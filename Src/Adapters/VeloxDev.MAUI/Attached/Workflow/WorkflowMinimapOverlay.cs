@@ -92,6 +92,10 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private WorkflowBounds _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
+    // Windows 上平移手势与原生指针探针会同时活着。只让其中一个驱动 NavigateToWorld；
+    // 两个都写时，绝对指针坐标与手势累计增量交替成为目标，X/Y 会以各自的节奏抖。
+    private bool _panActive;
+    private bool _nativePointerActive;
     private ContentView? _parentView;
 #if WINDOWS
     // 原生平移手势借用 GraphicsView 已捕获的 manipulation 管线（ManipulationMode=All），指针移出缩略图后增量照常到达；
@@ -220,31 +224,38 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         _nativePressedHandler = (s, e) =>
         {
             if (this.Handler?.PlatformView is not UIElement mm) return;
+            // 新的一次按下：清掉上一次可能没收到 Completed 的手势标记；本次手势若随后 Started 会重新置位。
+            _panActive = false;
+            _nativePointerActive = true;
             var pt = e.GetCurrentPoint(mm).Position;
-            _dragStartX = (float)pt.X;
-            _dragStartY = (float)pt.Y;
             // 尽力显式捕获：捕获期间只有此元素发指针事件，下面的 PointerMoved 移出边界也继续流动，直到释放（只能在 PointerPressed 期间取得）。
             mm.CapturePointer(e.Pointer);
-            // MAUI 的 StartInteraction 先经类 handler 再到本实例 handler，所以交互跑时 _isDragging 已为真，探针只记录起点；
-            // 手势压掉交互时，探针代行完整的按下处理。
+            // MAUI 的 StartInteraction 先经类 handler 再到本实例 handler，所以交互跑时 _isDragging 已为真，
+            // 这里不能再用探针的坐标覆盖它已经记下的起点（两套坐标来源一旦混用，X/Y 会各走各的）。
             if (_isDragging) return;
+            _dragStartX = (float)pt.X;
+            _dragStartY = (float)pt.Y;
             if (_pendingRefresh) RefreshMinimapData();
             var aw = (float)SafeDim(WidthRequest, 1);
             var ah = (float)SafeDim(HeightRequest, 1);
             ComputeDrawing(aw, ah);
+            _lastScrollX = float.MinValue;
+            _lastScrollY = float.MinValue;
             NavigateToWorld(_dragStartX, _dragStartY);
             _isDragging = true;
         };
         _nativeMovedHandler = (s, e) =>
         {
             if (!_isDragging) return;
+            // 原生探针是 Windows 上的首选：绝对坐标与缩略图同一套 DIP。PanGesture 的 TotalX/Y
+            // 在 WinUI 上会带屏幕/元素偏移，拿它加到局部起点上会把目标一次推出上千像素。
             if (this.Handler?.PlatformView is not UIElement mm) return;
             var pt = e.GetCurrentPoint(mm).Position;
             NavigateToWorld((float)pt.X, (float)pt.Y);
         };
         _nativeReleasedHandler = (s, e) =>
         {
-            if (!_isDragging) return;
+            _nativePointerActive = false;
             _isDragging = false;
         };
         mmEl.AddHandler(UIElement.PointerPressedEvent, _nativePressedHandler, true);
@@ -264,9 +275,11 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         switch (e.StatusType)
         {
             case GestureStatus.Started:
+                _panActive = true;
                 break;
             case GestureStatus.Running:
-                if (_isDragging)
+                // 原生探针已经按下时由它按绝对坐标驱动；只在探针没挂上时用累计增量兜底。
+                if (_isDragging && _panActive && !_nativePointerActive)
                 {
                     var x = _dragStartX + (float)e.TotalX;
                     var y = _dragStartY + (float)e.TotalY;
@@ -275,6 +288,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
                 break;
             case GestureStatus.Completed:
             case GestureStatus.Canceled:
+                _panActive = false;
                 _isDragging = false;
                 break;
         }
@@ -512,6 +526,10 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
 
+            // 新手势从当前指针重新起算；沿用上一轮的节流目标会把第一次滚动吞掉。
+            _lastScrollX = float.MinValue;
+            _lastScrollY = float.MinValue;
+
             // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
 #if WINDOWS
             _dragStartX = pt.X;
@@ -534,6 +552,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         try
         {
             if (!_isDragging) return;
+            // Windows 上手势/原生探针已经在驱动；MAUI 触摸路径不要再补一份。
+            if (_panActive || _nativePointerActive) return;
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
             NavigateToWorld(pt.X, pt.Y);

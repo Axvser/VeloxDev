@@ -49,6 +49,9 @@ public sealed class WorkflowSurfaceBehavior
         public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
         public bool IsRefreshing { get; set; }
         public bool IsVisibleRegionUpdateQueued { get; set; }
+        // MAUI 的 ScrollViewHandler.ViewChanged 先写 VerticalOffset 再写 HorizontalOffset，各发一次 Scrolled。
+        // 逐次 Refresh 会让装饰块/缩略图先只动 Y、再只动 X；合并到下一个 UI 轮次后两轴已经都是最终值。
+        public bool IsScrollRefreshQueued { get; set; }
         public double PendingViewportX { get; set; }
         public double PendingViewportY { get; set; }
 
@@ -1472,8 +1475,24 @@ public sealed class WorkflowSurfaceBehavior
         // 关键：平移期间不要压制 Scrolled。MAUI 每次原生 ViewChanged（中间 + 最终）都会发它，ScrollX/ScrollY 就是那一刻的原生偏移 —— 唯一可信的位置。
         // ScrollToAsync 是即发即忘的 ChangeView，可能没落到请求目标（从不保证命中），Windows 上原生 ScrollViewer 的 manipulation 还会自己移动内容。
         // 压制 Scrolled 曾让装饰块在拖拽中冻在请求目标上，释放后原生落到别处、装饰块就猛地一跳 —— 释放跳变。
-        // 放行每次滚动（缩略图那条路）才能让网格与内容始终贴在一起。
-        Refresh(host);
+        //
+        // 但也不能逐次 Refresh：MAUI 的 ViewChanged 先写 VerticalOffset、再写 HorizontalOffset，各发一次 Scrolled，
+        // 两次之间 ScrollX/Y 只更新了一轴。逐次 Refresh 会让装饰块/缩略图先只动 Y、再只动 X（实测 X/Y 分帧到达）。
+        // 合并到下一轮 UI 派发，读到的两轴都已是最终原生值；事件本身一个都不丢。
+        if (state.IsScrollRefreshQueued) return;
+        state.IsScrollRefreshQueued = true;
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            state.IsScrollRefreshQueued = false;
+            if (!GetIsEnabled(host)
+                || host.GetValue(StateProperty) is not SurfaceState currentState
+                || !ReferenceEquals(currentState, state))
+            {
+                return;
+            }
+
+            Refresh(host);
+        });
     }
 
     private static void OnScrollViewerSizeChanged(object? sender, EventArgs e)
@@ -1557,8 +1576,9 @@ public sealed class WorkflowSurfaceBehavior
         // 装饰块会合并重绘（ScheduleInvalidate），本 Refresh 稍后 ApplyVisibleRegion 的第二次写是免费的。
         if (state.ScrollViewer is not null)
         {
-            UpdateGridDecorator(viewModel, state, state.ScrollViewer.ScrollX, state.ScrollViewer.ScrollY);
-            UpdateMinimapOverlay(viewModel, state, state.ScrollViewer.ScrollX, state.ScrollViewer.ScrollY);
+            var (scrollX, scrollY) = ActualScroll(state);
+            UpdateGridDecorator(viewModel, state, scrollX, scrollY);
+            UpdateMinimapOverlay(viewModel, state, scrollX, scrollY);
         }
     }
 
@@ -2058,8 +2078,8 @@ public sealed class WorkflowSurfaceBehavior
 
         // 关键：ScrollToAsync 完成后，MAUI 异步布局趟中 ScrollViewer 尺寸与滚动位置仍可能是 NaN/零。NaN 会经 Viewport → Virtualize → 空间索引传播，清空所有 VisibleItems（连线永久消失）；C# 里 NaN <= 0 为假，Virtualize 的防护挡不住。
         // 关键：一律从 ScrollX 写 —— 最近一次 ViewChanged 的原生偏移，即内容真正所在处；ChangeView 落短时请求目标会与 ScrollX 不同，按请求目标写正是释放后网格猛跳回真实位置的原因。
-        var scrollX = state.ScrollViewer.ScrollX;
-        var scrollY = state.ScrollViewer.ScrollY;
+        // 两轴必须来自同一帧的同一处真相；MAUI 的 ScrollX/Y 镜像会先写 Y、再写 X。
+        var (scrollX, scrollY) = ActualScroll(state);
         var svW = state.ScrollViewer.Width;
         var svH = state.ScrollViewer.Height;
 
@@ -2084,6 +2104,27 @@ public sealed class WorkflowSurfaceBehavior
         viewModel.Layout.ViewportOffset = new Offset(
             double.IsNaN(viewportX) ? 0 : viewportX,
             double.IsNaN(viewportY) ? 0 : viewportY);
+    }
+
+    /// <summary>
+    /// The scroll offsets both axes are actually at, read from the native viewer on Windows.
+    /// MAUI's <c>ScrollViewHandler.ViewChanged</c> copies the viewer into <c>ScrollX</c> and
+    /// <c>ScrollY</c> with two separate assignments (Vertical then Horizontal), so the managed
+    /// mirror briefly holds one old axis and one new one. Reading the native offsets gives both
+    /// axes of the same frame; otherwise the overlays visibly move X and Y on different frames.
+    /// </summary>
+    private static (double X, double Y) ActualScroll(SurfaceState state)
+    {
+        var x = state.ScrollViewer?.ScrollX ?? 0;
+        var y = state.ScrollViewer?.ScrollY ?? 0;
+#if WINDOWS
+        if (state.ScrollViewer?.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.ScrollViewer native)
+        {
+            if (double.IsFinite(native.HorizontalOffset)) x = native.HorizontalOffset;
+            if (double.IsFinite(native.VerticalOffset)) y = native.VerticalOffset;
+        }
+#endif
+        return (double.IsNaN(x) ? 0 : x, double.IsNaN(y) ? 0 : y);
     }
 
     private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state, double scrollX, double scrollY)
