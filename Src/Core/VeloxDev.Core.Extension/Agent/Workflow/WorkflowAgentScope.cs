@@ -1568,6 +1568,27 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     public WorkflowAgentToolkit CreateToolkit() => _toolkit ??= new WorkflowAgentToolkit(this, ParentLedger);
 
     /// <summary>
+    /// Asks the compiled run that owns <paramref name="context"/> to stop, when this scope started it through
+    /// <c>StartCompiledWorkflow</c> or <c>ContinueCompiledWorkflow</c>.
+    /// </summary>
+    /// <param name="context">The run's session — the object the host's session configuration received.</param>
+    /// <returns>
+    /// <see langword="true"/> when a background run was found and its cancellation was requested;
+    /// <see langword="false"/> for a run this scope does not hold, such as the synchronous
+    /// <c>RunCompiledWorkflow</c> entry, whose lifetime belongs to the tool call waiting on it.
+    /// </returns>
+    /// <remarks>
+    /// The handle-taking <c>StopCompiledRun</c> tool is the Agent's own way in. A host UI that never saw the
+    /// handle — because the Agent started the run — has only the session it configured, so this is the seam that
+    /// lets its run manager stop that task without inventing a handle.
+    /// </remarks>
+    public bool TryStopRun(IRuntimeContext context)
+    {
+        if (context is null) return false;
+        return CreateToolkit().TryStopRun(context);
+    }
+
+    /// <summary>
     /// Convenience method: returns all tools ready for use with <c>ChatOptions.Tools</c> or
     /// <c>AsAIAgent(tools: ...)</c>.
     /// <para>

@@ -2267,6 +2267,22 @@ public sealed class WorkflowAgentToolkit
         => Error($"Run '{run.Handle}' is held by an execution gate this tool cannot drive — the host brought its own. " +
                  "Pause and resume it through the host's controls; StopCompiledRun still works.");
 
+    // 取消会话对应的后台运行：宿主没拿到句柄时，按它配置过的 RuntimeContext 找回 run。
+    internal bool TryStopRun(IRuntimeContext context)
+    {
+        lock (_runsGate)
+        {
+            foreach (var run in _runs.Values)
+            {
+                if (!ReferenceEquals(run.Context, context)) continue;
+                run.Cts.Cancel();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private bool TryGetRun(string handle, out CompiledRun run, out string error)
     {
         lock (_runsGate)
