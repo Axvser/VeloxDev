@@ -230,3 +230,12 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 - 模板侧：各条目产出什么形状、标尺 36 现在单一来源在**模板**的 `workflow-grid-decorator` —— `memory/modules/Templates/adapters/jalium.md`。
 - 主题切换的完整流向 —— **这一家没有这条线**（§一），见 `memory/modules/DynamicTheme/architecture.md`。
 - 人面向的「怎么用这套模板搭一个 Jalium 工作流视图」—— `skills/veloxdev-create-workflow/references/gui/jalium.md`。
+
+## Demo 工作台外壳（示例侧）
+
+`Examples/Workflow/Jalium/Demo/MainWindow.cs` 是代码搭的壳（**唯一需要改的文件**）：32px 标题条 + 48 活动栏 + 272 侧栏 + 4 分隔 + 主区（`流程图`/`输出` 两个 Tab）+ 4 分隔 + 348 检查器（`属性`/`AI 助手`）+ 24 状态栏。节点卡的色板与形状全在 `Views/Workflow/CardPalette.cs`（唯一色值来源）与 `NodeChrome.cs`（外壳/标题行/幽灵按钮），改色只改 `CardPalette`；`AccentWidth`、`TitleSize` 等度量也在那里。Jalium 没有 `Grid.SetColumnSpan`，标题条/状态条是靠外层单列 `Grid` 包住旧的三列 `Grid` 实现的，别在旧根上直接加跨列。
+
+- **运行管理器没有绑定**：`Runs.Changed` 时重建行，并**延后一个 dispatcher 轮次**再换按钮（点“暂停”时不能在按钮自己的点击栈里把按钮换掉）。行内容照 `WorkflowRunTaskViewModel` 的 `SourceText`/`RootLabel`/`StateText`/`StartedText`/`ElapsedText`/`ProgressText` 与 `Can*` 属性。
+- **`WindowStartupLocation.CenterScreen` 在这版 Jalium 上会静默退出**（进程消失、无异常），所以壳里没有设它；1500×900 窗口的默认位置在 150% DPI 下可能把右边推出屏幕，挪一下窗口即可。
+- **Agent 对话是纯文本列表**：Jalium 没有 Avalonia 那种 `MarkdownView`，工具调用以转录行出现，不折成 chat 围栏。
+- 小地图仍是适配器自带的 overlay，主区窄时会盖住一块画布。

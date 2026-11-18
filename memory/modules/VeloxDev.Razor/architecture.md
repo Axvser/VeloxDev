@@ -318,3 +318,15 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
   编组没有失败信号 —— `memory/modules/TransitionSystem/adapters/razor.md`。
 - 模板侧的形状、多个 `ToCss` 副本、双重 `GridDecorator` 命名、树模型自订阅 —— `memory/modules/Templates/adapters/razor.md`。
 - 其余六家的对应做法 —— `memory/modules/WorkflowSystem/extension.md` §4.3 那张「搬一家」的对照表。
+
+## Demo 工作台外壳（示例侧）
+
+`Examples/Workflow/Blazor/Demo/` 的 UI 是 Razor + 一份全局 `wwwroot/app.css`，没有 XAML/适配器契约可复用，改外壳只动这两个地方：
+
+- `Components/Layout/MainLayout.razor` 现在只保留 `wf-body`；**32px 标题条搬进了 `Components/Pages/Workflow.razor`**（`wf-topbar` + 品牌 + 文件/编辑/视图/帮助 + 居中“搜索命令”），因为菜单和命令中心要调页面自己的 `SaveWorkflow` / `LoadWorkflow` / `ResetDemo` / `Undo` / `Redo`。品牌图是 `wwwroot/veloxdev-logo.png`。菜单用原生 `<details>`，`copy.js` 的 `closeWorkbenchMenus` 负责点外部关闭。
+- `Components/Pages/Workflow.razor` 现在是四区工作台：48px `wf-activity-bar` + 272px `wf-sidebar-panel` + 主区（`流程图`/`输出` 两个标签）+ 348px `wf-inspector` + 24px `wf-statusbar`。侧栏页是资源管理器 / 运行 / MCP；检查器页是属性 / AI 助手。画布/标尺/小地图的颜色以组件参数形式写在这一页（`Background="#171717"`、`GridColor="#232323"` 等），改色板时要连同这里的参数一起改。
+- **全局快捷键走 DOM，不走 Blazor interop**：页面渲染四个 `display:none` 的 `wf-shortcut-*` 按钮，`copy.js` 的 keydown 监听器点击它们（Ctrl+S/O/Z/Y）；Ctrl+Shift+P 直接打开 `.wf-command` 的 `<details>`。输入框/可编辑元素里不抢 Z/Y，避免毁掉文本撤销。
+- **运行管理器**的行从 `TreeViewModel.Runs` 的 `SourceText/RootLabel/StateText/StartedText/ElapsedText/ProgressText` 与 `Can*` 属性渲染，选中行写 `Runs.Selected`；`清除已完成` 调 `Runs.ClearFinished()`。输出页绑定 `ExecutionLog`，`copy.js` 的 `scrollElementToEnd(id)` 负责自动滚到底。
+- **Agent 对话搬进了右侧检查器**，侧栏不再有它；Blazor 没有 markdown 渲染器，所以用既有的纯文本 `AgentLog`，不是 Avalonia 的 chat 围栏。子代理树用新增的 `Components/Workflow/SubAgentNodeView.razor` 递归渲染。
+- **窄屏**：1100px 以下侧栏/检查器变成覆盖层（活动栏打开），640px 以下进一步收窄；覆盖层 z-index 500、backdrop 400。`scrollWidth == innerWidth` 在 1440×900 与 390×844 下都验过。
+- 节点卡的色板在 `app.css` 的 `:root` 自定义属性里；Python/Controller/Timer/Enum 的 `Accent` 在 `Workflow.razor` 里取 `--wf-accent-*`。

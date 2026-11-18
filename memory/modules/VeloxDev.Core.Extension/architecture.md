@@ -129,6 +129,8 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 两条 `With*` 是宿主的口子：`WithCheckpointStore`（默认给每个 scope 一个内存 store，所以 Continue 开箱可用）与 `WithSessionConfiguration(Action<RuntimeContext>)`（重试策略 / 观察者 / sink / 补偿 / 门 / 检查点，一次配齐）。**填充顺序是契约**：scope 自己的设置 → 宿主钩子 → 工具需要的（门与 store 只在仍是 `null` 时补 ✗ 不覆盖宿主）✓（`WorkflowAgentToolkit.NewSession`）；失败记录与宿主的 sink **并存**（`RecordingErrorSink` 转发 ✓）。
 
+**宿主侧停止后台运行**：`WorkflowAgentScope.TryStopRun(IRuntimeContext)` 按会话引用在 `WorkflowAgentToolkit._runs` 里找后台运行并 `Cancel`。只有 `StartCompiledWorkflow` / `ContinueCompiledWorkflow` 注册进这张表；等待式 `RunCompiledWorkflow` / `GetNodeResult` 不在表里，返回 `false`（它们的生命周期属于那次工具调用）。宿主 UI 没拿到句柄也能停，靠的就是它自己配置过的那个 `RuntimeContext`。
+
 **日志读取取决于宿主的配置，而结果会把答案带出来**：配了文件 `ILogWriter` ⇒ 结果里有 `logFile`（**绝对路径**）⇒ 模型用它自己的文件工具打开即可；默认的内存日志 ⇒ 结果里的 `logs` 就是记录，不需要任何文件工具。`TextWriterLogWriter.Path`（`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Model/LogWriters.cs`，`For(path)` 时填、包装外部 `TextWriter` 时为 null）就是为这一条加的。
 
 ### 三点六、结果的规模、并发与持久化（2026-10-31）

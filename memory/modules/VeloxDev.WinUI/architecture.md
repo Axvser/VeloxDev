@@ -1,4 +1,4 @@
-# VeloxDev.WinUI — 架构
+﻿# VeloxDev.WinUI — 架构
 
 > 代码：`Src/Adapters/VeloxDev.WinUI/`（`Attached/Workflow/` 最大的几个是 `WorkflowSurfaceBehavior.cs`、`WorkflowMinimapOverlay.cs`、`WorkflowSlotLayoutBehavior.cs`；
 > `PlatformAdapters/` 最大的是 `ThemeValueConverters.cs`、`Transition.cs`；
@@ -242,3 +242,7 @@ return accepted;
 - 主题切换的完整流向、两级缓存、转换器如何被**生成器**激活 —— `memory/modules/DynamicTheme/architecture.md`。
 - 工作流宿主怎么写（`using:` 命名空间、`Clip="{x:Null}"`、offset frame 的模板写法、`NodeView` 的 Viewbox 与 `PART_*` 摆位）—— `skills/veloxdev-create-workflow/references/gui/winui.md`。
 - 本模块的验证线在 `Examples/Transition/AUTO TEST/`（`Samplers/VeloxDev.SamplerTest.csproj` 直接引本模块，`Samplers/WinUiEntries.cs`、`Conformance/WinUiConformance.cs`、`LoadMode/WinUiLoadMode.cs`、`Drivers/WinUIDemoDriver.cs` 是这家的几个入口）；工作流侧可跑的宿主就是 §六 表末那一组 `.xaml` 所在的 demo。
+
+6. **WinUI 的 demo 工作台现在是完整四区外壳**（2026-11-18）：32px 标题条 + 48 活动栏 + 272 侧栏 + 主区（`流程图`/`输出` 两个标签）+ 348 检查器（`属性`/`AI 助手`）+ 24 状态栏。`Views/Workflow/TreeView.xaml` 是整壳，`TreeView.xaml.cs` 绑定 `TreeViewModel.Runs`/`SelectedElement`/`CompiledStructure`/`ExecutionLog`；`Themes/Tokens.xaml` 提供色板，`WorkbenchConverters.cs` 提供 Bool/Null/Zero 可见性转换。运行管理器直接绑 `Runs.Tasks`，`Runs.PropertyChanged` 只在 `Selected` 变化时把选中行同步给 ListView（`_syncingRunSelection` 门）；元素列表与运行列表的选择同步都有 `_syncing...` 门，**不要再加无门的双向 SelectedItem 绑定**。
+   - **XAML 编译器的旧失败仍要记住**：上一轮一次性替换整份外壳时，WinUI 的 XAML 编译器会静默以退出码 1 失败（`MSB3073`，`output.json` 没有 error，stderr 为空）。这次的整壳是逐块加出来的，最终 `dotnet build` 0 错误；下次改大结构要沿用「逐块加 + 清 obj + 先验 XML」，不要整体替换。
+   - **运行验证**：最终构建上 Compile → Run → 打开运行侧栏与输出页均通过（18 段、91 行轨迹、任务行 `✓ 已完成`）。2026-11-18 之前出现过一个卡死的验证实例：WER 记录了 `combase.dll` 的 `0x802b000a`（`RO_E_CLOSED`）崩溃与 `RADAR_PRE_LEAK_64` 泄漏告警；那是被遗留、经历反复启动/重建的实例，不是最终单实例的正常路径。做长验证时只留一个实例，结束就关，卡住先抓 dump 再 kill。

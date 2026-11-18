@@ -241,3 +241,20 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 - **`ThemeValueConverters.cs` 在本仓库里没有任何消费者。** 文件里是 `VeloxDev.DynamicTheme` 下的一组 `IThemeValueConverter` 实现（`DoubleConverter`、`PointConverter`、`ThicknessConverter`、`CornerRadiusConverter`、`ColorConverter`、`BrushConverter`、`ObjectConverter`，加一个 `ThemeResourceLookup` 辅助），但**全仓没有任何 .cs / .xaml 引用它们**，`Examples/Theme/` 下也**没有 MAUI 主题 demo**（只有 Avalonia 与 WPF）。⇒ 改这里**跑不出任何症状**，也别把它当成 Transition/Workflow 契约的一部分（`TransitionSystem/adapters/maui.md` §四·4 同结论）。
 - **人面向的「怎么用这套模板搭一个 MAUI 工作流视图」** —— `skills/veloxdev-create-workflow/references/gui/maui.md`（`Docs/` 那套文档站点**不在本仓库**）。
 - **本家的验证线在哪**：Transition 轴有自动验收（`Examples/Transition/AUTO TEST/`，含 `Drivers/MauiDemoDriver.cs` 与 `Conformance/MauiConformance.cs`、`Samplers/MauiEntries.cs`）；**Workflow 轴在本仓库没有任何自动验收** —— `Examples/Workflow/` 下不存在 `AUTO TEST` 目录，唯一的执行样本是 `Examples/Workflow/MAUI Trimmed/Demo/` 本身。
+
+## Demo 工作台外壳（示例侧）
+
+`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml` 根是 `Grid RowDefinitions="32,*,24"`：32px 标题条 / 工作区 / 24px 状态栏。工作区 `WorkbenchGrid` 的列是 `48,272,1,*,1,348` —— 48 活动栏、272 侧栏、1px 分隔、主区、1px 分隔、348 检查器。侧栏三页（资源管理器 / 运行 / MCP）由 `ShowSidebarPage` 切；资源管理器里的「节点 / 插槽 / 连线」是同一张 `CollectionView` 换 `ItemsSource`（`SelectElementKind`）；运行页的 `CollectionView` 绑 `Runs.Tasks` + `Runs.Selected`；检查器两页（属性 / AI 助手）由 `ShowInspectorPage` 切。主区页签（流程图 / 输出）由 `SelectMainTab` 切，输出页绑 `ExecutionLog` 与 `Runs.Selected.*`。运行状态、编译段数、元素计数与缩放只在状态栏和运行页出现，属性页不重复。
+
+**数据是共享 `TreeViewModel` 的那一份**：`Runs`（`WorkflowRunCatalog`）、`SelectedElement`、`CompiledStructure`、`ExecutionLog` 都来自 `Examples/Workflow/Common/Lib`。运行任务的暂停/继续/停止/运行/移除直接调 `WorkflowRunTaskViewModel` 的 `Pause()/Resume()/Stop()/Start()`，可见性绑 `Can*`；不需要宿主再持有一份 gate 状态（旧的 `Session.Gate` 暂停/检查点按钮已移除）。
+
+色板在 `Resources/Styles/CardTheme.xaml`：节点卡用 `Card*`，外壳用 `WorkPanel*` / `WorkBorder*` / `WorkAccent*` / `Workbench*` Style；节点视图只引用 `Accent*` 键，`InfoOverlay.xaml` 的 HUD 颜色就地写。MAUI 的 `Border` 没有 `BorderThickness`（只有统一 `StrokeThickness`），所以「只描底边」的分隔用 1px `BoxView` —— 标题条、状态条、面板头都是这个做法。
+
+### 这层壳上踩过的三条 MAUI 事实
+
+1. **`CollectionView` 不会因为点到行里的 `Label` 就选中该行**（Windows 上实测）。元素列表与运行页因此在 DataTemplate 根上各挂一个 `TapGestureRecognizer`（`OnElementRowTapped` / `OnRunRowTapped`），行内的文字 `Label` / 左侧 `VerticalStackLayout` 设 `InputTransparent="True"`，右侧按钮保持可点。只靠 `SelectionMode="Single"` 时，点标签区域不会触发 `SelectionChanged`，属性检查器也就不会更新。
+2. **`StaticResource` 缺键编译期不报**：SourceGen 只校验类型与属性，`{StaticResource WorkWarning}` 这类键缺失要等运行时 `InitializeComponent` 抛 `XamlParseException`。WinUI 宿主已有的 `UnhandledException` 处理器会把它标成 handled，症状可能只是「窗口起来但内容空白/直接退出」；加壳色板后至少启动一次 Windows TFM。另：MAUI 的控件名是 `Switch`（`IsToggled` / `Toggled`），不是 Avalonia 的 `ToggleSwitch`。
+3. **MAUI 没有可放在布局里的菜单栏，`Button` 也只有文本、没有点击弹出的 `Flyout`**（`FlyoutBase` 在本版本只有 `ContextFlyout`）。标题条的文件/编辑/视图/帮助与命令中心因此走 `Page.DisplayActionSheetAsync`（`ShowMenuAsync` / `ExecuteMenuCommand`）；命令中心本体是 `Border` + `TapGestureRecognizer`。窗口最小化/最大化/关闭交给操作系统标题条（`Shell.NavBarIsVisible="False"` 后仍然保留），不在应用内画假按钮。
+4. **`CollectionView.ScrollTo` 对隐藏/未测量的列表不生效**：运行结束后才切到输出页时，一次滚到底会落空（`OnExecutionLogChanged` 在页面隐藏时也请求过）。`SelectMainTab("output")` 因此再调 `ScrollExecutionLogToEnd`，它先 `MainThread.BeginInvoke` 一次，再用 `Dispatcher.DispatchDelayed(80ms)` 补一次——第二次是布局落定后的那一次。
+
+构建用 `-f net10.0-windows10.0.19041.0` 验最快；其它 TFM 需要对应 workload。

@@ -177,3 +177,22 @@
 - TransitionSystem 侧的采样器逐一分析、pacer 与 `HasShutdownStarted`、`Property` 重载表里只有 `Transform` 不可替代 —— `memory/modules/TransitionSystem/adapters/wpf.md`。
 - 主题切换的完整流向、两级缓存、`Current` 的所有权 —— `memory/modules/DynamicTheme/architecture.md`。
 - 人面向的「怎么用这套模板搭一个 WPF 工作流视图」—— `skills/veloxdev-create-workflow/references/gui/wpf.md`。
+
+---
+
+## 八、Demo 工作台外壳（示例侧，不是适配器）
+
+这一节记的是 `Examples/Workflow/WPF/Demo/` 的宿主外壳。它参考 Scribalix 的工作台（自定义标题条、活动栏 + 左右面板 + 状态栏），**不是** `Src/Adapters/` 的一部分。
+
+- **设计源**：`Demo/Themes/Tokens.xaml`（色板 / 字体 / 圆角）、`Demo/Themes/Styles.xaml`（具名控件样式），`Demo/Themes/CardTheme.xaml` 只叠节点卡。WPF 没有 Avalonia 的 class selector，所以是「一组具名 Style，控件用 `Style="{StaticResource ...}"` 取用」。
+- **自定义窗口**：`MainWindow` 用 `WindowStyle="None"` + `WindowChrome`（`CaptionHeight=0`），标题条在 `WorkflowView.xaml` 里；拖动/双击最大化在 `OnTitleBarMouseLeftButtonDown`，按钮与菜单按祖先排除。
+- **图标字体必须是 `Segoe MDL2 Assets`**（`IconFontFamily`）。`Segoe Fluent Icons` 在这家画出来是方块。
+- **隐式 `TextBlock` 样式不要设 `FontFamily` / `FontSize`**：它会盖掉 `ContentPresenter` 从按钮继承的图标字体，活动栏 / 侧栏 / 窗口按钮全变成方块。字号与字体由 `Window` 继承，字号按需在各具名样式里写。
+- **Aero2 的深色化**：菜单/列表/输入框的默认模板读 `SystemColors.*`，在 `Tokens.xaml` 里覆盖 `Menu*` / `Window*` / `Control*` / `Highlight*` 键即可；但 `ListBox` 仍要把 `Background` 显式设成 `PanelBackgroundBrush`，只靠系统色覆盖不够。
+- **滚动条必须自带模板**：Aero2 的浅色卷轴在深色工作台里非常突兀；`Styles.xaml` 里有一个 12px 槽 / 8px 圆角 Thumb 的 `ScrollBar` 模板。
+- **TabControl/TabItem 也要自带模板**：默认的 header 面板是浅色的；`Styles.xaml` 里的模板只保留 `TabPanel + ContentPresenter`，与 Avalonia 的编辑器标签同形。
+- **运行管理器与输出**：与 Avalonia 共用 `TreeViewModel.Runs`（`WorkflowRunCatalog`）。手动编译/运行由 `WorkflowDemoSession.ConfigureSession` 写入；Agent 编译由 `AgentHelper.RecordToolCall` 从 `CompileWorkflow` / `CompileNodeResult` 的结果里读；Agent 运行由 scope 的 `WithSessionConfiguration` 指向同一个 `ConfigureSession`。`WorkflowRunCatalog.AttachSession` 包住会话的 `Observer` 与 `LogWriter`，轨迹不靠轮询。选中行被镜像进 `TreeViewModel.ExecutionLog`，输出页继续绑定它。
+- **属性页只留**选中元素与编译结构；运行状态/元素计数/缩放归状态栏，小地图开关归 `ElementListView` 上方，运行控制归运行管理器。
+- **列表选择用事件 + 守卫**：`ElementListView` 的三个 `ListBox` 不能同时 `SelectedItem="{Binding SelectedElement, Mode=TwoWay}"`（会互相清空成回路）；由 `OnSelectionChanged` 写 `TreeViewModel.SelectedElement`，`SyncSelection` 只读回。
+- **换树先释放旧会话**：`WorkflowView._session` 在 `LoadNetworkDemo` / `SelectWorkflow` 里 `Dispose()` 后再建新的；`WorkflowDemoSession` 用一个 writer 开 `pycache/workflow.log`（`FileShare.Read`），第二个写者会在第一轮运行时打不开同一个文件。载入文件时用 `WorkflowDemoSession.FromTree(result)`。
+- **不要订阅每个节点的 `PropertyChanged` 去刷新列表项**：WPF 的 `CollectionView` 会因 item 的 `PropertyChanged` 反复重整。2026-11-18 实测症状是启动后窗口不出现（`Demo` 进程的可见主窗口 `GetWindowRect` 为 0×0、`MainWindowHandle=0`，dispatcher 空转但 `Loaded` 不触发）。刷新走 `TreeViewModel.RefreshElementDetails(node)`，只在编译完成或该节点被驱动时调用。

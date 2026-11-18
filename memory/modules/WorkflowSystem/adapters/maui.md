@@ -139,9 +139,21 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
 `WorkflowSlotConnectionBehavior.cs` 的 `OnPanUpdated` 注释：MAUI 库的 TFM 是平台中立的，所以原生 pointer capture 可能不可用 ——
 一旦 `Pan` 手势开始，就让它独占这次拖拽（同方法）。Windows 上则由 `element.CapturePointer` 显式捕获
 （`WorkflowNodeDragBehavior.cs` 的 `OnPlatformPointerPressed`、`WorkflowSlotConnectionBehavior.cs` 的 `TryCapturePointer` 原生分支）。小地图更彻底：Windows 上
-**两条独立通道**（原生 `PointerPressed/Moved/Released` 探针 + `PanGestureRecognizer` 的 manipulation 增量）同时供数据，
+**两条独立通道**（原生 `PointerPressed/Moved/Released` 探针 + `PanGestureRecognizer` 的 manipulation 增量）同时存在，
 因为只有捕获所有者能收到越界事件（`WorkflowMinimapOverlay.cs` 的 `_nativePressedHandler` 等字段、`AttachPlatformPressedHandler`）；并且 Windows 上
 `EndInteraction` 必须**直接 return**（`OnEndInteraction`）—— MAUI 指针一离开小地图就报 `EndInteraction`，而拖拽还没结束。
+
+⚠ **两轴不能来自 MAUI 的 `ScrollX/ScrollY` 镜像。**（2026-11-18 同一轮实测）
+`ScrollViewHandler.ViewChanged` 先写 `VerticalOffset`、再写 `HorizontalOffset`；`IScrollView` 的两个 setter 各发一次 `Scrolled`，
+于是 `ScrollX` 与 `ScrollY` 的镜像在不同事件里更新。逐次 `Refresh` 会让网格/缩略图先只动 Y、再只动 X。
+现在 `WorkflowSurfaceBehavior` 的 `ActualScroll(state)` 在 Windows 上直接读原生 `ScrollViewer.HorizontalOffset/VerticalOffset`
+（同一帧的两轴），`OnScrolled` 也只排一次 `Refresh` 到下一轮 UI 派发；事件不丢，更新成对。
+
+⚠ **两条通道只能有一条 `NavigateToWorld`。**（2026-11-18 用户报告小地图拖动抖动，X/Y 不匹配）
+`PanGestureRecognizer` 用 `_dragStart + TotalX/Y`（累计增量 + 起点）而原生探针用绝对 `PointerMoved` 坐标；两者同时驱动时目标在
+两套坐标之间交替，视觉上就是 X/Y 各自抖动。现在用 `_panActive`（手势 Started/Completed）和 `_nativePointerActive`（原生按下/释放）互斥：**Windows 上优先原生绝对坐标**（`PanGesture.TotalX/Y` 在 WinUI 会带屏幕/元素偏移，曾把目标一次推出上千像素），手势只在原生探针没挂上时兜底；`OnDragInteraction` 被两者压住。另：`_nativePressedHandler` **不能**在 `_isDragging` 已为真时覆盖
+`OnStartInteraction` 记下的 `_dragStartX/Y` —— 起点混用会让累计增量落在错误的基准上。每次按下还重置
+`_lastScrollX/Y`，否则从上一轮继承的 2px 节流会吞掉第一笔拖动。
 
 **视口往返（2026-10-03 接上挂树口）**：这家本来就有整套恢复机（`RequestViewportRestore` → 调度器 +
 `Task.Yield` + `ToScreen` + clamp），但它只对宿主开放，宿主不调就不恢复。现在

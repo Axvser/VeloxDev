@@ -157,3 +157,14 @@
 - TransitionSystem 侧：`NonPriority`、手写 `Property` 重载、`CreateFramePacer` 条件、`"WindowsFormsSynchronizationContext"` 字符串比较、`PaddingSampler` 的截断 —— `memory/modules/TransitionSystem/adapters/winforms.md`。
 - 模板侧：各条目产出什么形状、`IWorkflowMinimapScrollSource` 的 CS0246 耦合、多份 `ParseColor` —— `memory/modules/Templates/adapters/winforms.md`。
 - 「怎么用这套模板搭一个 WinForms 工作流视图」（人面向）—— `skills/veloxdev-create-workflow/references/gui/winforms.md`。
+
+## Demo 工作台外壳（示例侧）
+
+`Examples/Workflow/WinForms/Demo/Form1.cs` 的 `BuildWorkbenchFrame` 在 Designer 的 `splitContainer` 外面套 32px 标题条 + 24px 状态条，`BuildSidebar` 再把 `Panel1` 换成 48px 活动栏 + 侧栏；`Panel1/2.Padding=Empty`、`SplitterWidth=4`、`SplitterDistance=320` 是工作台版式。节点卡色板/度量在 `Views/CardTheme.cs`；画布网格色在 `Controls/WorkflowCanvas.cs`，HUD 在 `Views/InfoOverlay.cs`，小地图在 `Views/MinimapOverlay.cs`。WinForms 没有 `BorderThickness`/圆角属性，分隔线用 1px `Panel`/自绘。
+
+- **四区外壳现在是完整的**（2026-11-18）：主区（`流程图`/`输出`）+ 348px 检查器（`属性`/`AI 助手`）；运行侧栏由 `Views/Workflow/RunManagerPanel.cs` 绑 `TreeViewModel.Runs`，检查器由 `Views/Workflow/WorkflowInspectorPanel.cs` 绑 `SelectedElement`/`CompiledStructure`，子代理面板是 `SubAgentPanel.cs`；`Views/Workbench/` 放共享外壳件（`WorkbenchPalette` / `StatusBarStrip` / `WorkbenchTabButton`）。
+- **标题条现在也有菜单与命令中心**：`BuildTitleStrip` 用 `GhostButton` 做“文件/编辑/视图/帮助”和居中的“搜索命令 Ctrl+Shift+P”；下拉是 `Views/Workbench/DarkPopupMenu`（无边框 `Form`，自己画 panel/hover/快捷键列），不是 `ContextMenuStrip`。**实测 2026-11-18**：`ContextMenuStrip` 即使设了自定义 `ToolStripRenderer`、`ToolStripManager.Renderer` 和 `Application.SetColorMode(SystemColorMode.Dark)`，弹层仍是浅色面板 + 浅色字；换自己的 Form 才稳定。原生窗口边框继续负责最小化/最大化/关闭，不画假按钮。
+- **两个旧控件已被移除**：Explorer 页顶部的 `titleLabel`（“VeloxDev Workflow Demo”大字）会和工作台标题条重复；运行页底部的 `seedTextBox`（`本次运行`）会和控制器卡上的 SEED 重复。两者都不再进入布局；Explorer 的动作改成 `Segoe Fluent Icons` 的 24px 图标按钮（保存/加载/撤销/重做/重载示例），与 Avalonia 面板头同节奏。
+- **元素表是自建的 `Views/Workflow/ElementRowList.cs`**：每行是 Label + 定位/删除两个 `Segoe Fluent Icons` 图标按钮（24px 行高），不再用 `ListBox` + 页底那组 Locate/Delete；选中行的背景切到 `CardTheme.Hover` 并写 `TreeViewModel.SelectedElement`。`Dock=Top` 的控件是后加的在上，所以 `SetEntries` 要 **反向添加** 才保持 `#0` 在顶部。
+- **没有 XAML 双向选择绑定**：元素列表与运行行都用点击事件写 `TreeViewModel.SelectedElement` / `Runs.Selected`，列表行本身只读；这与 Avalonia 的 `SelectedItem` 绑定是同一状态的两种平台写法。
+- **验证**：最终构建 0 错误；Compile → Run → 打开运行侧栏与输出页通过（18 段、任务行 `✓ 已完成`，输出页有 17:45:19 起的完整轨迹）。WinForms 的坐标点击在 150% DPI 环境下不可靠，脚本化验证用 UI Automation 按 `Name=Compile/Run` 的 `InvokePattern`，比 `mouse_event` 稳。

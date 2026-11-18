@@ -119,8 +119,9 @@
    **用户侧的症状就叫「demo 起不来」**：双击 `bin/.../Demo.exe` 一闪即退，从命令行才看得到上句（它走 stderr，进程立刻退出）。**判据是窗口句柄**：`Get-Process Demo | Select MainWindowHandle` 非 0、且 `Responding=True`，才算起来了；「跑 N 秒没输出」不是证据。
 6. **kill 掉一个 Avalonia workflow demo 会留下它自己的 WebView2 子进程**，占着 `bin/.../<App>.exe.WebView2\EBWebView`；下一次启动死在
    `COMException 0x800700AA`（资源正在使用中，栈在 `WebView2HwndAdapter.InitializeAsync`）。
-   来源是 **`md:MarkdownView`**：`AvalonMarkdown` 8.0.0 直接依赖 `Avalonia.Controls.WebView`（nuspec 里写着），于是每个带对话面板的 workflow demo 都真的起一个 WebView2 —— Debug / Release 都有，与 `AvaloniaUI.DiagnosticsSupport` 无关。
+   来源是 **`md:MarkdownView`**：`AvalonMarkdown`（当前 12.0.0）直接依赖 `Avalonia.Controls.WebView`（nuspec 里写着），于是每个带对话面板的 workflow demo 都真的起一个 WebView2 —— Debug / Release 都有，与 `AvaloniaUI.DiagnosticsSupport` 无关。
    收尾要连子进程一起收：`taskkill /PID <pid> /T /F`，或按命令行筛 `msedgewebview2.exe`（`CommandLine -like '*<demo 目录>*'`），别只关主进程。
+   同一处还有两件 demo 侧的约定：**对话面板的 Markdown 由 `TreeViewModel.ConversationMarkdownOptions` 打开 `ChatFences`**（推理与工具结果各折成 `chat` 面板，其余六家绑 `ToPlainTextLines` 不受影响）；**预览的配色在 `WorkflowView.OnConversationReady` 里用 `MarkdownThemeViewModel` 钉成侧栏的深色** —— 侧栏硬编码为暗色，而 `MarkdownView` 默认跟随系统主题，浅色模式下会露出一块白底。
 
 ---
 
@@ -132,3 +133,20 @@
 - `State` 空壳：七家都是空壳。
 - `ViewManager` 的静默 `catch`、`batchSize = 3` + `DispatcherPriority.Background`、`ConditionalWeakTable` 放管理器：与 WPF 逐字同形（WPF `ViewManager` 的 `ProcessNextBatch`）。
 - 主题值转换器的**一组名字**（Double / Point / Thickness / CornerRadius / Color / Brush / Object）与 WPF / WinUI / MAUI 相同（WinForms 与 Razor 各有更多，Jalium 没有）；名字是共有的，**实现里用的解析 API 才是各家的**（这是 `ThemeValueConverters.cs` 存在的理由，见 `extension.md` §二）。
+
+---
+
+## 十、Demo 工作台外壳（示例侧，不是适配器）
+
+这一节记的是 `Examples/Workflow/Avalonia/Demo/` 的宿主外壳。它参考 Scribalix 的工作台（深色、自定义标题栏、活动栏 + 左右面板 + 状态栏），**不是** `Src/Adapters/` 的一部分；改外壳不该动适配器。
+
+- **设计源**：`Demo/Theme/Tokens.axaml`（色板 / 字体 / 圆角）、`Demo/Theme/Styles.axaml`（控件与外壳），`Demo/Views/Workflow/CardTheme.axaml` 只叠节点卡那一层。面板里不要再写十六进制色值 —— 加一个 `DynamicResource` token。
+- **版式**：`WorkflowView.axaml` 的根 Grid 是 `32,*,24`（标题条 / 工作台 / 状态栏）；工作台列是 `48,272,4,*,4,348`（活动栏 / 侧栏 / 分隔条 / 主区 / 分隔条 / 右侧检查器）。主区是 `32,*`（编辑器标签 / 画布或输出）。
+- **唯一切换点**在 `WorkflowView.axaml.cs`：`ShowSidebarPage`、`ShowInspectorPage`、`SelectMainTab`。活动栏、右侧标签、菜单和命令中心都调这三个方法；**不要**在别处各自改 `IsVisible`，否则同一状态会有两条写路径。侧栏/检查器的显隐走 `SetSidebarVisible` / `SetInspectorVisible`（同时改列宽，否则隐藏后面板会留一条空列）。
+- **自定义窗口**：`MainWindow` 用 `WindowDecorations="BorderOnly"`；标题条拖动与双击最大化在 `OnTitleBarPointerPressed`，最小化/最大化/关闭在 `OnMinimizeWindow` / `OnMaximizeWindow` / `OnCloseWindow`。按钮和菜单在拖动处理里按祖先 `Button` / `MenuItem` 排除。
+- **标签字体**：Fluent 的 `TabItem` 会把标题放得比正文大很多；`Theme/Styles.axaml` 里显式压到 12px 才和外壳一致（实测于 Avalonia 12）。
+- **图标**：`Segoe Fluent Icons`（`IconFontFamily` token）。Scribalix 的 `ScribalixIcons.ttf` 是它自己的品牌资产，不复制；标题条的 logo 用仓库的 `Assets/veloxdev-logo.png`（已拷贝进 Demo/Assets）。
+- **运行管理器与输出**：`TreeViewModel.Runs`（`WorkflowRunCatalog`）是所有任务的唯一列表。手动编译/运行由 `WorkflowDemoSession.ConfigureSession` 写入；Agent 编译由 `AgentHelper.RecordToolCall` 从 `CompileWorkflow` / `CompileNodeResult` 的结果里读；Agent 运行由 scope 的 `WithSessionConfiguration` 指向同一个 `ConfigureSession`。`WorkflowRunCatalog.AttachSession` 包住会话的 `Observer` 与 `LogWriter`，轨迹不靠轮询。选中行被镜像进 `TreeViewModel.ExecutionLog`，六家已有的输出页继续绑定它，所以“输出页空白”不是绑定问题而是没人写这个集合。
+- **属性页只留两件**：选中元素与编译结构。运行状态/元素计数/缩放归状态栏，小地图开关归资源管理器，运行控制归运行管理器 —— 不要再复制回属性页。选中项是 `TreeViewModel.SelectedElement`（带 `[JsonIgnore]`，选中不是工作流状态，不能写进存档）；`WorkflowElementEntry.DetailText` 活读，`TreeViewModel.RefreshElementDetails` 只在编译完成或某节点被驱动时触发。
+- **换树先释放旧会话**：`WorkflowView._session` 在 `LoadNetworkDemo` / `SelectWorkflow` 里 `Dispose()` 后再建新的；`WorkflowDemoSession` 用一个 writer 开 `pycache/workflow.log`（`FileShare.Read`），第二个写者会在第一轮运行时打不开同一个文件。载入文件时用 `WorkflowDemoSession.FromTree(result)`，否则载入的控制器没有会话配置，运行也不会出现在管理器里。
+- **不要**给 `WorkflowElementCatalog` 订阅每个节点的 `PropertyChanged` 再刷新所有列表项：WPF 的 `CollectionView` 会因此反复重整，实测让 WPF demo 启动时窗口不显示（进程有窗口句柄为 0 的 0×0 窗口，dispatcher 空转）。要刷新就走 `RefreshElementDetails` 这个明确入口。

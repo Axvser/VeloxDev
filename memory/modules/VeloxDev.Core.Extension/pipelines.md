@@ -51,25 +51,28 @@
 
 **不是线程安全的，且刻意如此**（`AgentTranscript` 类注释）：一个 stage 喂它，在那一个被编组到的线程上。
 
-**宿主侧的消费契约**（`Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs`，七家共用）：内容增长走 120 ms 节流（`QueueConversationRender`），而**新开一个条目会立刻整篇重渲**（`OnTranscriptEntriesChanged`）——`AgentTranscriptTests.ConversationMarkdown_WrapsReasoningInAFence` 钉的就是后者，把新条目也并进节流会打破它（实测过）。`AgentLog` 由尾巴对齐同步（只动与前缀不同的那几条），不再是 `Clear` + 逐条 `Add`。
+**宿主侧的消费契约**（`Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs`，七家共用）：内容增长走 120 ms 节流（`QueueConversationRender`），而**新开一个条目会立刻整篇重渲**（`OnTranscriptEntriesChanged`）——`AgentTranscriptTests.ConversationMarkdown_WrapsReasoningInAChatPanel` 钉的就是后者，把新条目也并进节流会打破它（实测过）。`AgentLog` 由尾巴对齐同步（只动与前缀不同的那几条），不再是 `Clear` + 逐条 `Add`。
 
 **`AgentLog` 只有一个写者：那条投影。** 曾经 `AppendAgentLog` 也直接往它追加一行，而重渲会把整个 log 对齐到转录 —— 转录里没有那行，于是**追加的会被下一次重渲抹掉**。现在那条路改走转录：`TreeViewModel.AppendAgentError(message)` → `AgentTranscript.AddError`，两条渲染路径各自加自己的前缀（行内 `[Error] …`、markdown `**错误：**`），所以**传裸消息**。于是同一条错误在七家都出现（原来只有 MAUI 的 ListBox 有，且会消失）。`AppendAgentLog` 因此不再碰 `AgentLog`，只喂 `AgentMessages` —— 它现在没有生产调用者，但 `AgentMessages` 是**有意留着的第三种形状**（按角色渲染的宿主可以绑它，见 `Src/.../Test/Examples/AgentTranscriptTests.cs` 的类注释），所以别顺手删。唯一的生产调用者是 MAUI 的发送失败提示，已改调 `AppendAgentError`。
 
-**别把它当会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它做三件事 —— `ToMarkdown(AgentMarkdownOptions?)`、`ToPlainTextLines()`，以及从 `Entries` 拿结构化条目；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs` 的 `ToMarkdown` / `ToPlainTextLines` 调用点。`ToJson()` / `Restore()` 持久化的也只是这份**显示记录**（角色 / 文本 / 时间戳 / 工具名 / 详情 / 结局），恢复它不会恢复模型的记忆 —— 要续对话仍需持久化 `AgentSession`。`ToMarkdown` 会把**连续的**工具调用攒成一个块，理由同样是为了让每个 markdown 宿主不必自己写渲染器。
+**别把它当会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它做三件事 —— `ToMarkdown(AgentMarkdownOptions?)`、`ToPlainTextLines()`，以及从 `Entries` 拿结构化条目；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs` 的 `ToMarkdown` / `ToPlainTextLines` 调用点。`ToJson()` / `Restore()` 持久化的也只是这份**显示记录**（角色 / 文本 / 时间戳 / 工具名 / 详情 / 结局），恢复它不会恢复模型的记忆 —— 要续对话仍需持久化 `AgentSession`。`ToMarkdown` 默认把**连续的**工具调用攒成一个块，理由同样是为了让每个 markdown 宿主不必自己写渲染器；`ChatFences` 打开时改为每个工具一格折叠面板。
 
 ### 推理的渲染形状（`ToMarkdown` 的文档注释 + `AgentMarkdownOptions`）
 
-推理走**围栏代码块**，不是加粗段落 —— 段落的形状与 `Assistant` **完全同形**，只差标签，消费端拿到扁平字符串后无法把它独立包裹成一块。形状由 `AgentMarkdownOptions`（与 `AgentTranscript` 同文件）决定，两个成员都有出厂默认值，**传 `null` 就是出厂形状**：
+推理默认走**围栏代码块**，不是加粗段落 —— 段落的形状与 `Assistant` **完全同形**，只差标签，消费端拿到扁平字符串后无法把它独立包裹成一块。`ChatFences` 打开时改走 `chat` 折叠面板，推理与工具载荷因此都不占阅读路径。形状由 `AgentMarkdownOptions`（与 `AgentTranscript` 同文件）决定，所有成员都有出厂默认值，**传 `null` 就是出厂形状**：
 
 | 成员 | 默认 | 语义 |
 |---|---|---|
-| `ReasoningFence` | `"thinking"` | 围栏的 info string。**空串 = 关掉围栏**，退回旧的 `**思考：**\n\n{text}` |
-| `ReasoningHeading` | `"**思考：**"` | 围栏**之上、之外**的标签；`null` = 无标签（放进围栏会被当字面代码） |
+| `ReasoningFence` | `"thinking"` | 围栏的 info string。**空串 = 关掉围栏**，退回旧的 `**思考：**\n\n{text}`；`ChatFences` 打开时不生效 |
+| `ReasoningHeading` | `"**思考：**"` | 围栏**之上、之外**的标签；`null` = 无标签（放进围栏会被当字面代码）；`ChatFences` 打开时由面板标签替代 |
+| `ChatFences` | `false` | 推理与工具调用改用 `chat[label][state]` 折叠面板（AvalonMarkdown 12 的方言）。开着的推理用 `thinking` 转；关掉后统一用 `done` 显示勾（**不要用 `thinking,static`** —— 冻结的灯泡光环看起来像停在半路）。工具按结局用 `done` / `error`，没有结局的（旧文档恢复）用 `tool,static` |
+| `ToolDetailLimit` | `4000` | 每个工具面板携带的载荷上限（字符）。`0` = 不限。整篇文档每次重渲都会过桥，所以要有上限；截断处写明原长度 |
 
-两条必须知道的实现细节：
+三条必须知道的实现细节：
 
-- **围栏长度按正文里最长的连续反引号串 + 1 算**（`FenceLength`），下限 3。CommonMark 在遇到第一行「反引号数 ≥ 开围栏」时就闭合 —— 模型思考里写 ` ``` ` 是常态，固定 3 个会被内容自己提前闭合，把**后续整个对话**吞进代码块。
-- **info string 里的反引号被剔除**（`FenceInfo`）。它由宿主提供，一个反引号会并进开围栏、把开围栏拉得比闭围栏长，于是**永远闭合不了**。
+- **围栏长度按正文里最长的连续反引号串 + 1 算**（`FenceLength`），下限 3。CommonMark 在遇到第一行「反引号数 ≥ 开围栏」时就闭合 —— 模型思考里写 ` ``` ` 是常态，固定 3 个会被内容自己提前闭合，把**后续整个对话**吞进代码块。`chat` 面板的正文里还有工具载荷的代码围栏，所以外层同样按 `FenceLength(body)` 加长。
+- **info string 里的反引号被剔除**（`FenceInfo` 用于普通围栏，`ChatLabel` 用于面板标签）。它由宿主提供，一个反引号会并进开围栏、把开围栏拉得比闭围栏长，于是**永远闭合不了**。面板标签还不能含 `]` —— `chat` 围栏按 `]` 切分组，早闭合会让后面整段变成「组间有文本」的错误。
+- **工具的「结局」徽标取 `AgentToolOutcome`，不靠标签里的字推断**：`Succeeded` → `done`，`Failed` / `Refused` → `error`。标签写成 `工具 {ToolName} · {Outcome}`，类别、人名与结局各归各的。
 
 **`ToPlainTextLines()` 一行不动，也不给它对称的 options**：它的「一个条目一行」是一份**契约**而非形状（`ToPlainTextLines` 的文档注释），宿主靠 `Count ==` + `SequenceEqual` 同步、再按前缀解析回角色；推理在那儿早就是 `[Thinking] …` 行。纯文本宿主没有歧义要解，加 options 只会多一个面。
 
@@ -114,5 +117,5 @@
 
 - `Agent/Pipelines/` 下的文件**全部**在仓库内有真实调用者（`TextPipeline`、`ToolPipeline`、`AgentPipelineAgent` 由 `WorkflowAgentScope.Pipeline` 组装；`AgentTranscript` 由 demo 的 `TreeViewModel` 消费）。这个目录没有死面。
 - `AgentMarkdownOptions` 与 `AgentTranscript` **同文件**，没有新增文件（同一文件承载多个公开类型是本目录既有做法，`AgentEvent.cs`、`AgentPipeline.cs` 都是）。
-- **`AgentMarkdownOptions` 在仓库内没有生产消费者**（`ReasoningFence` —— demo 全走默认；测试里 `AgentTranscriptTests.cs` 有多处显式构造）。这是**有意**的默认值面而不是死面：它的存在意义就是「宿主不改任何东西也拿到围栏」，仓库里没有第二个消费者是正常的。但它同时意味着**形状回归不会有编译期信号** —— 守卫在 `VeloxDev.Core.Extension.Test/Agent/Pipelines/AgentTranscriptTests.cs` 的测试里。
+- **`AgentMarkdownOptions` 的生产消费者只有一个**：`Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs` 的 `ConversationMarkdownOptions`（`ChatFences = true`，只对绑 `ConversationMarkdown` 的 Avalonia 生效）。其余成员仍走默认值；测试里 `AgentTranscriptTests.cs` 也显式构造它。**形状回归没有编译期信号** —— 守卫在 `VeloxDev.Core.Extension.Test/Agent/Pipelines/AgentTranscriptTests.cs` 的测试里。
 - 唯一值得留意的是**事件种类里没有「交互」类**：`RequestSelection` / `RequestConfirmation` 走的是工具返回 + 宿主 handler，不走事件管线。想在 UI 上看到它们，订阅 `WorkflowAgentScope.ToolCalled` 或让工具自己回调。
