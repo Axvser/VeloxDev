@@ -40,8 +40,8 @@
                     Background="Transparent"
                     behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
                     behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-                <Grid ColumnDefinitions="2,*,Auto,Auto">
-                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="#6EC6FF" />
+                <Grid ColumnDefinitions="3,*,Auto,Auto">
+                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="{StaticResource NodeScriptAccentBrush}" />
                     <TextBlock Grid.Column="1" Style="{StaticResource CardTitleTextStyle}"
                                Text="{Binding Title}" Margin="12,0,6,0" />
                     <TextBlock Grid.Column="2" Style="{StaticResource CardValueTextStyle}"
@@ -104,7 +104,7 @@
                                                Text="{Binding Name}"
                                                Style="{StaticResource CardValueTextStyle}"
                                                FontSize="11" FontWeight="SemiBold"
-                                               Foreground="#6EC6FF"
+                                               Foreground="{StaticResource NodeScriptAccentBrush}"
                                                VerticalAlignment="Center"
                                                HorizontalAlignment="Left"
                                                Margin="4,0,0,0"
@@ -129,7 +129,7 @@
                                 BorderBrush="{StaticResource CardDividerBrush}" BorderThickness="0,0,0,1"
                                 Padding="8,4" CornerRadius="6,6,0,0">
                             <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Text="script.py" Foreground="#6EE7A8"
+                                <TextBlock Grid.Column="0" Text="script.py" Foreground="{StaticResource NodeSuccessBrush}"
                                            FontFamily="Consolas" FontSize="11" FontWeight="SemiBold" />
                                 <TextBlock Grid.Column="1" Text="Python 3" Foreground="{StaticResource CardDisabledTextBrush}"
                                            FontSize="10" />
@@ -186,7 +186,7 @@
                                                Text="{Binding Name}"
                                                Style="{StaticResource CardValueTextStyle}"
                                                FontSize="11" FontWeight="SemiBold"
-                                               Foreground="#6EC6FF"
+                                               Foreground="{StaticResource NodeScriptAccentBrush}"
                                                VerticalAlignment="Center"
                                                HorizontalAlignment="Right"
                                                Margin="0,0,4,0"

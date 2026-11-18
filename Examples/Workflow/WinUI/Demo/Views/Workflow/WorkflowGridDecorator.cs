@@ -31,14 +31,14 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
     // 中性灰一套，与 Trimmed demo（模板的默认调色板）逐字相同。原先这套是青蓝的──画布 #141922、
     // 轴用 #38BDF8──七家非 Trimmed 里有四家共用它。对齐的只有画布层：节点卡的逐类型配色是刻意保留的。
-    private static readonly SolidColorBrush SurfaceBackgroundBrush = CreateBrush("#1E1E1E");
-    private static readonly SolidColorBrush RulerBackgroundBrush = CreateBrush("#C8252526");
-    private static readonly SolidColorBrush LabelBrush = CreateBrush("#888888");
-    private static readonly SolidColorBrush MinorGridBrush = CreateBrush("#2A2D2E");
-    private static readonly SolidColorBrush MajorGridBrush = CreateBrush("#3A3D40");
-    private static readonly SolidColorBrush AxisBrush = CreateBrush("#4D4D4D");
-    private static readonly SolidColorBrush TickBrush = CreateBrush("#555555");
-    private static readonly SolidColorBrush DividerBrush = CreateBrush("#3A3D40");
+    private static readonly SolidColorBrush SurfaceBackgroundBrush = CreateBrush("#171717");
+    private static readonly SolidColorBrush RulerBackgroundBrush = CreateBrush("#D21F1F1F");
+    private static readonly SolidColorBrush LabelBrush = CreateBrush("#6E7681");
+    private static readonly SolidColorBrush MinorGridBrush = CreateBrush("#232323");
+    private static readonly SolidColorBrush MajorGridBrush = CreateBrush("#2E2E2E");
+    private static readonly SolidColorBrush AxisBrush = CreateBrush("#3A3A3A");
+    private static readonly SolidColorBrush TickBrush = CreateBrush("#4A4A4A");
+    private static readonly SolidColorBrush DividerBrush = CreateBrush("#2E2E2E");
 
     private readonly Canvas _contentLayer;
     private readonly Canvas _topRulerLayer;

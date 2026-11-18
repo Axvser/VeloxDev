@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Workbench tokens for the WinUI demo. Brushes and type only; the shell uses them through
+         StaticResource, so there is no template or converter for the XAML compiler to resolve. -->
+
+    <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#141414" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#1F1F1F" />
+    <SolidColorBrush x:Key="EditorBackgroundBrush" Color="#141414" />
+    <SolidColorBrush x:Key="ActivityBarBackgroundBrush" Color="#181818" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#252526" />
+    <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="#2D2D2D" />
+    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#2A2A2A" />
+    <SolidColorBrush x:Key="HoverBrush" Color="#2A2D2E" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#094771" />
+
+    <SolidColorBrush x:Key="BorderSubtleBrush" Color="#262626" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#333333" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="#404040" />
+
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#E7E7E7" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A0A0A0" />
+    <SolidColorBrush x:Key="TextTertiaryBrush" Color="#6E7681" />
+    <SolidColorBrush x:Key="TextDisabledBrush" Color="#585858" />
+
+    <SolidColorBrush x:Key="AccentBrush" Color="#0078D4" />
+    <SolidColorBrush x:Key="AccentTextBrush" Color="#4FC1FF" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#3FB950" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#D29922" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#F85149" />
+
+    <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#181818" />
+    <SolidColorBrush x:Key="StatusBarBorderBrush" Color="#2B2B2B" />
+    <SolidColorBrush x:Key="StatusBarTextBrush" Color="#B8B8B8" />
+
+    <SolidColorBrush x:Key="CanvasBorderBrush" Color="#2B2B2B" />
+    <SolidColorBrush x:Key="NodeBackgroundBrush" Color="#252526" />
+    <SolidColorBrush x:Key="NodeBorderBrush" Color="#3C3C3C" />
+    <SolidColorBrush x:Key="NodeFooterBrush" Color="#1B1B1C" />
+
+    <SolidColorBrush x:Key="NodeControllerAccentBrush" Color="#6E8BFF" />
+    <SolidColorBrush x:Key="NodeTimerAccentBrush" Color="#4FC1FF" />
+    <SolidColorBrush x:Key="NodeScriptAccentBrush" Color="#00A7A7" />
+    <SolidColorBrush x:Key="NodeEnumAccentBrush" Color="#C99BFF" />
+    <SolidColorBrush x:Key="NodeFallbackAccentBrush" Color="#94A3B8" />
+    <SolidColorBrush x:Key="NodeSuccessBrush" Color="#7EE787" />
+
+    <FontFamily x:Key="UiFontFamily">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Microsoft YaHei</FontFamily>
+    <FontFamily x:Key="IconFontFamily">Segoe Fluent Icons</FontFamily>
+    <FontFamily x:Key="MonoFontFamily">Cascadia Mono, Consolas, JetBrains Mono</FontFamily>
+    <x:Double x:Key="UiFontSize">12</x:Double>
+</ResourceDictionary>

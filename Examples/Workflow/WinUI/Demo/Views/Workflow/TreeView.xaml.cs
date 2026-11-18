@@ -31,6 +31,22 @@ namespace Demo.Views
         private IWorkflowNodeViewModel? _nodeLayoutTarget;
         private double _nodeLayoutTolerance = 8d;
 
+        // 一次只同步一侧：用户点列表 -> 写 ViewModel，ViewModel 变化 -> 选列表。
+        // 没有这两个门，两边的 SelectionChanged 会互相再触发一次。
+        private bool _syncingElementSelection;
+        private bool _syncingRunSelection;
+
+        private string _sidebarPage = "explorer";
+        private string _inspectorPage = "properties";
+        private bool _outputTabActive;
+
+        private static readonly SolidColorBrush ActivityAccent =
+            new(Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x00, 0x7A, 0xCC));
+        private static readonly SolidColorBrush ActivityIdle =
+            new(Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x9D, 0x9D, 0x9D));
+        private static readonly SolidColorBrush TransparentBrush =
+            new(Microsoft.UI.Colors.Transparent);
+
         [DllImport("user32.dll")]
         private static extern IntPtr GetActiveWindow();
 
@@ -46,6 +62,9 @@ namespace Demo.Views
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
         public TreeView()
@@ -58,7 +77,7 @@ namespace Demo.Views
             ElementNodeList.ItemsSource = _elements.Nodes;
             ElementSlotList.ItemsSource = _elements.Slots;
             ElementLinkList.ItemsSource = _elements.Links;
-            _elements.Changed += (_, _) => ElementStatus.Text = _elements.Summary;
+            _elements.Changed += OnElementsChanged;
             ElementStatus.Text = _elements.Summary;
 
             // Demo-only policy: layout is offered on the node itself, so no sidebar controls are needed.
@@ -74,40 +93,381 @@ namespace Demo.Views
             PART_ScrollViewer.ViewChanged += (_, _) => InfoOverlay.Refresh();
 
             WorkflowBehaviors.ViewPool.SetTemplateSelector(PART_Canvas, Resources["NodeSelector"] as DataTemplateSelector);
+
+            AddShellAccelerators();
+            ApplyShellVisuals();
             InitializeNetworkDemo();
         }
 
-        // 侧栏一次只显示一页：资源管理器 / 运行 / Agent / MCP / 输出。
+        // ── 工作台外壳：活动栏 / 页签 / 面板切换 ─────────────────────────────────
+
+        private void ApplyShellVisuals()
+        {
+            SelectMainTab("canvas");
+            ShowSidebarPage("explorer");
+            ShowInspectorPage("properties");
+            ShowElementTab("nodes");
+        }
+
+        private void OnElementTabClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: string view }) ShowElementTab(view);
+        }
+
+        private void ShowElementTab(string view)
+        {
+            ElementNodeList.Visibility = view == "nodes" ? Visibility.Visible : Visibility.Collapsed;
+            ElementSlotList.Visibility = view == "slots" ? Visibility.Visible : Visibility.Collapsed;
+            ElementLinkList.Visibility = view == "links" ? Visibility.Visible : Visibility.Collapsed;
+
+            PaintTab(NodeTabButton, view == "nodes");
+            PaintTab(SlotTabButton, view == "slots");
+            PaintTab(LinkTabButton, view == "links");
+        }
+
+        private void AddShellAccelerators()
+        {
+            AddAccelerator(Windows.System.VirtualKey.S, Windows.System.VirtualKeyModifiers.Control,
+                () => SaveWorkflow(this, new RoutedEventArgs()));
+            AddAccelerator(Windows.System.VirtualKey.O, Windows.System.VirtualKeyModifiers.Control,
+                () => SelectWorkflow(this, new RoutedEventArgs()));
+            AddAccelerator(Windows.System.VirtualKey.Z, Windows.System.VirtualKeyModifiers.Control,
+                () => ExecuteHistory(undo: true));
+            AddAccelerator(Windows.System.VirtualKey.Y, Windows.System.VirtualKeyModifiers.Control,
+                () => ExecuteHistory(undo: false));
+            AddAccelerator(Windows.System.VirtualKey.P,
+                Windows.System.VirtualKeyModifiers.Control | Windows.System.VirtualKeyModifiers.Shift,
+                () => OnOpenCommandCenter(this, new RoutedEventArgs()));
+        }
+
+        private void AddAccelerator(
+            Windows.System.VirtualKey key,
+            Windows.System.VirtualKeyModifiers modifiers,
+            Action action)
+        {
+            var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
+            accelerator.Invoked += (_, args) =>
+            {
+                action();
+                args.Handled = true;
+            };
+            KeyboardAccelerators.Add(accelerator);
+        }
+
+        private void ExecuteHistory(bool undo)
+        {
+            var command = undo ? ViewModel.UndoCommand : ViewModel.RedoCommand;
+            if (command.CanExecute(null)) command.Execute(null);
+        }
+
         private void OnActivityClick(object sender, RoutedEventArgs e)
         {
-            if (sender is not Button { Tag: string view } clicked) return;
+            if (sender is not Button { Tag: string view }) return;
 
-            // 活动栏是 Button 而不是 RadioButton，选中态在这里画：左侧蓝条 + 白色字形。
-            var accent = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x00, 0x7A, 0xCC));
-            var clear = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            var activeText = new SolidColorBrush(Microsoft.UI.Colors.White);
-            var idleText = new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0xFF, 0x9D, 0x9D, 0x9D));
-            foreach (var button in ActivityBar.Children.OfType<Button>())
+            if (view == "output")
             {
-                var active = ReferenceEquals(button, clicked);
-                button.BorderBrush = active ? accent : clear;
-                button.Foreground = active ? activeText : idleText;
+                SelectMainTab("output");
+                return;
             }
 
+            ShowSidebarPage(view);
+        }
+
+        private void OnInspectorActivityClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: string view }) return;
+
+            SetInspectorVisible(true);
+            ShowInspectorPage(view);
+        }
+
+        private void OnMainTabClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: string view }) SelectMainTab(view);
+        }
+
+        private void OnRightTabClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: string view }) ShowInspectorPage(view);
+        }
+
+        private void SelectMainTab(string view)
+        {
+            _outputTabActive = view == "output";
+            WorkflowContainer.Visibility = _outputTabActive ? Visibility.Collapsed : Visibility.Visible;
+            OutputPanel.Visibility = _outputTabActive ? Visibility.Visible : Visibility.Collapsed;
+
+            PaintTab(CanvasTab, _outputTabActive == false);
+            PaintTab(OutputTab, _outputTabActive);
+            PaintTopActivity();
+
+            if (_outputTabActive) ScrollToEnd(ExecutionLogScroller);
+        }
+
+        private void ShowSidebarPage(string view)
+        {
+            _sidebarPage = view;
             ExplorerPanel.Visibility = view == "explorer" ? Visibility.Visible : Visibility.Collapsed;
             RunPanel.Visibility = view == "run" ? Visibility.Visible : Visibility.Collapsed;
-            AgentPanel.Visibility = view == "agent" ? Visibility.Visible : Visibility.Collapsed;
             McpPanel.Visibility = view == "mcp" ? Visibility.Visible : Visibility.Collapsed;
-            OutputPanel.Visibility = view == "output" ? Visibility.Visible : Visibility.Collapsed;
 
             SidebarHeader.Text = view switch
             {
                 "run" => "运行",
-                "agent" => "AGENT",
-                "mcp" => "MCP",
-                "output" => "输出",
+                "mcp" => "MCP 服务器",
                 _ => "资源管理器",
             };
+
+            SetSidebarVisible(true);
+            PaintTopActivity();
+        }
+
+        private void ShowInspectorPage(string view)
+        {
+            _inspectorPage = view;
+            PropertiesPanel.Visibility = view == "properties" ? Visibility.Visible : Visibility.Collapsed;
+            AgentPanel.Visibility = view == "agent" ? Visibility.Visible : Visibility.Collapsed;
+
+            PaintTab(PropertiesTab, view == "properties");
+            PaintTab(AgentTab, view == "agent");
+            PaintBottomActivity();
+        }
+
+        private void PaintTab(Button button, bool selected)
+        {
+            button.BorderBrush = selected ? AccentBrush() : TransparentBrush;
+            button.Foreground = selected ? AppBrush("TextPrimaryBrush") : AppBrush("TextTertiaryBrush");
+        }
+
+        private void PaintTopActivity()
+        {
+            foreach (var button in TopActivityBar.Children.OfType<Button>())
+            {
+                var tag = button.Tag as string;
+                var active = tag == "output" ? _outputTabActive : tag == _sidebarPage;
+                PaintActivity(button, active);
+            }
+        }
+
+        private void PaintBottomActivity()
+        {
+            foreach (var button in BottomActivityBar.Children.OfType<Button>())
+                PaintActivity(button, button.Tag as string == _inspectorPage);
+        }
+
+        private static void PaintActivity(Button button, bool active)
+        {
+            button.Foreground = active ? AppBrush("TextPrimaryBrush") : ActivityIdle;
+            button.BorderBrush = active ? ActivityAccent : TransparentBrush;
+        }
+
+        private static SolidColorBrush AccentBrush()
+            => AppBrush("AccentBrush");
+
+        private static SolidColorBrush AppBrush(string key)
+        {
+            var resources = Application.Current.Resources;
+            return resources.ContainsKey(key) && resources[key] is SolidColorBrush brush
+                ? brush
+                : TransparentBrush;
+        }
+
+        private void OnToggleSidebar(object sender, RoutedEventArgs e)
+            => SetSidebarVisible(SidebarHost.Visibility == Visibility.Collapsed);
+
+        private void OnToggleInspector(object sender, RoutedEventArgs e)
+            => SetInspectorVisible(InspectorHost.Visibility == Visibility.Collapsed);
+
+        private void SetSidebarVisible(bool visible)
+        {
+            SidebarHost.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            WorkbenchGrid.ColumnDefinitions[1].Width = new GridLength(visible ? 272 : 0);
+            WorkbenchGrid.ColumnDefinitions[2].Width = new GridLength(visible ? 4 : 0);
+        }
+
+        private void SetInspectorVisible(bool visible)
+        {
+            InspectorHost.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            WorkbenchGrid.ColumnDefinitions[4].Width = new GridLength(visible ? 4 : 0);
+            WorkbenchGrid.ColumnDefinitions[5].Width = new GridLength(visible ? 348 : 0);
+        }
+
+        private void OnShowPanelMenu(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuFlyoutItem { Tag: string view }) return;
+
+            switch (view)
+            {
+                case "properties":
+                case "agent":
+                    SetInspectorVisible(true);
+                    ShowInspectorPage(view);
+                    break;
+                case "output":
+                    SelectMainTab("output");
+                    break;
+                default:
+                    ShowSidebarPage(view);
+                    break;
+            }
+        }
+
+        private void OnOpenCommandCenter(object sender, RoutedEventArgs e)
+            => CommandCenterButton.Flyout?.ShowAt(CommandCenterButton);
+
+        private void OnUndo(object sender, RoutedEventArgs e) => ExecuteHistory(undo: true);
+
+        private void OnRedo(object sender, RoutedEventArgs e) => ExecuteHistory(undo: false);
+
+        private async void OnShowAbout(object sender, RoutedEventArgs e)
+        {
+            await ShowMessageAsync(
+                "VeloxDev — Workflow Studio",
+                "演示宿主：工作流画布、运行任务、Agent 与 MCP 面板都在这一套外壳里。");
+        }
+
+        private void OnCloseWindow(object sender, RoutedEventArgs e)
+        {
+            var hwnd = GetActiveWindowHandle();
+            if (hwnd != IntPtr.Zero) PostMessage(hwnd, 0x0010 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero);
+        }
+
+        // ── 元素列表 / 检查器 ─────────────────────────────────────────────────
+
+        private void OnElementsChanged(object? sender, EventArgs e)
+        {
+            ElementStatus.Text = _elements.Summary;
+
+            if (ViewModel.SelectedElement is null && !_syncingElementSelection)
+                ClearElementSelection();
+        }
+
+        private void OnElementSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_syncingElementSelection) return;
+            if (sender is not ListView list) return;
+            if (list.SelectedItem is not WorkflowElementEntry entry) return;
+
+            _syncingElementSelection = true;
+            try
+            {
+                foreach (var other in new[] { ElementNodeList, ElementSlotList, ElementLinkList })
+                {
+                    if (!ReferenceEquals(other, list)) other.SelectedItem = null;
+                }
+
+                ViewModel.SelectedElement = entry;
+            }
+            finally
+            {
+                _syncingElementSelection = false;
+            }
+        }
+
+        private void ClearElementSelection()
+        {
+            _syncingElementSelection = true;
+            try
+            {
+                ElementNodeList.SelectedItem = null;
+                ElementSlotList.SelectedItem = null;
+                ElementLinkList.SelectedItem = null;
+            }
+            finally
+            {
+                _syncingElementSelection = false;
+            }
+        }
+
+        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(TreeViewModel.SelectedElement) &&
+                ViewModel.SelectedElement is null &&
+                !_syncingElementSelection)
+            {
+                ClearElementSelection();
+            }
+        }
+
+        // ── Run manager ──────────────────────────────────────────────────────
+
+        private static WorkflowRunTaskViewModel? RunTaskOf(object? sender)
+            => (sender as FrameworkElement)?.DataContext as WorkflowRunTaskViewModel;
+
+        private void OnPauseRunTask(object sender, RoutedEventArgs e) => RunTaskOf(sender)?.Pause();
+
+        private void OnResumeRunTask(object sender, RoutedEventArgs e) => RunTaskOf(sender)?.Resume();
+
+        private void OnStopRunTask(object sender, RoutedEventArgs e) => RunTaskOf(sender)?.Stop();
+
+        private void OnStartRunTask(object sender, RoutedEventArgs e) => RunTaskOf(sender)?.Start();
+
+        private void OnRemoveRunTask(object sender, RoutedEventArgs e)
+        {
+            if (RunTaskOf(sender) is { } task) ViewModel.Runs.Remove(task);
+        }
+
+        private void OnClearFinishedRuns(object sender, RoutedEventArgs e)
+            => ViewModel.Runs.ClearFinished();
+
+        private void OnRunTaskSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_syncingRunSelection) return;
+            if (RunTaskList.SelectedItem is not WorkflowRunTaskViewModel task) return;
+
+            _syncingRunSelection = true;
+            try
+            {
+                ViewModel.Runs.Selected = task;
+            }
+            finally
+            {
+                _syncingRunSelection = false;
+            }
+        }
+
+        private void OnRunsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(WorkflowRunCatalog.Selected)) return;
+
+            // The row is inserted into the bound collection and selected in the same call; let the
+            // ItemsSource see the insert before the ListView is asked to select it.
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, SyncRunSelection);
+        }
+
+        private void SyncRunSelection()
+        {
+            if (_syncingRunSelection) return;
+
+            _syncingRunSelection = true;
+            try
+            {
+                var selected = ViewModel.Runs.Selected;
+                if (!ReferenceEquals(RunTaskList.SelectedItem, selected))
+                    RunTaskList.SelectedItem = selected;
+
+                if (selected is not null)
+                    RunTaskList.ScrollIntoView(selected);
+            }
+            finally
+            {
+                _syncingRunSelection = false;
+            }
+        }
+
+        // ── Tree lifetime ────────────────────────────────────────────────────
+
+        private void AttachViewModel(TreeViewModel vm)
+        {
+            vm.PropertyChanged += OnViewModelPropertyChanged;
+            vm.Runs.PropertyChanged += OnRunsPropertyChanged;
+            SyncRunSelection();
+        }
+
+        private void DetachViewModel(TreeViewModel vm)
+        {
+            vm.PropertyChanged -= OnViewModelPropertyChanged;
+            vm.Runs.PropertyChanged -= OnRunsPropertyChanged;
         }
 
         /// <summary>
@@ -145,8 +505,6 @@ namespace Demo.Views
 
         private async void SaveWorkflow(object sender, RoutedEventArgs e)
         {
-            if (DataContext is not TreeViewModel tree) return;
-
             var folderPicker = new Windows.Storage.Pickers.FolderPicker();
             var hwnd = GetActiveWindowHandle();
             if (hwnd != IntPtr.Zero)
@@ -164,7 +522,7 @@ namespace Demo.Views
             }
 
             string filePath = Path.Combine(folder.Path, "Workflow.json");
-            tree.SaveCommand.Execute(filePath);
+            ViewModel.SaveCommand.Execute(filePath);
             await ShowMessageAsync("Save Succeeded", $"Workflow saved to: {filePath}");
         }
 
@@ -205,9 +563,11 @@ namespace Demo.Views
                 result.Layout.UpdateCommand.Execute(null);
 
                 UnsubscribeAutoScroll(ViewModel);
+                DetachViewModel(ViewModel);
                 ViewModel = result;
                 DataContext = ViewModel;
                 _elements.SetTree(ViewModel);
+                AttachViewModel(ViewModel);
                 SubscribeAutoScroll(ViewModel);
                 VetoFrameworkGestures(ViewModel);
                 WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
@@ -229,11 +589,14 @@ namespace Demo.Views
         private void InitializeNetworkDemo()
         {
             UnsubscribeAutoScroll(ViewModel);
-            _demo = WorkflowDemoSession.Create();
-            ViewModel = _demo.Tree;
-        HookLinkKeys(ViewModel);
+            DetachViewModel(ViewModel);
+
+            var demo = WorkflowDemoSession.Create();
+            ViewModel = demo.Tree;
+            HookLinkKeys(ViewModel);
             DataContext = ViewModel;
             _elements.SetTree(ViewModel);
+            AttachViewModel(ViewModel);
             SubscribeAutoScroll(ViewModel);
             VetoFrameworkGestures(ViewModel);
             if (ViewModel.GetHelper() is AgentHelper helper)
@@ -244,50 +607,6 @@ namespace Demo.Views
             ViewModel.Layout.UpdateCommand.Execute(null);
             WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
             InitializePermissionMode();
-
-            // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。Exited 是在线程池上发的，所以回到
-            // UI 线程再改控件。
-            _demo.Controller.RunCommand.Exited += _ => DispatcherQueue.TryEnqueue(RefreshRunControls);
-            _demo.Controller.ResumeCommand.Exited += _ => DispatcherQueue.TryEnqueue(RefreshRunControls);
-            RefreshRunControls();
-        }
-
-        /// <summary>
-        /// The demo session behind the tree on screen — <c>null</c> when the tree came from a file instead of from
-        /// <see cref="WorkflowDemoSession.Create"/>. The run controls live on it, not on the tree.
-        /// </summary>
-        private WorkflowDemoSession? _demo;
-
-        // Agent 一轮里每个工具调用都要求刷新，而一次刷新是全量的（重新定位命名控件、跑布局、重算可见区）。
-        // 合并之后一轮只刷新一次 —— 刷新本身是幂等的，后来的请求要的正是前一次即将看到的状态。
-        private CoalescedRefresh? _surfaceRefresh;
-
-        // 门与检查点都在会话上，所以这两件事只有拿得到会话时才可按；换过树（载入文件）就什么都别做。
-        private void RefreshRunControls()
-        {
-            ContinueFromCheckpointButton.IsEnabled = _demo?.HasCheckpoint == true;
-            RunGateState.Text = _demo?.Gate.IsPaused == true ? "已暂停" : "空闲";
-        }
-
-        private void PauseWorkflow(object sender, RoutedEventArgs e)
-        {
-            if (_demo is null) return;
-            _demo.Gate.Pause();
-            RunGateState.Text = "已暂停：停在下一个节点边界";
-        }
-
-        private void ResumeWorkflow(object sender, RoutedEventArgs e)
-        {
-            if (_demo is null) return;
-            _demo.Gate.Resume();
-            RunGateState.Text = "运行中";
-        }
-
-        private async void ContinueFromCheckpoint(object sender, RoutedEventArgs e)
-        {
-            if (_demo is null) return;
-            RunGateState.Text = "从检查点继续…";
-            await _demo.Controller.ResumeCommand.ExecuteAsync(null);
         }
 
         private async void OnReloadMcp(object sender, RoutedEventArgs e)
@@ -398,11 +717,6 @@ namespace Demo.Views
             vm.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
             if (vm.GetHelper() is AgentHelper helper)
             {
-                // 一个 surface 一个合并器：换树会重新走到这里，但合并器跟着视图走，不该重建。
-                _surfaceRefresh ??= new CoalescedRefresh(
-                    () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this),
-                    action => DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => action()));
-
                 helper.SelectionHandler = ShowSelectionDialogAsync;
                 helper.ConfirmationHandler = ShowConfirmationDialogAsync;
                 helper.ToolCalled += OnAgentToolCalled;
@@ -632,9 +946,16 @@ namespace Demo.Views
             args.Result = await tcs.Task;
         }
 
-        private void OnAgentToolCalled() => _surfaceRefresh?.Request();
+        private void OnAgentToolCalled() => RequestSurfaceRefresh();
 
-        private void OnVisualRefreshRequested() => _surfaceRefresh?.Request();
+        private void OnVisualRefreshRequested() => RequestSurfaceRefresh();
+
+        private void RequestSurfaceRefresh()
+        {
+            DispatcherQueue.TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this));
+        }
 
         private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
@@ -679,6 +1000,7 @@ namespace Demo.Views
 
             await dialog.ShowAsync();
         }
+
         // Demo-only: the node itself is the entry point. Right-clicking it opens this menu; the row/list
         // stays a passive index. The Core pipeline remains a pure snapshot/solve and the first invocation
         // of a layout is one undo step inside the applier.
@@ -787,24 +1109,44 @@ namespace Demo.Views
         {
             if ((sender as FrameworkElement)?.DataContext is not WorkflowElementEntry entry) return;
 
+            DeleteElement(entry);
+        }
+
+        private void OnLocateSelectedElement(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.SelectedElement is not { } entry) return;
+
+            ElementStatus.Text = _elements.Locate(entry)
+                ? $"已定位 {entry.Label}"
+                : "没有可用的表面，或该元素还没有有限坐标";
+        }
+
+        private void OnDeleteSelectedElement(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.SelectedElement is { } entry) DeleteElement(entry);
+        }
+
+        private void DeleteElement(WorkflowElementEntry entry)
+        {
             _elements.Delete(entry);
+            if (ReferenceEquals(ViewModel.SelectedElement, entry))
+                ViewModel.SelectedElement = null;
             ElementStatus.Text = $"已删除 {entry.Label}";
         }
 
-    // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
-    // 删不删由这里写（与悬停高亮同一条路）。
-    private void HookLinkKeys(IWorkflowTreeViewModel tree)
-    {
-        if (tree.GetHelper() is not IInputEvents events) return;
-
-        events.Input.KeyDown += (_, e) =>
+        // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
+        // 删不删由这里写（与悬停高亮同一条路）。
+        private void HookLinkKeys(IWorkflowTreeViewModel tree)
         {
-            if (e.Key != InputKey.Delete || e.Handle.PreventDefault) return;
-            if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
+            if (tree.GetHelper() is not IInputEvents events) return;
 
-            link.DeleteCommand.Execute(null);
-        };
-    }
+            events.Input.KeyDown += (_, e) =>
+            {
+                if (e.Key != InputKey.Delete || e.Handle.PreventDefault) return;
+                if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
 
+                link.DeleteCommand.Execute(null);
+            };
+        }
     }
 }

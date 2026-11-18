@@ -6,13 +6,13 @@
          绑偏移与视口，缩放与实际尺寸由控件订阅 Core 模型，ViewChanged 时刷新 -->
     <Grid>
         <Border IsHitTestVisible="False"
-                CornerRadius="6"
-                Background="#E612151B"
-                BorderBrush="#CC8EA3B8"
+                CornerRadius="7"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}"
                 BorderThickness="1"
                 Padding="12,8,58,8">
             <TextBlock x:Name="InfoText"
-                       Foreground="#DDE4EA"
+                       Foreground="{StaticResource TextSecondaryBrush}"
                        FontSize="12"
                        LineHeight="18"
                        IsHitTestVisible="False" />
@@ -24,9 +24,9 @@
                 Margin="0,0,8,8"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Bottom"
-                Background="#1E3A5F"
-                Foreground="#7EC8FF"
-                BorderBrush="#7EC8FF"
+                Background="{StaticResource SurfaceElevatedBrush}"
+                Foreground="{StaticResource AccentTextBrush}"
+                BorderBrush="{StaticResource BorderStrongBrush}"
                 BorderThickness="1"
                 Click="OnCopyClicked" />
     </Grid>

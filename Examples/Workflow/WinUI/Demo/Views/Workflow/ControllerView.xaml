@@ -36,8 +36,8 @@
                     Background="Transparent"
                     behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas"
                     behaviors:WorkflowNodeDragBehavior.IsEnabled="True">
-                <Grid ColumnDefinitions="2,*">
-                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="#38BDF8" />
+                <Grid ColumnDefinitions="3,*">
+                    <Border Grid.Column="0" Style="{StaticResource CardAccentStyle}" Background="{StaticResource NodeControllerAccentBrush}" />
                     <TextBlock Grid.Column="1" Style="{StaticResource CardTitleTextStyle}" Text="Controller" Margin="12,0,0,0" />
                 </Grid>
             </Border>
