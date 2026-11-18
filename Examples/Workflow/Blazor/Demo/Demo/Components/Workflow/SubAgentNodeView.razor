@@ -1,0 +1,64 @@
+@namespace Demo.Components.Workflow
+@using VeloxDev.AI.SubAgents
+
+@* One row of the Agent's sub-agent tree, rendered recursively. A node's own row is the
+   status lamp plus its title and the figures worth printing; children follow beneath it,
+   indented by depth. The lamp carries "finished" so a completed row does not repeat the
+   word; every other state gets its text. *@
+@if (Node is not null)
+{
+    <div class="wf-subagent-row" style="padding-left:@(Depth * 10)px">
+        <span class="wf-subagent-light @StateClass(Node.Row?.State)"></span>
+        <div style="min-width:0;">
+            <div class="wf-subagent-title">@Node.Title</div>
+            @if (!Node.IsScopeRoot)
+            {
+                <div class="wf-subagent-meta">
+                    @if (Node.HasDuration)
+                    {
+                        <span>@Node.DurationText</span>
+                    }
+                    @if (Node.HasTokens)
+                    {
+                        <span>· @Node.TokensText</span>
+                    }
+                    @if (Node.ShowSubtreeTokens)
+                    {
+                        <span>· 子树 @Node.SubtreeTokensText</span>
+                    }
+                    @if (Node.HasDroppedRequests)
+                    {
+                        <span>· 有 @Node.DroppedRequestCount 项请求被拒</span>
+                    }
+                    @if (Node.ShowStateText)
+                    {
+                        <span>@Node.StateText</span>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @foreach (var child in Node.Children)
+    {
+        <SubAgentNodeView Node="child" Depth="Depth + 1" />
+    }
+}
+
+@code {
+    [Parameter]
+    public SubAgentTreeNodeViewModel? Node { get; set; }
+
+    [Parameter]
+    public int Depth { get; set; }
+
+    private static string StateClass(SubAgentState? state) => state switch
+    {
+        SubAgentState.Queued => "queued",
+        SubAgentState.Running => "running",
+        SubAgentState.Completed => "completed",
+        SubAgentState.Failed => "failed",
+        SubAgentState.Cancelled => "cancelled",
+        _ => "idle",
+    };
+}

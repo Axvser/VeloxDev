@@ -1,8 +1,7 @@
 @inherits LayoutComponentBase
 
-<header class="wf-topbar">
-    <span class="wf-topbar-title">VeloxDev Workflow — Blazor Demo</span>
-</header>
+@* The workflow page owns its title strip: the menus and command centre need the page's own
+   commands, and the Avalonia reference keeps that strip inside the view rather than the layout. *@
 <main class="wf-body">
     @Body
 </main>

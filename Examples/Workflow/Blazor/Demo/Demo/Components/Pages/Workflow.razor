@@ -1,4 +1,4 @@
-@page "/"
+﻿@page "/"
 @page "/workflow"
 @rendermode RenderMode.InteractiveServer
 @using System.Collections.Specialized
@@ -11,108 +11,204 @@
 
 <PageTitle>VeloxDev Workflow — Blazor Demo</PageTitle>
 
-<div class="wf-app">
-    <!-- Left rail: a 48px activity bar and one sidebar page at a time, as in the WPF complex demo. -->
-    <aside class="wf-sidebar">
+@{ var tree = _session?.Tree; }
+
+<div class="wf-app @(_mobileSidebarOpen ? "mobile-sidebar-open" : null) @(_mobileInspectorOpen ? "mobile-inspector-open" : null)">
+    <header class="wf-topbar">
+        <div class="wf-brand">
+            <img src="veloxdev-logo.png" alt="VeloxDev" width="20" height="20" />
+            <span class="wf-brand-name">VeloxDev</span>
+        </div>
+        <div class="wf-topbar-menus">
+            <details class="wf-menu">
+                <summary>文件</summary>
+                <div class="wf-menu-panel">
+                    <button @onclick="@(() => MenuActionAsync(SaveWorkflow))"><span>保存工作流</span><span class="wf-menu-shortcut">Ctrl+S</span></button>
+                    <button @onclick="@(() => MenuActionAsync(LoadWorkflow))"><span>加载工作流</span><span class="wf-menu-shortcut">Ctrl+O</span></button>
+                    <button @onclick="@(() => MenuActionAsync(ResetDemo))"><span>重新载入示例</span></button>
+                </div>
+            </details>
+            <details class="wf-menu">
+                <summary>编辑</summary>
+                <div class="wf-menu-panel">
+                    <button @onclick="@(() => MenuActionAsync(Undo))"><span>撤销</span><span class="wf-menu-shortcut">Ctrl+Z</span></button>
+                    <button @onclick="@(() => MenuActionAsync(Redo))"><span>重做</span><span class="wf-menu-shortcut">Ctrl+Y</span></button>
+                </div>
+            </details>
+            <details class="wf-menu">
+                <summary>视图</summary>
+                <div class="wf-menu-panel">
+                    <button @onclick="@(() => MenuAction(() => SelectSidebarView("explorer")))">资源管理器</button>
+                    <button @onclick="@(() => MenuAction(() => SelectSidebarView("run")))">运行</button>
+                    <button @onclick="@(() => MenuAction(() => SelectSidebarView("mcp")))">MCP 服务器</button>
+                    <div class="wf-menu-sep"></div>
+                    <button @onclick="@(() => MenuAction(() => SelectInspectorFromActivity("properties")))">属性</button>
+                    <button @onclick="@(() => MenuAction(() => SelectInspectorFromActivity("agent")))">AI 助手</button>
+                    <button @onclick="@(() => MenuAction(() => SelectMainTab("output")))">执行输出</button>
+                </div>
+            </details>
+            <details class="wf-menu">
+                <summary>帮助</summary>
+                <div class="wf-menu-panel">
+                    <button @onclick="@(() => MenuActionAsync(ShowAboutAsync))">关于 VeloxDev</button>
+                </div>
+            </details>
+        </div>
+        <div class="wf-topbar-center">
+            <details class="wf-command">
+                <summary id="wf-command-summary"><span>搜索命令</span><span>Ctrl+Shift+P</span></summary>
+                <div class="wf-menu-panel wf-command-panel">
+                    <button @onclick="@(() => MenuActionAsync(SaveWorkflow))"><span>保存工作流</span><span class="wf-menu-shortcut">Ctrl+S</span></button>
+                    <button @onclick="@(() => MenuActionAsync(LoadWorkflow))"><span>加载工作流</span><span class="wf-menu-shortcut">Ctrl+O</span></button>
+                    <button @onclick="@(() => MenuActionAsync(ResetDemo))"><span>重新载入示例</span></button>
+                    <div class="wf-menu-sep"></div>
+                    <button @onclick="@(() => MenuActionAsync(Undo))"><span>撤销</span><span class="wf-menu-shortcut">Ctrl+Z</span></button>
+                    <button @onclick="@(() => MenuActionAsync(Redo))"><span>重做</span><span class="wf-menu-shortcut">Ctrl+Y</span></button>
+                    <div class="wf-menu-sep"></div>
+                    <button @onclick="@(() => MenuAction(() => SelectSidebarView("explorer")))">资源管理器</button>
+                    <button @onclick="@(() => MenuAction(() => SelectSidebarView("run")))">运行</button>
+                    <button @onclick="@(() => MenuAction(() => SelectSidebarView("mcp")))">MCP 服务器</button>
+                    <button @onclick="@(() => MenuAction(() => SelectInspectorFromActivity("properties")))">属性</button>
+                    <button @onclick="@(() => MenuAction(() => SelectInspectorFromActivity("agent")))">AI 助手</button>
+                    <button @onclick="@(() => MenuAction(() => SelectMainTab("output")))">执行输出</button>
+                </div>
+            </details>
+        </div>
+        <span class="wf-topbar-meta">Blazor · Interactive Server</span>
+
+        @* Hidden command targets for the global shortcuts; the JS handler clicks these. *@
+        <button id="wf-shortcut-save" class="wf-hidden-shortcut" @onclick="SaveWorkflow"></button>
+        <button id="wf-shortcut-load" class="wf-hidden-shortcut" @onclick="LoadWorkflow"></button>
+        <button id="wf-shortcut-undo" class="wf-hidden-shortcut" @onclick="Undo"></button>
+        <button id="wf-shortcut-redo" class="wf-hidden-shortcut" @onclick="Redo"></button>
+    </header>
+
+    <div class="wf-workbench">
+        @* A narrow viewport turns both side panels into overlays; this dismisses them. *@
+        @if (_mobileSidebarOpen || _mobileInspectorOpen)
+        {
+            <div class="wf-mobile-backdrop" @onclick="CloseMobilePanels"></div>
+        }
+
+        <!-- Activity bar: top entries switch the sidebar page (or the main tab for output),
+             bottom entries switch the right inspector. -->
         <nav class="wf-activity-bar">
-            <button class="wf-activity-btn @(_sidebarView == "explorer" ? "active" : null)" title="资源管理器"
-                    @onclick="@(() => SelectSidebarView("explorer"))">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M3 7V5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v2" />
-                    <path d="M3 9h18l-2 10H5z" />
-                </svg>
-            </button>
-            <button class="wf-activity-btn @(_sidebarView == "run" ? "active" : null)" title="运行"
-                    @onclick="@(() => SelectSidebarView("run"))">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M8 5l11 7-11 7z" />
-                </svg>
-            </button>
-            <button class="wf-activity-btn @(_sidebarView == "agent" ? "active" : null)" title="Agent 对话"
-                    @onclick="@(() => SelectSidebarView("agent"))">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M4 5h16v11H9l-5 4z" />
-                </svg>
-            </button>
-            <button class="wf-activity-btn @(_sidebarView == "mcp" ? "active" : null)" title="MCP 服务器"
-                    @onclick="@(() => SelectSidebarView("mcp"))">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="4" y="4" width="16" height="6" rx="1" />
-                    <rect x="4" y="14" width="16" height="6" rx="1" />
-                    <path d="M8 7h.01M8 17h.01" />
-                </svg>
-            </button>
-            <button class="wf-activity-btn @(_sidebarView == "output" ? "active" : null)" title="执行输出"
-                    @onclick="@(() => SelectSidebarView("output"))">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="3" y="4" width="18" height="16" rx="2" />
-                    <path d="M7 9l3 3-3 3M12 15h5" />
-                </svg>
-            </button>
+            <div class="wf-activity-top">
+                <button class="wf-activity-btn @(_sidebarView == "explorer" ? "active" : null)" title="资源管理器"
+                        @onclick="@(() => SelectSidebarView("explorer"))">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 7V5a1 1 0 0 1 1-1h5l2 2h8a1 1 0 0 1 1 1v2" />
+                        <path d="M3 9h18l-2 10H5z" />
+                    </svg>
+                </button>
+                <button class="wf-activity-btn @(_sidebarView == "run" ? "active" : null)" title="运行任务"
+                        @onclick="@(() => SelectSidebarView("run"))">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M8 5l11 7-11 7z" />
+                    </svg>
+                </button>
+                <button class="wf-activity-btn @(_sidebarView == "mcp" ? "active" : null)" title="MCP 服务器"
+                        @onclick="@(() => SelectSidebarView("mcp"))">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="4" y="4" width="16" height="6" rx="1" />
+                        <rect x="4" y="14" width="16" height="6" rx="1" />
+                        <path d="M8 7h.01M8 17h.01" />
+                    </svg>
+                </button>
+                <button class="wf-activity-btn @(_mainTab == "output" ? "active" : null)" title="执行输出"
+                        @onclick="@(() => SelectMainTab("output"))">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <path d="M7 9l3 3-3 3M12 15h5" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="wf-activity-spacer"></div>
+
+            <div class="wf-activity-bottom">
+                <button class="wf-activity-btn @(_inspectorTab == "properties" ? "active" : null)" title="属性"
+                        @onclick="@(() => SelectInspectorFromActivity("properties"))">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M4 7h16M4 12h10M4 17h13" />
+                        <circle cx="19" cy="12" r="2" />
+                    </svg>
+                </button>
+                <button class="wf-activity-btn @(_inspectorTab == "agent" ? "active" : null)" title="AI 助手"
+                        @onclick="@(() => SelectInspectorFromActivity("agent"))">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M4 5h16v11H9l-5 4z" />
+                    </svg>
+                </button>
+            </div>
         </nav>
 
+        <!-- Sidebar: one page at a time, as in Avalonia's workbench. -->
         <div class="wf-sidebar-panel">
-            <div class="wf-sidebar-header">@SidebarTitle</div>
-            <div class="wf-sidebar-body">
+            <div class="wf-sidebar-header">
+                <span class="wf-sidebar-title">@SidebarTitle</span>
+                <div class="wf-sidebar-actions">
+                    <button class="wf-action-btn" title="保存工作流" @onclick="SaveWorkflow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M5 3h11l3 3v15H5z" />
+                            <path d="M8 3v6h8V3" />
+                            <path d="M8 14h8v7H8z" />
+                        </svg>
+                    </button>
+                    <button class="wf-action-btn" title="加载工作流" @onclick="LoadWorkflow">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 6h6l2 2h9v2" />
+                            <path d="M3 10h17l-2 8H5z" />
+                        </svg>
+                    </button>
+                    <button class="wf-action-btn" title="撤销" @onclick="Undo"
+                            disabled="@(_session?.Tree?.UndoCommand?.CanExecute(null) != true)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M9 5 4 10l5 5" />
+                            <path d="M4 10h8a6 6 0 0 1 6 6v1" />
+                        </svg>
+                    </button>
+                    <button class="wf-action-btn" title="重做" @onclick="Redo"
+                            disabled="@(_session?.Tree?.RedoCommand?.CanExecute(null) != true)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M15 5l5 5-5 5" />
+                            <path d="M20 10h-8a6 6 0 0 0-6 6v1" />
+                        </svg>
+                    </button>
+                    <button class="wf-action-btn" title="重新载入示例" @onclick="ResetDemo">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M20 11a8 8 0 1 0-2.3 6.7" />
+                            <path d="M20 4v7h-7" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
 
-                @* Explorer: the Save / Load / Undo / Redo / reload actions and the element list. *@
+            <div class="wf-sidebar-body">
+                @* Explorer: the minimap toggle and the element lists. *@
                 @if (_sidebarView == "explorer")
                 {
-                    <div class="wf-sidebar-page">
-                        <div class="wf-sidebar-actions">
-                            <button class="wf-action-btn" title="保存工作流" @onclick="SaveWorkflow">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M5 3h11l3 3v15H5z" />
-                                    <path d="M8 3v6h8V3" />
-                                    <path d="M8 14h8v7H8z" />
-                                </svg>
-                            </button>
-                            <button class="wf-action-btn" title="加载工作流" @onclick="LoadWorkflow">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M3 6h6l2 2h9v2" />
-                                    <path d="M3 10h17l-2 8H5z" />
-                                </svg>
-                            </button>
-                            <button class="wf-action-btn" title="撤销" @onclick="Undo"
-                                    disabled="@(_session?.Tree?.UndoCommand?.CanExecute(null) != true)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M9 5 4 10l5 5" />
-                                    <path d="M4 10h8a6 6 0 0 1 6 6v1" />
-                                </svg>
-                            </button>
-                            <button class="wf-action-btn" title="重做" @onclick="Redo"
-                                    disabled="@(_session?.Tree?.RedoCommand?.CanExecute(null) != true)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M15 5l5 5-5 5" />
-                                    <path d="M20 10h-8a6 6 0 0 0-6 6v1" />
-                                </svg>
-                            </button>
-                            <button class="wf-action-btn" title="重新载入示例" @onclick="ResetDemo">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M20 11a8 8 0 1 0-2.3 6.7" />
-                                    <path d="M20 4v7h-7" />
-                                </svg>
-                            </button>
+                    <div class="wf-page">
+                        <div class="wf-minimap-row">
+                            <span class="wf-muted">小地图</span>
+                            <label class="wf-switch">
+                                <input type="checkbox" checked="@_minimapVisible" @onchange="OnMinimapToggle" />
+                                显示
+                            </label>
                         </div>
 
-                        <div class="wf-section-title">元素</div>
-
-                        @* 元素列表：从当前树上取节点 / 插槽 / 连线，每行可 Locate / Delete。状态在共享目录
-                           WorkflowElementCatalog 里，与 WPF / Avalonia 的完整 Demo 同一份；这里只渲染它、把两个
-                           动作转给目录。换树（Reset / Load）时 SubscribeSession 会把它重新挂到新树上。 *@
-                        <div class="sb-panel">
-                            <div class="sb-panel-header">
-                                <span>元素（从 Tree 加载）</span>
-                            </div>
+                        <div class="wf-section-label">元素</div>
+                        <div class="wf-card-panel">
                             <div class="wf-element-tabs">
                                 <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Node ? "active" : null)"
                                         @onclick="() => SelectElementTab(WorkflowElementKind.Node)">节点</button>
@@ -121,6 +217,10 @@
                                 <button class="wf-element-tab @(_elementTab == WorkflowElementKind.Link ? "active" : null)"
                                         @onclick="() => SelectElementTab(WorkflowElementKind.Link)">连线</button>
                             </div>
+
+                            @* 元素列表：从当前树上取节点 / 插槽 / 连线，每行可定位 / 删除。状态在共享目录
+                               WorkflowElementCatalog 里，与 WPF / Avalonia 的完整 Demo 同一份；这里只渲染它、
+                               把动作转给目录。换树（Reset / Load）时 SubscribeSession 会把它重新挂到新树上。 *@
                             @if (_elements is not null)
                             {
                                 <div class="wf-element-list">
@@ -130,75 +230,415 @@
                                     }
                                     @foreach (var entry in ElementRows)
                                     {
-                                        <div class="wf-element-row">
+                                        <div class="wf-element-row @(tree?.SelectedElement == entry ? "selected" : null)"
+                                             @onclick="() => SelectElement(entry)">
                                             <span class="wf-element-label" title="@entry.Label">@entry.Label</span>
-                                            <button class="sb-btn wf-element-action"
+                                            <button class="wf-row-action"
                                                     title="滚到视口中心；插槽定位所属节点，连线定位两端节点中心"
-                                                    @onclick="() => LocateElement(entry)">Locate</button>
-                                            <button class="sb-btn wf-element-action"
+                                                    @onclick="() => LocateElement(entry)" @onclick:stopPropagation="true">Locate</button>
+                                            <button class="wf-row-action"
                                                     title="删除该元素；插槽与节点会一并删除它们的连线"
-                                                    @onclick="() => DeleteElement(entry)">Delete</button>
+                                                    @onclick="() => DeleteElement(entry)" @onclick:stopPropagation="true">Delete</button>
                                         </div>
                                     }
                                 </div>
+                                <div class="wf-element-status">
+                                    <span>@_elements.Summary</span>
+                                    @if (!string.IsNullOrEmpty(_elementStatus))
+                                    {
+                                        <span> · @_elementStatus</span>
+                                    }
+                                </div>
                             }
-                            <div class="wf-element-status">
-                                <span>@(_elements?.Summary)</span>
-                                @if (!string.IsNullOrEmpty(_elementStatus))
-                                {
-                                    <span> · @_elementStatus</span>
-                                }
-                            </div>
                         </div>
                     </div>
                 }
 
-                @* Run: the pause gate and checkpoint resume, plus the live element counts. *@
+                @* Run: every compile and run task, manual and Agent alike. *@
                 @if (_sidebarView == "run")
                 {
-                    <div class="wf-sidebar-page">
-                        <div class="wf-section-title">运行</div>
-
-                        @* 运行控制：编译执行能力里「得有人按一下」的那两件 —— 暂停门与检查点恢复。其余几件
-                           （观察者、重试、错误 sink、补偿、日志落文件）在运行里自己生效，不需要控件。
-                           按钮走 code-behind 而不是 Command 绑定：门与检查点都在会话上、不在树上
-                           —— 与同栏的 Save / Load 同一个理由。 *@
-                        <div class="sb-panel">
-                            <div class="sb-panel-header">
-                                <span>运行控制</span>
-                                <span style="color:#a0a0a0;font-weight:normal;">@_runGateState</span>
+                    <div class="wf-page">
+                        <div class="wf-run-head">
+                            <div>
+                                <div class="wf-run-title-text">运行任务</div>
+                                <div class="wf-micro">@(tree?.Runs.Summary)</div>
                             </div>
-                            <div style="display:flex;gap:6px;">
-                                <button class="sb-btn" style="flex:1;" @onclick="PauseWorkflow">Pause</button>
-                                <button class="sb-btn" style="flex:1;" @onclick="ResumeWorkflow">Resume</button>
-                            </div>
-                            <button class="sb-btn" @onclick="ContinueFromCheckpoint" disabled="@(!_hasCheckpoint)">
-                                从检查点继续
-                            </button>
+                            <button class="wf-row-action" title="移除已结束的任务行"
+                                    @onclick="ClearFinishedRuns">清除已完成</button>
                         </div>
 
-                        <div class="wf-section-title">画布</div>
-                        <div class="sb-info">
-                            <span>总元素数: <strong>@(_session?.Tree?.TotalElementText ?? "0")</strong></span>
-                            <span>可见元素数: <strong>@(_session?.Tree?.VisibleElementText ?? "0")</strong></span>
+                        <div class="wf-hint">
+                            手动编译、手动运行，以及 Agent 编译 / 运行的任务都会出现在这里。选中一行，输出页会跟随它。
                         </div>
+
+                        @if (tree is not null)
+                        {
+                            @foreach (var task in tree.Runs.Tasks)
+                            {
+                                <div class="wf-run-row @(tree.Runs.Selected == task ? "selected" : null)"
+                                     @onclick="() => SelectRun(task)">
+                                    <div class="wf-run-main">
+                                        <div class="wf-run-title">
+                                            <span class="wf-run-source">@task.SourceText</span>
+                                            <span class="wf-run-root" title="@task.RootLabel">@task.RootLabel</span>
+                                        </div>
+                                        <div class="wf-run-meta">
+                                            <span>@task.StateText</span>
+                                            <span class="wf-micro">@task.StartedText</span>
+                                            <span class="wf-micro">@task.ElapsedText</span>
+                                        </div>
+                                        <div class="wf-run-progress">@task.ProgressText</div>
+                                    </div>
+                                    @* Clicks inside the action column must not also select the row. *@
+                                    <div class="wf-run-actions" @onclick:stopPropagation="true">
+                                        @if (task.CanPause)
+                                        {
+                                            <button class="wf-row-action" @onclick="() => PauseRun(task)">暂停</button>
+                                        }
+                                        @if (task.CanResume)
+                                        {
+                                            <button class="wf-row-action" @onclick="() => ResumeRun(task)">继续</button>
+                                        }
+                                        @if (task.CanStop)
+                                        {
+                                            <button class="wf-row-action" @onclick="() => StopRun(task)">停止</button>
+                                        }
+                                        @if (task.CanStart)
+                                        {
+                                            <button class="wf-row-action" @onclick="() => StartRun(task)">运行</button>
+                                        }
+                                        @if (task.CanRemove)
+                                        {
+                                            <button class="wf-row-action" @onclick="() => RemoveRun(task)">移除</button>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            @if (tree.Runs.IsEmpty)
+                            {
+                                <div class="wf-empty-hint">
+                                    还没有任务。在控制器卡上编译一次，或让 Agent 编译 / 运行工作流。
+                                </div>
+                            }
+                        }
                     </div>
                 }
 
-                @* Agent: session permission sits with the chat, because it decides what the model may do. *@
-                @if (_sidebarView == "agent")
+                @* MCP: the connected server list and its reload action. *@
+                @if (_sidebarView == "mcp")
                 {
-                    <div class="wf-sidebar-page">
-                        <div class="wf-section-title">会话</div>
+                    <div class="wf-page">
+                        <div class="wf-section-label">服务器</div>
+                        <div class="wf-card-panel">
+                            @if (McpStatus is { } mcp)
+                            {
+                                <div class="wf-row-between">
+                                    <span class="wf-accent-text" style="font-weight:600;">MCP 服务器</span>
+                                    <div class="wf-run-meta">
+                                        <span class="wf-success-text">存活 @mcp.ConnectedCount</span>
+                                        <span class="wf-danger-text">· 错误 @mcp.ErrorCount</span>
+                                        <span class="wf-micro">安装/连接 @mcp.WorkingCount</span>
+                                        <button class="wf-tool" @onclick="ReloadMcpAsync">重载</button>
+                                    </div>
+                                </div>
+                                <div class="wf-mcp-list">
+                                    @foreach (var s in mcp.Servers)
+                                    {
+                                        <div class="wf-log-entry">
+                                            <span class="wf-text-primary">@s.Name</span>
+                                            <span class="wf-muted"> @s.StateText</span>
+                                            @if (s.ToolCount > 0)
+                                            {
+                                                <span class="wf-success-text"> · @s.ToolCount tools</span>
+                                            }
+                                        </div>
+                                        @if (s.IsError && !string.IsNullOrEmpty(s.Error))
+                                        {
+                                            <div class="wf-log-entry wf-danger-text">@s.Error</div>
+                                        }
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="wf-muted">正在读取 MCP 状态…</div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
 
-                        @* 权限模式：会话级设置，与 Agent 对话放在同一页。它也不是 AgentModes 的 build/plan
-                           那一对：那一对改的是模型被告知什么，这一个改的是什么允许跑。切换运行期生效：
-                           门逐调用读策略，下一次工具调用就按新模式判，提示词下一轮跟上。 *@
-                        <div class="sb-panel">
-                            <div class="sb-panel-header">
-                                <span>权限模式</span>
+        <!-- Main area: the 流程图 / 输出 tabs, with the canvas left mounted while output shows. -->
+        <main class="wf-main">
+            <div class="wf-main-tabs">
+                <div class="wf-tabs">
+                    <button class="wf-editor-tab @(_mainTab == "canvas" ? "active" : null)"
+                            @onclick="@(() => SelectMainTab("canvas"))">流程图</button>
+                    <button class="wf-editor-tab @(_mainTab == "output" ? "active" : null)"
+                            @onclick="@(() => SelectMainTab("output"))">输出</button>
+                </div>
+                <div class="wf-tabs-meta">
+                    <span class="wf-micro">Ctrl+滚轮缩放</span>
+                    <span class="wf-micro">·</span>
+                    <span class="wf-micro">@(tree?.TotalElementText ?? "0")</span>
+                </div>
+            </div>
+
+            <div class="wf-main-view">
+                <div class="wf-view @(_mainTab != "canvas" ? "wf-hidden" : null)">
+                    @if (tree is not null)
+                    {
+                        <div class="wf-canvas-wrapper">
+                            <WorkflowSurfaceBehavior @ref="_surface"
+                                                     Tree="tree"
+                                                     IsEnabled="true"
+                                                     ZoomEnabled="true"
+                                                     ScrollViewerId="wf-scroll"
+                                                     CanvasId="wf-canvas"
+                                                     GridSpacing="40"
+                                                     GridColor="#232323"
+                                                     MajorGridColor="#2E2E2E"
+                                                     MajorLineEvery="5"
+                                                     AxisColor="#3A3A3A"
+                                                     Background="#171717">
+                                <GridDecorator Context="vp">
+                                    <WorkflowGridDecorator Viewport="vp"
+                                                           RulerThickness="28" Spacing="40"
+                                                           MajorLineEvery="5"
+                                                           RulerBackground="rgba(31,31,31,0.78)"
+                                                           TickColor="#4A4A4A"
+                                                           LabelColor="#6E7681"
+                                                           AxisColor="#3A3A3A"
+                                                           DividerColor="#2E2E2E" />
+                                </GridDecorator>
+                                <Minimap Context="vp">
+                                    @if (_minimapVisible)
+                                    {
+                                        <WorkflowMinimapOverlay Viewport="vp"
+                                                                Width="180" Height="120"
+                                                                ScrollViewerId="wf-scroll"
+                                                                Background="#1F1F1F"
+                                                                BorderColor="#404040"
+                                                                NodeFill="#6E8BFF"
+                                                                ViewportStroke="#E7E7E7" />
+                                    }
+                                    @* 实时画布信息 HUD（左下浮动文本 + 复制按钮） *@
+                                    <InfoOverlay Tree="tree" Viewport="vp" />
+                                </Minimap>
+                                <ChildContent Context="sc">
+                                    @* Links layer: one full-canvas TemplateLinkView per connection (template product,
+                                       absolute, overflow visible). Each link draws a cubic curve with a light running
+                                       along it by arc length. The layer itself stays click-through — each link hands hit
+                                       testing back on its own strokes — and the surface's root is the keyboard host:
+                                       focus lands there on hover so Delete reaches the page without a click first. *@
+                                    <div class="veloxdev-wf-links"
+                                         style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;height:@sc.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;pointer-events:none;outline:none;">
+                                        @foreach (var link in tree.Links)
+                                        {
+                                            @* Keyed by the link itself: a view carries per-link state that only
+                                               OnInitialized seeds (visibility, endpoint subscriptions) plus the
+                                               hover flag, and a positional diff would hand all of it to the
+                                               neighbouring link whenever one is deleted. *@
+                                            <TemplateLinkView @key="link" Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height"
+                                                              IsSelected="@(_surface?.MenuLink == link)" />
+                                        }
+                                        @if (tree.VirtualLink.IsVisible)
+                                        {
+                                            <TemplateLinkView Link="tree.VirtualLink" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
+                                        }
+                                    </div>
+
+                                    @* Nodes layer: generated TemplateNodeView cards with type-specific body content
+                                       (template product). Each card wires slot-layout + node-drag behaviors itself,
+                                       and each card states only what is its own: its type accent (the 2px bar at the
+                                       head of the title row) and, when it has one, the status capsule it reads live. *@
+                                    <ViewPool ItemsSource="tree.Nodes" KeySelector="n => n">
+                                        <ItemTemplate Context="node">
+                                            @switch (node)
+                                            {
+                                                case ControllerViewModel c:
+                                                    <TemplateNodeView Node="c" Title="Network Flow Controller"
+                                                                      StatusChanged="SetElementStatus"
+                                                                      Accent="var(--wf-accent-controller)"
+                                                                      AllowOverflow="true"
+                                                                      BorderBrush="@(c.IsActive ? "var(--wf-accent-controller)" : null)">
+                                                        <BodyContent>
+                                                            <WorkflowControllerView Controller="c" />
+                                                        </BodyContent>
+                                                        <OutputSlots>
+                                                            @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
+                                                            <TemplateSlotView Slot="c.OutputSlot" Tree="tree" SlotSize="32" />
+                                                        </OutputSlots>
+                                                    </TemplateNodeView>
+                                                    break;
+                                                case EnumSelectorNodeViewModel e:
+                                                    <TemplateNodeView Node="e" StatusChanged="SetElementStatus"
+                                                                      Accent="var(--wf-accent-enum)"
+                                                                      StatusProperty="LastRouted"
+                                                                      AllowOverflow="true">
+                                                        <BodyContent>
+                                                            <WorkflowEnumSelectorView Selector="e" Tree="tree" />
+                                                        </BodyContent>
+                                                        <InputSlots>
+                                                            <TemplateSlotView Slot="e.InputSlot" Tree="tree" SlotSize="32" />
+                                                        </InputSlots>
+                                                    </TemplateNodeView>
+                                                    break;
+                                                case PythonScriptNodeViewModel p:
+                                                    <TemplateNodeView Node="p" StatusChanged="SetElementStatus"
+                                                                      Accent="var(--wf-accent-script)"
+                                                                      StatusProperty="LastStatus"
+                                                                      AllowOverflow="true">
+                                                        <BodyContent>
+                                                            <WorkflowPythonNodeView Selector="p" Tree="tree" />
+                                                        </BodyContent>
+                                                    </TemplateNodeView>
+                                                    break;
+                                                case TimerNodeViewModel t:
+                                                    <TemplateNodeView Node="t" StatusChanged="SetElementStatus"
+                                                                      Accent="var(--wf-accent-worker)"
+                                                                      AllowOverflow="true">
+                                                        <BodyContent>
+                                                            <WorkflowTimerView Selector="t" />
+                                                        </BodyContent>
+                                                        <InputSlots>
+                                                            <TemplateSlotView Slot="t.InputSlot" Tree="tree" SlotSize="32" />
+                                                        </InputSlots>
+                                                        <OutputSlots>
+                                                            <TemplateSlotView Slot="t.OutputSlot" Tree="tree" SlotSize="32" />
+                                                        </OutputSlots>
+                                                    </TemplateNodeView>
+                                                    break;
+                                                case IWorkflowNodeViewModel g:
+                                                    @* Generic catch-all: a foreign node still lands on the same card
+                                                       family, with the neutral slate accent, because there is no type
+                                                       here to give it a colour. *@
+                                                    <TemplateNodeView Node="g" StatusChanged="SetElementStatus" AllowOverflow="true">
+                                                        <BodyContent>
+                                                            <WorkflowNodeView Node="g" />
+                                                        </BodyContent>
+                                                    </TemplateNodeView>
+                                                    break;
+                                            }
+                                        </ItemTemplate>
+                                    </ViewPool>
+                                </ChildContent>
+                                <LinkMenu Context="link">
+                                    @* VeloxDev customization: add or remove the item buttons here. The menu chrome,
+                                       its position, and the input wiring all live in the surface; each entry just
+                                       receives the link it acts on. *@
+                                    <button class="wf-link-menu-item" @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>
+                                </LinkMenu>
+                            </WorkflowSurfaceBehavior>
+                        </div>
+                    }
+                </div>
+
+                <div class="wf-output @(_mainTab != "output" ? "wf-hidden" : null)">
+                    <div class="wf-output-header">
+                        <span class="wf-output-title">执行输出</span>
+                        @if (tree?.Runs.Selected is { } selectedRun)
+                        {
+                            <span class="wf-accent-text">@selectedRun.RootLabel</span>
+                            <span class="wf-muted">@selectedRun.StateText</span>
+                            <span class="wf-micro">@selectedRun.ProgressText</span>
+                        }
+                        <span class="wf-output-count wf-micro">已记录 @(tree?.ExecutionLog.Count ?? 0) 行</span>
+                    </div>
+                    <div class="wf-output-body" id="wf-exec-log">
+                        <div class="wf-log-section">实际执行顺序</div>
+                        @if (tree is null || !tree.Runs.HasSelection)
+                        {
+                            <div class="wf-hint" style="margin:0;">
+                                运行一次，或让 Agent 编译 / 运行工作流。节点开始、完成、重试、重定向和运行收尾都会按发生顺序落在这里。
                             </div>
-                            <select class="wf-field" @onchange="OnPermissionModeChanged">
+                        }
+                        @if (tree is not null)
+                        {
+                            @foreach (var line in tree.ExecutionLog)
+                            {
+                                <div class="wf-log-line">@line</div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right inspector: 属性 / AI 助手. Run state and canvas totals belong to the
+             status bar and the run manager, so they are not repeated here. -->
+        <aside class="wf-inspector">
+            <div class="wf-inspector-header">
+                <button class="wf-panel-tab @(_inspectorTab == "properties" ? "active" : null)"
+                        @onclick="@(() => SelectInspectorTab("properties"))">属性</button>
+                <button class="wf-panel-tab @(_inspectorTab == "agent" ? "active" : null)"
+                        @onclick="@(() => SelectInspectorTab("agent"))">AI 助手</button>
+            </div>
+
+            <div class="wf-inspector-body">
+                @if (_inspectorTab == "properties")
+                {
+                    <div class="wf-inspector-page">
+                        <div class="wf-section-label">选中元素</div>
+                        <div class="wf-card-panel">
+                            @if (tree?.SelectedElement is { } selected)
+                            {
+                                <div class="wf-row-between">
+                                    <span class="wf-text-primary" style="font-weight:600;">@selected.Label</span>
+                                    <span class="wf-muted">@selected.KindText</span>
+                                </div>
+                                <div class="wf-divider-line"></div>
+                                <div class="wf-mono wf-muted" style="white-space:pre-wrap;">@selected.DetailText</div>
+                                <div class="wf-prop-actions">
+                                    <button class="wf-row-action" @onclick="LocateSelectedElement">定位</button>
+                                    <button class="wf-row-action" @onclick="DeleteSelectedElement">删除</button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="wf-hint" style="margin:0;">
+                                    在左侧「元素」列表里选一行，这里显示它的类型、位置、编译顺序与连接。
+                                </div>
+                            }
+                        </div>
+
+                        <div class="wf-section-label">编译结构</div>
+                        <div class="wf-card-panel">
+                            <div class="wf-row-between">
+                                <span class="wf-muted">分段</span>
+                                <span class="wf-micro">@(tree?.CompiledStructure.Count ?? 0) 段</span>
+                            </div>
+                            @if (tree is { } compiledTree && compiledTree.CompiledStructure.Count > 0)
+                            {
+                                @foreach (var segment in compiledTree.CompiledStructure)
+                                {
+                                    <div class="wf-compiled-row" style="padding-left:@(segment.Depth * 12)px">
+                                        <span class="wf-compiled-kind">@segment.Kind</span>
+                                        <span class="wf-compiled-label">@segment.Label</span>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="wf-hint" style="margin:0;">编译一次后这里列出实际执行段。</div>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="wf-agent-page">
+                        <div class="wf-section-label">会话</div>
+                        <div class="wf-card-panel" style="margin-top:0;">
+                            <div class="wf-row-between">
+                                <span class="wf-muted">权限模式</span>
+                            </div>
+                            @* 权限模式：会话级设置，与 Agent 对话放在同一页。切换运行期生效：门逐调用读策略，
+                               下一次工具调用就按新模式判，提示词下一轮跟上。 *@
+                            <select class="wf-field" @onchange="OnPermissionModeChanged"
+                                    title="权限模式：决定哪些动作直接放行、哪些先问、哪些拒绝。宿主规则可以比模式更严，deny 规则在任何模式下都生效">
                                 @foreach (var mode in Enum.GetValues<AgentPermissionMode>())
                                 {
                                     <option value="@mode" selected="@(mode == _permissionMode)">@mode</option>
@@ -206,317 +646,148 @@
                             </select>
                         </div>
 
-                        <div class="sb-panel">
-                            <div class="sb-panel-header">
-                                <span>Agent 对话</span>
-                                <label class="sb-toggle">
-                                    <input type="checkbox" checked="@_useStreaming" @onchange="OnStreamingToggle" />
-                                    流式
-                                </label>
-                            </div>
-                            <div class="sb-agent-log">
-                                @if (_session?.Tree?.AgentLog is { } log)
-                                {
-                                    @foreach (var entry in log)
-                                    {
-                                        <div class="sb-log-entry">@entry</div>
-                                    }
-                                }
-                            </div>
-                            <div class="sb-agent-input-row">
-                                <input class="sb-agent-input" type="text" @bind="_agentMessage"
-                                       @onkeydown="OnAgentKeyDown" placeholder="输入消息..." />
-                                <button class="sb-agent-send" @onclick="SendToAgent" disabled="@string.IsNullOrWhiteSpace(_agentMessage)">
-                                    发送
-                                </button>
-                            </div>
+                        <div class="wf-agent-head">
+                            <span class="wf-agent-title">Agent 对话</span>
+                            <label class="wf-switch">
+                                <input type="checkbox" checked="@_useStreaming" @onchange="OnStreamingToggle" />
+                                流式
+                            </label>
                         </div>
-                    </div>
-                }
 
-                @* MCP: the connected server list and its reload action. *@
-                @if (_sidebarView == "mcp")
-                {
-                    <div class="wf-sidebar-page">
-                        <div class="sb-panel">
-                            <div class="sb-panel-header">
-                                <span>MCP 服务器</span>
-                            </div>
-                            <div class="sb-exec-log">
-                                @if (McpStatus is { } mcp)
+                        <div class="wf-agent-log" id="wf-agent-log">
+                            @if (tree is not null)
+                            {
+                                @foreach (var entry in tree.AgentLog)
                                 {
-                                    <div class="sb-log-entry">存活 @mcp.ConnectedCount · 错误 @mcp.ErrorCount · 安装/连接 @mcp.WorkingCount</div>
-                                    @foreach (var s in mcp.Servers)
-                                    {
-                                        <div class="sb-log-entry">
-                                            <span>@s.Name — @s.StateText</span>
-                                            @if (s.ToolCount > 0)
-                                            {
-                                                <span> · @s.ToolCount tools</span>
-                                            }
-                                        </div>
-                                        @if (s.IsError && !string.IsNullOrEmpty(s.Error))
+                                    <div class="wf-chat-line">@entry</div>
+                                }
+                            }
+                        </div>
+
+                        <div class="wf-agent-input-row">
+                            <input class="wf-agent-input" type="text" @bind="_agentMessage"
+                                   @onkeydown="OnAgentKeyDown" placeholder="输入消息..." />
+                            <button class="wf-tool accent" @onclick="SendToAgent"
+                                    disabled="@string.IsNullOrWhiteSpace(_agentMessage)">发送</button>
+                        </div>
+
+                        @if (_subAgentTree is { } subAgents)
+                        {
+                            <div class="wf-subagent-panel">
+                                <div class="wf-subagent-head">
+                                    <span class="wf-accent-text" style="font-weight:600;">子代理</span>
+                                    <div class="wf-run-meta">
+                                        @if (!subAgents.IsIdle)
                                         {
-                                            <div class="sb-log-entry" style="color:#ff6b6b">@s.Error</div>
+                                            <span class="wf-success-text">运行中 @subAgents.RunningCount</span>
                                         }
-                                    }
-                                    <button class="sb-action-btn" @onclick="ReloadMcpAsync">重载</button>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                }
-
-                @* Output: the execution log. *@
-                @if (_sidebarView == "output")
-                {
-                    <div class="wf-sidebar-page">
-                        <div class="sb-panel">
-                            <div class="sb-panel-header">
-                                <span>实际执行顺序</span>
-                            </div>
-                            <div class="sb-exec-log">
-                                @if (_session?.Tree?.ExecutionLog is { } execLog)
+                                        <span>@subAgents.TotalCount 个</span>
+                                        @if (subAgents.ScopeRoot.HasTokens)
+                                        {
+                                            <span>· @subAgents.SubtreeTokensText tokens</span>
+                                        }
+                                        @if (subAgents.HasFailed)
+                                        {
+                                            <span class="wf-danger-text">· 失败 @subAgents.FailedCount</span>
+                                        }
+                                    </div>
+                                </div>
+                                @if (subAgents.IsEmpty)
                                 {
-                                    <div class="sb-log-entry">已记录: @execLog.Count</div>
-                                    @foreach (var entry in execLog)
-                                    {
-                                        <div class="sb-log-entry">@entry</div>
-                                    }
+                                    <div class="wf-hint" style="margin:0;">尚无子代理。让 Agent「派一个子代理去数一数节点」试试。</div>
                                 }
+                                <div class="wf-subagent-scroll">
+                                    <SubAgentNodeView Node="@subAgents.ScopeRoot" Depth="0" />
+                                </div>
                             </div>
-                        </div>
+                        }
                     </div>
                 }
             </div>
+        </aside>
+    </div>
+
+    <!-- Status bar: run state, compiled segments, element counts, zoom. -->
+    <div class="wf-statusbar">
+        <div class="wf-status-left">
+            <span class="wf-status-item">
+                <span class="wf-status-dot @(tree?.IsWorkflowRunning == true ? "running" : "idle")"></span>
+                <span class="@(tree?.IsWorkflowRunning == true ? "wf-warning-text" : null)">
+                    @(tree?.IsWorkflowRunning == true ? "运行中" : "空闲")
+                </span>
+            </span>
+            <span class="wf-status-item">编译 @(tree?.CompiledStructure.Count ?? 0) 段</span>
+            <span class="wf-status-item">元素 @(tree?.TotalElementText ?? "0")</span>
         </div>
-    </aside>
-
-    <!-- Main Canvas Area -->
-    <main class="wf-main">
-        <div class="wf-toolbar">
-            <button class="tb-btn tb-close" @onclick="StopWorkflow" disabled="@(_session?.Controller?.IsActive != true)">
-                ■ Close Tree
-            </button>
-            <button class="tb-btn tb-reset" @onclick="ResetDemo">
-                ↩ Reset
-            </button>
-            <span class="tb-status">@(_session?.Controller?.IsActive == true ? "● Running" : "○ Idle")</span>
-            <span class="tb-layout">Layout: @_canvasLayoutSize</span>
+        <div class="wf-status-spacer"></div>
+        <div class="wf-status-right">
+            <span class="wf-status-item">可见 @(tree?.VisibleElementText ?? "0")</span>
+            <span class="wf-status-item">@ZoomText</span>
+            <span class="wf-status-item wf-status-hint">Ctrl+滚轮缩放</span>
         </div>
-
-        @if (_session?.Tree is { } tree)
-        {
-            <div class="wf-canvas-wrapper">
-                <WorkflowSurfaceBehavior @ref="_surface"
-                                         Tree="tree"
-                                         IsEnabled="true"
-                                         ZoomEnabled="true"
-                                         ScrollViewerId="wf-scroll"
-                                         CanvasId="wf-canvas"
-                                         GridSpacing="40"
-                                         GridColor="#2A2D2E"
-                                         MajorGridColor="#3A3D40"
-                                         MajorLineEvery="5"
-                                         AxisColor="#4D4D4D"
-                                         Background="#1E1E1E">
-                    <GridDecorator Context="vp">
-                        <WorkflowGridDecorator Viewport="vp"
-                                               RulerThickness="28" Spacing="40"
-                                               MajorLineEvery="5"
-                                               RulerBackground="rgba(37,37,38,0.78)"
-                                               TickColor="#555555"
-                                               LabelColor="#888888"
-                                               AxisColor="#4D4D4D"
-                                               DividerColor="#3A3D40" />
-                    </GridDecorator>
-                    <Minimap Context="vp">
-                        <WorkflowMinimapOverlay Viewport="vp"
-                                                Width="180" Height="120"
-                                                ScrollViewerId="wf-scroll"
-                                                Background="#1C2330"
-                                                BorderColor="#475569"
-                                                NodeFill="#38BDF8"
-                                                ViewportStroke="#FFFFFF" />
-                        @* 实时画布信息 HUD（左下浮动文本 + 复制按钮） *@
-                        <InfoOverlay Tree="tree" Viewport="vp" />
-                    </Minimap>
-                    <ChildContent Context="sc">
-                        @* Links layer: one full-canvas TemplateLinkView per connection (template product,
-                           absolute, overflow visible). Each link draws a cubic curve with a light running
-                           along it by arc length. The layer itself stays click-through — each link hands hit
-                           testing back on its own strokes — and the surface's root is the keyboard host:
-                           focus lands there on hover so Delete reaches the page without a click first. *@
-                        <div class="veloxdev-wf-links"
-                             style="position:absolute;left:0;top:0;width:@sc.Width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;height:@sc.Height.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)px;pointer-events:none;outline:none;">
-                            @foreach (var link in tree.Links)
-                            {
-                                @* Keyed by the link itself: a view carries per-link state that only
-                                   OnInitialized seeds (visibility, endpoint subscriptions) plus the
-                                   hover flag, and a positional diff would hand all of it to the
-                                   neighbouring link whenever one is deleted. *@
-                                <TemplateLinkView @key="link" Link="link" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height"
-                                                  IsSelected="@(_surface?.MenuLink == link)" />
-                            }
-                            @if (tree.VirtualLink.IsVisible)
-                            {
-                                <TemplateLinkView Link="tree.VirtualLink" CanvasWidth="@sc.Width" CanvasHeight="@sc.Height" />
-                            }
-                        </div>
-
-                        @* Nodes layer: generated TemplateNodeView cards with type-specific body content
-                           (template product). Each card wires slot-layout + node-drag behaviors itself,
-                           and each card states only what is its own: its type accent (the 2px bar at the
-                           head of the title row) and, when it has one, the status capsule it reads live.
-                           The surface, the hairline and the title row are the shared card design system
-                           in app.css — no card paints its own palette any more.
-
-                           A port on the card's edge is 32 design units, a port inside a list is 24:
-                           the card is authored at its design size and scaled, so these are design
-                           lengths and they match the Avalonia cards' 32 / 24. *@
-                        <ViewPool ItemsSource="tree.Nodes" KeySelector="n => n">
-                            <ItemTemplate Context="node">
-                                @switch (node)
-                                {
-                                    case ControllerViewModel c:
-                                        <TemplateNodeView Node="c" Title="Network Flow Controller"
-                                                          StatusChanged="SetElementStatus"
-                                                          Accent="var(--wf-accent-controller)"
-                                                          AllowOverflow="true"
-                                                          BorderBrush="@(c.IsActive ? "var(--wf-accent-controller)" : null)">
-                                            <BodyContent>
-                                                <WorkflowControllerView Controller="c" />
-                                            </BodyContent>
-                                            <OutputSlots>
-                                                @* TemplateSlotView 已为插槽开启连接行为，再包一层会让锚点与手势处理翻倍 *@
-                                                <TemplateSlotView Slot="c.OutputSlot" Tree="tree" SlotSize="32" />
-                                            </OutputSlots>
-                                        </TemplateNodeView>
-                                        break;
-                                    case EnumSelectorNodeViewModel e:
-                                        <TemplateNodeView Node="e" StatusChanged="SetElementStatus"
-                                                          Accent="var(--wf-accent-enum)"
-                                                          StatusProperty="LastRouted"
-                                                          AllowOverflow="true">
-                                            <BodyContent>
-                                                <WorkflowEnumSelectorView Selector="e" Tree="tree" />
-                                            </BodyContent>
-                                            <InputSlots>
-                                                <TemplateSlotView Slot="e.InputSlot" Tree="tree" SlotSize="32" />
-                                            </InputSlots>
-                                        </TemplateNodeView>
-                                        break;
-                                    case PythonScriptNodeViewModel p:
-                                        <TemplateNodeView Node="p" StatusChanged="SetElementStatus"
-                                                          Accent="var(--wf-accent-worker)"
-                                                          StatusProperty="LastStatus"
-                                                          AllowOverflow="true">
-                                            <BodyContent>
-                                                <WorkflowPythonNodeView Selector="p" Tree="tree" />
-                                            </BodyContent>
-                                        </TemplateNodeView>
-                                        break;
-                                    case TimerNodeViewModel t:
-                                        <TemplateNodeView Node="t" StatusChanged="SetElementStatus"
-                                                          Accent="var(--wf-accent-worker)"
-                                                          AllowOverflow="true">
-                                            <BodyContent>
-                                                <WorkflowTimerView Selector="t" />
-                                            </BodyContent>
-                                            <InputSlots>
-                                                <TemplateSlotView Slot="t.InputSlot" Tree="tree" SlotSize="32" />
-                                            </InputSlots>
-                                            <OutputSlots>
-                                                <TemplateSlotView Slot="t.OutputSlot" Tree="tree" SlotSize="32" />
-                                            </OutputSlots>
-                                        </TemplateNodeView>
-                                        break;
-                                    case IWorkflowNodeViewModel g:
-                                        @* Generic catch-all: a foreign node still lands on the same card
-                                           family, with the neutral slate accent, because there is no type
-                                           here to give it a colour. *@
-                                        <TemplateNodeView Node="g" StatusChanged="SetElementStatus" AllowOverflow="true">
-                                            <BodyContent>
-                                                <WorkflowNodeView Node="g" />
-                                            </BodyContent>
-                                        </TemplateNodeView>
-                                        break;
-                                }
-                            </ItemTemplate>
-                        </ViewPool>
-                    </ChildContent>
-                    <LinkMenu Context="link">
-                        @* VeloxDev customization: add or remove the item buttons here. The menu chrome,
-                           its position, and the input wiring all live in the surface; each entry just
-                           receives the link it acts on. *@
-                        <button class="wf-link-menu-item" @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>
-                    </LinkMenu>
-                </WorkflowSurfaceBehavior>
-            </div>
-        }
-    </main>
-
-    <!-- Agent interaction modals (RequestSelection / RequestConfirmation) -->
-    @if (_selection is { } sel)
-    {
-        <div class="wf-modal-overlay">
-            <div class="wf-modal">
-                <div class="wf-modal-header">@(sel.AllowMultiSelect ? "Agent · 请多选" : "Agent · 请选择")</div>
-                <div class="wf-modal-body">
-                    <p class="wf-modal-prompt">@sel.Prompt</p>
-                    <div class="wf-modal-options">
-                        @if (sel.AllowMultiSelect)
-                        {
-                            @foreach (var idx in System.Linq.Enumerable.Range(0, sel.Options.Length))
-                            {
-                                <label class="wf-opt">
-                                    <input type="checkbox" checked="@sel.Checked[idx]" @onchange="e => OnCheckChanged(sel, idx, (bool)(e.Value ?? false))" />
-                                    <span>@sel.Options[idx]</span>
-                                </label>
-                            }
-                        }
-                        else
-                        {
-                            @foreach (var opt in sel.Options)
-                            {
-                                <button class="wf-opt-btn" @onclick="() => PickOption(opt)">@opt</button>
-                            }
-                        }
-                    </div>
-                    <div class="wf-modal-freetext-label">@sel.FreeTextPrompt</div>
-                    <input class="wf-modal-freetext" type="text" @bind="sel.FreeText" @bind:event="oninput" placeholder="@sel.FreeTextPrompt" />
-                    <div class="wf-modal-actions">
-                        @if (sel.AllowMultiSelect)
-                        {
-                            <button class="wf-btn-cancel" @onclick="CancelSelection">取消</button>
-                            <button class="wf-btn-confirm" @onclick="ConfirmMultiSelection">确认选择</button>
-                        }
-                        else
-                        {
-                            <button class="wf-btn-confirm" @onclick="SubmitFreeTextSelection" disabled="@string.IsNullOrWhiteSpace(sel.FreeText)">使用输入</button>
-                            <button class="wf-btn-cancel" @onclick="CancelSelection">取消（不选择）</button>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-
-    @if (_confirmation is { } conf)
-    {
-        <div class="wf-modal-overlay">
-            <div class="wf-modal">
-                <div class="wf-modal-header" style="color:#ffd166;">Agent · 操作确认</div>
-                <div class="wf-modal-body">
-                    <div class="wf-modal-key">@conf.OperationKey</div>
-                    <p class="wf-modal-prompt">@conf.Description</p>
-                    <div class="wf-modal-actions">
-                        <button class="wf-btn-deny" @onclick="() => CompleteConfirmation(AgentConfirmationResult.Deny)">拒绝</button>
-                        <button class="wf-btn-once" @onclick="() => CompleteConfirmation(AgentConfirmationResult.AllowOnce)">仅同意一次</button>
-                        <button class="wf-btn-always" @onclick="() => CompleteConfirmation(AgentConfirmationResult.AllowAlways)">本次会话始终同意</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
+    </div>
 </div>
+
+<!-- Agent interaction modals (RequestSelection / RequestConfirmation) -->
+@if (_selection is { } sel)
+{
+    <div class="wf-modal-overlay">
+        <div class="wf-modal">
+            <div class="wf-modal-header">@(sel.AllowMultiSelect ? "Agent · 请多选" : "Agent · 请选择")</div>
+            <div class="wf-modal-body">
+                <p class="wf-modal-prompt">@sel.Prompt</p>
+                <div class="wf-modal-options">
+                    @if (sel.AllowMultiSelect)
+                    {
+                        @foreach (var idx in System.Linq.Enumerable.Range(0, sel.Options.Length))
+                        {
+                            <label class="wf-opt">
+                                <input type="checkbox" checked="@sel.Checked[idx]" @onchange="e => OnCheckChanged(sel, idx, (bool)(e.Value ?? false))" />
+                                <span>@sel.Options[idx]</span>
+                            </label>
+                        }
+                    }
+                    else
+                    {
+                        @foreach (var opt in sel.Options)
+                        {
+                            <button class="wf-opt-btn" @onclick="() => PickOption(opt)">@opt</button>
+                        }
+                    }
+                </div>
+                <div class="wf-modal-freetext-label">@sel.FreeTextPrompt</div>
+                <input class="wf-modal-freetext" type="text" @bind="sel.FreeText" @bind:event="oninput" placeholder="@sel.FreeTextPrompt" />
+                <div class="wf-modal-actions">
+                    @if (sel.AllowMultiSelect)
+                    {
+                        <button class="wf-btn-cancel" @onclick="CancelSelection">取消</button>
+                        <button class="wf-btn-confirm" @onclick="ConfirmMultiSelection">确认选择</button>
+                    }
+                    else
+                    {
+                        <button class="wf-btn-confirm" @onclick="SubmitFreeTextSelection" disabled="@string.IsNullOrWhiteSpace(sel.FreeText)">使用输入</button>
+                        <button class="wf-btn-cancel" @onclick="CancelSelection">取消（不选择）</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_confirmation is { } conf)
+{
+    <div class="wf-modal-overlay">
+        <div class="wf-modal">
+            <div class="wf-modal-header" style="color:#ffd166;">Agent · 操作确认</div>
+            <div class="wf-modal-body">
+                <div class="wf-modal-key">@conf.OperationKey</div>
+                <p class="wf-modal-prompt">@conf.Description</p>
+                <div class="wf-modal-actions">
+                    <button class="wf-btn-deny" @onclick="() => CompleteConfirmation(AgentConfirmationResult.Deny)">拒绝</button>
+                    <button class="wf-btn-once" @onclick="() => CompleteConfirmation(AgentConfirmationResult.AllowOnce)">仅同意一次</button>
+                    <button class="wf-btn-always" @onclick="() => CompleteConfirmation(AgentConfirmationResult.AllowAlways)">本次会话始终同意</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}

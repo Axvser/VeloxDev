@@ -8,6 +8,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using VeloxDev.AI;
 using VeloxDev.AI.Safety;
+using VeloxDev.AI.SubAgents;
 using VeloxDev.MVVM;
 using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
@@ -24,32 +25,83 @@ public partial class Workflow : ComponentBase, IDisposable
     private string _agentMessage = "";
     private bool _useStreaming = true;
 
-    // ── Sidebar rail ───────────────────────────────────────────────────────
-    // 五个活动页一次只显示一页，键与活动栏按钮的展开一一对应。
+    // ── Workbench shell state ──────────────────────────────────────────────
+    // The activity bar owns which sidebar page and which inspector page is on. The main
+    // area has its own two tabs. On a narrow viewport the side panels become overlays,
+    // and the mobile-* flags say whether one is currently shown — on the desktop CSS
+    // keeps both panels visible regardless of them.
     private string _sidebarView = "explorer";
+    private string _mainTab = "canvas";
+    private string _inspectorTab = "properties";
+    private bool _mobileSidebarOpen;
+    private bool _mobileInspectorOpen;
 
     private string SidebarTitle => _sidebarView switch
     {
         "run" => "运行",
-        "agent" => "AGENT",
-        "mcp" => "MCP",
-        "output" => "输出",
+        "mcp" => "MCP 服务器",
         _ => "资源管理器",
     };
 
-    private void SelectSidebarView(string view) => _sidebarView = view;
+    private void SelectSidebarView(string view)
+    {
+        // The output activity is a main-area tab in the final shell, not a sidebar page.
+        if (view == "output")
+        {
+            SelectMainTab("output");
+            _mobileSidebarOpen = false;
+            return;
+        }
+
+        if (_sidebarView == view && _mobileSidebarOpen)
+        {
+            _mobileSidebarOpen = false;
+            return;
+        }
+
+        _sidebarView = view;
+        _mobileSidebarOpen = true;
+    }
+
+    private void SelectMainTab(string tab)
+    {
+        _mainTab = tab;
+        if (tab == "output") _scrollExecPending = true;
+        _mobileSidebarOpen = false;
+    }
+
+    /// <summary>Bottom activity entry: sets the inspector tab, or closes the overlay when it is already open.</summary>
+    private void SelectInspectorFromActivity(string tab)
+    {
+        if (_inspectorTab == tab && _mobileInspectorOpen)
+        {
+            _mobileInspectorOpen = false;
+            return;
+        }
+
+        _inspectorTab = tab;
+        _mobileInspectorOpen = true;
+        if (tab == "agent") EnsureSubAgents();
+    }
+
+    /// <summary>Panel-header tab click: always selects, never toggles.</summary>
+    private void SelectInspectorTab(string tab)
+    {
+        _inspectorTab = tab;
+        if (tab == "agent") EnsureSubAgents();
+    }
+
+    private void CloseMobilePanels()
+    {
+        _mobileSidebarOpen = false;
+        _mobileInspectorOpen = false;
+    }
 
     private VeloxDev.AI.MCP.McpStatusViewModel? McpStatus
         => (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;
-    private string _canvasLayoutSize = "";
 
     // 运行控制卡片对闸门状态的显示——空闲 / 已暂停 / …
-    private string _runGateState = "空闲";
-
-    // 会话是否有可续跑的检查点。缓存而不是每次渲染读取：页面在每个节点/连线变化时重渲染，而 HasCheckpoint 会碰磁盘。
-    private bool _hasCheckpoint;
-
-    // 权限模式的下拉当前值。会话级设置：换树（Reset / Load）时在 SubscribeSession 里跟着新 helper 重新对齐。
+    // Session-scoped: rebuilt on Reset / Load by SubscribeSession.
     private AgentPermissionMode _permissionMode = AgentPermissionMode.AutoEdit;
 
     // ── Link selection ─────────────────────────────────────────────────────
@@ -72,6 +124,31 @@ public partial class Workflow : ComponentBase, IDisposable
             WorkflowElementKind.Link => elements.Links,
             _ => elements.Nodes,
         };
+
+    // ── Minimap / view state ───────────────────────────────────────────────
+    private bool _minimapVisible = true;
+
+    // ── Rendering / auto-scroll ────────────────────────────────────────────
+    private bool _renderPending;
+    private bool _scrollExecPending;
+    private bool _scrollAgentPending;
+    private bool _disposed;
+
+    // ── Agent sub-agents ───────────────────────────────────────────────────
+    private SubAgentTreeViewModel? _subAgentTree;
+    private INotifyPropertyChanged? _subAgentNotifier;
+    private System.Threading.Timer? _subAgentTick;
+
+    private string ZoomText
+    {
+        get
+        {
+            var scale = _session?.Tree.Layout.Scale.Horizontal ?? 1d;
+            return scale > 0
+                ? $"{Math.Round(100d / scale):0}%"
+                : "—";
+        }
+    }
 
     // ── Agent interaction modals (RequestSelection / RequestConfirmation) ──
     private SelectionRequest? _selection;
@@ -109,7 +186,6 @@ public partial class Workflow : ComponentBase, IDisposable
         _elements = new WorkflowElementCatalog(_session.Tree);
         _elements.Changed += OnElementsChanged;
         SubscribeSession();
-        UpdateCanvasSize();
     }
 
     private void SubscribeSession()
@@ -122,10 +198,13 @@ public partial class Workflow : ComponentBase, IDisposable
         // 可见元素数跟着虚拟化集合走；表面滚动时它才会变，所以侧栏要自己订这一份。
         _session.Tree.GetHelper().VisibleItems.CollectionChanged += OnVisibleItemsChanged;
         _session.Controller.PropertyChanged += OnControllerPropertyChanged;
-        // 一轮跑完，检查点这一轮才写得下来 —— 按钮可不可按跟着它走。
-        _session.Controller.RunCommand.Exited += OnRunCommandExited;
-        _session.Controller.ResumeCommand.Exited += OnRunCommandExited;
-        RefreshRunControls();
+        // The workbench status bar reads IsWorkflowRunning, and both panels read SelectedElement.
+        _session.Tree.PropertyChanged += OnTreePropertyChanged;
+        // The run manager and the output header follow the shared run catalog.
+        _session.Tree.Runs.Changed += OnRunsChanged;
+        _session.Tree.ExecutionLog.CollectionChanged += OnExecutionLogChanged;
+        _session.Tree.AgentLog.CollectionChanged += OnAgentLogChanged;
+        _session.Tree.CompiledStructure.CollectionChanged += OnCompiledStructureChanged;
         if (_session.Tree.Layout is INotifyPropertyChanged lp)
             lp.PropertyChanged += OnLayoutPropertyChanged;
         if (_session.Tree.GetHelper() is AgentHelper helper)
@@ -139,13 +218,37 @@ public partial class Workflow : ComponentBase, IDisposable
             _ = helper.LoadMcpServersAsync();
             // 下拉的初值：会话级设置，跟着刚挂上的这棵树的 helper 走。
             _permissionMode = helper.PermissionMode;
+            AttachSubAgents(helper);
         }
+        _useStreaming = _session.Tree.UseStreamingAgentResponse;
         // 跟着会话一起订：OnInitialized / Reset / Load 三处换树都走这里，探针因此总落在屏幕上那棵树。
         VetoFrameworkGestures(_session.Tree);
     }
 
-    private void OnMcpStatusChanged(object? sender, PropertyChangedEventArgs e)
-        => _ = InvokeAsync(StateHasChanged);
+    private void UnsubscribeSession()
+    {
+        if (_session is null) return;
+        _session.Tree.Nodes.CollectionChanged -= OnNodesOrLinksChanged;
+        _session.Tree.Links.CollectionChanged -= OnNodesOrLinksChanged;
+        _session.Tree.GetHelper().VisibleItems.CollectionChanged -= OnVisibleItemsChanged;
+        _session.Controller.PropertyChanged -= OnControllerPropertyChanged;
+        _session.Tree.PropertyChanged -= OnTreePropertyChanged;
+        _session.Tree.Runs.Changed -= OnRunsChanged;
+        _session.Tree.ExecutionLog.CollectionChanged -= OnExecutionLogChanged;
+        _session.Tree.AgentLog.CollectionChanged -= OnAgentLogChanged;
+        _session.Tree.CompiledStructure.CollectionChanged -= OnCompiledStructureChanged;
+        if (_session.Tree.Layout is INotifyPropertyChanged lp)
+            lp.PropertyChanged -= OnLayoutPropertyChanged;
+        if (_session.Tree.GetHelper() is AgentHelper helper)
+        {
+            helper.SelectionHandler = null;
+            helper.ConfirmationHandler = null;
+            helper.Mcp.Status.PropertyChanged -= OnMcpStatusChanged;
+        }
+        DetachSubAgents();
+    }
+
+    private void OnMcpStatusChanged(object? sender, PropertyChangedEventArgs e) => QueueRender();
 
     private async Task ReloadMcpAsync()
     {
@@ -170,56 +273,105 @@ public partial class Workflow : ComponentBase, IDisposable
         helper.Scope?.SetPermissionMode(mode);
     }
 
-    private void UnsubscribeSession()
-    {
-        if (_session is null) return;
-        _session.Tree.Nodes.CollectionChanged -= OnNodesOrLinksChanged;
-        _session.Tree.Links.CollectionChanged -= OnNodesOrLinksChanged;
-        _session.Tree.GetHelper().VisibleItems.CollectionChanged -= OnVisibleItemsChanged;
-        _session.Controller.PropertyChanged -= OnControllerPropertyChanged;
-        _session.Controller.RunCommand.Exited -= OnRunCommandExited;
-        _session.Controller.ResumeCommand.Exited -= OnRunCommandExited;
-        if (_session.Tree.Layout is INotifyPropertyChanged lp)
-            lp.PropertyChanged -= OnLayoutPropertyChanged;
-        if (_session.Tree.GetHelper() is AgentHelper helper)
-        {
-            helper.SelectionHandler = null;
-            helper.ConfirmationHandler = null;
-            helper.Mcp.Status.PropertyChanged -= OnMcpStatusChanged;
-        }
-    }
-
-    private void UpdateCanvasSize()
-    {
-        if (_session?.Tree?.Layout is { } layout)
-            _canvasLayoutSize = $"{layout.ActualSize.Width:F0}×{layout.ActualSize.Height:F0}";
-    }
-
     private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Only the canvas size affects the sidebar label. ViewportOffset is written by the surface
-        // on every scroll — re-rendering the page for it would re-render the whole tree each frame.
-        if (e.PropertyName is nameof(CanvasLayout.ActualSize))
+        // ActualSize and Scale drive the status bar (element counts and zoom). ViewportOffset is
+        // written by the surface on every scroll — re-rendering the page for it would re-render
+        // the whole tree each frame.
+        if (e.PropertyName is nameof(CanvasLayout.ActualSize) or nameof(CanvasLayout.Scale))
+            QueueRender();
+    }
+
+    // 树/连线的重渲染归表面组件；页面订阅只是为了让状态栏的计数与编译分段跟着变。
+    private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => QueueRender();
+
+    private void OnVisibleItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => QueueRender();
+
+    private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        => QueueRender();
+
+    private void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(TreeViewModel.IsWorkflowRunning)
+            or nameof(TreeViewModel.SelectedElement)
+            or nameof(TreeViewModel.HasSelectedElement))
         {
-            UpdateCanvasSize();
-            InvokeAsync(StateHasChanged);
+            QueueRender();
         }
     }
 
-    // 树/连线的重渲染归表面组件；页面订阅只是为了让侧栏的节点数、连接数跟着变。
-    private void OnNodesOrLinksChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => InvokeAsync(StateHasChanged);
+    private void OnRunsChanged(object? sender, EventArgs e)
+    {
+        // A run manager that is not on screen does not need a page render per 250ms tick.
+        if (_sidebarView == "run" || _mainTab == "output") QueueRender();
+    }
 
-    private void OnVisibleItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => InvokeAsync(StateHasChanged);
+    private void OnCompiledStructureChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => QueueRender();
 
-    private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs e)
-        => InvokeAsync(StateHasChanged);
+    private void OnExecutionLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_mainTab != "output") return;
+        _scrollExecPending = true;
+        QueueRender();
+    }
+
+    private void OnAgentLogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_inspectorTab != "agent") return;
+        _scrollAgentPending = true;
+        QueueRender();
+    }
+
+    /// <summary>Coalesces a burst of model changes into one render.</summary>
+    private void QueueRender()
+    {
+        if (_renderPending || _disposed) return;
+        _renderPending = true;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        _renderPending = false;
+
+        if (_scrollExecPending)
+        {
+            _scrollExecPending = false;
+            _ = ScrollToEnd("wf-exec-log");
+        }
+
+        if (_scrollAgentPending)
+        {
+            _scrollAgentPending = false;
+            _ = ScrollToEnd("wf-agent-log");
+        }
+    }
+
+    private async Task ScrollToEnd(string elementId)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("scrollElementToEnd", elementId);
+        }
+        catch
+        {
+            // The log is an enhancement; a missing JS hook must not take the page down.
+        }
+    }
 
     // ── Element list ───────────────────────────────────────────────────────
-    private void OnElementsChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
+    private void OnElementsChanged(object? sender, EventArgs e) => QueueRender();
 
     private void SelectElementTab(WorkflowElementKind kind) => _elementTab = kind;
+
+    private void SelectElement(WorkflowElementEntry entry)
+    {
+        if (_session is null) return;
+        _session.Tree.SelectedElement = entry;
+    }
 
     private void LocateElement(WorkflowElementEntry entry)
     {
@@ -235,6 +387,16 @@ public partial class Workflow : ComponentBase, IDisposable
         _elements?.Delete(entry);
     }
 
+    private void LocateSelectedElement()
+    {
+        if (_session?.Tree.SelectedElement is { } entry) LocateElement(entry);
+    }
+
+    private void DeleteSelectedElement()
+    {
+        if (_session?.Tree.SelectedElement is { } entry) DeleteElement(entry);
+    }
+
     /// <summary>Receives the one-line layout summary from the node card's right-click menu.</summary>
     private void SetElementStatus(string status)
     {
@@ -242,47 +404,115 @@ public partial class Workflow : ComponentBase, IDisposable
         StateHasChanged();
     }
 
-    private async Task StopWorkflow()
+    private void OnMinimapToggle(ChangeEventArgs e)
+        => _minimapVisible = ToBool(e);
+
+    private static bool ToBool(ChangeEventArgs e)
+        => e.Value is bool value
+            ? value
+            : string.Equals(e.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+
+    // ── Run manager ────────────────────────────────────────────────────────
+    // 任务行自己拥有动作（CanPause / CanResume / ...），页面只把按钮转给它；选中的行由共享目录镜像到
+    // ExecutionLog，输出页因此跟随选中的那一行。
+    private void SelectRun(WorkflowRunTaskViewModel task)
     {
         if (_session is null) return;
-        await _session.Controller.CloseWorkflowCommand.ExecuteAsync(null);
+        _session.Tree.Runs.Selected = task;
+        _scrollExecPending = true;
+        QueueRender();
     }
 
-    // ── Run controls ───────────────────────────────────────────────────────
-    // 门与检查点都在会话上、不在树上，所以这三件事只有拿得到会话时才可按；换过会话就跟着新的走。
-    private void RefreshRunControls()
+    private void PauseRun(WorkflowRunTaskViewModel task) => task.Pause();
+
+    private void ResumeRun(WorkflowRunTaskViewModel task) => task.Resume();
+
+    private void StopRun(WorkflowRunTaskViewModel task) => task.Stop();
+
+    private void StartRun(WorkflowRunTaskViewModel task) => task.Start();
+
+    private void RemoveRun(WorkflowRunTaskViewModel task)
+        => _session?.Tree.Runs.Remove(task);
+
+    private void ClearFinishedRuns()
+        => _session?.Tree.Runs.ClearFinished();
+
+    // ── Agent sub-agents ───────────────────────────────────────────────────
+    /// <summary>
+    /// Attaches the panel to the helper's subsystem, when it has one. The subsystem is built inside
+    /// <c>ProvideAgent</c>, after the chat client resolves, so a host without a key simply has no panel.
+    /// </summary>
+    private void AttachSubAgents(AgentHelper helper)
     {
-        _hasCheckpoint = _session?.HasCheckpoint == true;
-        _runGateState = _session?.Gate.IsPaused == true ? "已暂停" : "空闲";
-        _ = InvokeAsync(StateHasChanged);
+        DetachSubAgents();
+        if (helper.SubAgents is not { } scope) return;
+
+        try
+        {
+            // Built on the render context on purpose: the tree captures the context it marshals
+            // its rebuilds to, so it has to be born where the page renders.
+            _subAgentTree = new SubAgentTreeViewModel(scope);
+            if (_subAgentTree is INotifyPropertyChanged notifier)
+            {
+                _subAgentNotifier = notifier;
+                notifier.PropertyChanged += OnSubAgentChanged;
+            }
+
+            // The library owns no clock. One second is the coarsest rate at which "m:ss" still
+            // looks alive, and it also keeps the panel's counts fresh.
+            _subAgentTick = new System.Threading.Timer(_ => TickSubAgents(), null, 1000, 1000);
+        }
+        catch
+        {
+            DetachSubAgents();
+        }
     }
 
-    private void OnRunCommandExited(CommandEventArgs e) => RefreshRunControls();
-
-    private void PauseWorkflow()
+    private void EnsureSubAgents()
     {
-        if (_session is null) return;
-        _session.Gate.Pause();
-        _runGateState = "已暂停：停在下一个节点边界";
-        StateHasChanged();
+        if (_subAgentTree is null
+            && _session?.Tree.GetHelper() is AgentHelper { SubAgents: not null } helper)
+        {
+            AttachSubAgents(helper);
+        }
     }
 
-    private void ResumeWorkflow()
+    private void TickSubAgents()
     {
-        if (_session is null) return;
-        _session.Gate.Resume();
-        _runGateState = "运行中";
-        StateHasChanged();
+        if (_disposed || _inspectorTab != "agent") return;
+
+        _ = InvokeAsync(() =>
+        {
+            try
+            {
+                _subAgentTree?.TickElapsed();
+                StateHasChanged();
+            }
+            catch
+            {
+                // A circuit that went away during the tick has nothing left to render.
+            }
+        });
     }
 
-    private async Task ContinueFromCheckpoint()
+    private void OnSubAgentChanged(object? sender, PropertyChangedEventArgs e) => QueueRender();
+
+    private void DetachSubAgents()
     {
-        if (_session is null) return;
-        _runGateState = "从检查点继续…";
-        StateHasChanged();
-        await _session.Controller.ResumeCommand.ExecuteAsync(null);
+        _subAgentTick?.Dispose();
+        _subAgentTick = null;
+
+        if (_subAgentNotifier is not null)
+        {
+            _subAgentNotifier.PropertyChanged -= OnSubAgentChanged;
+            _subAgentNotifier = null;
+        }
+
+        _subAgentTree?.Dispose();
+        _subAgentTree = null;
     }
 
+    // ── Session lifecycle ──────────────────────────────────────────────────
     private async Task ResetDemo()
     {
         UnsubscribeSession();
@@ -290,9 +520,26 @@ public partial class Workflow : ComponentBase, IDisposable
             await _session.Tree.GetHelper().CloseAsync();
         _session = WorkflowDemoSession.Create();
         SubscribeSession();
-        UpdateCanvasSize();
         StateHasChanged();
     }
+
+    private async Task MenuActionAsync(Func<Task> action)
+    {
+        await CloseMenusAsync();
+        await action();
+    }
+
+    private async Task MenuAction(Action action)
+    {
+        await CloseMenusAsync();
+        action();
+    }
+
+    private Task CloseMenusAsync() => JS.InvokeVoidAsync("closeWorkbenchMenus").AsTask();
+
+    private Task ShowAboutAsync() => JS.InvokeVoidAsync(
+        "alert",
+        "VeloxDev — Workflow Studio\n演示宿主：工作流画布、运行门、Agent 与 MCP 面板。").AsTask();
 
     private async Task Undo()
     {
@@ -328,9 +575,8 @@ public partial class Workflow : ComponentBase, IDisposable
 
             var tree = json.Deserialize<TreeViewModel>();
             _session = WorkflowDemoSession.FromTree(tree);
-        HookLinkKeys(_session.Tree);
+            HookLinkKeys(_session.Tree);
             SubscribeSession();
-            UpdateCanvasSize();
             // The surface restores the saved viewport position by itself when the new tree reaches it.
             StateHasChanged();
         }
@@ -340,6 +586,7 @@ public partial class Workflow : ComponentBase, IDisposable
     private async Task SendToAgent()
     {
         if (_session?.Tree is null || string.IsNullOrWhiteSpace(_agentMessage)) return;
+        EnsureSubAgents();
         var msg = _agentMessage;
         _agentMessage = "";
         await _session.Tree.AskCommand.ExecuteAsync(msg);
@@ -354,7 +601,7 @@ public partial class Workflow : ComponentBase, IDisposable
 
     private void OnStreamingToggle(ChangeEventArgs e)
     {
-        _useStreaming = e.Value?.ToString() == "true";
+        _useStreaming = ToBool(e);
         if (_session?.Tree is not null)
             _session.Tree.UseStreamingAgentResponse = _useStreaming;
     }
@@ -454,6 +701,7 @@ public partial class Workflow : ComponentBase, IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         // 目录没有 Dispose：先摘 Changed（页面此后不再重渲染），再把树连同它的集合订阅一起放掉。
         if (_elements is not null)
         {
@@ -462,6 +710,7 @@ public partial class Workflow : ComponentBase, IDisposable
         }
         UnsubscribeSession();
     }
+
     // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
     // 删不删由这里写（与悬停高亮同一条路）。
     private void HookLinkKeys(IWorkflowTreeViewModel? tree)
@@ -511,5 +760,4 @@ public partial class Workflow : ComponentBase, IDisposable
         // wheel that reaches the verdict, and this demo wants it to zoom. A host that wants Ctrl+wheel for itself
         // instead refuses it on <c>PointerWheelChanged</c>, exactly as the press clause above does.
     }
-
 }
