@@ -77,7 +77,11 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         OnHost(() =>
         {
             OnPropertyChanged(nameof(HasCompiledGraphs));
-            (Parent as TreeViewModel)?.RefreshCompiledStructure(this);
+            if (Parent is not TreeViewModel tree) return;
+            tree.RefreshCompiledStructure(this);
+            // 同一次编译也让运行管理器与属性页看到它：手动编译与 Agent 编译走的是同一条列表。
+            tree.NoteManualCompile(this);
+            tree.RefreshElementDetails(this);
         });
     }
 

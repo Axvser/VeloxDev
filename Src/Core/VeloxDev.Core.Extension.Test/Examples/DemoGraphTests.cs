@@ -192,6 +192,16 @@ public class DemoGraphTests
         Assert.AreEqual("Completed", generate.LastStatus);
         Assert.AreEqual("Completed", audit.LastStatus);
         Assert.IsNull(audit.RedirectTo, "the fallback target is cleared at the start of the drive that follows");
+
+        // The page-level view: the same run as a task row, and the observations the output pane renders in order.
+        var task = session.Tree.Runs.Tasks.FirstOrDefault(t => t.Source == WorkflowRunSource.Manual)!;
+        Assert.IsNotNull(task, "the run manager holds the run");
+        Assert.AreEqual(WorkflowRunState.Completed, task.State);
+        Assert.AreSame(task, session.Tree.Runs.Selected, "the run is what the output page follows");
+        Assert.IsTrue(session.Tree.ExecutionLog.Any(line => line.Contains("运行结束", StringComparison.Ordinal)),
+            "the trace closes with the run's outcome");
+        Assert.IsTrue(session.Tree.ExecutionLog.Any(line => line.Contains("重试", StringComparison.Ordinal)),
+            $"the retry is in the trace; got: {string.Join(" | ", session.Tree.ExecutionLog.Take(20))}");
     }
 
     /// <summary>

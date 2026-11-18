@@ -2,7 +2,9 @@
 using VeloxDev.AI.Pipelines;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json.Serialization;
 using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
@@ -19,6 +21,10 @@ public partial class TreeViewModel
 {
     public TreeViewModel()
     {
+        // 按属性取集合而不是把字段交出去：反序列化可能替换 ExecutionLog 实例。
+        Runs = new WorkflowRunCatalog(() => ExecutionLog) { Tree = this };
+        Runs.Changed += OnRunsChanged;
+
         InitializeWorkflow();
         SubscribeTranscript();
 
@@ -38,6 +44,30 @@ public partial class TreeViewModel
     [VeloxProperty] private ObservableCollection<AgentMessageViewModel> agentMessages = [];
     [VeloxProperty] private string conversationMarkdown = "";
     [VeloxProperty] private bool isWorkflowRunning = false;
+
+    // 资源管理器写它、右侧检查器读它；列表重建时由 WorkflowElementCatalog 换到新行或清空。
+    // 它不是工作流的一部分：持久化它会把元素引用（以及它们背后的整棵树）写进文件。
+    [JsonIgnore]
+    [VeloxProperty] private WorkflowElementEntry? selectedElement;
+
+    /// <summary>
+    /// Every compile and run task the demo knows about, manual and Agent alike. The run manager binds it; the
+    /// selected row's lines are mirrored into <see cref="ExecutionLog"/>, which every output pane already binds.
+    /// </summary>
+    public WorkflowRunCatalog Runs { get; }
+
+    /// <summary>Whether the inspector has an element to describe.</summary>
+    public bool HasSelectedElement => selectedElement is not null;
+
+    partial void OnSelectedElementChanged(WorkflowElementEntry? oldValue, WorkflowElementEntry? newValue)
+        => OnPropertyChanged(nameof(HasSelectedElement));
+
+    /// <summary>Raised when an element's details changed — a compile identity, a run status — not on every property.</summary>
+    internal event Action<IWorkflowNodeViewModel?>? ElementDetailsInvalidated;
+
+    /// <summary>Asks every inspector to re-read one node's details, or all of them when <paramref name="node"/> is null.</summary>
+    internal void RefreshElementDetails(IWorkflowNodeViewModel? node = null)
+        => ElementDetailsInvalidated?.Invoke(node);
 
     [VeloxProperty] private bool useStreamingAgentResponse = true;
 
@@ -98,24 +128,52 @@ public partial class TreeViewModel
     }
 
     /// <summary>Marks the workflow running and clears the execution log; the UI calls this when a run starts.</summary>
+    /// <remarks>
+    /// The task row is already selected by the time the controller calls this — its session was configured first —
+    /// so clearing both the row and the mirrored log leaves the page empty for the run that is about to start.
+    /// </remarks>
     public void BeginWorkflowRun()
     {
-        ResetExecutionLog();
+        Runs.Selected?.ClearLines();
+        ExecutionLog.Clear();
         SetWorkflowRunning(true);
     }
 
-    /// <summary>Recomputes the running flag from the controllers' active state — needed after the tree is edited.</summary>
+    /// <summary>Recomputes the running flag from the controllers' active state and the task catalog.</summary>
     public void RefreshWorkflowRunningState()
     {
-        var isRunning = Nodes.OfType<ControllerViewModel>().Any(c => c.IsActive);
+        var isRunning = Nodes.OfType<ControllerViewModel>().Any(c => c.IsActive) || Runs.AnyRunning;
         SetWorkflowRunning(isRunning);
     }
 
-    /// <summary>Clears the execution log and the running flag.</summary>
+    /// <summary>Clears the execution log and recomputes the running flag.</summary>
     public void ResetExecutionLog()
     {
+        Runs.Selected?.ClearLines();
         ExecutionLog.Clear();
-        SetWorkflowRunning(false);
+        SetWorkflowRunning(Runs.AnyRunning || Nodes.OfType<ControllerViewModel>().Any(c => c.IsActive));
+    }
+
+    /// <summary>Pushes a controller's fresh compile into the run manager, reusing that controller's row.</summary>
+    /// <param name="controller">The controller whose <see cref="ControllerViewModel.Compiler"/> just produced a graph.</param>
+    internal void NoteManualCompile(ControllerViewModel controller)
+    {
+        IReadOnlyList<CompiledOutlineRow> outline =
+            controller.Compiler.Graphs.FirstOrDefault() is { } graph
+                ? CompiledOutline.Of(graph)
+                : Array.Empty<CompiledOutlineRow>();
+
+        Runs.NoteManualCompile(
+            "manual:" + RuntimeHelpers.GetHashCode(controller),
+            WorkflowElementCatalog.Describe(controller),
+            outline,
+            () => controller.RunCommand.Execute(null));
+    }
+
+    private void OnRunsChanged(object? sender, EventArgs e)
+    {
+        var isRunning = Runs.AnyRunning || Nodes.OfType<ControllerViewModel>().Any(c => c.IsActive);
+        if (IsWorkflowRunning != isRunning) IsWorkflowRunning = isRunning;
     }
 
     /// <summary>
@@ -162,6 +220,10 @@ public partial class TreeViewModel
 
     // ── Session Markdown transcript (fed directly to the AvalonMarkdown MarkdownView in the Avalonia Full Demo) ──
 
+    // 只有 Avalonia 绑 ConversationMarkdown（其余六家绑 ToPlainTextLines），而 AvalonMarkdown 12 的
+    // chat 围栏能把推理与工具载荷折成一行 —— 对话才不会被思考过程和 JSON 结果淹没。
+    private static readonly AgentMarkdownOptions ConversationMarkdownOptions = new() { ChatFences = true };
+
     /// <summary>
     /// Renders the conversation from the pipeline's transcript, which owns the message boundaries and the
     /// tool-call grouping. This host used to derive both from its own message list, which is where the
@@ -176,7 +238,7 @@ public partial class TreeViewModel
             return;
         }
 
-        ConversationMarkdown = _subscribedTranscript.ToMarkdown();
+        ConversationMarkdown = _subscribedTranscript.ToMarkdown(ConversationMarkdownOptions);
 
         // The platforms that bind the plain-text log get the same conversation, tool calls included —
         // they used to miss those entirely, because a tool call only ever reached the message list.
@@ -310,16 +372,12 @@ public partial class TreeViewModel
         await writer.WriteAsync(json).ConfigureAwait(false);
     }
 
+    // 只读树上的标志。控制器自己的 IsActive 由 DriveAsync 写；这里再写一遍会让 Agent 的运行把控制器点亮。
     private void SetWorkflowRunning(bool isRunning)
     {
         if (IsWorkflowRunning != isRunning)
         {
             IsWorkflowRunning = isRunning;
-        }
-
-        if (Nodes.OfType<ControllerViewModel>().FirstOrDefault() is { } controller && controller.IsActive != isRunning)
-        {
-            controller.IsActive = isRunning;
         }
     }
 

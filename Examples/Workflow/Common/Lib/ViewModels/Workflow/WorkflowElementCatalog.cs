@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Text;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 
@@ -14,17 +16,117 @@ public enum WorkflowElementKind
     Link,
 }
 
-/// <summary>One row of the demo element lists.</summary>
-public sealed class WorkflowElementEntry(IWorkflowViewModel element, string label, WorkflowElementKind kind)
+/// <summary>One row of the demo element lists, and the inspector's subject when it is selected.</summary>
+public sealed class WorkflowElementEntry : INotifyPropertyChanged
 {
+    /// <summary>Creates a row for an element.</summary>
+    public WorkflowElementEntry(IWorkflowViewModel element, string label, WorkflowElementKind kind)
+    {
+        Element = element;
+        Label = label;
+        Kind = kind;
+    }
+
+    /// <inheritdoc />
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>The node, slot or link the row acts on.</summary>
-    public IWorkflowViewModel Element { get; } = element;
+    public IWorkflowViewModel Element { get; }
 
     /// <summary>The text shown for the row.</summary>
-    public string Label { get; } = label;
+    public string Label { get; }
 
     /// <summary>Which list the row belongs to.</summary>
-    public WorkflowElementKind Kind { get; } = kind;
+    public WorkflowElementKind Kind { get; }
+
+    /// <summary>The kind in the inspector's language.</summary>
+    public string KindText => Kind switch
+    {
+        WorkflowElementKind.Node => "节点",
+        WorkflowElementKind.Slot => "插槽",
+        _ => "连线",
+    };
+
+    /// <summary>The element's own properties, one per line, for the inspector card.</summary>
+    /// <remarks>
+    /// Read live rather than captured at construction: a compile writes the node's order after the list was
+    /// built, and a run writes its status on every node. A cached copy made the inspector say "未编译" about a
+    /// node that had just been compiled.
+    /// </remarks>
+    public string DetailText => BuildDetail(Element, Kind);
+
+    /// <summary>Whether this row is a node.</summary>
+    public bool IsNode => Kind == WorkflowElementKind.Node;
+
+    /// <summary>Whether this row is a slot.</summary>
+    public bool IsSlot => Kind == WorkflowElementKind.Slot;
+
+    /// <summary>Whether this row is a link.</summary>
+    public bool IsLink => Kind == WorkflowElementKind.Link;
+
+    // 列表里的行对象活到下一次重建；它们订阅的是节点的属性变化，重建后由 catalog 换掉。
+    internal void Refresh() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DetailText)));
+
+    private static string BuildDetail(IWorkflowViewModel element, WorkflowElementKind kind)
+    {
+        var text = new StringBuilder();
+        switch (element)
+        {
+            case IWorkflowNodeViewModel node:
+                text.AppendLine($"类型    {node.GetType().Name.Replace("ViewModel", string.Empty)}");
+                text.AppendLine($"位置    ({node.Anchor.Horizontal:0}, {node.Anchor.Vertical:0}) · 图层 {node.Anchor.Layer}");
+                text.AppendLine($"大小    {node.Size.Width:0} × {node.Size.Height:0}");
+                text.AppendLine($"编译    {CompileText(node)}");
+                text.AppendLine($"插槽    {node.Slots.Count}");
+
+                switch (node)
+                {
+                    case PythonScriptNodeViewModel python:
+                        text.AppendLine($"运行    {python.LastStatus} · {python.LastRun}");
+                        break;
+                    case TimerNodeViewModel timer:
+                        text.AppendLine($"定时    {timer.IntervalMilliseconds} ms · 最近 {timer.LastTick}");
+                        break;
+                    case EnumSelectorNodeViewModel selector:
+                        text.AppendLine($"路由    {selector.CompileMode} · 最近 {selector.LastRouted}");
+                        break;
+                    case ControllerViewModel controller:
+                        text.AppendLine($"编译图  {controller.Compiler.Graphs.Count} 张");
+                        break;
+                }
+                break;
+
+            case IWorkflowSlotViewModel slot:
+                text.AppendLine($"所属    {WorkflowElementCatalog.Describe(slot.Parent)}");
+                text.AppendLine($"通道    {slot.Channel}");
+                text.AppendLine($"状态    {slot.State}");
+                text.AppendLine($"连接    出 {slot.Targets.Count} · 入 {slot.Sources.Count}");
+                text.AppendLine($"位置    ({slot.Anchor.Horizontal:0}, {slot.Anchor.Vertical:0})");
+                break;
+
+            case IWorkflowLinkViewModel link:
+                text.AppendLine($"起点    {WorkflowElementCatalog.Describe(link.Sender?.Parent)}");
+                text.AppendLine($"终点    {WorkflowElementCatalog.Describe(link.Receiver?.Parent)}");
+                text.AppendLine($"可见    {(link.IsVisible ? "是" : "否")}");
+                break;
+
+            default:
+                text.AppendLine($"类型    {element.GetType().Name}");
+                break;
+        }
+
+        return text.ToString().TrimEnd();
+    }
+
+    private static string CompileText(IWorkflowNodeViewModel node)
+    {
+        if (node is not ICompileTimeAware aware || aware.CompileContext is not { } context)
+            return "未编译";
+
+        return context.Order < 0
+            ? "已剪枝（Order = -1）"
+            : $"顺序 #{context.Order + 1} · 链 {context.ChainIndex} · 偏移 {context.Offset}";
+    }
 }
 
 /// <summary>
@@ -74,6 +176,7 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
         {
             _tree.Nodes.CollectionChanged += OnNodesChanged;
             _tree.Links.CollectionChanged += OnLinksChanged;
+            if (_tree is TreeViewModel typed) typed.ElementDetailsInvalidated += OnElementDetailsInvalidated;
         }
 
         Rebuild();
@@ -112,6 +215,7 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
 
         _tree.Nodes.CollectionChanged -= OnNodesChanged;
         _tree.Links.CollectionChanged -= OnLinksChanged;
+        if (_tree is TreeViewModel typed) typed.ElementDetailsInvalidated -= OnElementDetailsInvalidated;
         foreach (var node in _trackedNodes) node.Slots.CollectionChanged -= OnSlotsChanged;
         _trackedNodes.Clear();
         _tree = null;
@@ -162,6 +266,15 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
             }
         }
 
+        // 列表重建后入口对象换了一批；选中的元素若还在，换到新的那一行，若已不在（被删或被 Agent 改掉）就清空。
+        // 按元素而不是按入口对象找：否则任何一次 Agent 编辑都会把检查器的选择一并清掉。
+        if (_tree is TreeViewModel typed && typed.SelectedElement is { } selected)
+        {
+            var replacement = Nodes.Concat(Slots).Concat(Links)
+                .FirstOrDefault(entry => ReferenceEquals(entry.Element, selected.Element));
+            if (!ReferenceEquals(replacement, selected)) typed.SelectedElement = replacement;
+        }
+
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Summary)));
         Changed?.Invoke(this, EventArgs.Empty);
     }
@@ -183,7 +296,27 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
         }
     }
 
-    private static string Describe(IWorkflowNodeViewModel? node)
+    // 只在“编译完成 / 某个节点被驱动”这些明确时点刷新检查器的选中行，不订阅节点的每一次属性变化：
+    // 后者会在启动布局期把每一行都打成脏的，WPF 的 CollectionView 会因此反复重整列表。
+    private void OnElementDetailsInvalidated(IWorkflowNodeViewModel? node)
+    {
+        if (_ui is not null && !ReferenceEquals(_ui, SynchronizationContext.Current))
+        {
+            _ui.Post(_ => OnElementDetailsInvalidated(node), null);
+            return;
+        }
+
+        // 只有检查器正在描述的那一行会重新读；列表行的文字不变量，没有必要让 CollectionView 跟着重排。
+        if (_tree is not TreeViewModel tree || tree.SelectedElement is not { } selected) return;
+
+        var matches = node is null
+            || ReferenceEquals(selected.Element, node)
+            || (selected.Element is IWorkflowSlotViewModel slot && ReferenceEquals(slot.Parent, node));
+
+        if (matches) selected.Refresh();
+    }
+
+    internal static string Describe(IWorkflowNodeViewModel? node)
     {
         if (node is null) return "?";
 

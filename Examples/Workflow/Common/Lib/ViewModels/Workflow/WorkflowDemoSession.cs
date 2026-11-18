@@ -1,6 +1,8 @@
 using Demo.ViewModels;
+using Demo.ViewModels.Workflow.Helper;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Runtime.CompilerServices;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
@@ -229,8 +231,17 @@ public sealed class WorkflowDemoSession : IDisposable
 
         // The run's capabilities are configured where the graph is built, so every platform demo's Run button shows
         // the same thing without a line of per-platform code.
-        primary.ConfigureSessionWith(ConfigureRun);
+        primary.ConfigureSessionWith(context => ConfigureSession(context, WorkflowRunSource.Manual));
+
+        // Agent runs take the same path. The helper reads this at session-creation time, so a tree loaded later
+        // gets it too as long as FromTree went through this constructor.
+        if (tree.GetHelper() is AgentHelper agent)
+            agent.SessionConfigurator = ConfigureAgentSession;
     }
+
+    /// <summary>Configures a run the Agent started exactly as a manual run is configured.</summary>
+    /// <param name="context">The session the Agent's tool is about to drive.</param>
+    public void ConfigureAgentSession(RuntimeContext context) => ConfigureSession(context, WorkflowRunSource.Agent);
 
     /// <summary>The workflow tree this session owns; the canvas binds it.</summary>
     public TreeViewModel Tree { get; }
@@ -256,14 +267,17 @@ public sealed class WorkflowDemoSession : IDisposable
     public bool HasCheckpoint => File.Exists(CheckpointPath);
 
     /// <summary>
-    /// The pause point of a run: <see cref="ManualExecutionGate.Pause"/> holds it at the next node boundary,
-    /// <see cref="ManualExecutionGate.Resume"/> lets it go. Releasable from any thread, including the one driving.
+    /// The pause point of the most recent run: <see cref="ManualExecutionGate.Pause"/> holds it at the next node
+    /// boundary, <see cref="ManualExecutionGate.Resume"/> lets it go. Releasable from any thread.
     /// </summary>
-    public ManualExecutionGate Gate { get; } = new();
+    /// <remarks>
+    /// One gate per run rather than one per session. The run manager holds several tasks at once, and a shared gate
+    /// would make pausing one row report success while it silently held every other run too. The view's own
+    /// Pause/Resume controls read this property, so they still act on the newest run.
+    /// </remarks>
+    public ManualExecutionGate Gate { get; private set; } = new();
 
     private TextWriterLogWriter? _logWriter;   // 具体类型：接口上没有 Dispose，而文件是会话开的
-    private int _nodesDriven;
-    private int _retries;
 
     /// <summary>
     /// Closes the log this session opened. Who opened the file closes it — see <see cref="TextWriterLogWriter.For"/>
@@ -276,50 +290,79 @@ public sealed class WorkflowDemoSession : IDisposable
     }
 
     /// <summary>
-    /// Configures the session one Run drives. Nothing here is required by the engine — with all of it unset a run
+    /// Configures the session one run drives. Nothing here is required by the engine — with all of it unset a run
     /// behaves exactly as it did before these capabilities existed — which is the point of showing them together:
     /// the same graph, one press, and the log says what each one did.
     /// </summary>
-    private void ConfigureRun(RuntimeContext context)
+    /// <remarks>
+    /// Manual runs and Agent runs both arrive here. The only difference is where the row's stop control goes: the
+    /// controller's own Stop command, or the Agent scope that holds the background run's cancellation source.
+    /// </remarks>
+    private void ConfigureSession(RuntimeContext context, WorkflowRunSource source)
     {
-        // 一个 writer 给整个会话：谁开的文件谁 Dispose，而 demo 的会话活到进程结束。
+        // 一个 writer 给整个会话：谁开的文件谁 Dispose，换树时由视图释放旧会话。
         // 目录要先建出来：pycache 原本是第一个 python 节点跑起来才有的，而 writer 在运行之前就要开文件。
         _logWriter ??= TextWriterLogWriter.For(Scratch(LogPath));
         context.LogWriter = _logWriter;
 
-        // 一次运行绝不带着上一次留下的暂停开始：门是宿主的手，而每次 Run 都是新的一轮。
-        Gate.Resume();
-        context.ExecutionGate = Gate;
+        // 每轮一把新门，且从松开状态起步：上一轮留下的暂停不属于这一轮。
+        var gate = new ManualExecutionGate();
+        Gate = gate;
+        context.ExecutionGate = gate;
 
         // The publish node's first delivery fails on purpose; this is what gets it through.
         context.RetryPolicy = new ExponentialBackoffRetry(maxAttempts: 3, baseDelayMs: 200, factor: 2.0);
-        context.Observer = new DelegateExecutionObserver(Observe);
+        var tally = new RunTally();
+        context.Observer = new DelegateExecutionObserver(observation => Observe(context, observation, tally));
         context.ErrorSink = new DelegateExecutionErrorSink(Diagnostics.Add);
         context.Compensation = new DelegateExecutionCompensation(
-            c => Controller.RuntimeContext?.Log($"[Compensation] undo {NameOf(c.Node)} (attempt {c.Order})"));
+            c => context.Log($"[Compensation] undo {NameOf(c.Node)} (attempt {c.Order})"));
         context.CheckpointStore = Checkpoints;
+
+        // 手动跑用控制器自己的 Stop；Agent 的后台运行只有 scope 握得到它的取消源。
+        Func<bool>? stop = source == WorkflowRunSource.Manual
+            ? () => { Controller.StopCommand.Execute(null); return true; }
+            : Tree.GetHelper() is AgentHelper { Scope: { } scope }
+                ? () => scope.TryStopRun(context)
+                : null;
+
+        var graph = Controller.Compiler.Graphs.FirstOrDefault();
+        Tree.Runs.AttachSession(
+            context,
+            source,
+            source == WorkflowRunSource.Manual ? "manual:" + RuntimeHelpers.GetHashCode(Controller) : null,
+            WorkflowElementCatalog.Describe(Controller),
+            graph is null ? 0 : CompiledOutline.Of(graph).Count,
+            stop,
+            () => Controller.RunCommand.Execute(null));
     }
 
     // 每条观察都进来，但只在收尾时写一行：一轮二三十个节点，逐条写会把日志本身淹掉。
-    private void Observe(ExecutionObservation observation)
+    // 计数按会话走，因为 Agent 可以同时持有不止一条运行。
+    private static void Observe(RuntimeContext context, ExecutionObservation observation, RunTally tally)
     {
         switch (observation.Kind)
         {
             case ExecutionObservationKind.NodeStarted:
-                _nodesDriven++;
+                tally.Nodes++;
                 break;
             case ExecutionObservationKind.NodeRetried:
-                _retries++;
+                tally.Retries++;
                 break;
             case ExecutionObservationKind.RunEnded:
-                var outcome = (Controller.RuntimeContext as RuntimeContext)?.Outcome;
-                Controller.RuntimeContext?.Log(
-                    $"[Observer] {_nodesDriven} nodes driven, {_retries} retried, pass {observation.Attempt}, " +
-                    $"{observation.Elapsed.TotalSeconds:0.0}s, {outcome}");
-                _nodesDriven = 0;
-                _retries = 0;
+                context.Log(
+                    $"[Observer] {tally.Nodes} nodes driven, {tally.Retries} retried, pass {observation.Attempt}, " +
+                    $"{observation.Elapsed.TotalSeconds:0.0}s, {context.Outcome}");
+                tally.Nodes = 0;
+                tally.Retries = 0;
                 break;
         }
+    }
+
+    private sealed class RunTally
+    {
+        public int Nodes;
+        public int Retries;
     }
 
     private static string NameOf(IWorkflowNodeViewModel node)

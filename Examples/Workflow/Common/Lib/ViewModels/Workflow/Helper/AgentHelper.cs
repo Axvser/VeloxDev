@@ -15,6 +15,7 @@ using VeloxDev.AI.Safety;
 using VeloxDev.AI.Skills;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.AI.Workflow;
+using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels.Workflow.Helper;
@@ -52,6 +53,18 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// and the Agent manages servers through McpAgentToolkit (ListMcpServers / LoadMcpServers).
     /// </summary>
     public McpScope Mcp { get; } = new();
+
+    /// <summary>
+    /// Configures every run session the Agent starts — the demo points this at the same method the controller's
+    /// own Run uses, so an Agent run gets the host's log writer, retry policy, pause gate, checkpoint store and
+    /// observer instead of a plainer session.
+    /// </summary>
+    /// <remarks>
+    /// Read at session-creation time rather than copied into the scope, so a session created after the tree was
+    /// loaded still sees the configuration this host installed for that tree. A host that never sets it leaves
+    /// Agent runs on the library's plain defaults.
+    /// </remarks>
+    public Action<RuntimeContext>? SessionConfigurator { get; set; }
 
     /// <summary>MCP server configurations pre-registered by the host (the Agent may only load these, never construct arbitrary ones).
     /// Security model: configuration is fixed once at load time and cannot change afterwards — the Agent can only load/unload/inspect, never reconfigure mid-session.</summary>
@@ -180,7 +193,12 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// — which is what makes it safe to append to a bound collection.
     /// </summary>
     internal void RecordToolCall(AgentToolCallEventArgs args)
-        => Component?.AppendToolCall(args.ToolName, args.Result);
+    {
+        Component?.AppendToolCall(args.ToolName, args.Result);
+
+        // 编译工具不建运行会话，它的“任务”只能从结果里的编译计划读出来；运行工具由会话配置那一路接管。
+        Component?.Runs.NoteAgentToolCall(args.ToolName, args.Result);
+    }
 
     #pragma warning disable CS0067 // used by external subscribers
     /// <summary>
@@ -360,6 +378,10 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             ChatOptions = new ChatOptions { Instructions = contextPrompt },
             AIContextProviders = scope.CreateContextProviders(),
         });
+
+        // Every run the Agent starts is configured through the host's hook. The delegate reads the property at
+        // run time: the demo session that installs it is built after the tree, and a loaded tree swaps it.
+        scope.WithSessionConfiguration(context => helper.SessionConfigurator?.Invoke(context));
 
         // Handed back so the host can move the permission mode later without rebuilding any of this.
         helper.Scope = scope;

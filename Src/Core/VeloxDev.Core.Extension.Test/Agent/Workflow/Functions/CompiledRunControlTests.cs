@@ -140,6 +140,48 @@ public class CompiledRunControlTests
         Assert.IsTrue(ended["attempts"]!.Value<int>() >= 1);
     }
 
+    /// <summary>
+    /// The other source of rows: a run the Agent starts gets the same session configuration a manual run does, so
+    /// the host's run manager and output page show it without the Agent reporting anything.
+    /// </summary>
+    [TestMethod]
+    public async Task AnAgentRun_ShowsUpInTheHostsRunManager()
+    {
+        var (scope, session) = Build(TimeSpan.FromMilliseconds(10));
+        scope.WithSessionConfiguration(context => session.ConfigureAgentSession(context));
+
+        var handle = Start(scope, ControllerIndex(session));
+        await WaitForEndAsync(scope, handle);
+
+        var task = session.Tree.Runs.Tasks.FirstOrDefault(t => t.Source == WorkflowRunSource.Agent)!;
+        Assert.IsNotNull(task, "the Agent's run must leave a row the host can see");
+        Assert.AreEqual(WorkflowRunState.Completed, task.State);
+        Assert.AreSame(task, session.Tree.Runs.Selected, "and the output page follows it");
+        Assert.IsTrue(session.Tree.ExecutionLog.Any(line => line.Contains("运行结束", StringComparison.Ordinal)),
+            "the trace was mirrored into the page's log");
+    }
+
+    /// <summary>
+    /// The host-side stop: a UI never sees the Agent's handle, but it did configure the session, so the scope can
+    /// find the background run by the session it owns and cancel it. The synchronous entry is not in that registry.
+    /// </summary>
+    [TestMethod]
+    public async Task AHost_CanStopABackgroundRunThroughItsSession()
+    {
+        var (scope, session) = Build(TimeSpan.FromMilliseconds(40));
+        RuntimeContext? captured = null;
+        scope.WithSessionConfiguration(context => captured = context);
+
+        var handle = Start(scope, ControllerIndex(session));
+        Assert.IsNotNull(captured, "starting the run must configure the session the host is handed");
+
+        Assert.IsTrue(scope.TryStopRun(captured!), "the scope holds this background run");
+
+        var cancelled = await WaitForEndAsync(scope, handle);
+        Assert.AreEqual("Cancelled", cancelled["outcome"]?.Value<string>(),
+            "a run the host stopped through its session is a cancellation");
+    }
+
     [TestMethod]
     public async Task AStoppedRun_EndsAsCancelled_AndTheAgentCanCarryOnFromIt()
     {
