@@ -17,20 +17,20 @@
 
 | 我想加 | 官方挂点（具体成员） | 位置 |
 |---|---|---|
-| 让一个 Jalium 类型可动画 | 实现 `ISampler`，再 `RegisterInterpolator(typeof(T), new XSampler())` | `PlatformAdapters/Interpolator.cs` 的静态构造（唯一的登记表） |
-| 换线程句柄 / 优先级 / 解释器 | 改 `TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherPriority>` 的类型实参 | `PlatformAdapters/TransitionScheduler.cs` |
-| 一条过渡时长预设 | `TransitionEffects` 的三个静态属性（可 `set`，进程级） | `PlatformAdapters/TransitionEffects.cs` 的 `Empty` / `Theme` / `Hover` |
-| 让 `.Property(...)` 能顺滑写某个 Jalium 类型 | 加一个 `Property(Expression<Func<T, TXxx>>, TXxx, object?)` 重载 | `PlatformAdapters/Transition.cs`（**这一家的重载都在这里**） |
-| 加 / 换工作流表面 | 在 item template 的 `UserControl` 根上写 `behaviors:WorkflowSurfaceBehavior.*`（具名部件 + `ZoomEnabled` + `LinkMenuKey`）；要改手势/命中/视口/菜单数学就改表面行为 | `Src/Templates/…/workflow-tree-view/TemplateClass.jalxaml`、`Attached/Workflow/WorkflowSurfaceBehavior.cs` |
+| 让一个 Jalium 类型可动画 | 实现 `ISampler`，再 `RegisterInterpolator(typeof(T), new XSampler())` | `TransitionSystem/Interpolator.cs` 的静态构造（唯一的登记表） |
+| 换线程句柄 / 优先级 / 解释器 | 改 `TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherPriority>` 的类型实参 | `TransitionSystem/TransitionScheduler.cs` |
+| 一条过渡时长预设 | `TransitionEffects` 的三个静态属性（可 `set`，进程级） | `TransitionSystem/TransitionEffects.cs` 的 `Empty` / `Theme` / `Hover` |
+| 让 `.Property(...)` 能顺滑写某个 Jalium 类型 | 加一个 `Property(Expression<Func<T, TXxx>>, TXxx, object?)` 重载 | `TransitionSystem/Transition.cs`（**这一家的重载都在这里**） |
+| 加 / 换工作流表面 | 在 item template 的 `UserControl` 根上写 `behaviors:WorkflowSurfaceBehavior.*`（具名部件 + `ZoomEnabled` + `LinkMenuKey`）；要改手势/命中/视口/菜单数学就改表面行为 | `Src/Templates/…/workflow-tree-view/TemplateClass.jalxaml`、`WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` |
 | 卡片长什么样 | 改 `workflow-node-view` 的标记（`UserControl` + `Viewbox` + 设计尺寸 `Grid`），节点拖拽挂 `WorkflowNodeDragBehavior` | `Src/Templates/…/workflow-node-view/TemplateClass.jalxaml` |
-| 换连线外观（颜色 / 线宽 / 命中 / 虚线段） | 改 `workflow-link-view` 的 code-behind（`UserControl`，`LineColor` DP + `TemplateLinkColor`/`TemplateLinkThickness` 符号）；自盒化助手在适配器 | `Src/Templates/…/workflow-link-view/TemplateClass.jalxaml.cs`、`Attached/Workflow/WorkflowLinkBounds.cs` |
+| 换连线外观（颜色 / 线宽 / 命中 / 虚线段） | 改 `workflow-link-view` 的 code-behind（`UserControl`，`LineColor` DP + `TemplateLinkColor`/`TemplateLinkThickness` 符号）；自盒化助手在适配器 | `Src/Templates/…/workflow-link-view/TemplateClass.jalxaml.cs`、`WorkflowSystem/AttachedBehaviors/WorkflowLinkBounds.cs` |
 | 换网格 / 标尺外观 | 改 `workflow-grid-decorator`（`sealed class : Grid, IWorkflowGridDecorator`，**整个渲染器都在这一个文件里**），设调色板与 `GridStep` / `MajorLineEvery` | `Src/Templates/…/workflow-grid-decorator/TemplateClass.cs` |
-| 端口位置（`slot.Anchor`）与卡片设计尺寸 | `slot.Anchor` 由 `WorkflowSlotLayoutBehavior` 量测写回；卡片设计尺寸写在该条目的标记里（`Viewbox` 内固定 260×180） | `Attached/Workflow/WorkflowSlotLayoutBehavior.cs`、`Src/Templates/…/workflow-node-view/TemplateClass.jalxaml` |
+| 端口位置（`slot.Anchor`）与卡片设计尺寸 | `slot.Anchor` 由 `WorkflowSlotLayoutBehavior` 量测写回；卡片设计尺寸写在该条目的标记里（`Viewbox` 内固定 260×180） | `WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs`、`Src/Templates/…/workflow-node-view/TemplateClass.jalxaml` |
 | 端口图形 | 改 `workflow-slot-view` 的标记（`UserControl` + `Path`）与 code-behind 的 `SlotState` 配色；连接手势挂 `WorkflowSlotConnectionBehavior` | `Src/Templates/…/workflow-slot-view/TemplateClass.jalxaml(.cs)` |
 | 换「item 类型 → 视图」的分派 | 在 tree-view 模板的 `Resources` 里改 `DataTemplate` 与 selector（现在是 `sealed class : DataTemplateSelector`） | `Src/Templates/…/workflow-template-selector/TemplateClass.cs` |
-| 换池化行为 | 改 `ViewPool` 的两个附着属性 / `ViewManager` 的集合同步（分批大小在 `ProcessNextBatch`） | `Attached/Workflow/ViewPool.cs`、`ViewManager.cs` |
-| 小地图换皮 | 继承 `WorkflowMinimapOverlay`（`public class`，可继承），设四色；模板只产出一个薄派生 | `Attached/Workflow/WorkflowMinimapOverlay.cs` |
-| 让 DynamicTheme 在这一家真动画 | 覆写 `InterpolatorCore.CreateScheduler` —— **已实现但本仓库无人调用** | `PlatformAdapters/Interpolator.cs` 的 `CreateScheduler`；理由见 `architecture.md` §一 |
+| 换池化行为 | 改 `ViewPool` 的两个附着属性，或替换 `ViewHosting/` 里的层（批策略是 Core 的 `AdaptiveViewPoolPolicy`） | `WorkflowSystem/AttachedBehaviors/ViewPool.cs`、`WorkflowSystem/ViewHosting/` |
+| 小地图换皮 | 继承 `WorkflowMinimapOverlay`（`public class`，可继承），设四色；模板只产出一个薄派生 | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` |
+| 让 DynamicTheme 在这一家真动画 | 覆写 `InterpolatorCore.CreateScheduler` —— **已实现但本仓库无人调用** | `TransitionSystem/Interpolator.cs` 的 `CreateScheduler`；理由见 `architecture.md` §一 |
 
 **这里没有的扩展点（别去找）：**
 
@@ -49,17 +49,17 @@
 
 | # | 错的捷径 | 为什么错 | 官方做法 | 依据 |
 |---|---|---|---|---|
-| 1 | 在 `Samplers/` 加一个 `ISampler` 类就以为生效了 | 登记表是唯一开关；没登记 = 该采样器**永不运行**，且库里没有任何东西会报错 | 同时在 `Interpolator` 的静态构造里加一行 | `PlatformAdapters/Interpolator.cs` 的静态构造 |
+| 1 | 在 `Samplers/` 加一个 `ISampler` 类就以为生效了 | 登记表是唯一开关；没登记 = 该采样器**永不运行**，且库里没有任何东西会报错 | 同时在 `Interpolator` 的静态构造里加一行 | `TransitionSystem/Interpolator.cs` 的静态构造 |
 | 2 | 登记了但忘了改测试表 | 不会编译错，运行到 `EveryShippedSampler_IsAccountedFor` 才红：它反射所有 `VeloxDev.*` 程序集里的 `ISampler`，再与 `SamplerRegistry.Entries` ∪ `UnreachableSamplers.All` 求差 | `Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 加一条 `Entry(...)`（`All` 属性、`Adapter` 常量） | `Samplers/SamplerCoverageTests.cs` 的 `EveryShippedSampler_IsAccountedFor`；`SamplerRegistry.cs` → `AdapterSamplerEntries.All` → `JaliumEntries.All` |
 | 3 | 改采样器类名只改文件 | 测试按**字符串**反射取类型：`Type.GetType($"VeloxDev.Adapters.NativeSamplers.{name}, {JaliumAssembly}", throwOnError: true)`。编译不报错，**测试运行时才炸** | 改名要同步 `JaliumEntries.cs` 里的字符串 | `JaliumEntries` 的类型解析表达式（`throwOnError: true`） |
 | 4 | 把登记代码写在采样器自己的文件里 / `App` 里 / `Main` 里 | 没人保证它会跑在第一个 `new Transition<T>()` 之前；`RegisterInterpolator` 是**末位胜出** | 只在静态构造里集中登记 | Core `Effects/Transition.cs` 的字段初始化器 |
-| 5 | 照 WPF 的样子「登记基类型接住整族」，于是给 `TranslateTransform` / `RotateTransform` / `TransformGroup` 各登记一条 | 这家的姿态是**只登记基类型**（`typeof(Transform)`）＋ 精确类型的少数几条；多余登记会被精确命中抢先 | 只登记 `Transform` 与 `Media3D.Transform3D` 两条 | `PlatformAdapters/Interpolator.cs` 静态构造里的那两条 |
-| 6 | 只设 `ViewPool.ItemsSource`（或只设 `TemplateSelector`）就以为视图会出来 | 两个 DP 共用 `OnChanged`，只有**两者都非空**才建 manager；否则走 `else` 分支把 manager `Detach()` | 两个一起给 —— 模板里两者都写在 `PART_Canvas` 上（或由表面行为从资源按 `WorkflowSurfaceBehavior.TemplateSelectorKey` 一并设） | `Attached/Workflow/ViewPool.cs` 的 `OnChanged`；`WorkflowSurfaceBehavior.BindTree` |
-| 7 | 把 `Property(…, ICollection<Transform>)` 的「单个直接赋值」分支改成统一 `TransformGroup` | 会改运行时类型，破坏 `((TranslateTransform)x.RenderTransform).X` 这类嵌套路径 | 保持 `Count == 1` 直赋、其余包组 | `PlatformAdapters/Transition.cs` 的 `Transform` 重载（及其中注释） |
-| 8 | 把 `.Property(...)` 的某个重载「补进 Core」 | Core 的 `TransitionCore<...>` 里**一个 `Property` 都没有**，重载分别写在各家适配器里，数量不等 —— 补进 Core 等于改七家的形状 | 重载留在本家 `PlatformAdapters/Transition.cs` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs` 全文无 `Property` 方法 |
-| 9 | 让 `Attached/` 里的东西直接驱动一个 `Transition<T>`（或反过来） | 两条轴在程序集内互不引用是既成事实；跨一条就再也拆不开 | 想跨轴就在宿主侧接线 | `architecture.md` §一 |
+| 5 | 照 WPF 的样子「登记基类型接住整族」，于是给 `TranslateTransform` / `RotateTransform` / `TransformGroup` 各登记一条 | 这家的姿态是**只登记基类型**（`typeof(Transform)`）＋ 精确类型的少数几条；多余登记会被精确命中抢先 | 只登记 `Transform` 与 `Media3D.Transform3D` 两条 | `TransitionSystem/Interpolator.cs` 静态构造里的那两条 |
+| 6 | 只设 `ViewPool.ItemsSource`（或只设 `TemplateSelector`）就以为视图会出来 | 两个 DP 共用 `OnChanged`，只有**两者都非空**才建 manager；否则走 `else` 分支把 manager `Detach()` | 两个一起给 —— 模板里两者都写在 `PART_Canvas` 上（或由表面行为从资源按 `WorkflowSurfaceBehavior.TemplateSelectorKey` 一并设） | `WorkflowSystem/AttachedBehaviors/ViewPool.cs` 的 `OnChanged`；`WorkflowSurfaceBehavior.BindTree` |
+| 7 | 把 `Property(…, ICollection<Transform>)` 的「单个直接赋值」分支改成统一 `TransformGroup` | 会改运行时类型，破坏 `((TranslateTransform)x.RenderTransform).X` 这类嵌套路径 | 保持 `Count == 1` 直赋、其余包组 | `TransitionSystem/Transition.cs` 的 `Transform` 重载（及其中注释） |
+| 8 | 把 `.Property(...)` 的某个重载「补进 Core」 | Core 的 `TransitionCore<...>` 里**一个 `Property` 都没有**，重载分别写在各家适配器里，数量不等 —— 补进 Core 等于改七家的形状 | 重载留在本家 `TransitionSystem/Transition.cs` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs` 全文无 `Property` 方法 |
+| 9 | 让 `AttachedBehaviors/` 里的东西直接驱动一个 `Transition<T>`（或反过来） | 两条轴在程序集内互不引用是既成事实；跨一条就再也拆不开 | 想跨轴就在宿主侧接线 | `architecture.md` §一 |
 | 10 | 按别家的条数猜这一家有几种采样器 | 条数本来就不等（各家的采样器与登记数量各不相同） | 按 `Interpolator` 静态构造现读 | 同左 |
-| 11 | 在模板/demo 里重写适配器行为已经做掉的机制（自己管缩放/视口、自己算端口锚点、自己写连线自盒化） | 机制与策略会分叉；两边都会编译通过，出问题时看不出谁是对的 | 平台机制改 `Attached/Workflow/` 下的行为 / 助手，策略留模板标记或 code-behind，判据见 `adapter-base-class-specifications.md` §2.1 | `architecture.md` §四；`Src/Templates/…/workflow-*`（表面/卡片/槽/连线是标记 + 薄 code-behind，网格/小地图/选择器是 `.cs`） |
+| 11 | 在模板/demo 里重写适配器行为已经做掉的机制（自己管缩放/视口、自己算端口锚点、自己写连线自盒化） | 机制与策略会分叉；两边都会编译通过，出问题时看不出谁是对的 | 平台机制改 `WorkflowSystem/AttachedBehaviors/` 下的行为 / 助手，策略留模板标记或 code-behind，判据见 `adapter-base-class-specifications.md` §2.1 | `architecture.md` §四；`Src/Templates/…/workflow-*`（表面/卡片/槽/连线是标记 + 薄 code-behind，网格/小地图/选择器是 `.cs`） |
 
 ---
 
@@ -67,8 +67,8 @@
 
 ### A. 让一个新的 Jalium 类型可动画（加一个采样器）—— 最常见的路径
 
-1. **建文件** `PlatformAdapters/Samplers/XxxSampler.cs`，命名空间 **`VeloxDev.Adapters.NativeSamplers`**（七家共用这个名字），实现 `ISampler`。端点约定：`t == 0` / `t == 1` 原样交出调用方给的起点/终点实例（范式见 `PlatformAdapters/Samplers/TransformSampler.cs`）。
-2. **登记**：`PlatformAdapters/Interpolator.cs` 的静态构造加一行 `RegisterInterpolator(typeof(X), new XxxSampler());`。要登记的是**基类型**还是**精确类型**，照 §二·5 的姿态选。
+1. **建文件** `TransitionSystem/Samplers/XxxSampler.cs`，命名空间 **`VeloxDev.Adapters.NativeSamplers`**（七家共用这个名字），实现 `ISampler`。端点约定：`t == 0` / `t == 1` 原样交出调用方给的起点/终点实例（范式见 `TransitionSystem/Samplers/TransformSampler.cs`）。
+2. **登记**：`TransitionSystem/Interpolator.cs` 的静态构造加一行 `RegisterInterpolator(typeof(X), new XxxSampler());`。要登记的是**基类型**还是**精确类型**，照 §二·5 的姿态选。
 3. **补验证表**（**最容易漏的一步**）：`Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 加 ① 私有 `Target` 类上的一条属性，② 一条 `Entry("XxxSampler", SamplerRule.…, start, end, x => x.属性, t => 闭式解)`，放进 `All` 属性。漏了不会在库里报错，但 `EveryShippedSampler_IsAccountedFor` 会红。
 4. **可选**：给 `.Property(...)` 加一个对应重载（§三·D），否则调用方只能走泛型 `Property<TValue>`。
 5. **同步 `memory/modules/TransitionSystem/adapters/jalium.md`** 的条数与清单。
@@ -98,7 +98,7 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 
 ### D. 给 `.Property(...)` 加一个重载
 
-1. `PlatformAdapters/Transition.cs` 内，形状一律是：`public Transition<T> Property(Expression<Func<T, TXxx>> propertyLambda, TXxx newValue, object? interpolationOptions = null)`，体三行 —— `state.SetValue(...)` → 可选 `state.SetOptions(...)` → `return this;`。
+1. `TransitionSystem/Transition.cs` 内，形状一律是：`public Transition<T> Property(Expression<Func<T, TXxx>> propertyLambda, TXxx newValue, object? interpolationOptions = null)`，体三行 —— `state.SetValue(...)` → 可选 `state.SetOptions(...)` → `return this;`。
 2. 新重载**必须**与 `Interpolator` 的登记项对应；不对应的重载是死代码。
 3. **不要**把重载搬到 Core：见 §二·8。
 
@@ -116,10 +116,10 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 
 ### 4.1 加一个平台采样器
 
-- [ ] `Src/Adapters/VeloxDev.Jalium/PlatformAdapters/Samplers/XxxSampler.cs`（命名空间 `VeloxDev.Adapters.NativeSamplers`）
-- [ ] `Src/Adapters/VeloxDev.Jalium/PlatformAdapters/Interpolator.cs` 的静态构造登记（**不登记 = 永不运行**）
+- [ ] `Src/Adapters/VeloxDev.Jalium/TransitionSystem/Samplers/XxxSampler.cs`（命名空间 `VeloxDev.Adapters.NativeSamplers`）
+- [ ] `Src/Adapters/VeloxDev.Jalium/TransitionSystem/Interpolator.cs` 的静态构造登记（**不登记 = 永不运行**）
 - [ ] `Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs`：`Target` 属性 + 一条 `Entry`（**漏了直接红**）
-- [ ] 要进流的 `.Property(...)` 重载：`Src/Adapters/VeloxDev.Jalium/PlatformAdapters/Transition.cs`
+- [ ] 要进流的 `.Property(...)` 重载：`Src/Adapters/VeloxDev.Jalium/TransitionSystem/Transition.cs`
 - [ ] 与 Core / 别家撞名时，命名空间留在 `VeloxDev.Adapters.NativeSamplers`（绕法是 `JaliumEntries` 里按程序集限定名反射的那条）
 - [ ] `memory/modules/TransitionSystem/adapters/jalium.md`（条数与清单）
 
@@ -127,7 +127,7 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 
 ### 4.2 加 / 换一个工作流视图角色（现在走「标记 + 薄 code-behind + 适配器附着行为」）
 
-- [ ] **平台机制**：先判断这段是不是扩展点（判据 §2.1 in `adapter-base-class-specifications.md`）。是机制 → 改 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/` 下对应的附着行为 / 助手；是策略（形状、配色、间距）→ 留在模板或 demo 的标记 / code-behind。
+- [ ] **平台机制**：先判断这段是不是扩展点（判据 §2.1 in `adapter-base-class-specifications.md`）。是机制 → 改 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/` 下对应的附着行为 / 助手；是策略（形状、配色、间距）→ 留在模板或 demo 的标记 / code-behind。
 - [ ] **表面 / 卡片 / 连线 / 网格 / 选择器**：`Src/Templates/VeloxDev.Jalium.Templates/working/content/` 下对应条目（`workflow-tree-view` / `-node-view` / `-slot-view` / `-link-view` / `-grid-decorator` / `-minimap-overlay` / `-template-selector`）与镜像 `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/`（**同形，两处一起改**）。
 - [ ] 若新表面要池化：在 `PART_Canvas` 上同时给 `ViewPool.ItemsSource` 与 `ViewPool.TemplateSelector`（**两个都要**）
 - [ ] 两套 demo 都要过：`Examples/Workflow/Jalium/Demo/`（自己写的 `NodeEditorSurface : Canvas`，不接适配器行为）与 `Examples/Workflow/Jalium Trimmed/Demo/`（标记 + 行为那条）
@@ -142,7 +142,7 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 
 ## 五、几个「以为能改、其实不该改」的地方
 
-1. **`TransitionEffects` 的三个时长**（`PlatformAdapters/TransitionEffects.cs` 的 `Empty` / `Theme` / `Hover`：0s、0.46s、0.32s）**六家逐字相同** —— 改这里等于改所有平台的默认观感。
+1. **`TransitionEffects` 的三个时长**（`TransitionSystem/TransitionEffects.cs` 的 `Empty` / `Theme` / `Hover`：0s、0.46s、0.32s）**六家逐字相同** —— 改这里等于改所有平台的默认观感。
 2. **`Interpolator` 静态构造里那条看似冗余的 `SolidColorBrush` 登记不要顺手删。** 它确实被 `typeof(Brush)` 的基类回溯覆盖，删了多半不报错也不改行为 —— 但它防的是「属性声明成 `SolidColorBrush`」这一类，代价为零。**要删就先跑一遍 `Examples/Transition/Jalium/Demo/`。**
 3. **`ZoomPin` / `NotifyZoomCommitted` 现在在 `WorkflowSurfaceBehavior` 里**（`SurfaceState.ZoomPin` 字段、`NotifyZoomCommitted`、`UpdateViewport`），不要搬到宿主窗口，也不必在模板里重造。缩放手势本身归表面（`ZoomEnabled` + `OnZoomPreviewMouseWheel` 自己调），宿主**零调用者**。
 4. **七家的采样器类名不要「统一化」**（如 `PointSampler` → `JaliumPointSampler`）：命名空间的跨家重名是既成事实，改名只会让两处字符串表（`JaliumEntries` 里按程序集限定名的反射、以及别家同名反射）同时错位。

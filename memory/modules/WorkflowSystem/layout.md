@@ -8,12 +8,12 @@
 实现目录叫 `Layout/`，但**命名空间不能带 `.Layout` 这一段**。带上的后果是适配器编译失败，而且错在别家代码里：
 
 ```
-Src/Adapters/VeloxDev.MAUI/Attached/Workflow/ViewManager.cs
-Src/Adapters/VeloxDev.MAUI/Attached/Workflow/ViewPool.cs
+Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewContainer.cs
+Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewLinkLayer.cs
   error CS0118: “Layout”是 命名空间，但此处被当做 类型 来使用
 ```
 
-MAUI 这几处的命名空间是 `VeloxDev.WorkflowSystem.AttachedBehaviors`（Core 命名空间的子命名空间），里面裸用 `Layout`（`Microsoft.Maui.Controls.Layout`）。C# 先看外层命名空间里**声明**的成员/命名空间，找到 `VeloxDev.WorkflowSystem.Layout` 就不再去看 `using` 带来的类型。同一课在 [输入别名规范](../../specifications/input-alias-specifications.md) 里已经写过一次（裸名会静默盖住平台同名类型），这里是「命名空间段」版本的复发。
+MAUI 这些文件的命名空间是 `VeloxDev.WorkflowSystem.AttachedBehaviors` / `VeloxDev.WorkflowSystem.ViewHosting`（Core 命名空间的子命名空间），里面裸用 `Layout`（`Microsoft.Maui.Controls.Layout`）。C# 先看外层命名空间里**声明**的成员/命名空间，找到 `VeloxDev.WorkflowSystem.Layout` 就不再去看 `using` 带来的类型。同一课在 [输入别名规范](../../specifications/input-alias-specifications.md) 里已经写过一次（裸名会静默盖住平台同名类型），这里是「命名空间段」版本的复发。
 
 ⇒ 契约与实现**都用** `namespace VeloxDev.WorkflowSystem`；`Interfaces/WorkflowSystem/Layout/` 只是目录分层，不影响命名空间（同 `Interfaces/architecture.md` §一）。以后要在 `Src/Adapters/` 的祖命名空间下新建子命名空间，先搜一遍七家适配器里有没有同名裸类型。
 

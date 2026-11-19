@@ -19,10 +19,10 @@
 
 | 条目 | 形状 | 关键锚点 |
 |---|---|---|
-| tree-view | **2026-10-03 起**：`sealed class TemplateClass : WorkflowTreeView`——调色板 + `CreateNodeView` / `CreateLinkView` / `OnBuildLinkMenu`。搭壳、两个私有嵌套类（`SurfaceCanvas` / `RulerOverlayForm`）、平移引擎、视图池全在适配器的基类里：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` | 基类见左；模板只剩构造器、两个工厂 override 与 `OnBuildLinkMenu` |
+| tree-view | **2026-10-03 起**：`sealed class TemplateClass : WorkflowTreeView`——调色板 + `CreateNodeView` / `CreateLinkView` / `OnBuildLinkMenu`。搭壳、两个私有嵌套类（`SurfaceCanvas` / `RulerOverlayForm`）、平移引擎、视图池全在适配器的基类里：`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs` | 基类见左；模板只剩构造器、两个工厂 override 与 `OnBuildLinkMenu` |
 | link-view | **2026-10-04 起**：`sealed class : Control` + `WorkflowLinkAttachment.Attach(this)`——自己的控件、自己的 `OnPaint`；雕窗口区域、端点订阅、几何、命中发布全在助手 `WorkflowLinkAttachment` | 助手见左；不再是基类派生 |
 | node-view（**2026-10-04 起不再是薄派生**：自己的 `UserControl` + `WorkflowNodeAttachment.Attach`） | **2026-10-04 起**：`sealed class : UserControl`——三个私有嵌套面板（`DynamicOutputsPanel` / `DynamicSlotRow` / `DoubleBufferedPanel`）、`OnRebound` / `OnCollapse`、绘制。绑定/定位/折叠/标题与端口解析在适配器的 `WorkflowNodeAttachment` | 附件见左 |
-| slot-view（**2026-10-04 起不再是薄派生**：自己的 `Control` + `WorkflowSlotAttachment.Attach`） | **2026-10-04 起**：`sealed class : Control` —— 图形 + 调色值 + `SlotPath`。**那个 `SvgPathParser` 搬进了适配器**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/SvgPathParser.cs`（`BuildPath`）） | 附件见左 |
+| slot-view（**2026-10-04 起不再是薄派生**：自己的 `Control` + `WorkflowSlotAttachment.Attach`） | **2026-10-04 起**：`sealed class : Control` —— 图形 + 调色值 + `SlotPath`。**那个 `SvgPathParser` 搬进了适配器**（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/SvgPathParser.cs`（`BuildPath`）） | 附件见左 |
 | grid-decorator | **2026-10-03 起**：`sealed class : WorkflowGridDecorator`——八个颜色 + 间距 + 每几条一条主线。网格与标尺的绘制（含 `OnPaintBackground` 那一趟）在基类 | 基类见左 |
 | minimap-overlay | **2026-10-03 起**：`sealed class : WorkflowMinimapOverlay`——一组调色值。定位、拖拽映射、布局数学全在基类（它并实现了 `IWorkflowMinimapScrollSource`，那个接口也搬进了适配器） | 基类见左 |
 | template-selector | **2026-10-03 起**：`sealed class : WorkflowTemplateSelector`——构造函数里给 node / link 两个工厂赋值。四个 `Func<…, Control>` 工厂、分流与诊断都在基类。**树视图不再引用它**——树的基类自带一个记录视图角色的选择器 | 基类见左 |
@@ -36,7 +36,7 @@
 `CreateLinkView` → `new LinkView { ViewModel = link }`）、以及一个 `OnBuildLinkMenu` 空 override
 （右键菜单的增删点，基类默认加 "Delete"）。
 
-全在适配器基类 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 里（模板里没有这些）：
+全在适配器基类 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs` 里（模板里没有这些）：
 外壳与三个部件（`SetScrollViewer/SetCanvas/SetGridDecorator`）、`PART_GridDecorator => PART_Canvas`
 别名、池数据源与虚拟化（`AttachTree` / `ApplyPan` 里写
 `helper.Viewport`）、`ArrangeLinkViews` 的 z 序、小地图 `MinimapOverlay` 属性接线、布局/平移流水线。
@@ -49,7 +49,7 @@
 
 ⚠ **两个工厂在模板里只赋 node/link**（`NodeViewFactory`/`LinkViewFactory`）；插槽与树 item 的工厂保持
 `null` —— 一旦有插槽/树对象流进池，基类 `WorkflowTemplateSelector.CreateView` 会抛
-`InvalidOperationException`（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTemplateSelector.cs` 的 `CreateView`）。
+`InvalidOperationException`（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowTemplateSelector.cs` 的 `CreateView`）。
 
 ---
 
@@ -58,7 +58,7 @@
 ### P1 · 只生成 tree 不生成 minimap ⇒ **生成出来的代码编译不过** —— **tree-view 这一处已消除**
 
 `IWorkflowMinimapScrollSource` 声明在适配器
-（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs`），tree 的基类引它、
+（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/IWorkflowMinimapScrollSource.cs`），tree 的基类引它、
 不引 minimap 产物；minimap 模板与它的镜像都没有本地声明。`winforms-v-tree` 的编译期兄弟只剩
 NodeView 与 LinkView，而 `verify-workflow-item-templates-all.ps1` 会把七条一起生成并编译（`verify-workflow-item-templates.ps1` 现在转发到它），再出现这类漏依赖会当场红。
 
@@ -70,17 +70,17 @@ NodeView 与 LinkView，而 `verify-workflow-item-templates-all.ps1` 会把七�
 ### P2 · 多份 `ParseColor` 副本，而且这一家多一条 `Color.FromName` 兜底
 
 **2026-10-03 起这些副本没了**：解析器只有一处 —— 适配器的 `WorkflowSurfaceColors.Parse`
-（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSurfaceColors.cs`），模板通过各自基类的
+（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceColors.cs`），模板通过各自基类的
 `protected static ParseColor` 调它。下面这段记的是修复前的形状，**结论（`Color.FromName` 兜底会静默吃掉写错的占位符）仍然成立**：
 
 这一家的实现**比其他平台多一个兜底**：解析不出 `#RRGGBB`/`#AARRGGBB` 时
-`return Color.FromName(value);`（现在只此一处：适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSurfaceColors.cs` 的 `Parse`）。
+`return Color.FromName(value);`（现在只此一处：适配器 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceColors.cs` 的 `Parse`）。
 ⇒ 占位符写错（少一位、拼错名字）时**不抛也不报**，`Color.FromName` 对未知名字返回
 ARGB 全 0 的透明黑 —— 表现是"这条线/这个背景不见了"。改解析规则要动多处。
 
 ### P3 · `slotPath` 是**真的被解析**的，但只认 `M/m`、`A/a`、`Z`
 
-解析器现在在**适配器**：`SvgPathParser` 搬成了独立文件 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/SvgPathParser.cs`：
+解析器现在在**适配器**：`SvgPathParser` 搬成了独立文件 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/SvgPathParser.cs`：
 `WorkflowSlotAttachment.Paint` 把 `SlotPath` 交给它（`WorkflowSlotAttachment.cs` 的 `EnsureIconPath` 调 `BuildPath`、`SvgPathParser.cs` 定义 `BuildPath`）；
 解析器只实现这三个命令（`SvgPathParser.cs` 里 `BuildPath` 上方的注释），`default` 分支是 `return path;`（`BuildPath` 的 `default` 分支，
 注释「看不懂的命令：体面地停下，而不是抛」）。
@@ -94,7 +94,7 @@ WPF/WinUI/Avalonia 三家是空转参数（`../architecture.md` §7.1）。
 
 ### P4 · 输入端口靠**反射属性名**决定，没有任何控件名参与
 
-`ResolveInputSlot()` 现在在**适配器**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowNodeAttachment.cs`）
+`ResolveInputSlot()` 现在在**适配器**（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowNodeAttachment.cs`）
 遍历节点的 `Slots`，返回第一个"能作源、不能作目标"的口；这样的口不存在时返回 `null`。
 方法上方的 `<remarks>` 说明了为什么这个回退要按通道读：**输入插槽的通道在渲染时可能还是生成器默认值，
 因为写通道是走异步命令的**。模板在 `OnRebound` 里调它（`workflow-node-view/TemplateClass.cs`），
@@ -105,9 +105,9 @@ WPF/WinUI/Avalonia 三家是空转参数（`../architecture.md` §7.1）。
 
 | 传什么 | 怎么传 | 依据 |
 |---|---|---|
-| 世界原点要留出的标尺宽度 | 单一来源：`WorkflowTreeView.RulerReserve = SurfaceCanvas.DefaultRulerThickness`，节点卡不再复制 `+ 36`（旧模板里的那份已随重构消失） | `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 的 `RulerReserve` |
-| 画布平移量 | 适配器 `WorkflowNodeAttachment.SurfacePanOffset` 属性，由附件内部直接写，不再反射父链 | `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowNodeAttachment.cs` 的 `SurfacePanOffset`（由 `ApplySurfacePosition` 写入） |
-| 节点显示标题 | 视图声明的 `NodeTitle` 委托（在适配器里） | `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowNodeAttachment.cs` 的 `ReadNodeTitle`（`IWorkflowNodeViewModel` 不暴露名字） |
+| 世界原点要留出的标尺宽度 | 单一来源：`WorkflowTreeView.RulerReserve = SurfaceCanvas.DefaultRulerThickness`，节点卡不再复制 `+ 36`（旧模板里的那份已随重构消失） | `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs` 的 `RulerReserve` |
+| 画布平移量 | 适配器 `WorkflowNodeAttachment.SurfacePanOffset` 属性，由附件内部直接写，不再反射父链 | `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowNodeAttachment.cs` 的 `SurfacePanOffset`（由 `ApplySurfacePosition` 写入） |
+| 节点显示标题 | 视图声明的 `NodeTitle` 委托（在适配器里） | `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowNodeAttachment.cs` 的 `ReadNodeTitle`（`IWorkflowNodeViewModel` 不暴露名字） |
 
 ⇒ 标尺与平移都是**单一来源/显式属性**，改名不再静默失效；**标题也不再靠反射** —— 由视图声明的 `NodeTitle`
 委托读取（未声明即无标题）。这与适配器侧那几处解析接缝（见
@@ -115,7 +115,7 @@ WPF/WinUI/Avalonia 三家是空转参数（`../architecture.md` §7.1）。
 
 ### P6 · 标尺带是一个 `WS_EX_LAYERED` 浮层窗体，生命周期是模板自己管的
 
-`RulerOverlayForm`（适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 的私有嵌套类）
+`RulerOverlayForm`（适配器 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs` 的私有嵌套类）
 由 `EnsureRulerOverlay()` 在 `OnHandleCreated` 时建，也允许在 `ApplyPan`
 里惰性补建；窗体取 `FindForm()` 作 owner 并 `Show(owner)`。
 同步点：宿主 `LocationChanged` / owner `Move`，每次 `SyncRulerOverlay()` 重设
@@ -160,7 +160,7 @@ WinForms 的子窗口**不透明、也不与兄弟合成**，所以连线视图�
 这正是这一家早年放弃子窗口、改成"画布代画"的原因（`WorkflowSystem/adapters/winforms.md` 里
 没有这条，只在旧注释里）。现在的做法是**把窗口区域雕成折线的描边带**：
 
-- `RebuildGeometry`（适配器 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowLinkAttachment.cs`）：
+- `RebuildGeometry`（适配器 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowLinkAttachment.cs`）：
   取四点 → `Widen(厚度 + 2×RegionPad)` → 取 `GetBounds` 落在整像素上，
   路径平移到窗口局部后交给 `Region`。
   ⇒ **窗口只在线的位置上存在**，网格在它周围照常可见，命中测试也只落在线上（视图还 `Enabled = false`）。

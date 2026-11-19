@@ -8,14 +8,21 @@
 		<Nullable>enable</Nullable>
 		<UseWPF>true</UseWPF>
 		<UseWindowsForms>true</UseWindowsForms>
-		<!-- 适配器热路径的 A/B 基准：不打包、不被 dotnet test 发现。WinUI / MAUI 没有可在控制台进程里宿主的目标，不在此列。 -->
+		<!-- Jalium 只消费预编译的原生库；不要在基准构建里重建它们。 -->
+		<BuildJaliumNativeProjects>false</BuildJaliumNativeProjects>
+		<BuildJaliumNativeStaticProjects>false</BuildJaliumNativeStaticProjects>
+		<!-- 适配器热路径的 A/B 基准：不打包、不被 dotnet test 发现。WinUI / MAUI 由同目录的独立宿主工程承载，不在此项目里。 -->
 		<IsPackable>false</IsPackable>
 		<NoWarn>$(NoWarn);CS1591</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Avalonia.Headless" Version="11.1.0" />
+		<PackageReference Include="Avalonia.Desktop" Version="11.1.0" />
+		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.0" />
 		<PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+		<!-- Jalium 适配器只引用平台中立的 Controls 包；有头宿主还需要 Windows 入口（AppBuilder / 窗口循环）。 -->
+		<PackageReference Include="Jalium.UI.Desktop" Version="26.10.9" />
 		<!-- MAUI 适配器无法在控制台宿主，只引图形原语库隔离其 PathF / Color 分配。 -->
 		<PackageReference Include="Microsoft.Maui.Graphics" Version="10.*" />
 	</ItemGroup>
@@ -25,6 +32,8 @@
 		 不在引用上逐个覆盖配置：那会让 Core 以两组全局属性各构建一次、写进同一个 obj，生成器产物重复。 -->
 	<ItemGroup>
 		<ProjectReference Include="..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<!-- 宿主无关的有头基准核心（选项 / 场景 / 报告 / 运行循环）；WinUI / MAUI 独立宿主引用同一个库。 -->
+		<ProjectReference Include="..\VeloxDev.Adapters.Benchmarks.Headed\VeloxDev.Adapters.Benchmarks.Headed.csproj" />
 		<ProjectReference Include="..\HeadlessAdapters\VeloxDev.AdapterTestKit\VeloxDev.AdapterTestKit.csproj" />
 		<ProjectReference Include="..\..\Adapters\VeloxDev.WPF\VeloxDev.WPF.csproj" Aliases="wpf" />
 		<ProjectReference Include="..\..\Adapters\VeloxDev.Avalonia\VeloxDev.Avalonia.csproj" Aliases="ava" />

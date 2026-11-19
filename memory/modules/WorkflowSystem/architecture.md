@@ -17,7 +17,7 @@
 
 | 你以为在这里 | 其实在哪 |
 |---|---|
-| 怎么画节点/连线 | 七家适配器 `Src/Adapters/VeloxDev.*/Attached/Workflow/`，Core 只给坐标数学 |
+| 怎么画节点/连线 | 七家适配器 `Src/Adapters/VeloxDev.*/WorkflowSystem/AttachedBehaviors/`，Core 只给坐标数学 |
 | 鼠标命中、拖拽、滚轮 | 适配器的七个角色行为（`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSurfaceBehavior` 等；**Jalium 这些角色同样是附着行为 —— 表面 `WorkflowSurfaceBehavior`、插槽 `WorkflowSlotLayoutBehavior`、节点拖拽 `WorkflowNodeDragBehavior`、连线手势 `WorkflowSlotConnectionBehavior`，见 `adapters/jalium.md`**） |
 | 持久化格式 | **2026-10-03 起由生成代码定义**（`VeloxDev.Serialization`，通用面入口 `ViewModelSerializer`（`Src/Core/VeloxDev.Core/Serialization/ViewModelSerializer.cs`，原名 `ComponentModelEx`），见 [`Serialization/architecture.md`](../Serialization/architecture.md)）。本模块只保留**序列化钩子**，且用的仍是 **.NET 序列化特性**（`System.Runtime.Serialization`，不是自定义接口）：`Anchor` / `Size` 的 `[OnSerializing]` / `[OnSerialized]` / `[OnDeserialized]`（`GUI/GeometryModels/Anchor.cs` 的 `OnSerializing` / `OnSerialized` / `OnDeserialized`，`Size.cs` 同名三个），`SlotEnumerator` 的 `[OnDeserializing]` / `[OnDeserialized]`（`SelectorEx/SlotEnumerator.cs` 的同名两个方法），`BranchOption` / `BranchSegment` 的 `[OnDeserialized]`（`CompilerEx/Compile/Model/BranchOption.cs` 的 `NormalizeKey`、`BranchSegment.cs` 的 `NormalizeCompileKey`）。全仓源码里没有 `IVeloxJsonSerializing` / `IVeloxJsonSerialized` / `IVeloxJsonDeserialized` 这类接口 |
 | 撤销栈的存储 | 栈是 `TreeHelper<T>` 的私有字段；Core 只定义「一对 Redo/Undo 委托」`WorkflowActionPair.cs` 的 `WorkflowActionPair` |
@@ -181,7 +181,7 @@ TreeHelper.MarkDirty() → 10fps Tickable tick（tick 线程只判脏）     Tem
 ```
 
 - **节点移动/缩放不标脏（2026-10-30 用户决定）**：`Viewport` 没变时重算可见集只能靠 `MarkDirty()`，但那会让 helper 在拖动期间按 tick 反复重跑 `Virtualize` —— 用户判断这项开销高于「`VisibleItems` 与 HUD 晚一拍」。七家现在一致：节点几何变化只摆卡片/重画，可见集等下一次滚动/缩放收敛。Jalium 表面曾按旧结论在 `OnNodeChanged` 的 `Anchor`/`Size` 分支补过 `MarkDirty()`（`8f85056f`），已按此决定移除（`NodeEditorSurface.cs`）。不要把它当漏写再补回去。
-- **tick 线程不碰可见集（2026-10-28 起）**：装了虚拟化的 helper 在 `Install` 时记下 `SynchronizationContext.Current`（安装线程就是宿主 UI 线程），脏了就把 `Virtualize + BroadcastVisibleItemLayout` 整趟 post 回该上下文，并用 `uiPassQueued` 合并 —— UI 忙时只留一趟。**上下文跟着安装走**：每次 `Install` 都重新取并递增 `installVersion`，投递时把版本带走；`Uninstall` 清掉自动捕获的值并重置 `uiPassQueued`。所以换一个 UI 线程重装会自然改绑，上一次安装遗留的排队不会把新安装锁死，旧 UI 线程里迟到的回投也会因版本不符被丢掉（否则它会拿着新组件在旧线程上跑）。没有上下文的宿主（服务端、控制台、无头测试）保持原来的 tick 线程内联执行。宿主在非 UI 线程装 helper 时，必须 `new TreeHelper<T>(cellSize).WithSynchronizationContext(ctx)` 显式给（`Templates/Helpers/TreeHelper.cs` 的 `WithSynchronizationContext`），否则这一趟仍会落在 tick 线程；显式值（含显式 null）跨安装保留。**原因**：`VisibleItems` 绑在 UI 上，tick 线程直接改会和 `ViewManager` 的同步 Remove 分支并发 —— 下游实测症状是连线随机消失。回归测试 `TreeHelperTickTests.TheDirtyPassTouchesTheVisibleSetOnTheThreadThatInstalledTheHelper`（把 helper 显式设成 null 上下文即红）。
+- **tick 线程不碰可见集（2026-10-28 起）**：装了虚拟化的 helper 在 `Install` 时记下 `SynchronizationContext.Current`（安装线程就是宿主 UI 线程），脏了就把 `Virtualize + BroadcastVisibleItemLayout` 整趟 post 回该上下文，并用 `uiPassQueued` 合并 —— UI 忙时只留一趟。**上下文跟着安装走**：每次 `Install` 都重新取并递增 `installVersion`，投递时把版本带走；`Uninstall` 清掉自动捕获的值并重置 `uiPassQueued`。所以换一个 UI 线程重装会自然改绑，上一次安装遗留的排队不会把新安装锁死，旧 UI 线程里迟到的回投也会因版本不符被丢掉（否则它会拿着新组件在旧线程上跑）。没有上下文的宿主（服务端、控制台、无头测试）保持原来的 tick 线程内联执行。宿主在非 UI 线程装 helper 时，必须 `new TreeHelper<T>(cellSize).WithSynchronizationContext(ctx)` 显式给（`Templates/Helpers/TreeHelper.cs` 的 `WithSynchronizationContext`），否则这一趟仍会落在 tick 线程；显式值（含显式 null）跨安装保留。**原因**：`VisibleItems` 绑在 UI 上，tick 线程直接改会和 Core 的 `ViewPool` 同步 Remove 分支并发 —— 下游实测症状是连线随机消失。回归测试 `TreeHelperTickTests.TheDirtyPassTouchesTheVisibleSetOnTheThreadThatInstalledTheHelper`（把 helper 显式设成 null 上下文即红）。
 
 - **只有 `TreeHelper(double cellSize)` 这个构造开虚拟化**，无参构造把 `useVirtualization = false`（`Templates/Helpers/TreeHelper.cs` 的 `TreeHelper()` 与 `TreeHelper(double cellSize)` 两个构造函数）。「图每次都全渲染」十有八九是用了无参构造。
 - 索引有两张：节点网格 `_nodeMap` 与节点对（连线）网格 `_nodePairMap`（`WorkflowSpatialManager.cs` 的同名两个字段）。连线在两端都还没被索引时进 `_pendingLinks` 暂存，节点插入后 `RetryPendingLinks()` 补挂（`_pendingLinks` / `RetryPendingLinks`）。
@@ -189,6 +189,7 @@ TreeHelper.MarkDirty() → 10fps Tickable tick（tick 线程只判脏）     Tem
 - **查询之前索引必须补齐（2026-09-27 起）。** `SpatialGridHashMap.Query` 先跑一次 `EnsureIndexed()`：① 把重入守卫延后的那次 `ResyncGrid` 补上（否则要等到下一次 bounds 变化才跑）；② 给**边界为空**的条目（视图还没测量 ⇒ 登记了但**不在任何格子里**）再读一次 `Bounds`，变成真的就补进网格。不补的后果是**永久性**的：那类条目任何查询都碰不到 ⇒ **视口怎么移都救不回来**（用户实测：Agent 对话进行中节点/连线概率消失，重入 Viewport 无效）。判别测试 `SpatialIndexFreshnessTests.AnItemMeasuredSilently_IsFoundByTheNextQuery`（把 `EnsureIndexed()` 注释掉即红）。同族的 `WorkflowSpatialManager.QueryAgentBounds` 也在查询前补一次 `RetryPendingLinks()` —— 若那条暂存只由 `NodeAdded` 触发，此后没有新节点就永远挂着。
 - 重入守卫、bounds 空/脏态、resync：`GUI/Virtualization/SpatialGridHashMap.cs` 的 `_unindexed` / `_boundsDirty` / `OnItemPropertyChanged` / `EnsureIndexed` / `ResyncGrid`，以及 `WorkflowSpatialEx.cs` 的 `Virtualizing` / `Insets` 两张 `ConditionalWeakTable`/字典重入表。
 - 视口修正 `RulerBand` → `SetVirtualizeInset`（`WorkflowSpatialEx.cs` 的 `SetVirtualizeInset`）：只影响 `Virtualize` 内部的查询膨胀，**不动权威的 `Viewport`**。
+- **视图系统（六家已接入）**：契约在 `Interfaces/WorkflowSystem/ViewHosting/`（工厂 / 容器 / 摆位 / 调度 / 诊断 + 池策略 / 层级策略 / 连线层 / 测量），通用流程在 `WorkflowSystem/ViewHosting/`（`ViewHostCore` / `ViewPoolCore` / `ViewSourcePipelineCore`）；WPF / Avalonia / WinUI / MAUI / WinForms / Jalium 各自在 `WorkflowSystem/ViewHosting/` 逐层实现，由适配器的 `ViewSourcePipeline` 闭合，入口仍是 `ViewPool` 附着属性。Razor 是 renderer-native 例外（Blazor renderer 自己做实例化/diff）。契约、不变量与新增平台步骤见 [view-hosting.md](view-hosting.md)。
 
 ### 3.6 交互（命中测试）
 
@@ -327,7 +328,7 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 ```
 
 - **Core 不引用任何 UI 程序集**（见 §一 csproj）。方向是单向的：适配器 → Core。
-- **适配器之间不互相引用**，也没有共享适配器基类 —— 七家各写各的 `Attached/Workflow/`（文件清单见 `Src/Adapters/VeloxDev.*/Attached/Workflow/`）。
+- **适配器之间不互相引用**，也没有共享适配器基类 —— 七家各写各的 `WorkflowSystem/AttachedBehaviors/`（文件清单见 `Src/Adapters/VeloxDev.*/WorkflowSystem/AttachedBehaviors/`）。
 - **`VeloxDev.Core.Extension` 在 Release 走 NuGet 包、Debug 走 ProjectReference**（`VeloxDev.Core.Extension.csproj` 的 ItemGroup），`VeloxDev.Core` 自己同理。生成器（`Src/Generators/VeloxDev.Core.Generator/`）是 analyzer，**不随 ProjectReference 传递**，所以每个用生成器特性的项目都要各自重复那一对引用。
 - **`StandardEx/` 是扩展方法而非接口成员**：`StandardXxx(this IWorkflowXxxViewModel, ...)`。这意味着「默认行为」和「契约」是分开的 —— 接口干净，行为可以整体换掉。Helper 的虚方法（如 `NodeHelper<T>.ReceiveAsync`）再转调 `Component.StandardXxx`。改行为时先分清你要改的是**接口**（影响所有实现）、**StandardEx**（影响所有用 Standard 的实现）还是**Helper 虚方法**（影响继承该 Helper 的实现）。
 
@@ -340,7 +341,7 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 | 节点收到数据时算什么 | `Templates/Helpers/NodeHelper.cs` 的 `ReceiveAsync`（`Interfaces/WorkflowSystem/Components/IWorkflowNodeViewModel.cs` 的 `ReceiveAsync` 是契约）。默认返回 `null` = 静默不往下传 |
 | 一条边能不能连 | `Templates/Helpers/TreeHelper.cs` 的 `ValidateConnection`（`TreeHelper<T>.ValidateConnection`，默认 `true`）。协议见 §3.2 |
 | 用户拖出的连线用什么类型 | `TreeHelper<T>.CreateLink`（`Templates/Helpers/TreeHelper.cs` 的 `CreateLink`，默认 `LinkDefaultViewModel`） |
-| 连接的容量/自动清理规则 | `Interfaces/WorkflowSystem/Enums/Slot.cs` 的 `SlotChannel` + `StandardEx/WorkflowTreeEx.cs` 的 `ShouldCleanupConnections` |
+| 连接的容量/自动清理规则 | `Interfaces/WorkflowSystem/Enums/SlotChannel.cs` 的 `SlotChannel` + `StandardEx/WorkflowTreeEx.cs` 的 `ShouldCleanupConnections` |
 | slot 的状态位怎么算 | `StandardEx/WorkflowSlotEx.cs` 的 `StandardUpdateState`（由 `Targets.Count`/`Sources.Count` 推导） |
 | 改通道时旧连接怎么清 | `StandardEx/WorkflowSlotEx.cs` 的 `StandardSetChannel`（按**旧**通道的位决定删哪些） |
 | 图怎么被切成执行段 | `CompilerEx/Compile/CompilerViewModel.cs`（正向）与 `CompilerViewModel.Reverse.cs`（逆向锥） |
@@ -354,6 +355,7 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 | 缩放时画布怎么长 | `GUI/GeometryModels/CanvasLayout.cs` 的 `Update()` |
 | 缩放后保存/加载丢东西 | `GUI/GeometryModels/Anchor.cs` 的 `OnSerializing` / `OnSerialized` / `OnDeserialized` 三个钩子（`Size.cs` 同构） |
 | 什么进可见集 | `GUI/Virtualization/WorkflowSpatialEx.cs` 的 `VirtualizeCore`；暂存与补挂 `WorkflowSpatialManager.cs` 的 `InsertLink` / `RetryPendingLinks` |
+| 可见集怎么变成视图 | 契约 `Interfaces/WorkflowSystem/ViewHosting/`；通用流程 `WorkflowSystem/ViewHosting/`（`ViewPoolCore` / `ViewSourcePipelineCore`）；六家适配器各自的 `WorkflowSystem/ViewHosting/`，入口为 `ViewPool`；Razor 例外见 [view-hosting.md](view-hosting.md) |
 | 网格索引的数据结构 | `GUI/Virtualization/SpatialGridHashMap.cs`（注意 `OnItemPropertyChanged` 里 `_reindexing` 上方那段注释：重入时改 `Dictionary` 会毁内部状态） |
 | 可见集变化后怎么让视图刷新 | `Templates/Helpers/TreeHelper.cs` 的 `BroadcastVisibleItemLayout()`（对每个可见节点重发 `Anchor`/`Size`） |
 | 撤销/重做栈 | `StandardEx/WorkflowTreeEx.cs`（`StandardRedo`/`StandardSubmit`/`StandardUndo`/`StandardClearHistory`） |

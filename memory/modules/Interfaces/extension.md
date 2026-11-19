@@ -123,7 +123,7 @@
 | # | 联动点 | 漏了会怎样 |
 |---|---|---|
 | 1 | `Src/Generators/VeloxDev.Core.Generator/` 里的**字符串全名**（`Theme.cs`、`AopSurface.cs`、`Writers/{TickWriter,CommandWriter,WorkflowWriter}.cs`） | 改名后静默不生成，症状远离病因 |
-| 2 | 七家适配器 `Src/Adapters/<平台>/PlatformAdapters/`（`UIThreadInspector` / `Samplers/` / `ThemeValueConverters` / `Attached/Workflow/*`） | 编译失败（好情况）或漏一家（见 §五·1 的规模差异） |
+| 2 | 七家适配器 `Src/Adapters/<平台>/TransitionSystem/`（`UIThreadInspector` / `Samplers/` / `ThemeValueConverters` / `WorkflowSystem/AttachedBehaviors/*`） | 编译失败（好情况）或漏一家（见 §五·1 的规模差异） |
 | 3 | Core 侧的**默认实现**：`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/*DefaultViewModel.cs`、`TransitionSystem/{Runtime/TransitionInterpreter,Runtime/TransitionScheduler,Effects/TransitionEffect,Binding/TransitionProperty}.cs` | 编译失败 |
 | 4 | `Src/Templates/*/working/content/<契约名>/` 与 `Examples/`（`IWorkflowGridDecorator` 不在适配器本体的那几家在这里补；`IWorkflowMinimapOverlay` 现已七家全在适配器本体） | 该平台的示例/模板缺能力 |
 | 5 | 若是注册表键：`TimerCore.RegisterTimeSource<…>` 的所有调用点（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs` 定义，`TransitionSystem/Sampling/SamplerSet.cs` 的 `Run`、`TransitionSystem/Effects/Transition.cs` 的 `TimerCore.CreateTimeSource<ITimeSourceControl>()` 调用） | 运行期抛「未注册」，编译期无感 |

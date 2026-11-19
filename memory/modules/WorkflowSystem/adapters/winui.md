@@ -8,7 +8,7 @@
 > `skills/veloxdev-create-workflow/references/gui/winui.md`。本文只写这一家的**形状**：
 > 被哪些平台事实逼成现在这样、哪里和另外六家不一样、改哪里会踩什么。
 
-代码：`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/`。
+代码：`Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/`。
 
 **参考实现是 `Examples/Workflow/WinUI Trimmed/`（offset frame）**；完整版用另一条腿：**每条线自己的包围盒**
 （见 §四·P3）。两者都避免按画布尺寸裁线，别把任何一边的盒子绑回画布 `ActualWidth/Height`。
@@ -18,11 +18,14 @@
 ## 一、这一家与契约的接法（只说需要额外知道的部分）
 
 七个角色都落在适配器里，与别家同名（`WorkflowSurfaceBehavior` / `WorkflowCanvasTransformBehavior` /
-`ViewManager`+`ViewPool` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` /
-`WorkflowSlotLayoutBehavior` / `WorkflowMinimapOverlay`）。附着属性名与 `PART_*` 约定与 WPF 一致，
-不要在这里重抄一遍。契约之外这一家多出来的是：
+`ViewSourcePipeline`+`ViewPool` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` /
+`WorkflowSlotLayoutBehavior` / `WorkflowMinimapOverlay`）。视图池的各层实现在
+`WorkflowSystem/ViewHosting/`（`ViewFactory` / `ViewContainer` / `ViewArranger` / `ViewScheduler` /
+`ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` / `ViewMeasureHost`），由 `ViewSourcePipeline`
+闭合成 Core 的 `ViewSourcePipelineCore<Panel, FrameworkElement, …>`；`ViewPool` 只保留附着属性入口。
+附着属性名与 `PART_*` 约定与 WPF 一致，不要在这里重抄一遍。契约之外这一家多出来的是：
 
-**多一个公开入口 `WorkflowSurfaceBehavior.Refresh(UserControl host)`**（`Attached/Workflow/WorkflowSurfaceBehavior.cs`）。
+**多一个公开入口 `WorkflowSurfaceBehavior.Refresh(UserControl host)`**（`WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`）。
 原因是这一家解析 `PART_*` 唯一的路子是**名称域查找**（`FindName`，`ResolveNamedControls`），而名称域挂在 `UserControl` 上、
 不在可视树上 —— 宿主换树或重新套模板后，必须有人再调一次 `Refresh` 重新解析。别家能靠可视树遍历自愈，
 所以别家没有这个成员。**接新平台时如果你能在可视树上按名字找，就不需要抄它。**
@@ -55,7 +58,7 @@
 插槽连线的处理方式同源：冒泡 `PointerPressed`/`PointerReleased`，
 不置 `e.Handled`，用下降沿 `ReleasePointerCaptures()` 代替「抢在子元素之前」
 （`WorkflowSlotConnectionBehavior.cs` 的 `OnPointerPressed`）。这家**没有**隧道相，所以四个手势的否决只能由组件自己路由这一笔按下（见 L9）。对照：WPF 走隧道 `PreviewMouseLeftButtonDown` 并置 `Handled`
-（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotConnectionBehavior.cs` 的 `OnPointerPressed` / `OnPointerReleased`）。
+（`Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.cs` 的 `OnPointerPressed` / `OnPointerReleased`）。
 
 **L2 · 没有公共 `OnRender`。** 小地图只能是**保留式元素**：`WorkflowMinimapOverlay : Canvas`
 （`WorkflowMinimapOverlay.cs` 的类声明），`RebuildShapes` 复用 `Rectangle` 池并**原地改** `Width/Height/SetLeft/SetTop`。
@@ -92,7 +95,7 @@ WinUI 是七家里唯一需要挂两级的。
 | 延后的事 | 档位 | 重校验 |
 |---|---|---|
 | 可见区域/虚拟化重算（`UpdateVisibleRegion`） | `Low`（`UpdateVisibleRegion` 的 `TryEnqueue`） | `ReferenceEquals(currentState, state)` |
-| 一批视图的物化（`ScheduleNextBatchRender`） | `Low`（`ViewManager.ScheduleNextBatchRender`） | 批次上限 3 |
+| 一批视图的物化（`ViewPoolCore.ScheduleNextBatch`） | `Low`（`ViewScheduler.Schedule`） | 入队返回值交给池复位 `scheduled`；批大小/预算由 `AdaptiveViewPoolPolicy` 决定 |
 | 槽位同步的非布局触发（`WorkflowLayoutBatch.Schedule`） | `Normal`（`WorkflowSlotLayoutBehavior.RequestSync` 传入的 post） | 入队返回值交给批次复位 `scheduled`；`Syncing` 守卫（`WorkflowSlotLayoutBehavior.Sync`） |
 | 小地图在 `ScrollViewer` 尺寸变化后的重算 | `Low`（`WorkflowMinimapOverlay.OnScrollViewerResized`） | —— |
 
@@ -105,7 +108,7 @@ WinUI 是七家里唯一需要挂两级的。
 物化慢一拍、可见区域重算落在后面、新连线不出现 —— 而且**「迟迟不出现」和「一直看不到」是同一个开关**，
 只是排队时长不同。
 **这一条是推断，不是实测**（2026-10-01 有过一轮把它当成因的改动，改完用户说更卡，已全部回退）。
-要把它坐实只需一件事：给 `ScheduleNextBatchRender` 与 `ProcessNextBatch` 各打一个带时间戳的日志，
+要把它坐实只需一件事：给 `ViewPoolCore.ScheduleNextBatch` 与 `ProcessNextBatch` 各打一个带时间戳的日志，
 量「排进去到跑起来」隔了多久。别在没量到之前再按它改代码。
 
 **L7 · WinRT 控件只能在有 XAML 运行时、且在 UI 线程上构造。** 小地图 ctor 里
@@ -139,18 +142,18 @@ WPF/Avalonia 的做法是「适配器设一个附着属性，节点与连线视�
 
 **D2 · 节点几何是「模板绑定 + 适配器命令式再写一遍」两套并存。**
 示例模板里节点视图直接绑 `Canvas.Left/Top/ZIndex` 到 `Anchor`（`Examples/Workflow/WinUI/Demo/Views/Workflow/TreeView.xaml` 的 `NodeTemplate`），
-同时 `ViewManager.ApplyLayout` 又命令式写一遍同样的三个附着属性、外加 `Width`/`Height`
-（`ViewManager.ApplyLayout`）。WPF/Avalonia 的 `ViewManager` **只写 `Visibility` + `DataContext`**，
-几何全交给模板（WPF/Avalonia 的 `ViewManager` 里 `AddOrReuseView` / `HideViewFor` / `ResetAllViews`）。
+同时 `ViewArranger.ApplyGeometry` 又命令式写一遍同样的三个附着属性、外加 `Width`/`Height`
+（`ViewHosting/ViewArranger.cs` 的 `ApplyGeometry`）。WPF 的 `ViewContainer` / Avalonia 的 `ViewContainer` **只写可见性与绑定态**，
+几何全交给模板（WPF 的 `ViewArranger` 是 no-op，几何由模板绑定）。
 **这里的做法和其他家不一样，因为**这一家的池化宿主是挂在 `PART_Canvas` 上的 `behaviors:ViewPool`，
-`ViewManager` 把模板视图**直接** `Children.Add` 到 Canvas（`ViewManager.AddOrReuseView`），几何因此也由适配器在挂树后亲手写一遍 ——
+`ViewContainer` 把模板视图**直接** `Children.Add` 到 Canvas（`ViewHosting/ViewContainer.cs` 的 `Attach`），几何因此也由适配器在挂树后亲手写一遍 ——
 模板上那三条绑定与它并存、取同一个 `Anchor`，互为保险。
 （这里不用 `CanvasItemsControl` 抄 Left/Top —— `Examples/Workflow/WinUI/Demo/Views/Workflow/CanvasItemsControl.cs` 不在源码树里，
 别去找，它只剩 `obj/` 里的生成物。）
 `Width/Height` 则是本家必需的（见 D3）。
 
 **D3 · `Size` 为 `(0,0)` 时写 `Width/Height = double.NaN`，而不是 0。**
-`ViewManager.ApplyLayout` 及注释：「还没测量过，用 NaN 让平台自己定尺寸」。
+`ViewArranger.ApplyGeometry` 及注释：「还没测量过，用 NaN 让平台自己定尺寸」。
 **这里的做法和其他家不一样，因为** WinUI 里 `Width = 0` 是「真的宽 0」，没有别家那种
 「0 表示未设」的约定（`Layout.ActualSize` 的后续写入依赖这一点）。
 
@@ -165,7 +168,7 @@ WPF/Avalonia 的做法是「适配器设一个附着属性，节点与连线视�
 适配器目录里没有 `WorkflowGridDecorator`，装饰器是示例/模板产物
 （`Examples/Workflow/WinUI/Demo/Views/Workflow/WorkflowGridDecorator.cs` 的 `WorkflowGridDecorator`）；
 Razor 与 WinForms 则把它放进了适配器
-（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowGridDecorator.razor.cs`、`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowGridDecorator.cs`）。
+（`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowGridDecorator.razor.cs`、`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowGridDecorator.cs`）。
 但契约要求的 `RulerBand → SetVirtualizeInset` 转发**由适配器做**
 （`WorkflowSurfaceBehavior.UpdateGridDecorator`：`SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand)`）。
 **这里的做法和其他家不一样，因为**这一家按名字找装饰器、拿不到就不装 inset；
@@ -194,7 +197,7 @@ Razor 与 WinForms 则把它放进了适配器
 - **一处刻意保留的齐一性**：Ctrl 那一支里，订阅方若置 `PreventDefault` 就跳过缩放且**不置 `Handled`**，于是原生滚动仍可能发生 —— 这与 WPF/Avalonia 参考实现逐字相同，是为了「七家同形」而没有为这家特判。
 - **宿主级按下处理器只处理画布区域**（2026-10-30 起）：完整 Demo 把侧栏与画布装在同一个 `UserControl` 里，而 `OnLinkPointerPressed` 挂在宿主上、`handledEventsToo`。它在按下时无条件 `host.Focus(FocusState.Pointer)`（为了让 Ctrl+Z 有落点），于是侧栏元素列表里的按钮在**真实慢点击**（按住 100–150ms）时会失焦：焦点跳到画布里的 SEED `TextBox`，按钮的 `Click` 不落地 —— 表现为「点 Locate 只让输入栏获得焦点、HUD 不动」。同一刻 down+up 的合成点击不会触发这个竞态。现在处理器开头用 `IsWithinScrollViewer(e.OriginalSource, state.ScrollViewer)` 判门：不在画布滚动容器里的按下直接 return，焦点与路由都留给侧栏自己；画布/节点/插槽/连线的按下（都在容器内）不受影响。
   **卡片内的按钮过不了那道门，要另一条判据**（2026-10-30 起）：节点卡上的 Compile/Run/Stop/Close 本来就在滚动容器里，`IsWithinScrollViewer` 放行后照样被 `surfaceViewer.Focus(FocusState.Pointer)` 收走焦点，`Button.Click` 不落地 —— 真实鼠标点 Compile 后 `Run` 永不高亮、节点不出现 `#N`；同一按钮用 UI Automation 的 `Invoke` 却能编译（`Invoke` 不走指针与焦点，正好是判别这两种原因的探针）。现在焦点判断是 `WorkflowSurfaceBehavior.OwnsItsFocus`：从 `OriginalSource` 向上找 `TextBox`/`RichEditBox`/`PasswordBox`/`ButtonBase`/`ComboBox`/`ToggleSwitch`/`RangeBase`，命中就跳过 Focus；空白画布、卡片面、插槽、连线仍收焦点。
-- **视图池按类型复用，TwoWay 选择器会把复位写回新节点**（2026-10-30 起）：`ViewManager.HideViewFor` 池化时把 `DataContext` 置空、`AddOrReuseView` 复用时再赋新 VM；ComboBox 的 `SelectedItem` 在 `ItemsSource` 换引用（`EnumValues`/`CompileModeOptions` 每次 getter 都是新数组）时复位并回写 null —— 绑到非空枚举会变成 `default` = `Static`，绑到 `SelectedValue` 直接清空。表现：Enum Selector 卡滚出再滚回视口后 COMPILE MODE 自己变 Static、SELECTED METHOD 变空；此后再编译，Static 拿不到分支键，整条下游 `Order = -1` 不执行（节点仍拿得到 `#N`，所以只看徽标会以为编译正常）。修法在共享 VM `EnumSelectorNodeViewModel`：`SelectedValue` 忽略 null 并重推；`CompileMode` 的 UI 面走字符串 `CompileModeName`/`CompileModeNames`（WinUI 的 `EnumSelectorNodeView.xaml`），空值同样忽略。WPF 的 `VirtualizingStackPanel` 也是 `Recycling`，同一条判据对它可能成立，但未实测。
+- **视图池按类型复用，TwoWay 选择器会把复位写回新节点**（2026-10-30 起）：`ViewContainer.Deactivate` 池化时把 `DataContext` 置空、`Activate` 复用时再赋新 VM；ComboBox 的 `SelectedItem` 在 `ItemsSource` 换引用（`EnumValues`/`CompileModeOptions` 每次 getter 都是新数组）时复位并回写 null —— 绑到非空枚举会变成 `default` = `Static`，绑到 `SelectedValue` 直接清空。表现：Enum Selector 卡滚出再滚回视口后 COMPILE MODE 自己变 Static、SELECTED METHOD 变空；此后再编译，Static 拿不到分支键，整条下游 `Order = -1` 不执行（节点仍拿得到 `#N`，所以只看徽标会以为编译正常）。修法在共享 VM `EnumSelectorNodeViewModel`：`SelectedValue` 忽略 null 并重推；`CompileMode` 的 UI 面走字符串 `CompileModeName`/`CompileModeNames`（WinUI 的 `EnumSelectorNodeView.xaml`），空值同样忽略。WPF 的 `VirtualizingStackPanel` 也是 `Recycling`，同一条判据对它可能成立，但未实测。
   **焦点不能再落在宿主上**（同一次修复）：`host.Focus(FocusState.Pointer)` 会沿焦点链落到节点卡的第一个 `TextBox`（完整 Demo 的 SEED 输入框），`ScrollViewer` 随后 `BringIntoView` 把它滚进视口 —— 这就是「Locate 几下再进画布 / 大幅度拖动后画布闪回」的另一半根因。现在把 `PART_ScrollViewer.IsTabStop = true`（`ResolveNamedControls`）并把两处 `host.Focus` 改成 `viewer.Focus(FocusState.Pointer)`（按下处理器与 `RoutePointer` 的悬停连线收焦点）；键仍从滚动容器冒泡到宿主的 KeyDown。Trimmed Demo 没有可聚焦的节点输入，因此从来看不到这一条。
 - **滚动写入只有一个入口，读位置只认逻辑目标**（2026-10-30 起）：`RequestScroll(state, x, y)` 先记 `PendingScrollX/Y`（NaN = 该轴在途）→ `ApplyLayout` 用 `ActualOffset − (pending − 实际滚动)` 写 `Canvas.Translation` → 再 `ChangeView`。`OnViewChanged` 落地后清 pending，Translate 回到 `ActualOffset`；`OnDataContextChanged`、滚动容器换实例、目标落到可滚范围外都会清。所有「读当前位置」的地方（平移起点、`ToCanvasLocalAnchor`、可见区、grid/minimap、滚轮/缩放起点）都走 `EffectiveScrollX/Y`，绝不能在 ChangeView 未落地时读 `HorizontalOffset`。**理由**：ChangeView 异步，负向扩画布又同时改 `ActualOffset`（合成变换当帧生效），不补偿就会「内容先平移、再被滚动拉回」——这就是非 Trimmed 大幅拖动/Locate 后的闪回；补偿让「逻辑滚动位置」成为唯一真相，落的滚只是为了追上来。小地图的拖拽导航也必须走同一个入口（`WorkflowSurfaceBehavior.TryRequestScroll(this, x, y)`）；它若自己 `ChangeView`，会绕过在途目标，把画面钉在旧位置。在途目标另有一个 **150ms 的一次性定时器**兜底：ChangeView 被夹取/被忽略、或用户在途中自己拖了滚动条时，定时器清掉补偿并 `Refresh`，避免画面永远挂在到不了的位置。
 - **平移越过画布边缘时，先让布局认下新 extent，再读 `ExtentWidth/Height`**（2026-10-29 起）：`ClampScrollOffset` 只改模型（`Negative/PositiveOffset` → `ActualSize`/`ActualOffset`），`ScrollViewer` 的范围要到下一次布局才更新。`OnCanvasPanMoved` 原在 `ApplyLayout` 后立刻读 max 并 `ChangeView`，读到的是旧范围，越界那一截被夹短，松手后画面停在旧边界（非 Trimmed Demo 的 3600×1000 画布最容易碰到；Trimmed 画布大，普通拖动到不了边）。修法与 `CenterOn` 同形：`ApplyLayout` → `Canvas.UpdateLayout()` → `ScrollViewer.UpdateLayout()` → `host.UpdateLayout()` → 再读 max。滚轮与定位那两路本来就有这套三连。
@@ -258,12 +261,10 @@ WHEEL handled=True delta=-120 | INNER off=(0,12) max=(0,12)   ← 仍然 True
 或者「补上」这个绑定，从而与 `Canvas.Translation` 的平移**叠加**成双倍位移。
 `OnTransformChanged` 是故意空的（自陈「只是通知载体，宿主本身不能收渲染变换」），这一半是对的。
 
-**P2 · `ViewManager.SubscribeToLayoutChanges` 的延迟闭包不重校验自己还是当前状态。**
-它在跨线程时 `TryEnqueue(DispatcherQueuePriority.Low, () => ApplyLayout(view, viewModel))`，
-闭包捕获 `view`/`viewModel` 后**没有**确认这一对还在活跃。
-对照 `WorkflowSurfaceBehavior.UpdateVisibleRegion`，那里排 Low 之前与落地之后都做了 `ReferenceEquals` 重校验。
-**后果**：一帧内视图被回收并复用给另一个 ViewModel 时，旧几何会写到新宿主上 —— 且不报错。
-改这里时照 L6 的表补一条重校验。
+**P2 · 池化视图的几何订阅由 `ViewLayoutTracker` 统一持有，且落地前重校验。**
+`ViewArranger.Arrange` 每次按新 item 重订，`ViewContainer.Deactivate`/`Destroy` 释放；跨线程的属性变更
+`TryEnqueue(Low, …)` 落地时先确认 `_entries[view].Source` 仍是该 item（`ViewLayoutTracker.Track`）。
+**后果**：一帧内视图被回收并复用给另一个 ViewModel 时，旧几何不会写到新宿主上；`Deactivate` 之后也不再有订阅。
 
 **P3 · 连线视图的盒子绝不能绑画布尺寸；完整版现在用「每条线的包围盒」。**
 完整版曾经把 `PolylineCurveView` 的 `Width/Height` 绑到画布 `ActualWidth/ActualHeight`（`TreeView.xaml` 的 `LinkTemplate`），
@@ -285,11 +286,12 @@ WHEEL handled=True delta=-120 | INNER off=(0,12) max=(0,12)   ← 仍然 True
 
 **P6 · 小地图在非 UI 线程构造 = 永不重绘且不报错**（§二·L7）。定时器建不出来时没有任何补偿路径。
 
-**P8 · 入队被拒 = 永久失效，因为旗标是在回调里清的**（2026-09-27 修了两处）。`ViewManager.ScheduleNextBatchRender`
-与 `WorkflowSurfaceBehavior.UpdateVisibleRegion` 都是「先置旗标 → `TryEnqueue` → 在回调里清旗标」，
-而后者的返回值被丢掉了：队列一旦拒绝（正在关闭），回调永远不跑 ⇒ 旗标永远立着 ⇒ 之后每次调用都在第一行返回
-⇒ **画布一个视图都不会再加**。**症状很好认：小地图照旧画（它读的是模型，不是这批视图），画布上节点/连线却没了。**
-现在「没有入队成功就立刻复位旗标 + `Debug.WriteLine`」。同族还有两处同样丢返回值、但没有旗标（
+**P8 · 入队被拒必须复位旗标，否则永久失效。** `ViewPoolCore.ScheduleNextBatch`
+与 `WorkflowSurfaceBehavior.UpdateVisibleRegion` 都是「先置旗标 → `TryEnqueue` → 在回调里清旗标」。
+视图池这一侧由 `ViewScheduler.Schedule` 返回 `TryEnqueue` 的真实结果，池在 `false` 时立刻复位 `scheduled`；
+`UpdateVisibleRegion` 同样在拒绝时复位并 `Debug.WriteLine`。若不复位，队列关闭时回调永远不跑 ⇒ 旗标永远立着
+⇒ 之后每次调用都在第一行返回 ⇒ **画布一个视图都不会再加**。**症状很好认：小地图照旧画（它读的是模型，不是这批视图），画布上节点/连线却没了。**
+同族还有两处同样丢返回值、但没有旗标（
 `WorkflowSlotLayoutBehavior.SyncSlotEnumerator` 的重试入队、`WorkflowMinimapOverlay.OnScrollViewerResized`）：它们只丢一次更新，下一次事件会补上。槽位同步那条已并入 Core 的 `WorkflowLayoutBatch`：`post` 返回 `TryEnqueue` 的真实结果，`Schedule` 在 `false` 时复位 `scheduled`，不再是「丢一次」。
 **这条与本文件 P4 是同一个教训**（「已置位状态……永久停止且不报错」），该家自己的正确范形在 `SyncSlotEnumerator`：
 用可判定的条件（`ActualWidth <= 0`）判断「还没测量」并**排 Low 重试**。
@@ -316,7 +318,7 @@ P8 那两处修复**仍然成立**（确实存在的一类永久失效），只�
 Avalonia/WPF/Jalium 的同一份视图是每帧重算的（`Render`/`OnRender`），所以那边
 `_length <= 0` 这类守卫即使被 NaN 穿过，最多错一帧；**这边错的是永远** —— 写进去什么就一直画什么。
 同一个视图还有两个不触发 `Loaded`/`Unloaded` 的入口必须自己挂：`DataContextChanged`
-（池化视图改绑/回收，`ViewManager.HideViewFor` 只改 `Visibility` + `DataContext`，从不摘树 —— 见 §六），
+（池化视图改绑/回收，`ViewContainer.Deactivate` 只改 `Visibility` + `DataContext`，从不摘树 —— 见 §六），
 以及「本帧没有属性变化」这件事本身。
 两条硬规则：**几何里不许出现 NaN**（未测量的 slot 锚点就是 NaN，`WorkflowSlotUpdateGate` 的约定；
 NaN 参与的比较全是 false，`_length <= 0`、`lo >= _length` 这类守卫一条都拦不住，而 NaN 点画不出任何东西）；
@@ -405,7 +407,7 @@ Trimmed 的 `SlotView` 与 `Src/Templates/VeloxDev.WinUI.Templates/` 的那份**
 **P10 · `OnLinkKeyDown` 现在只吞 `Delete`，但别把它读成「画布不再丢键盘」。** 先前无条件 `e.Handled = true`
 （指针停在连线上时方向键、翻页键、空格一并被吞），2026-10-06 收窄成只在 `Windows.System.VirtualKey.Delete` 上置
 （`WorkflowSurfaceBehavior.OnLinkKeyDown`，置位在 `e.Key == Windows.System.VirtualKey.Delete`；与 Avalonia 的「非 Delete 直接 `return`」
-（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `OnLinkKeyDown`）、Jalium 的「只吞 Delete」同形）。
+（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `OnLinkKeyDown`）、Jalium 的「只吞 Delete」同形）。
 **实测（悬停连线上按 PageDown）**：改前与改后视口都从 `0,0` 滚到 `0,437` —— `ScrollViewer` 是宿主的**下代**，
 冒泡相里它先处理，宿主再置 `Handled` 追不上它；被吞的从来只是继续往**宿主之上**（窗口级处理器）的那一段。
 所以这是一笔对齐（不再替宿主的窗口级键盘做决定），**不是**键盘不可用的修复。
@@ -422,7 +424,7 @@ code-behind 因此只剩 `InitializeComponent()`（Trimmed / 模板）或自身�
 **命中在 Core，不在元素上。** 连线视图本身**整块不可命中**：`PolylineCurveView` 在
 `UpdateInteractivity` 里恒置 `IsHitTestVisible = false`，三条静息线各自的 `Path` 也恒为 `false`（`RestingStroke` 那处 `IsHitTestVisible = false`）—— 理由自陈在类里与 `UpdateInteractivity` 上方的注释：它是整块画布大小，
 一旦可命中就会把画布手势全吃掉。判定改由视图把画出的曲线**发布**给 Core
-（`_boundLink?.PublishCurve(RenderReady ? _curve : null, this)`，`PublishCurve`），适配器 `RoutePointer` 先按 `ResolveTarget` 从来源视觉的 DataContext 认节点/插槽（路由的 `Target` 已不只连线，见 §二·L9），都不认才落到 `tree.HitTestVisibleLinks` 做几何判定（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `RoutePointer`、`ResolveTarget`），
+（`_boundLink?.PublishCurve(RenderReady ? _curve : null, this)`，`PublishCurve`），适配器 `RoutePointer` 先按 `ResolveTarget` 从来源视觉的 DataContext 认节点/插槽（路由的 `Target` 已不只连线，见 §二·L9），都不认才落到 `tree.HitTestVisibleLinks` 做几何判定（`Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `RoutePointer`、`ResolveTarget`），
 半径 `LinkHitTestEx.DefaultHitRadius = 6d`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs` 的 `DefaultHitRadius`，
 画布单位、**不随缩放放大**，见 `HitTest` 的 remarks）。带宽因此 ≈±6px —— 与「把 halo 描边设成可命中」那套的 ±5.5px
 同量级，但机制完全不同。**输入仍要够得着宿主**：`PART_Canvas` 自身 `Background="Transparent"`
@@ -471,8 +473,8 @@ code-behind 因此只剩 `InitializeComponent()`（Trimmed / 模板）或自身�
 ## 六、核不到的东西（写下来免得下一个人重找）
 
 - 历史记录里的「**WinUI 上池化视图可能在离树状态下收到属性变更**」在 WinUI 侧**不成立**：
-  池化视图从不离开视觉树 —— `ViewManager.HideViewFor` 只做 `Visibility = Collapsed` + `DataContext = null` +
+  池化视图从不离开视觉树 —— `ViewContainer.Deactivate` 只做 `Visibility = Collapsed` + `DataContext = null` +
   退订 + 入池，从池里取回时也不再 `Children.Add`。
-  离它最近的机制是 §四·P2 那个不重校验的延迟闭包，与「离树」无关。
+  跨线程的属性变更订阅在 `ViewLayoutTracker`，落地前会重校验（见 §四·P2），与「离树」无关。
 - `WorkflowCanvasTransformBehavior` 那句错注释的具体来历无法考证（代码与注释里都没有记录），
   只能确证**现状**与注释不符（§四·P1）。

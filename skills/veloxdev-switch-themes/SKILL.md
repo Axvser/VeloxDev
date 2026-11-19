@@ -72,4 +72,4 @@ public partial class MainWindow : Window
 
 ⚙ `Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/` — `ITheme`, `IThemeObject`, `IThemeValueConverter`. The implementations are next door in `Src/Core/VeloxDev.Core/DynamicTheme/` — `Dark`, `Light`, `ThemeCache`, `[ThemeConfig]` (`ThemeConfigAttribute.cs`) and `ThemeManager`.
 
-⚙ `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/ThemeValueConverters.cs` — the converters a GUI supplies. Jalium has the transition half of the adapter but no theme converters.
+⚙ `Src/Adapters/VeloxDev.<GUI>/DynamicTheme/ThemeValueConverters.cs` — the converters a GUI supplies. Jalium has the transition half of the adapter but no theme converters.

@@ -46,7 +46,7 @@
 		</ContextMenu>
 	</UserControl.Resources>
 
-	<!-- Node editor rendering (with virtualization) -->
+	<!-- Node editor rendering (virtualized through the Core-driven ViewPool pipeline) -->
 	<Grid Grid.Column="2">
 		<Border x:Name="PART_SurfaceBorder" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="3" Background="#1E1E1E">
 			<local:WorkflowGridDecorator x:Name="PART_GridDecorator">

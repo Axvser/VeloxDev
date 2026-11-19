@@ -88,8 +88,8 @@ tree-view 用两个 **keyed** `<DataTemplate x:Key="NodeTemplate" …>`（`workf
 （不是「生成但不接线」的 selector）。selector 的 XML 注释仍告诉你要 assign 四个模板
 （`workflow-template-selector/TemplateClass.cs` 的类注释），tree-view 这一份只给了 Node/Link 两个。
 
-⚠ 模板查找找不到时 `Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs` 会
-**抛 `InvalidOperationException`**（与 WPF 的静默三级回退不同）；树的 item 与插槽不进池，
+⚠ 模板查找找不到时 `Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/ViewHosting/ViewFactory.cs` 的
+`CreateView` 返回 `null`，Core pool 按类型缓存并跳过；树的 item 与插槽不进池，
 所以 selector 的 `SlotTemplate`/`TreeTemplate` 留空是正常的。
 
 ### P4 · `IsScrollInertiaEnabled="False"` 是必须的
@@ -106,6 +106,6 @@ tree-view 用两个 **keyed** `<DataTemplate x:Key="NodeTemplate" …>`（`workf
 |---|---|
 | 坐标换算选哪个 `SlotAnchorFrom*`、缩放的枢轴补偿 | `memory/modules/WorkflowSystem/adapters/avalonia.md` 与 `extension.md` §3.9 |
 | 适配器侧"平台检测"等 Avalonia 独有文件 | 同上 |
-| `ViewPool` / `ViewManager` 的模板查找与池化细节 | `Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs` 的 `FindDataTemplate` / `Build`（找不到模板时抛 `InvalidOperationException`） |
+| `ViewPool` / `ViewFactory` 的模板查找与池化细节 | `Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/ViewHosting/ViewFactory.cs` 的 `FindTemplate` / `CreateView`（找不到模板时返回 `null`） |
 | 滚轮方向与缩放提交顺序（模板只消费，不改） | `memory/modules/WorkflowSystem/extension.md` §3.9 |
 | 人面向的"怎么用这套模板" | `skills/veloxdev-create-workflow/references/gui/avalonia.md` 的 `## Item templates` |

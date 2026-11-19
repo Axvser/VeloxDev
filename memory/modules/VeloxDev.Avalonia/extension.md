@@ -11,9 +11,9 @@
 
 步骤：
 
-1. `PlatformAdapters/Samplers/XxxSampler.cs`：`public class XxxSampler : ISampler`，**命名空间必须写 `VeloxDev.Adapters.NativeSamplers`**（`Interpolator.cs` 的 `using VeloxDev.Adapters.NativeSamplers;`）。**必须是 public 且无参构造**：测试侧两条路都靠它 —— 独有类型直接 `typeof(X)`，撞名的走 `SamplerAssembly.GetType("VeloxDev.Adapters.NativeSamplers." + name)`（`AvaloniaEntries.cs` 的 `CrossAdapter`，`SamplerAssembly` 是该文件的静态字段），两条路最后都落到 `Activator.CreateInstance(samplerType)`。
-2. `PlatformAdapters/Interpolator.cs` 静态 ctor 加一行 `RegisterInterpolator(typeof(你的类型), new XxxSampler());`（登记都在其中）。注册接口（`IBrush`/`ITransform` 那种）也合法，且比注册基类覆盖面更大。
-3. **可选**：想让它出现在 `Transition<T>` 的强类型重载表里，就在 `PlatformAdapters/Transition.cs` 的 `Property(...)` 重载组里加一条。`Property<TValue>(…)` 泛型重载已经能走通，所以「不加」不是遗漏。
+1. `TransitionSystem/Samplers/XxxSampler.cs`：`public class XxxSampler : ISampler`，**命名空间必须写 `VeloxDev.Adapters.NativeSamplers`**（`Interpolator.cs` 的 `using VeloxDev.Adapters.NativeSamplers;`）。**必须是 public 且无参构造**：测试侧两条路都靠它 —— 独有类型直接 `typeof(X)`，撞名的走 `SamplerAssembly.GetType("VeloxDev.Adapters.NativeSamplers." + name)`（`AvaloniaEntries.cs` 的 `CrossAdapter`，`SamplerAssembly` 是该文件的静态字段），两条路最后都落到 `Activator.CreateInstance(samplerType)`。
+2. `TransitionSystem/Interpolator.cs` 静态 ctor 加一行 `RegisterInterpolator(typeof(你的类型), new XxxSampler());`（登记都在其中）。注册接口（`IBrush`/`ITransform` 那种）也合法，且比注册基类覆盖面更大。
+3. **可选**：想让它出现在 `Transition<T>` 的强类型重载表里，就在 `TransitionSystem/Transition.cs` 的 `Property(...)` 重载组里加一条。`Property<TValue>(…)` 泛型重载已经能走通，所以「不加」不是遗漏。
 4. **测试联动（硬闸）**：`Examples/Transition/AUTO TEST/Samplers/AvaloniaEntries.cs` 加一条 `Entry(...)`（`All` 成员）。**与别家撞名的用 `CrossAdapter("XxxSampler")` 反射取，独有类型直接 `typeof(XxxSampler)`**（判别法：`architecture.md` §五）。
 5. 不做第 4 步**测试必红**（是测试期硬闸，不是编译错）：`SamplerCoverageTests.EveryShippedSampler_IsAccountedFor`（`Examples/Transition/AUTO TEST/Samplers/SamplerCoverageTests.cs`）反射产品程序集里每个 `ISampler`，与注册表 + `UnreachableSamplers` 对账。注册表本身在那里（`SamplerRegistry.Entries`）。
 6. 只有在**纯数据进程里造不出端点值**时才进 `UnreachableSamplers`：`SamplerCoverageTests.cs` 会真的去构造那个值来证伪理由，且条目必须以类型名出现在 `AUTO TEST/Conformance/*Conformance.cs` 表里。**这家的采样器全部可在纯数据进程构造，名单里没有 Avalonia 条目。**
@@ -24,7 +24,7 @@
 
 ## 二、加一个主题值转换器
 
-1. 类放 `PlatformAdapters/ThemeValueConverters.cs`（现有的一组实现都在这个文件里），命名空间 `VeloxDev.DynamicTheme`（与 `IThemeValueConverter` 同命名空间，所以文件里一条 `using VeloxDev.*` 都不需要）。
+1. 类放 `DynamicTheme/ThemeValueConverters.cs`（现有的一组实现都在这个文件里），命名空间 `VeloxDev.DynamicTheme`（与 `IThemeValueConverter` 同命名空间，所以文件里一条 `using VeloxDev.*` 都不需要）。
 2. **必须 public + 无参构造**：生成器发的是 `Activator.CreateInstance(typeof(global::…))`（`Src/Generators/VeloxDev.Core.Generator/Theme.cs` 的 `Activator.CreateInstance`）。给它加构造函数**不会编译报错**，只在真的切到那个主题的那一次炸。
 3. 接入方式是**特性的第一个类型参数**，没有名字约定也没有注册表：`[ThemeConfig<ObjectConverter, Dark, Light>(nameof(Background), ["#1e1e1e"], ["#ffffff"])]`（`Examples/Theme/Avalonia/Demo/ThemeTile.cs` 的两个 `[ThemeConfig<...>]`）。
 4. **不要用 `ThemeCache.RegisterConverter` / `GetConverter`**（`Src/Core/VeloxDev.Core/DynamicTheme/ThemeCache.cs`）。这两个 API 在当前源码里都不存在：`grep -rn "RegisterConverter\|GetConverter(" Src Examples --include=*.cs`（排除 `obj/`）**只命中无关的 `TypeDescriptor.GetConverter`** —— 生成器不走它们，七家适配器也不调。看着像「官方的注册入口」，实际是没有这个入口。
@@ -57,7 +57,7 @@
 | 只在 `Attach` 里加订阅、`Detach` 里忘解绑 | 重挂后事件翻倍，静默 | 每个订阅在 `Detach` 里配对（§三.2） |
 | 以为 `ThemeValueConverters.cs` 里有 `TypeDescriptor.GetConverter` 兜底 | 本文件没有这条（grep 零命中），照别家的记忆补会重复一遍已有分支 | 按 §二.5 的三条既有路挑 |
 | 看到 `Rect` 就以为「Avalonia 有采样器」 | Core 注册的是 `System.Drawing.Rectangle`，与 `Avalonia.Rect` 是两个不同的类型，两个都不覆盖 `Avalonia.Rect` | 见 `architecture.md` §六的缺口 |
-| 在 `Attached/` 里引一次 `VeloxDev.TransitionSystem`（或反过来） | 能编译，三条轴再也不能独立演进 | 现在零交叉引用（`architecture.md` §一），保持 |
+| 在 `AttachedBehaviors/` 里引一次 `VeloxDev.TransitionSystem`（或反过来） | 能编译，三条轴再也不能独立演进 | 现在零交叉引用（`architecture.md` §一），保持 |
 
 ---
 
@@ -65,8 +65,8 @@
 
 | 你加/改什么 | 必须同步的位置 |
 |---|---|
-| 一个采样器 | `PlatformAdapters/Samplers/XxxSampler.cs` + `PlatformAdapters/Interpolator.cs` 静态 ctor +（可选）`PlatformAdapters/Transition.cs` 的 `Property(...)` 重载 + `AUTO TEST/Samplers/AvaloniaEntries.cs`（+ `AdapterSamplerEntries.All` 若新增聚合） |
-| 一个主题转换器 | `PlatformAdapters/ThemeValueConverters.cs` + **消费方**的 `[ThemeConfig<>]`（适配器侧无需登记） |
+| 一个采样器 | `TransitionSystem/Samplers/XxxSampler.cs` + `TransitionSystem/Interpolator.cs` 静态 ctor +（可选）`TransitionSystem/Transition.cs` 的 `Property(...)` 重载 + `AUTO TEST/Samplers/AvaloniaEntries.cs`（+ `AdapterSamplerEntries.All` 若新增聚合） |
+| 一个主题转换器 | `DynamicTheme/ThemeValueConverters.cs` + **消费方**的 `[ThemeConfig<>]`（适配器侧无需登记） |
 | 一个附着行为 | 本模块新类 + demo XAML + `Src/Templates/VeloxDev.Avalonia.Templates/` 的 item 模板 |
 | 一个被解析的具名控件 | §三.3 那组配套改动 + demo XAML |
 | 接一家新平台 | `Src/Adapters/VeloxDev.<家>/` + `VeloxDev.slnx` + `AUTO TEST/Samplers/<家>Entries.cs` + `AdapterSamplerEntries.All` + `SamplerCoverageTests` 的 `ExpectedAdapterAssemblies` |

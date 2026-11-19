@@ -47,8 +47,8 @@
 `PART_Canvas` 的 `ViewPool.ItemsSource` 绑
 `{Binding BindingContext.Helper.VisibleItems, Source={x:Reference Root}}`
 （`workflow-tree-view/TemplateClass.xaml` 的 `PART_Canvas`）—— 与其余六家同源（`Helper` 由树生成器产出）。
-**连线不会进池**：适配器的 `ViewManager` 在入队前问一次选择器，拿不到模板的项（这一家的选择器只声明
-`NodeTemplate`、遇到连线会抛）直接跳过 —— 机制见 `memory/modules/WorkflowSystem/adapters/maui.md` §二·1。
+**连线不会进池**：适配器的 `ViewLinkLayer`（`IsActive=true`、`Handles` 判连线）在主池入队与物化两处挡掉它们；
+拿不到模板的类型（这一家的选择器只声明 `NodeTemplate`、遇到插槽/树节点会抛）由 `ViewFactory` 记进 `_unsupportedTypes` 直接跳过 —— 机制见 `memory/modules/WorkflowSystem/adapters/maui.md` §二·1。
 ⇒ 这一家的 `TemplateSelector` 因此**只需要 `NodeTemplate`**（`workflow-tree-view/TemplateClass.xaml` 的 `TemplateSelector`
 实例化只有这一个实参，上方注释说明原因），模板 code-behind 也只剩构造器。
 **别的平台把 `Helper.VisibleItems` 直接喂给池**，连线在各家自己的 `LinkTemplate` 里物化；
@@ -97,13 +97,12 @@
 一份 SVG 路径都没有。⇒ **想在 MAUI 上换插槽图标，要改的是 `SlotDrawable`，不是任何 `TemplateSlotPath`。**
 其余空转参数与全局清单见 `../architecture.md` §7.1。
 
-### P2 · `Replace` / `Move` 仍无人处理（现在归适配器）
+### P2 · `Replace` / `Move` 由 Core 池处理
 
-过滤已搬进适配器 `ViewManager`（见 `memory/modules/WorkflowSystem/adapters/maui.md` §二·1），
-它的 `OnCollectionChanged` 同样只有 `Add` / `Remove` / `Reset`（`ViewManager.cs` 的 `OnCollectionChanged`）。
-⇒ 上游若用 `Replace` 原地换掉一个可见项，池**不会**收到任何通知，节点视图不刷新也不报错
-（与本仓库适配器侧"`ViewManager` 多半不处理 `Replace`"是同一类问题，
-对照表见 `memory/modules/WorkflowSystem/adapters/wpf.md` §三·5）。
+过滤已搬进适配器的 `ViewLinkLayer` / `ViewFactory`（见 `memory/modules/WorkflowSystem/adapters/maui.md` §二·1），
+共享的 `ViewPoolCore.OnCollectionChanged` 处理 `Add` / `Remove` / `Replace` / `Reset`，`Move` 被忽略
+（视图身份是条目引用）。⇒ 上游用 `Replace` 原地换掉一个可见项会刷新视图；`Move` 不改视图身份，
+顺序变化不会造成重建。对照表见 `memory/modules/WorkflowSystem/adapters/wpf.md` §三·5。
 
 ### P3 · 池的重订靠 `BindingContext` 变化
 
@@ -132,7 +131,7 @@ Razor 写 `28`。与 WinForms/Jalium 的 `36` 对照表在 `../architecture.md` 
 |---|---|
 | 原生 extent 是异步重测的、`await Task.Yield()` 两次、`PanGestureRecognizer` 平移、没有空白判定 | `memory/modules/WorkflowSystem/adapters/maui.md` |
 | 槽位锚点走 `GetCenterRelativeTo` + `SlotAnchorFromCanvasLocal` | 同上 |
-| `ViewManager` 用 16 ms 定时器代替 `DispatcherPriority.Background`（`BatchSize = 8`） | 同上 |
+| `ViewScheduler` 用 16 ms 定时器代替 `DispatcherPriority.Background`（默认 `AdaptiveViewPoolPolicy` 初始 32/8ms） | 同上 |
 | `WorkflowLinkOverlay` 换掉 `WorkflowCanvasTransformBehavior` 这层关系 | 同上 |
 | 滚轮方向与缩放提交顺序 | `memory/modules/WorkflowSystem/extension.md` §3.9 |
 | 人面向的"怎么用这套模板" | `skills/veloxdev-create-workflow/references/gui/maui.md` 的 `## Item templates` |

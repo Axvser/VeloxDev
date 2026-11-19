@@ -7,7 +7,7 @@
 > 连线交互规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)：输入是标准输入
 > （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），命中归 Core 的共享曲线判定，外观、删除与菜单的接线归宿主/适配器。
 >
-> 代码：`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/`。
+> 代码：`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/`。
 > 七个视图角色的职责、附着属性命名约定、绑定挂哪儿，在 `../extension.md` §3.9 与
 > `skills/veloxdev-create-workflow/references/view-layer.md`（七角色表见 §The seven roles）；给使用者的平台说明在
 > `skills/veloxdev-create-workflow/references/gui/maui.md`。本文不重抄那两份，只写**这一家的硬限制、刻意背离、改动时的坑**。
@@ -22,8 +22,8 @@
 | 角色 | 本家的实现 | 说明 |
 |---|---|---|
 | 画布宿主 | `WorkflowSurfaceBehavior.cs` | 唯一的「知晓一切」的类：解析命名控件、喂装饰器、平移、缩放、可见区、连线右键菜单接线、以及组件自己那次输入转发的入口与「已路由」登记（§三·9） |
-| 画布变换 | —— **本家没有这个类** | 见 §三·1；职责由宿主 + `ViewManager` 分担 |
-| 视图池 | `ViewPool.cs` / `ViewManager.cs` | 见 §二·1 |
+| 画布变换 | —— **本家没有这个类** | 见 §三·1；职责由宿主 + `ViewHosting/ViewArranger` 分担 |
+| 视图池 | `ViewPool.cs`（附着属性）+ `WorkflowSystem/ViewHosting/`（`ViewSourcePipeline` 组合 Core 的池与各层） | 见 §二·1 |
 | 节点拖拽 | `WorkflowNodeDragBehavior.cs` | 见 §三·5 |
 | 插槽连接 | `WorkflowSlotConnectionBehavior.cs` | 见 §三·6 |
 | 插槽布局 | `WorkflowSlotLayoutBehavior.cs` | 见 §二·5 |
@@ -41,20 +41,28 @@
 
 ### 1. MAUI 没有 `DispatcherPriority`，所以视图物化与槽位同步都靠 16ms 一次性定时器
 
-- 视图池：`BatchSize = 8`，用一个**非重复**的 16ms `IDispatcherTimer` 逐帧分批建视图，理由写在
-  `ViewManager.cs` 的 `ScheduleNextBatchRender`（「MAUI lacks WPF's DispatcherPriority.Background，所以用逐帧定时器把视图创建摊到多帧」）。
-  分批跑完若还有待建项，**自己再排下一次**（同文件的 `OnBatchTimerTick`）。
-- **选择器物化不了的项在入队前就筛掉**（2026-10-03）：`ViewManager.CanMaterialize`（`ViewManager.cs`）问一次选择器，
-  拿到模板才进 `_pendingViews`；选择器抛异常（典型：只声明 `NodeTemplate` 的选择器遇到连线）或返回 null 的，
-  按类型记进 `_unsupportedTypes` 字段跳过 —— 不排队、不重复抛。于是**只有节点模板的 demo/模板可以把
-  `ViewPool.ItemsSource` 直绑 `Helper.VisibleItems`**，连线交给共享链接层画，池不再需要模板侧的过滤包装
-  （原 `NodeOnlyVisibleItems` 已从模板与两个 demo 删除）。
-- 槽位同步：同样 16ms，但定时器从「每控件一个」改为**每棵树的共享批次一个**（`WorkflowLayoutBatch` 的 `Schedule`，post 由 `WorkflowSlotLayoutBehavior.RequestSync` 提供），合并范围也从单控件扩到整棵树；布局 pass 那条（Windows 原生 `LayoutUpdated` / 非 Windows `SizeChanged`）仍同步 `Flush`，见 [../scheduling.md](../scheduling.md)。
+- 视图池：Core 的 `ViewSourcePipeline` 以 `NonPriority` 闭合；`ViewScheduler` 每批起一个**非重复**的 16ms
+  `IDispatcherTimer`，`Schedule` 只 `Start()`、绝不同步执行批次。MAUI 的非重复定时器 fire 一次之后不能再
+  `Start()` 装填，所以每批都新建一个；池在一批跑完仍有待建项时自己再排下一批（`ViewPoolCore` 的
+  `ProcessNextBatch`），`ViewScheduler.OnTick` 只负责当前这一批。
+- 默认池策略是 Core 的 `AdaptiveViewPoolPolicy`，初始 `32` 个视图 / `8ms` 预算，之后按实测吞吐与待建数
+  在 8/12/16ms 之间收敛。手机视口一次露出的节点通常只有几十个，首批小一点能避免冷滚动卡住一帧。
+- **选择器物化不了的类型按运行时类型缓存跳过**：`ViewFactory.CreateView` 问一次
+  `DataTemplateSelector.SelectTemplate`；选择器抛异常（典型：只声明 `NodeTemplate` 的选择器遇到插槽/树节点）
+  或返回 null 时，该类型记进 `_unsupportedTypes` 并返回 null，异常不越过工厂。于是**只有节点模板的 demo/模板
+  可以把 `ViewPool.ItemsSource` 直绑 `Helper.VisibleItems`**，连线交给共享链接层画，池不需要模板侧的过滤包装。
+- **连线不进主池**：`ViewLinkLayer.IsActive = true` 且 `Handles(item) => item is IWorkflowLinkViewModel`，
+  主池在入队与物化两处跳过它们；`Render` 是空实现，`WorkflowLinkOverlay` 继续从 `VisibleItems` 画全部可见连线。
+- `ViewLayerPolicy` 恒返回 0（层序交给 XAML 元素顺序），`ViewMeasureHost` 是空实现（几何由 MAUI 布局 pass 给出），
+  `ViewDiagnostics` 写 `Debug.WriteLine`。
+- 槽位同步：同样 16ms，但定时器是**每棵树的共享批次一个**（`WorkflowLayoutBatch` 的 `Schedule`，post 由
+  `WorkflowSlotLayoutBehavior.RequestSync` 提供），合并范围是整棵树；布局 pass 那条（Windows 原生 `LayoutUpdated` /
+  非 Windows `SizeChanged`）仍同步 `Flush`，见 [../scheduling.md](../scheduling.md)。
 - **这两个 `IsRepeating = false` 与 Transition 侧 pacer 的 `IsRepeating = true` 不矛盾**：pacer 的定时器每拍由
-  `FramePacerCore.Fire()` 先 `Disarm()`，重复正是为了让下一拍还在；这两个是「干完这一批就停、需要时再排」。
-  照抄 `IsRepeating` 的取值前先确认你要的是哪一种（对位：`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/TransitionInterpreter.cs` 的 `IsRepeating` 设置）。
+  `FramePacerCore.Fire()` 先 `Disarm()`，重复正是为了让下一拍还在；视图池是「建完这一批就停、有待建项再排下一批」。
+  照抄 `IsRepeating` 的取值前先确认你要的是哪一种（对位：`Src/Adapters/VeloxDev.MAUI/TransitionSystem/TransitionInterpreter.cs` 的 `IsRepeating` 设置）。
 - 两个定时器的 `Tick` 都必须自带 try：`IDispatcherTimer.Tick` 抛出的异常 MAUI 不接，直接冒到 WinUI 的
-  `UnhandledException`（dotnet/maui #12245，`ViewManager.cs` 的 `OnBatchTimerTick`、`WorkflowSlotLayoutBehavior.cs` 的 `PostToUiThread`）。
+  `UnhandledException`（dotnet/maui #12245，`ViewScheduler.OnTick`、`WorkflowSlotLayoutBehavior.cs` 的 `PostToUiThread`）。
 
 ### 2. `GraphicsView` 的 `Draw` 回调没有异常保护
 
@@ -244,7 +252,8 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
    「Uses layout-only changes (no render transforms) so the slot-layout behavior's layout-position measurement keeps producing
    correct link anchors」）。于是平移改由两处**代码写几何**承担：整块画布 `TranslationX/Y = Layout.ActualOffset`
    （`WorkflowSurfaceBehavior.cs` 的 `ApplyLayout`，注释说明为什么是画布级而不是逐子元素：同级平移才能让节点/连线/网格同帧一致），
-   每一项的落位由 `ViewManager` 每帧 `AbsoluteLayout.SetLayoutBounds`（`ViewManager.cs` 的 `ApplyLayout`）写。
+   每一项的落位由 `ViewHosting/ViewArranger` 写 `AbsoluteLayout.SetLayoutBounds`；Core 池只在物化时 arrange 一次，
+   所以 `ViewArranger` 还订阅节点的 `Anchor`/`Size`，每帧合并一次重写。
    **照抄点**：`view-layer.md` §The binding rule that bites 那条「变换绑定必须挂在 `DataTemplate` 根上」的坑在 MAUI 上**不适用** ——
    这里根本没有那个附着属性可绑。
 2. **两个 demo（与模板产物）现在都是「一层」：共享的 `LinkView` 包一个 `WorkflowLinkOverlay`（2026-10-04 复核；「每线一视图」那条路当前无消费者）。**
@@ -321,9 +330,9 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 7. **删掉 `x:Name="Root"`** → 链接层的 `WorkflowTree` 与 `InteractionSource` 是 `Source={x:Reference Root}` 的绑定
    （`TreeView.xaml` 的根 `x:Name="Root"` 与 `Source={x:Reference Root}`），全部解析不到；`ScrollOffset*`/`ContentOffset*`/`RulerThickness` 绑的却是
    `PART_GridDecorator`（同文件的 `Source={x:Reference PART_GridDecorator}`），不随 `Root` 一起失效（`skills/veloxdev-create-workflow/references/gui/maui.md` §The connection preview and the wheel 同结论）。
-8. **把隐藏视图从 `_layout.Children` 里 `Remove`** → 本家刻意保留子元素、只 `IsVisible=false` + `ZIndex=-100`
-   （`ViewManager.cs` 的 `HideViewFor`、`ResetAllViews` 注释：移除会触发昂贵的 MAUI 重排）。
-   相应地，隐藏视图仍在树上 —— 遍历子元素时别假设「看不见 = 不在」。
+8. **把隐藏视图从 `_layout.Children` 里 `Remove`** → 本家刻意保留子元素：`ViewContainer.Detach` 是空的，
+   `Deactivate` 只写 `IsVisible=false` + `ZIndex=-100` + `BindingContext=null`；`Destroy` 才移除（且默认策略不限回收，
+   基本不会走到）。移除会触发昂贵的 MAUI 重排。相应地，隐藏视图仍在树上 —— 遍历子元素时别假设「看不见 = 不在」。
 9. **忘了取消在飞的滚动** → `PanCts` 一旦漏取消，`ScrollToAsync` 会叠起来（`WorkflowSurfaceBehavior.cs` 的 `ApplyPanTargetAsync` 与 `SurfaceScroller` 里的清理）。
 10. **删掉 `Refresh` 的 `IsRefreshing` 重入守卫** → 画布扩张 → `Refresh` → 再扩张的级联（`Refresh` 的注释记了
     「每次扩张级联 2-3 次 Refresh，正反馈减速螺旋」）。
@@ -338,7 +347,7 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
     - **盒子不能每帧跟着曲线包围盒走**。写 `AbsoluteLayout.SetLayoutBounds` 是能生效的，但一帧一变时
       视图会停在一两个状态之前的盒子上（实测），正在拖动的橡皮筋因此整条消失。
       现在做法是 `LinkView.EnsureBox`：盒子 = 画布 + 一圈余量，**建一次就不动**，只有连线真的跑出这个区域才长大一次（长大之后又稳定）。
-    - **`ViewManager.ApplyLayout` 对连线的分支必须保持「不写 bounds」**（`ViewManager.cs` 里那段），
+    - **`ViewArranger` 对连线的分支必须保持「不写 bounds」**（`ViewHosting/ViewArranger.cs` 里那段），
       否则池子会把盒子刷回画布尺寸，把上面两条一起作废。
 13. **橡皮筋（虚拟连线）在新旧两版都画得出来 —— 别读成「从来没画过」（2026-10-03 核实）。**
     上一版（overlay 画全部连线的时代）与这一版（每线视图）都能画出橡皮筋；我先前那次「回到改动前也看不到」

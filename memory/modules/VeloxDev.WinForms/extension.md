@@ -11,18 +11,18 @@
 
 | 我想加 | 挂点 | 位置 |
 |---|---|---|
-| 一张新的工作流表面 | **派生 `WorkflowTreeView`**（`abstract`），实现 `CreateNodeView`/`CreateLinkView`，或赋 `TemplateSelector` | `Attached/Workflow/WorkflowTreeView.cs`（工厂 `CreateNodeView`/`CreateLinkView`） |
-| 一种新的节点卡片 | **`WorkflowNodeAttachment.Attach(this)`**（2026-10-04 起不再是可继承基类），卡片自绘并按 `PART_*` 名接线 | `Attached/Workflow/WorkflowNodeAttachment.Attach` |
-| 一种新的插槽图形 | **`WorkflowSlotAttachment.Attach(this)`** | `Attached/Workflow/WorkflowSlotAttachment.Attach` |
+| 一张新的工作流表面 | **派生 `WorkflowTreeView`**（`abstract`），实现 `CreateNodeView`/`CreateLinkView`，或赋 `TemplateSelector` | `WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs`（工厂 `CreateNodeView`/`CreateLinkView`） |
+| 一种新的节点卡片 | **`WorkflowNodeAttachment.Attach(this)`**（2026-10-04 起不再是可继承基类），卡片自绘并按 `PART_*` 名接线 | `WorkflowSystem/AttachedBehaviors/WorkflowNodeAttachment.Attach` |
+| 一种新的插槽图形 | **`WorkflowSlotAttachment.Attach(this)`** | `WorkflowSystem/AttachedBehaviors/WorkflowSlotAttachment.Attach` |
 | 一种新的连线图形 | **自己的控件 + `WorkflowLinkAttachment.Attach(this)`**，在 `OnPaint` 里画（2026-10-04 起不再是基类） | `WorkflowLinkAttachment.cs` |
 | 换网格/标尺外观 | **派生 `WorkflowGridDecorator`**，设调色板与间距 | `WorkflowGridDecorator` |
-| 「item 类型 → 视图」的工厂 | `WorkflowTemplateSelector`（设四个工厂）或直接实现 `IWorkflowTemplateSelector.CreateView(object item)` | `WorkflowTemplateSelector` / `ViewManager.cs` 的 `IWorkflowTemplateSelector` |
-| 一个新的附着行为 | 新建 `public static class` + `ConditionalWeakTable<Control, State>` + 静态 `Get`/`Set`，命名空间写 `VeloxDev.WorkflowSystem.AttachedBehaviors` | `Attached/Workflow/` 下新文件；若需要 `Refresh` 推数据，改 `WorkflowSurfaceBehavior.Refresh` |
+| 「item 类型 → 视图」的工厂 | `WorkflowTemplateSelector`（设四个工厂）或直接实现 `IWorkflowTemplateSelector.CreateView(object item)` | `WorkflowTemplateSelector` / `IWorkflowTemplateSelector.cs` |
+| 一个新的附着行为 | 新建 `public static class` + `ConditionalWeakTable<Control, State>` + 静态 `Get`/`Set`，命名空间写 `VeloxDev.WorkflowSystem.AttachedBehaviors` | `WorkflowSystem/AttachedBehaviors/` 下新文件；若需要 `Refresh` 推数据，改 `WorkflowSurfaceBehavior.Refresh` |
 | 一个新的「名字」通道 | 状态里加 `string? XxxName` + 用 `FindControlByName` 解析 | `WorkflowSlotLayoutBehavior.FindControlByName` |
 | 一个新的 Win32 补偿 | `NativeWindowStyleHelper` 加常量 + 方法 | `NativeWindowStyleHelper` 的样式常量与 `ApplyStyle`；**必须同时加调用点**（现有几处） |
-| 一个采样器 | `PlatformAdapters/Samplers/XxxSampler.cs`，命名空间 `VeloxDev.Adapters.NativeSamplers` | 登记在 `Interpolator` 的静态构造；且必须给 AUTO TEST 加表项（§四·3）；要能被 `Transition` 面用可能还要加 `Property` 重载（`Transition.cs`） |
-| 一个主题转换器 | `PlatformAdapters/ThemeValueConverters.cs` 里加一个 `IThemeValueConverter` 类 | **无注册**（按目标类型键）。但这三个平台上无 demo 可验（`Examples/Theme/` 没有 WinForms） |
-| 一个自绘小地图 | 派生 `WorkflowMinimapOverlay`（已实现 `IWorkflowMinimapOverlay` + `IWorkflowMinimapScrollSource`） | `Attached/Workflow/WorkflowMinimapOverlay` |
+| 一个采样器 | `TransitionSystem/Samplers/XxxSampler.cs`，命名空间 `VeloxDev.Adapters.NativeSamplers` | 登记在 `Interpolator` 的静态构造；且必须给 AUTO TEST 加表项（§四·3）；要能被 `Transition` 面用可能还要加 `Property` 重载（`Transition.cs`） |
+| 一个主题转换器 | `DynamicTheme/ThemeValueConverters.cs` 里加一个 `IThemeValueConverter` 类 | **无注册**（按目标类型键）。但这三个平台上无 demo 可验（`Examples/Theme/` 没有 WinForms） |
+| 一个自绘小地图 | 派生 `WorkflowMinimapOverlay`（已实现 `IWorkflowMinimapOverlay` + `IWorkflowMinimapScrollSource`） | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay` |
 
 ---
 
@@ -38,12 +38,12 @@
 | 4 | 在节点卡 ctor 里调 `Refresh`/`SetIsEnabled`，指望锚点当场量好 | `ScheduleSync` 在 `!control.IsHandleCreated` 时把 `SyncPending` 复位后返回 —— 请求被**丢掉**，不是排队 | 要同步量就调 `WorkflowSlotLayoutBehavior.SyncNow(control)` | `WorkflowSlotLayoutBehavior.ScheduleSync` / `SyncNow` |
 | 5 | 自绘画布用 `WorkflowCanvasTransformBehavior.GetTransform(host)` 拿平移量 | 写进去了，**全仓零读者**（写值走 `Apply`）。基类卡片走 `IWorkflowSurfaceNodeView.ApplySurfacePosition`，表面走自己的 pan 字段 | 你既然是自绘，pan 就在你自己手里，不必绕这一圈 | `WorkflowCanvasTransformBehavior.GetTransform` / `Apply` |
 | 6 | `using VeloxDev.TransitionSystem.NativeSamplers;` 想用这家唯一的采样器 | 这家在 `VeloxDev.Adapters.NativeSamplers`；`VeloxDev.TransitionSystem.NativeSamplers` 是 **Core 自己那组采样器**的命名空间 | 用 `VeloxDev.Adapters.NativeSamplers` | `Samplers/PaddingSampler.cs` 的命名空间；`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/ColorSampler.cs` 的命名空间 |
-| 7 | 在 `Attached/` 里直接用 `Transition<T>`/`Interpolator`（因为编译得过） | 编译得过是因为 `GlobalUsings.cs` 把 `VeloxDev.TransitionSystem` 灌进了每个文件 —— 但「三条轴在程序集内互不引用」是七家共同守的纪律，破了不会报错 | 保持零引用；跨轴的事在宿主侧接 | `GlobalUsings.cs`；`architecture.md` §一 |
+| 7 | 在 `AttachedBehaviors/` 里直接用 `Transition<T>`/`Interpolator`（因为编译得过） | 编译得过是因为 `GlobalUsings.cs` 把 `VeloxDev.TransitionSystem` 灌进了每个文件 —— 但「三条轴在程序集内互不引用」是七家共同守的纪律，破了不会报错 | 保持零引用；跨轴的事在宿主侧接 | `GlobalUsings.cs`；`architecture.md` §一 |
 | 8 | 照 WPF 的心智模型期待名字作用域 / 重名报错 | 这家是**递归子树顺序查找 + `Ordinal` 比较**，取第一个命中；跨容器、非子孙一律找不到，而且**不抛不报** | 名字只挂在宿主子树里，且保证唯一 | `WorkflowSlotLayoutBehavior.FindControlByName` |
 | 9 | 以为 `SetIsEnabled` 会订阅事件、或有早退 | 它只做两件事：置位 + 加 `WS_CLIPCHILDREN`/`WS_EX_COMPOSITED`；订阅是各 `Set*Name` 干的 | 别靠 `SetIsEnabled` 反复调来「重新接入」 | `WorkflowSurfaceBehavior.SetIsEnabled` |
 | 10 | 传 `typeof(Panel)` 当坐标宿主，而节点卡与画布之间还夹着一层 `Panel` | 类型档是**就近匹配、无校验**，会静默按错的坐标系写锚点 | 能确定类型就传真正画布的类型（demo 传 `typeof(WorkflowCanvas)`） | `WorkflowSlotLayoutBehavior.ResolveCoordinateHost`；`WorkflowNodeDragBehavior`（同形） |
 | 11 | 给节点卡片加 Dispose 逻辑却不用助手 | 卡片是子控件树，直接 `Dispose` 父控件会漏掉订阅（`ModelChangeRelay`）与子控件 | 用 `DisposeChildren(parent)` 收尾 | `WorkflowNodeAttachment.DisposeChildren` |
-| 12 | 以为隐藏的视图会被 `Remove` | `ViewManager` 只把视图 `Visible = false` 留在画布 `Controls` 里（移除触发昂贵重排） | 遍历子控件时不能假设「看不见 = 不在」 | `ViewManager`（池化重排注释） |
+| 12 | 以为隐藏的视图会被 `Remove` | `ViewContainer` 只把视图 `Visible = false` 留在画布 `Controls` 里（移除触发昂贵重排） | 遍历子控件时不能假设「看不见 = 不在」 | `ViewHosting/ViewContainer.cs` |
 
 ---
 
@@ -59,28 +59,28 @@
 
 ### 3.2 加一个采样器
 
-1. `PlatformAdapters/Samplers/XxxSampler.cs`，`namespace VeloxDev.Adapters.NativeSamplers`，实现 `ISampler` 那几个方法（`PaddingSampler.cs` 是唯一先例）。
-2. 在 `PlatformAdapters/Interpolator.cs` 的静态构造里 `RegisterInterpolator(typeof(T), new XxxSampler());`。
-3. 要能被 `Transition` 面用上，可能需要在 `PlatformAdapters/Transition.cs` 加 `Property` 重载（先是泛型 `Property<TValue>` 兜底，其后是一组手写重载，`System.Numerics` 那几个在 `#if !NETSTANDARD2_0` 里）。
+1. `TransitionSystem/Samplers/XxxSampler.cs`，`namespace VeloxDev.Adapters.NativeSamplers`，实现 `ISampler` 那几个方法（`PaddingSampler.cs` 是唯一先例）。
+2. 在 `TransitionSystem/Interpolator.cs` 的静态构造里 `RegisterInterpolator(typeof(T), new XxxSampler());`。
+3. 要能被 `Transition` 面用上，可能需要在 `TransitionSystem/Transition.cs` 加 `Property` 重载（先是泛型 `Property<TValue>` 兜底，其后是一组手写重载，`System.Numerics` 那几个在 `#if !NETSTANDARD2_0` 里）。
 4. **必须**给 `Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.All` 加一条 `EntryFactory.Create<...>`：`SamplerCoverageTests` 会反射产品程序集里所有 `ISampler` 与注册表比对，**漏了就直接失败**。
 5. 闭式解怎么定、`SamplerRule` 该选哪个 —— 见 `memory/modules/TransitionSystem/extension.md`；采样器在本平台的行为差异见 `TransitionSystem/adapters/winforms.md`。
 
 ### 3.3 加一个主题转换器
 
-1. 在 `PlatformAdapters/ThemeValueConverters.cs` 里加一个 `IThemeValueConverter` 类（既有若干先例）。**按目标类型键，无需注册。**
+1. 在 `DynamicTheme/ThemeValueConverters.cs` 里加一个 `IThemeValueConverter` 类（既有若干先例）。**按目标类型键，无需注册。**
 2. 命名冲突要当场处理：本文件与 `System.Drawing` 多个同名类型共存，凡要用框架那个必须全限定（`System.Drawing.ColorConverter` / `System.Drawing.FontConverter` 就是被逼出来的写法）。
 3. 转换失败一律静默返回 `null` 是这家（也是 DynamicTheme）的刻意姿态，别改成抛。
 4. 验证方式：**这三个平台上没有 Theme demo**（`Examples/Theme/` 只有 Avalonia/WPF），只能自己起宿主验。
 
 ### 3.4 加一个 Win32 补偿
 
-1. 在 `Attached/Workflow/NativeWindowStyleHelper.cs` 加常量与方法（`internal static`，不对外）。
+1. 在 `WorkflowSystem/AttachedBehaviors/NativeWindowStyleHelper.cs` 加常量与方法（`internal static`，不对外）。
 2. `SetWindowLong` 的 index（普通样式 vs 扩展样式）不要凭常量值猜 —— 这家两个常量**值相同**（`WS_CLIPCHILDREN` / `WS_EX_COMPOSITED` 都是 `0x02000000`）。
 3. 至少加一个调用点，并想清楚「句柄还没建」的情况：`ApplyStyle` 只在位缺失时才动 `SetWindowPos`，而 `HandleCreated` 处有重挂（`EnsureClipChildren` / `EnsureComposited`）。
 
 ### 3.5 加一个附着行为（旧的静态 `Get`/`Set` 形态）
 
-1. `Attached/Workflow/WorkflowXxxBehavior.cs`，`namespace VeloxDev.WorkflowSystem.AttachedBehaviors;`，类写 `public static class`。
+1. `WorkflowSystem/AttachedBehaviors/WorkflowXxxBehavior.cs`，`namespace VeloxDev.WorkflowSystem.AttachedBehaviors;`，类写 `public static class`。
 2. `private sealed class XxxState` + `static readonly ConditionalWeakTable<Control, XxxState> States`（照 `WorkflowSurfaceBehavior` 的 `GetState`）。
 3. 每个属性一对 `public static T? GetXxx(Control element)` / `SetXxx(Control element, T? value)`；`element is null` 抛 `ArgumentNullException`（全模块一致）。
 4. 若宿主用**名字**指认目标控件，走 `FindControlByName` 那一套（私有，`WorkflowSlotLayoutBehavior.FindControlByName` —— 这家没有共享的名字解析工具）。
@@ -109,7 +109,7 @@
 
 ### 4.3 加一个采样器
 
-- [ ] `PlatformAdapters/Samplers/` 新文件 + `Interpolator` 静态构造注册
+- [ ] `TransitionSystem/Samplers/` 新文件 + `Interpolator` 静态构造注册
 - [ ] **`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.All`** —— 漏了会被 `SamplerCoverageTests` 反射比对直接判失败（`ExpectedAdapterAssemblies` 里必须有 `VeloxDev.WinForms`）
 - [ ] 若端点值在这个进程里造不出来 → 进 `UnreachableSamplers.All`（**可证伪**的登记，不是垃圾桶）
 - [ ] `AdapterSamplerEntries.cs` **不用改**（聚合器已经引用 `WinFormsEntries.All`）

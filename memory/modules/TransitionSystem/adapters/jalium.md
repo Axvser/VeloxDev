@@ -2,8 +2,8 @@
 
 > **读法**：契约与注册位置在 `memory/modules/TransitionSystem/extension.md`，本文不重复；
 > 人面向的「怎么写一个适配器」在 `skills/veloxdev-create-animation/references/adapter.md`，本文只指路不抄。
-> 本文只写这家的**硬限制、刻意背离、该家特有的坑**。代码在 `Src/Adapters/VeloxDev.Jalium/PlatformAdapters/`。
-> **路径写法**：下文的裸文件名（`Interpolator.cs`、`Samplers/RectSampler.cs` 等）都相对 `Src/Adapters/VeloxDev.Jalium/PlatformAdapters/`；引用 Core 或别家时一律写全路径。
+> 本文只写这家的**硬限制、刻意背离、该家特有的坑**。代码在 `Src/Adapters/VeloxDev.Jalium/TransitionSystem/`。
+> **路径写法**：下文的裸文件名（`Interpolator.cs`、`Samplers/RectSampler.cs` 等）都相对 `Src/Adapters/VeloxDev.Jalium/TransitionSystem/`；引用 Core 或别家时一律写全路径。
 
 ---
 
@@ -11,7 +11,7 @@
 
 契约要求的类一个不少（表见 extension.md §三·C）。这家唯一"有内容"的选择是**第七型参填 `DispatcherPriority`**（`TransitionScheduler.cs` 的 `TransitionScheduler`），与 WPF/Avalonia 同族。这个选择牵动的几处与 WPF 逐条同形：`CreateScheduler` 里测 `effect is ITransitionEffect<DispatcherPriority>`（`Interpolator.cs` 的 `CreateScheduler`；**这一处属 DynamicTheme 轴，在本家是休眠的** —— 它唯一的调用者是 `Src/Core/VeloxDev.Core/DynamicTheme/ThemeManager.cs` 的 `RunSwitch`，而全仓没有任何 Jalium 调用 `SetPlatformInterpolator`、`Examples/Theme/` 下也没有 Jalium）、宿主覆写 `InternalPriority`（`UIThreadInspector.cs` 的 `InternalPriority` 给 `Send`）、pacer 有真优先级可用（`TransitionInterpreter.cs` 的 `CreateFramePacer` 建 `DispatcherFramePacer`、`CreateTimer` 建带优先级的 `DispatcherTimer`）、`TransitionEffect.Priority` 给 `Render`（`TransitionEffect.cs` 的 `Priority`）。
 
-**这家的过渡层基本上是 WPF 的逐字副本**：`TransitionInterpreter.cs`（含 `DispatcherFramePacer` 的 `Arm`/`Disarm`/`Dispose`）与 `Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionInterpreter.cs` 除注释外逐字相同；`State.cs`、`TransitionScheduler.cs`、`TransitionEffects.cs`、`TransitionEffect.cs` 只换了 `using`。**⇒ 差异全部集中在采样器面与 `Property` 重载面；要给别家找跨平台范本，这两家等价，要理解 Jalium 只需要看那两处。**
+**这家的过渡层基本上是 WPF 的逐字副本**：`TransitionInterpreter.cs`（含 `DispatcherFramePacer` 的 `Arm`/`Disarm`/`Dispose`）与 `Src/Adapters/VeloxDev.WPF/TransitionSystem/TransitionInterpreter.cs` 除注释外逐字相同；`State.cs`、`TransitionScheduler.cs`、`TransitionEffects.cs`、`TransitionEffect.cs` 只换了 `using`。**⇒ 差异全部集中在采样器面与 `Property` 重载面；要给别家找跨平台范本，这两家等价，要理解 Jalium 只需要看那两处。**
 
 ### 1.1 采样器面：类与注册条数不等
 
@@ -25,7 +25,7 @@
 | 共有 | `Point`/`Rect`/`Thickness`/`CornerRadius`/`Size`/`Color`/`Brush`/`Transform` | 同 |
 
 - **三维面换了一个类型**：Jalium 用**一个聚合类型** `Jalium.UI.Media.Media3D.Transform3D`（反射 `Jalium.UI.Managed` 可证其存在）替掉 WPF 的 `Point3D` + `Vector3D` ⇒ 两家的三维动画**声明面不同形**（`Transition.cs` 的 `Property(Expression<Func<T, Jalium.UI.Media.Media3D.Transform3D?>>…)` 是 Jalium 的 `Transform3D` 重载，WPF 没有）。`Transform3DSampler.cs` 的 `RotateTransform3D` 轴守卫 + `Matrix3D` 回退就是为这个聚合类型付的代价。
-- **`Vector` 与 `Vector3D` 的类型存在、但没有采样器**：`Jalium.UI.Vector` 与 `Jalium.UI.Media.Media3D.Vector3D` 都反射得到（后者在 `Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 顶部还被 `using` 别名引用，说明可编译）。⇒ **Jalium 上 `Vector` / `Vector3D` 属性不可动画，这是缺口不是平台限制**，代码与注释里都没写理由。要补就照 WPF 的 `Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/VectorSampler.cs`：加注册 +（要声明就）加重载。
+- **`Vector` 与 `Vector3D` 的类型存在、但没有采样器**：`Jalium.UI.Vector` 与 `Jalium.UI.Media.Media3D.Vector3D` 都反射得到（后者在 `Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 顶部还被 `using` 别名引用，说明可编译）。⇒ **Jalium 上 `Vector` / `Vector3D` 属性不可动画，这是缺口不是平台限制**，代码与注释里都没写理由。要补就照 WPF 的 `Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/VectorSampler.cs`：加注册 +（要声明就）加重载。
 
 ### 1.2 `Property` 重载面：泛型 + 一批手写
 
@@ -68,9 +68,9 @@
 
 ### 2.4 有 dispatcher ⇒ 存活问它；但这家多一级兜底，且不接线 `Lifetime`
 
-- `UIThreadInspector.cs` 的 `ThreadFor` 是**四级链**：`target is DispatcherObject` → `Application.Current?.Dispatcher` → `Dispatcher.FromThread(Thread.CurrentThread)` → **`Dispatcher.MainDispatcher`**。最后一级是 WPF 没有的（WPF 的 `ThreadFor` 只兜到 `Dispatcher.FromThread`，`Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs` 的 `ThreadFor`）。
+- `UIThreadInspector.cs` 的 `ThreadFor` 是**四级链**：`target is DispatcherObject` → `Application.Current?.Dispatcher` → `Dispatcher.FromThread(Thread.CurrentThread)` → **`Dispatcher.MainDispatcher`**。最后一级是 WPF 没有的（WPF 的 `ThreadFor` 只兜到 `Dispatcher.FromThread`，`Src/Adapters/VeloxDev.WPF/TransitionSystem/UIThreadInspector.cs` 的 `ThreadFor`）。
 - 整段包在 `try` 里，异常兜底 `ThreadRef.None`（`UIThreadInspector.cs` 的 `ThreadFor` 的 `catch`）；按注释，`None` 只让这个目标失去 pacer（退回 `ArmNextFrame`），不抛。
-- `PostCore` 先看 `dispatcher.HasShutdownStarted` 再入队（`UIThreadInspector.cs` 的 `PostCore`）。⇒ **这家不接线 `Lifetime`、不覆写 `IsAlive`**，所以 `CanSetValue()` 恒为 true，真正的存活判据是 `HasShutdownStarted`。与 WPF 同一份守卫；对照：**Avalonia 有 dispatcher 却没有这道守卫**（`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/UIThreadInspector.cs` 的 `PostCore` 搜不到 `HasShutdownStarted`）。
+- `PostCore` 先看 `dispatcher.HasShutdownStarted` 再入队（`UIThreadInspector.cs` 的 `PostCore`）。⇒ **这家不接线 `Lifetime`、不覆写 `IsAlive`**，所以 `CanSetValue()` 恒为 true，真正的存活判据是 `HasShutdownStarted`。与 WPF 同一份守卫；对照：**Avalonia 有 dispatcher 却没有这道守卫**（`Src/Adapters/VeloxDev.Avalonia/TransitionSystem/UIThreadInspector.cs` 的 `PostCore` 搜不到 `HasShutdownStarted`）。
 - 入队用的是 `dispatcher.BeginInvoke(priority, action)`（`UIThreadInspector.cs` 的 `PostCore`），而 WPF/Avalonia 用 `InvokeAsync(action, priority)`。**这不是背离**：Jalium 的 `Dispatcher` 两套都有（反射 `Jalium.UI.Managed` 可证 `BeginInvoke(DispatcherPriority, Action)` 与 `InvokeAsync(Action, DispatcherPriority)` 都在），语义相同，只是命名。
 
 ### 2.5 csproj：独一家 `net10.0` 无平台后缀
@@ -85,9 +85,9 @@
 > **先给一个校准**：这一层的差异比看起来少。`TransitionScheduler` 是**非泛型空壳**（`TransitionScheduler.cs`，与 WPF/MAUI/WinForms/Razor 同，只有 Avalonia/WinUI 用 `TransitionScheduler<TTarget>`）；`TransitionEffect.Priority` 给 `DispatcherPriority.Render`（`TransitionEffect.cs` 的 `Priority`，与 WPF/Avalonia 同，WinUI 给 `DispatcherQueuePriority.High`）；`TransitionEffects` 的预置时长与六家逐字相同（`TransitionEffects.cs`）。下面只列真正的背离。
 
 1. **这里的注册表是七家里唯一的"同族双注册"，而且它的注释是错的。** `typeof(Brush)` 与 `typeof(SolidColorBrush)` 都指向 `BrushSampler`（`Interpolator.cs` 的静态构造）。`Interpolator.cs` 里的注释说这是**必须**的（"Exact-type lookup: register BOTH Brush and SolidColorBrush so brush properties declared as either type animate"）—— **这句与 Core 的查找规则不符**：查找是精确 → 基类由近及远 → 接口按名字序（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `TryGetInterpolator`），而 `SolidColorBrush : Brush`（反射可证：`SolidColorBrush → Brush → Animatable → …`），所以**只留 `typeof(Brush)` 那一行同样命中 `SolidColorBrush`**；第二行是冗余（但无害：两个 key 指向同一实例）。⇒ **别把这段注释当契约抄到别家，也别据此认为"Jalium 的查找和别家不同"。**
-2. **唯独这家把 3-D 面注册成一个聚合类型**：`Transform3D`（`Interpolator.cs` 的静态构造）+ `Samplers/Transform3DSampler.cs`，而 WPF 用 `Point3D` + `Vector3D`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/Point3DSampler.cs`、`Vector3DSampler.cs`）。⇒ 三维动画的**声明面在两家不同形**，没有可抄的关系；`Transform3DSampler` 里的轴守卫就是聚合类型的代价。
+2. **唯独这家把 3-D 面注册成一个聚合类型**：`Transform3D`（`Interpolator.cs` 的静态构造）+ `Samplers/Transform3DSampler.cs`，而 WPF 用 `Point3D` + `Vector3D`（`Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/Point3DSampler.cs`、`Vector3DSampler.cs`）。⇒ 三维动画的**声明面在两家不同形**，没有可抄的关系；`Transform3DSampler` 里的轴守卫就是聚合类型的代价。
 3. **这里的 `Property` 手写重载比别家少，而别家把 `System.Drawing` / `System.Numerics` 全铺了一遍。** 这不是"少写了"：泛型 `Property<TValue>` 覆盖它们（见 §1.2）。**唯一的实际差异是声明风格** —— 在 Jalium 上写 `Property(Expression<Func<T, System.Drawing.Point>>, ...)` 要走泛型，签名里显式写类型即可，没有别的后果。
-4. **没有第四条。** 另两处容易误判成背离的地方其实是共性，列在这里免去下一次比对：① 存活判据用 `HasShutdownStarted` 而不是 `Lifetime`/`IsAlive`，WPF 同款（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs` 的 `PostCore`），而 Avalonia 有 dispatcher 却没这道守卫；② `PostCore` 用 `BeginInvoke`、WPF/Avalonia 用 `InvokeAsync`，Jalium 两套 API 都在、语义相同（反射 `Jalium.UI.Managed`），只是命名。
+4. **没有第四条。** 另两处容易误判成背离的地方其实是共性，列在这里免去下一次比对：① 存活判据用 `HasShutdownStarted` 而不是 `Lifetime`/`IsAlive`，WPF 同款（`Src/Adapters/VeloxDev.WPF/TransitionSystem/UIThreadInspector.cs` 的 `PostCore`），而 Avalonia 有 dispatcher 却没这道守卫；② `PostCore` 用 `BeginInvoke`、WPF/Avalonia 用 `InvokeAsync`，Jalium 两套 API 都在、语义相同（反射 `Jalium.UI.Managed`），只是命名。
 
 ---
 

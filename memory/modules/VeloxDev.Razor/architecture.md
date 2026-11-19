@@ -1,8 +1,8 @@
 # VeloxDev.Razor — 架构
 
-> 代码：`Src/Adapters/VeloxDev.Razor/`（2026-10-06；`Attached/Workflow/` 是 `.cs` 与 `.razor` 两组文件，最大的 `.cs` 是
+> 代码：`Src/Adapters/VeloxDev.Razor/`（2026-10-06；`WorkflowSystem/AttachedBehaviors/` 是 `.cs` 与 `.razor` 两组文件，最大的 `.cs` 是
 > `WorkflowSurfaceBehavior.razor.cs`、`WorkflowMinimapOverlay.razor.cs`、`WorkflowNodeDragBehavior.razor.cs`；
-> `PlatformAdapters/` 有直子文件 + `Samplers/StringSampler.cs`；顶层 `GlobalUsings.cs`），
+> `TransitionSystem/` 有直子文件 + `Samplers/StringSampler.cs`；顶层 `GlobalUsings.cs`），
 > 另有 `_Imports.razor` 与 `wwwroot/veloxdev.workflow.js`、`wwwroot/veloxdev.workflow.css`。（`README.md` **已不存在** —— 树里没有这个文件，别再按它找 API 面。）
 > **计数写法**：`git ls-files Src/Adapters/VeloxDev.Razor | grep -c '\.cs$'`。别写 `'…/**/*.cs'` —— 这条 pathspec **不匹配目录本级**的
 > 文件，会漏掉 `GlobalUsings.cs`（七家适配器全都正好漏这处）。
@@ -23,12 +23,12 @@
 
 | 轴 | Core 契约 | 本项目落点 | 平台差异记在哪 |
 |---|---|---|---|
-| WorkflowSystem | 七个视图角色 | `Attached/Workflow/`（`.cs` + `.razor`）+ **`wwwroot/`** | `memory/modules/WorkflowSystem/adapters/razor.md` |
-| TransitionSystem | 宿主 / 解释器 / 调度器 / 采样器 | `PlatformAdapters/`（平台类型 + 一个采样器） | `memory/modules/TransitionSystem/adapters/razor.md` |
-| DynamicTheme | `IThemeValueConverter` | `PlatformAdapters/ThemeValueConverters.cs` | 条数清单在 `memory/modules/DynamicTheme/architecture.md` §六 |
+| WorkflowSystem | 七个视图角色 | `WorkflowSystem/AttachedBehaviors/`（`.cs` + `.razor`）+ **`wwwroot/`** | `memory/modules/WorkflowSystem/adapters/razor.md` |
+| TransitionSystem | 宿主 / 解释器 / 调度器 / 采样器 | `TransitionSystem/`（平台类型 + 一个采样器） | `memory/modules/TransitionSystem/adapters/razor.md` |
+| DynamicTheme | `IThemeValueConverter` | `DynamicTheme/ThemeValueConverters.cs` | 条数清单在 `memory/modules/DynamicTheme/architecture.md` §六 |
 
-**三条轴在程序集内互不引用**（与别家同形）：`Attached/` 下零 `Transition<T>` / `Interpolator` / `ThemeManager` 符号，
-`PlatformAdapters/` 下零 `Workflow` 符号。跨轴只能在宿主侧接线。
+**三条轴在程序集内互不引用**（与别家同形）：`AttachedBehaviors/` 下零 `Transition<T>` / `Interpolator` / `ThemeManager` 符号，
+`TransitionSystem/` 下零 `Workflow` 符号。跨轴只能在宿主侧接线。
 
 **不解决什么（常被误以为在这里）：**
 
@@ -165,25 +165,25 @@ settle 循环 → 回报 `surfaceReporters`。
 
 ---
 
-## 三、`PlatformAdapters/`：注册与工厂
+## 三、`TransitionSystem/`：注册与工厂
 
 | 要注册的东西 | 注册点 | 什么时候真的发生 |
 |---|---|---|
-| 唯一的采样器（`string`） | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs`） | 第一次构造 `Transition<T>` 时（Core 的字段初始化器 `new()`） |
+| 唯一的采样器（`string`） | `Interpolator` 的**静态构造**（`TransitionSystem/Interpolator.cs`） | 第一次构造 `Transition<T>` 时（Core 的字段初始化器 `new()`） |
 | 宿主/解释器/优先级 | `TransitionScheduler` 的类型实参（`TransitionScheduler.cs`） | 编译期写死 |
 | DynamicTheme 的调度器工厂 | `Interpolator.CreateScheduler` | 宿主必须显式调 `ThemeManager.SetPlatformInterpolator(new Interpolator())` |
 
 **没有程序集级入口，也没有 `Initialize()`**；唯一的静态构造就是 `Interpolator` 的静态构造。
 工厂写 `FindOrCreate` 而不是 `new`（`Interpolator.CreateScheduler`）—— 只有它会把调度器按 target 归档。
 
-**`Transition<T>` 的 `Property` 是逐类型手写的重载表**（`PlatformAdapters/Transition.cs`，首个重载是 `int` 版本；
+**`Transition<T>` 的 `Property` 是逐类型手写的重载表**（`TransitionSystem/Transition.cs`，首个重载是 `int` 版本；
 `#if !NETSTANDARD2_0` 块包住 `Vector2` / `Vector3` / `Vector4` / `Quaternion`，因本家只有一个 TFM 而**恒为真**）。后果与缺口（`long` 声明不出来、`decimal` 声明得出但无采样器）
 已经在 `memory/modules/TransitionSystem/adapters/razor.md` §二·3 写全，本文不重复 —— 只补一句：
 **在这家，漏登记采样器的症状是「写不出来」，不是别家的「运行期静默」**，因为那张表没有泛型兜底。
 
 ---
 
-## 四、`Attached/Workflow/`：没有附着属性系统，组件即行为
+## 四、`WorkflowSystem/AttachedBehaviors/`：没有附着属性系统，组件即行为
 
 XAML 那几家靠 `DependencyProperty.RegisterAttached` 把行为挂到任意元素上。Blazor 没有这套东西，
 所以这家的七个角色是**七个 Razor 组件**，靠 `[Parameter]` + `RenderFragment` 槽装配：
@@ -222,16 +222,23 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 **`WorkflowPresentation.cs`**（2026-10-04 新增）是给模板共用的展示助手：默认树调色板、XAML `#AARRGGBB` → CSS 颜色转换
 （`ToCss`）、通用输入/输出插槽切分；它住在适配器里而不是模板 code-behind，好让生成项目的 code-behind 只剩自己的旋钮。
 
+**`ViewPool` 是渲染器原生的视图池，不走 Core 的视图系统。** `WorkflowSystem/AttachedBehaviors/ViewPool.razor(.cs)` 只做
+「订阅 `INotifyCollectionChanged` → 按 `ItemsSource` 引用变化快照 → 用 `@key` 渲染 `ItemTemplate`」；
+diff、节点复用与生命周期全归 Blazor 渲染器。它**不接** Core 的 `ViewSourcePipelineCore` /
+`ViewPoolCore`（`Src/Core/VeloxDev.Core/WorkflowSystem/ViewHosting/`）：渲染器拥有组件实例、树成员
+与绑定态，适配器没有「创建视图实例再 Attach」的入口。三条不成立的契约（Factory / Container / Scheduler）
+见 `memory/modules/WorkflowSystem/adapters/razor.md` §二·7。**不要在这里补一套 `ViewHosting/` 的层。**
+
 ---
 
 ## 五、`GlobalUsings.cs`、`VeloxDev.Razor.csproj`
 
 **`GlobalUsings.cs` 三行，七个适配器逐字相同**（`global using` `VeloxDev.TransitionSystem` / `…Abstractions` / `VeloxDev.Threading`）——
 所以它不是这家的特征，别拿它当差异。注意 `VeloxDev.TransitionSystem.Abstractions` 是**在 `TransitionSystem/` 的文件里声明的命名空间**，
-不存在 `Abstractions/` 目录。它不含 `VeloxDev.WorkflowSystem`，于是 `Attached/` 里的文件各自写 `using VeloxDev.WorkflowSystem;`。
+不存在 `Abstractions/` 目录。它不含 `VeloxDev.WorkflowSystem`，于是 `AttachedBehaviors/` 里的文件各自写 `using VeloxDev.WorkflowSystem;`。
 `global using` 是编译期的，**不随包传给消费者**。
 
-**参数默认值要以代码为准**（这家没有 README，组件参数就是 API 面，见 `Attached/Workflow/` 下各组件的 `[Parameter]`）：
+**参数默认值要以代码为准**（这家没有 README，组件参数就是 API 面，见 `WorkflowSystem/AttachedBehaviors/` 下各组件的 `[Parameter]`）：
 它与 `WorkflowMinimapOverlay.ViewportFill` 的默认（`rgba(255,255,255,0.15)`，而模板写死 `transparent`，
 见 `Templates/adapters/razor.md` P4）这类地方容易各说各话。
 
@@ -269,7 +276,7 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
    「工作区缩放路径必须让 DOM 宿主长大」，但缩放路径走的是 `applyZoomSurface`；`scrollToPosition` 则由适配器**走模块导入**调（`_module.InvokeVoidAsync("scrollToPosition", …)`，`WorkflowSurfaceBehavior.OnAfterRenderAsync`）。`applySurfaceNavigation` 是 `Locate` 的落点（`CenterOnAsync` 调它），不在这几条里。⇒ 删这些之前先确认没有宿主在用它们 —— 它们是 `window.veloxdevWorkflow` 的公开面。
 5. **`ScrollViewerId` / `CanvasId` 之外，宿主还要给 `Minimap` 传一次同样的 id。** surface 的 id 只管自己，
    小地图要**再传一次** —— 两者是各自独立的参数，不是级联。
-6. **`WorkflowGeometryScope` 是 `AsyncLocal`，不是线程静态。** `Attached/Workflow/WorkflowGeometryScope.cs` 用
+6. **`WorkflowGeometryScope` 是 `AsyncLocal`，不是线程静态。** `WorkflowSystem/AttachedBehaviors/WorkflowGeometryScope.cs` 用
    `AsyncLocal<int>` 计深度，`IsZooming` 期间各几何写手自己让开（`WorkflowNodeDragBehavior.razor.cs`、`WorkflowSurfaceBehavior.OnNodePropertyChanged`）。
    ⇒ 一次缩放手势里所有 **await 之后仍在同一 `ExecutionContext`** 的代码都能读到它；但**放到 `Task.Run` 或另一个
    circuit 的线程上就读不到**。新增「缩放中让开」的写手时，先确认自己在那条 `AsyncLocal` 链上。
@@ -292,17 +299,17 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
 
 | 想改的东西 | 先打开 |
 |---|---|
-| 滚轮缩放、平移、滚动上报、边缘扩张、每帧原子提交 | `wwwroot/veloxdev.workflow.js` 的 `initSurface` / `applyZoomSurface` / `scheduleZoomSettle`，C# 侧是 `Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` |
+| 滚轮缩放、平移、滚动上报、边缘扩张、每帧原子提交 | `wwwroot/veloxdev.workflow.js` 的 `initSurface` / `applyZoomSurface` / `scheduleZoomSettle`，C# 侧是 `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.razor.cs` |
 | 缩放的枢轴与夹取顺序 | `WorkflowSurfaceBehavior.razor.cs` 的 `OnWheelZoom` —— 数学在 Core `WorkflowSurfaceMath` |
-| 节点拖拽的落点、包装盒尺寸、z-index | `Attached/Workflow/WorkflowNodeDragBehavior.razor(.cs)` |
-| 插槽连接的两阶段命令 | `Attached/Workflow/WorkflowSlotConnectionBehavior.razor(.cs)` |
+| 节点拖拽的落点、包装盒尺寸、z-index | `WorkflowSystem/AttachedBehaviors/WorkflowNodeDragBehavior.razor(.cs)` |
+| 插槽连接的两阶段命令 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.razor(.cs)` |
 | 槽位锚点回传与写回 | `WorkflowSlotLayoutBehavior.razor.cs`（`OnSlotLayoutBatch`）+ JS 的 `initSlotLayout` |
 | 标尺/网格装饰器 | `WorkflowGridDecorator.razor(.cs)`（模板侧的形状见 `Templates/adapters/razor.md`） |
 | 小地图外观与导航 | `WorkflowMinimapOverlay.razor(.cs)` + JS 的 `initMinimap` |
-| 视图池 | `ViewPool.razor(.cs)` |
+| 视图池（渲染器原生，不接 Core 视图系统 —— 理由见 `WorkflowSystem/adapters/razor.md` §二·7） | `ViewPool.razor(.cs)` |
 | 组件 ↔ DOM 的挂钩名 | `wwwroot/veloxdev.workflow.js` §2.3 那四张表 |
-| 线程、优先级、pacer、采样器 | `PlatformAdapters/` —— 差异与坑见 `TransitionSystem/adapters/razor.md` |
-| 主题字符串 → 值 | `PlatformAdapters/ThemeValueConverters.cs` |
+| 线程、优先级、pacer、采样器 | `TransitionSystem/` —— 差异与坑见 `TransitionSystem/adapters/razor.md` |
+| 主题字符串 → 值 | `DynamicTheme/ThemeValueConverters.cs` |
 | 包结构、TFM、双轨引用 | `VeloxDev.Razor.csproj` |
 | **宿主怎么把这些接起来（最小可读样本）** | `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/TreeView.razor`；完整版在 `Examples/Workflow/Blazor/Demo/Demo/Components/Pages/Workflow.razor` |
 
@@ -314,6 +321,8 @@ OnAfterRenderAsync(firstRender) → if (firstRender && IsEnabled) { import 模�
   `skills/veloxdev-create-workflow/references/view-layer.md`。
 - 这家的平台硬限制与逐条坑（服务端没有元素、几何往返、区域设置全量清单、`TryFind` 是线性扫描、
   两处注释与代码不符）—— `memory/modules/WorkflowSystem/adapters/razor.md`。
+- Core 的视图池为什么不接这家（Factory / Container / Scheduler 三条契约不成立）——
+  `WorkflowSystem/adapters/razor.md` §二·7。
 - TransitionSystem 侧为什么只有一个采样器、`Property` 手写表的两个缺口、circuit 级同步上下文、
   编组没有失败信号 —— `memory/modules/TransitionSystem/adapters/razor.md`。
 - 模板侧的形状、多个 `ToCss` 副本、双重 `GridDecorator` 命名、树模型自订阅 —— `memory/modules/Templates/adapters/razor.md`。

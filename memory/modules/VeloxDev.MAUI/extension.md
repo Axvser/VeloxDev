@@ -11,15 +11,15 @@
 
 | 想加的东西 | 落点 | 必须同步的地方 |
 |---|---|---|
-| 一个可动画类型 | `PlatformAdapters/Samplers/` 一个新类 + `Interpolator` 静态构造一行注册 | §三·1 |
-| 表达式形式的 `Property(...)` 重载 | `PlatformAdapters/Transition.cs` 的 `Transition<T>.Property` 重载组（Core 没有这张表，各家自写） | §三·1 |
-| 一个附着行为（第 8 个角色之类） | `Attached/Workflow/` 新文件，`namespace VeloxDev.WorkflowSystem.AttachedBehaviors` | §三·2 |
-| 链接层的视觉/几何 | `Attached/Workflow/WorkflowLinkOverlay.cs` | §三·3 |
-| 小地图的外观 | `Attached/Workflow/WorkflowMinimapOverlay.cs`（**继承它**，别改它） | §三·3 |
+| 一个可动画类型 | `TransitionSystem/Samplers/` 一个新类 + `Interpolator` 静态构造一行注册 | §三·1 |
+| 表达式形式的 `Property(...)` 重载 | `TransitionSystem/Transition.cs` 的 `Transition<T>.Property` 重载组（Core 没有这张表，各家自写） | §三·1 |
+| 一个附着行为（第 8 个角色之类） | `WorkflowSystem/AttachedBehaviors/` 新文件，`namespace VeloxDev.WorkflowSystem.AttachedBehaviors` | §三·2 |
+| 链接层的视觉/几何 | `WorkflowSystem/AttachedBehaviors/WorkflowLinkOverlay.cs` | §三·3 |
+| 小地图的外观 | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs`（**继承它**，别改它） | §三·3 |
 | 模型事件 → 宿主 | 绑 `WorkflowEvents.Node`/`.Slot`/`.Tree` | §三·2 |
-| 主题字符串 → 值 | `PlatformAdapters/ThemeValueConverters.cs` | §三·4（**仓库内无消费者**） |
+| 主题字符串 → 值 | `DynamicTheme/ThemeValueConverters.cs` | §三·4（**仓库内无消费者**） |
 | 视图池的模板选择 | 宿主侧 `ViewPool.TemplateSelector`（本模块只提供挂点） | §三·2 |
-| Windows 专属的一条能力 | `Attached/Workflow/*` 里的 `#if WINDOWS` 块 | §四·4 |
+| Windows 专属的一条能力 | `WorkflowSystem/AttachedBehaviors/*` 里的 `#if WINDOWS` 块 | §四·4 |
 
 ---
 
@@ -60,7 +60,7 @@
 
 ### 2.4 「把 `DataTemplate` 放进 `Resources`，让视图池按资源键找」
 
-**看着**：`ViewManager.FindDataTemplate` 曾有第三条路 `TryFindTemplateByResourceKey`（看起来会遍历 `_layout` 祖先与 `Application.Current.Resources`），所以「按 key 放模板」应该能用。
+**看着**：`ViewFactory.FindTemplate` 曾有第三条路 `TryFindTemplateByResourceKey`（看起来会遍历 `_layout` 祖先与 `Application.Current.Resources`），所以「按 key 放模板」应该能用。
 
 **错在哪**：那段是**死代码**（已于 2026-10-18 删除 —— 原 `resourceKey` 写死为 `null`，后面永远不可达）。视图池的模板**只能**来自 `TemplateSelector`（这与 `ViewPool.EnsureManager` 要求 `GetTemplateSelector(layout) is not null` 正好互证）。
 
@@ -101,16 +101,16 @@
 
 ### 3.1 新增一个「MAUI 类型可动画」
 
-1. **写采样器**：`PlatformAdapters/Samplers/XxxSampler.cs`，照 `PointFSampler.cs` 的形状 —— `NormalizeStart`/`NormalizeEnd` 原样返回，`InsertFrame` 里解**MAUI**的类型。值类型是引用型或带内部结构时，草稿放 `ref object? working`（`ShadowSampler.cs` 的复用形状），**不要把状态挂到采样器字段上**（注册表是进程级的）。
-2. **注册**：`PlatformAdapters/Interpolator.cs` 的静态构造加一行。**这一步唯一要核的是「键的类型 == 采样器里解的类型」** —— 本文件没有 `using System.Drawing`，所以短名天然取 MAUI 那一侧；要用 `System.Drawing` 的类型就**逐字全限定**（见 §2.1、`architecture.md` §五·1）。
-3. **（可选）表达式重载**：需要 `anim.Property(x => x.Xxx, value)` 有编译期类型约束时，在 `PlatformAdapters/Transition.cs` 加一段；不需要就靠第一个泛型 `Property<TValue>` 兜底。除 `Transform` 外，体都是「`state.SetValue` + 可选 `state.SetOptions`」两行。
+1. **写采样器**：`TransitionSystem/Samplers/XxxSampler.cs`，照 `PointFSampler.cs` 的形状 —— `NormalizeStart`/`NormalizeEnd` 原样返回，`InsertFrame` 里解**MAUI**的类型。值类型是引用型或带内部结构时，草稿放 `ref object? working`（`ShadowSampler.cs` 的复用形状），**不要把状态挂到采样器字段上**（注册表是进程级的）。
+2. **注册**：`TransitionSystem/Interpolator.cs` 的静态构造加一行。**这一步唯一要核的是「键的类型 == 采样器里解的类型」** —— 本文件没有 `using System.Drawing`，所以短名天然取 MAUI 那一侧；要用 `System.Drawing` 的类型就**逐字全限定**（见 §2.1、`architecture.md` §五·1）。
+3. **（可选）表达式重载**：需要 `anim.Property(x => x.Xxx, value)` 有编译期类型约束时，在 `TransitionSystem/Transition.cs` 加一段；不需要就靠第一个泛型 `Property<TValue>` 兜底。除 `Transform` 外，体都是「`state.SetValue` + 可选 `state.SetOptions`」两行。
 4. **验收登记**：`Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs` 里 `Entry<...>("XxxSampler", rule, start, end, selector, expected)` 补一条闭式解，并在私有 `Target` 类上补一条同类型属性。**不登记会红**：`SamplerCoverageTests.EveryShippedSampler_IsAccountedFor` 反射产品程序集里所有 `ISampler` 类，要求每个都在 `SamplerRegistry.Entries` 或 `UnreachableSamplers.All` 里。
 5. **驱动不起来的**（端点值要真 MAUI 运行时）：登记到 `Samplers/UnreachableSamplers.cs`（`SamplerType` + `RepresentativeValue` + `Reason` 的形状），再到 `Examples/Transition/AUTO TEST/Conformance/MauiConformance.cs` 补一条。**这条名册是可证伪的**：`EveryUnreachableSampler_NeedsAValueThatCannotBeBuiltHere` 会真去造那个值，造得出来测试就失败。
 6. **只在 MAUI 有的类型**（`PointF`/`SizeF`/`RectF`/`Shadow` 这一族）：只有本家要加这几步，别家不动。判据是**键的类型**，不是类名。
 
 ### 3.2 新增一个附着行为
 
-1. `Attached/Workflow/` 新文件，`namespace VeloxDev.WorkflowSystem.AttachedBehaviors;`（**不要**写 `using VeloxDev.WorkflowSystem;` —— 见 `architecture.md` §1.1）。
+1. `WorkflowSystem/AttachedBehaviors/` 新文件，`namespace VeloxDev.WorkflowSystem.AttachedBehaviors;`（**不要**写 `using VeloxDev.WorkflowSystem;` —— 见 `architecture.md` §1.1）。
 2. 声明 `IsEnabledProperty`（`typeof(bool)`、默认 **`false`**、`propertyChanged: OnIsEnabledChanged`）+ 一个**私有** `StateProperty`（放这个行为的每元素状态）。
 3. `OnIsEnabledChanged` 的门槛：`if (bindable is not <宿主类型> control) return;`，然后 `true → Attach` / 否则 `Detach`。宿主类型按需要选最窄的：`ContentView`（要给子树做坐标/尺寸的）、`View`（只碰自己的）、`Layout`（容器）。
 4. `Attach` 的第一行 **`Detach(control)`**（`WorkflowSurfaceBehavior.Attach`）；`Detach` 必须幂等（先 `-=` 所有事件，再清 `State`，最后 `ClearValue(StateProperty)`）。
@@ -130,13 +130,13 @@
 
 ### 3.4 新增一个主题转换器
 
-在 `PlatformAdapters/ThemeValueConverters.cs` 里实现 `IThemeValueConverter`（照 `DoubleConverter` 的形状），并记住：**本仓库没有任何消费者**（`architecture.md` §八）—— 加它、改它都跑不出症状，也没有 MAUI 主题 demo 可以验。别顺手把它当成「DynamicTheme 的 MAUI 适配器已就绪」的证据。
+在 `DynamicTheme/ThemeValueConverters.cs` 里实现 `IThemeValueConverter`（照 `DoubleConverter` 的形状），并记住：**本仓库没有任何消费者**（`architecture.md` §八）—— 加它、改它都跑不出症状，也没有 MAUI 主题 demo 可以验。别顺手把它当成「DynamicTheme 的 MAUI 适配器已就绪」的证据。
 
 ---
 
 ## 四、联动清单（漏一处通常不报错）
 
-1. **改任何一个公开类型名**（`ViewManager`、`ViewPool`、`WorkflowSurfaceBehavior`、`WorkflowMinimapOverlay`、`WorkflowLinkOverlay`、`WorkflowSlotLayoutBehavior`、`WorkflowNodeDragBehavior`、`WorkflowSlotConnectionBehavior`、`WorkflowEvents`）→ **七家各有一份同名类型，同在一个命名空间**（`architecture.md` §1.2）。漏改的症状只在「同时引用两家」的项目里出现（CS0433）。至少检查：`Src/Templates/VeloxDev.MAUI.Templates/working/content/` 下带 `assembly=VeloxDev.MAUI` 的 XAML、`Examples/Workflow/MAUI*/` 的 XAML、`skills/veloxdev-create-workflow/references/gui/maui.md`。
+1. **改任何一个公开类型名**（`ViewPool`、`ViewSourcePipeline`、`ViewFactory`、`ViewContainer`、`WorkflowSurfaceBehavior`、`WorkflowMinimapOverlay`、`WorkflowLinkOverlay`、`WorkflowSlotLayoutBehavior`、`WorkflowNodeDragBehavior`、`WorkflowSlotConnectionBehavior`、`WorkflowEvents`）→ **七家各有一份同名类型，同在一个命名空间**（`architecture.md` §1.2）。漏改的症状只在「同时引用两家」的项目里出现（CS0433）。至少检查：`Src/Templates/VeloxDev.MAUI.Templates/working/content/` 下带 `assembly=VeloxDev.MAUI` 的 XAML、`Examples/Workflow/MAUI*/` 的 XAML、`skills/veloxdev-create-workflow/references/gui/maui.md`。
 2. **改公开附着属性名** → 同上：模板包（各模板）、MAUI workflow demo 的 XAML、`ViewPool` 的 `ItemsSource`/`TemplateSelector` 用法，以及其它六家的同名属性。
 3. **加/删一个采样器类** → `Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs`（闭式解）或 `UnreachableSamplers.cs`（造不出端点值）+ `Conformance/MauiConformance.cs`（真 app 侧）。**覆盖率测试读的是产品程序集里的 `ISampler` 类型集合**，所以新类不被登记就一定红；反过来，登记表按**类名**取类型（`MauiEntries.Entry<TValue>` 的程序集限定反射）。
 4. **动 `#if WINDOWS`** → 记住本家有两个 TFM（中立 + windows），多处分支会编出**两份不同的实现**；而 demo 的 Windows TFM 是**条件的**（`Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj` 的 `IsOSPlatform('windows')`），非 Windows 机器上这些分支根本不参与编译。改完至少在一台 Windows 上编一次。
@@ -151,6 +151,6 @@
    顺带一条：`WorkflowSlotConnectionBehavior.SetIsDraggingConnection`（`public`）在**全仓库没有外部调用点** —— 它由内部置真/置假，别以为外部有人在用它。
 2. **两个 overlay 的不对称是有意的**：小地图**被推**（实现 `IWorkflowMinimapOverlay`，由 `UpdateMinimapOverlay` 写一组值），链接层**自己拉**（不实现任何 Core 接口，偏移从装饰器实例上绑）。给链接层加 Core 接口实现会牵动宿主 XAML 的绑定形态；把装饰器的值改成推给链接层则要新增一条写路径。**改之前先读 `architecture.md` §三·3。**
 3. **`WorkflowLinkOverlay.InputTransparent = true` 与它在 XAML 里的位置都是承重的**：这一层满屏盖在节点上，去掉 `InputTransparent` 会吞掉全部节点交互；z 序靠 XAML 位置。挪位置等于改层序。
-4. **`ViewManager` 把隐藏视图留在 `_layout.Children` 里**（只 `IsVisible=false` + `ZIndex=-100`，理由：移除会触发昂贵的 MAUI 重排）。想「清理一下」把它们 `Remove` 掉是在改性能特征，不是在整理。
+4. **`ViewContainer` 把隐藏视图留在 `_layout.Children` 里**（只 `IsVisible=false` + `ZIndex=-100`，理由：移除会触发昂贵的 MAUI 重排）。想「清理一下」把它们 `Remove` 掉是在改性能特征，不是在整理。
 5. **`Refresh` 的两道闸不能为了「让它一定生效」拆掉**：`IsEnabled` 那道保证没开开关时静默；`IsRefreshing` 那道记着「每次画布扩张级联多次 Refresh，正反馈减速螺旋」。
 6. **`ApplyVisibleRegion` 的 NaN 提前返回**不是防御性编程，是必需 —— 放进去会让整批 `VisibleItems` 被清空。任何一处 NaN 守卫都不要删。

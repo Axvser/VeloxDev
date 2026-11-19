@@ -6,28 +6,30 @@
 > **读法**：契约（七个视图角色、附着属性、注册位置、联动清单）在 `memory/modules/WorkflowSystem/extension.md` §3.9 与 §4.3，
 > 本文不重复；人面向的「怎么搭一个 WPF 工作流视图」在 `skills/veloxdev-create-workflow/references/gui/wpf.md`，
 > 逐角色职责表在 `skills/veloxdev-create-workflow/references/new-adapter.md` / `references/view-layer.md`。
-> 本文只写这家的**硬限制、刻意背离、该家特有的坑**。代码在 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/`。
-> **路径写法**：下文的裸文件名（`WorkflowSurfaceBehavior.cs`、`ViewManager.cs` 等）都相对 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/`；引用 Core 或别家时一律写全路径。
+> 本文只写这家的**硬限制、刻意背离、该家特有的坑**。代码在 `Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/`。
+> **路径写法**：下文的裸文件名（`WorkflowSurfaceBehavior.cs`、`ViewPool.cs` 等）都相对 `Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/`；引用 Core、`ViewHosting/` 子目录或别家时写全路径。
 
 ---
 
 ## 一、这家要写什么，为什么是这些
 
-WPF 把七个视图角色**一对一**落成一组实现（视图池拆成「挂点」与「管理器」），**没有任何一个角色被合并、也没有多出契约外的角色**：
+WPF 把七个视图角色**一对一**落成一组实现（视图池的挂点是 `ViewPool`，簿记在 Core 的 `ViewPoolCore`，平台层在 `WorkflowSystem/ViewHosting/`），**没有任何一个角色被合并、也没有多出契约外的角色**：
 
 | 角色 | 这家的实现 | 为什么是它 |
 |---|---|---|
 | 画布宿主 | `WorkflowSurfaceBehavior` | 附着属性入口，也是唯一持有 `SurfaceState` 的地方 |
 | 画布变换 | `WorkflowCanvasTransformBehavior` | 只是一个**值载体**（见坑 6） |
-| 视图池 | `ViewPool`（挂点）+ `ViewManager`（管理器） | 挂点在 XAML 上要能写，管理器要能按 `Panel` 存状态 |
+| 视图池 | `ViewPool`（挂点）+ `ViewSourcePipeline`（组合根，闭合 `ViewFactory` / `ViewContainer` / `ViewArranger` / `ViewScheduler` / `ViewDiagnostics` 等层） | 挂点在 XAML 上要能写；池、分批与复用归 Core，模板、容器与调度归这几层 |
 | 节点拖拽 | `WorkflowNodeDragBehavior` | |
 | 插槽连接 | `WorkflowSlotConnectionBehavior` | 只做两阶段命令派发，不做规则 |
 | 插槽布局 | `WorkflowSlotLayoutBehavior` | 测量 + 写 `slot.Anchor` |
 | 网格装饰器 / 小地图 | `WorkflowMinimapOverlay`（装饰器由模板/demo 提供并被 cast 成 `IWorkflowGridDecorator`，`WorkflowSurfaceBehavior.cs` 的 `UpdateGridDecorator`） | |
 
+**视图池的平台层在 `WorkflowSystem/ViewHosting/`**：`ViewFactory`（选择器 → 可视树 `Resources` → `Application.Resources`，`LoadContent()`，按运行时类型缓存）、`ViewContainer`（`Visibility.Collapsed` + `DataContext = null`，视图留在 `panel.Children`）、`ViewArranger`（no-op，模板绑 `Canvas.Left/Top/Width/Height`）、`ViewScheduler`（`Dispatcher.BeginInvoke(DispatcherPriority.Background)`）、`ViewLayerPolicy`（恒 0）、`ViewLinkLayer`（`IsActive=false`）、`ViewMeasureHost`（no-op）。默认池策略是 Core 的 `AdaptiveViewPoolPolicy`，没有固定参数的 `ViewPoolPolicy`。
+
 **为什么这家没有第八个角色**：WPF 的渲染层不需要额外托管——连线视图自己 `OnRender` 画（`Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/LinkView.xaml.cs`）。别家的额外文件都不是契约要求，是各家的平台补偿：MAUI 用 `WorkflowLinkOverlay` 换掉 `WorkflowCanvasTransformBehavior`（它不需要一个独立的变换载体，但需要一个链接层）；Avalonia 多一个 `PlatformDetection.cs`；WinForms 多一个 `NativeWindowStyleHelper.cs`（外加 `IWorkflowTemplateSelector` / `WorkflowTreeView` 等一整套基类）；Jalium 用 `WorkflowLinkBounds` 换掉 `WorkflowCanvasTransformBehavior`（渲染器按 `RenderSize` 盒裁剪的补偿，见 `adapters/jalium.md` §2.1；变换直接发在 `WorkflowSurfaceBehavior` 上）；Razor 的装饰器也在适配器里，且每个行为都是 `.razor` + `.razor.cs` 一对。
 
-**唯一与 WPF 逐文件同构的是 WinUI**（同名同分法）。这条的实际用处：**想把 WPF 的适配器结构照搬到某一家之前，先确认目标是 WinUI；对另外五家都搬不过去。**
+**视图管线与 WPF 逐文件同构的是 Avalonia**：两家的 `ViewHosting/` 都按同一组层拆分（`ViewFactory` / `ViewContainer` / `ViewArranger` / `ViewScheduler` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` / `ViewMeasureHost` / `ViewSourcePipeline`；Avalonia 另有一个固定参数的 `ViewPoolPolicy` 对照实现）。**其余六个表面角色仍与 WinUI 逐文件同构**——想把 WPF 的整个适配器结构照搬到别家之前，先确认目标是 WinUI；对另外五家都搬不过去。
 
 ---
 
@@ -63,7 +65,7 @@ maxH = GetHorizontalScrollMaximum(sv);   // WorkflowSurfaceMath.ScrollMax(Extent
 
 出现三处：缩放 `WorkflowSurfaceBehavior.cs` 的 `OnZoomPreviewMouseWheel`、被夹后重读同一分支、平移越边时 `OnCanvasPanMoved`。那里的注释写明了理由（「让 ScrollViewer 先认下可能刚被自动扩过的 extent，再读 max，否则枢轴落偏、下一 tick 再修一次漂移」）。
 
-**这条不能照抄到别家**：它依赖 WPF 的 layout 是同步可推进的。MAUI 的原生 extent 是**异步**重测的，那边必须 `await Task.Yield()` 两次（`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的注释）—— 在 MAUI 上写这个三连是无效动作。
+**这条不能照抄到别家**：它依赖 WPF 的 layout 是同步可推进的。MAUI 的原生 extent 是**异步**重测的，那边必须 `await Task.Yield()` 两次（`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的注释）—— 在 MAUI 上写这个三连是无效动作。
 
 ### 2.4 鼠标捕获的两处硬要求
 
@@ -95,9 +97,9 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 ### 2.8 分批建视图的前提是「有优先级队列」
 
-`ViewManager` 每次只造 3 个视图，然后 `Dispatcher.BeginInvoke(ProcessNextBatch, DispatcherPriority.Background)`（`ViewManager.cs` 的 `ScheduleNextBatchRender` / `ProcessNextBatch`，`batchSize = 3`），**再排下一批**。`Background` 的语义是「只在更紧急的消息处理完之后跑」，所以创建被摊进消息泵的空隙里。
+`ViewScheduler` 把每一批物化交给 `Dispatcher.BeginInvoke(DispatcherPriority.Background)`（`ViewHosting/ViewScheduler.cs`），批大小与时间预算由 Core 的 `AdaptiveViewPoolPolicy` 决定（初始 64 个 / 8ms，按吞吐与 pending 收敛到 8/12/16ms），**再排下一批**。`Background` 的语义是「只在更紧急的消息处理完之后跑」，所以创建被摊进消息泵的空隙里。
 
-这条**只在有 `DispatcherPriority` 的三家成立**。MAUI 的等价物用的是 16ms 一次的一次性定时器，它的注释把理由写得很直白：`// MAUI 没有 WPF 的 DispatcherPriority.Background`（`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/ViewManager.cs` 里 `BatchSize = 8` 与那个定时器）。WinForms 干脆没有分批（Jalium 的 `ViewManager` 现在也按 `DispatcherPriority.Background` 三个一批，与 WPF 同）;
+这条**只在有 `DispatcherPriority` 的三家成立**（WPF / Avalonia / Jalium 都是 `DispatcherPriority.Background`）。MAUI 的等价物用的是 16ms 一次的一次性定时器（`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewScheduler.cs`，Tick 自带 try）；WinForms 把批次交给 `Control.BeginInvoke`（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/ViewHosting/ViewScheduler.cs`），两者都是 `NonPriority`。WinUI 用 `DispatcherQueuePriority.Low`。批大小六家都走 Core 的 `AdaptiveViewPoolPolicy`（WPF 初始 64/8ms，不再是固定 3 个一批）;
 
 ### 2.9 自带手势的否决：按下在宿主隧道相路由一次，句柄存表面，节点/插槽只读
 
@@ -107,16 +109,16 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 ## 三、与其它六家的刻意背离
 
-1. **这家用原生 `PreviewMouseWheel` 拿滚轮，因此可以真的吃掉事件**：缩放那一支 `OnZoomPreviewMouseWheel` 挂在 `ScrollViewer` 的预览相上（`WorkflowSurfaceBehavior.cs` 的 `HookZoom` 装、受 `ZoomEnabled` 门控，末尾 `e.Handled = true`）；**普通（非 Ctrl）滚轮是另一支** `OnLinkPointerWheel`，挂在**宿主的预览相**上（`Attach` 装、`Detach` 卸，处理器就是 `OnLinkPointerWheel`；2026-10-11 起**置 `Handled`** —— 普通滚轮整笔改由适配器执行，见 [architecture.md §3.6](../architecture.md)）。普通这一支的相是 2026-10-06 换的：先前挂宿主的**冒泡**相 `MouseWheel`，实测两格滚轮 **0 行**到达 —— `ScrollViewer` 是宿主的**下代**，冒泡相里它先吃掉并标记 handled；改到预览相后 **2/2**。Avalonia 与 WinUI **没有** `PreviewMouseWheel`：Avalonia 的普通滚轮也挂在宿主的隧道相上（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `OnPointerWheel` 注册处），它的缩放那一支另挂 `ScrollViewer`（同文件的缩放挂接）。
+1. **这家用原生 `PreviewMouseWheel` 拿滚轮，因此可以真的吃掉事件**：缩放那一支 `OnZoomPreviewMouseWheel` 挂在 `ScrollViewer` 的预览相上（`WorkflowSurfaceBehavior.cs` 的 `HookZoom` 装、受 `ZoomEnabled` 门控，末尾 `e.Handled = true`）；**普通（非 Ctrl）滚轮是另一支** `OnLinkPointerWheel`，挂在**宿主的预览相**上（`Attach` 装、`Detach` 卸，处理器就是 `OnLinkPointerWheel`；2026-10-11 起**置 `Handled`** —— 普通滚轮整笔改由适配器执行，见 [architecture.md §3.6](../architecture.md)）。普通这一支的相是 2026-10-06 换的：先前挂宿主的**冒泡**相 `MouseWheel`，实测两格滚轮 **0 行**到达 —— `ScrollViewer` 是宿主的**下代**，冒泡相里它先吃掉并标记 handled；改到预览相后 **2/2**。Avalonia 与 WinUI **没有** `PreviewMouseWheel`：Avalonia 的普通滚轮也挂在宿主的隧道相上（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `OnPointerWheel` 注册处），它的缩放那一支另挂 `ScrollViewer`（同文件的缩放挂接）。
 ⇒ **接一家新平台先确认它有没有 preview/tunnel 阶段**；**没有隧道相时的解法不是「忍一丝」**（2026-10-11 起更正）：挂**滚动容器本身**确实会漏 —— `Handled` 在 `ScrollContentPresenter` 已经滚完之后才跑（WinUI 实测一格漏 74 DIP，且 `handledEventsToo` 也救不回来）；但挂**滚动容器的内容**（画布）就**一点不漏**，它在冒泡路径上早于 presenter，`Handled` 真的挡得住。WinUI 改挂画布后实测一格 74、与基线逐字相同（改前若照旧挂容器会是 148）。
 
-2. **空白判定里多一道按类名字符串识别连线的步骤**：`IsWorkflowLinkVisual` 判 `DataContext is IWorkflowLinkViewModel` **或** 类型名等于 `"BezierCurveView"`/`"PolylineCurveView"`（`WorkflowSurfaceBehavior.cs` 的 `IsWorkflowLinkVisual`，用在 `IsSurfaceBlankInteraction`）。七家里只有 WPF 与 Avalonia（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `IsWorkflowLinkVisual`）有这后一道类名判定；WinUI 的同名方法只判 `DataContext`（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `IsWorkflowLinkVisual`），Jalium 有独立的表面行为（`WorkflowSurfaceBehavior`）但它的空白判定只判 `DataContext`、没有按类名的白名单（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `IsNodeOrSlotVisual`），MAUI 完全不用空白判定（无 `IsSurfaceBlank*`）—— 它在 Windows 上走原生指针事件平移，其余平台才用 `PanGestureRecognizer`（`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 里 `PanGesture` 的创建处）。⇒ 类名白名单只有 WPF 与 Avalonia 吃，换名字就静默失效（WPF 上的生效前提另见坑 1）。
+2. **空白判定里多一道按类名字符串识别连线的步骤**：`IsWorkflowLinkVisual` 判 `DataContext is IWorkflowLinkViewModel` **或** 类型名等于 `"BezierCurveView"`/`"PolylineCurveView"`（`WorkflowSurfaceBehavior.cs` 的 `IsWorkflowLinkVisual`，用在 `IsSurfaceBlankInteraction`）。七家里只有 WPF 与 Avalonia（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `IsWorkflowLinkVisual`）有这后一道类名判定；WinUI 的同名方法只判 `DataContext`（`Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `IsWorkflowLinkVisual`），Jalium 有独立的表面行为（`WorkflowSurfaceBehavior`）但它的空白判定只判 `DataContext`、没有按类名的白名单（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `IsNodeOrSlotVisual`），MAUI 完全不用空白判定（无 `IsSurfaceBlank*`）—— 它在 Windows 上走原生指针事件平移，其余平台才用 `PanGestureRecognizer`（`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 里 `PanGesture` 的创建处）。⇒ 类名白名单只有 WPF 与 Avalonia 吃，换名字就静默失效（WPF 上的生效前提另见坑 1）。
 
-3. **网格装饰器不在适配器里**：WPF 只按名字找它、cast 成 `IWorkflowGridDecorator` 并回填 `ScrollOffset*`/`ContentOffset*`（`WorkflowSurfaceBehavior.cs` 的 `UpdateGridDecorator`），实现体由模板与 demo 提供（`Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-grid-decorator/TemplateClass.cs`）。只有 Razor（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowGridDecorator.razor`）与 WinForms（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowGridDecorator.cs`）把自家装饰器放进了适配器 —— **那是它们的背离，不是 WPF 少写了一个文件**。
+3. **网格装饰器不在适配器里**：WPF 只按名字找它、cast 成 `IWorkflowGridDecorator` 并回填 `ScrollOffset*`/`ContentOffset*`（`WorkflowSurfaceBehavior.cs` 的 `UpdateGridDecorator`），实现体由模板与 demo 提供（`Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-grid-decorator/TemplateClass.cs`）。只有 Razor（`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowGridDecorator.razor`）与 WinForms（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowGridDecorator.cs`）把自家装饰器放进了适配器 —— **那是它们的背离，不是 WPF 少写了一个文件**。
 
-4. **小地图的导航语义是「点哪哪成中心」**，不是「抓住视口块拖」。代码注释明写这是对齐 Jalium（`WorkflowMinimapOverlay.cs` 的 `OnMouseLeftButtonDown` 里 `// 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。`），Avalonia（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowMinimapOverlay.cs` 的 `OnMouseLeftButtonDown`）、WinUI（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowMinimapOverlay.cs` 的 `OnPointerPressedHandler`）、MAUI（`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowMinimapOverlay.cs` 的同一句）与 Razor 的 JS（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js` 的 `// MINIMAP — always-center navigation (matching the Jalium adapter).`）都是同一句。⇒ 这是**五家 + Razor JS 的一致行为**，不是 WPF 单独的选择；WPF 只是把「按下即中心」写成 `OnMouseLeftButtonDown` 里立刻 `NavigateToWorld` 再置 `_isDragging`，所以按下的一瞬视口就跳了。**唯一与之冲突的是一句注释**，见坑 3。
+4. **小地图的导航语义是「点哪哪成中心」**，不是「抓住视口块拖」。代码注释明写这是对齐 Jalium（`WorkflowMinimapOverlay.cs` 的 `OnMouseLeftButtonDown` 里 `// 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。`），Avalonia（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` 的 `OnMouseLeftButtonDown`）、WinUI（`Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` 的 `OnPointerPressedHandler`）、MAUI（`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` 的同一句）与 Razor 的 JS（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js` 的 `// MINIMAP — always-center navigation (matching the Jalium adapter).`）都是同一句。⇒ 这是**五家 + Razor JS 的一致行为**，不是 WPF 单独的选择；WPF 只是把「按下即中心」写成 `OnMouseLeftButtonDown` 里立刻 `NavigateToWorld` 再置 `_isDragging`，所以按下的一瞬视口就跳了。**唯一与之冲突的是一句注释**，见坑 3。
 
-5. **`Move` / `Replace` 两种集合变更不处理**：`ViewManager` 的 `switch` 只列 `Add`/`Remove`/`Reset`。WPF、Avalonia、WinUI、MAUI 四家都这样；**Jalium（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/ViewManager.cs` 的 `case NotifyCollectionChangedAction.Replace`）与 WinForms（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/ViewManager.cs` 的 `case NotifyCollectionChangedAction.Replace`）处理 `Replace`**。⇒ 若你在 WPF 上依赖「原地替换 `VisibleItems` 里的元素」来刷新视图，**不会刷新，也不会报错**；要走 `Reset` 或先删后加。
+5. **`Replace` 由 Core 的池处理**：六家现在都走 `ViewPoolCore`（`ViewPool.cs` 的 `OnCollectionChanged`），同一个 `switch` 处理 `Add`/`Remove`/`Replace`/`Reset`（`Replace` 先回收旧项再物化新项）；`Move` 被忽略，因为视图身份是条目引用。⇒ 在 WPF 上原地替换 `VisibleItems` 里的元素会刷新视图，不需要走 `Reset` 或先删后加。
 
 6. **`WorkflowCanvasTransformBehavior.Transform` 的变更回调是故意空的**（`WorkflowCanvasTransformBehavior.cs` 的 `OnTransformChanged`，注释：「这个属性只是通知载体；节点与连线视图各自在 XAML 里把自己的 `RenderTransform` 绑到它；宿主自身绝不能收到渲染变换」）。⇒ 别在这里补逻辑；它是被 `Apply` 写、被 XAML 绑定读的单向值通道。
 
@@ -181,9 +183,9 @@ notch6 同上
 
 2. **`WorkflowMinimapOverlay.RulerThickness` 这个 DP 在本文件里从未被读**：DP 注册在 `RulerThicknessProperty`，CLR 访问器是 `RulerThickness`，而 `RulerBand` 硬编码返回 0。真正把标尺厚度接上的是**网格装饰器**（`Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-grid-decorator/TemplateClass.cs` 的 `RulerBand => RulerThickness`）。⇒ 想让小地图也避让标尺，得先在这里把 `RulerBand` 换成读 DPs，而不是设一个没人读的 `RulerThickness`。
 
-3. **【注释与代码不符，跨文件】** `Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowMinimapOverlay.razor.cs` 的 XML 注释写着「Navigation is grab-the-block (**matching the other adapters**)」，但 Razor 自己的 JS 注释写着 `// MINIMAP — always-center navigation (matching the Jalium adapter)`（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js`），且 WPF/Avalonia/WinUI/MAUI 四家的 C# 注释全是 always-center。⇒ **错的是 Razor 的 C# 注释**，代码是 always-center。WPF 这边（`OnMouseLeftButtonDown`）的注释与代码一致，可以信。这正是「源码注释与代码矛盾时要显式标出」的样本：注释写的是「和别人一样」，而它说反了。
+3. **【注释与代码不符，跨文件】** `Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.razor.cs` 的 XML 注释写着「Navigation is grab-the-block (**matching the other adapters**)」，但 Razor 自己的 JS 注释写着 `// MINIMAP — always-center navigation (matching the Jalium adapter)`（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js`），且 WPF/Avalonia/WinUI/MAUI 四家的 C# 注释全是 always-center。⇒ **错的是 Razor 的 C# 注释**，代码是 always-center。WPF 这边（`OnMouseLeftButtonDown`）的注释与代码一致，可以信。这正是「源码注释与代码矛盾时要显式标出」的样本：注释写的是「和别人一样」，而它说反了。
 
-4. **Ctrl 判定用精确相等，不是 `HasFlag`**：`Keyboard.Modifiers != ModifierKeys.Control`（`WorkflowSurfaceBehavior.cs` 的 `OnZoomPreviewMouseWheel`，WinForms 同形：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `PreFilterMessage` 里 `Control.ModifierKeys == Keys.Control`，同样精确相等）；另外三家用 `HasFlag`：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `OnPointerWheel`、`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `OnSurfaceWheel`、`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 里 `KeyModifiers.HasFlag(...Control)` 那处。⇒ **Ctrl+Shift+滚轮在 WPF 与 WinForms 上不缩放，在这三家上缩放**；Jalium 的表面行为在 `ScrollViewer` 预览相上按 `e.KeyboardModifiers != ModifierKeys.Control` 处理（精确相等，与 WPF/WinForms 同侧，`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的缩放分支）；它的非 Trimmed demo 另有两处：窗口级 `Keyboard.Modifiers == ModifierKeys.Control`（精确相等，`Examples/Workflow/Jalium/Demo/MainWindow.cs`）与画布内 `NodeEditorSurface.OnZoomMouseWheel` 的 `HasFlag`（`Examples/Workflow/Jalium/Demo/Views/Workflow/NodeEditorSurface.cs`）。代码与注释里**没有**记录这是刻意还是遗漏 —— 别猜，按现状保留或统一都可以，但别以为七家一致。
+4. **Ctrl 判定用精确相等，不是 `HasFlag`**：`Keyboard.Modifiers != ModifierKeys.Control`（`WorkflowSurfaceBehavior.cs` 的 `OnZoomPreviewMouseWheel`，WinForms 同形：`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `PreFilterMessage` 里 `Control.ModifierKeys == Keys.Control`，同样精确相等）；另外三家用 `HasFlag`：`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `OnPointerWheel`、`Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `OnSurfaceWheel`、`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 里 `KeyModifiers.HasFlag(...Control)` 那处。⇒ **Ctrl+Shift+滚轮在 WPF 与 WinForms 上不缩放，在这三家上缩放**；Jalium 的表面行为在 `ScrollViewer` 预览相上按 `e.KeyboardModifiers != ModifierKeys.Control` 处理（精确相等，与 WPF/WinForms 同侧，`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的缩放分支）；它的非 Trimmed demo 另有两处：窗口级 `Keyboard.Modifiers == ModifierKeys.Control`（精确相等，`Examples/Workflow/Jalium/Demo/MainWindow.cs`）与画布内 `NodeEditorSurface.OnZoomMouseWheel` 的 `HasFlag`（`Examples/Workflow/Jalium/Demo/Views/Workflow/NodeEditorSurface.cs`）。代码与注释里**没有**记录这是刻意还是遗漏 —— 别猜，按现状保留或统一都可以，但别以为七家一致。
 
 5. **每个滚动 tick 都会全量重解析部件、并新建一个 `TranslateTransform`**：`ScrollViewer.ScrollChanged` → `Refresh(host)`（`OnScrollChanged`）→ `ResolveNamedControls`（先全部退订再逐个 `FindName` 重找重订）+ `ApplyLayout`（`new TranslateTransform(...)` 处，`WorkflowCanvasTransformBehavior.Apply` 写进去）。⇒ 滚动期间每个节点/连线模板绑定的那个变换实例都在被替换。**知道就好**：要在这里加缓存或改绑定时，先确认这个刷新不是必需的。
 
@@ -191,9 +193,9 @@ notch6 同上
 
 7. **插槽锚点用 `TranslatePoint` 换算到坐标宿主，再交给 Core 的换算函数**：`control.TranslatePoint(节点中心, coordinateHost)` 后调 `WorkflowSurfaceMath.SlotAnchorFromVisualCenter`（`WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`，注释解释了为什么是「世界 + ActualOffset」）。坐标宿主取不到时退回 `SlotAnchorFromNode`。⇒ 两种坐标系数值上不同源，**混用会得到系统性偏移**，选哪个取决于你测到的是哪个坐标系。
 
-8. **`ViewManager` 的池按运行时类型分桶，隐藏的视图留在 `panel.Children` 里不清树**：池是 `Dictionary<Type, Queue<FrameworkElement>>`（`ViewManager.cs` 的 `_viewPool`），复用前 `Visibility.Collapsed` + `DataContext = null`（`HideViewFor` / `ResetAllViews`）。`DataTemplate` 查找是三级回退 + 缓存（`AddOrReuseView` 调 `FindDataTemplate`：`TemplateSelector` → 视觉树 `Resources` → `Application.Resources`）。⇒ 「视图消失了但仍在树上」是设计；**不要用 `panel.Children.Count` 表示可见视图数**，用 `VisibleItems`。
+8. **池按运行时类型分桶，隐藏的视图留在 `panel.Children` 里不清树**：Core 的 `ViewPoolCore` 为每个运行时类型维护一个 `Queue<FrameworkElement>`；回收时 `ViewHosting/ViewContainer.cs` 的 `Deactivate` 置 `Visibility.Collapsed` + `DataContext = null`，`Detach` 是空实现。`DataTemplate` 查找在 `ViewHosting/ViewFactory.cs`：`TemplateSelector` → 可视树 `Resources` → `Application.Resources`，命中后按运行时类型缓存。⇒ 「视图消失了但仍在树上」是设计；**不要用 `panel.Children.Count` 表示可见视图数**，用 `VisibleItems`。
 
-9. **`ViewPool` 的管理器挂在 `ConditionalWeakTable<Panel, ViewManager>` 上，并在 `Panel.Unloaded` 时清理**（`ViewPool.cs` 的 `_managers`、`OnItemsSourceChanged` / `OnPanelUnloaded`）。⇒ 面板一旦被卸载，池与所有复用视图一起作废 —— 把工作流面板放进一个会被反复卸载/重建的容器（切换 Tab、`ContentControl` 换模板）时，每次都要重新付一遍建视图的成本。
+9. **`ViewPool` 的 system 挂在 `ConditionalWeakTable<Panel, ViewSourcePipeline>` 上，并在 `Panel.Unloaded` 时 `Dispose`**（`ViewPool.cs` 的 `_systems`、`Rebuild` / `OnPanelUnloaded`）。⇒ 面板一旦被卸载，池与所有复用视图一起作废 —— 把工作流面板放进一个会被反复卸载/重建的容器（切换 Tab、`ContentControl` 换模板）时，每次都要重新付一遍建视图的成本。
 
 10. **平移越边会主动扩张画布，因此平移中必须重读两次 max 并把 `PanStartOffset` 重设**（`WorkflowSurfaceBehavior.cs` 的 `OnCanvasPanMoved`）：`layoutChanged` 时先 `ApplyLayout` + 三连 `UpdateLayout` 再重读 max，并用**实际落地的偏移**（而非期望偏移）重置 `PanStart`/`PanStartOffset`。少这一步的表现是拖到边缘后指针「甩开」画布。这条的数学在 Core（`WorkflowSurfaceMath.ClampScrollOffset` 的 `extendRatio`，`OnCanvasPanMoved` 传的是 `DefaultPanExtendRatio`）。
 
@@ -210,9 +212,9 @@ notch6 同上
 
     **量这条时的两个坑**：(a) 先用 `ScrollTo*` 把偏移预设到别处再悬停 ⇒ 症状被掩盖（它依赖当时的偏移），要照真实用法从启动状态扫；(b) 合成光标（`SetCursorPos`）**必须**先 `SetWindowPos(HWND_TOPMOST)` + `SetForegroundWindow` 把窗口推到最前，否则一次都命不中、日志里连 `over ->` 都没有 —— 我第一次就是这样量到「0 次」的。
 
-    **别家（未核）**：WinUI 的 `ScrollViewer.BringIntoViewOnFocusChange` 默认同为 `true`，而这家也有同形的悬停取焦点 —— 由适配器做，取的是宿主 `UserControl` 而非连线视图（`host.Focus(FocusState.Pointer)`，`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `OnPointerMoved` / `RoutePointer` 与 `OnLinkPointerPressed`）⇒ 同一症状在 WinUI 上可能存在，实测前别断言没有。Avalonia 无此默认行为，同形的取焦点也在适配器（`FocusHoveredLink`，`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `FocusHoveredLink`），未见此症状。
+    **别家（未核）**：WinUI 的 `ScrollViewer.BringIntoViewOnFocusChange` 默认同为 `true`，而这家也有同形的悬停取焦点 —— 由适配器做，取的是宿主 `UserControl` 而非连线视图（`host.Focus(FocusState.Pointer)`，`Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `OnPointerMoved` / `RoutePointer` 与 `OnLinkPointerPressed`）⇒ 同一症状在 WinUI 上可能存在，实测前别断言没有。Avalonia 无此默认行为，同形的取焦点也在适配器（`FocusHoveredLink`，`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `FocusHoveredLink`），未见此症状。
 
-14. **`OnLinkKeyDown` 现在只吞 `Delete`，但别把它读成「画布不再丢键盘」。** 先前无条件 `e.Handled = true`（指针停在连线上时方向键、翻页键、空格一并被吞），2026-10-06 收窄成只在 `PlatformInput.Key.Delete` 上置（`WorkflowSurfaceBehavior.cs` 的 `OnLinkKeyDown`，置位在 `e.Key == PlatformInput.Key.Delete`；与 Avalonia 的「非 Delete 直接 `return`」（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `OnLinkKeyDown`）、Jalium 的「只吞 Delete」同形）。**实测（完整版 demo，悬停连线上按 PageDown）**：改前与改后视口都从 `0,0` 滚到 `0,437` —— `ScrollViewer` 是宿主的**下代**，冒泡相里它先处理，宿主再置 `Handled` 追不上它；被吞的从来只是继续往**宿主之上**（窗口级处理器）的那一段。所以这是一笔对齐（不再替宿主的窗口级键盘做决定），**不是**「画布对键盘整段无响应」的修复。
+14. **`OnLinkKeyDown` 现在只吞 `Delete`，但别把它读成「画布不再丢键盘」。** 先前无条件 `e.Handled = true`（指针停在连线上时方向键、翻页键、空格一并被吞），2026-10-06 收窄成只在 `PlatformInput.Key.Delete` 上置（`WorkflowSurfaceBehavior.cs` 的 `OnLinkKeyDown`，置位在 `e.Key == PlatformInput.Key.Delete`；与 Avalonia 的「非 Delete 直接 `return`」（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `OnLinkKeyDown`）、Jalium 的「只吞 Delete」同形）。**实测（完整版 demo，悬停连线上按 PageDown）**：改前与改后视口都从 `0,0` 滚到 `0,437` —— `ScrollViewer` 是宿主的**下代**，冒泡相里它先处理，宿主再置 `Handled` 追不上它；被吞的从来只是继续往**宿主之上**（窗口级处理器）的那一段。所以这是一笔对齐（不再替宿主的窗口级键盘做决定），**不是**「画布对键盘整段无响应」的修复。
 
 ---
 
@@ -224,10 +226,10 @@ notch6 同上
 
 | 事 | 落点 | 依据 |
 |---|---|---|
-| 命中 | 适配器先从命中元素的数据上下文解析出节点/插槽，解析不到才把这笔交给 Core 的共享曲线判定（`WorkflowSurfaceBehavior.RoutePointer` → `ResolveTarget`，回退到 `tree.HitTestVisibleLinks(x, y, input.HitRadius)`）；曲线判定被测的是视图发布的 `LinkCurve`（`PolylineCurveView.xaml.cs` 的 `PublishCurve`） | `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `RoutePointer`、`ResolveTarget`（回退就是 `tree.HitTestVisibleLinks`）；`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs` 的 `HitTest` / `HitTestVisibleLinks`；半径 `LinkHitTestEx.DefaultHitRadius = 6d` |
+| 命中 | 适配器先从命中元素的数据上下文解析出节点/插槽，解析不到才把这笔交给 Core 的共享曲线判定（`WorkflowSurfaceBehavior.RoutePointer` → `ResolveTarget`，回退到 `tree.HitTestVisibleLinks(x, y, input.HitRadius)`）；曲线判定被测的是视图发布的 `LinkCurve`（`PolylineCurveView.xaml.cs` 的 `PublishCurve`） | `Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `RoutePointer`、`ResolveTarget`（回退就是 `tree.HitTestVisibleLinks`）；`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs` 的 `HitTest` / `HitTestVisibleLinks`；半径 `LinkHitTestEx.DefaultHitRadius = 6d` |
 | 高亮 | 宿主/demo：连线视图订**自己** helper 的 `Input.PointerEntered` / `PointerExited`（`PolylineCurveView.xaml.cs` 的 `ResubscribeInput`），据 `HoveredLink` 写自己的 `IsHighlighted`（`OnPointerEntered` / `OnPointerExited`，读它换色见 `OnRender`）；Core 里没有 `ILinkHighlight` / `AutoHighlight` | `Examples/Workflow/WPF/Demo/Views/Workflow/PolylineCurveView.xaml.cs` 的 `ResubscribeInput` / `OnPointerEntered` / `OnPointerExited` / `OnRender` |
 | 悬停取焦点 | 适配器：`WorkflowSurfaceBehavior.FocusHoveredLink` 把焦点交给画线的那台控件，不可聚焦才退回宿主 | `WorkflowSurfaceBehavior.cs` 的 `FocusHoveredLink`；调用点是 `RoutePointer`（进入/移动/释放都经它）与 `OnLinkPointerExited` |
-| 右键菜单 | 适配器（表面）：按 `LinkMenuKey` 解析带键资源、订输入面 `Input.PointerPressed` 与树的 `LinkRemoved`、设 `DataContext` 后自己定位弹出 | `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `WireLinkMenu`（`Refresh` 调）、`ShowLinkMenu`、`UnwireLinkMenu`（`Detach` 调）；`LinkMenuKeyProperty` |
+| 右键菜单 | 适配器（表面）：按 `LinkMenuKey` 解析带键资源、订输入面 `Input.PointerPressed` 与树的 `LinkRemoved`、设 `DataContext` 后自己定位弹出 | `Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `WireLinkMenu`（`Refresh` 调）、`ShowLinkMenu`、`UnwireLinkMenu`（`Detach` 调）；`LinkMenuKeyProperty` |
 | 删除 | 菜单项绑 `Command="{Binding DeleteCommand}"`；Delete 键由**宿主**执行（库只把 `KeyDown` 路由过来），demo 订树 helper 的 `Input.KeyDown` 执行 `link.DeleteCommand` | `WorkflowView.xaml` 里 `MenuItem` 的 `Command="{Binding DeleteCommand}"`；`Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml.cs` 的 `HookLinkKeys` |
 
 **四条结论：**

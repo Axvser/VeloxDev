@@ -1,6 +1,6 @@
 ﻿# TransitionSystem — Razor (Blazor) 适配器
 
-> 代码：`Src/Adapters/VeloxDev.Razor/PlatformAdapters/`（项目名 `VeloxDev.Razor`，demo 目录却叫
+> 代码：`Src/Adapters/VeloxDev.Razor/TransitionSystem/`（项目名 `VeloxDev.Razor`，demo 目录却叫
 > `Examples/Transition/Blazor/` —— 这处命名不对称在 `Src/Adapters/` 与 `Examples/` 之间是既成事实，找东西时两边都要看）。
 > 契约与共性见 `../extension.md`、`../architecture.md`（帧与编组）。
 > **逐平台怎么写一个适配器**见 `skills/veloxdev-create-animation/references/adapter.md`，本文不重复。
@@ -19,7 +19,7 @@
 | `Transition<T>` | 逐类型手写的 `Property` 重载表 | 唯一要回答「用户能声明出什么」的地方，而这张表是手写的、因此有缺口（§二·3 末） |
 | `State` / `TransitionEffect` / `TransitionEffects` / `TransitionScheduler` / `TransitionInterpreter` | —— | `TransitionScheduler` 只是把三个型参绑好；**`TransitionEffect` 类体为空、连 `Priority` 都不声明**，靠 Core 非泛型基类已经实现好的 `ITransitionEffect<NonPriority>`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的 `TransitionEffectCore`）—— 这是「这家的 `TPriorityCore` = `NonPriority`」的必然结果，别等着一份优先级默认值；`TransitionInterpreter` 的类体为空**本身就是这家的核心决定**，见 §二·2 |
 
-`Transition<T>` 的 `where T : class`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Transition.cs` 的 `Transition<T>` 声明）不是随手加的约束，
+`Transition<T>` 的 `where T : class`（`Src/Adapters/VeloxDev.Razor/TransitionSystem/Transition.cs` 的 `Transition<T>` 声明）不是随手加的约束，
 它是这家的动画目标形状（§二·1）。
 
 ---
@@ -46,10 +46,10 @@
 
 **限制。** Blazor 没有一个在「渲染器自己的线程」上 tick 的定时器 —— 服务端根本没有渲染器线程，渲染发生在浏览器。
 `TransitionInterpreter` 的 XML 把这句写成了结论：`Deliberately without a frame pacer: Blazor has no timer that fires on
-the renderer's own thread.`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs` 的类 XML，类体为空）。
+the renderer's own thread.`（`Src/Adapters/VeloxDev.Razor/TransitionSystem/TransitionInterpreter.cs` 的类 XML，类体为空）。
 
 **这条「唯一」是有据可查的**：七家里六家都覆写了 `CreateFramePacer`（Avalonia / Jalium / MAUI / WPF / WinForms / WinUI
-各自的 `PlatformAdapters/TransitionInterpreter.cs`），**只有 Razor 没有** —— 它的那个文件里只有类声明。
+各自的 `TransitionSystem/TransitionInterpreter.cs`），**只有 Razor 没有** —— 它的那个文件里只有类声明。
 
 **由此产生的做法（这是本篇最该记住的一条链）。** 基类 `CreateFramePacer` 默认返回 `null`
 （`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs` 的 `CreateFramePacer`）→ `ArmNextFrame` 落到 `ReusableTimerWait`
@@ -69,14 +69,14 @@ therefore drifts to a pool thread after its first frame unless the host supplied
 ### 3. 浏览器里没有那些 CLR 类型 → 所以只注册 `string` 采样器（Q1）
 
 **事实。** 这家的静态构造只注册 `string` 采样器：`RegisterInterpolator(typeof(string), new StringSampler());`
-（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Interpolator.cs` 的静态构造里 `RegisterInterpolator(typeof(string), new StringSampler());`），`PlatformAdapters/Samplers/` 下也只有 `StringSampler`。
+（`Src/Adapters/VeloxDev.Razor/TransitionSystem/Interpolator.cs` 的静态构造里 `RegisterInterpolator(typeof(string), new StringSampler());`），`TransitionSystem/Samplers/` 下也只有 `StringSampler`。
 
 **先把「数量对比」这件事本身说准**（它比看起来更容易被误读）。别家注册的都是自己 GUI 框架里的一族类型，
-**WinForms 只注册 `Padding`，Razor 只注册 `string`**（各家 `PlatformAdapters/Interpolator.cs`
+**WinForms 只注册 `Padding`，Razor 只注册 `string`**（各家 `TransitionSystem/Interpolator.cs`
 静态构造里 `RegisterInterpolator` 的条数）。所以「采样器少」不是 Razor 独有 —— **WinForms 同样少**。
 但两者性质完全不同，这正是这条问题的答案：
 - WinForms 注册的是 `RegisterInterpolator(typeof(Padding), new PaddingSampler());`
-  （`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/Interpolator.cs` 的 `RegisterInterpolator(typeof(Padding), new PaddingSampler());`）—— `System.Windows.Forms.Padding`
+  （`Src/Adapters/VeloxDev.WinForms/TransitionSystem/Interpolator.cs` 的 `RegisterInterpolator(typeof(Padding), new PaddingSampler());`）—— `System.Windows.Forms.Padding`
   是**那个框架自己拥有的 CLR 类型**，只是 WinForms 的可动画面确实只剩它值得注册。
 - Razor 注册的是 `string` —— `string` **不是 Blazor 的类型**，它是**服务端把值送到浏览器去的唯一载体**。
 
@@ -90,7 +90,7 @@ therefore drifts to a pool thread after its first frame unless the host supplied
 Blazor 这一侧没有这样的类型：**没有任何「可写的元素属性」是 CLR 对象**，动画的产物是一段**字符串**（CSS / SVG 属性）。
 于是 `string` 是这家唯一有意义的平台类型，而字符串插值恰恰需要自己的数学 ——
 颜色要按 R/G/B 通道共用一条 `BoundedProgress` 进度、alpha 走自己的区间
-（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Samplers/StringSampler.cs` 的 `InterpolateColor`；
+（`Src/Adapters/VeloxDev.Razor/TransitionSystem/Samplers/StringSampler.cs` 的 `InterpolateColor`；
 `BoundedProgress` 本身在 Core：`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/BoundedProgress.cs`），
 非颜色串只能退化成**离散标记**：先判两端能不能解析成颜色，不能就挂 `DiscreteMarker`，起点保持到进度到 1 才换终点
 （同文件 `InsertFrame` 的离散分支与 `DiscreteMarker`）。
@@ -98,11 +98,11 @@ Blazor 这一侧没有这样的类型：**没有任何「可写的元素属性�
 这家 demo 的动画面就是「几个 double + 一个 CSS 颜色串」（`Examples/Transition/Blazor/Demo/Demo/Models/BoxModel.cs` 的 `Style` 属性），
 Core 注册的那一族本来就够。
 
-**由此得出的联动陷阱。** 这张表是**手写**的（`PlatformAdapters/Transition.cs` 里 `Transition<T>` 的逐类型 `Property` 重载），
+**由此得出的联动陷阱。** 这张表是**手写**的（`TransitionSystem/Transition.cs` 里 `Transition<T>` 的逐类型 `Property` 重载），
 而不是别家那种泛型 `Property<TValue>`，于是它的两个边缘各有一个坑（`../extension.md` §三·C 已记 `long`）：
 - **`long` 声明不出来**：Core 注册了 `LongSampler`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的静态构造），
   但这张手写表里没有 `long` 重载 → 在 Razor 上**根本写不出**这条路径，不是「写了不生效」而是「写不了」。
-- **`decimal` 声明得出来但不会动**：表里有 `decimal` 重载（`PlatformAdapters/Transition.cs` 的 `Property(Expression<Func<T, decimal>>…)`），
+- **`decimal` 声明得出来但不会动**：表里有 `decimal` 重载（`TransitionSystem/Transition.cs` 的 `Property(Expression<Func<T, decimal>>…)`），
   但 Core **从没注册过** decimal 采样器 → `Prepare` 走 `Warn(WarnStage.Unsampled, …)` 静默跳过。
   这一格在**六家都存在**（WPF/Avalonia/WinUI/MAUI/WinForms/Razor 的重载表都有 `decimal`；**只有 Jalium 没有**，它的 `Transition.cs` 里搜不到 `decimal`），不是 Razor 特有；写在这是因为手写表没有编译器帮你对账。
 
@@ -113,7 +113,7 @@ Core 注册的那一族本来就够。
 ### 4. `SynchronizationContext` 属于 circuit，不属于进程
 
 **限制。** 一个 Blazor Server 进程同时跑很多 circuit，每个 circuit 有自己的同步上下文。
-「UI 线程」在这家**不是一个进程级答案，而是「哪个 circuit 在问」**（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs` 的 `ThreadFor` remarks
+「UI 线程」在这家**不是一个进程级答案，而是「哪个 circuit 在问」**（`Src/Adapters/VeloxDev.Razor/TransitionSystem/UIThreadInspector.cs` 的 `ThreadFor` remarks
 把这句写死了）。
 
 **做法。** `ThreadFor` 返回**当前线程的 context 优先、首次捕获的兜底**（`ThreadFor`）；
@@ -148,7 +148,7 @@ Core 注册的那一族本来就够。
    `Transition` 的 `LateUpdate` 上，是因为目标就是被渲染的那个对象；这家必须由**用户代码**把
    `PropertyChanged` 桥接成重绘（§二·1），适配器给不了这个桥 —— 服务端进程里没有元素可读。
 2. **这里的做法是「接入契约的默认路径」而不是「覆写它」。** 别家覆写 `CreateFramePacer` 把循环钉在 UI 线程上；
-   这家**不覆写**（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs` 类体为空），
+   这家**不覆写**（`Src/Adapters/VeloxDev.Razor/TransitionSystem/TransitionInterpreter.cs` 类体为空），
    让循环按 Core 的默认落到线程池定时器
    （`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs` 的 `ArmNextFrame` 与 `FrameWait` 的漂移说明），
    再靠 `UIThreadInspector` 把每一帧编组回去。理由：Blazor 没有渲染线程定时器可用（§二·2）。

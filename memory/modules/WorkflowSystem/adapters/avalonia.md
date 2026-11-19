@@ -3,7 +3,7 @@
 > 连线交互规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)：输入是标准输入
 > （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），命中归 Core 的共享曲线判定，外观、删除与菜单的接线归宿主/适配器。
 >
-> 代码：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/`。
+> 代码：`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/`。
 > 契约、注册位置、七角色职责表在 `memory/modules/WorkflowSystem/extension.md` §3.9 与
 > `skills/veloxdev-create-workflow/references/view-layer.md`；「怎么搭一个工作流界面」在
 > `skills/veloxdev-create-workflow/references/gui/avalonia.md`。
@@ -20,7 +20,7 @@
 |---|---|---|
 | 画布宿主 | `WorkflowSurfaceBehavior`（`sealed class : AvaloniaObject`） | 附着公开属性与一个私有 `State`，命名控件靠 `control.FindControl<T>(name)` 解析 |
 | 画布变换 | `WorkflowCanvasTransformBehavior`（**`sealed class : AvaloniaObject`**） | WPF/WinUI 的同名类是 `static class`，这家不行 —— 理由在 §二.1 |
-| 视图池 | `ViewPool`（`sealed class : AvaloniaObject`）+ `ViewManager`（普通 `sealed class`） | `ViewPool` 要注册附着属性所以继承 `AvaloniaObject`；`ViewManager` 不是行为类、没有附着属性，所以不继承 |
+| 视图池 | `ViewPool` + `ViewSourcePipeline` + 九项层/策略（`WorkflowSystem/ViewHosting/`） | `ViewPool` 要注册附着属性所以继承 `AvaloniaObject`；九个平台层/策略不是行为类、没有附着属性，所以不继承 |
 | 节点拖拽 | `WorkflowNodeDragBehavior`（`sealed class : AvaloniaObject`） | 只认左键；位移在**坐标宿主空间**里算，不是 Canvas 空间 |
 | 插槽连接 | `WorkflowSlotConnectionBehavior`（`sealed class : AvaloniaObject`） | 按下发送、同元素上松开接收；按下后**主动释放指针捕获**，见 §三.3 |
 | 插槽布局 | `WorkflowSlotLayoutBehavior`（`sealed class : AvaloniaObject`） | **三条写回路径**，见 §三.5 |
@@ -89,7 +89,7 @@ IL 实测（11.1.0）：`LayoutManager.QueueLayoutPass()` → `MediaContext.Begi
 
 IL 实测：`Layoutable.OnAttachedToVisualTreeCore` 在挂树时订阅的是 `ILayoutManager.LayoutUpdated`（整棵树那条），再由每个 `Layoutable` 的私有处理器转发成自己的 `LayoutUpdated`；`LayoutManager.ExecuteLayoutPass` 的 IL 里，`InnerLayoutPass`（measure + arrange）跑完之后才 `EventHandler.Invoke` 那条事件。
 
-**这条要紧，因为代码注释把它归错了源头**：`WorkflowSlotLayoutBehavior.cs` 的 `OnLayoutUpdated` 上方注释写着「布局后同步回写（与 WinUI 家一致）：在渲染前读插槽中心，保证连线端点锚点与节点折叠同帧刷新，而不是迟一个 Dispatcher.Post(Render) 节拍（插槽漂移/闪烁的来源）」。而 WinUI 那边的注释（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSlotLayoutBehavior.cs` 的类文档）说的是**相反**的事：WinUI 的 `LayoutUpdated` 是**逐元素**的，可能在节点还没移到新位置时就读到旧的 Canvas 坐标，**WPF 免疫恰恰因为 WPF 的 `LayoutUpdated` 是整棵树一次**。
+**这条要紧，因为代码注释把它归错了源头**：`WorkflowSlotLayoutBehavior.cs` 的 `OnLayoutUpdated` 上方注释写着「布局后同步回写（与 WinUI 家一致）：在渲染前读插槽中心，保证连线端点锚点与节点折叠同帧刷新，而不是迟一个 Dispatcher.Post(Render) 节拍（插槽漂移/闪烁的来源）」。而 WinUI 那边的注释（`Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` 的类文档）说的是**相反**的事：WinUI 的 `LayoutUpdated` 是**逐元素**的，可能在节点还没移到新位置时就读到旧的 Canvas 坐标，**WPF 免疫恰恰因为 WPF 的 `LayoutUpdated` 是整棵树一次**。
 Avalonia 与 WPF 同族 → **同步写在 Avalonia 上成立的理由是 WPF 那条**，与「照 WinUI 抄」无关。抄形状可以，别抄错了理由；将来若有人按 WinUI 那段注释去「修正」Avalonia 的实现（例如改用坐标宿主的 `LayoutUpdated`），那是把 WPF 族当成 WinUI 族在改。
 
 ### 8. 命名控件解析：`FindControl<T>(name)`，以及为什么小地图要自己走视觉树
@@ -103,7 +103,7 @@ Avalonia 与 WPF 同族 → **同步写在 Avalonia 上成立的理由是 WPF �
 
 ### 9. 附着属性里塞对象当「每宿主状态」是这家的通用手法
 
-`State`（`SurfaceState` / `LayoutState` / `DragState`）都是各自的**私有附着属性**（`WorkflowSurfaceBehavior.cs` 的 `StateProperty`、`WorkflowSlotLayoutBehavior.cs` 的 `StateProperty`、`WorkflowNodeDragBehavior.cs` 的 `StateProperty`），因为行为类自身无实例、状态必须寄存在被附着的控件上。WPF 同形（WPF `WorkflowSurfaceBehavior.cs` 的 `StateProperty`）。**新写一家时跟着抄这个手法**，不要改用 `ConditionalWeakTable`（`ViewPool.cs` 的 `_managers` 那种用法是给「不需要在 XAML 里读到的管理器」用的，不是给行为状态用的）。
+`State`（`SurfaceState` / `LayoutState` / `DragState`）都是各自的**私有附着属性**（`WorkflowSurfaceBehavior.cs` 的 `StateProperty`、`WorkflowSlotLayoutBehavior.cs` 的 `StateProperty`、`WorkflowNodeDragBehavior.cs` 的 `StateProperty`），因为行为类自身无实例、状态必须寄存在被附着的控件上。WPF 同形（WPF `WorkflowSurfaceBehavior.cs` 的 `StateProperty`）。**新写一家时跟着抄这个手法**，不要改用 `ConditionalWeakTable`（`ViewPool.cs` 的 `Systems` 那种用法是给「不需要在 XAML 里读到的管理器」用的，不是给行为状态用的）。
 
 ### 10. 四个自带手势的否决：按下在**隧道相**路由一次，句柄存在表面状态里
 
@@ -120,7 +120,7 @@ Avalonia 与 WPF 同族 → **同步写在 Avalonia 上成立的理由是 WPF �
 
 | 认左键 + 中键 | 只认左键 |
 |---|---|
-| Avalonia（`ShouldStartPan`）、WinUI（`VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的平移起手判定，逐字同形） | WPF（`if (e.ChangedButton != MouseButton.Left) return;`） |
+| Avalonia（`ShouldStartPan`）、WinUI（`VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的平移起手判定，逐字同形） | WPF（`if (e.ChangedButton != MouseButton.Left) return;`） |
 
 **要注意的不是「Avalonia 特别」，而是「WPF 不是唯一参照」**：这家的形态与 WinUI 一致，代码与注释都没写理由（CAD/地图类界面把中键当平移是惯例）。副作用是：中键平移到一半、左键随便点一下，`IsPanStillActive` 仍为真，平移不会中断。**别按 WPF 那份去「修正」成只认左键** —— 先决定要哪一派。
 
@@ -165,15 +165,34 @@ WPF 那份是 `PreviewMouseLeftButtonDown/Up` + 两个处理器都 `e.Handled = 
 
 ### 6. 模板查找的第三级是 `Application.Current.DataTemplates`
 
-`ViewManager.FindDataTemplate` 顺序：`_templateMap`（按 ViewModel 类型缓存）→ `TemplateSelector.Match` → 面板自己的 `DataTemplates` → **沿 `Parent` 链往上逐个控件的 `DataTemplates`** → `Application.Current.DataTemplates`。
-WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 匹配的 `DataTemplate`（WPF `ViewManager.cs` 的 `FindDataTemplate` 资源回退）。
+`ViewFactory.FindTemplate` 顺序：`_templates`（按 ViewModel 类型缓存）→ `TemplateSelector.Match` → 面板自己的 `DataTemplates` → **沿 `Parent` 链往上逐个控件的 `DataTemplates`** → `Application.Current.DataTemplates`。
+WPF 的 `ViewFactory.FindTemplate` 第三级是**扫 `Application.Current.Resources`** 找 `DataType` 匹配的 `DataTemplate`（WPF `ViewHosting/ViewFactory.cs` 的资源回退）。
 
 **这里的做法和其他家不一样，因为 Avalonia 有 `Application.DataTemplates` 这个有序集合，而 WPF 没有**（WPF 的隐式模板走资源查找）。所以这家的「Self > Parent > App」三级是平台提供的结构，不是自创层级。
 
 ### 7. 视图池 batching 与 WPF **相同**（记下来免得重复查）
 
-`batchSize = 3` + `DispatcherPriority.Background`（`ViewManager.cs` 的 `ProcessNextBatch` 与 `ScheduleNextBatch`）与 WPF 逐字一致（WPF `ViewManager.cs` 同两处）；WinUI 是 3 + `DispatcherQueuePriority.Low`，MAUI 是 8 + 自己的 `IDispatcherTimer`。
-另：`ViewPool` 的清理只在 `DetachedFromVisualTree`（`ViewPool.cs` 的 `OnItemsSourceChanged` / `OnPanelDetached`），WPF 用 `Unloaded` —— **同形，不是本家差异**；管理器放 `ConditionalWeakTable`（`ViewPool.cs` 的 `_managers`）两家也一样。
+默认是 Core 的 `AdaptiveViewPoolPolicy`（初始 64/8ms，按吞吐收敛到 8/12/16ms）；固定 `ViewPoolPolicy` 是 1024/16ms 的对照。六家默认都用 `AdaptiveViewPoolPolicy`，区别只在 `ViewScheduler.BatchPriority`：WPF/Avalonia/Jalium 是 `DispatcherPriority.Background`，WinUI 是 `DispatcherQueuePriority.Low`，WinForms 走 `Control.BeginInvoke`、MAUI 走 16ms 一次性 `IDispatcherTimer`（两者都是 `NonPriority`）。
+`ViewPool` 在 `DetachedFromVisualTree` 时 `Dispose` system 并摘处理器；管理器放 `ConditionalWeakTable`（`ViewPool.cs` 的 `Systems`）。
+
+### 8. Core 视图系统：`ViewPool` + 九项
+
+- `ViewPool`（`ViewPool.cs`，附着属性 `ItemsSource` / `TemplateSelector`）只负责重建/销毁 `ViewSourcePipeline`；后者在 `WorkflowSystem/ViewHosting/` 继承 Core 的 `ViewSourcePipelineCore<Panel,Control,IWorkflowViewModel,DispatcherPriority,…>`，组合全部层与策略。
+- **五个必选层**（`WorkflowSystem/ViewHosting/`）：
+  - `ViewFactory`：选择器 → 面板 `DataTemplates` → 父链 → `Application.DataTemplates`，按类型缓存；
+  - `ViewContainer`：用 `HashSet<Control>`（引用比较）做 O(1) 去重挂载，不再 `Children.Contains`；`Activate` 设 `DataContext` + 可见，`Deactivate` 置空 + 隐藏，`Detach` 不摘树，`SetZOrder` 空实现（模板绑 z），`Destroy` 摘树并移出集合；
+  - `ViewArranger`：no-op（节点/连线模板自己绑几何）；
+  - `ViewScheduler`：`DispatcherPriority.Background` + `Dispatcher.UIThread.Post`；
+  - `ViewDiagnostics`：`Debug.WriteLine`。
+- **四个策略/服务层**：
+  - 默认池策略用 Core 的 `AdaptiveViewPoolPolicy`（初始 64/8ms，按吞吐收敛）；`ViewPoolPolicy` 保留为固定 1024/16ms 的对照；
+  - `ViewLayerPolicy`：`GetZOrder` 恒 0；
+  - `ViewLinkLayer`：`IsActive=false`，连线仍由主池逐条物化；
+  - `ViewMeasureHost`：no-op（布局 pass 自己量）。
+- 引擎处理 `Replace`；模板缺失时 `ViewFactory.CreateView` 返回 `null`，按 ViewModel 类型缓存到 system 销毁为止；因此**换模板必须重建 system** —— `ViewPool` 的两个附着属性任一变化都会 `Cleanup` + 重建。
+- Avalonia Trimmed 与全量 demo 都用 `behaviors:ViewPool.*`；全量 demo 没有 `TemplateSelector`，走面板 `DataTemplates` 的 fallback。
+- 这些类都是 **`public sealed`**，不是 `internal`；类名不带平台前缀（`ViewFactory` / `ViewContainer` / `ViewSourcePipeline` …），与 Core 的 `ViewSourcePipelineCore` 形成「Core 泛型 → 适配器短名」的关系。
+- 分层清单、不变量与新增平台步骤见 [../view-hosting.md](../view-hosting.md)。
 
 ---
 
@@ -232,7 +251,7 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
    - **未验证**：Avalonia 里滚动条（Thumb）按下时是否会把 `PointerPressed` 标成已处理、从而根本到不了 `OnPointerPressed`（这家是 `+=` 注册、默认不接收已处理事件）。若会，这条就不会触发；若不会，点击滚动条会**同时**启动一次画布平移。**下一个动这块的人应该先用一次实测把它定下来**，别按 WPF 的结论直接补排除。
 3. **拖拽手柄必须有不透明背景，否则收不到指针事件。** `Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/NodeView.axaml` 里拖拽用的 Grid 带 `Background="Transparent"`；插槽视图 `Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/SlotView.axaml` 用 `Background="#01000000"`（近透明，仍参与命中测试）。空背景的 `Grid`/`Panel` 在 Avalonia 里不做命中测试 —— 这与 `memory/modules/WorkflowSystem/…` 里「XAML node drag header needs Background="Transparent"」是同一件事，属平台硬限制，不是 demo 的随手写法。
 4. **`IsScrollInertiaEnabled="False"`**（demo 的 `PART_ScrollViewer`，`Examples/Workflow/Avalonia Trimmed/Demo/Demo/Views/Workflow/TreeView.axaml`）：这家自建了完整的平移逻辑（`WorkflowSurfaceBehavior` 的 `IsPanning`/`PanStartOffset`），滚动惯性会与它抢同一组指针事件。抄 demo 时别把这一行删了。
-5. **`_templateMap` 按 ViewModel 类型永久缓存模板**（`ViewManager.cs` 的 `FindDataTemplate`），后来才加进 `Application.DataTemplates` 的模板不会被重新解析；同类型换模板（例如主题切换换掉 DataTemplate）也不会生效。这不是 bug 而是缓存策略，但改模板相关行为时要知道它在那儿。
+5. **`ViewFactory._templates` 按 ViewModel 类型永久缓存模板**（`ViewFactory.FindTemplate`），后来才加进 `Application.DataTemplates` 的模板不会被重新解析；同类型换模板（例如主题切换换掉 DataTemplate）也不会生效。换模板必须重建 `ViewPool` 的 system。
 6. **`WorkflowSurfaceBehavior` 的刷新是 `ScrollChanged` 驱动的**：`OnScrollChanged` → `Refresh(host)` → `UpdateVisibleRegion`，而 `UpdateVisibleRegion` 每次都会写 `viewModel.Layout.ViewportOffset`。**`Viewport` 是画布局部坐标、只有适配器写它**这条契约（`extension.md` §3.9-3）在这家由这一处落地；不要在别处再写一次 `Viewport`。
    2026-10-03 起 `Refresh` 里还多了一对：`CaptureViewportRestore`（在 `UpdateVisibleRegion` **之前**取
    `Layout.ViewportOffset`）+ `QueueViewportRestore`（末尾 `Dispatcher.UIThread.Post(…, DispatcherPriority.Loaded)`，
@@ -242,7 +261,7 @@ WPF 那份的第三级是**扫 `Application.Current.Resources`** 找 `DataType` 
 8. **`TranslatePoint` 在这家返回 `Point?`**（未挂到同一视觉树根时为 null）。所有测量点都要处理 null：`WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`（有坐标宿主时）与同方法的回退分支（`SlotAnchorFromNode`）。**别把这两条回退路径合成一条**：前者用 `SlotAnchorFromVisualCenter` + 宿主 `CanvasLayout`，后者用 `SlotAnchorFromNode`，坐标系不同（`extension.md` §3.9-5 要求按测量到的坐标系三选一）。
 9. **`SyncSlot` 在 `Bounds` 未测量时直接返回**（`WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`：`control.Bounds.Width <= 0 || control.Bounds.Height <= 0`）。这是这家版的「NaN 锚点 = 未测量」门（Core 那边是 `WorkflowSlotUpdateGate`）；**不要**在这里改成「用 0 兜底」，那会让连线先在节点原点画一帧再跳走。
 
-10. **池建视图时传的是 VM，不是 `null` —— 传 `null` 会让自定义 `IDataTemplate` 选择器整个失效。** 那一行现在是 `template?.Build(viewModel)`（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/ViewManager.cs` 的 `AddOrReuseView`，2026-09-25 从 `Build(null)` 改来）。原因：Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的若是个**选择器**，轮到 `Build` 时才是它挑内层模板的时候；传 `null` 它无从下手（`workflow-template-selector` 的 `SelectTemplate(null)` 抛 `InvalidOperationException`）⇒ **视图一个都不建、画布空着、不报错**。实测（Avalonia Trimmed demo，装记录仪）：`Build(null)` 时 5 次 Build 全失败（1 条连线 + 4 个节点，正好对应基线的 4 张卡），截图是空画布；改成传 VM 后日志为 `Build NodeViewModel -> NodeView`×4 与 `Build LinkDefaultViewModel -> LinkView`，卡片回来。**别把它「简化」回 `Build(null)`** —— 其余三家（WPF/WinUI/MAUI）没有这个问题，因为它们的 `DataTemplateSelector` 只负责「选」，建由适配器 `LoadContent()`/`CreateContent()` 做。
+10. **建视图时传的是 VM，不是 `null` —— 传 `null` 会让自定义 `IDataTemplate` 选择器整个失效。** 那一行是 `template?.Build(item)`（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/ViewHosting/ViewFactory.cs` 的 `CreateView`）。原因：Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的若是个**选择器**，轮到 `Build` 时才是它挑内层模板的时候；传 `null` 它无从下手（`workflow-template-selector` 的 `SelectTemplate(null)` 抛 `InvalidOperationException`）⇒ **视图一个都不建、画布空着、不报错**。**别把它「简化」回 `Build(null)`** —— 其余三家（WPF/WinUI/MAUI）没有这个问题，因为它们的 `DataTemplateSelector` 只负责「选」，建由适配器 `LoadContent()`/`CreateContent()` 做。
 
 11. **Android 头那一行 `AndroidEnableProfiledAot` 会把整个解决方案的 Debug 构建挡在门外。**
    `Examples/Workflow/Avalonia Trimmed/Demo/Demo.Android/Demo.Android.csproj` 的 `AndroidEnableProfiledAot` 一旦无条件设为 `true`，就让 Android SDK 在**求值阶段**就打开 AOT（`Microsoft.Android.Sdk.Windows/36.1.69/targets/Microsoft.Android.Sdk.Aot.targets` 里那段以 `'$(AotAssemblies)' == 'true'` 为条件的 `ImportGroup`），于是去解析 `Microsoft.NET.Runtime.MonoAOTCompiler.Task` 与 `Microsoft.NETCore.App.Runtime.AOT.Cross.android-*`；工作负载不全的机器上解不出来，**`dotnet build VeloxDev.slnx` 连 MSBuild 求值都过不去**（错误挂在 `Microsoft.Android.Sdk.Aot.targets` 上，看着像环境问题，其实是这一行）。**全仓只有这一处设了它**（`grep AndroidEnableProfiledAot` 只有这一行）。现在带上 `Condition="'$(Configuration)' == 'Release'"` —— Debug 不需要 AOT。

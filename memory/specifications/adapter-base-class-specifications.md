@@ -130,7 +130,7 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 5. **模板与 Trimmed demo 同时改成派生**（同一笔；只改一边等于没改）。
 6. **跑校验脚本**（见 §四）。
 
-**worked example**：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/` 下五个基类
+**worked example**：`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/` 下五个基类
 （`WorkflowTreeView` / `WorkflowNodeView` / `WorkflowSlotView` / `WorkflowMinimapOverlay`，加连线的 `WorkflowLinkAttachment`），
 对应模板 1095→52、790→404、379→22、346→21、325→22 行。
 
@@ -166,7 +166,7 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 | **WinForms** | 四项有基类（grid-decorator / minimap-overlay / template-selector / tree-view）；**link / node / slot 三项改为附加助手**（2026-10-04，见 §2.1.1） | —— |
 | **Jalium** | **本规范不再适用于它**（2026-10-05 移出 §一）：它改成标记驱动，与 WPF / Avalonia / WinUI / MAUI 同一形态 | —— |
 
-**WinForms 的七个基类**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`）与它们把模板压到的行数：
+**WinForms 的七个基类**（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`）与它们把模板压到的行数：
 `WorkflowTreeView` 52、`WorkflowNodeView` 404、`WorkflowSlotView` 22、`WorkflowGridDecorator` 41、
 `WorkflowMinimapOverlay` 22、`WorkflowTemplateSelector` 19；连线那一角色换成 `WorkflowLinkAttachment`
 （助手，2026-10-04）。
@@ -174,12 +174,12 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 `WorkflowSurfaceGrid`（网格线判定与刻度标签格式化，此前在包内有**两份**逐字相同的私有副本）。
 校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform WinForms -Strict` 全绿。
 
-**Jalium 的七个角色**（适配器在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/`，2026-10-05 转标记驱动后重写；
+**Jalium 的七个角色**（适配器在 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/`，2026-10-05 转标记驱动后重写；
 **网格装饰器与另外六家一样归模板**，见 §2.2）：
 `WorkflowSurfaceBehavior`（宿主表面的 9 个附着属性）、`WorkflowSlotLayoutBehavior`（`slot.Anchor` 的唯一写回点，走 Core 的 `SlotAnchorFromVisualCenter`）、
 `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds`
 （与 WPF 同名同形的行为；`WorkflowLinkBounds` 是唯一刻意背离，见 §三）、`WorkflowMinimapOverlay`（22 个 DP）、
-`ViewPool` / `ViewManager`（用 Jalium 自己的 `DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退）。
+`ViewPool` + `ViewHosting/`（用 Jalium 自己的 `DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退）。
 `workflow-grid-decorator` 模板产物是 `sealed class : Grid, IWorkflowGridDecorator`（15 个 DP）。
 **没有** `WorkflowTreeView`、三个 `*Attachment`、适配器里的 `WorkflowGridDecorator`、`WorkflowPortGeometry`、
 `WorkflowPortLayout`、`IWorkflowTemplateSelector` —— 那一整套已删。

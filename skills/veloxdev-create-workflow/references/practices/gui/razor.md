@@ -8,7 +8,7 @@
 
 ⚙ **The "Trimmed" in that path means *minimal demo*.** It is a demo-size choice, not a publish setting — see [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
 
-The adapter's API surface is the components themselves: each role is a `.razor` component under `Src/Adapters/VeloxDev.Razor/Attached/Workflow/`, and its `[Parameter]`s are the contract.
+The adapter's API surface is the components themselves: each role is a `.razor` component under `Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/`, and its `[Parameter]`s are the contract.
 
 ## Writing the surface
 

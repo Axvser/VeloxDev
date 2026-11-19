@@ -2,7 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core/DynamicTheme/`，契约在 `Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/`（`ITheme.cs` / `IThemeObject.cs` / `IThemeValueConverter.cs`）。
 > 生成器：`Src/Generators/VeloxDev.Core.Generator/Theme.cs`。**下文不带路径的 `Theme.cs` 指这一个**（注意：本模块目录下**没有** `Theme.cs`，别在 `DynamicTheme/` 里找；运行期文件是 `Dark.cs` / `Light.cs` / `ThemeCache.cs` / `ThemeConfigAttribute.cs` / `ThemeManager.cs`）。
-> 平台侧：各家的 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/ThemeValueConverters.cs`。
+> 平台侧：各家的 `ThemeValueConverters.cs`。Avalonia 试点已按模块移到 `Src/Adapters/VeloxDev.Avalonia/DynamicTheme/`；其余六家仍在 `TransitionSystem/`。
 > 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
@@ -19,7 +19,7 @@
 |---|---|
 | 主题是什么 | **空标记类型**。Core 只提供 `Dark.cs` / `Light.cs` 两个空类，`ITheme` 也是空接口（`Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/ITheme.cs`）。主题的身份就是 **`Type` 对象本身**，可以自定义 |
 | 属性变更通知 | 不产生。`SetThemeValue` 走生成器的 `UpdatePropertyToCurrentTheme` → `propertyInfo.SetValue`（`Theme.cs` 生成的 `UpdatePropertyToCurrentTheme`），**绕过 setter 的语义**（对 `[VeloxProperty]` 属性来说就是绕过生成的通知） |
-| 字符串/画刷怎么变成值 | `IThemeValueConverter`，实现全在**适配器**（各家的 `PlatformAdapters/ThemeValueConverters.cs`；Jalium 不接主题）。Core 一个也不带。**可声明的类型是有界的**（平台原生类型的构造 ＋ 可插值的自定义类型）。各家全用**显式转换表**、**无一家走 `TypeDescriptor`**（WPF/WinForms 的 `ThemeValueConverters.cs` 里各自写着「刻意不用」的注释），所以这条界各家一致，理由见 [extension.md](extension.md) §四·1 |
+| 字符串/画刷怎么变成值 | `IThemeValueConverter`，实现全在**适配器**（各家的 `ThemeValueConverters.cs`；Avalonia 在 `DynamicTheme/`，其余在 `TransitionSystem/`；Jalium 不接主题）。Core 一个也不带。**可声明的类型是有界的**（平台原生类型的构造 ＋ 可插值的自定义类型）。各家全用**显式转换表**、**无一家走 `TypeDescriptor`**（WPF/WinForms 的 `ThemeValueConverters.cs` 里各自写着「刻意不用」的注释），所以这条界各家一致，理由见 [extension.md](extension.md) §四·1 |
 | 动画的采样、缓动、帧、时间轴 | TransitionSystem。本模块只用它的 `TransitionSchedulerCore.Track/Execute/Untrack`、`TransitionRun`、`StateCore`、`TransitionProperty` |
 | 什么时候能动、什么时候不能（哪家平台画得出来） | 各家的 `Interpolator.CreateScheduler`。**这就是「主题切换为什么在这个平台不动」的答案所在** —— 判定在适配器，不在本模块 |
 | 反播、暂停/速率 的**额外**控制面 | 不新增。整场共用一条时间轴，`Pause` / `Resume` / `SetRate` 对整场生效；`Seek` / `Exit` **不是整场操作**：`SeekRun` 只改该 run 的 `PassAnchor`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs` 的 `SeekRun`），`Exit` 只取消传入 target 的 run（`RunSwitch` 的注释与 `Transition(Type, …)` 的 `<remarks>` 都按此写） |
@@ -144,7 +144,7 @@ RunSwitch (:201)
 | 「哪些属性参与一场切换」 | 同上 `PrepareSamplers` —— 由目标的 `GetStaticThemeCache()` 决定 |
 | 声明语法的形状（arity 上限、converter 在哪） | `Src/Core/VeloxDev.Core/DynamicTheme/ThemeConfigAttribute.cs`（arity 3..8） |
 | 生成出来的 `IThemeObject` 实现长什么样 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs`（生成的 `InitializeTheme`、`SetThemeValue`、`UpdatePropertyToCurrentTheme`） |
-| 字符串/画刷怎么解析成值 | 各家的 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/ThemeValueConverters.cs` |
+| 字符串/画刷怎么解析成值 | 各家的 `ThemeValueConverters.cs`（Avalonia `DynamicTheme/`，其余 `TransitionSystem/`） |
 | **「主题切换为什么在这个平台不animate」** | 该家的 `Interpolator.CreateScheduler`。契约与各家的差异见 `memory/modules/TransitionSystem/architecture.md` §六末行与 `memory/modules/TransitionSystem/adapters/<平台>.md` |
 | 「谁调了 `SetPlatformInterpolator`」 | 只调在 Examples 与 `Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs` 里，点见 `memory/modules/TransitionSystem/adapters/winforms.md`（Brush 采样器缺失与 `SetPlatformInterpolator` 调用点） |
 | 缓存的两级与键形状 | `ThemeCache.cs`（静态 `_staticCache`、活动 `_activeCache`、合并 `CollectStaticForType`） |

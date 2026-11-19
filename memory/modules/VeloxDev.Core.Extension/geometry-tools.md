@@ -11,7 +11,7 @@
 
 | | 人类拖拽 | Agent 工具 |
 |---|---|---|
-| 派发的命令 | **`MoveCommand` + `Offset` 增量**（七家适配器的 `WorkflowNodeDragBehavior`，如 WPF `Attached/Workflow/WorkflowNodeDragBehavior.cs` 的 `OnMouseMove`） | `MoveNode` 也派发 `MoveCommand`（世界位移），**不**用 `SetAnchorCommand` + 自算绝对锚点 |
+| 派发的命令 | **`MoveCommand` + `Offset` 增量**（七家适配器的 `WorkflowNodeDragBehavior`，如 WPF `WorkflowSystem/AttachedBehaviors/WorkflowNodeDragBehavior.cs` 的 `OnMouseMove`） | `MoveNode` 也派发 `MoveCommand`（世界位移），**不**用 `SetAnchorCommand` + 自算绝对锚点 |
 | 增量语义 | 视图空间增量，由 `StandardMove` 按 `Scale` 换算 | 无 |
 
 **铁律：`node.Anchor` 的 getter 返回的是被画布 `Scale` 坍缩过的值**（`NodeDefaultViewModel.Anchor` 的 getter

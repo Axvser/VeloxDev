@@ -81,7 +81,7 @@
 
 | # | 做什么 | 依据 |
 |---|---|---|
-| 1 | 在**该家**的 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/ThemeValueConverters.cs` 加一个实现 `IThemeValueConverter` 的类 | 各家都在 `namespace VeloxDev.DynamicTheme`（同名类各写一份） |
+| 1 | 在**该家**的 `ThemeValueConverters.cs` 加一个实现 `IThemeValueConverter` 的类（Avalonia 在 `DynamicTheme/`，其余在 `TransitionSystem/`） | 各家都在 `namespace VeloxDev.DynamicTheme`（同名类各写一份） |
 | 2 | **必须有无参构造** | 生成器用 `Activator.CreateInstance(typeof(...))` 内联 new（`Theme.cs` 的 `convertExpr`） |
 | 3 | 类名要能作为特性泛型实参直接写 | 用户在 `[ThemeConfig<BrushConverter, ...>]` 里裸写类名（demo 的 `[ThemeConfig<...>]`），所以命名空间必须能被 `using VeloxDev.DynamicTheme;` 覆盖 |
 

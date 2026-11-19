@@ -1,6 +1,6 @@
 ﻿# TransitionSystem — Avalonia
 
-> 代码：`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/`（契约要求的类 + `Samplers/` 下的采样器）。
+> 代码：`Src/Adapters/VeloxDev.Avalonia/TransitionSystem/`（契约要求的类 + `Samplers/` 下的采样器）。
 > 契约、扩展点、注册位置在 `memory/modules/TransitionSystem/extension.md`；「怎么用这套 API」在
 > `skills/veloxdev-create-animation/SKILL.md`，逐平台差异的写法在 `skills/veloxdev-create-animation/references/adapter.md`。
 > 本文只写：这家必须实现哪些成员、这家的平台硬限制、与其它六家的刻意背离、改这里最容易踩的坑。
@@ -82,7 +82,7 @@ Input -1 · Default 0 · Loaded 1 · UiThreadRender 2 · AfterRender 3 · Render
 
 ### 7. 为什么这家的采样器比别家宽：**类型系统驱动，不是实现驱动**
 
-这是最容易被误读成「Avalonia 更完整」的一处。把这几家的注册表摊开对比（`VeloxDev.{Avalonia,WPF,WinUI,MAUI}/PlatformAdapters/Interpolator.cs` 的静态构造）：
+这是最容易被误读成「Avalonia 更完整」的一处。把这几家的注册表摊开对比（`VeloxDev.{Avalonia,WPF,WinUI,MAUI}/TransitionSystem/Interpolator.cs` 的静态构造）：
 
 | 家 | 独有项 | 为什么只有它有 |
 |---|---|---|
@@ -103,13 +103,13 @@ Input -1 · Default 0 · Loaded 1 · UiThreadRender 2 · AfterRender 3 · Render
 
 `UIThreadInspector.cs` 的 `PostCore` 只检查「能不能拿到 `Dispatcher`」，拿到就 `InvokeAsync` 并 `return true`；**没有任何存活判断**，`IsAlive` 也从未覆写（恒 `true`）。
 
-- 七家的存活机制**没有一家相同**，逐个记：**覆写 `IsAlive` 的三家** —— MAUI 用 `Windows.Count > 0`、WinForms 挂 `Application.ApplicationExit` 存一个 `_isAppAlive`、Razor 提供手动 `NotifyShutdown()`；**不覆写但问了平台的两个** —— WPF 与 Jalium 在 `PostCore` 里检查 `dispatcher.HasShutdownStarted`（同一份守卫）；**不覆写但回报基类的** —— WinUI 在 `PostCore` 里 `Lifetime.SetAlive(queue.TryEnqueue(...))`（`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs` 的 `PostCore`）双向报告。⇒ **七家里只有 Avalonia 一个存活信号都没有**，`IsAlive` 恒 `true`。别把「Avalonia 与 WPF 都不携带存活」当成一条 —— WPF 至少看了一眼 shutdown，而 Jalium 与它情况完全相同。
+- 七家的存活机制**没有一家相同**，逐个记：**覆写 `IsAlive` 的三家** —— MAUI 用 `Windows.Count > 0`、WinForms 挂 `Application.ApplicationExit` 存一个 `_isAppAlive`、Razor 提供手动 `NotifyShutdown()`；**不覆写但问了平台的两个** —— WPF 与 Jalium 在 `PostCore` 里检查 `dispatcher.HasShutdownStarted`（同一份守卫）；**不覆写但回报基类的** —— WinUI 在 `PostCore` 里 `Lifetime.SetAlive(queue.TryEnqueue(...))`（`Src/Adapters/VeloxDev.WinUI/TransitionSystem/UIThreadInspector.cs` 的 `PostCore`）双向报告。⇒ **七家里只有 Avalonia 一个存活信号都没有**，`IsAlive` 恒 `true`。别把「Avalonia 与 WPF 都不携带存活」当成一条 —— WPF 至少看了一眼 shutdown，而 Jalium 与它情况完全相同。
 - **这里的做法和其他家不一样，因为 Avalonia 的 `Dispatcher` 没有可查询的 shutdown 属性**：11.1.0 实测 `Dispatcher` 的公开成员里**没有** `HasShutdownStarted` 之类的 bool；它有的是 `ShutdownStarted` / `ShutdownFinished` **两个事件**（实测）。要用事件做存活，就得订阅后自己存一个标志 —— 这正是基类给的 `Lifetime`（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs` + `ApplicationState`）的用途，而这家**没有接**。
 - **代价是清楚的**：`ThreadDispatcherBase.PostAsync` 的等待条件是「动作被真正接受」（`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs` 的 `PostAsync`，注释「宿主静默丢掉的动作永远不会完成它的 TCS，等下去就是等一辈子」）。dispatcher 已关闭后仍返回 `true`，就是让消费者挂到进程结束。这条在 Avalonia 上**可以修**（订阅 `ShutdownStarted` → `Lifetime` 报 false），但目前没修 —— 评估「要不要修」时按上面的事实判断，不要按「WPF 也这样」判断，因为 WPF 那边是真的没有同步信号、只能靠 `HasShutdownStarted`。
 
 ### 2. `GridLength` 单位不同时**保持起始值**，WinUI 切到结束值
 
-`Samplers/GridLengthSampler.cs` 的 `InsertFrame`：单位不同就 `SetValue(target, g1)` 直接返回，**永远到不了终点**。WinUI 的同名采样器是 `property.SetValue(target, t >= 1 ? g2 : g1)`（`VeloxDev.WinUI/PlatformAdapters/Samplers/GridLengthSampler.cs`）。
+`Samplers/GridLengthSampler.cs` 的 `InsertFrame`：单位不同就 `SetValue(target, g1)` 直接返回，**永远到不了终点**。WinUI 的同名采样器是 `property.SetValue(target, t >= 1 ? g2 : g1)`（`VeloxDev.WinUI/TransitionSystem/Samplers/GridLengthSampler.cs`）。
 
 **这里的做法和其他家不一样，因为 Avalonia 的这条分支选择了「不动」而不是「收敛」**：单位不一样（`Auto` vs `Star` vs 像素）时没有可插值的量，两种选择都是「离散切换」，区别只在切换点。`skills/veloxdev-create-animation/references/adapter.md` §2 的「Sizes and lengths」明确站 WinUI 那边：「prefer the branch that still reaches the target over the one that holds the start ... only the former ever arrives」。**要保持一致的话，这处该改成 WinUI 的写法**；保持现状则要接受「跨单位的 GridLength 动画在 Avalonia 上画不出终点」这个静默结果（不抛、不报，只是永远停在起点）。
 

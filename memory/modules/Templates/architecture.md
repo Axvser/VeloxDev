@@ -31,7 +31,7 @@
 **不解决什么**：
 
 - **不是 demo**。`Examples/Workflow/<GUI>*/` 才是能跑的；模板里没有树 ViewModel、没有窗口、没有入口。
-- **不是适配器**。七个角色的实现全在 `Src/Adapters/VeloxDev.<GUI>/Attached/Workflow/`。
+- **不是适配器**。七个角色的实现全在 `Src/Adapters/VeloxDev.<GUI>/WorkflowSystem/AttachedBehaviors/`。
 - **不是"一套模板七家共享"**。同一角色在七家**结构不同**（§六），不是同一份文件换个后缀。
 - **改动无法独立验证（已被统一脚本取代）**。仓库里没有测试项目、模板目录下没有 `.md`；2026-10-04 起七家统一走
   `Src/Verification/verify-workflow-item-templates-all.ps1`（装包 → 生成七个条目 → 一起编译 → 与镜像比对 +
@@ -133,14 +133,14 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
   承担）。⇒ **生成不生成这一条，tree-view 行为不变**；其余六家的 tree-view 都真的引用它
   （WPF/WinUI/Avalonia/MAUI/Razor/Jalium 都在标记/组件里实例化，见本节上表）。
 - **WinForms 的 tree-view 与 minimap 之间没有类型级耦合**：
-  `IWorkflowMinimapScrollSource` 声明在适配器（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs`），
+  `IWorkflowMinimapScrollSource` 声明在适配器（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/IWorkflowMinimapScrollSource.cs`），
   由 `WorkflowTreeView` 的 `MinimapOverlay` setter 与 `WorkflowMinimapOverlay` 类声明引用，**模板侧零命中**
   ⇒ 只生成 `winforms-v-tree` 也能编译，它的编译期兄弟只剩 `NodeView` 与 `LinkView`（见 §7.6）。
-- 对照：**WinForms 的可见集现在也由适配器喂给池**（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 的 `AttachTree` 里取 `_tree?.GetHelper().VisibleItems`），模板不再自己发散虚拟化。WPF/WinUI/Avalonia/Razor 在标记里绑
-  `Helper.VisibleItems`，MAUI 由适配器 `ViewManager` 在入队前筛掉连线交给共享 overlay 画；
+- 对照：**WinForms 的可见集现在也由适配器喂给池**（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs` 的 `AttachTree` 里取 `_tree?.GetHelper().VisibleItems`），模板不再自己发散虚拟化。WPF/WinUI/Avalonia/Razor 在标记里绑
+  `Helper.VisibleItems`，MAUI 由适配器的 `ViewLinkLayer`（`IsActive=true`、`Handles` 判连线）在入队前挡在主池外，交给共享 overlay 画；
   Jalium 现在也在标记里绑 `behaviors:ViewPool.ItemsSource`（`workflow-tree-view/TemplateClass.jalxaml`）—— 绑的是可见集，**不要**改成全量 `Nodes`。
   Razor 的 `Items="Tree.GetHelper().VisibleItems"` 在 `workflow-tree-view/TemplateClass.razor` 的 `TemplateSelector` 上；MAUI 的连线
-  由适配器 `ViewManager` 在入队前筛掉（选择器给不出 `LinkTemplate`），交给共享 overlay 画
+  由适配器的 `ViewLinkLayer` 在入队前挡在主池外（选择器给不出 `LinkTemplate`），交给共享 overlay 画
   （见 `adapters/maui.md` §2.2 与 `WorkflowSystem/adapters/maui.md` §二·1）。
   ⚠ **2026-10-03 起 `workflow-tree-view` 条目还带「连线的右键菜单」**：**条目**声明在模板里（WPF/Avalonia/WinUI/MAUI/Jalium
   是资源里的 `ContextMenu`，Razor 是 `.razor` 里的按钮，WinForms 是基类的 `OnBuildLinkMenu` 钩子），
@@ -186,7 +186,7 @@ tree-view 的产物里**写死了另外六条的 `defaultName`**。七家各自�
 | 值 | 平台 | 依据 |
 |---|---|---|
 | **28** | WPF、Avalonia、WinUI、MAUI、Razor | WPF / Avalonia / WinUI / MAUI 各自 `workflow-grid-decorator/TemplateClass.cs` 的 `RulerThicknessProperty`；Razor 是 `workflow-grid-decorator/TemplateClass.razor.cs` 的 `RulerThickness`，tree-view 里又写死一份 `workflow-tree-view/TemplateClass.razor` 的 `RulerThickness="28"` |
-| **36** | WinForms、Jalium | **都不在模板的 tree-view 里**：WinForms 定义在适配器基类 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowGridDecorator.cs` 的 `const DefaultRulerThickness = 36`（tree-view 的 `RulerReserve` 也读它）；Jalium 的 36 现在在**模板自己的 grid-decorator** 里 —— `workflow-grid-decorator/TemplateClass.cs` 的 `const DefaultRulerThickness = 36`（`RulerThickness` DP 的默认值） |
+| **36** | WinForms、Jalium | **都不在模板的 tree-view 里**：WinForms 定义在适配器基类 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowGridDecorator.cs` 的 `const DefaultRulerThickness = 36`（tree-view 的 `RulerReserve` 也读它）；Jalium 的 36 现在在**模板自己的 grid-decorator** 里 —— `workflow-grid-decorator/TemplateClass.cs` 的 `const DefaultRulerThickness = 36`（`RulerThickness` DP 的默认值） |
 
 WinForms 的 36 是**有理由的、注释写明的偏离**：`WorkflowGridDecorator.cs` 里 `DefaultRulerThickness` 的 `<remarks>` 写着
 `Other flavours of this control use 28; WinForms reads visually smaller, so the platform default is 36.`
@@ -227,7 +227,7 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 | 薄壳（2026-10-03 起也归此列） | WinForms | `workflow-minimap-overlay/TemplateClass.cs` |
 
 ⇒ **2026-10-03 起七家全是薄壳**：WinForms 的实现搬进了适配器
-（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowMinimapOverlay.cs`）—— 该家的创建控件钩子、
+（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs`）—— 该家的创建控件钩子、
 装饰器与小地图现在都由适配器基类提供（迁移判据见
 [`adapter-base-class-specifications.md`](../../specifications/adapter-base-class-specifications.md) §2.2）。
 Jalium 的薄壳设四个颜色符号（`workflow-minimap-overlay/TemplateClass.cs`）；最薄的是 MAUI。
@@ -244,7 +244,7 @@ Jalium 的薄壳设四个颜色符号（`workflow-minimap-overlay/TemplateClass.
 | minimap-overlay | 适配器基类 + 薄壳策略 |
 | template-selector | 适配器基类 + 薄壳策略 |
 
-包内七个控件在 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`，另有几个共用件
+包内七个控件在 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`，另有几个共用件
 （`WorkflowSurfaceColors` / `WorkflowSurfaceGraphics` / `WorkflowSurfaceGrid`）。
 
 **判据是「这一段是不是用户该改的扩展点」**，不是「这个角色像不像用户的」，也不是「离群不离群」——「`grid-decorator` 的行数落在其余六家的中间」不能当理由跳过它。该角色含平台机制（网格线的世界坐标换算、刻度与标签排版、每帧重绘），
@@ -269,7 +269,7 @@ Jalium 的薄壳设四个颜色符号（`workflow-minimap-overlay/TemplateClass.
 | minimap-overlay | `.cs` |
 | template-selector | `.cs` |
 
-⇒ Jalium 的 `Attached/Workflow/` 现在是若干文件（附着行为 + 池 + 小地图），另有模板侧的一套产物。校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`。见 `extension.md` §4.1。
+⇒ Jalium 的 `WorkflowSystem/AttachedBehaviors/` 现在是若干文件（附着行为 + 池 + 小地图），另有模板侧的一套产物。校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`。见 `extension.md` §4.1。
 
 ---
 
@@ -358,7 +358,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 | MAUI | `BindableProperty` + 绑 `Slot.State` / `State` | `workflow-slot-view/TemplateClass.xaml.cs` 的 `SlotStateProperty`；`workflow-node-view/TemplateClass.xaml` 的输入/输出两行 |
 | Jalium | 模板 slot-view 自己在 code-behind 里按 `SlotState` 算 `Foreground`；node-view 绑 `SlotState="{Binding State}"` | `workflow-slot-view/TemplateClass.jalxaml.cs` 的 `UpdateForeground`；`workflow-node-view/TemplateClass.jalxaml` |
 | Razor | 不绑，slot-view 在 C# 里算 | `workflow-slot-view/TemplateClass.razor.cs` 的 `FillColor` / `SlotStateColor` |
-| WinForms | 不绑，状态色由**适配器** `WorkflowSlotAttachment` 按 `SlotState` 算（`WorkflowSlotAttachment.cs` 的 `GlyphColor`）；模板 slot-view 只剩调色板（该家 slot-view 完全没有声明空转 symbol） | `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSlotAttachment.cs` 的 `GlyphColor` |
+| WinForms | 不绑，状态色由**适配器** `WorkflowSlotAttachment` 按 `SlotState` 算（`WorkflowSlotAttachment.cs` 的 `GlyphColor`）；模板 slot-view 只剩调色板（该家 slot-view 完全没有声明空转 symbol） | `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowSlotAttachment.cs` 的 `GlyphColor` |
 | **Avalonia** | **没有** —— slot-view 里搜 `SlotState` 零命中 | `workflow-slot-view/TemplateClass.axaml` 只把 `<Path Fill>` 绑到 `$parent[UserControl].Foreground`，而模板里没有任何地方写 `Foreground` |
 
 ⇒ 在 Avalonia 上，插槽**永远不会变色**，而且不会报错。要修就得给 slot-view 加一个状态属性再绑上去。
@@ -370,7 +370,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 | WPF | `link.IsRenderReady()` | `workflow-link-view/TemplateClass.xaml.cs` 的 `OnRender` |
 | Jalium | `!link.IsRenderReady()` | `Src/Templates/VeloxDev.Jalium.Templates/working/content/workflow-link-view/TemplateClass.jalxaml.cs`（`Refresh`） |
 | Razor | `WorkflowSlotUpdateGate.IsLinkRenderReady(link)` | `workflow-link-view/TemplateClass.razor.cs` 的 `BuildCurve` |
-| WinForms | `WorkflowSlotUpdateGate.IsLinkRenderReady(link)` | **已进适配器**：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowLinkAttachment.cs` 的 `RebuildGeometry`（模板 link-view 是自己的控件 + `Attach`） |
+| WinForms | `WorkflowSlotUpdateGate.IsLinkRenderReady(link)` | **已进适配器**：`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowLinkAttachment.cs` 的 `RebuildGeometry`（模板 link-view 是自己的控件 + `Attach`） |
 
 | 无门 | 它们各自有的东西 |
 |---|---|
@@ -385,7 +385,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 ### 7.6 WinForms 少生成一条兄弟条目 ⇒ 编译不过（且没有任何地方写明）—— **tree-view 这一处已于 2026-10-03 消除**
 
 **WinForms 的 tree-view 没有这条耦合**：`IWorkflowMinimapScrollSource` 在适配器里
-（`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/IWorkflowMinimapScrollSource.cs`），模板的
+（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/IWorkflowMinimapScrollSource.cs`），模板的
 `workflow-minimap-overlay/TemplateClass.cs` 是薄壳，tree-view 不模式匹配它
 ⇒ `winforms-v-tree` 的编译期兄弟只有 `NodeView` 与 `LinkView`。
 ⚠ 与 §7.3 的 Avalonia 那处不同（那条注释自己写明了 "build fails HERE"）：**WinForms 这类「少一条兄弟就 CS0246」的耦合没有任何文件写明**，只能读代码发现。
@@ -414,7 +414,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 
 **2026-09-25 对齐的只是画布层，不是全部。** 那四家的画布底 / 网格 / 标尺 / 连线 / 边框已换成上表的值（各家 `WorkflowGridDecorator` 的八个静态字段 + 连线默认色 + `PART_SurfaceBorder`）。**节点卡的逐类型配色刻意保留** —— Controller 深灰、Timer/Python 蓝、Enum 紫是 feature demo 要展示的东西，对齐成一张白卡等于把这条信息删掉。用者的口径是「只对齐画布层」。
 
-**改配色的落点**：网格与标尺集中在各家的 `WorkflowGridDecorator`（WinForms 拆在适配器的 `WorkflowGridDecorator.cs` 与 `WorkflowTreeView.cs` 两处；Razor 在适配器 `WorkflowGridDecorator.razor.cs` 加 surface）。连线的默认色一般在各家自己的连线视图里，**MAUI 模板是例外：模板没有本地连线视图，用的是适配器** `Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowLinkOverlay.cs`（demo 已于 2026-10-03 改成每线一视图，见 §五），在那里改会**同时改掉 Trimmed MAUI**（2026-09-25 删箭头就是这么做的）。
+**改配色的落点**：网格与标尺集中在各家的 `WorkflowGridDecorator`（WinForms 拆在适配器的 `WorkflowGridDecorator.cs` 与 `WorkflowTreeView.cs` 两处；Razor 在适配器 `WorkflowGridDecorator.razor.cs` 加 surface）。连线的默认色一般在各家自己的连线视图里，**MAUI 模板是例外：模板没有本地连线视图，用的是适配器** `Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/WorkflowLinkOverlay.cs`（demo 已于 2026-10-03 改成每线一视图，见 §五），在那里改会**同时改掉 Trimmed MAUI**（2026-09-25 删箭头就是这么做的）。
 
 **连线：七家都没有箭头。** 那套箭头（长 12、宽 8，`!IsVirtual` 时画）七家都不画。
 模板与各家 Trimmed demo 现在都是**一条平线 + 悬停高亮**：高亮时绕线画一圈白色 halo
@@ -451,7 +451,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 
 `Avalonia/Demo/Views/Workflow/` 下的 `SlotView` 原是一个 `UserControl` + 一个 `.axaml`，那个 axaml 的根上挂着**两样性命攸关的东西**：
 
-- `behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"` —— 它给控件挂 `PointerPressed` / `PointerReleased`（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSlotConnectionBehavior.cs` 的 `OnIsEnabledChanged`）。没有它，**端口拖不出连线**。
+- `behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"` —— 它给控件挂 `PointerPressed` / `PointerReleased`（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.cs` 的 `OnIsEnabledChanged`）。没有它，**端口拖不出连线**。
 - `Background="#01000000"` —— 那是端口的**命中测试面**。全部改自绘、删掉 axaml 之后它一起没了，指针事件到不了控件。
 
 两样都不报错：端口照样画得好好的，只是静默失去交互。现在两者都写在 `SlotView` 的**构造函数**里（外加一个近透明的子 `Border` 作实在的命中面 —— 依赖 `UserControl` 自己的 `Background` 能否被命中是一层推断，落一个真元素就不是了），卡片忘了也不会再丢。

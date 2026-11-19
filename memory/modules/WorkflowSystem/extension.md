@@ -34,7 +34,7 @@
 | **把节点 / 插槽 / 连线定位到视口中心** | 2026-10-29 起：`node.Locate()` / `slot.Locate()` / `link.Locate()`（`WorkflowNavigationEx`）。它们只把元素换算成世界点（节点 = 自身矩形中心；插槽 = 父节点矩形中心；连线 = 两端节点矩形中心的中点）——**全部是模型数据，不读插槽锚点或已发布曲线**，所以未测量/未绘制的元素也能定位，滚动交给 `WorkflowInput.Navigator`（`IWorkflowSurfaceNavigator.CenterOn`）。目标由 `WorkflowSurfaceMath.CenterScroll` 算出（`scroll = world − viewport/2 + ActualOffset`）；越界时按差额延展画布（WPF/Avalonia/WinUI/MAUI/Razor；Jalium 本来就 Grow）。只平移，不改缩放。没有表面时返回 false、不动模型 | `StandardEx/WorkflowNavigationEx.cs`、`GUI/Events/IWorkflowSurfaceNavigator.cs`、七家 `SurfaceScroller`（同时实现滚动与定位）；WPF/Avalonia/WinForms/Jalium 有无头测试，Razor 走 JS `applySurfaceNavigation`，WinUI/MAUI 没有无头宿主（有头 SendInput 实测节点/插槽/连线三种行都能定位） |
 | **否决某一次自带手势**（平移 / 节点拖动 / 插槽连线 / Ctrl+滚轮缩放） | 与上面那条是**同一条契约**，只是落点不同：适配器在动手**之前**路由这一笔按下、读 `e.Handle.PreventDefault`，被否决就不起手势。谁路由谁负责 —— 有隧道相的三家（WPF / Avalonia / Jalium）在隧道相路由一次、句柄存在表面里，节点与插槽的处理器去读；没有隧道相的三家（WinUI / WinForms / MAUI）由组件自己那次转发产出句柄（各家一个 `RouteComponentPress`）；Razor 的手势在 JS、路由在 C#，只能「先问再动手」（`RequestPressVerdict` / `RequestWheelVerdict` 返回 bool）。**同一笔物理按下只能路由一次** —— 路由两遍会让订阅者收到两次、并重写 `PointerTarget` | 七家 `WorkflowSurfaceBehavior`（`RouteComponentPress` / `GetPressHandle` / `RouteWheel`）+ Razor `wwwroot/veloxdev.workflow.js` 的 GESTURE VERDICT 段；各家为何这样接线见 `adapters/<平台>.md` |
 | **把节点/插槽/树的动作也接成标准事件** | 取该组件的 Helper 并按**能力接口**转型：`((IWorkflowNodeEvents)node.GetHelper())`、`IWorkflowSlotEvents`、`IWorkflowTreeEvents`。已实现这几对：`Moving/Moved`、`Resizing/Resized`、`Deleting/Deleted`（node）、`ChannelChanging/Changed`（slot）、`Connecting/Connected`（tree） | `GUI/Events/{Node,Slot,Tree}/IWorkflow*Events.cs` |
-| **把模型事件交给宿主，按平台族分三种**（2026-10-03 用户定：**模型事件不由 Core 统一广播，走各家自己的宿主接线**；2026-10-05 Jalium 归入①） | ①**有附加属性的五家**（WPF/Avalonia/WinUI/MAUI/Jalium）：附加属性 + 绑定一个 sink 对象 —— `behaviors:WorkflowEvents.Node="{Binding NodeEvents}"`（`.Slot` / `.Tree` 同形）；②**Razor**（类 XAML）：沿用订阅；③**无标记语言的 WinForms**：**适配器基类提供 `protected virtual OnXxx(args)` 钩子**，宿主重写即得 | `GUI/Events/IWorkflow*EventSink.cs`、`GUI/Events/WorkflowEventRelay.cs`；WPF 参考实现 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowEvents.cs` |
+| **把模型事件交给宿主，按平台族分三种**（2026-10-03 用户定：**模型事件不由 Core 统一广播，走各家自己的宿主接线**；2026-10-05 Jalium 归入①） | ①**有附加属性的五家**（WPF/Avalonia/WinUI/MAUI/Jalium）：附加属性 + 绑定一个 sink 对象 —— `behaviors:WorkflowEvents.Node="{Binding NodeEvents}"`（`.Slot` / `.Tree` 同形）；②**Razor**（类 XAML）：沿用订阅；③**无标记语言的 WinForms**：**适配器基类提供 `protected virtual OnXxx(args)` 钩子**，宿主重写即得 | `GUI/Events/IWorkflow*EventSink.cs`、`GUI/Events/WorkflowEventRelay.cs`；WPF 参考实现 `Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowEvents.cs` |
 | **连线的右键菜单** | **归模板**（2026-10-03 用户定）：条目声明在 `workflow-tree-view` 条目里，用户改模板增删；无标记语言的 WinForms 由 `WorkflowTreeView` 基类的 `OnBuildLinkMenu` 钩子给出，Jalium 与标记五家一样走 `WorkflowSurfaceBehavior.LinkMenuKey` | [item-template-specifications.md](../specifications/item-template-specifications.md) §五 |
 | 右键菜单的请求与开合 | Core **没有**菜单事件了（2026-10-04 起）：**适配器从自己的 `PointerPressed(Right, link)` 里弹**（模板只声明条目，见 `WorkflowSurfaceBehavior.LinkMenuKey`）；宿主想否决，就在链上更靠前的一级（连线自己）订同一个事件并置 `PreventDefault` —— 顺序由「目标先于祖先」保证。开合由适配器自己置 `WorkflowInput.IsSuspended` | 七家适配器的 `WorkflowSurfaceBehavior` / `WorkflowTreeView` 基类 |
 | **让菜单不活得比它的线久**（Delete 键外的删除也算：Undo、Agent 改树） | 订**既有的** `tree.GetHelper().LinkRemoved`（Delete/Undo/Agent 改树都会发），比对是不是自己那份菜单指着的那条，是就关掉并放开挂起。**接线落点是适配层**（WPF/Avalonia/WinUI/MAUI/Jalium 五家：`WorkflowSurfaceBehavior.LinkMenuKey` 那个附着行为；Razor：组件参数 `LinkMenu` + RenderFragment；无标记语言的 WinForms：基类），模板不参与 | `Templates/Helpers/TreeHelper.cs`（`OnLinksChanged`） |
@@ -122,7 +122,7 @@
 | 25 | 自己写一个 `IRuntimeContext` 实现（或从别处拿一个），指望暂停 / 观察 / 重试 / 错误 sink / 补偿 / 宿主重定向照旧生效 | 那六个是 `RuntimeContext` 的**具体类成员**，引擎按 `context as RuntimeContext`（扇出内透过 `BranchRuntimeContext.Session`）取 —— 换掉实现就**静默**一个也拿不到。与 `MaxParallelBranches`、`LogWriter` 同样的取舍（给 `IRuntimeContext` 加成员会破坏每个外部实现） | 要用这几条就 `new RuntimeContext(...)` 并把对象插上去；自定义实现只在确实不需要它们时用 | `CompilerEx/Runtime/RuntimeEngine.cs` 的 `Session(IRuntimeContext)`；`CompilerEx/Runtime/Model/RuntimeContext.cs` 的「可选能力」一节 |
 
 | 26 | 把「容忍多近才不动」「钉住不移动」写进 `TileSeparationStage` 的分支 | 产品规则就绑死在一个阶段上，未来换分层方案时无法整体替换；硬违规与软对齐的边界也会散在代码里 | 实现 `IWorkflowLayoutPositionPolicy`，由 `TileSeparationStage` 构造函数注入；硬违规仍由阶段强制修复 | `Src/Core/VeloxDev.Core/WorkflowSystem/Layout/TileSeparationStage.cs` 的 `_policy.ShouldApply`；`TolerancePositionPolicy.cs` |
-| 27 | 在布局目录里写 `namespace VeloxDev.WorkflowSystem.Layout` | 这个命名空间段会盖住 MAUI 的 `Layout` 类型 —— 适配器文件在 `VeloxDev.WorkflowSystem.AttachedBehaviors` 下裸用 `Layout`，编译报 CS0118，而错误全落在适配器里 | 契约与实现都用 `namespace VeloxDev.WorkflowSystem`；目录仍叫 `Layout/` | `Src/Adapters/VeloxDev.MAUI/Attached/Workflow/ViewManager.cs`、`ViewPool.cs`；[layout.md](layout.md) §一 |
+| 27 | 在布局目录里写 `namespace VeloxDev.WorkflowSystem.Layout` | 这个命名空间段会盖住 MAUI 的 `Layout` 类型 —— 适配器文件在 `VeloxDev.WorkflowSystem.ViewHosting` 下裸用 `Layout`，编译报 CS0118，而错误全落在适配器里 | 契约与实现都用 `namespace VeloxDev.WorkflowSystem`；目录仍叫 `Layout/` | `Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewContainer.cs`、`ViewLinkLayer.cs`；[layout.md](layout.md) §一 |
 
 ---
 
@@ -222,10 +222,10 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 3. **`Viewport` 是画布局部坐标，只有适配器写它**；写完同步触发虚拟化（`Templates/Helpers/TreeHelper.cs` 的 `OnViewportChanged`）。
 4. **连线视图首行必须过渲染就绪门**：`if (DataContext is IWorkflowLinkViewModel link && !link.IsRenderReady()) return;`（`GUI/Rendering/WorkflowLinkRenderEx.cs` 的 `IsRenderReady`）。NaN 锚点 = 未测量，这是**跨平台统一**的机制，不需要各家自己发明时序。
 5. **插槽锚点写入用 Core 提供的三个函数之一**（按你测量到的坐标系选）：`SlotAnchorFromVisualCenter` / `SlotAnchorFromNode` / `SlotAnchorFromCanvasLocal`（`GUI/Math/WorkflowSurfaceMath.cs` 的这三个同名方法）。
-6. **滚轮方向统一：上滚 = 放大**，放大即 `Scale *= 1/1.1`（`Scale` 是折叠因子）；`Scale` 夹在 `[0.1, 10]`。七家一致：`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `OnZoomPreviewMouseWheel`，其余六家同形。**写反成 `delta > 0 ? 1.1 : 1/1.1` 会把方向弄反**。
+6. **滚轮方向统一：上滚 = 放大**，放大即 `Scale *= 1/1.1`（`Scale` 是折叠因子）；`Scale` 夹在 `[0.1, 10]`。七家一致：`Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `OnZoomPreviewMouseWheel`，其余六家同形。**写反成 `delta > 0 ? 1.1 : 1/1.1` 会把方向弄反**。
 7. **一次缩放的提交顺序**：枢轴 → `Scale` → `EnsureNegativeCover` → 重布局 → `PivotCenterScroll` → `ClampScrollOffset`（`GUI/Math/WorkflowSurfaceMath.cs` 的 `EnsureNegativeCover` 的时序约束）。
 8. **既有默认实现可以直接复用**：`TreeDefaultViewModel` / `NodeDefaultViewModel` / `SlotDefaultViewModel` / `LinkDefaultViewModel`（`Templates/ViewModels/`）。一家适配器**不需要**定义新的 ViewModel 类型。
-9. **适配器不引用其它适配器**，也没有共享适配器基类 —— 七家各写各的（`Src/Adapters/VeloxDev.*/Attached/Workflow/`）。能从自家平台 API 拿到的东西不要去 Core 里加开关。
+9. **适配器不引用其它适配器**，也没有共享适配器基类 —— 七家各写各的（`Src/Adapters/VeloxDev.*/WorkflowSystem/AttachedBehaviors/`）。能从自家平台 API 拿到的东西不要去 Core 里加开关。
 10. **视口位置必须成对：滚动时写回，挂树时恢复。** 写回用 `WorkflowSurfaceMath.ViewportOffsetFromScroll`（世界坐标），恢复用 `ViewportRestoreScroll` + `ClampValue`，各自的逆函数就是对方。**缺一半都算没实现**：只写不恢复 = 存了白存（宿主加载回来停在原点）；只恢复不写 = 存下来的是空。判据用 `HasViewportRestore`（默认 (0,0) 与亚像素不算）。
     **时序是硬要求**：适配器自己第一次 `Refresh`/`UpdateVisibleRegion` 会用控件当前（还没滚过去的）位置**覆盖** `ViewportOffset`，所以捕获必须在它之前。参考实现见七家各自的 `CaptureViewportRestore` + 一个延后队列（`Dispatcher`/`DispatcherQueue`/`MainThread`/`BeginInvoke`/`OnAfterRenderAsync` 各按平台）；每次换树只恢复一次，用树引用去重（`LastRestoreTree`）。
     **适配器不做「没存档就居中」** —— 那是宿主的 UX 决定。
@@ -235,7 +235,7 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 | 要注册的东西 | 位置 |
 |---|---|
 | 适配器项目本身 | `VeloxDev.slnx`，以及 `Src/Adapters/VeloxDev.<平台>/` |
-| 七家对齐的参考实现 | `Src/Adapters/VeloxDev.{WPF,Avalonia,WinUI,MAUI,WinForms,Razor,Jalium}/Attached/Workflow/` |
+| 七家对齐的参考实现 | `Src/Adapters/VeloxDev.{WPF,Avalonia,WinUI,MAUI,WinForms,Razor,Jalium}/WorkflowSystem/AttachedBehaviors/` |
 | `dotnet new` 模板包 | `Src/Templates/VeloxDev.<平台>.Templates/working/content/` 下的一组模板：`workflow-tree-view`、`workflow-node-view`、`workflow-slot-view`、`workflow-link-view`、`workflow-grid-decorator`、`workflow-minimap-overlay`、`workflow-template-selector`（各含 `.template.config/template.json`） |
 | 可运行 demo | `Examples/Workflow/<平台>/` 与 `Examples/Workflow/<平台> Trimmed/`（完整版与 Trimmed 各一套），共享 `Examples/Workflow/Common/Lib/` |
 | Skill 里的平台页 | `skills/veloxdev-create-workflow/references/gui/<平台>.md`（文件名必须与 `adapters/<平台>.md` 对齐） |
@@ -281,13 +281,14 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 - [ ] **生成器的几个 `switch`**：`Writers/WorkflowWriter.cs` 的 `GetWorkflowInterfaceName`、`GetWorkflowHelperInterfaceName`、`GenerateBody` 的 `case 1..4`—— 目前的 `int WorkflowType` 编码是 1=Tree/2=Node/3=Slot/4=Link，硬编码在 `Analizer` 的特性名匹配里
 - [ ] `Writers/WorkflowWriter.cs` 的 `IsWorkflowViewModelAttribute`（按字符串 `Contains("WorkflowBuilder.XxxAttribute")` 匹配）
 - [ ] `WorkflowWriter.cs` 的 `CheckBaseClassForWorkflowInfrastructure` / `HasIdentifiableInfrastructure`（决定子类是否只生成 `EnsureWorkflowHelper` 覆写）
-- [ ] 七家适配器的 `Attached/Workflow/`（每家的 `ViewManager` / `ViewPool` / 各 Behavior）
+- [ ] 七家适配器的 `WorkflowSystem/AttachedBehaviors/`（每家的 `ViewPool` / 各 Behavior；六家的池层在 `WorkflowSystem/ViewHosting/`，Razor 除外）
 - [ ] `Src/Templates/*` 七套模板包
 - [ ] `memory/modules/WorkflowSystem/adapters/*.md` 七份
 
 ### 4.3 加**一家新平台适配器**
 
-- [ ] `Src/Adapters/VeloxDev.<平台>/Attached/Workflow/`（七个角色对应的类）
+- [ ] `Src/Adapters/VeloxDev.<平台>/WorkflowSystem/AttachedBehaviors/`（七个角色对应的类）
+- [ ] 若这家要接 Core 视图系统（2026-11-19 起 Avalonia 试点）：在 `WorkflowSystem/ViewHosting/` 实现全部层与策略（Factory / Container / Arranger / Scheduler / Diagnostics / PoolPolicy / LayerPolicy / LinkLayer / MeasureHost），再用 `ViewSourcePipeline : ViewSourcePipelineCore<…>` 闭合；池/active/pending 的簿记不要在本家复制，见 [view-hosting.md](view-hosting.md)
 - [ ] `VeloxDev.slnx` 注册项目
 - [ ] `Src/Templates/VeloxDev.<平台>.Templates/working/content/` 下的一组模板（缺文件 ≠ 无差异）
 - [ ] `Examples/Workflow/<平台>/` + `Examples/Workflow/<平台> Trimmed/`

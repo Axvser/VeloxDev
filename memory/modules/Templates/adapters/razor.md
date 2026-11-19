@@ -39,7 +39,7 @@
 1. **同一段标记里 `GridDecorator` 出现两次，是两层不同的东西**：
    外层 `<GridDecorator Context="vp">`（`workflow-tree-view/TemplateClass.razor`）**不是组件**，它是在给
    `WorkflowSurfaceBehavior` 的**片段参数** `GridDecorator` 传值（适配器：
-   `Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` 的
+   `Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.razor.cs` 的
    `RenderFragment<SurfaceViewport>?`），`Context="vp"` 给这个片段的形参起名；
    内层 `<GridDecorator Viewport="vp" …/>` 才是**本模板生成的那个组件**。
    ⇒ 两者同名是必需的、不是笔误：若外层按类型解析，内层就成了它的 `ChildContent`，
@@ -53,7 +53,7 @@
    基类是 `ComponentBase` 而**不是** `IDisposable`。重渲染、槽枚举、默认调色板都由适配器的
    `WorkflowSurfaceBehavior` 与 `WorkflowPresentation` 提供（类上的 `<summary>` 已这么写）。
    ⇒ 模板**不自己订阅那些事件**（也没有 `UnsubscribeTree`）：
-   改重渲染行为要改 `Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor.cs`，
+   改重渲染行为要改 `Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.razor.cs`，
    不是在模板里补订阅。
 
 3. **连线的视图由池物化，模板只提供 `LinkTemplate`**：tree-view 把
@@ -65,7 +65,7 @@
    虚线的 `stroke-dasharray` 是 link-view 条目 code-behind 里按 `IsVirtual` 算出的（`workflow-link-view/TemplateClass.razor` 的 `@dash`）；
    三个 `data-veloxdev-*` 属性（`link-view/TemplateClass.razor` 的 `<svg>` 上）来自
    `WorkflowRuntimeIds.Get`（`.razor` 顶部 `var` 块里的调用）—— 适配器把这个 API 设成 `public` **就是为了给模板/ demo 的
-   link-view 用**（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowRuntimeIds.cs` 的 `class` 与 `Get`；XML 明写）。
+   link-view 用**（`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowRuntimeIds.cs` 的 `class` 与 `Get`；XML 明写）。
    ⇒ 漏写这三个属性不会报错，代价在深缩放：JS 无法把这条曲线与折叠后的实时插槽对上
    （机制见 `memory/modules/WorkflowSystem/adapters/razor.md` §二·1 / §二·2）。**这四个属性之外还有第五个**：
    画曲线的那一个元素必须带 `data-veloxdev-link-curve`（两个 `<path>` 上），JS 只写带它的元素
@@ -94,16 +94,16 @@
    其余按视口增删 ⇒ **虚拟连线天然被池覆盖**，不要再给模板加 `@if (Tree.VirtualLink.IsVisible)` 分支；
    画不画由生成的 `<LinkView>` 自己的 `CanRender` 门决定。
    ⚠ "选择器"在这一家是**组件**，不是选择器实例：适配器的对应物是 `ViewPool.ItemTemplate` + 消费方自己派发
-   （`Src/Adapters/VeloxDev.Razor/Attached/Workflow/ViewPool.razor.cs` 的 `ItemTemplate`；这家 `ViewPool.razor.cs` 没有 `TemplateSelector` 参数，
+   （`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/ViewPool.razor.cs` 的 `ItemTemplate`；这家 `ViewPool.razor.cs` 没有 `TemplateSelector` 参数，
    整个适配器也没有 `ViewManager`）⇒ 判定"这家接没接选择器"看 `<TemplateSelector>` 那一行即可，
    **搜 `ViewPool.TemplateSelector` 在本家恒空**。
    同族对照：WPF / WinUI / Avalonia / MAUI 在标记里喂 `Helper.VisibleItems`；**WinForms 现在也由适配器喂它**
-   （`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 的 `AttachTree`，模板不再发散虚拟化）；
-   Jalium 现在也在标记里绑（`behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`）。MAUI 的连线由适配器 `ViewManager` 在入队前筛掉，交给共享 overlay 画。
+   （`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs` 的 `AttachTree`，模板不再发散虚拟化）；
+   Jalium 现在也在标记里绑（`behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`）。MAUI 的连线由适配器的 `ViewLinkLayer` 在入队前挡在主池外，交给共享 overlay 画。
 
 7. **输入/输出插槽按通道拆的逻辑现在在适配器 `WorkflowPresentation`**：`InputSlotsOf`（只带 source 标志、
    排除任何 target 标志）与 `OutputSlotsOf`（带 target 标志）
-   （`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowPresentation.cs` 的 `InputSlotsOf` / `OutputSlotsOf`），
+   （`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowPresentation.cs` 的 `InputSlotsOf` / `OutputSlotsOf`），
    插槽显示名走 `IConditionalSlotProviders`（`SlotNamesOf`，理由在其 `<remarks>`）。
    两处尺寸仍在 tree-view 标记里写死：输入 `SlotSize="18"`、输出 `SlotSize="14"`
    （`workflow-tree-view/TemplateClass.razor` 的 `RenderGenericNode`），而 slot-view 自己的默认是 `IconSize = 20`
@@ -114,7 +114,7 @@
    生成的 tree-view 给 decorator 传 `RulerThickness="28"`（`workflow-tree-view/TemplateClass.razor` 的内层 `GridDecorator`），
    **但从不给 `<WorkflowSurfaceBehavior>` 传 `RulerThickness`**（组件上只有
    `GridSpacing` / `GridColor` / `Background`）—— surface 那边用的是适配器默认 28
-   （`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor.cs` 的 `RulerThickness`）。
+   （`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.razor.cs` 的 `RulerThickness`）。
    两者相等只是**默认值巧合**。⇒ 改标尺厚度要同时改**两处**，只改模板那一处会让刻度带与"世界原点预留"
    错开同样的像素数。同一份常量在 grid-decorator 条目里也是硬编码（`grid-decorator/TemplateClass.razor.cs` 的 `RulerThickness`），
    而**两个条目的 `template.json` 都没有 `rulerThickness` 符号** ⇒ Razor 的标尺厚度**不可经 CLI 配置**。
@@ -129,7 +129,7 @@
 
 | 空转符号 | 为什么换不回来 |
 |---|---|
-| `surfaceBorderBrush`、`surfaceBorderThickness`、`surfaceCornerRadius`（tree-view） | 生成的 tree-view **没有任何外层容器元素**（`.razor` 的根就是 `<WorkflowSurfaceBehavior>`），而适配器的外壳 `<div class="veloxdev-wf-surface">` 是适配器渲染的、没有内联边框样式（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSurfaceBehavior.razor` 的外壳 `div`）⇒ 没地方画这个边框 |
+| `surfaceBorderBrush`、`surfaceBorderThickness`、`surfaceCornerRadius`（tree-view） | 生成的 tree-view **没有任何外层容器元素**（`.razor` 的根就是 `<WorkflowSurfaceBehavior>`），而适配器的外壳 `<div class="veloxdev-wf-surface">` 是适配器渲染的、没有内联边框样式（`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.razor` 的外壳 `div`）⇒ 没地方画这个边框 |
 | `gridBackground`、`minorGridColor`、`majorGridColor`（grid-decorator） | 在 Razor 里网格背景/细线/粗线/坐标轴**不由 decorator 画**，而由 surface 画布元素的 CSS 变量承载：`--veloxdev-gs/-gc/-mgc/-ac`（`WorkflowSurfaceBehavior.razor.cs` 的 `CanvasBackgroundStyle`，参数 `Background` / `GridColor` / `MajorGridColor` / `AxisColor`）⇒ decorator 上放这三个颜色没有绘制面 |
 | `slotBackground`（slot-view） | slot-view 只画一个 `<path>`（fill + stroke，`workflow-slot-view/TemplateClass.razor`），适配器的连接行为也不提供背景层；这一条在 `template.json` 的 `description` 里自陈（`workflow-slot-view/.template.config/template.json` 的 `slotBackground.description`：`Accepted for cross-GUI CLI parity; this GUI's slot has no separate background surface.`）—— 2026-10-04 起全仓那批空转参数都这么自陈了，它不再是唯一一个 |
 
@@ -149,7 +149,7 @@ tree-view 实例化生成组件时**显式传了**哪些参数（`workflow-tree-
 
 ### P3 · tree-view 里的颜色：只有一个是符号，其余在适配器里硬编码
 
-一组默认色现在定义在**适配器** `Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowPresentation.cs` 的静态属性里：
+一组默认色现在定义在**适配器** `Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowPresentation.cs` 的静态属性里：
 `MinorGridColor = ToCss("#2A2D2E")`、`RulerBackground = ToCss("#C8252526")`、
 `RulerTickColor = ToCss("#555555")`、`RulerDividerColor = ToCss("#3A3D40")`、
 `NodeForegroundCss = ToCss("#DD1E1E1E")`（`NodeForegroundCss` 用在输出插槽的标签上，`workflow-tree-view/TemplateClass.razor` 的 `RenderGenericNode`）——
@@ -160,12 +160,12 @@ tree-view 实例化生成组件时**显式传了**哪些参数（`workflow-tree-
 （`<WorkflowSurfaceBehavior>` 上只有 `GridSpacing` / `GridColor` / `Background`）。⇒ 生成出来的项目里，**粗网格线颜色与坐标轴颜色根本改不了**（只能手工往
 `<WorkflowSurfaceBehavior>` 上加参数），而细网格颜色要在适配器 `WorkflowPresentation` 里改。
 唯一经符号可配的颜色是 `Background`（`<WorkflowSurfaceBehavior>` 的 `TemplateSurfaceBackground`）。
-`AxisColor` 若不传，适配器会退回 `TickColor`（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowGridDecorator.razor.cs` 的 `AxisColorCss`）。
+`AxisColor` 若不传，适配器会退回 `TickColor`（`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowGridDecorator.razor.cs` 的 `AxisColorCss`）。
 
 ### P4 · minimap 薄壳把一个适配器默认值**写死覆盖**了，且没有符号
 
 `workflow-minimap-overlay/TemplateClass.razor` 传 `ViewportFill="transparent"`，
-而适配器的默认是 `rgba(255,255,255,0.15)`（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowMinimapOverlay.razor.cs` 的 `ViewportFill`）。
+而适配器的默认是 `rgba(255,255,255,0.15)`（`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.razor.cs` 的 `ViewportFill`）。
 ⇒ 生成的小地图是"只有描边的视口框"，没有任何 `Template*` 或 CLI 参数能把它换回来 ——
 想要半透明填充只能手改这一行。同一文件里的 `Width="180" Height="120"`（tree-view 传的，`workflow-tree-view/TemplateClass.razor` 的 `MinimapOverlay`）
 与 adaptor 的 `Width` / `Height` 默认值一致（`WorkflowMinimapOverlay.razor.cs`），改小地图尺寸要改 tree-view 的标记。
@@ -185,7 +185,7 @@ tree-view 实例化生成组件时**显式传了**哪些参数（`workflow-tree-
 `CanRender` / `IsVirtual` 两个**状态字段**（由 `Sync` 写）。
 ⇒ 这里成立的前提是「一个 link 实例始终配同一个 `LinkView` 实例」。
 tree-view 现在把连线交给池（本文 §二·3 / §二·6），池对每个 item 下 `@key`（`KeySelector="i => i"`，
-`Src/Adapters/VeloxDev.Razor/Attached/Workflow/ViewPool.razor` 的 `@key`）⇒ 配对按**对象身份**稳定。
+`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/ViewPool.razor` 的 `@key`）⇒ 配对按**对象身份**稳定。
 **历史**：连线还是手写 `@foreach (var link in Tree.Links)`（无 `@key`）时，集合重排/换对象会让组件实例按
 **位置**复用、`CanRender`/`IsVirtual` 留在旧值上（该显示时不显示，且不报错）—— 那条结论是从代码与 Blazor
 差分语义推得的**未实测**判断，对应的代码路径已经不存在。**以后若有人把连线拿出池自己 `foreach`，要补 `@key`。**
@@ -195,7 +195,7 @@ tree-view 现在把连线交给池（本文 §二·3 / §二·6），池对每�
 `ToCss`（`#AARRGGBB` → `rgba(...)`）与 `HexByte` 在**多处**逐字重复（tree-view 的那份已随重构搬进适配器）：
 `link-view` / `node-view` / `slot-view` / `grid-decorator` / `minimap-overlay` 各自的 `TemplateClass.razor.cs`
 （`template-selector` 没有；tree-view 用适配器的
-`WorkflowPresentation.ToCss`，`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowPresentation.cs` 的 `ToCss` + `HexByte`）。
+`WorkflowPresentation.ToCss`，`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowPresentation.cs` 的 `ToCss` + `HexByte`）。
 ⇒ 改解析规则（比如支持 3 位缩写、或支持 `#RGB`）要改这些地方 **加** 适配器那一份。
 （WinUI 那家的那份重复见 `../adapters/winui.md` §三·P4。）
 同一类的还有**设计尺寸 260 在 node-view 里多处各写一份**：标记的 `width:260px;height:180px`

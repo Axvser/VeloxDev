@@ -12,9 +12,9 @@
 
 ### 步骤
 
-1. **写类**：`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/Samplers/<名字>Sampler.cs`，命名空间必须是 `VeloxDev.Adapters.NativeSamplers`（本模块的采样器全在这个命名空间，见 `Samplers/PointSampler.cs` 的 `namespace`）。
+1. **写类**：`Src/Adapters/VeloxDev.WinUI/TransitionSystem/Samplers/<名字>Sampler.cs`，命名空间必须是 `VeloxDev.Adapters.NativeSamplers`（本模块的采样器全在这个命名空间，见 `Samplers/PointSampler.cs` 的 `namespace`）。
    形状照 `Samplers/PointSampler.cs`（最小的一份）：实现 `ISampler` 的那几个方法 `NormalizeStart` / `NormalizeEnd` / `InsertFrame`；`ISampler` 由 `GlobalUsings.cs` 的 `global using VeloxDev.TransitionSystem.Abstractions;` 提供，**不要**再写一行 `using`。
-2. **注册**：在 `PlatformAdapters/Interpolator.cs` 静态构造函数里加一行 `RegisterInterpolator(typeof(你要动画的类型), new <名字>Sampler());`。这一张表就是全部注册；没有别的注册点。
+2. **注册**：在 `TransitionSystem/Interpolator.cs` 静态构造函数里加一行 `RegisterInterpolator(typeof(你要动画的类型), new <名字>Sampler());`。这一张表就是全部注册；没有别的注册点。
 3. **登记到闭式解套件**（只有「产出的值本身是值」的采样器才能走这条）：`Examples/Transition/AUTO TEST/Samplers/WinUiEntries.cs` 加一条 `SamplerEntry`，并在同文件的 `Target` 类上补一个属性让 `Write` 有真实目标可写。
 4. **登记到验收表**（产出的值是 **WinRT `DependencyObject`** 的那一类走这条）：`Examples/Transition/AUTO TEST/Conformance/WinUiConformance.cs`（`All` 成员）加一条，并由真跑起来的 demo 驱动（`Samplers/UnreachableSamplers.cs` 是这条路的名字来源）。
 5. **跑两条验证线**：`Examples/Transition/AUTO TEST/Samplers/VeloxDev.SamplerTest.csproj`（`SamplerCoverageTests` + `SamplerConformanceTests`）与 `Examples/Transition/AUTO TEST/`（`Conformance/`、`LoadMode/WinUiLoadMode.cs`、`Drivers/WinUIDemoDriver.cs`）。
@@ -41,14 +41,14 @@
 
 ### 步骤
 
-1. 在 `PlatformAdapters/ThemeValueConverters.cs`（或本模块任何文件）里写一个类，**命名空间必须是 `VeloxDev.DynamicTheme`**（该文件的 `namespace`），实现 `IThemeValueConverter`。现有这些：`DoubleConverter`、`PointConverter`、`ThicknessConverter`、`CornerRadiusConverter`、`ColorConverter`、`BrushConverter`、`ObjectConverter`。
+1. 在 `DynamicTheme/ThemeValueConverters.cs`（或本模块任何文件）里写一个类，**命名空间必须是 `VeloxDev.DynamicTheme`**（该文件的 `namespace`），实现 `IThemeValueConverter`。现有这些：`DoubleConverter`、`PointConverter`、`ThicknessConverter`、`CornerRadiusConverter`、`ColorConverter`、`BrushConverter`、`ObjectConverter`。
 2. **没有第二步。** 转换器**不存在宿主注册调用** —— 消费方在代码里用 `[ThemeConfig<YourConverter, TThemeA, TThemeB>(nameof(Prop), [..], [..])]` 点名（仓内用法样例：`Examples/Theme/Avalonia/Demo/ThemeTile.cs` 的两个 `[ThemeConfig<...>]`），**生成器**把类型名写进生成的代码里，运行期由 `System.Activator.CreateInstance` 激活（`Src/Generators/VeloxDev.Core.Generator/Theme.cs` 的 `Activator.CreateInstance`）。⇒ 转换器类只需是**有公开无参构造**的 `class`，与 `VeloxDev.WinUI` 被引没被引无关。
 
 ### 官方做法 vs 看着能编译但错的捷径
 
 - ❌ **调 `ThemeCache.RegisterConverter(...)` 注册**。这个 API 在当前源码里不存在（`grep -rn RegisterConverter Src/ Examples/ --include=*.cs` 零命中）；转换器只由生成器按 `[ThemeConfig<>]` 把类型名写死，没有运行期注册入口。走它等于把转换器挂在一个没人会去查的名字上。
 - ⚠ **短文名一律解析到本模块这几个转换器**：`BrushConverter.Convert` 里两处 `new ColorConverter()` **有意**指向本文件 `ColorConverter` 的那一个（把字符串解析成 `Windows.UI.Color` 再包成 `SolidColorBrush`）。所以在这个命名空间里新写转换器时，别指望平台自带的转换器 —— WinUI 侧只有 `ColorHelper` 这类 static helper，没有实现 `IThemeValueConverter` 的类型。**反过来说：WPF 那条「必须全限定平台自带转换器」的坑在这里不存在**（全模块 `grep 'Microsoft.UI.Xaml.Media.BrushConverter'` 零命中），不要照搬。
-- ⚠ **`ThemeResourceLookup` 的 `Application.Current` 只有一条路径，而且是守住的**（`ThemeValueConverters.cs` 的 `Application.Current?.Resources`，紧跟其后的 `resources is null` 检查）—— 全文件 `Application.Current` 只出现这一处（模块内另一次在 `ViewManager.cs`，同样有 `is not null` 守卫）。所以 WPF 的 `ObjectConverter` 那条「两条路径、一条没守、无 `Application` 的进程静默拿到 null」的坑**在这里不存在**，别照抄过来「顺手加固」。真正要记的是它的**返回语义**：找不到资源时返回 `false`（不抛），调用方 `ObjectConverter` 于是给出 null ⇒ 无 `Application` 的进程（单测、控制台探针）症状仍是**静默 null**，不是异常。查找本身是**递归**的：`TryFindInDictionary` 依次看字典自己、`ThemeDictionaries`、`MergedDictionaries`，所以写在主题字典或合并字典里的键也找得到 —— 这在 WinUI 上是必须的（浅色/深色值常规就放在 `ThemeDictionaries` 里）。
+- ⚠ **`ThemeResourceLookup` 的 `Application.Current` 只有一条路径，而且是守住的**（`ThemeValueConverters.cs` 的 `Application.Current?.Resources`，紧跟其后的 `resources is null` 检查）—— 全文件 `Application.Current` 只出现这一处（模块内另一次在 `ViewHosting/ViewFactory.cs`，同样有 `is not null` 守卫）。所以 WPF 的 `ObjectConverter` 那条「两条路径、一条没守、无 `Application` 的进程静默拿到 null」的坑**在这里不存在**，别照抄过来「顺手加固」。真正要记的是它的**返回语义**：找不到资源时返回 `false`（不抛），调用方 `ObjectConverter` 于是给出 null ⇒ 无 `Application` 的进程（单测、控制台探针）症状仍是**静默 null**，不是异常。查找本身是**递归**的：`TryFindInDictionary` 依次看字典自己、`ThemeDictionaries`、`MergedDictionaries`，所以写在主题字典或合并字典里的键也找得到 —— 这在 WinUI 上是必须的（浅色/深色值常规就放在 `ThemeDictionaries` 里）。
 - ⚠ **本文件的 `catch` 全部吞掉异常**（`DoubleConverter`/`ThicknessConverter` 的 `catch` 块内 `return null`、`CornerRadiusConverter`/`ColorConverter` 的 `catch { return null; }`、`PointConverter`/`BrushConverter`/`ObjectConverter` 的空 `catch { }`）—— 这是刻意姿态，与 DynamicTheme「异常不逃逸」一致，别顺手「修」成抛异常。
 - ⚠ **本模块的转换器在仓内没有任何消费方**（`Examples/Theme/` 下只有 Avalonia 与 WPF 两套）。想在 WinUI 上验证主题切换，得自己起一个宿主并按上面第 2 步写 `[ThemeConfig<>]`。
 
@@ -92,9 +92,9 @@
 
 | 位置 | 内容 |
 |---|---|
-| `PlatformAdapters/Transition.cs` 的 `Transition<T>` 基类列表 | `Transition<T> : TransitionCore<T, State, TransitionEffect, Interpolator, UIThreadInspector, TransitionInterpreter, DispatcherQueuePriority>` |
-| `PlatformAdapters/TransitionScheduler.cs` 的 `TransitionScheduler<TTarget>` 类声明 | `TransitionScheduler<TTarget> : TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherQueuePriority>` |
-| `PlatformAdapters/Interpolator.cs` 的 `CreateScheduler` | `effect is ITransitionEffect<DispatcherQueuePriority>` 与 `FindOrCreate` 的类型实参 |
+| `TransitionSystem/Transition.cs` 的 `Transition<T>` 基类列表 | `Transition<T> : TransitionCore<T, State, TransitionEffect, Interpolator, UIThreadInspector, TransitionInterpreter, DispatcherQueuePriority>` |
+| `TransitionSystem/TransitionScheduler.cs` 的 `TransitionScheduler<TTarget>` 类声明 | `TransitionScheduler<TTarget> : TransitionSchedulerCore<UIThreadInspector, TransitionInterpreter, DispatcherQueuePriority>` |
+| `TransitionSystem/Interpolator.cs` 的 `CreateScheduler` | `effect is ITransitionEffect<DispatcherQueuePriority>` 与 `FindOrCreate` 的类型实参 |
 
 **`Transition<T>` 与 `CreateScheduler` 那两处必须是同一组实参**，否则 `CreateScheduler` 会走到 `null` 分支 —— 表现是**动画完全不跑且不抛异常**（只是没有调度器）。`effect is ITransitionEffect<TPriority>` 这个判断**只认优先级类型**，传进来一个别家的 `TransitionEffect` 就是这条静默路径。
 
@@ -103,7 +103,7 @@
 - ❌ **「修好」`UIThreadInspector.PostCore` 里的 `Lifetime.SetAlive(accepted)`**。它是**刻意双向**的：队列拒绝说明应用在退出，接纳说明还活着，两个方向都报；Core 侧 remarks（`Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs` 的 `ApplicationState.SetAlive`）点名了「WinUI clears its flag when a single enqueue is refused … has to be able to take it back」。改成只置 false ⇒ **一次瞬时拒绝就让整个进程的动画永久停摆、且什么都不记**。改这里之前先把 `SetAlive` 的消费链读一遍：`Runtime/TransitionHostBase.cs`（`Lifetime`/`IsAlive` 两个属性都转发到它）→ `Sampling/SamplerSet.cs` 的 `CanSetValue`（每次写属性的闸门）。
 - ❌ **给 `UIThreadInspector` 加一个「更可靠」的静态初始化**。它已有三层：`QueueFor(target)` 先问 target 自己、`EnsureQueue()` 懒捕获、`CaptureUIThread()` 让宿主主动交（非 UI 线程会抛）。**WinUI 侧的仓内调用点是零**（唯一调用在 Blazor demo），因为 `DependencyObject` 目标是常态；加之前先确认你确实有「target 不是 `DependencyObject`」的宿主。
 - ❌ **拿 `new TransitionScheduler<T>()` 当调度器**。这个类的 `TTarget` 是个没人用的类型参数、全仓没有构造点（`TransitionScheduler.cs` 的类声明）；真正被用的建法只有 `TransitionSchedulerCore<…>.FindOrCreate(target)`（`Interpolator.CreateScheduler`）。手建的那个**不参与 `MutualSchedulers` 归档**，而按 target 找回 run 的三个静态入口 `Exit`/`Pause`/`Seek`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs`，默认 `IncludeMutual = true`）走的正是那张字典（读者是 `CollectSchedulers`）⇒ 对目标调它们，你手建那个调度器不会被停、不会被定位（`architecture.md` §二·3）。
-- ⚠ **`State : StateCore`、`Transition : TransitionCore` 是空壳**，看起来像「忘了实现」而实际就是空的（`PlatformAdapters/State.cs` 的 `State`、`Transition.cs` 的 `Transition`）。要加状态字段就加在这里，别去 Core 改。
+- ⚠ **`State : StateCore`、`Transition : TransitionCore` 是空壳**，看起来像「忘了实现」而实际就是空的（`TransitionSystem/State.cs` 的 `State`、`Transition.cs` 的 `Transition`）。要加状态字段就加在这里，别去 Core 改。
 
 ---
 
@@ -118,14 +118,14 @@
 | 采样器的引用（`Examples/Transition/AUTO TEST/Samplers/VeloxDev.SamplerTest.csproj` 里指向 `VeloxDev.WinUI` 的 `ProjectReference`） | 摘掉会让 `EveryAdapterAssembly_IsLoadedSoItsSamplersAreCounted` 失败（设计如此，消息直接指过来） |
 | 想让新类型出现在模板里 | `Src/Templates/VeloxDev.WinUI.Templates/` 是**纯内容包**，改它不产生任何依赖；面向用户的一侧在 `skills/veloxdev-create-workflow/references/gui/winui.md` |
 
-**加 TFM 之前先问一句**：本模块唯一一处条件编译是 `PlatformAdapters/Transition.cs` 的 `#if !NETSTANDARD2_0`（`System.Numerics` 那组重载），而现有两个 TFM 都不带 netstandard ⇒ **它恒为真，是死守卫**。加一个 `netstandard2.0` 会让那些重载真的消失（这正是 Avalonia 那条同款守卫存在的意义）—— 这是改 TFM 时**唯一**一处会被动的代码，其余全是 MSBuild 层的事。
+**加 TFM 之前先问一句**：本模块唯一一处条件编译是 `TransitionSystem/Transition.cs` 的 `#if !NETSTANDARD2_0`（`System.Numerics` 那组重载），而现有两个 TFM 都不带 netstandard ⇒ **它恒为真，是死守卫**。加一个 `netstandard2.0` 会让那些重载真的消失（这正是 Avalonia 那条同款守卫存在的意义）—— 这是改 TFM 时**唯一**一处会被动的代码，其余全是 MSBuild 层的事。
 
 ---
 
 ## 六、本模块专属的几条禁令
 
 1. **不要为了「对齐别家」把合成平移换回 `RenderTransform` 绑定。** 那会与 `Canvas.Translation`（`WorkflowSurfaceBehavior.ApplyLayout` 里的 `state.Canvas.Translation`）叠加成双倍位移，而且槽位锚点必须跟着从 `SlotAnchorFromCanvasLocal` 改回 `SlotAnchorFromNode`（`WorkflowSlotLayoutBehavior.SyncSlot` 的分支就是为这件事存在的）。
-2. **不要给 `ViewManager.ApplyLayout` 的连线分支补写 `Canvas.SetLeft/SetTop`**（`IWorkflowLinkViewModel` 分支的空 `break`）。它是 offset frame 的前提，注释已说明理由。
+2. **不要给 `ViewArranger` 的连线分支补写 `Canvas.SetLeft/SetTop`**（`IWorkflowLinkViewModel` 分支保持不写几何）。它是 offset frame 的前提，注释已说明理由。
 3. **不要把 `Refresh` 从 `OnViewChanged` 里摘掉来「省性能」**。它是这一家在「模板换树后重新解析」上的唯一自动路径（名称域只有 `FindName` 一条路）；摘掉之后一切依赖宿主显式调。要优化就在 `ResolveNamedControls`/`UnsubscribeResolvedControls` 内部省，别动调用关系。
 4. **不要引用 `Docs/`**（不在本仓库），**也不要把 `docs` 站点的措辞当依据** —— 依据只能是 `Src/` 与 `Examples/` 里的代码。
 5. **改这一家时先确认参考实现是哪一个**：工作流是 `Examples/Workflow/WinUI Trimmed/`（**整目录都可照抄** —— code-behind 只做宿主输入接线，没有漂移探针）；非 Trimmed 的 `Examples/Workflow/WinUI/` 停在 offset frame 之前的老做法。

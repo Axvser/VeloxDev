@@ -15,7 +15,7 @@ ControlExtensions.FindControl[T] → WorkflowSurfaceBehavior.ResolveNamedControl
   → Demo.WorkflowView.!XamlIlPopulate(...)   WorkflowView.axaml:21
 ```
 
-**机制**：Avalonia 的 XAML 加载器把 attached 属性**一条一条**写上去，而**父命名作用域要等装载完成才挂上**。这些属性里只有 `LinkMenuKey` 有变更处理函数（`Attached/Workflow/WorkflowSurfaceBehavior.cs` 静态构造函数里的 `LinkMenuKeyProperty.Changed.AddClassHandler`），而它被写在**最后一条**（7 家模板与全部 demo 都是这个顺序）—— 于是它触发重查时，前面的 `ScrollViewerName` / `CanvasName` / `GridDecoratorName` / `MinimapOverlayName` / `PointerPressSourceName` **已经全都写上了**，`ResolveNamedControls` 于是真的去 `FindControl`，而那时作用域还没有。
+**机制**：Avalonia 的 XAML 加载器把 attached 属性**一条一条**写上去，而**父命名作用域要等装载完成才挂上**。这些属性里只有 `LinkMenuKey` 有变更处理函数（`WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 静态构造函数里的 `LinkMenuKeyProperty.Changed.AddClassHandler`），而它被写在**最后一条**（7 家模板与全部 demo 都是这个顺序）—— 于是它触发重查时，前面的 `ScrollViewerName` / `CanvasName` / `GridDecoratorName` / `MinimapOverlayName` / `PointerPressSourceName` **已经全都写上了**，`ResolveNamedControls` 于是真的去 `FindControl`，而那时作用域还没有。
 
 **为什么别的那几个属性没事**：它们没有处理函数，所以装载途中根本不会重查 —— 这不是设计，是巧合。
 

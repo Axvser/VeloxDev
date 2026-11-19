@@ -2,7 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`，契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`，
 > 时钟在 `Src/Core/VeloxDev.Core/Timing/`，编组在 `Src/Core/VeloxDev.Core/Threading/`。
-> 七家平台实现在 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`。
+> 七家平台实现在 `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/`。
 >
 > **本文只写共性契约**：扩展点在哪、官方做法、联动清单。
 > **一家的平台硬限制、刻意背离、该家特有的坑一律不写在这里** —— 那些在 `memory/modules/TransitionSystem/adapters/<平台>.md`。
@@ -43,7 +43,7 @@
 | `InsertFrame` 里就地改 `start`/`end`（例如拿 start 当 scratch） | 它们与快照**共享**，改了污染快照，下一次迭代/另一个目标读到被改过的端点 | `ISampler.cs` 的 `ISampler` 类型注释明写（「never mutate the `start` / `end`」） |
 | `t <= 0` / `t >= 1` 返回 scratch，而不是调用方给的 start/end 本身 | 嵌套路径（`((TranslateTransform)x.RenderTransform).X`）依赖端点声明时的**运行时类型**，scratch 会把类型换掉 | `skills/veloxdev-create-animation/references/adapter.md` §2 的「When the product feeds a nested path…」一条 |
 | 只注册具体类型，却希望基类型属性也走它 | 查找**只向上走**：精确 → 基类由近及远 → 接口按名字序。注册 `SolidColorBrush` 不会命中 `LinearGradientBrush`；而**声明类型本身就是抽象基类**时更彻底 —— 一条键都没有，`Prepare` 报一次 `Unsampled` 把该属性整个跳过。WPF 走过这个形状（注册 `DropShadowEffect`，而它自己的 `UIElement.Effect` DP 声明成 `Effect`），2026-09-20 改成注册基类型（见 `adapters/wpf.md` 坑 7） | `Sampling/Interpolator.cs` 的 `TryGetInterpolator`、`Sampling/Interpolator.cs` 的 `Prepare` 里 `sampler == null` 分支 |
-| 注册了基类型却只处理具体类型 | 反过来同样成立：注册 `Brush` 就承诺处理整个家族，梯度也会进来。**改注成基类型是这条义务的开始，不是结束** —— 注册 `Effect` 后，兜底分支必须如实交出端点（凭空造一个 `DropShadowEffect` 顶替就会让 `BlurEffect` 被静默画成阴影） | `adapter.md` §3 的「A more general registration must handle the whole family」一条、`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/DropShadowEffectSampler.cs` 的 `InsertFrame`（非 `DropShadowEffect` 端点走 `t >= 0.5d ? end : start`） |
+| 注册了基类型却只处理具体类型 | 反过来同样成立：注册 `Brush` 就承诺处理整个家族，梯度也会进来。**改注成基类型是这条义务的开始，不是结束** —— 注册 `Effect` 后，兜底分支必须如实交出端点（凭空造一个 `DropShadowEffect` 顶替就会让 `BlurEffect` 被静默画成阴影） | `adapter.md` §3 的「A more general registration must handle the whole family」一条、`Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/DropShadowEffectSampler.cs` 的 `InsertFrame`（非 `DropShadowEffect` 端点走 `t >= 0.5d ? end : start`） |
 | 用 `UnregisterInterpolator` 做「临时替换，用完恢复」 | 安装是 **last-writer-wins 的原子 AddOrUpdate**（`Sampling/Interpolator.cs` 的 `RegisterInterpolator`），并发下先后顺序不由你定，恢复可能盖掉别人的注册 | `Sampling/Interpolator.cs` 的 `RegisterInterpolator` |
 | 在 `Prepare` 之后才注册，以为能生效 | 采样器**每个 property 每趟动画只解析一次**，且在首趟的 `Prepare` 里 | `Sampling/Interpolator.cs` 的 `InterpolatorCore.Prepare` |
 
@@ -69,7 +69,7 @@
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
 | 用 `Property(x => x.SomeDecimal, 1.5m)` 期望它动起来 | **六家的 `decimal` 重载都是空头支票**：全仓库没有任何 `DecimalSampler`，Core 也不注册 `decimal`（`Sampling/Interpolator.cs` 的静态构造）⇒ 该属性每趟只报一次 `Warn(WarnStage.Unsampled, …)` 然后被跳过，**什么都不动**。`decimal` 是值类型，所以连声明期的 `TransitionPathUnsampleableException` 都不会抛 | `Sampling/Interpolator.cs` 的 `Prepare`（`sampler == null` 分支）、`Effects/Transition.cs` 的 `RejectUnsampleablePaths`；`decimal` 重载位置：Avalonia `Effects/Transition.cs` 的 `Property(Expression<Func<T, decimal>>, …)`、MAUI 同名重载、Razor 同名重载、WPF 同名重载、WinForms 同名重载、WinUI 同名重载（**只有 Jalium 没有 `decimal` 重载**，在它那里是编译错误 —— 反而更安全） |
-| 以为「用了平台自带的值类型就没问题」 | 平台类型同样受这条支配：Avalonia 有 `Avalonia.Rect` / `Avalonia.Vector` 却没注册，于是这两个类型的属性动画一律静默跳过（WPF/WinUI/MAUI 三家都注册了 `Rect`，所以这是 Avalonia 的缺口而非平台限制） | `Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/Interpolator.cs` 的静态构造；见 `adapters/avalonia.md` |
+| 以为「用了平台自带的值类型就没问题」 | 平台类型同样受这条支配：Avalonia 有 `Avalonia.Rect` / `Avalonia.Vector` 却没注册，于是这两个类型的属性动画一律静默跳过（WPF/WinUI/MAUI 三家都注册了 `Rect`，所以这是 Avalonia 的缺口而非平台限制） | `Src/Adapters/VeloxDev.Avalonia/TransitionSystem/Interpolator.cs` 的静态构造；见 `adapters/avalonia.md` |
 | 想靠「值类型成员可写」绕过去 | 值类型的中间态是**装箱副本**，逐成员写回不到原属性 —— 这正是 `StructAssembler` 要用 `CaptureProperty` 假路径收集成员的原因（`Sampling/StructAssembler.cs` 的 `CaptureProperty`）。没实现 `ISampleable` 就没有这个装配器可用 | `Sampling/StructAssembler.cs` 的 `CaptureProperty` |
 
 **样本的判据是「这条路径动了没有」，不是「有没有报错」** —— 排查「某条路径不生效」时，先确认它的类型在不在该家 `Interpolator` 静态构造的注册表里。
@@ -171,11 +171,11 @@
 
 1. **写采样器类**：`ISampler` 的成员，无状态。
    - 无 GUI 依赖的类型 → `Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/`（现有的采样器是范本）。
-   - 平台类型 → `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/Samplers/`。
+   - 平台类型 → `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/Samplers/`。
 2. **注册**：在该家的 `Interpolator` 静态构造里 `RegisterInterpolator(typeof(X), new XSampler());`
    - Core 类型 → `TransitionSystem/Sampling/Interpolator.cs` 的静态构造。
-   - 平台类型 → `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/Interpolator.cs` 的静态构造。
-3. **声明入口**（只有 Razor 一定需要）：六家的 `Transition<T>` 有泛型 `Property<TValue>`（Avalonia、WinForms、WinUI、MAUI、WPF、Jalium 各自 `PlatformAdapters/Transition.cs` 里的 `Property<TValue>`），**Razor 没有**，它是逐类型手写重载（`Razor/PlatformAdapters/Transition.cs` 的逐类型 `Property` 重载）——**Razor 上 Core 有采样器但没重载的类型就是声明不出来**（例如 `long`：`Sampling/Interpolator.cs` 的静态构造注册了 `LongSampler`，Razor 的重载表里没有 `long`）。在 Razor 上加一个类型必须顺手补重载。
+   - 平台类型 → `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/Interpolator.cs` 的静态构造。
+3. **声明入口**（只有 Razor 一定需要）：六家的 `Transition<T>` 有泛型 `Property<TValue>`（Avalonia、WinForms、WinUI、MAUI、WPF、Jalium 各自 `TransitionSystem/Transition.cs` 里的 `Property<TValue>`），**Razor 没有**，它是逐类型手写重载（`Razor/TransitionSystem/Transition.cs` 的逐类型 `Property` 重载）——**Razor 上 Core 有采样器但没重载的类型就是声明不出来**（例如 `long`：`Sampling/Interpolator.cs` 的静态构造注册了 `LongSampler`，Razor 的重载表里没有 `long`）。在 Razor 上加一个类型必须顺手补重载。
 4. **测试表**：`Examples/Transition/AUTO TEST/Samplers/` 下该家的 `<平台>Entries.cs` 加一条。
    - 端点值在这个纯数据进程里造不出来时（要真 XAML/MAUI 运行时）→ 改加进 `UnreachableSamplers.cs`，并在 `Examples/Transition/AUTO TEST/Conformance/*Conformance.cs` 里补同名条目（见 §四）。
 5. **demo**：`Examples/Transition/<GUI>/Demo` 的 probe/subject 加一行（照着现有行抄）。
@@ -192,7 +192,7 @@
 
 ### C. 新增一个平台适配器
 
-**要写的类**（全部镜像七家现成的；放 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`）：
+**要写的类**（全部镜像七家现成的；放 `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/`）：
 
 | 类 | 基类 | 必须提供 |
 |---|---|---|
@@ -212,7 +212,7 @@
 - `ThreadFor` 不能为调用方造 dispatcher。
 - 采样器一律无状态单例，端点不回写。
 
-**`TPriorityCore` 选型**：框架有 dispatcher 优先级就用它，没有就用 `NonPriority`（`Threading/NonPriority.cs`）。当前七家：WPF/Avalonia/Jalium = `DispatcherPriority`，WinUI = `DispatcherQueuePriority`，MAUI/WinForms/Razor = `NonPriority`（`Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/TransitionScheduler.cs` 等各家声明；`adapter.md` §4「Priority」的表）。优先级出现在**两处**：`Transition<T>` 的第七个型参，与 `CreateScheduler` 里测试 effect 的那个 cast —— 第二处写错会让主题切换静默降级为瞬切。
+**`TPriorityCore` 选型**：框架有 dispatcher 优先级就用它，没有就用 `NonPriority`（`Threading/NonPriority.cs`）。当前七家：WPF/Avalonia/Jalium = `DispatcherPriority`，WinUI = `DispatcherQueuePriority`，MAUI/WinForms/Razor = `NonPriority`（`Src/Adapters/VeloxDev.<GUI>/TransitionSystem/TransitionScheduler.cs` 等各家声明；`adapter.md` §4「Priority」的表）。优先级出现在**两处**：`Transition<T>` 的第七个型参，与 `CreateScheduler` 里测试 effect 的那个 cast —— 第二处写错会让主题切换静默降级为瞬切。
 
 **注册位置**：只在自己家注册采样器（`Interpolator` 静态构造）、只在自己家返回 scheduler（`CreateScheduler`）。**Core 里没有任何一处需要改** —— 这正是这套适配器模式的目的。Core 侧要改的只有测试与 demo 的清单，见 §四。
 
@@ -250,9 +250,9 @@
 
 | # | 位置 | 漏了会怎样 |
 |---|---|---|
-| 1 | `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/Samplers/XSampler.cs` | —— |
-| 2 | 该家 `PlatformAdapters/Interpolator.cs` 静态构造里的 `RegisterInterpolator` | 该类型全程不可动画，`Warn(WarnStage.Unsampled, …)` 每趟一次 |
-| 3 | 该家 `PlatformAdapters/Transition.cs` 的 `Property` 重载 | 只有 Razor 会漏到「声明不出来」（它逐类型手写）；六家泛型 `Property<TValue>` 自动覆盖 |
+| 1 | `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/Samplers/XSampler.cs` | —— |
+| 2 | 该家 `TransitionSystem/Interpolator.cs` 静态构造里的 `RegisterInterpolator` | 该类型全程不可动画，`Warn(WarnStage.Unsampled, …)` 每趟一次 |
+| 3 | 该家 `TransitionSystem/Transition.cs` 的 `Property` 重载 | 只有 Razor 会漏到「声明不出来」（它逐类型手写）；六家泛型 `Property<TValue>` 自动覆盖 |
 | 4 | `Examples/Transition/AUTO TEST/Samplers/<平台>Entries.cs` | `SamplerCoverageTests.EveryShippedSampler_IsAccountedFor`（`SamplerCoverageTests.cs`）**红** |
 | 5 | `Samplers/AdapterSamplerEntries.cs` 的 `All` 聚合数组 | 只有新增**平台**时才要；漏了则该家整张表不进注册表 → 同 4 红 |
 | 6 | 若端点值造不出来：`Samplers/UnreachableSamplers.cs` + `Examples/Transition/AUTO TEST/Conformance/<平台>Conformance.cs` | `EveryUnreachableSampler_IsCoveredByTheAcceptanceTables`（`SamplerCoverageTests.cs`）按**名字**对账，两边都漏就红；一边漏也红 |

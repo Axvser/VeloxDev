@@ -1,7 +1,7 @@
 # VeloxDev.MAUI — 架构
 
-> 代码：`Src/Adapters/VeloxDev.MAUI/`（`Attached/Workflow/` 最大的几个是 `WorkflowSurfaceBehavior.cs`、`WorkflowLinkOverlay.cs`、`WorkflowMinimapOverlay.cs`；`PlatformAdapters/` 本级最大的是 `ThemeValueConverters.cs`、`Transition.cs`，其下另有一组采样器；顶层 `GlobalUsings.cs`）。
-> **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.MAUI/*.cs' 'Src/Adapters/VeloxDev.MAUI/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 只匹配**子目录里**的 `.cs`，本级文件一个都不算（漏掉 `GlobalUsings.cs`；同理 `PlatformAdapters/**/*.cs` 只数到采样器，`PlatformAdapters/` 本级要另写 `PlatformAdapters/*.cs`）。七家适配器每家都正好漏这处。
+> 代码：`Src/Adapters/VeloxDev.MAUI/`（`WorkflowSystem/AttachedBehaviors/` 最大的几个是 `WorkflowSurfaceBehavior.cs`、`WorkflowLinkOverlay.cs`、`WorkflowMinimapOverlay.cs`；`TransitionSystem/` 本级最大的是 `Transition.cs`，其下另有一组采样器；`DynamicTheme/ThemeValueConverters.cs`；顶层 `GlobalUsings.cs`）。
+> **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.MAUI/*.cs' 'Src/Adapters/VeloxDev.MAUI/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 只匹配**子目录里**的 `.cs`，本级文件一个都不算（漏掉 `GlobalUsings.cs`；同理 `TransitionSystem/**/*.cs` 只数到采样器，`TransitionSystem/` 本级要另写 `TransitionSystem/*.cs`）。七家适配器每家都正好漏这处。
 >
 > 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 >
@@ -16,11 +16,11 @@
 
 | 轴 | Core 契约 | 本项目落点 | 平台差异记在哪 |
 |---|---|---|---|
-| WorkflowSystem | 七个视图角色 + 模型事件桥 | `Attached/Workflow/` | `memory/modules/WorkflowSystem/adapters/maui.md` |
-| TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `PlatformAdapters/`（平台类型 + 一组采样器） | `memory/modules/TransitionSystem/adapters/maui.md` |
-| DynamicTheme | `IThemeValueConverter` | `PlatformAdapters/ThemeValueConverters.cs` | `memory/modules/DynamicTheme/architecture.md` |
+| WorkflowSystem | 七个视图角色 + 模型事件桥 | `WorkflowSystem/AttachedBehaviors/` | `memory/modules/WorkflowSystem/adapters/maui.md` |
+| TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `TransitionSystem/`（平台类型 + 一组采样器） | `memory/modules/TransitionSystem/adapters/maui.md` |
+| DynamicTheme | `IThemeValueConverter` | `DynamicTheme/ThemeValueConverters.cs` | `memory/modules/DynamicTheme/architecture.md` |
 
-**目录名与轴不对齐，别按目录推契约**：`Attached/` 只有 WorkflowSystem 一条轴；TransitionSystem 与 DynamicTheme 混在 `PlatformAdapters/` 里。这与 WPF 同形，是七家共有的排布。
+**目录名与轴不对齐，别按目录推契约**：`AttachedBehaviors/` 只有 WorkflowSystem 一条轴；TransitionSystem 与 DynamicTheme 混在 `TransitionSystem/` 里。这与 WPF 同形，是七家共有的排布。
 
 ### 1.1 三条轴的命名空间都寄生在 Core 上，而 Attached 那一侧靠**嵌套**白拿 Core 的类型
 
@@ -30,12 +30,12 @@
 
 推论（改这些文件的头部之前先看这一条）：
 
-- **其中若干文件里的 `using VeloxDev.WorkflowSystem;` 是多余的**（`ViewManager.cs`、`WorkflowLinkOverlay.cs`、`WorkflowNodeDragBehavior.cs`、`WorkflowSlotConnectionBehavior.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowSurfaceBehavior.cs`），删掉不影响编译。真正**必需**的是 `WorkflowSurfaceBehavior.cs` 的 `using VeloxDev.WorkflowSystem.StandardEx;` —— StandardEx 是**子**命名空间，不在向上查找的链上，扩展方法必须显式引入（`StandardSetAnchor` 族在 `Src/Core/VeloxDev.Core/WorkflowSystem/StandardEx/WorkflowNodeEx.cs`）。`WorkflowEvents.cs` 另需显式 `using VeloxDev.WorkflowSystem;` ——它没有走别名那条路，而 `WorkflowMinimapOverlay.cs` 连这一行也没有，靠的是 `Wf` 别名加命名空间嵌套（见上段）。
+- **其中若干文件里的 `using VeloxDev.WorkflowSystem;` 是多余的**（`WorkflowLinkOverlay.cs`、`WorkflowNodeDragBehavior.cs`、`WorkflowSlotConnectionBehavior.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowSurfaceBehavior.cs`），删掉不影响编译。真正**必需**的是 `WorkflowSurfaceBehavior.cs` 的 `using VeloxDev.WorkflowSystem.StandardEx;` —— StandardEx 是**子**命名空间，不在向上查找的链上，扩展方法必须显式引入（`StandardSetAnchor` 族在 `Src/Core/VeloxDev.Core/WorkflowSystem/StandardEx/WorkflowNodeEx.cs`）。`WorkflowEvents.cs` 另需显式 `using VeloxDev.WorkflowSystem;` ——它没有走别名那条路，而 `WorkflowMinimapOverlay.cs` 连这一行也没有，靠的是 `Wf` 别名加命名空间嵌套（见上段）。
 - 反过来说：**把 Attached 文件挪到别的命名空间（比如为省 CS0433 而改名）会一次性打断所有对 Core 类型的引用**，而且报的是一整串「找不到类型」，看不出是命名空间的事。
 
 ### 1.2 「同名类型」在本模块是硬约束，不是风格
 
-`ViewManager` / `ViewPool` / `WorkflowSurfaceBehavior` / `WorkflowMinimapOverlay` 这些类型名在**七家适配器里逐家各有一份**，且都在 `VeloxDev.WorkflowSystem.AttachedBehaviors` 这一个命名空间下（全仓 `git grep -l 'namespace VeloxDev.WorkflowSystem.AttachedBehaviors'` 命中大量 `.cs`，全部在 `Src/Adapters/*/Attached/`，Core 没有命中，其中本家也贡献了一份）。后果：
+`ViewPool` / `WorkflowSurfaceBehavior` / `WorkflowMinimapOverlay` 这些类型名在**七家适配器里逐家各有一份**，且都在 `VeloxDev.WorkflowSystem.AttachedBehaviors` 这一个命名空间下（全仓 `git grep -l 'namespace VeloxDev.WorkflowSystem.AttachedBehaviors'` 命中大量 `.cs`，全部在 `Src/Adapters/*/Attached/`，Core 没有命中，其中本家也贡献了一份）。视图池的新分层（`ViewFactory`、`ViewContainer`、`ViewArranger`、`ViewSourcePipeline` 等）同名地住在 `VeloxDev.WorkflowSystem.ViewHosting`，同样是每家一份。后果：
 
 1. **宿主 XAML 必须写 `assembly=`**：`xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"`（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml`）。写成 `assembly=VeloxDev.Core` 一个行为类型都找不到。
 2. **同时引用两家适配器的 C# 项目会 CS0433**。代价的真实样貌见 `Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs` 的 `Entry<TValue>`：它按程序集 `GetType($"VeloxDev.Adapters.NativeSamplers.{samplerName}", throwOnError: true)` 反射取类型。
@@ -55,15 +55,15 @@
 
 ---
 
-## 二、`PlatformAdapters/`：注册与工厂
+## 二、`TransitionSystem/`：注册与工厂
 
 ### 2.1 三条注册路径，只有一条需要宿主动手
 
 | 要注册的东西 | 注册点 | 什么时候真的发生 |
 |---|---|---|
-| 一组采样器 | `Interpolator` 的**静态构造**（`PlatformAdapters/Interpolator.cs`；登记都在其中） | 第一次**构造** `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs`，其泛型约束里的 `new()`） |
-| 采样器所在的宿主/解释器/优先级 | `Transition<T>` 的类型实参（`PlatformAdapters/Transition.cs` 的 `Transition<T>` 基类参数）与 `TransitionScheduler`（`TransitionScheduler.cs`） | 同上，全部编译期写死 |
-| DynamicTheme 的调度器工厂 | `Interpolator.CreateScheduler`（`PlatformAdapters/Interpolator.cs`） | **宿主必须显式调** `ThemeManager.SetPlatformInterpolator(new Interpolator())` |
+| 一组采样器 | `Interpolator` 的**静态构造**（`TransitionSystem/Interpolator.cs`；登记都在其中） | 第一次**构造** `Transition<T>` 时：Core 的字段初始化 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs`，其泛型约束里的 `new()`） |
+| 采样器所在的宿主/解释器/优先级 | `Transition<T>` 的类型实参（`TransitionSystem/Transition.cs` 的 `Transition<T>` 基类参数）与 `TransitionScheduler`（`TransitionScheduler.cs`） | 同上，全部编译期写死 |
+| DynamicTheme 的调度器工厂 | `Interpolator.CreateScheduler`（`TransitionSystem/Interpolator.cs`） | **宿主必须显式调** `ThemeManager.SetPlatformInterpolator(new Interpolator())` |
 
 **没有程序集级入口，也没有 `Initialize()`**：全模块 grep `ModuleInitializer` / `[assembly:` 零命中，唯一的静态构造就是 `Interpolator` 的静态构造。⇒ 只用 `Transition<T>` 的宿主什么都不用做；而只走 DynamicTheme 的宿主漏掉 `SetPlatformInterpolator` 会**静默瞬切**（机制与各家的差异见 TransitionSystem 记忆）。
 
@@ -79,7 +79,7 @@
 
 ### 2.3 `Property(...)` 重载表由本家自己写，Core 一个都没有
 
-Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器各自手抄一份闭合的重载清单，本家是 `PlatformAdapters/Transition.cs` 的 `Transition<T>.Property` 重载组：
+Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器各自手抄一份闭合的重载清单，本家是 `TransitionSystem/Transition.cs` 的 `Transition<T>.Property` 重载组：
 
 - 第一个是泛型 `Property<TValue>` 兜底；
 - 走 MAUI 类型的若干条（`Brush?`/`Transform?`/`Point`/`PointF`/`CornerRadius`/`Thickness`/`Color?`/`Size`/`SizeF`/`Rect`/`RectF`/`Shadow?`/`int`/`double`/`float`/`decimal`）；
@@ -92,7 +92,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 
 ---
 
-## 三、`Attached/Workflow/`：每个角色的入口与挂载方式
+## 三、`WorkflowSystem/AttachedBehaviors/`：每个角色的入口与挂载方式
 
 ### 3.1 八种挂法，三道门槛
 
@@ -102,7 +102,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 | 插槽布局 `WorkflowSlotLayoutBehavior` | `IsEnabled="True"` + `SlotNames`/`SlotEnumeratorNames`/`CoordinateHost*` | **`ContentView`**（`Attach` / `Refresh` 的形参） | 私有附着 DP `State` | 被挂的那个 `ContentView` 自己 |
 | 节点拖拽 `WorkflowNodeDragBehavior` | `IsEnabled="True"` + `CoordinateHost*`（两个附着 `BindableProperty`） | **`View`**（`Attach` 的形参）——最宽 | 私有附着 DP `State` | 自己或祖先（`ResolveCoordinateHost` 的 `FindByName` → 祖先类型回退） |
 | 插槽连接 `WorkflowSlotConnectionBehavior` | `IsEnabled="True"` | **`View`**（`Attach` 的形参） | 私有附着 DP `State` | 自己；坐标宿主与画布**靠遍历祖先现找**，见 §3.2 |
-| 视图池 `ViewPool` | 赋 `ItemsSource`（附着 DP）+ `TemplateSelector`（附着 DP） | **`Layout`**（`EnsureManager`/`CleanupManager` 的 `is not Layout`） | `ConditionalWeakTable<Layout, ViewManager>`（`Managers`） | 不读；它是**写** DC 的那一方 |
+| 视图池 `ViewPool` | 赋 `ItemsSource`（附着 DP）+ `TemplateSelector`（附着 DP） | **`Layout`**（`Ensure`/`Cleanup` 的 `is not Layout`） | `ConditionalWeakTable<Layout, ViewSourcePipeline>`（`Systems`） | 不读；它是**写** DC 的那一方 |
 | 小地图 `WorkflowMinimapOverlay` | 不用挂：**继承它** + 赋 `WorkflowTree` | 继承（`GraphicsView, IDrawable, IWorkflowMinimapOverlay`；`public class`，全模块唯一非 `sealed`） | 实例字段（它本身就是元素） | 不读，它自己订阅 Core 模型（`OnTreeChanged` 起） |
 | 链接层 `WorkflowLinkOverlay` | 不用挂：XAML 里**绑**它的偏移 DP | 元素本身（`GraphicsView` 子类） | 实例字段 | 不读 |
 | 模型事件桥 `WorkflowEvents` | 绑 `Node`/`Slot`/`Tree` 到 sink | `VisualElement` | `ConditionalWeakTable` | 订阅跟随 `BindingContext`（转发在 Core `WorkflowEventRelay`） |
@@ -150,10 +150,10 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 
 ## 四、不变量：谁拥有状态，什么必须成对
 
-1. **每个附着行为的每元素状态只住在私有附着 DP `State` 里**，`Detach` 时 `ClearValue`。没有全局注册表（唯一的例外是 `ViewPool` 的 `ConditionalWeakTable` `Managers`，因为它的状态天然按 `Layout` 归档）。
+1. **每个附着行为的每元素状态只住在私有附着 DP `State` 里**，`Detach` 时 `ClearValue`。没有全局注册表（唯一的例外是 `ViewPool` 的 `ConditionalWeakTable` `Systems`，因为它的状态天然按 `Layout` 归档）。
 2. **两处进程级静态是刻意的**：`WorkflowNodeDragBehavior.IsDraggingNode` 与 `WorkflowSlotConnectionBehavior._activeConnection` / `IsDraggingConnection`。它们表达的是「全局同一时刻只允许一次节点拖拽 / 一次连线拖拽」，不是缓存。`IsDraggingNode` 被**平移逻辑**读（`WorkflowSurfaceBehavior` 的多处平移锚点计算：拖节点时把平移锚点贴到当前位置，避免拖拽结束后平移跳一段），所以删掉会连累平移。跨行为的读法只有这几处，别扩大。
 3. **`Attach` 必须先 `Detach`**；`Detach` 必须可重入（先 `-=` 再清状态）。所有 `OnIsEnabledChanged` 都依赖这一点。
-4. **视图被隐藏时留在 `_layout.Children` 里**：只 `IsVisible=false` + `ZIndex=-100`（`ViewManager` 的隐藏分支，两处，移除会触发昂贵的 MAUI 重排）⇒ 遍历子元素时**不能假设「看不见 = 不在」**。
+4. **视图被隐藏时留在 `_layout.Children` 里**：`ViewContainer.Detach` 是空的，`ViewContainer.Deactivate` 只写 `IsVisible=false` + `ZIndex=-100` + `BindingContext=null`；移除会触发昂贵的 MAUI 重排 ⇒ 遍历子元素时**不能假设「看不见 = 不在」**。
 5. **窗口增长方向是单向的**：`ApplyLayout` 里 `WidthRequest/HeightRequest` 只增不减（两个 `if` 都带 `<` 判定），尺寸还有个 `Math.Max(1, ...)` 下限。
 6. **`ApplyVisibleRegion` 的 NaN 提前返回是硬前提**。`NaN <= 0` 在 C# 里是 `false`，Core 的守卫抓不到，一旦放进去会让 `Viewport → Virtualize → 空间索引` 把**整批 VisibleItems 清空**（注释明写「links permanently disappear」）。
 
@@ -162,7 +162,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 ## 五、陷阱（带依据）
 
 1. **注册键与采样器实现必须是同一个 `RectF` —— 这个名字在不同 using 下会解到不同类型。**
-   - `PlatformAdapters/Interpolator.cs` 的 `RegisterInterpolator(typeof(RectF), new RectFSampler());`：该文件只 `using` 了 `Microsoft.Maui.Controls.Shapes` 与 `VeloxDev.Adapters.NativeSamplers`，**没有 `System.Drawing`**；而 `System.Drawing` 里**没有叫 `RectF` 的类型**（它叫 `RectangleF`）。MAUI 的隐式 using 里有 `global using Microsoft.Maui.Graphics;`（生成物 `obj/.../VeloxDev.MAUI.GlobalUsings.g.cs`）⇒ 这个 `RectF` 只能是 `Microsoft.Maui.Graphics.RectF`。
+   - `TransitionSystem/Interpolator.cs` 的 `RegisterInterpolator(typeof(RectF), new RectFSampler());`：该文件只 `using` 了 `Microsoft.Maui.Controls.Shapes` 与 `VeloxDev.Adapters.NativeSamplers`，**没有 `System.Drawing`**；而 `System.Drawing` 里**没有叫 `RectF` 的类型**（它叫 `RectangleF`）。MAUI 的隐式 using 里有 `global using Microsoft.Maui.Graphics;`（生成物 `obj/.../VeloxDev.MAUI.GlobalUsings.g.cs`）⇒ 这个 `RectF` 只能是 `Microsoft.Maui.Graphics.RectF`。
    - 采样器那侧（`Samplers/RectFSampler.cs`）一旦 `using System.Drawing;`，就会解成 `System.Drawing.RectangleF` —— 与键解到的不是同一个 `Type`（本模块的采样器默认都不 import `System.Drawing`）。
    - **后果**：声明为 `Microsoft.Maui.Graphics.RectF` 的属性走注册表解析（精确类型命中，Core `InterpolatorCore.TryGetInterpolator`；`RectF` 是 struct，基类链走到 `ValueType`/`object` 就没了，没有别的回退），**第一帧抛 `InvalidCastException`**；`SamplerSet.ApplyCore` 的 `catch` 接住，报一条 `ErrorStage.Sampling` 诊断，`CancelQuietly()`，返回 —— **整条 run 被取消，不是静默降级**。
    - **不受这条键影响的**：`System.Drawing.RectangleF` 由 **Core** 注册（`InterpolatorCore` 静态构造里的 `RectangleFSampler`），根本不经过这条键；`Microsoft.Maui.Graphics.Rect` 走同一个静态构造里的 `RectSampler`，是对的。
@@ -170,11 +170,11 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
    - **测试为什么抓不到**：`SamplerCoverageTests` 对的是**采样器类型**集合，不是 `(键, 采样器)` 配对。这类断言在 `Examples/Transition/AUTO TEST/Samplers/SamplerKeyTests.cs`：它拿真实注册表问「条目声明的类型解析到谁」，`EveryEntry_ValueTypeResolvesToTheSamplerItNames` 比采样器类型、`EveryEntry_SamplerTheRegistryResolves_AcceptsAValueOfThatKey` 跑一帧看接不接得住。
    - 与 `memory/modules/TransitionSystem/adapters/maui.md` §四·1 的结论一致，**不冲突**。
 
-2. **`ViewManager.TryFindTemplateByResourceKey` 已于 2026-10-18 删除**（原实现在 `ViewManager` 里把 `resourceKey` 写死为 `null`，后面永远不可达）。所以 `FindDataTemplate` 只有「`TemplateSelector` 选中」这一条活路 —— 与 `ViewPool.EnsureManager` 要求 `GetTemplateSelector(layout) is not null` 正好印证。⇒ **不要以为放一个 `DataTemplate` 到 `Resources` 里就能被选中**。
+2. **模板查找只有「`TemplateSelector` 选中」这一条路**：`ViewFactory.CreateView` 只问 `DataTemplateSelector`，没有从 resources 按 key 找模板的第二条路 —— 与 `ViewPool.Ensure` 要求 `GetTemplateSelector(layout) is not null` 正好印证。⇒ **不要以为放一个 `DataTemplate` 到 `Resources` 里就能被选中**。
 
 3. **`WorkflowMinimapOverlay.RulerBand => 0`**，而宿主只把**网格装饰器**的 `RulerBand` 转发给虚拟化 inset（`WorkflowSurfaceBehavior.UpdateGridDecorator` 的 `SetVirtualizeInset(left: decorator.RulerBand, top: ...)`）。⇒ 小地图自己的标尺带永远不参与 inset；这条与 WPF 同结论（`WorkflowSystem/adapters/wpf.md` 坑 2）。
 
-4. **`#if WINDOWS` 在本家会编出两个不同的程序集**。csproj 的 TFM 是 `net10.0;net10.0-windows10.0.19041.0`，**七家里只有本家是「平台中立 + windows」一对**（WinUI 是两个 `-windows`；WPF/WinForms 是 `netframework4.6.1;net5.0-windows;netcoreapp3.0`；Avalonia `netstandard2.0;net6.0`；其余单一 TFM）。所以 **多处 `#if WINDOWS`**（Surface、Minimap、LinkOverlay、NodeDrag、SlotLayout、SlotConnection 各有多处）在两个 TFM 下是**两份不同的实现**，而它们在 `PlatformAdapters/` 里**一处也没有**（Transition 轴只有与 TFM 无关的 `#if !NETSTANDARD2_0`）。
+4. **`#if WINDOWS` 在本家会编出两个不同的程序集**。csproj 的 TFM 是 `net10.0;net10.0-windows10.0.19041.0`，**七家里只有本家是「平台中立 + windows」一对**（WinUI 是两个 `-windows`；WPF/WinForms 是 `netframework4.6.1;net5.0-windows;netcoreapp3.0`；Avalonia `netstandard2.0;net6.0`；其余单一 TFM）。所以 **多处 `#if WINDOWS`**（Surface、Minimap、LinkOverlay、NodeDrag、SlotLayout、SlotConnection 各有多处）在两个 TFM 下是**两份不同的实现**，而它们在 `TransitionSystem/` 里**一处也没有**（Transition 轴只有与 TFM 无关的 `#if !NETSTANDARD2_0`）。
 
    **顺带一条宿主侧的事实**：MAUI demo 的 Windows TFM 是**条件的** —— `Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj` 用 `Condition="$([MSBuild]::IsOSPlatform('windows'))"` 才把 `net10.0-windows10.0.19041.0` 追加进去。⇒ **在非 Windows 机器上编译，这些分支一个都不参与编译**，出了错也看不见。反过来 Windows 上跑起来的那份 exe 路径在 `Examples/Transition/AUTO TEST/Drivers/MauiDemoDriver.cs`。
 
@@ -184,9 +184,9 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 
 7. **`obj/` 里有陈旧产物，别拿它当事实**。`obj/Debug/net10.0-windows10.0.17763.0/` 与 `obj/Debug/*.nuspec`（6.0.0 / 6.0.4 / 6.0.82 …）都还在；那个 17763 目录里的 `VeloxDev.MAUI.GlobalUsings.g.cs` 只有少数行、**没有 MAUI 的隐式 using**，是旧工程状态的残留；当前声明过的 TFM 目录（`net10.0`、`net10.0-windows10.0.19041.0`）里的是另一份。别按 `obj/` 推当前 TFM 或当前 API。
 
-8. **模板选择器对同一个 VM 类型只会被问一次**：`ViewManager` 把结果按 `Type` 缓存（`_templateMap`，`FindDataTemplate` 先查它、命中即短路，未命中才写入），而这个字典**在文件里没有任何一处清空**。它的寿命等于一次挂载周期 —— `ViewPool.CleanupManager` 在 `Layout.Handler` 变 null 时 `Managers.Remove(layout)`，管理器随之丢弃、缓存才跟着没。⇒ selector 里写「按状态换模板」的逻辑在一次挂载里只生效一次；要状态可变就得让 `ItemsSource` 的元素换新实例、或重建宿主。
+8. **模板选择器对同一个 VM 类型只会被问一次**：`ViewFactory` 把结果按 `Type` 缓存（`_templates`，命中即短路，未命中才写入），而这个字典在系统生命周期内不清空。系统在换 `ItemsSource`/`TemplateSelector` 或 `Layout.Handler` 变 null 时 `ViewPool.Cleanup` → `Systems.Remove(layout)`，缓存才跟着没。⇒ selector 里写「按状态换模板」的逻辑在一次系统生命周期里只生效一次；要状态可变就得让 `ItemsSource` 的元素换新实例、或重建宿主。
 
-9. **`ViewManager` 现在会「探测」它没法物化的 item**：`CanMaterialize` 拿 `FindDataTemplate` 试一次，选择器抛异常/返回 null 的 item 被跳过而不是让整个批次炸（这就是 2026-10-04「selector-probing」那条提交）。⇒ 选择器「按 item 类型分派、不认识的返回 null」是受支持的写法；但**跳过是静默的**，item 永远不出现也不报错。
+9. **`ViewFactory` 会「探测」它没法物化的 item**：选择器抛异常或返回 null 时，该运行时类型记进 `_unsupportedTypes`、返回 null，而不是让整个批次炸。⇒ 选择器「按 item 类型分派、不认识的返回 null」是受支持的写法；但**跳过是静默的**，item 永远不出现也不报错。
 
 ---
 
@@ -214,19 +214,19 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 
 | 想改的东西 | 先打开 |
 |---|---|
-| 画布平移 / 缩放 / 捏合 / Windows 的 Ctrl+滚轮 / 平移到边时的扩张 | `Attached/Workflow/WorkflowSurfaceBehavior.cs`（数学在 Core `WorkflowSurfaceMath`） |
+| 画布平移 / 缩放 / 捏合 / Windows 的 Ctrl+滚轮 / 平移到边时的扩张 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`（数学在 Core `WorkflowSurfaceMath`） |
 | 可见区、装饰器与小地图的喂值、`Viewport` 写回 | 同上，`UpdateVisibleRegion` 与 `ApplyVisibleRegion` |
 | 连线右键菜单 / 视口恢复 | 同上（`WireLinkMenu`、`RequestViewportRestore`） |
-| 节点拖拽的落点与坐标宿主 | `Attached/Workflow/WorkflowNodeDragBehavior.cs` |
-| 插槽锚点写回、重同步信号源 | `Attached/Workflow/WorkflowSlotLayoutBehavior.cs` |
-| 插槽两阶段连接命令 | `Attached/Workflow/WorkflowSlotConnectionBehavior.cs` |
-| 视图池、模板查找、分批 | `Attached/Workflow/ViewManager.cs`（挂点 `ViewPool.cs`） |
-| 小地图外观与导航 | `Attached/Workflow/WorkflowMinimapOverlay.cs` |
-| 链接层绘制、裁剪、光带 | `Attached/Workflow/WorkflowLinkOverlay.cs` |
-| 把模型事件接给宿主的 sink | `Attached/Workflow/WorkflowEvents.cs` |
-| 某个 MAUI 类型可动画 | `PlatformAdapters/Samplers/` + `PlatformAdapters/Interpolator.cs` 的静态构造 + `Transition.cs` 的 `Property` 重载组 |
-| 线程、优先级、pacer、调度器 | `PlatformAdapters/UIThreadInspector.cs`、`TransitionInterpreter.cs` —— 差异与坑见 `TransitionSystem/adapters/maui.md` |
-| 主题字符串 → 值 | `PlatformAdapters/ThemeValueConverters.cs`（**仓库内无消费者**，见 §八） |
+| 节点拖拽的落点与坐标宿主 | `WorkflowSystem/AttachedBehaviors/WorkflowNodeDragBehavior.cs` |
+| 插槽锚点写回、重同步信号源 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` |
+| 插槽两阶段连接命令 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.cs` |
+| 视图池、模板查找、分批 | `WorkflowSystem/ViewHosting/`（`ViewSourcePipeline` 组合各层；挂点 `ViewPool.cs`） |
+| 小地图外观与导航 | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` |
+| 链接层绘制、裁剪、光带 | `WorkflowSystem/AttachedBehaviors/WorkflowLinkOverlay.cs` |
+| 把模型事件接给宿主的 sink | `WorkflowSystem/AttachedBehaviors/WorkflowEvents.cs` |
+| 某个 MAUI 类型可动画 | `TransitionSystem/Samplers/` + `TransitionSystem/Interpolator.cs` 的静态构造 + `Transition.cs` 的 `Property` 重载组 |
+| 线程、优先级、pacer、调度器 | `TransitionSystem/UIThreadInspector.cs`、`TransitionInterpreter.cs` —— 差异与坑见 `TransitionSystem/adapters/maui.md` |
+| 主题字符串 → 值 | `DynamicTheme/ThemeValueConverters.cs`（**仓库内无消费者**，见 §八） |
 | 包结构、TFM、双轨引用、MAUI 版本钉法 | `VeloxDev.MAUI.csproj` |
 | **宿主怎么把这些接起来（最小可读样本）** | `Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml`（附着属性 + 链接层绑定一次看全）；节点/插槽侧看同目录的 `NodeView.xaml`、`SlotView.xaml` |
 

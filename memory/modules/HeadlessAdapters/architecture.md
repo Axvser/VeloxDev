@@ -44,7 +44,7 @@
 - **名字要自己注册。** `FindName` 是 namescope 查找，代码建的树没有 XAML 的 `x:Name` 注册：
   `NameScope.SetNameScope(host, scope)` + `scope.RegisterName(...)`。只设 `element.Name` 不够。
 - **不调 `Show()`。** 只 `Measure` / `Arrange` / `UpdateLayout`，不创建 `Window`，也不需要 `Application.Current`。
-- **按优先级排队的工作要泵。** `QueueViewportRestore` 用 `DispatcherPriority.Loaded` 投递，`ViewManager` 的批次用 `Background`。
+- **按优先级排队的工作要泵。** `QueueViewportRestore` 用 `DispatcherPriority.Loaded` 投递，`ViewScheduler` 的批次用 `Background`。
   `WpfHeadlessSurface.Pump()` 用 `DispatcherFrame` + `PushFrame` 排到 `ApplicationIdle`。
 - **`FrameworkElementFactory` 的模板必须 `Seal()`。** 未密封时 `LoadContent` 抛
   「FrameworkElementFactory 必须位于此操作的密封模板中」；`AnyTemplateSelector.BuildTemplate` 已封。
@@ -117,7 +117,7 @@ Avalonia 55.2%、WinForms 35.3%、Razor 41.9%、Jalium 35.6%；地板 44/55/35/4
   `OnMinimapScrollRequested` 走与拖画布/小地图同一套边界语义。
 - **`WorkflowSurfaceBehavior.Refresh` 不检查 `IsEnabled`**（与 WPF/Avalonia 不同）。禁用只清滚动口
   （`ClearScroller`），所以 WinForms 套件不断言「禁用后 Refresh 不写模型」。
-- `ViewPool` 在 WinForms 是**同步**的（`ViewManager.AddItem` 直接建视图），不需要泵批次。
+- `ViewPool` 在 WinForms 是**异步分批**的（`ViewScheduler` 把每一批交给 `Control.BeginInvoke`，池在一批跑完后自己排下一批），套件要像视口恢复那样用 `Application.DoEvents()` 泵。
 
 ## 八、Razor：bUnit 的 C# 半边
 

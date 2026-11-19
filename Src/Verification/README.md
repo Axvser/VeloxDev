@@ -75,6 +75,66 @@ VELOXDEV_LIVE=1 dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.
 
 ---
 
+## 跑有头视图管线基准
+
+`VeloxDev.Adapters.Benchmarks` 另外带一个**有头**（真实窗口）的视图管线基准，不走 BenchmarkDotNet。宿主无关的选项、合成场景、报告和运行循环在 `VeloxDev.Adapters.Benchmarks.Headed`；各平台只实现 `IHeadedBenchmarkHost`。
+
+```bash
+# 1) 用优化过的 Debug 产物构建（理由与序列化基准相同：非 Debug 会去拿未发布的生成器包）
+dotnet build Src/Verification/VeloxDev.Adapters.Benchmarks/VeloxDev.Adapters.Benchmarks.csproj \
+             -c Debug -p:Optimize=true -t:Rebuild
+
+# 2) 直接运行产物；不要用 dotnet run，它会再构建一次
+./Src/Verification/VeloxDev.Adapters.Benchmarks/bin/Debug/net10.0-windows/VeloxDev.Adapters.Benchmarks.exe \
+  headed --adapter avalonia --policy adaptive \
+         --nodes 2000 --links 3000 --iterations 5 --steps 20
+
+# 同一进程还宿主 WPF / WinForms / Jalium：换 --adapter 即可
+#   --adapter wpf | winforms | jalium
+```
+
+WinUI 与 MAUI 是独立可执行宿主（各自真实窗口，输出同一份 JSON）：
+
+```bash
+# WinUI 3（unpackaged；宿主运行时用 Windows App SDK 1.8，适配器自身仍编译在 1.6）
+dotnet build Src/Verification/VeloxDev.Adapters.Benchmarks.WinUI/VeloxDev.Adapters.Benchmarks.WinUI.csproj \
+             -c Debug -p:BuildProjectReferences=false
+./Src/Verification/VeloxDev.Adapters.Benchmarks.WinUI/bin/Debug/net10.0-windows10.0.19041.0/win-x64/VeloxDev.Adapters.Benchmarks.WinUI.exe \
+  --adapter winui --policy adaptive --nodes 2000 --links 3000 --iterations 5 --steps 20
+
+# MAUI（Windows 目标）
+dotnet build Src/Verification/VeloxDev.Adapters.Benchmarks.MAUI/VeloxDev.Adapters.Benchmarks.MAUI.csproj \
+             -c Debug -p:BuildProjectReferences=false
+./Src/Verification/VeloxDev.Adapters.Benchmarks.MAUI/bin/Debug/net10.0-windows10.0.19041.0/win-x64/VeloxDev.Adapters.Benchmarks.MAUI.exe \
+  --adapter maui --policy adaptive --nodes 2000 --links 3000 --iterations 5 --steps 20
+```
+
+> 上面 WinUI / MAUI 的 `-p:BuildProjectReferences=false` 只是本轮为了避免多个基准进程同时重写共享 `obj/`；首次构建或要拿代表性数字时去掉它，并按前面的纪律加 `-p:Optimize=true`。Razor 基准必须在构建依赖图时加 `-p:Optimize=true`；BDN 的 optimizer validator 现在保持开启，依赖未优化会直接拒绝运行。
+
+Razor 的 `ViewPool` 是 renderer-native 的，没有可驱动的 `ViewSourcePipeline`；它单独跑 `HtmlRenderer` 的**无头渲染基准**，不能与上面的窗口数字直接横比：
+
+```bash
+dotnet build Src/Verification/VeloxDev.Adapters.Benchmarks.Razor/VeloxDev.Adapters.Benchmarks.Razor.csproj \
+             -c Debug -p:BuildProjectReferences=false
+./Src/Verification/VeloxDev.Adapters.Benchmarks.Razor/bin/Debug/net10.0/VeloxDev.Adapters.Benchmarks.Razor.exe --probe
+./Src/Verification/VeloxDev.Adapters.Benchmarks.Razor/bin/Debug/net10.0/VeloxDev.Adapters.Benchmarks.Razor.exe
+```
+
+默认 `--policy adaptive`：初始 64/8ms，按每批实测吞吐收敛，pending 大于 1024/256 时目标预算 16/12ms，否则 8ms。需要固定参数对照时用 `--policy fixed --batch 1024 --budget 16`。
+
+它测的是**可见集 → 视图池 → 真窗口布局**这一段：`Initial materialization`（空视口开始）、`Scroll step`（对角扫视口，逐步计时）、`Scroll sweep final`、`Full visibility`。每步之后等池的 pending 批次排空，再等一次 `TopLevel.RequestAnimationFrame`，所以数字包含真实的 dispatcher + layout，不是「只调方法」的微基准。
+
+**怎么读数字**：
+
+- 每轮先 warmup（默认 1 轮，不计），再测 `--iterations` 轮；表里是**中位数 / P95**，不是均值。
+- `Created / Reused / Destroyed` 是池的累计计数；`Active / Pending / Recycled / Visible` 是当前状态。
+- 分配量是最稳的一维；耗时是同机同会话的前后对比，不要当跨机器绝对基准。
+- 输出写在 `BenchmarkDotNet.Artifacts/view-pipeline/`（工程目录下，已被 `.gitignore` 的任意深度规则覆盖），同时有 `.md` 与原始 `.json`。
+
+**适配器范围**：`avalonia` / `wpf` / `winforms` / `jalium` / `winui` / `maui` 都测真实窗口里的新 Core 管线；`razor` 测的是框架 renderer 构造 `ViewPool` 渲染树（无头），不测窗口布局。**一次只跑一家**，别并行驱动多个 UI 进程。
+
+**纪律**（与 `agent-ui-probe.ps1` 同源）：构建失败不许跑；跑前确认没有残留 benchmark/旧 demo 进程；不要在基准运行期间跑 `dotnet test`（它会把 Core 重新构回未优化版本）；报告里带机器/运行时/参数。
+
 ## 跑序列化基准
 
 ```bash

@@ -13,19 +13,19 @@
 > 本文不重复；人面向的「怎么搭一个 WinForms 工作流视图」在 `skills/veloxdev-create-workflow/references/gui/winforms.md`，
 > 逐角色职责表在 `skills/veloxdev-create-workflow/references/new-adapter.md` / `references/view-layer.md`。
 > 本文只写这家的**硬限制、刻意背离、该家特有的坑**。
-> **路径写法**：下文的裸文件名（`WorkflowSurfaceBehavior.cs` 等）都相对 `Src/Adapters/VeloxDev.WinForms/Attached/Workflow/`；引用 Core、别家、模板、demo 时一律写全路径。
+> **路径写法**：下文的裸文件名（`WorkflowSurfaceBehavior.cs` 等）都相对 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`；引用 Core、别家、模板、demo 时一律写全路径。
 
 ---
 
 ## 一、这家要写什么，为什么是这些
 
-七个视图角色在适配器里各有实现文件（视图池由 `ViewPool` + `ViewManager` 承担），外加一个**契约外的平台补偿文件**：
+七个视图角色在适配器里各有实现文件（视图池由挂点 `ViewPool` 与 `ViewHosting/` 下 Core 驱动的 `ViewSourcePipeline` 承担），外加一个**契约外的平台补偿文件**：
 
 | 角色 | 这家的实现 | 这家特有的形状 |
 |---|---|---|
 | 画布宿主 | `WorkflowSurfaceBehavior`（`sealed class` + 静态 `Get/Set` + `ConditionalWeakTable<Control, SurfaceState>`，`WorkflowSurfaceBehavior.cs`）；画布控件本体也是适配器里的 `WorkflowTreeView`（`WorkflowTreeView.cs`） | 同时是**滚轮汇报/缩放的 `IMessageFilter` 宿主**（`SurfaceState : IMessageFilter`）；过滤器跟着 `IsEnabled` 挂、看得见**每一笔** `WM_MOUSEWHEEL`（`EnsureMessageFilter`／`SetIsEnabled` 调用，`_filterAdded` 守卫） |
 | 画布变换 | `WorkflowCanvasTransformBehavior`（`static class`，CWT 存一个 `Offset`，`WorkflowCanvasTransformBehavior.cs`） | 只是一个**值载体**，而且是结构体不是变换对象 |
-| 视图池 | `ViewPool`（挂点）+ `ViewManager`（管理器 + `IWorkflowTemplateSelector` 接口，`ViewManager.cs` 的 `IWorkflowTemplateSelector` 与 `ViewManager`） | 用**自定义接口**代替 `DataTemplateSelector`（没有 XAML，没有 `DataTemplate`） |
+| 视图池 | `ViewPool`（挂点）+ `ViewHosting/ViewSourcePipeline`（Core `ViewSourcePipelineCore` 在这家的闭合），层实现是 `ViewHosting/` 下的 `ViewFactory` / `ViewContainer` / `ViewArranger` / `ViewScheduler` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` / `ViewMeasureHost`；创建路径是 `ViewFactory` 包住的 `IWorkflowTemplateSelector`（`IWorkflowTemplateSelector.cs`） | 用**自定义接口**代替 `DataTemplateSelector`（没有 XAML，没有 `DataTemplate`）；调度走 `Control.BeginInvoke` 异步分批，`TPriorityCore` 是 `NonPriority` |
 | 节点拖拽 | `WorkflowNodeDragBehavior`（`WorkflowNodeDragBehavior.cs`） | 递归挂**整棵控件树**的 `MouseDown`（`HookControlTree`），不是一次命中测试 |
 | 插槽连接 | `WorkflowSlotConnectionBehavior`（`WorkflowSlotConnectionBehavior.cs`） | 应用级 `IMessageFilter` + `WindowFromPoint`（静态 `_messageFilter` / `_activeConnection`、`FindSurfaceControl`、`ConnectionMessageFilter`） |
 | 插槽布局 | `WorkflowSlotLayoutBehavior`（`WorkflowSlotLayoutBehavior.cs`） | 是七家里唯一额外提供**同步重测**入口 `SyncNow` 的 |
@@ -48,9 +48,9 @@
 ### 2.1 没有附加属性、没有 `DataContext`、没有 `DataTemplate` ⇒ 三个替代物
 
 - **静态 `Get/Set` + `ConditionalWeakTable`**：每个 Behavior 都是 `sealed class`（或 `static class`）+ 一对 `GetXxx/SetXxx(Control, …)`，状态放 CWT（`WorkflowSurfaceBehavior.cs` 的 `States`、`WorkflowSlotLayoutBehavior.cs` 的 `States`、`WorkflowNodeDragBehavior.cs` 的 `DragState`、`ViewPool.cs` 的 `PoolState`）。⇒ **`ConditionalWeakTable` 不可枚举**，需要「遍历所有已挂载控件」时得另存一个普通集合。
-- **没有 `DataContext` ⇒ 反射填上下文**：`ViewManager.ApplyContext`（节点/插槽/连线的视图先分派给各自的 `*Attachment`，其余角色走下面这条）先 `view.Tag = item`，再对 `"ViewModel"` / `"DataContext"` / `"BindingContext"` 三个属性名做反射 `SetValue`（`ViewManager.cs` 的 `ApplyContext`）。⇒ **视图控件想拿到 VM，要么读 `Tag`，要么有那三个名字之一的属性**；其它名字静默拿不到（不报错）。
-- **没有 `DataTemplate` ⇒ `IWorkflowTemplateSelector`**：一个自定义接口，`Control CreateView(object item)`（`ViewManager.cs` 的 `IWorkflowTemplateSelector`）。契约要求由用户实现并把选择器交给 `ViewManager.SetTemplateSelector`（`SetTemplateSelector`）。
-- **池不安排 z 序**：`ViewManager.AddItem` 在 `Controls.Add` 之后无条件 `view.BringToFront()`（`ViewManager.cs` 的 `AddItem`），`Controls[i]` 的序号 0 是最前面（`Add` 追加到末尾 = 最后面）。⇒ **凡是进池的视图，`Controls` 的顺序只反映「谁最后被物化」**；需要"永远待在后面"的视图（如 Trimmed 那家的连线 —— 非 Trimmed 的 demo 根本不物化连线视图，它由画布代画，见 §4.9）只能由宿主在每次可见集变化后自己 `SendToBack` —— 别家靠 `Panel.ZIndex`，这家没有对应物。
+- **没有 `DataContext` ⇒ 反射填上下文**：`ViewHosting/ViewContainer` 的 `ApplyBinding`（节点/插槽/连线的视图先分派给各自的 `*Attachment`，其余角色走下面这条）先 `view.Tag = item`，再对 `"ViewModel"` / `"DataContext"` / `"BindingContext"` 三个属性名做反射 `SetValue`（`ViewHosting/ViewContainer.cs` 的 `ApplyBinding`）。⇒ **视图控件想拿到 VM，要么读 `Tag`，要么有那三个名字之一的属性**；其它名字静默拿不到（不报错）。
+- **没有 `DataTemplate` ⇒ `IWorkflowTemplateSelector`**：一个自定义接口，`Control CreateView(object item)`（`IWorkflowTemplateSelector.cs` 的 `IWorkflowTemplateSelector`）。契约要求由用户实现并把选择器交给 `ViewPool.SetTemplateSelector`（`SetTemplateSelector`）；`ViewHosting/ViewFactory` 是它唯一的调用方。
+- **没有 z 序属性，层级按角色在挂树时定**：`ViewHosting/ViewContainer.Attach` 在第一次物化时 `Controls.Add`，随后 —— 节点 `BringToFront`、连线 `SendToBack`（`Controls` 的序号 0 是最前面，`Add` 追加到末尾 = 最后面）。回收时视图留在 `Controls` 里，`SetZOrder` 是空操作。⇒ **池是异步物化的，`ArrangeLinkViews` 在可见集变化时跑在视图生成之前，所以新视图的层级必须在挂树这一趟当场定下来**；`WorkflowTreeView.ArrangeLinkViews` 仍会在可见集变化时补发连线投影并 `SendToBack`。别家靠 `Panel.ZIndex`，这家没有对应物。
 
 ### 2.2 没有路由/隧道事件 ⇒ `Application.AddMessageFilter`，而且是**进程级单例**
 
@@ -145,10 +145,10 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 |---|---|---|
 | 1 | **`SetIsEnabled` 顺手改 Win32 窗口样式（七家里唯一）**：启用画布宿主的同时给画布窗口上 `WS_CLIPCHILDREN`、给顶层窗体上 `WS_EX_COMPOSITED`。因为这家没有合成器，自绘画布与子窗口的重绘分离必然产生闪烁/鬼影，只能在窗口层解决。别家没有这一步，也没有对应的 hook 点。 | `WorkflowSurfaceBehavior.SetIsEnabled` 里 `EnsureClipChildren` / `EnsureComposited` 两行 |
 | 2 | **滚轮走应用级 `IMessageFilter`：看得见每一笔滚轮（七家里唯一），且 Ctrl+缩放能真的把消息吃掉（七家里唯一）**：别家都用平台的路由/隧道/预览阶段（WPF `PreviewMouseWheel`、Avalonia `RoutingStrategies.Tunnel`、Jalium `Mouse.PreviewMouseWheelEvent`，见 `wpf.md` §三·1）；WinUI 没有预览相，得挂滚动容器的**内容**（画布）才不漏（挂容器本身一格漏 74 DIP），见 `wpf.md` §三·1。这家没有事件路由，只能抢在消息泵那一层（`WM_MOUSEWHEEL` 发给焦点/光标下的那个窗口，冒泡不到画布），于是分两支：**非 Ctrl（或关掉了缩放）路由汇报，没人否决就自己默认滚并吞消息**；**Ctrl 且开着缩放**才走缩放、被否决即 `m.Result = IntPtr.Zero; return true; // swallow the message`。设计意图写在 `PreFilterMessage` 的注释里。 | `WorkflowSurfaceBehavior.cs` 的 `PreFilterMessage` |
-| 3 | **插槽连接用消息过滤器 + `WindowFromPoint` + 静态单活动连接（七家里唯一）**：整个处理器都压在一个应用级过滤器上；对照 WPF 只有两行式实现，只有 `PreviewMouseLeftButtonDown`（先读表面存的按下句柄，被否决就不起）→ `SendConnectionCommand`、`PreviewMouseLeftButtonUp` → `ReceiveConnectionCommand`（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotConnectionBehavior.cs` 的 `OnPointerPressed` / `OnPointerReleased`）。这家的复杂度全部来自「按下与抬起可能落在不同的窗口上」，所以必须靠 `WindowFromPoint` 反查目标控件、并自己维护「谁在拖」。**别把 WPF 那种两行式实现当成通用形状往新平台上套。** | `WorkflowSlotConnectionBehavior.cs` 的 `_messageFilter` / `_activeConnection`、`EnsureMessageFilter` / `DetachMessageFilter`、`GetControlAtScreenPoint`、`TryCompleteFromMouseUp` |
+| 3 | **插槽连接用消息过滤器 + `WindowFromPoint` + 静态单活动连接（七家里唯一）**：整个处理器都压在一个应用级过滤器上；对照 WPF 只有两行式实现，只有 `PreviewMouseLeftButtonDown`（先读表面存的按下句柄，被否决就不起）→ `SendConnectionCommand`、`PreviewMouseLeftButtonUp` → `ReceiveConnectionCommand`（`Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.cs` 的 `OnPointerPressed` / `OnPointerReleased`）。这家的复杂度全部来自「按下与抬起可能落在不同的窗口上」，所以必须靠 `WindowFromPoint` 反查目标控件、并自己维护「谁在拖」。**别把 WPF 那种两行式实现当成通用形状往新平台上套。** | `WorkflowSlotConnectionBehavior.cs` 的 `_messageFilter` / `_activeConnection`、`EnsureMessageFilter` / `DetachMessageFilter`、`GetControlAtScreenPoint`、`TryCompleteFromMouseUp` |
 | 4 | **`WorkflowSlotLayoutBehavior.SyncNow(Control)` 只有这家有**：一个公开的**同步**重测入口。理由是延迟路径 `BeginInvoke` 会合并到消息循环，而消息循环排在强制同步重绘之后，所以缩放折叠/画布扩张期间连线会用旧端点画一帧。别家都不需要它 —— 它们的布局/渲染是同一趟流水线。**调用方**：适配器基类 `WorkflowTreeView`（`ApplyPan`）、节点视图 `Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-node-view/TemplateClass.cs` 与 `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/NodeView.cs` 的 `SyncNow` 调用。 | `WorkflowSlotLayoutBehavior.SyncNow` |
 | 5 | **表面行为不再按名字找控件**：画布/装饰器/小地图都是宿主**按对象**交进来的（`SetScrollViewer` / `SetCanvas` / `SetGridDecorator` / `SetMinimapOverlay`），改名不再有影响。仍然靠名字找的是**插槽布局** —— `FindControlByName`（Ordinal 全树遍历）解析插槽名 / 坐标宿 / 父宿（`SyncNamedSlot`、`ResolveCoordinateHost`、`ResolveParentHost`、`FindControlByName`），不是 `FindName`/`GetTemplateChild`。`PART_*` 命名约定在这家**只是模板自己遵守的写法**，框架不强制任何前缀。⇒ 给这些具名控件改名，插槽测量会静默失效（不抛）。 | `WorkflowSlotLayoutBehavior.FindControlByName` |
-| 6 | **`ViewManager` 处理 `NotifyCollectionChangedAction.Replace`**：与 Jalium 同（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/ViewManager.cs` 的 `case NotifyCollectionChangedAction.Replace`），而 WPF/Avalonia/WinUI/MAUI 四家的 `switch` 只列 `Add`/`Remove`/`Reset`。⇒ 这家的「原地替换 `VisibleItems` 元素」是**会**刷新视图的。 | `ViewManager.cs` 的 `case NotifyCollectionChangedAction.Replace` |
+| 6 | **`Replace` 由共享的 Core 池处理**：`Src/Core/VeloxDev.Core/WorkflowSystem/ViewHosting/ViewPool.cs` 的 `OnCollectionChanged` 显式列了 `Replace`（先 Remove 再 Add）。⇒ 这家与其余五家一样，「原地替换 `VisibleItems` 元素」是**会**刷新视图的；六家现在都走 Core 池，没有谁还只列 `Add`/`Remove`/`Reset`。 | `ViewPool.cs` 的 `case NotifyCollectionChangedAction.Replace` |
 | 7 | **Ctrl 判定是精确相等**：消息过滤器先判 `Control.ModifierKeys == Keys.Control`、再看 `GetState(host).ZoomEnabled`。与 WPF 同形，另四家用 `HasFlag`（四家的位置见 `wpf.md` §四·4）。⇒ **Ctrl+Shift+滚轮在这家不缩放**（走汇报支、按默认滚处理）；这是七家不一致的地方，代码里没写是刻意还是遗漏，**别猜**。 | `WorkflowSurfaceBehavior.cs` 的 `PreFilterMessage`（`zoomGesture`） |
 
 ---
@@ -159,7 +159,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 这家根本没有定义 `GetPointerPressSourceName` / `SetPointerPressSourceName` —— `grep PointerPressSourceName` 在 `Src/Adapters/VeloxDev.WinForms/` 内一个命中都没有。表面行为改成**按对象**交部件（`SetScrollViewer` / `SetCanvas` / `SetGridDecorator` / `SetMinimapOverlay`），没有「按下指针时该由哪个具名控件启动平移」这个设置项。
 
-其余四家（WPF `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs`、Avalonia `Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs`、WinUI `Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs`、MAUI `Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSurfaceBehavior.cs`）**都**在宿主行为的 `ResolveNamedControls` 里解析它并据此挂拖拽/平移（Razor 无此 API；Jalium 的表面行为也解析它，`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `GetPointerPressSourceName` 调用，模板里给的是 `PART_SurfaceBorder`）。⇒ **照着别家的模板写 `SetPointerPressSourceName(this, "PART_Canvas")` 在这家编不过**（方法不存在）。这家的平移/拖拽由 `WorkflowNodeDragBehavior` 的整树挂钩与宿主自己的 pan 逻辑承担。
+其余四家（WPF `Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`、Avalonia `Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`、WinUI `Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`、MAUI `Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`）**都**在宿主行为的 `ResolveNamedControls` 里解析它并据此挂拖拽/平移（Razor 无此 API；Jalium 的表面行为也解析它，`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `GetPointerPressSourceName` 调用，模板里给的是 `PART_SurfaceBorder`）。⇒ **照着别家的模板写 `SetPointerPressSourceName(this, "PART_Canvas")` 在这家编不过**（方法不存在）。这家的平移/拖拽由 `WorkflowNodeDragBehavior` 的整树挂钩与宿主自己的 pan 逻辑承担。
 
 ### 4.2 `WorkflowCanvasTransformBehavior.GetTransform` 没有消费者（注释描述的是「能力」，不是现状）
 
@@ -173,7 +173,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 坐标宿主存在时，路径是 `slotControl.PointToClient(screenPoint)` → `SlotAnchorFromCanvasLocal`（`WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`），注释写明理由：**`PointToClient` 得到的已经是画布客户区坐标（节点的 `Location` 里已经含 pan + `ActualOffset`），所以不能再减一次偏移；用 `SlotAnchorFromVisualCenter` 会把每条连线整体平移 `-ActualOffset`（只要设了 `NegativeOffset`，就是恒定的左上移位）。** 取不到坐标宿主时才退回 `SlotAnchorFromNode`。
 
-⇒ 这正是 `WorkflowSurfaceMath`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Math/WorkflowSurfaceMath.cs` 的 `SlotAnchorFromCanvasLocal` 注释）所说「选错是静默的偏移 bug」。**七家在这条上分三派，照抄前先看你测到的是哪个坐标系**：用 `SlotAnchorFromCanvasLocal` 的是这家、WinUI（`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`）、MAUI（`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`）；用 `SlotAnchorFromVisualCenter` 的是 WPF（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`）、Avalonia（`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`）与 Jalium（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`，取不到坐标宿主时退 `SlotAnchorFromNode`）；Razor 直接 `new Anchor(...)` 不经过这三个函数（`Src/Adapters/VeloxDev.Razor/Attached/Workflow/WorkflowSlotLayoutBehavior.razor.cs` 里写 `slot.Anchor = new Anchor(...)` 那处）。**「分三派」说的是「哪一个是插槽测量的主路径」，不是互斥** —— 除 Razor 外，每家都还调了另外一两个（作退路或用在别的角色上），所以别按「这家只该出现这一个函数名」去搜。
+⇒ 这正是 `WorkflowSurfaceMath`（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Math/WorkflowSurfaceMath.cs` 的 `SlotAnchorFromCanvasLocal` 注释）所说「选错是静默的偏移 bug」。**七家在这条上分三派，照抄前先看你测到的是哪个坐标系**：用 `SlotAnchorFromCanvasLocal` 的是这家、WinUI（`Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`）、MAUI（`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`）；用 `SlotAnchorFromVisualCenter` 的是 WPF（`Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`）、Avalonia（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`）与 Jalium（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` 的 `SyncSlot`，取不到坐标宿主时退 `SlotAnchorFromNode`）；Razor 直接 `new Anchor(...)` 不经过这三个函数（`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.razor.cs` 里写 `slot.Anchor = new Anchor(...)` 那处）。**「分三派」说的是「哪一个是插槽测量的主路径」，不是互斥** —— 除 Razor 外，每家都还调了另外一两个（作退路或用在别的角色上），所以别按「这家只该出现这一个函数名」去搜。
 
 ### 4.5 反射是这家的主要接缝，改名即静默失效
 
@@ -188,7 +188,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 ⇒ **改宿主控件（模板或 demo）的成员名时，这里一定一起改；而且不会有任何编译错误或运行时异常提醒你。**
 
 **2026-10-03：这些名字现在有了一个真实来源。** 适配器包发了 `WorkflowTreeView`
-（`Attached/Workflow/WorkflowTreeView.cs`），生成模板与 `WinForms Trimmed` 的树视图都从它派生 ——
+（`WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs`），生成模板与 `WinForms Trimmed` 的树视图都从它派生 ——
 `PanOffset`、`OnMinimapScrollRequested`、四个 `PART_*` 名不再靠用户代码碰巧起对名字，反射是对着包内类型解析的。
 ⇒ 那三处反射**可以**改成真实接口（尚未做）；在那之前，**基类上这些名字同样不能改名**，
 而且改坏不会有编译错误，只会让卡片不跟手、缩放枢轴漂移。
@@ -223,7 +223,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 | 命中半径 | `LinkHitRadius = 6f`（≈ 最外圈辉光管壁的半宽 5.5px），建输入路由时写进 `input.HitRadius` | `WorkflowCanvas.cs` 的 `LinkHitRadius`、初始化 `input.HitRadius` 处 |
 | 选中即取焦点 | 输入路由的悬停结果一到就 `Focus()`（上色是画布写回渲染器的 `IsHighlighted`，取焦点是画布补的平台一半） | `WorkflowCanvas.cs` 的 `RoutePointer`（`HoveredLink` 一到就 `Focus()`）、`ControlStyles.Selectable` |
 | 删除 | 走连线的 `DeleteCommand`，**不是**摘控件：Delete 键由宿主自己在 `OnKeyDown` 里执行，菜单项在本地 `OnBuildLinkMenu` 里直接 `Execute` | `WorkflowCanvas.cs` 的 `OnKeyDown`、`OnBuildLinkMenu` |
-| 右键菜单 | 每次右键**现建**一个 `ContextMenuStrip`，条目由本地 `OnBuildLinkMenu` 填（只有「删除连线」一项）；本画布发布的指针是**世界坐标**，所以弹出位置须经 `WorldToClient` 落回客户区再 `PointToScreen`（适配器基类发布的却是**客户区坐标**，那边直接 `PointToScreen`、没有这个逆变换 —— 两家的坐标约定相反，别互相照抄）；菜单一开就把输入路由置 `IsSuspended`、收起时放开（宿主自己记账）；**不挂 `Control.ContextMenuStrip`**（挂上去会变成画布任意处右键都弹）。**菜单不得比它作用的那条线活得久**：那条线离开 `tree.Links`（Delete 键 / Agent / Undo 任一删除路径）时树发 `LinkRemoved`，宿主用记录菜单目标线的字段（本家 `_menuLink`）认领是不是自己这份菜单，认领了才 `_linkMenu?.Close()` —— 收起照常放开 `IsSuspended`，输入路由不代关弹窗；这一对接线在两处：适配器基类 `AttachLinkInput`/`DetachLinkInput`（模板产物与 Trimmed 继承它，自动具备）与这块自绘画布各自的 attach/detach 对 | `WorkflowCanvas.cs` 的 `OnLinkPointerPressed` / `OnLinkRemoved` / `WorldToClient`、`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowTreeView.cs` 的 `AttachLinkInput` / `DetachLinkInput` / `OnLinkPointerPressed` |
+| 右键菜单 | 每次右键**现建**一个 `ContextMenuStrip`，条目由本地 `OnBuildLinkMenu` 填（只有「删除连线」一项）；本画布发布的指针是**世界坐标**，所以弹出位置须经 `WorldToClient` 落回客户区再 `PointToScreen`（适配器基类发布的却是**客户区坐标**，那边直接 `PointToScreen`、没有这个逆变换 —— 两家的坐标约定相反，别互相照抄）；菜单一开就把输入路由置 `IsSuspended`、收起时放开（宿主自己记账）；**不挂 `Control.ContextMenuStrip`**（挂上去会变成画布任意处右键都弹）。**菜单不得比它作用的那条线活得久**：那条线离开 `tree.Links`（Delete 键 / Agent / Undo 任一删除路径）时树发 `LinkRemoved`，宿主用记录菜单目标线的字段（本家 `_menuLink`）认领是不是自己这份菜单，认领了才 `_linkMenu?.Close()` —— 收起照常放开 `IsSuspended`，输入路由不代关弹窗；这一对接线在两处：适配器基类 `AttachLinkInput`/`DetachLinkInput`（模板产物与 Trimmed 继承它，自动具备）与这块自绘画布各自的 attach/detach 对 | `WorkflowCanvas.cs` 的 `OnLinkPointerPressed` / `OnLinkRemoved` / `WorldToClient`、`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs` 的 `AttachLinkInput` / `DetachLinkInput` / `OnLinkPointerPressed` |
 
 四条要记住的结论：
 

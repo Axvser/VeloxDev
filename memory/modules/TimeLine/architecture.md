@@ -21,7 +21,7 @@
 
 | 你以为在这里 | 其实在哪 |
 |---|---|
-| 各家 GUI 适配器的帧循环 | 不在这里。各家的定时器由各自的 `TransitionInterpreter.CreateFramePacer` 建立（`Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`） |
+| 各家 GUI 适配器的帧循环 | 不在这里。各家的定时器由各自的 `TransitionInterpreter.CreateFramePacer` 建立（`Src/Adapters/VeloxDev.<GUI>/TransitionSystem/`） |
 | 动画的采样节奏 / FPS 上限 | `TransitionSystem/Runtime/FramePacerCore.cs` + `TransitionInterpreter.RunPassAsync` |
 | 时间本身（暂停/倍速/锚点/epoch） | `Timing/TimeSourceCore.cs`。本模块只是**持有**一条总线并用它 |
 | UI 线程编组 | `Threading/IThreadDispatcher` + 各家 `UIThreadInspector`。这里的线程是**自己起的后台线程** |
@@ -166,7 +166,7 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 
 ## 五、边界：这不是 GUI 适配器的东西
 
-**`Src/Adapters/VeloxDev.*/` 下没有任何一行引用 `TickManager`**，只有两处**注释**在解释「为什么这段代码会被非 UI 线程碰到」：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowMinimapOverlay.cs` 与 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowMinimapOverlay.cs` 中的相关注释（后者点明了「经 `BroadcastVisibleItemLayout`」）。各家的帧循环各自由 `TransitionInterpreter.CreateFramePacer` 建立。
+**`Src/Adapters/VeloxDev.*/` 下没有任何一行引用 `TickManager`**，只有两处**注释**在解释「为什么这段代码会被非 UI 线程碰到」：`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` 与 `Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` 中的相关注释（后者点明了「经 `BroadcastVisibleItemLayout`」）。各家的帧循环各自由 `TransitionInterpreter.CreateFramePacer` 建立。
 
 它给的是 **Unity 式宿主** —— 游戏循环、Unity 的 MonoBehaviour 集成、或任何想跑一条**独立于 UI 的帧循环**的非 UI 代码。判据很简单：你要的是「一条与渲染无关、能自己调速、暂停时不占 CPU 的帧泵」，就用它；你要的是「让动画在 UI 线程上出帧」，那是 `TransitionSystem` + 适配器的事。
 

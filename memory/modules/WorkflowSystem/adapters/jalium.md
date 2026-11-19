@@ -8,7 +8,7 @@
 
 > **读法**：契约与注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3，本文不重复；
 > 人面向的「这家怎么用」在 `skills/veloxdev-create-workflow/references/gui/jalium.md`，本文只指路不抄。
-> 代码在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/` 与
+> 代码在 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/`（视图池的各层在 `ViewHosting/`）与
 > `Src/Templates/VeloxDev.Jalium.Templates/working/content/`（其中一部分条目是 `.jalxaml`）。
 
 ## 〇、`.jalxaml` 运行时能力实测（2026-10-05）
@@ -67,7 +67,7 @@
 | 模型事件 | `WorkflowEvents` | `static` + `Node` / `Slot` / `Tree` 三个 sink 附着属性 |
 | 连线自盒化 | `WorkflowLinkBounds` | `static` 助手（**唯一刻意背离**，见 §2.1） |
 | 小地图 | `WorkflowMinimapOverlay` | `FrameworkElement`，一组 DP；`ScrollViewerName` 由模板给 |
-| 视图池 | `ViewPool` / `ViewManager` | Jalium 自己的 `DataTemplateSelector` + `DataTemplate.LoadContent()` + 三级回退 |
+| 视图池 | `ViewPool`（挂点）+ `ViewHosting/` 九个层 | 挂点建 `ViewSourcePipeline`（Core 泛型组合根）；`ViewFactory` 走选择器 → 资源回退 + `DataTemplate.LoadContent()`，其余层见 §四 |
 
 **网格装饰器不在这里**：与 WPF / Avalonia / WinUI / MAUI / Razor 五家一致，它归**模板**
 （`workflow-grid-decorator`，`sealed class : Grid, IWorkflowGridDecorator`），适配器只留接口。
@@ -293,9 +293,9 @@ Ctrl+滚轮缩放仍挂 `ScrollViewer.PreviewMouseWheel`（`HookZoom`，只在 `
 
 1. **重做连线视图时最容易漏掉"自盒化"。** 盒子必须**每次端点折叠/移动都同步** `Canvas.SetLeft/Top` + `Width/Height` —— 调 `WorkflowLinkBounds.Apply`（`WorkflowLinkBounds.cs` 的 `Apply`），且把几何减掉它交回的 `originX/originY` 再画（`workflow-link-view/TemplateClass.jalxaml.cs` 的 `BuildCurve()`）。漏任一半 = 深缩放静默消失或整条线画歪。依据：`WorkflowLinkBounds.cs` 的 `<remarks>` 注释与 §2.1 的 IL 判定链。
 2. **拖拽预览的跳过条件要精确，不要回到 `IsVirtual`。** 现用 `IsVirtualLink(link) => link.Sender.Parent is null && link.Receiver.Parent is null`（`workflow-link-view/TemplateClass.jalxaml.cs` 的 `IsVirtualLink`），并把 `CanRender` / `link.IsVisible` / `link.IsRenderReady()` 与 `_hasBounds` 的检查都留下（`Refresh()`、`OnRender`）。判据的要点是「两端都还没落到卡片上」，脱了插槽的真实连线照样渲染。
-3. **视图池的模板解析失败会抛，不是静默返回。** `_selector` 字段在（`ViewManager.cs` 的 `_selector`，由 `SetTemplateSelector` 写入），`_selector` 为空只是让 `FindDataTemplate` 走后面的资源回退 —— 没有任何一条「静默返回」。有两条失败路 —— ① manager 根本建不起来：`ViewPool` 的两个附着属性（`ItemsSource` / `TemplateSelector`）**都非空**才建（`ViewPool.cs` 的 `OnChanged`）；② 建起来了但三级回退都解析不到：`FindDataTemplate`（选择器 → 沿视觉树上溯 `Resources`（按 `DataType` 比）→ `Application.Resources`）返回 `null` 时 `AddOrReuseView` 抛 `InvalidOperationException`，只在 `ProcessNextBatch` 的 `catch` 里打一行 `Debug.WriteLine` ⇒ 表现仍是**什么都不显示**，但会有一条调试输出。诊断顺序：先确认模板产物里 `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"` 与 `ItemsSource` 都写了（`workflow-tree-view/TemplateClass.jalxaml` 的 `PART_Canvas` 元素）。
-4. **视图池按具体类型分桶、且是分批创建。** `ViewManager.cs` 的 `AddOrReuseView` / `PoolOf` 用 `item.GetType()` 作桶键 ⇒ 两种 ViewModel 类型即使视图相同也各建一份（`item.GetType()` 同时也是 `_templateMap` 缓存键，见 `FindDataTemplate`）；`ScheduleNextBatchRender` / `ProcessNextBatch` **按 `DispatcherPriority.Background` 每批 3 个**物化（`batchSize = 3`），未处理完继续排下一批 —— 本家就是分批（与 WPF 同形）。依据：类文档的 `<remarks>`、`ScheduleNextBatchRender` / `ProcessNextBatch`、`AddOrReuseView`、`PoolOf`。另：与 WPF 的差异是它**额外处理 `Replace`**（`OnCollectionChanged` 的 `Replace` 分支）。
-5. **删视图时同时置 `Collapsed` 与 `DataContext = null`**（`ViewManager.cs` 的 `HideViewFor`，`ResetAllViews` 同款）。⇒ 视图里读 `DataContext` 的代码在池化回收后会看到 `null`，别把 `DataContext is not null` 当成"已初始化"。现在取模型都靠 `DataContextChanged`：连线模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `OnDataContextChanged` 与 `Rebind` 里的 `DataContext as IWorkflowLinkViewModel`；槽/节点侧由 `WorkflowSlotLayoutBehavior` 在 `DataContextChanged` 上重接（`WorkflowSlotLayoutBehavior.cs` 的 `OnDataContextChanged`）。
+3. **模板解析失败是「按类型记一次不支持」，不是抛异常。** `ViewPool` 只要 `ItemsSource` 非空就建 `ViewSourcePipeline`（`TemplateSelector` 可以为空，为空时 `ViewFactory` 直接走资源回退）。`ViewFactory.FindTemplate` 的顺序是选择器 → 沿视觉树上溯 `Resources`（按 `DataType` 比）→ `Application.Resources`；三处都落空时 `CreateView` 返回 `null`，Core 池把它记进 `unsupportedTypes` 后**静默跳过该运行时类型**（`ViewPoolCore.Materialize`）⇒ 表现是**什么都不显示，且没有异常**。诊断顺序：先确认模板产物里 `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"` 与 `ItemsSource` 都写了（`workflow-tree-view/TemplateClass.jalxaml` 的 `PART_Canvas` 元素），再确认选择器覆盖了该 ViewModel 类型。
+4. **视图池按具体类型分桶，批大小归 Core 的自适应策略。** Core 池的回收桶用 `item.GetType()` 作键 ⇒ 两种 ViewModel 类型即使视图相同也各建一份；active 表与 pending 集按**引用身份**比较（`ViewReferenceComparer`），同类型的不同实例不会互相顶替，同一引用重复入集也只留一个。适配器默认传 Core 的 `AdaptiveViewPoolPolicy`（起始 64 个 / 8ms，按平滑吞吐与 pending 收敛到 8 / 12 / 16ms 预算）⇒ 不再是固定的每批 3 个；`Replace` 由 Core 处理（`Remove` + `Add`）。公开计数：`ActiveViewCount` / `PendingViewCount` / `CreatedViewCount` / `ReusedViewCount` / `DestroyedViewCount` / `RecycledViewCount`。
+5. **删视图时同时置 `Collapsed` 与 `DataContext = null`**（`ViewHosting/ViewContainer.cs` 的 `Deactivate`；`Detach` 不摘树，只有 `Destroy` 从 `Children` 移除）。⇒ 视图里读 `DataContext` 的代码在池化回收后会看到 `null`，别把 `DataContext is not null` 当成"已初始化"。现在取模型都靠 `DataContextChanged`：连线模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `OnDataContextChanged` 与 `Rebind` 里的 `DataContext as IWorkflowLinkViewModel`；槽/节点侧由 `WorkflowSlotLayoutBehavior` 在 `DataContextChanged` 上重接（`WorkflowSlotLayoutBehavior.cs` 的 `OnDataContextChanged`）。
 6. **哪些插槽显示由卡片刻画决定，命中与端点由适配器量测决定 —— 改名字要同步。** `WorkflowSlotLayoutBehavior` 不反射读模型：它按 `SlotNames` / `SlotEnumeratorNames` 找到模板里那些具名控件（`FindName`），从控件 `DataContext` 取槽，量测后写回 `slot.Anchor`。⚠ 但它**硬编码**了几个 watch 的属性名（`RebuildWatchedNames`：`Anchor`、`Size` + 配置进来的名字 + `InputSlot`/`OutputSlot`/`OutputSlots`）—— 改节点 view-model 上这几个属性名会让重测静默丢失对应触发。`DrawCard` / `WorkflowPortGeometry` 都不存在。
 7. **csproj 的独有设定会咬人**（详见 `memory/modules/TransitionSystem/adapters/jalium.md` §2.5）：单目标 `net10.0` 无平台后缀（`Src/Adapters/VeloxDev.Jalium/VeloxDev.Jalium.csproj` 的 `TargetFramework`）⇒ 只能引用 `Jalium.UI.Controls` 这个平台中性包；`NoWarn` 现在是 `1573;1591`（同文件的 `NoWarn`）—— 1591 关「公开成员缺 XML 注释」、1573 关「参数缺 `<param>` 标签」，与平台包或 DP 拆箱无关（模板与适配器里值类型 DP 包装走泛型 `Read<T>`，不产生值类型拆箱告警）。改这条 NoWarn 前先确认没别的地方会触发。
 

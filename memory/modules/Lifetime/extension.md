@@ -24,8 +24,8 @@
 |---|---|---|
 | 宿主持有 `Lifetime` 却从不写 | 初值 `true`（`ApplicationState._isAlive`）⇒ 与「完全不实现 `IApplicationState`」行为一致，且没有任何地方会报 | `IApplicationState.cs` 的 `ApplicationState` |
 | 单向使用：只报死、从不报活 | 信号源若是「每次投递的返回值」，一次瞬时拒绝就**永久判死且无日志**；`ApplicationState` 的双向备注正是为此写的 | `ApplicationState.SetAlive` 的 remarks |
-| 把 `IsAlive` 当「可以安全调用平台 API」的守卫 | 它只被 `CanSetValue` 一处读（`SamplerSet.CanSetValue`），不守卫任何其它调用。平台 API 的可用性要自己带 try/catch（`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/UIThreadInspector.cs` 是同一考虑的邻居） | `SamplerSet.CanSetValue` / `Apply` / `ApplyCore` |
-| `IsAlive` getter 里做昂贵或可能抛的查询 | 它每帧**每属性**读一次（`SamplerSet.ApplyCore` 在 `foreach` **内**）。MAUI 的实现（`Application.Current?.Windows?.Count > 0`，`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/UIThreadInspector.cs`）就是 O(属性数)/帧的属性链 | `SamplerSet.ApplyCore` |
+| 把 `IsAlive` 当「可以安全调用平台 API」的守卫 | 它只被 `CanSetValue` 一处读（`SamplerSet.CanSetValue`），不守卫任何其它调用。平台 API 的可用性要自己带 try/catch（`Src/Adapters/VeloxDev.MAUI/TransitionSystem/UIThreadInspector.cs` 是同一考虑的邻居） | `SamplerSet.CanSetValue` / `Apply` / `ApplyCore` |
+| `IsAlive` getter 里做昂贵或可能抛的查询 | 它每帧**每属性**读一次（`SamplerSet.ApplyCore` 在 `foreach` **内**）。MAUI 的实现（`Application.Current?.Windows?.Count > 0`，`Src/Adapters/VeloxDev.MAUI/TransitionSystem/UIThreadInspector.cs`）就是 O(属性数)/帧的属性链 | `SamplerSet.ApplyCore` |
 | 以为 `IsAlive = false` 会停掉或收尾动画 | 不会：循环照跑、`Update`/`LateUpdate`/`Completed` 照发，只是值写不出去。要停只有 `Transition.Exit` | `SamplerSet.Apply` / `ApplyCore` |
 | 用 `SetAlive` 当取消信号（「宿主要死了先报 false 让动画收尾」） | `CanSetValue` 只读不写，没有任何收尾路径挂在它上面 | `SamplerSet.CanSetValue` |
 
@@ -35,10 +35,10 @@
 
 | 平台给你的是… | 做法 | 树内样板 |
 |---|---|---|
-| **投递操作本身带成功/失败返回值** | `PostCore` 里 `Lifetime.SetAlive(那次返回值)`，**每次投递都报、双向** | WinUI `Src/Adapters/VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs` 的 `PostCore` |
-| 一个**可订阅的退出事件** | 订阅 → `SetAlive(false)` | WinForms 同形状但把标志存成自己的字段（`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/UIThreadInspector.cs` 的 `_isAppAlive`） |
+| **投递操作本身带成功/失败返回值** | `PostCore` 里 `Lifetime.SetAlive(那次返回值)`，**每次投递都报、双向** | WinUI `Src/Adapters/VeloxDev.WinUI/TransitionSystem/UIThreadInspector.cs` 的 `PostCore` |
+| 一个**可订阅的退出事件** | 订阅 → `SetAlive(false)` | WinForms 同形状但把标志存成自己的字段（`Src/Adapters/VeloxDev.WinForms/TransitionSystem/UIThreadInspector.cs` 的 `_isAppAlive`） |
 | 一个**可查询**的平台对象 | 覆写 `IsAlive` 去问它 | MAUI 问窗口数（`UIThreadInspector.IsAlive`） |
-| 只有**外部**知道（框架不给钩子） | 覆写 `IsAlive` 读自己的标志 + 对外开一个 `NotifyShutdown()` 形状的方法 | Razor `Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs` 的 `NotifyShutdown` / `IsAlive` |
+| 只有**外部**知道（框架不给钩子） | 覆写 `IsAlive` 读自己的标志 + 对外开一个 `NotifyShutdown()` 形状的方法 | Razor `Src/Adapters/VeloxDev.Razor/TransitionSystem/UIThreadInspector.cs` 的 `NotifyShutdown` / `IsAlive` |
 | **什么都没有**（例：`Dispatcher` 只有 `ShutdownStarted` 事件且没接） | 不接线 —— 编译过、像好的，代价见 §四 | Avalonia |
 
 **新接一家时这是可以推迟的一项**，但「推迟」必须是有意识的：它不会报错，只会少一个能力。
@@ -61,7 +61,7 @@
 |---|---|---|
 | 1 | 该家宿主：覆写 `IsAlive` 或在 `PostCore` 里 `Lifetime.SetAlive(...)` | 恒 alive，关停后继续投帧 |
 | 2 | `memory/modules/TransitionSystem/adapters/<平台>.md` 记本家的做法与背离 | 下一家接平台的人照抄错的默认 —— 这条比对本现在就存在（`memory/modules/TransitionSystem/adapters/avalonia.md` §三.1） |
-| 3 | 若本家自报标志（Razor 形状）：**同时记下谁负责调 `NotifyShutdown()`** | 没人调 = 永不判死，且与「没实现」无从区分（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs` 的 `NotifyShutdown`） |
+| 3 | 若本家自报标志（Razor 形状）：**同时记下谁负责调 `NotifyShutdown()`** | 没人调 = 永不判死，且与「没实现」无从区分（`Src/Adapters/VeloxDev.Razor/TransitionSystem/UIThreadInspector.cs` 的 `NotifyShutdown`） |
 | 4 | 若本家 `PostCore` 乐观恒 true：把「关停后会不会挂住 `_gate`」评估一遍（§四.1） | 挂死只在该家真机出现，验收套件看不到 |
 | 5 | 若本家覆写 `IsAlive`：确认 getter 廉价且不抛（`SamplerSet.ApplyCore` 每帧每属性读） | 每帧一次属性链 / 一次异常逃进写路径 |
 

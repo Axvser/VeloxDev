@@ -1,6 +1,6 @@
 # VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/`（`Attached/Workflow/` 最大的几个是 `WorkflowTreeView.cs`、`WorkflowSurfaceBehavior.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowNodeDragBehavior.cs`、`WorkflowLinkAttachment.cs`、`WorkflowNodeAttachment.cs`；`PlatformAdapters/` 最大的是 `ThemeValueConverters.cs`、`Transition.cs`、`TransitionInterpreter.cs`、`UIThreadInspector.cs`，其下另有一个采样器；顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。
+> 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/AttachedBehaviors/` 最大的几个是 `WorkflowTreeView.cs`、`WorkflowSurfaceBehavior.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowNodeDragBehavior.cs`、`WorkflowLinkAttachment.cs`、`WorkflowNodeAttachment.cs`；`TransitionSystem/` 最大的是 `Transition.cs`、`TransitionInterpreter.cs`、`UIThreadInspector.cs`，其下另有一个采样器；`DynamicTheme/ThemeValueConverters.cs`；顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这处）。
 >
 > 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
@@ -14,14 +14,14 @@
 
 | 轴 | Core 契约 | 本项目落点 | 平台差异记在哪 |
 |---|---|---|---|
-| WorkflowSystem | 七个视图角色 + 模型事件 | `Attached/Workflow/` | `WorkflowSystem/adapters/winforms.md` |
-| TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `PlatformAdapters/`（平台类型 + 一个采样器） | `TransitionSystem/adapters/winforms.md` |
-| DynamicTheme | `IThemeValueConverter` | `PlatformAdapters/ThemeValueConverters.cs`（一组转换器） | DynamicTheme 模块记忆 |
+| WorkflowSystem | 七个视图角色 + 模型事件 | `WorkflowSystem/AttachedBehaviors/` | `WorkflowSystem/adapters/winforms.md` |
+| TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `TransitionSystem/`（平台类型 + 一个采样器） | `TransitionSystem/adapters/winforms.md` |
+| DynamicTheme | `IThemeValueConverter` | `DynamicTheme/ThemeValueConverters.cs`（一组转换器） | DynamicTheme 模块记忆 |
 
 三个只在读这个目录时才会发现的结构事实：
 
-1. **三条轴互不引用，但没有任何编译期阻挡。** 实测 `Attached/` 下零 `Transition`/`Interpolator`/`ThemeManager` 符号、`PlatformAdapters/` 下零 `Workflow` 符号 —— 靠的是纪律：`GlobalUsings.cs` 已经把 `VeloxDev.TransitionSystem` 灌进了**每一个**文件（含 `Attached/`）。⇒ 「在这家写了一条跨轴的调用」不会被拦下，七家都维持着零引用，改的人得自己守。
-2. **命名空间全部寄生在 Core 上，唯一例外的命名空间还和 Core 撞了名。** 唯一的采样器在 `VeloxDev.Adapters.NativeSamplers`（`PlatformAdapters/Samplers/PaddingSampler.cs` 的命名空间），而 **Core 自己的采样器在 `VeloxDev.TransitionSystem.NativeSamplers`**（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/ColorSampler.cs` 的命名空间）—— 两个不同命名空间。⇒ 写 Core 那一支的 `using` 引不到这家唯一自带的采样器（AUTO TEST 用的是前者：`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs`）。
+1. **三条轴互不引用，但没有任何编译期阻挡。** 实测 `AttachedBehaviors/` 下零 `Transition`/`Interpolator`/`ThemeManager` 符号、`TransitionSystem/` 下零 `Workflow` 符号 —— 靠的是纪律：`GlobalUsings.cs` 已经把 `VeloxDev.TransitionSystem` 灌进了**每一个**文件（含 `AttachedBehaviors/`）。⇒ 「在这家写了一条跨轴的调用」不会被拦下，七家都维持着零引用，改的人得自己守。
+2. **命名空间全部寄生在 Core 上，唯一例外的命名空间还和 Core 撞了名。** 唯一的采样器在 `VeloxDev.Adapters.NativeSamplers`（`TransitionSystem/Samplers/PaddingSampler.cs` 的命名空间），而 **Core 自己的采样器在 `VeloxDev.TransitionSystem.NativeSamplers`**（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/ColorSampler.cs` 的命名空间）—— 两个不同命名空间。⇒ 写 Core 那一支的 `using` 引不到这家唯一自带的采样器（AUTO TEST 用的是前者：`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs`）。
 3. **`VeloxDev.WorkflowSystem.AttachedBehaviors` 在 Core 里不存在**：七家各声明一份同名命名空间。XAML 平台靠 `assembly=` 消歧，C# 宿主只能写全名或别名。
 
 **DynamicTheme 这条轴在这家没有消费者**：`Examples/Theme/` 下只有 Avalonia/WPF 两族目录（无 WinForms），`ThemeManager.SetPlatformInterpolator` 的仓内调用点无一处是本平台。这些转换器没有任何 demo/测试碰过 —— 它是三条轴里唯一「有实现、零使用」的。
@@ -58,7 +58,7 @@
 
 ## 三、宿主怎么把它接起来：派生 `WorkflowTreeView` + 命令式 `Set*` + pull
 
-**没有属性系统、没有 `DataContext`、没有注册表。** 全模块 grep `ModuleInitializer` / `[assembly:` 零命中，唯一的静态构造是 `PlatformAdapters/Interpolator.cs` 的静态构造（注册采样器）。状态一律存在 `ConditionalWeakTable<Control, State>` 里，附着属性退化成静态 `Get`/`Set`。
+**没有属性系统、没有 `DataContext`、没有注册表。** 全模块 grep `ModuleInitializer` / `[assembly:` 零命中，唯一的静态构造是 `TransitionSystem/Interpolator.cs` 的静态构造（注册采样器）。状态一律存在 `ConditionalWeakTable<Control, State>` 里，附着属性退化成静态 `Get`/`Set`。
 
 **名字仍是唯一的接线语言。** 所有 `Set*Name` 立即解析，解析器是 `FindControlByName`（`WorkflowSlotLayoutBehavior`）：**递归遍历宿主子树 + `Ordinal` 比较**，取第一个命中。⇒ 与 WPF 的 `NameScope` 不同：只管宿主子树、跨容器/非子孙一律找不到、**找不到不抛也不报**，只在那条数据推送处静默跳过。
 
@@ -72,7 +72,7 @@
 
 - **`Refresh(Control)` 是唯一的重驱动入口**，第一行被 `IsEnabled` 门住；它把当前 scroll/content 偏移推给 GridDecorator/MinimapOverlay、调 `SetVirtualizeInset`，循环末尾 `PerformLayout()` + `Invalidate()`，而 `Update()`（同步重画）**只在 `host.Capture` 为真时**调。
 - **这家现在有自己的平移实现**（在 `WorkflowTreeView` 里，不在 `WorkflowSurfaceBehavior`）：`WorkflowSurfaceBehavior.ResolvePanOffset` 仍只**反射读**宿主的 `PanOffset` 属性或私有 `_panOffset` 字段（注释明说：平移由宿主的 tree-view 私有持有、在 `ApplyPan` 里推给画布）；`WorkflowTreeView` 把 `PART_Canvas`（`SurfaceCanvas`）的 `PanOffset` 写成签名偏移，卡片经 `IWorkflowSurfaceNodeView.ApplySurfacePosition` 自己落位。
-- **视图池由赋值触发**：`ItemsSource` 与 `TemplateSelector` **都**非空才起 `ViewManager`（`ViewPool.UpdateManager`），任一置 `null` 即停。
+- **视图池由赋值触发**：`ItemsSource` 与 `TemplateSelector` **都**非空才起 `ViewSourcePipeline`（`ViewPool.UpdateSystem`），任一置 `null` 即停。池本身是 Core 的 `ViewPool`，在这家由 `ViewHosting/ViewScheduler` 经 `Control.BeginInvoke` 异步分批物化。
 - **滚动宿主只当视口用**：`PART_ScrollViewer.AutoScroll = false`，因为平移直接改画布、且 WinForms 的 AutoScroll 位置被夹在 `>= 0`，只允许往右下平移。
 
 ---
@@ -81,8 +81,8 @@
 
 **`GlobalUsings.cs` 三行，与 WPF/WinUI 逐字相同**（`diff` 无输出）：`global using` `VeloxDev.TransitionSystem` / `VeloxDev.TransitionSystem.Abstractions` / `VeloxDev.Threading`。
 
-- 这就是 `PlatformAdapters/` 里不写 `using` 却能用 `InterpolatorCore`/`ISampler` 的原因（它们在 `...Abstractions` 里）。
-- **它不含 `VeloxDev.WorkflowSystem`** ⇒ `Attached/` 里需要 Core 契约的文件各自写这一行（基类文件大多靠命名空间嵌套免了它）。
+- 这就是 `TransitionSystem/` 里不写 `using` 却能用 `InterpolatorCore`/`ISampler` 的原因（它们在 `...Abstractions` 里）。
+- **它不含 `VeloxDev.WorkflowSystem`** ⇒ `AttachedBehaviors/` 里需要 Core 契约的文件各自写这一行（基类文件大多靠命名空间嵌套免了它）。
 - **`global using` 是编译期的，不随包/`ProjectReference` 传给消费者** —— 宿主要用 `Transition<T>` 仍得自己写 `using VeloxDev.TransitionSystem;`。
 
 **csproj 里影响代码本身的条件**（`VeloxDev.WinForms.csproj`）：
@@ -130,21 +130,21 @@
 
 | 想改的东西 | 先打开 |
 |---|---|
-| 工作表表面：chrome / 平移 / 网格 / 标尺 / 池接线 / 布局调度 | `Attached/Workflow/WorkflowTreeView.cs`（派生类只实现两个工厂） |
-| 节点卡片 | `Attached/Workflow/WorkflowNodeAttachment.cs`（附加）+ 用户卡片自己的 `OnPaint` |
-| 插槽 / 连线图形 | `Attached/Workflow/WorkflowSlotAttachment.cs`、`WorkflowLinkAttachment.cs` |
-| 网格/标尺调色板与间距 | `Attached/Workflow/WorkflowGridDecorator.cs` |
-| 「item 类型 → 视图」的工厂 | `Attached/Workflow/WorkflowTemplateSelector.cs` / `ViewManager.cs` 的 `IWorkflowTemplateSelector` |
-| 滚轮缩放 / Ctrl 判定 / 消息过滤器 | `Attached/Workflow/WorkflowSurfaceBehavior.cs`（`SetZoomEnabled`、`SurfaceState.OnMessage`） |
+| 工作表表面：chrome / 平移 / 网格 / 标尺 / 池接线 / 布局调度 | `WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs`（派生类只实现两个工厂） |
+| 节点卡片 | `WorkflowSystem/AttachedBehaviors/WorkflowNodeAttachment.cs`（附加）+ 用户卡片自己的 `OnPaint` |
+| 插槽 / 连线图形 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotAttachment.cs`、`WorkflowLinkAttachment.cs` |
+| 网格/标尺调色板与间距 | `WorkflowSystem/AttachedBehaviors/WorkflowGridDecorator.cs` |
+| 「item 类型 → 视图」的工厂 | `WorkflowSystem/AttachedBehaviors/WorkflowTemplateSelector.cs` / `IWorkflowTemplateSelector.cs` |
+| 滚轮缩放 / Ctrl 判定 / 消息过滤器 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`（`SetZoomEnabled`、`SurfaceState.OnMessage`） |
 | 名字解析、`Refresh` 推给装饰器/小地图的偏移 | 同上（`FindControlByName` 在 `WorkflowSlotLayoutBehavior.cs`；`Refresh` 在 `WorkflowSurfaceBehavior.cs`） |
-| 节点拖拽的落点、坐标宿主、拖拽期重画 | `Attached/Workflow/WorkflowNodeDragBehavior.cs` |
-| 插槽锚点写回与同步时机（含唯一的同步入口 `SyncNow`） | `Attached/Workflow/WorkflowSlotLayoutBehavior.cs` |
-| 插槽两阶段连接手势 | `Attached/Workflow/WorkflowSlotConnectionBehavior.cs` |
-| 视图池 / 物品→控件的工厂 / 上下文注入 | `Attached/Workflow/ViewManager.cs`（挂点 `ViewPool.cs`） |
-| 小地图（现在是可继承基类） | `Attached/Workflow/WorkflowMinimapOverlay.cs` |
-| Win32 样式、100 个控件的阈值 | `Attached/Workflow/NativeWindowStyleHelper.cs` |
-| 线程、优先级、pacer、调度器、采样器 | `PlatformAdapters/` —— 差异与坑见 `TransitionSystem/adapters/winforms.md` |
-| 主题字符串 → 值 | `PlatformAdapters/ThemeValueConverters.cs` |
+| 节点拖拽的落点、坐标宿主、拖拽期重画 | `WorkflowSystem/AttachedBehaviors/WorkflowNodeDragBehavior.cs` |
+| 插槽锚点写回与同步时机（含唯一的同步入口 `SyncNow`） | `WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` |
+| 插槽两阶段连接手势 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.cs` |
+| 视图池 / 物品→控件的工厂 / 上下文注入 | `WorkflowSystem/AttachedBehaviors/ViewPool.cs`（挂点）+ `WorkflowSystem/ViewHosting/`（`ViewSourcePipeline`、`ViewContainer`、`ViewFactory`） |
+| 小地图（现在是可继承基类） | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` |
+| Win32 样式、100 个控件的阈值 | `WorkflowSystem/AttachedBehaviors/NativeWindowStyleHelper.cs` |
+| 线程、优先级、pacer、调度器、采样器 | `TransitionSystem/` —— 差异与坑见 `TransitionSystem/adapters/winforms.md` |
+| 主题字符串 → 值 | `DynamicTheme/ThemeValueConverters.cs` |
 | 「宿主怎么把这些接起来」 | 派生一个 `WorkflowTreeView` 子类的模板：`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-tree-view/TemplateClass.cs`；两个 demo 在 `Examples/Workflow/WinForms*/` |
 | 包结构、TFM、双轨引用 | `VeloxDev.WinForms.csproj` |
 

@@ -2,7 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core/Threading/`（命名空间 `VeloxDev.Threading`）。
 > 注意 **`IThreadDispatcher.cs` 里装着 `IThreadAffinity` 与 `IThreadDispatcher<TPriorityCore>`** —— 文件名只对了后一半。
-> 唯一的消费者是 TransitionSystem 的宿主接缝：`Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ITransitionHost.cs` 的 `ITransitionHost<TPriorityCore>` 把 `IThreadDispatcher<TPriorityCore>` 与 `Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs` 合成一个接口；各家实现见 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/UIThreadInspector.cs`。
+> 唯一的消费者是 TransitionSystem 的宿主接缝：`Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ITransitionHost.cs` 的 `ITransitionHost<TPriorityCore>` 把 `IThreadDispatcher<TPriorityCore>` 与 `Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs` 合成一个接口；各家实现见 `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/UIThreadInspector.cs`。
 
 本文只写「读完这些文件 + 找到全部调用点才知道的东西」。成员表、继承树请看 IDE。
 
@@ -18,7 +18,7 @@
 |---|---|
 | 优先级的取值与含义 | 宿主的类型参数 `TPriorityCore`。Threading **不知道也不检查它** —— 全树没有任何 `where TPriorityCore` 约束 |
 | 「宿主还活着吗」 | `Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs`；Threading 与 Lifetime 直到 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ITransitionHost.cs` 的 `ITransitionHost<TPriorityCore>` 才被合成 |
-| 某家怎么找线程、怎么投递 | 各家的 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/UIThreadInspector.cs`（差异指路 `memory/modules/TransitionSystem/adapters/<平台>.md`） |
+| 某家怎么找线程、怎么投递 | 各家的 `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/UIThreadInspector.cs`（差异指路 `memory/modules/TransitionSystem/adapters/<平台>.md`） |
 | 帧的节拍 / 等在哪条线程上 | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/FramePacerCore.cs`；Threading 只提供「哪条线程」这个答案 |
 | 排队、去重、取消、代际 | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` |
 | 「把异常安全地送回去」 | **不成立**。只有 `PostAsync`/`Run` 把动作的异常装进完成源；`Post` 是 fire-and-forget，动作的异常落在泵它的那条线程上 |
@@ -52,7 +52,7 @@
 | `Post(target, action, priority)`（三参便利重载） | **零调用者**（`Src/`、`Examples/`、`Src/Core/VeloxDev.Core.Test/` 全域搜不到） | 每次自己解析线程；写路径刻意不用它 |
 | `PostAsync` | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `PostAsync`（Awake） | 只给 `Awake` 用 |
 | `Run<T>` | `Interpolator`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `host.Run<object?>`） | 只给 `Prepare` 读起点用 |
-| `IsCurrent(object)` | `Src/Adapters/VeloxDev.WinForms/PlatformAdapters/TransitionInterpreter.cs` 的 `CreateFramePacer` | 全树唯一消费者：决定这家要不要 pacer |
+| `IsCurrent(object)` | `Src/Adapters/VeloxDev.WinForms/TransitionSystem/TransitionInterpreter.cs` 的 `CreateFramePacer` | 全树唯一消费者：决定这家要不要 pacer |
 | `IsCurrentFor(target, thread)` | 基类内部 `Post` / `PostAsync` / `Run<T>` 等处 | **inline 还是 queue 的唯一判定** |
 | `InternalPriority` | `ThreadDispatcherBase.cs` 的 `Run<T>` | 只服务于 `Run<T>` 的跨线程跳 |
 
@@ -71,7 +71,7 @@ Post(target, thread, action, priority)
 
 - **适配器的 `PostCore` 永远不会在拥有 target 的那条线程上被调用**（除非它自己覆写 `IsCurrentFor` 并答 true）。所以 `PostCore` 里不需要「我已经在这条线程上了」这条分支。
 - **Core 不再问「我是不是 UI 线程」**：只有 `IsCurrentFor` 一个判据，而它的默认实现是 `IsCurrentThread(thread)`（`ThreadDispatcherBase.IsCurrentFor`）。
-- 覆写 `IsCurrentFor` 等于决定「UI 线程上的写要不要走消息泵」。各家里只有 WinForms 覆写（`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/UIThreadInspector.cs` 的 `IsCurrentFor`），问的是 `Control.InvokeRequired` —— 同一个问题的对偶问法（细节见 `memory/modules/TransitionSystem/adapters/winforms.md` §三.1）。
+- 覆写 `IsCurrentFor` 等于决定「UI 线程上的写要不要走消息泵」。各家里只有 WinForms 覆写（`Src/Adapters/VeloxDev.WinForms/TransitionSystem/UIThreadInspector.cs` 的 `IsCurrentFor`），问的是 `Control.InvokeRequired` —— 同一个问题的对偶问法（细节见 `memory/modules/TransitionSystem/adapters/winforms.md` §三.1）。
 - inline 分支**绕过宿主排队**：没有优先级、没有排队延迟、`RunInline` 不 catch，异常直接抛在调用者线程上（`ThreadDispatcherBase.cs` 的 `RunInline`）。
 
 ---
@@ -102,10 +102,10 @@ Post(target, thread, action, priority)
 1. **`ThreadFor` 不得为调用方造句柄**（`IThreadDispatcher.cs` 中 `ThreadFor` 的注释「Never mint one for the caller」：`Dispatcher.CurrentDispatcher` 之流会给调用线程造一个没人泵的 dispatcher，消费者从此被钉死在上面，且无处上报）。
 2. **`PostCore` 必须诚实报告入队。** 乐观 `true` 会让 `PostAsync` 的消费者挂到进程结束；而它唯一的消费者 `Awake` 是在**持有 scheduler 的 `_gate` 时** await 的（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `_gate.WaitAsync` → `host.PostAsync` → `finally` 里的 `_gate.Release`），于是那条 `_gate` 永不释放：同一个 target 之后每一次动画都会排在它后面，永远不开始。这就是「一个乐观的 true 换一次永久挂死」的完整链条。
 3. **`IsCurrentThread(ThreadRef)` 必须由宿主实现**，基类给不出（见 §二末）。
-4. **有优先级的宿主必须覆写 `InternalPriority`**（`ThreadDispatcherBase.cs` 的 `InternalPriority`）。它只影响 `Run<T>` 的跨线程跳，也就是**动画启动前的那一次读**。默认 `default!`；WPF/Jalium/Avalonia 给 `Send`、WinUI 给 `Normal`（`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs` 的 `InternalPriority`）。
+4. **有优先级的宿主必须覆写 `InternalPriority`**（`ThreadDispatcherBase.cs` 的 `InternalPriority`）。它只影响 `Run<T>` 的跨线程跳，也就是**动画启动前的那一次读**。默认 `default!`；WPF/Jalium/Avalonia 给 `Send`、WinUI 给 `Normal`（`Src/Adapters/VeloxDev.WinUI/TransitionSystem/UIThreadInspector.cs` 的 `InternalPriority`）。
 5. **`IsCurrentFor` 是 inline/queue 的唯一判据**（§四）。谎报 true = 写落在错的线程上，静默通过。
-6. **`ThreadRef` 相等 = 句柄引用相等**（`ThreadRef.cs` 的 `Equals`）。各家的 `IsCurrentThread` 一律是「`TryGet<T>` 出自己的类型 → 问它」，其中有的直接 `ReferenceEquals(SynchronizationContext.Current, context)`（`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/UIThreadInspector.cs` 与 `Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs` 的 `IsCurrentThread`）。别在里面做值比较。
-7. **`ThreadRef.None` 是答案不是失败**：`ThreadFor` 返 None ⇒ pacer 拿到 `null`（`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/TransitionInterpreter.cs` 的 `CreateFramePacer` 里 `IsNone ? null`；`Src/Adapters/VeloxDev.WPF/PlatformAdapters/TransitionInterpreter.cs` 的 `CreateFramePacer` 里 `TryGet` 失败）⇒ 循环等在线程池定时器上；`PostCore` 遇到 None 应当返回 false（帧被丢，`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply` 只报一次 `Warn(WarnStage.Dropped, …)`）。
+6. **`ThreadRef` 相等 = 句柄引用相等**（`ThreadRef.cs` 的 `Equals`）。各家的 `IsCurrentThread` 一律是「`TryGet<T>` 出自己的类型 → 问它」，其中有的直接 `ReferenceEquals(SynchronizationContext.Current, context)`（`Src/Adapters/VeloxDev.WinForms/TransitionSystem/UIThreadInspector.cs` 与 `Src/Adapters/VeloxDev.Razor/TransitionSystem/UIThreadInspector.cs` 的 `IsCurrentThread`）。别在里面做值比较。
+7. **`ThreadRef.None` 是答案不是失败**：`ThreadFor` 返 None ⇒ pacer 拿到 `null`（`Src/Adapters/VeloxDev.Avalonia/TransitionSystem/TransitionInterpreter.cs` 的 `CreateFramePacer` 里 `IsNone ? null`；`Src/Adapters/VeloxDev.WPF/TransitionSystem/TransitionInterpreter.cs` 的 `CreateFramePacer` 里 `TryGet` 失败）⇒ 循环等在线程池定时器上；`PostCore` 遇到 None 应当返回 false（帧被丢，`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply` 只报一次 `Warn(WarnStage.Dropped, …)`）。
 8. **线程归属在「答案随调用者变化」的宿主上属于 run，不属于 target**：调度器在仍是启动线程时解析一次、写进 `TransitionRun.Thread`（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `host.ThreadFor(target)` → `run.Thread = thread`；`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionRun.cs` 的 `Thread`），写路径只用钉好的那条（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply`）。这类宿主上每帧重问会得到错的答案（平台细节见 `memory/modules/TransitionSystem/adapters/razor.md`）。
 
 ---
@@ -118,7 +118,7 @@ Post(target, thread, action, priority)
 | 契约本身（谁必须实现什么、返回值承诺） | `IThreadDispatcher.cs`（含 `IThreadAffinity`） |
 | 「没有优先级」这个概念怎么表达 | `NonPriority.cs`，用法见 §八 |
 | 句柄包装、`None`、相等语义 | `ThreadRef.cs` |
-| 某家怎么找线程、怎么投递、怎么报存活 | `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/UIThreadInspector.cs` |
+| 某家怎么找线程、怎么投递、怎么报存活 | `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/UIThreadInspector.cs` |
 | 「宿主死了」这一位从哪来 | `Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs`；消费者在 `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `CanSetValue` |
 | 帧什么时候被投出去、用什么优先级 | `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply` + `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `Execute`（`_gate` 内那段） |
 
@@ -131,5 +131,5 @@ Post(target, thread, action, priority)
 - `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs`：非泛型基类 `TransitionEffectCore` **显式**实现 `ITransitionEffect<NonPriority>`（同文件 `TransitionEffectCore` 的 `NonPriority ITransitionEffect<NonPriority>.Priority`）。也就是说「无优先级」在 Core 里是一条**一等公民**的路径，不是缺省兜底。
 - `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs`：`TransitionInterpreterCore<TTransitionEffectCore>`（单型参版）就是 `ITransitionInterpreter<NonPriority>` 那一支，其注释写明它走 `frameSet.Apply(target, easedT)`，「`NonPriority` 每帧不花任何代价」。
 - MAUI / WinForms / Razor 适配器的第七型参、`SamplerSet<NonPriority>`、以及 `Src/Core/VeloxDev.Core.Test/` 里几乎所有宿主都是它。
-- 它是 `readonly struct` 且**从不被实例化**（全树搜不到 `new NonPriority`），实际流动的值是 `default(NonPriority)`（如 `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply` 默认参 `priority = default!`）。空 struct 正是为此选的：`default` 是**真值**，所以 `is TPriorityCore` 这类检查（`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/Interpolator.cs` 的 `is ITransitionEffect<NonPriority>`）不用为它开特例（`NonPriority.cs` 的类注释）。
+- 它是 `readonly struct` 且**从不被实例化**（全树搜不到 `new NonPriority`），实际流动的值是 `default(NonPriority)`（如 `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply` 默认参 `priority = default!`）。空 struct 正是为此选的：`default` 是**真值**，所以 `is TPriorityCore` 这类检查（`Src/Adapters/VeloxDev.MAUI/TransitionSystem/Interpolator.cs` 的 `is ITransitionEffect<NonPriority>`）不用为它开特例（`NonPriority.cs` 的类注释）。
 - 型参**无约束**（全树无 `where TPriorityCore`），所以 `default!` 与「传一个装箱的类」都能编译；这是刻意留下的自由度，不是遗漏。

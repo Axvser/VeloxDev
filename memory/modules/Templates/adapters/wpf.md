@@ -73,7 +73,7 @@
   （`workflow-slot-view/TemplateClass.xaml.cs` 的 `OnPointerPressed`）与 `context.ReceiveConnectionCommand.Execute(null)`（`OnPointerReleased`）
 
 而适配器的附着行为走的是 `PreviewMouseLeftButtonDown` / `PreviewMouseLeftButtonUp` 并置 `e.Handled = true`
-（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotConnectionBehavior.cs` 的 `OnIsEnabledChanged` / `OnPointerPressed`，同位置见
+（`Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.cs` 的 `OnIsEnabledChanged` / `OnPointerPressed`，同位置见
 `memory/modules/WorkflowSystem/adapters/wpf.md` §二·L1 的对照）。
 
 ⇒ **同一对命令挂了两条路**。按 WPF 路由语义，Preview（隧道）那条置 `Handled` 之后，

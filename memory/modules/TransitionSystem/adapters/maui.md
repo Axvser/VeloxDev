@@ -1,6 +1,6 @@
 ﻿# MAUI — TransitionSystem 适配器
 
-> 代码：`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/`（采样器在 `Samplers/`）。
+> 代码：`Src/Adapters/VeloxDev.MAUI/TransitionSystem/`（采样器在 `Samplers/`）。
 > 本文只写这一家的差异。契约本身、要实现的类、以及所有平台共通的坑，在 `../extension.md`；用法层文档在
 > `skills/veloxdev-create-animation/references/adapter.md`（MAUI 段落含 `IsRepeating` 与「首个 stop」），本文不重抄。
 > 该目录下 `ThemeValueConverters.cs` / `TransitionEffects.cs` **不属于契约**：前者是 `VeloxDev.DynamicTheme` 的
@@ -31,7 +31,7 @@ Rect   : RectF    (Interpolator.cs:19,20)
 `*FSampler` 里的 **F 就是单精度 `float`**，对应 MAUI 的 `PointF/SizeF/RectF` —— 名字里的 F 与 .NET 的
 `PointF`/`SizeF`/`RectangleF` 同源，不是「Frame」也不是平台缩写。七家里只有 MAUI 有这套重复类型，所以
 `PointFSampler` / `SizeFSampler` / `RectFSampler` / `ShadowSampler` 这几个类**只有 MAUI 有**
-（对比：`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/Samplers/`、`…/Avalonia/…`、`…/WPF/…` 等六家的目录清单里都没有）。
+（对比：`Src/Adapters/VeloxDev.WinUI/TransitionSystem/Samplers/`、`…/Avalonia/…`、`…/WPF/…` 等六家的目录清单里都没有）。
 校验身份时按**注册键类型**核对，不要按类名 —— 注册表的 key 就是 `Type` 本身（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `Interpolators` 是 `ConcurrentDictionary<Type, ISampler>`，查找是 `TryGetInterpolator` 的精确命中→基类→接口），同名而不同程序集的两个类型是两个键、各注册各的；只有把**同一个 `Type`** 注册两次才会被 `AddOrUpdate` 顶掉（历史上那条 `RectFSampler` 的教训见 §四·1）。
 
 ---
@@ -45,9 +45,9 @@ Rect   : RectF    (Interpolator.cs:19,20)
 - 基类的默认实现是 `Lifetime.IsAlive`（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs` 的 `IsAlive`），而
   `ApplicationState` 的初值是 `true` 且只有宿主主动 `SetAlive(false)` 才变（`Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs` 的 `ApplicationState._isAlive` 初值 `true` 与 `SetAlive`）。
   也就是说**不覆写就没有「应用已退出」这个信号**。
-- 七家里覆写 `IsAlive` 的只有三家：MAUI 用窗口数，Razor 用自报的 `_isAppRunning`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs` 的 `IsAlive`）、
-  WinForms 用自报的 `_isAppAlive`（`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/UIThreadInspector.cs` 的 `IsAlive`）；
-  WinUI 走的是反写 `Lifetime.SetAlive(accepted)`（`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/UIThreadInspector.cs` 的 `PostCore`）。
+- 七家里覆写 `IsAlive` 的只有三家：MAUI 用窗口数，Razor 用自报的 `_isAppRunning`（`Src/Adapters/VeloxDev.Razor/TransitionSystem/UIThreadInspector.cs` 的 `IsAlive`）、
+  WinForms 用自报的 `_isAppAlive`（`Src/Adapters/VeloxDev.WinForms/TransitionSystem/UIThreadInspector.cs` 的 `IsAlive`）；
+  WinUI 走的是反写 `Lifetime.SetAlive(accepted)`（`Src/Adapters/VeloxDev.WinUI/TransitionSystem/UIThreadInspector.cs` 的 `PostCore`）。
 - **推论（未实测）**：MAUI 的窗口数在进程早期是 0，此时写路径按「已死」处理（`../extension.md` §7 的 `CanSetValue()`），
   所以「在 `App` 构造里就对某个还没上屏的对象起动画」这条路理论上会被拒写。要动这条判定前先实测。
 
@@ -60,10 +60,10 @@ Rect   : RectF    (Interpolator.cs:19,20)
 timer.IsRepeating = true;
 ```
 
-- **这是本家与 WinUI 的正面对立**：WinUI 是 `timer.IsRepeating = false`（`Src/Adapters/VeloxDev.WinUI/PlatformAdapters/TransitionInterpreter.cs` 的 `CreateTimer`）。
+- **这是本家与 WinUI 的正面对立**：WinUI 是 `timer.IsRepeating = false`（`Src/Adapters/VeloxDev.WinUI/TransitionSystem/TransitionInterpreter.cs` 的 `CreateTimer`）。
   两家的差异不是风格，是各自的定时器语义；`IsRepeating` 的取值**跟宿主走，不能跨家抄**。
 - 重复不会多画：每一拍由 `FramePacerCore.Fire()` 先 `Disarm()` 再唤起续体（`TransitionInterpreter.cs` 的 `CreateTimer` 注释、`../extension.md` §二·5）。
-- Razor 则干脆不提供 pacer（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/TransitionInterpreter.cs` 的类型注释明写
+- Razor 则干脆不提供 pacer（`Src/Adapters/VeloxDev.Razor/TransitionSystem/TransitionInterpreter.cs` 的类型注释明写
   「Deliberately without a frame pacer」），所以「MAUI 缺 pacer 会怎样」不能拿 Razor 当参照。
 
 ### 3. 等待线程必须取自 `affinity.ThreadFor(target)`
@@ -82,7 +82,7 @@ dispatcher 建定时器**。这是 `../extension.md` §二·5「从平台派生�
 ### 4. `IDispatcherTimer` 的 tick 异常不会留在 MAUI 里
 
 不是 Transition 侧的代码，但决定本家所有定时器回调必须自带 try：`IDispatcherTimer.Tick` 里抛出的异常 MAUI 不接，
-直接冒到 WinUI 的 `UnhandledException`（dotnet/maui #12245，引用处 `Src/Adapters/VeloxDev.MAUI/Attached/Workflow/ViewManager.cs` 与 `…/WorkflowSlotLayoutBehavior.cs` 里提到 #12245 的注释）。
+直接冒到 WinUI 的 `UnhandledException`（dotnet/maui #12245，引用处 `Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewScheduler.cs` 与 `…/WorkflowSlotLayoutBehavior.cs` 里提到 #12245 的注释）。
 Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`（`TransitionInterpreter.cs` 的 `OnTick`），失败由采样路径收口。
 
 ---
@@ -94,10 +94,10 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
    WinUI 用「入队被拒」反写，WPF/Avalonia/Jalium 干脆不报（基类默认恒活）。
 2. **pacer 的定时器是可重复的，WinUI 是反的。** 这里的做法和其他家不一样，因为 MAUI 的 `IDispatcherTimer` 一旦
    `IsRepeating = false`，`Stop()` 后再 `Start()` 不再装填（`TransitionInterpreter.cs` 的 `CreateTimer` 注释，WinUI 对位的是
-   `Src/Adapters/VeloxDev.WinUI/PlatformAdapters/TransitionInterpreter.cs` 的 `CreateTimer` 里 `IsRepeating = false`）。
+   `Src/Adapters/VeloxDev.WinUI/TransitionSystem/TransitionInterpreter.cs` 的 `CreateTimer` 里 `IsRepeating = false`）。
 3. **多出单精度几何采样器与 `Shadow` 采样器**（`PointFSampler`/`SizeFSampler`/`RectFSampler`/`ShadowSampler`）。
    这里的做法和其他家不一样，因为只有 MAUI 同时暴露单精度几何类型（§一）与 `Microsoft.Maui.Controls.Shadow`；
-   WPF 的对应物是 `DropShadowEffectSampler`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/`），别家没有对应类型。
+   WPF 的对应物是 `DropShadowEffectSampler`（`Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/`），别家没有对应类型。
 4. **引用型值用 scratch 复用，但它的 brush 是「中点硬切」而不是插值。** `ShadowSampler` 每帧只改
    一个复用 `Shadow` 的几个字段（`Samplers/ShadowSampler.cs` 的 `InsertFrame` 里复用 scratch 的那段），**`Brush` 在 `t >= 0.5` 时整体切换**（`ws.Brush = t >= 0.5 ? brush2 : brush1;`，注释自称
    "Simple transition handling"）。这和 `BrushSampler` 的「梯度细节丢失、退到 `gradientStops[0]` 当代表」是同一类让步：
@@ -167,7 +167,7 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
 
 ### 5. 本家没有一处 `#if WINDOWS`
 
-PlatformAdapters 下唯一的分支是 `Transition.cs` 的 `#if !NETSTANDARD2_0`（与 TFM 轴 `net10.0` / `net10.0-windows10.0.19041.0` 无关，
+TransitionSystem 下唯一的分支是 `Transition.cs` 的 `#if !NETSTANDARD2_0`（与 TFM 轴 `net10.0` / `net10.0-windows10.0.19041.0` 无关，
 `Src/Adapters/VeloxDev.MAUI/VeloxDev.MAUI.csproj` 的 `TargetFrameworks`）。**Workflow 侧相反** —— 那一侧大量使用 `#if WINDOWS` + `Handler.PlatformView`。
 所以在 Transition 侧排查「为什么 Android 上行为不同」时不要去找 `#if`：两个 TFM 跑的是同一份实现，差异只可能来自
 `IDispatcherTimer` / `BindableObject.Dispatcher` 的运行时行为。

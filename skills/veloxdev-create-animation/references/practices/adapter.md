@@ -2,7 +2,7 @@
 
 A GUI gets support by implementing a handful of small classes against Core's interfaces. Nothing in Core knows about any UI framework — that is why an unsupported GUI is a contained job rather than a fork.
 
-Put them in a namespace of your choosing and mirror the seven official adapters (`Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`), which are the reference implementations.
+Put them in a namespace of your choosing and mirror the seven official adapters (`Src/Adapters/VeloxDev.<GUI>/TransitionSystem/`), which are the reference implementations.
 
 An adapter needs three namespaces: `VeloxDev.TransitionSystem` for the types users name, `VeloxDev.TransitionSystem.Abstractions` for the bases it derives from (`InterpolatorCore`, `StateCore`, `TransitionInterpreterCore`, `TransitionHostBase`), and `VeloxDev.Threading` for `NonPriority` and `ThreadRef`.
 
@@ -23,7 +23,7 @@ Derive from `TransitionHostBase<TPriorityCore>` and answer **three** members. Ev
 **Route by the target, not by a captured global.** If the target is a UI object it already knows its thread, so a background-thread start marshals straight there with no capture and no wrong-thread hop:
 
 ```csharp
-// WPF — Src/Adapters/VeloxDev.WPF/PlatformAdapters/UIThreadInspector.cs
+// WPF — Src/Adapters/VeloxDev.WPF/TransitionSystem/UIThreadInspector.cs
 public override ThreadRef ThreadFor(object target)
 {
     try
@@ -88,7 +88,7 @@ One `ISampler` per platform type, registered as a **stateless singleton**. Three
 ⚙ **The scratch (`ref object? working`) is per segment**, like the endpoints it was built from. Derive its type from the endpoint and re-derive it if the type changes:
 
 ```csharp
-// Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/TransformSampler.cs
+// Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/TransformSampler.cs
 if (working is not Transform wt || wt.GetType() != startT.GetType()) { /* build a fresh scratch */ }
 ```
 

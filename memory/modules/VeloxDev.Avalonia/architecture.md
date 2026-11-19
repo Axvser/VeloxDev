@@ -1,8 +1,8 @@
 # VeloxDev.Avalonia — 架构
 
-> 代码：`Src/Adapters/VeloxDev.Avalonia/`，分四块：`PlatformAdapters/` 根、`PlatformAdapters/Samplers/`、`Attached/Workflow/`、`GlobalUsings.cs`。
+> 代码：`Src/Adapters/VeloxDev.Avalonia/`，按 Core 的模块分：`WorkflowSystem/`（`AttachedBehaviors/` + `ViewHosting/`）、`TransitionSystem/`（根 + `Samplers/`）、`DynamicTheme/`、`GlobalUsings.cs`。
 > 数法：`git ls-files 'Src/Adapters/VeloxDev.Avalonia/*.cs'` 能数到全部 `.cs`（git 的 pathspec 通配符**跨 `/` 匹配**，与 shell 不同）；而 `git ls-files 'Src/Adapters/VeloxDev.Avalonia/**/*.cs'` 会少 —— `**/` **不匹配顶层文件**，七家每家都正好漏掉顶层那个 `GlobalUsings.cs`。核验用 `git ls-files Src/Adapters/VeloxDev.Avalonia | grep -c '\.cs$'`。
-> 最大几个文件：`WorkflowSurfaceBehavior.cs`、`WorkflowMinimapOverlay.cs`、`WorkflowSlotLayoutBehavior.cs`、`ViewManager.cs`、`Samplers/TransformSampler.cs`、`ThemeValueConverters.cs`、`Transition.cs`。
+> 最大几个文件：`WorkflowSurfaceBehavior.cs`、`WorkflowMinimapOverlay.cs`、`WorkflowSlotLayoutBehavior.cs`、`Samplers/TransformSampler.cs`、`ThemeValueConverters.cs`、`Transition.cs`。
 > **三条 GUI 轴的平台差异不在这里**：`memory/modules/{TransitionSystem,WorkflowSystem,Templates}/adapters/avalonia.md`；七角色契约与附着属性注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；「怎么用这套 API」在 `skills/`。本文只写这个项目独有的：四块怎么分、注册与工厂在哪、三条轴各自怎么被宿主接上、程序集级约束、csproj 与 TFM。
 
 ---
@@ -11,12 +11,12 @@
 
 | 目录 | 面向的 Core 模块 | 消费方怎么接入 | 平台差异细节在哪 |
 |---|---|---|---|
-| `PlatformAdapters/` 根 | TransitionSystem | `Transition<T>.Create()`（编译期闭泛型，**零引导**） | `TransitionSystem/adapters/avalonia.md` |
-| `PlatformAdapters/Samplers/` | TransitionSystem（采样器实现） | 同上 —— 注册是构造 `Interpolator` 的副作用，见 §二 | 同上 §二.7、§三 |
-| `PlatformAdapters/ThemeValueConverters.cs` | DynamicTheme | `[ThemeConfig<XxxConverter, …>]` 的类型参数 + 一次性 `ThemeManager.SetPlatformInterpolator(new Interpolator())` | 本文 §三.2 |
-| `Attached/Workflow/` | WorkflowSystem | XAML 附着属性 + `PART_*` 名字解析 | `WorkflowSystem/adapters/avalonia.md` |
+| `TransitionSystem/` 根 | TransitionSystem | `Transition<T>.Create()`（编译期闭泛型，**零引导**） | `TransitionSystem/adapters/avalonia.md` |
+| `TransitionSystem/Samplers/` | TransitionSystem（采样器实现） | 同上 —— 注册是构造 `Interpolator` 的副作用，见 §二 | 同上 §二.7、§三 |
+| `DynamicTheme/ThemeValueConverters.cs` | DynamicTheme | `[ThemeConfig<XxxConverter, …>]` 的类型参数 + 一次性 `ThemeManager.SetPlatformInterpolator(new Interpolator())` | 本文 §三.2 |
+| `WorkflowSystem/AttachedBehaviors/` | WorkflowSystem | XAML 附着属性 + `PART_*` 名字解析 | `WorkflowSystem/adapters/avalonia.md` |
 
-**三块之间零交叉引用**，可复核：`grep -rn "using VeloxDev.WorkflowSystem" PlatformAdapters/` 与 `grep -rn "using VeloxDev.TransitionSystem" Attached/` 都为空。每块各面向一个 Core 模块 —— `ThemeValueConverters.cs` 连一条 `using VeloxDev.*` 都没有（它 `namespace VeloxDev.DynamicTheme` 与 `IThemeValueConverter` 同命名空间，工具全是 Avalonia 类型）。
+**三块之间零交叉引用**，可复核：`grep -rn "using VeloxDev.WorkflowSystem" TransitionSystem/` 与 `grep -rn "using VeloxDev.TransitionSystem" AttachedBehaviors/` 都为空。每块各面向一个 Core 模块 —— `ThemeValueConverters.cs` 连一条 `using VeloxDev.*` 都没有（它 `namespace VeloxDev.DynamicTheme` 与 `IThemeValueConverter` 同命名空间，工具全是 Avalonia 类型）。
 
 **不解决什么：**
 
@@ -51,7 +51,7 @@
 
 ---
 
-## 四、`Attached/Workflow/` 的挂载模型（入口清单）
+## 四、`WorkflowSystem/AttachedBehaviors/` 的挂载模型（入口清单）
 
 （`PlatformDetection` 已于 2026-10-18 删除；其余九个）按「挂在哪 + 谁来开」分档：
 
@@ -61,12 +61,12 @@
 | 节点视图 `UserControl`：`WorkflowSlotLayoutBehavior`（`WorkflowSlotLayoutBehavior` 的 `RegisterAttached` 属性组） | `IsEnabled` | 槽名是逗号分隔串，与 WPF 同形（WPF 的 `SlotNames`/`GetAllSlotNames`） |
 | 拖拽手柄 `InputElement`：`WorkflowNodeDragBehavior`（`WorkflowNodeDragBehavior` 的 `RegisterAttached` 属性组） | `IsEnabled` | 只认左键（`OnPointerPressed` 的 `PointerPressed` 订阅）；坐标宿主靠 `CoordinateHostName` / `CoordinateHostType` 二选一（`ResolveCoordinateHost`） |
 | 插槽视图 `Control`：`WorkflowSlotConnectionBehavior`（`WorkflowSlotConnectionBehavior` 的 `RegisterAttached`） | `IsEnabled` | 两阶段命令（`OnPointerPressed` / `OnPointerReleased`） |
-| 节点容器 `Panel`：`ViewPool`（`ItemsSourceProperty`/`TemplateSelectorProperty`） | **没有 `IsEnabled`**，两个数据属性（`ItemsSource` + `TemplateSelector`）谁写谁建管理器（`OnItemsSourceChanged`/`OnTemplateSelectorChanged`） | 管理器放 `ConditionalWeakTable`，`DetachedFromVisualTree` 时 `Detach`（`_managers`/`OnPanelDetached`/`CleanupManager`） |
+| 节点容器 `Panel`：`ViewPool`（`ItemsSourceProperty`/`TemplateSelectorProperty`） | 没有 `IsEnabled`；任一属性变化都 `Cleanup` + 重建 | 底层是 Core 的 `ViewSourcePipelineCore<…>`；五个必选层 + 四个策略/服务层在 `WorkflowSystem/ViewHosting/`（均为 **`public sealed`**、类名不带平台前缀），由适配器的 `ViewSourcePipeline` 闭合 |
 | 画布 `Control`：`WorkflowCanvasTransformBehavior`（`TransformProperty`） | 无开关：属性只是通知载体，宿主写（`Apply`）、XAML 绑；回调**刻意为空**（`OnTransformChanged`） | 七角色里唯一「只承载不响应」的 |
 | 具名子控件：`WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay` 的类声明） | 不是行为类；宿主把偏移推给它（`WorkflowSurfaceBehavior.UpdateMinimapOverlay`），自己 `Render` 自绘 | 消费方继承改配色（demo 的 `MinimapOverlay.cs`） |
 | 模型事件桥 `WorkflowEvents : AvaloniaObject`（`WorkflowEvents` 的类声明） | 绑 `Node`/`Slot`/`Tree` 到 sink | 订阅跟随 `DataContext`（`WorkflowEvents.Attachment` 的 `Connect`/`OnDataContextChanged`）；转发在 Core `WorkflowEventRelay` |
 
-**成对不变量**：`IsEnabled=false` 与重挂都会走 `Detach` → 解绑全部订阅（`WorkflowSurfaceBehavior.Detach`、`WorkflowNodeDragBehavior.Detach`、`WorkflowSlotLayoutBehavior.Detach`、`ViewPool.OnPanelDetached`）。新增订阅时必须在对应 `Detach`（或 `WorkflowSurfaceBehavior.UnsubscribeResolvedControls`）里配对 —— 漏掉不报错，只在重挂后事件翻倍。
+**成对不变量**：`IsEnabled=false` 与重挂都会走 `Detach` → 解绑全部订阅（`WorkflowSurfaceBehavior.Detach`、`WorkflowNodeDragBehavior.Detach`、`WorkflowSlotLayoutBehavior.Detach`、`ViewPool` 的 `DetachedFromVisualTree` 清理）。新增订阅时必须在对应 `Detach`（或 `WorkflowSurfaceBehavior.UnsubscribeResolvedControls`）里配对 —— 漏掉不报错，只在重挂后事件翻倍。
 
 ---
 
@@ -81,7 +81,7 @@
 
 ## 六、采样器为什么这家最多（**机制**，不是「这家写得全」）
 
-数一遍（`git ls-files 'Src/Adapters/<家>/PlatformAdapters/Samplers/*.cs' | wc -l`）：各家数量不等，Avalonia 在四家 XAML 平台里最多。「别的家不用写这么多」是错的 —— 四个 XAML 家都在同一量级。真实机制：
+数一遍（`git ls-files 'Src/Adapters/<家>/TransitionSystem/Samplers/*.cs' | wc -l`）：各家数量不等，Avalonia 在四家 XAML 平台里最多。「别的家不用写这么多」是错的 —— 四个 XAML 家都在同一量级。真实机制：
 
 - **Core 只覆盖「不属于任何 toolkit」的取值类型**：它的静态注册表用的是 `System.Drawing` 与 `System.Numerics` 下的 `Point`/`PointF`/`Size`/`SizeF`/`Color`/`Rectangle`/`RectangleF`/`Vector2-4`/`Quaternion`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `using` + 静态构造函数里的 `RegisterInterpolator`）。
 - **工具包自己的同名类型是另一个类型**，必须各自注册：这家注册 `Avalonia.Point` / `Avalonia.Size` / `Avalonia.Color`（`Interpolator.cs` 里三条对应的 `RegisterInterpolator`），WPF / WinUI / MAUI / Jalium 同理各注册一份自己的。
@@ -104,11 +104,11 @@
 
 ## 八、陷阱（这个项目级）
 
-1. **模板解析失败是静默的。** `ViewManager.AddOrReuseView` 找不到 `DataTemplate` 会抛（`throw new InvalidOperationException($"No DataTemplate found for type…")`），但调用它的批次循环把异常吞成 `Debug.WriteLine`（`ProcessNextBatch` 的 `catch`）⇒ 症状是**节点永远不出现，不抛不报**。WPF 那份逐字相同（WPF `ViewManager` 的 `ProcessNextBatch`）⇒ 六家共有的约定而非这家 bug；但在**这家最容易撞上**：模板要按「面板 → 沿 `Parent` 链 → `Application.Current.DataTemplates`」三级找（`ViewManager.FindDataTemplate`）。
+1. **模板解析失败是静默的。** `ViewFactory.CreateView` 找不到模板时返回 `null`，Core pool 按 ViewModel 类型缓存该类型并跳过 —— 不抛、不报；换模板必须重建 system（`ViewPool` 的属性变化会重建）。模板按「面板 → 沿 `Parent` 链 → `Application.Current.DataTemplates`」三级找（`ViewFactory.FindTemplate`）。
 2. **全模块唯一的反射点读的是私有框架字段，而且是「做一次就自摘」的。** `WorkflowSurfaceBehavior.OnScrollViewerLayoutUpdated` 取 `GestureRecognizerCollection` 的私有 `_recognizers` 列表，把 `ScrollGestureRecognizer` 全删掉（理由写在同一方法的注释里：它会在拖拽中抢走指针捕获，触屏平台尤甚），删完立刻 `viewer.LayoutUpdated -= OnScrollViewerLayoutUpdated` —— 所以这段逻辑只在第一次布局后跑一次，之后不再走。前提是 `GestureRecognizerCollection` 只公开 `Add`（`WorkflowSystem/adapters/avalonia.md` §二.4）。这家**没有任何裁剪注解**（grep `IsTrimmable|DynamicDependency|RequiresUnreferencedCode` 只命中 `obj/` 产物），而这家恰好有裁剪 demo（§七）。**裁剪会把这里影响到什么程度、是抛还是静默失效，我没有验证 —— 存疑**；要动这里先在裁剪 demo 上实测。
 3. **`WorkflowSurfaceBehavior.Refresh` 是 public 静态入口**，每次都会重解析名字、重写滚动偏移并写 `viewModel.Layout.ViewportOffset`（`Refresh` 与 `UpdateVisibleRegion`）。别在别处再写一次 `Viewport` / `ScrollViewer.Offset` —— `Viewport` 只有适配器写这条契约（`WorkflowSystem/extension.md` §3.9-3）在这家由这一处落地。
    2026-10-03 起 `Refresh` **也读** `ViewportOffset`：`CaptureViewportRestore` 在 `UpdateVisibleRegion` 之前取值、换树才算，末尾 `QueueViewportRestore` 排 `DispatcherPriority.Loaded` 滚过去。⇒ 宿主的加载路径**不要**再自己滚，也不要在绑定前手动捕获 —— 适配器已经做在那一层（`WorkflowSystem/extension.md` §3.9-10）。
-4. **`ViewManager.Attach` 要求集合实现 `IEnumerable`**（`throw new ArgumentException("Collection must implement IEnumerable…")`）；`ViewPool` 的两个属性**谁后写谁重建管理器**（`OnItemsSourceChanged`/`OnTemplateSelectorChanged`），运行期换 `TemplateSelector` 会 `CleanupManager` → 清空并重建整池视图（`OnTemplateSelectorChanged`、`CleanupManager`）。
+4. **`ViewPool` 的两个属性谁后写谁重建 system**（`OnItemsSourceChanged`/`OnTemplateSelectorChanged`）；源必须实现 `IEnumerable`，运行期换 `TemplateSelector` 会 `Cleanup` 旧 system 并按新模板重建。
 5. **故意让一次 XAML 编译失败，会把 Avalonia 的构建服务卡住；此后每一笔「成功」的构建都在产出一个没有编译 XAML 的程序集。** 症状是**启动即抛**
    `Avalonia.Markup.Xaml.XamlLoadException: No precompiled XAML found for <App>`（栈顶在 `App.axaml.cs` 的 `Initialize()`）。
    机制：XAML 编译由一个**常驻的构建服务进程**做（命令行形如 `dotnet exec .../avalonia.buildservices/<ver>/tools/netstandard2.0/...`），它把目标程序集载进自己进程来改写。一次失败的编译把它留在「载着 `obj/<cfg>/<tfm>/<App>.dll`」的状态，后续构建就改不动那个文件了 —— 而且**增量构建既不报错、也不产出编译后的 XAML**，只有 `-t:Rebuild` 才会明说：
@@ -131,7 +131,7 @@
 - `GlobalUsings.cs` 三条：七家逐字相同。
 - `Debug`/非 Debug 双轨：七家同形（只差 TFM）。
 - `State` 空壳：七家都是空壳。
-- `ViewManager` 的静默 `catch`、`batchSize = 3` + `DispatcherPriority.Background`、`ConditionalWeakTable` 放管理器：与 WPF 逐字同形（WPF `ViewManager` 的 `ProcessNextBatch`）。
+- `ViewPool` 默认用 Core 的 **自适应池策略**（初始 64/8ms，按吞吐收敛）+ Background、`ConditionalWeakTable` 放 system；池簿记在 Core，模板缺失走「返回 null + 按类型缓存」。
 - 主题值转换器的**一组名字**（Double / Point / Thickness / CornerRadius / Color / Brush / Object）与 WPF / WinUI / MAUI 相同（WinForms 与 Razor 各有更多，Jalium 没有）；名字是共有的，**实现里用的解析 API 才是各家的**（这是 `ThemeValueConverters.cs` 存在的理由，见 `extension.md` §二）。
 
 ---

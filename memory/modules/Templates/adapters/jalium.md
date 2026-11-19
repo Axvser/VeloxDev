@@ -45,7 +45,7 @@
 
 ### 2.1 表面 = 标记（根上挂行为）+ 薄 code-behind
 
-七个条目里只有 tree-view 的产物含**任意**装配，而且它现在是标记：`UserControl` 根上写五个 `behaviors:WorkflowSurfaceBehavior.*` 具名部件（`ScrollViewerName`/`CanvasName`/`GridDecoratorName`/`PointerPressSourceName`/`MinimapOverlayName`）+ `IsEnabled`/`ZoomEnabled`/`LinkMenuKey`（`workflow-tree-view/TemplateClass.jalxaml` 的根元素），`Resources` 里放两个 `DataTemplate` 与 `TemplateSelector`。画布手势、命中、视口虚拟化、菜单、`ZoomPin` 守卫都在适配器行为 `WorkflowSurfaceBehavior` 里 —— **模板里没有第二份**。改这些机制要改 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs`，不是在模板里补代码。code-behind 只把 `CanvasTransform` 附着属性用一个同名 CLR 属性再暴露一次（`workflow-tree-view/TemplateClass.jalxaml.cs` 的 `CanvasTransform`，因为本家绑定读不到括号路径）。
+七个条目里只有 tree-view 的产物含**任意**装配，而且它现在是标记：`UserControl` 根上写五个 `behaviors:WorkflowSurfaceBehavior.*` 具名部件（`ScrollViewerName`/`CanvasName`/`GridDecoratorName`/`PointerPressSourceName`/`MinimapOverlayName`）+ `IsEnabled`/`ZoomEnabled`/`LinkMenuKey`（`workflow-tree-view/TemplateClass.jalxaml` 的根元素），`Resources` 里放两个 `DataTemplate` 与 `TemplateSelector`。画布手势、命中、视口虚拟化、菜单、`ZoomPin` 守卫都在适配器行为 `WorkflowSurfaceBehavior` 里 —— **模板里没有第二份**。改这些机制要改 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`，不是在模板里补代码。code-behind 只把 `CanvasTransform` 附着属性用一个同名 CLR 属性再暴露一次（`workflow-tree-view/TemplateClass.jalxaml.cs` 的 `CanvasTransform`，因为本家绑定读不到括号路径）。
 
 ### 2.2 七份产物合起来还缺一个宿主窗口 —— 但宿主现在也是标记
 
@@ -102,7 +102,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 |---|---|
 | 权威常量 `public const double DefaultRulerThickness = 36;`（`RulerThickness` DP 默认值） | `Src/Templates/…/workflow-grid-decorator/TemplateClass.cs` 的 `DefaultRulerThickness` / `RulerThicknessProperty` |
 | 装饰器把接口属性映射过去：`public double RulerBand => RulerThickness;` | `Src/Templates/…/workflow-grid-decorator/TemplateClass.cs` 的 `RulerBand` |
-| 表面读**接口属性** `IWorkflowGridDecorator.RulerBand`，拿不到装饰器才兜底 `?? 36d` | `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `RulerBand` |
+| 表面读**接口属性** `IWorkflowGridDecorator.RulerBand`，拿不到装饰器才兜底 `?? 36d` | `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `RulerBand` |
 | 模板侧**没有**第二个副本（link-view / node-view 都不再算标尺 reserve） | — |
 
 ⇒ **改厚度要改模板那一个常量**（或运行期改 `PART_GridDecorator.RulerThickness`）。本家也**没有**绑定式那条路
@@ -116,12 +116,12 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 ### P4 · link-view 的"自盒化"：助手在适配器，**调用在模板**
 
-自盒化的实现是适配器的静态助手 `WorkflowLinkBounds.Apply`（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowLinkBounds.cs`，根因注释在类声明上方）；**调用方是模板产物** `workflow-link-view/TemplateClass.jalxaml.cs`：`Refresh()` 摆盒调用 `WorkflowLinkBounds.Apply`，把四个控制点交给助手摆盒，`BuildCurve()` 画前把每个点减掉助手交回的原点。模板不只是"出线色" —— 它**必须**在正确时机调用这个助手，这是它在扩展点里的责任。机制说明见 `memory/modules/WorkflowSystem/adapters/jalium.md` §2.1。
+自盒化的实现是适配器的静态助手 `WorkflowLinkBounds.Apply`（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowLinkBounds.cs`，根因注释在类声明上方）；**调用方是模板产物** `workflow-link-view/TemplateClass.jalxaml.cs`：`Refresh()` 摆盒调用 `WorkflowLinkBounds.Apply`，把四个控制点交给助手摆盒，`BuildCurve()` 画前把每个点减掉助手交回的原点。模板不只是"出线色" —— 它**必须**在正确时机调用这个助手，这是它在扩展点里的责任。机制说明见 `memory/modules/WorkflowSystem/adapters/jalium.md` §2.1。
 
 ### P5 · "深缩放不丢连线"的守卫在**适配器表面行为**里，宿主零调用者
 
 `ZoomPin`（250 ms）+ `NotifyZoomCommitted` 这套 committed-target 守卫在 `WorkflowSurfaceBehavior`
-（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `ZoomPin` 字段、
+（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `ZoomPin` 字段、
 `NotifyZoomCommitted`、`UpdateViewport`）—— **不在模板产物里，也不由宿主调**：缩放手势本身归表面（`ZoomEnabled`），
 `OnZoomPreviewMouseWheel` 算出提交目标后**自己**调 `NotifyZoomCommitted` —— 缩放手势归表面，demo 宿主是标记、不调它。少了它，缩放后要等 helper 的 ~10 fps 脏计时器才重算可见集。
 
@@ -134,7 +134,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 ### P7 · 两处"初始尺寸/兜底"都在**适配器表面行为**里，是刻意的
 
-- `WorkflowSurfaceBehavior.CanvasWidth/CanvasHeight = 2000`（`Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `CanvasWidth` / `CanvasHeight` 常量）只是**下界**：实际尺寸取 `Math.Max(2000, Layout.ActualSize)`（`UpdateCanvasSize`），并用 `InvalidateMeasure()` 让宿主重新测量。
+- `WorkflowSurfaceBehavior.CanvasWidth/CanvasHeight = 2000`（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `CanvasWidth` / `CanvasHeight` 常量）只是**下界**：实际尺寸取 `Math.Max(2000, Layout.ActualSize)`（`UpdateCanvasSize`），并用 `InvalidateMeasure()` 让宿主重新测量。
 - 视口由具名 `ScrollViewer` 解析而来，表面同时挂 `ScrollChanged` **与** `SizeChanged`（`ResolveNamedParts`），注释说明 Jalium 可能**不为视口尺寸变化发 `ScrollChanged`**；`UpdateViewport` 还在视口未测量时**退回整张画布**，否则第一次虚拟化会在 0 尺寸视口上空转。
 
 ---
@@ -143,7 +143,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 | 结论 | 在哪 |
 |---|---|
-| 表面侧机制（自盒化的 `Visual.ShouldRenderChild` 根因、`CanvasTransform` 通道与括号路径限制、`ZoomPin`、手势/命中/菜单） | `memory/modules/WorkflowSystem/adapters/jalium.md` §2；代码在 `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/Workflow{SurfaceBehavior,SlotLayoutBehavior,NodeDragBehavior,SlotConnectionBehavior,Events,LinkBounds,MinimapOverlay}.cs` + `ViewPool.cs`/`ViewManager.cs` |
+| 表面侧机制（自盒化的 `Visual.ShouldRenderChild` 根因、`CanvasTransform` 通道与括号路径限制、`ZoomPin`、手势/命中/菜单） | `memory/modules/WorkflowSystem/adapters/jalium.md` §2；代码在 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/Workflow{SurfaceBehavior,SlotLayoutBehavior,NodeDragBehavior,SlotConnectionBehavior,Events,LinkBounds,MinimapOverlay}.cs` + `ViewPool.cs`；池层在 `WorkflowSystem/ViewHosting/`（`ViewSourcePipeline` 与 `ViewContainer`/`ViewFactory`/`ViewScheduler`） |
 | 缩放枢轴 / `EnsureNegativeCover` / `ClampScrollOffset` 的模型侧语义 | `memory/modules/WorkflowSystem/extension.md` §3.9 与 `../extension.md` §4.1 的 #13 |
 | 空转 symbol 的全局盘点（Jalium 侧现已没有） | `../architecture.md` §7.1 |
 | 七家同一条目的结构差异（标尺 28/36、连线四族、minimap 薄壳 vs 自带实现） | `../architecture.md` §六 |

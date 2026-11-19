@@ -2,8 +2,8 @@
 
 > **读法**：契约与注册位置在 `memory/modules/TransitionSystem/extension.md`，本文不重复；
 > 人面向的「怎么写一个适配器」在 `skills/veloxdev-create-animation/references/adapter.md`，本文只指路不抄。
-> 本文只写这家的**硬限制、刻意背离、该家特有的坑**。代码在 `Src/Adapters/VeloxDev.WPF/PlatformAdapters/`。
-> **路径写法**：下文的裸文件名（`Interpolator.cs`、`Samplers/TransformSampler.cs` 等）都相对 `Src/Adapters/VeloxDev.WPF/PlatformAdapters/`；引用 Core 或别家时一律写全路径。
+> 本文只写这家的**硬限制、刻意背离、该家特有的坑**。代码在 `Src/Adapters/VeloxDev.WPF/TransitionSystem/`。
+> **路径写法**：下文的裸文件名（`Interpolator.cs`、`Samplers/TransformSampler.cs` 等）都相对 `Src/Adapters/VeloxDev.WPF/TransitionSystem/`；引用 Core 或别家时一律写全路径。
 
 ---
 
@@ -27,14 +27,14 @@
 **采样器条数不度量工作量，它度量「这家框架自带的、且 Core 还没覆盖的可动画值类型有多少个」。**
 
 - Core 已把**无 GUI 依赖**的一整族注册完（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的静态构造）：基元类型 + `System.Drawing` 的 `Point/PointF/Size/SizeF/Color/Rectangle/RectangleF` + `System.Numerics` 的向量/四元数。
-- **WinForms 的整个值类型面就是 `System.Drawing` 那一族**，Core 已经全注册了，只剩 `Padding` 没覆盖 ⇒ 所以只有 `PaddingSampler`（`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/Interpolator.cs` 的 `RegisterInterpolator(typeof(Padding), …)`）。
-- **Razor 没有任何带类型的 UI 值类型**，它的动画面是内联 CSS 字符串 ⇒ 只有 `StringSampler`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/Interpolator.cs` 的 `RegisterInterpolator(typeof(string), …)`）。
-- WPF 则自带一整族 `System.Windows.*` 可动画类型：`Point/Size/Rect/Vector/Thickness/CornerRadius` + Freezable 家族（`Brush`/`Transform`）+ `Effect`（服务整个效果家族，实作是 `DropShadowEffectSampler`）+ `Media3D` 的 `Point3D`/`Vector3D` + `Media.Color`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Interpolator.cs` 的静态构造）。
+- **WinForms 的整个值类型面就是 `System.Drawing` 那一族**，Core 已经全注册了，只剩 `Padding` 没覆盖 ⇒ 所以只有 `PaddingSampler`（`Src/Adapters/VeloxDev.WinForms/TransitionSystem/Interpolator.cs` 的 `RegisterInterpolator(typeof(Padding), …)`）。
+- **Razor 没有任何带类型的 UI 值类型**，它的动画面是内联 CSS 字符串 ⇒ 只有 `StringSampler`（`Src/Adapters/VeloxDev.Razor/TransitionSystem/Interpolator.cs` 的 `RegisterInterpolator(typeof(string), …)`）。
+- WPF 则自带一整族 `System.Windows.*` 可动画类型：`Point/Size/Rect/Vector/Thickness/CornerRadius` + Freezable 家族（`Brush`/`Transform`）+ `Effect`（服务整个效果家族，实作是 `DropShadowEffectSampler`）+ `Media3D` 的 `Point3D`/`Vector3D` + `Media.Color`（`Src/Adapters/VeloxDev.WPF/TransitionSystem/Interpolator.cs` 的静态构造）。
 - 顺带校准一下别家的量级，免得「WPF 最多」被当成事实（**数的是采样器类数 / `RegisterInterpolator` 条数**，两者仅在 Jalium 上不同 —— 它的 `BrushSampler` 同时注册 `Brush` 与 `SolidColorBrush`）：Avalonia 的采样器面最宽，WPF 与 MAUI 相近，其后是 WinUI、Jalium，WinForms 与 Razor 最少。
 
-**这条的副作用（最容易漏的一点）**：`System.Windows.Point/Size/Color` 与 Core 用 `System.Drawing` 注册的那几个**同名不同型**（Core 侧同名文件在 `Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/PointSampler.cs`、`SizeSampler.cs`、`ColorSampler.cs`），所以 WPF 必须**再写一份**采样器，放在 `VeloxDev.Adapters.NativeSamplers` 命名空间里（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/PointSampler.cs` 的 namespace）才能与 Core 的 `VeloxDev.TransitionSystem.NativeSamplers` 共存。⇒ **改 WPF 采样器时不要 `using VeloxDev.TransitionSystem.NativeSamplers;`**，那几个名字立刻歧义。这不是 WPF 独有：Avalonia 的 `PointSampler` 同形同namespace（`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/Samplers/PointSampler.cs` 的 namespace）。
+**这条的副作用（最容易漏的一点）**：`System.Windows.Point/Size/Color` 与 Core 用 `System.Drawing` 注册的那几个**同名不同型**（Core 侧同名文件在 `Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/PointSampler.cs`、`SizeSampler.cs`、`ColorSampler.cs`），所以 WPF 必须**再写一份**采样器，放在 `VeloxDev.Adapters.NativeSamplers` 命名空间里（`Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/PointSampler.cs` 的 namespace）才能与 Core 的 `VeloxDev.TransitionSystem.NativeSamplers` 共存。⇒ **改 WPF 采样器时不要 `using VeloxDev.TransitionSystem.NativeSamplers;`**，那几个名字立刻歧义。这不是 WPF 独有：Avalonia 的 `PointSampler` 同形同namespace（`Src/Adapters/VeloxDev.Avalonia/TransitionSystem/Samplers/PointSampler.cs` 的 namespace）。
 
-**没被覆盖的类型（要动它们就得自己写采样器）**：`System.Windows.Media.Matrix` 只被 `TransformSampler` 内部用（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Samplers/TransformSampler.cs` 的 `LerpMatrix`），**注册表里没有 `typeof(Matrix)`** ⇒ `Matrix` 类型的属性不可动画；`Media3D.Matrix3D`、`GradientStop` 同理。别以为「有 Transform 就有 Matrix」。
+**没被覆盖的类型（要动它们就得自己写采样器）**：`System.Windows.Media.Matrix` 只被 `TransformSampler` 内部用（`Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/TransformSampler.cs` 的 `LerpMatrix`），**注册表里没有 `typeof(Matrix)`** ⇒ `Matrix` 类型的属性不可动画；`Media3D.Matrix3D`、`GradientStop` 同理。别以为「有 Transform 就有 Matrix」。
 
 ---
 
@@ -46,9 +46,9 @@
 
 `PostCore` 先 `TryGet<Dispatcher>` 失败返 `false`，**再看 `dispatcher.HasShutdownStarted` 返 `false`**，然后 `InvokeAsync(action, priority); return true;`（`UIThreadInspector.cs` 的 `PostCore`）。
 
-这家**不覆写 `IsAlive`** —— 关停后由 dispatcher 自己说。七家里同类写法的只有 WPF 与 Jalium（`Src/Adapters/VeloxDev.Jalium/PlatformAdapters/UIThreadInspector.cs` 的 `PostCore` 是同一份守卫）；**Avalonia 同样有 dispatcher 却没有这道守卫**（`Src/Adapters/VeloxDev.Avalonia/PlatformAdapters/UIThreadInspector.cs` 的 `PostCore` 里搜不到 `HasShutdownStarted`），代码里没写理由 —— 接新一家时按「有 dispatcher 就问它」写是合理默认，但别断言七家一致。
+这家**不覆写 `IsAlive`** —— 关停后由 dispatcher 自己说。七家里同类写法的只有 WPF 与 Jalium（`Src/Adapters/VeloxDev.Jalium/TransitionSystem/UIThreadInspector.cs` 的 `PostCore` 是同一份守卫）；**Avalonia 同样有 dispatcher 却没有这道守卫**（`Src/Adapters/VeloxDev.Avalonia/TransitionSystem/UIThreadInspector.cs` 的 `PostCore` 里搜不到 `HasShutdownStarted`），代码里没写理由 —— 接新一家时按「有 dispatcher 就问它」写是合理默认，但别断言七家一致。
 
-`NonPriority` 三家反过来**必须自己造存活状态**，因为没东西可问：MAUI 看 `Application.Current?.Windows?.Count`（`Src/Adapters/VeloxDev.MAUI/PlatformAdapters/UIThreadInspector.cs` 的 `IsAlive`）、WinForms 持一个 `_isAppAlive`（`Src/Adapters/VeloxDev.WinForms/PlatformAdapters/UIThreadInspector.cs` 的 `IsAlive`）、Razor 有个手动 `NotifyShutdown` 的 `_isAppRunning`（`Src/Adapters/VeloxDev.Razor/PlatformAdapters/UIThreadInspector.cs` 的 `IsAlive`）。**别把这三家的做法搬到 WPF**，也别反过来。
+`NonPriority` 三家反过来**必须自己造存活状态**，因为没东西可问：MAUI 看 `Application.Current?.Windows?.Count`（`Src/Adapters/VeloxDev.MAUI/TransitionSystem/UIThreadInspector.cs` 的 `IsAlive`）、WinForms 持一个 `_isAppAlive`（`Src/Adapters/VeloxDev.WinForms/TransitionSystem/UIThreadInspector.cs` 的 `IsAlive`）、Razor 有个手动 `NotifyShutdown` 的 `_isAppRunning`（`Src/Adapters/VeloxDev.Razor/TransitionSystem/UIThreadInspector.cs` 的 `IsAlive`）。**别把这三家的做法搬到 WPF**，也别反过来。
 
 ### 2.2 pacer：`DispatcherTimer` 天生可重复，但会在它所属的 dispatcher 上留下队列项
 
@@ -58,7 +58,7 @@
 
 ### 2.3 一切以 `UserControl` 为界，不是就静默无效
 
-宿主行为直接 cast（`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `CaptureViewportRestore(UserControl host, …)`、`Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSlotLayoutBehavior.cs` 的 `OnIsEnabledChanged`），或从事件源往上找最近的 UserControl（`WorkflowSurfaceBehavior.cs` 里 `EnumerateVisualAncestors(source).OfType<UserControl>().FirstOrDefault(GetIsEnabled)` 那几处）。根元素换成 `Border`/`Grid` ⇒ 全部 no-op，**不抛异常**。demo 里因此 Surface/NodeView/SlotView 全是 UserControl。
+宿主行为直接 cast（`Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `CaptureViewportRestore(UserControl host, …)`、`Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` 的 `OnIsEnabledChanged`），或从事件源往上找最近的 UserControl（`WorkflowSurfaceBehavior.cs` 里 `EnumerateVisualAncestors(source).OfType<UserControl>().FirstOrDefault(GetIsEnabled)` 那几处）。根元素换成 `Border`/`Grid` ⇒ 全部 no-op，**不抛异常**。demo 里因此 Surface/NodeView/SlotView 全是 UserControl。
 
 （这条在 WorkflowSystem 那半边更要命，见 `memory/modules/WorkflowSystem/adapters/wpf.md`。放在这里是因为同一个 cast 形状贯穿两个模块。）
 
@@ -78,7 +78,7 @@
 
 > **先给一个反直觉的结论**：TransitionSystem 这边 WPF 是七家里的**平均样本** —— 它既不是采样器最多的（Avalonia 比它宽），也不是唯一有存活守卫的，`TransitionScheduler`/`TransitionEffect.Priority` 都跟多数派一致。所以下面既列真正的背离，也列**「看起来像这家特有、其实不是」**的校准项，免得下一个 agent 把共性当差异去改。
 
-1. **这里的 Ctrl 判定是精确相等，不是 `HasFlag`** —— 见 2.3 同源的 `Src/Adapters/VeloxDev.WPF/Attached/Workflow/WorkflowSurfaceBehavior.cs` 里 `Keyboard.Modifiers != ModifierKeys.Control`（WinForms 同形：`Src/Adapters/VeloxDev.WinForms/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `Control.ModifierKeys == Keys.Control`）；另外三家用 `HasFlag`：`Src/Adapters/VeloxDev.Avalonia/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `e.KeyModifiers.HasFlag(KeyModifiers.Control)`、`Src/Adapters/VeloxDev.WinUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control)`、`Src/Adapters/VeloxDev.MAUI/Attached/Workflow/WorkflowSurfaceBehavior.cs` 的 `OnZoomWheelChanged` 里 `e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control)`。可观察后果：**Ctrl+Shift+滚轮在 WPF 与 WinForms 上不缩放，在这三家上缩放**（Jalium 同在这组：它的缩放挂在 `WorkflowSurfaceBehavior` 的 `ScrollViewer.PreviewMouseWheel` 上，Ctrl 也判精确相等 —— `Src/Adapters/VeloxDev.Jalium/Attached/Workflow/WorkflowSurfaceBehavior.cs`）。代码与注释里**没有**记录这是刻意还是遗漏 —— 按现状保留或统一都行，但别以为七家一致。
+1. **这里的 Ctrl 判定是精确相等，不是 `HasFlag`** —— 见 2.3 同源的 `Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 里 `Keyboard.Modifiers != ModifierKeys.Control`（WinForms 同形：`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `Control.ModifierKeys == Keys.Control`）；另外三家用 `HasFlag`：`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `e.KeyModifiers.HasFlag(KeyModifiers.Control)`、`Src/Adapters/VeloxDev.WinUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control)`、`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `OnZoomWheelChanged` 里 `e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control)`。可观察后果：**Ctrl+Shift+滚轮在 WPF 与 WinForms 上不缩放，在这三家上缩放**（Jalium 同在这组：它的缩放挂在 `WorkflowSurfaceBehavior` 的 `ScrollViewer.PreviewMouseWheel` 上，Ctrl 也判精确相等 —— `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`）。代码与注释里**没有**记录这是刻意还是遗漏 —— 按现状保留或统一都行，但别以为七家一致。
 
 2. **这家与 Avalonia 是七家里唯二会与 Core 撞名的** —— `System.Windows.Point/Size/Color`（Avalonia 则是 `Avalonia.Point/Size/Color`）与 Core 注册的 `System.Drawing` 三兄弟同名，只能靠第二命名空间分开（两家的采样器都放在 `VeloxDev.Adapters.NativeSamplers`）。WinUI/Jalium/MAUI 的平台类型与 `System.Drawing` 不同名，不需要这一层。理由见第一节。
 
@@ -102,7 +102,7 @@
 
 6. **`WpfEntries.cs` 记录了一个真会咬人的坑：七家采样器共享同一个命名空间 `VeloxDev.Adapters.NativeSamplers` 且类名相同** ⇒ 同一个测试项目里引用两家就是 CS0433/CS0104。那份文件里的解法是显式 using 别名 + 程序集限定名反射（`VeloxDev.Adapters.NativeSamplers.{name}`）。**这条不是测试的怪癖，是真实的适配器形状**：新接一家沿用同名同namespace 时，任何同时引用两家的项目都要付这份成本。
 
-7. **声明成 `Effect`（抽象基类）的属性要注册基类型 `typeof(Effect)`。** 查找只**向上**走（精确 → 基类 → 接口，`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `TryGetInterpolator`），所以只注册具体类型 `DropShadowEffect` 时，`Effect` 的基类链（`Animatable` → `Freezable` → `DependencyObject` → `object`）上没有键 ⇒ `Prepare` 报一次 `Unsampled` 并把该属性**整个跳过**（`InterpolatorCore.Prepare` 里 `sampler == null` 的分支），**不抛、不降级、不提示**。注册的是 `typeof(Effect)`（`Src/Adapters/VeloxDev.WPF/PlatformAdapters/Interpolator.cs` 的静态构造），**这条键的代价是必须服务整个家族**（Core 注册表那条通则的实例）：
+7. **声明成 `Effect`（抽象基类）的属性要注册基类型 `typeof(Effect)`。** 查找只**向上**走（精确 → 基类 → 接口，`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `TryGetInterpolator`），所以只注册具体类型 `DropShadowEffect` 时，`Effect` 的基类链（`Animatable` → `Freezable` → `DependencyObject` → `object`）上没有键 ⇒ `Prepare` 报一次 `Unsampled` 并把该属性**整个跳过**（`InterpolatorCore.Prepare` 里 `sampler == null` 的分支），**不抛、不降级、不提示**。注册的是 `typeof(Effect)`（`Src/Adapters/VeloxDev.WPF/TransitionSystem/Interpolator.cs` 的静态构造），**这条键的代价是必须服务整个家族**（Core 注册表那条通则的实例）：
    - **两处独立地照 `Effect` 声明**，所以这不是测试的臆造：真 demo 的 DP 是 `ShadowProperty` 注册为 `typeof(Effect)`、属性是 `public Effect? Shadow`（`Examples/Transition/WPF/Demo/SamplerSubject.cs`）；纯数据表的 `Target.Shadow` 同样是 `Effect`（`Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs` 的 `Target` 类）。
    - **两处都绕开注册表**：demo 用 `SetInterpolator` 逐条覆盖（`Examples/Transition/WPF/Demo/MainWindow.xaml.cs` 的 `SetInterpolator(property, SamplerProbe.Create(sampler))`），纯数据表直接拿采样器实例。⇒ 只按具体类型注册时，「`Effect` 属性能动画」在仓库里**没有任何一条经注册表的证据**；注册成基类型之后才有。
    - **公开 API 暴露的是具体类型**：`Transition.cs` 的重载签名是 `Expression<Func<T, DropShadowEffect?>>`。这条重载仍是「编译期就知道是阴影」时的最短写法，但**它不是走通 `Effect` 声明的前提** —— 泛型 `Property<TValue>` 配 `typeof(Effect)` 那条键即可，demo 与纯数据表用的都是后者。

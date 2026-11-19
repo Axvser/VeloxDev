@@ -182,6 +182,10 @@
   </Folder>
   <Folder Name="/Verification/">
     <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks/VeloxDev.Adapters.Benchmarks.csproj" />
+    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks.Headed/VeloxDev.Adapters.Benchmarks.Headed.csproj" />
+    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks.MAUI/VeloxDev.Adapters.Benchmarks.MAUI.csproj" />
+    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks.Razor/VeloxDev.Adapters.Benchmarks.Razor.csproj" />
+    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks.WinUI/VeloxDev.Adapters.Benchmarks.WinUI.csproj" />
     <Project Path="Src/Verification/VeloxDev.Maui.Benchmarks/VeloxDev.Maui.Benchmarks.csproj" />
     <Project Path="Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Serialization.Benchmarks.csproj" />
   </Folder>

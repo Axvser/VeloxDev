@@ -1,7 +1,7 @@
 ﻿# TransitionSystem — 架构
 
 > 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`（2026-10-04 起按角色分子目录：`Events/`、`Effects/`、`Binding/`、`Sampling/`、`State/`、`Runtime/`、`NativeSamplers/`；命名空间不变）、契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`，枚举在 `Interfaces/TransitionSystem/Enums/`；
-> 七家平台实现在 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/`。
+> 七家平台实现在 `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/`。
 > 依赖的子系统：`Timing/`（时钟）、`Threading/`（线程归属与编组）、`TimeLine/`（事件参数）、`WeakTypes/`、`Lifetime/`。
 
 本文只写「读完整个模块的代码才知道的东西」。类型清单、成员表、继承树请看 IDE。
@@ -35,7 +35,7 @@
 用户代码 / Skills
    │  只触碰  VeloxDev.TransitionSystem.Transition<T>   ← 每家适配器各有一个
    ▼
-适配器 (Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/)
+适配器 (Src/Adapters/VeloxDev.<GUI>/TransitionSystem/)
    │  继承 Abstractions 的基类，实现契约
    ▼
 VeloxDev.Core / TransitionSystem  (Abstractions)
@@ -52,7 +52,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 
 **用户可见面与内部面。** `VeloxDev.TransitionSystem` 命名空间（`Transition<T>`、`TransitionEffect`、`State`、`Interpolator`、`TransitionScheduler`、`Eases`、`PathIndex`、`RotationDirection`、`ISampler`、`ISampleable`、`IEaseCalculator`、`ITransitionProperty`、`IFrameState`、`TransitionCoreEx` 等）是给用户的；`VeloxDev.TransitionSystem.Abstractions`（`TransitionCore`、`InterpolatorCore`、`StateCore`、`TransitionSchedulerCore`、`TransitionInterpreterCore`、`TransitionHostBase`、`SamplerSet`、`TransitionRun`、`TransitionDiagnostics`）是给适配器的。
 
-用户命名空间里没有 scheduler 的内部件：`TransitionScheduler`、`Transition<T>`、`TransitionEffect`、`State`、`Interpolator`、`UIThreadInspector` 都是**每家适配器自己**在 `Src/Adapters/VeloxDev.<GUI>/PlatformAdapters/` 下定义的（Core 里没有同名的具体类型）。Core 侧用户命名空间里能直接用的只有 `TransitionCoreEx`（`Then`/`Await`/`AwaitThen`/`Repeat`/`Interpolator` 这几个链式扩展方法，`Effects/TransitionEx.cs`）与各接口/枚举/`PathIndex`/`Eases`。
+用户命名空间里没有 scheduler 的内部件：`TransitionScheduler`、`Transition<T>`、`TransitionEffect`、`State`、`Interpolator`、`UIThreadInspector` 都是**每家适配器自己**在 `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/` 下定义的（Core 里没有同名的具体类型）。Core 侧用户命名空间里能直接用的只有 `TransitionCoreEx`（`Then`/`Await`/`AwaitThen`/`Repeat`/`Interpolator` 这几个链式扩展方法，`Effects/TransitionEx.cs`）与各接口/枚举/`PathIndex`/`Eases`。
 
 ---
 
@@ -221,7 +221,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 | 链与段（`Then`/`Await`/`AwaitThen`/`Repeat` 的语义、段间等待、帧集的重用与重放） | `TransitionSystem/Effects/Transition.cs`（`ExecuteCoreAsync` 的后半与 `CoreRepeat`） |
 | 端点怎么被读出来、路径怎么被解析/编译、哪些路径要拒绝 | `TransitionSystem/Sampling/Interpolator.cs`（`Prepare`）、`TransitionSystem/Binding/TransitionProperty.cs`、`TransitionSystem/Binding/PathSegment.cs` |
 | 每帧写出去了什么、marshaling、stale-frame 守卫 | `TransitionSystem/Sampling/SamplerSet.cs` |
-| 一个具体类型的插值数学 | 对应 `ISampler`：Core 的在 `TransitionSystem/NativeSamplers/`，平台的在各家 `PlatformAdapters/Samplers/` |
+| 一个具体类型的插值数学 | 对应 `ISampler`：Core 的在 `TransitionSystem/NativeSamplers/`，平台的在各家 `TransitionSystem/Samplers/` |
 | 颜色的边界/溢出去哪了 | `TransitionSystem/Runtime/BoundedProgress.cs` |
 | 缓动曲线 | `TransitionSystem/Effects/Eases.cs` |
 | 「下一帧什么时候来」/宿主定时器 | `TransitionSystem/Runtime/FramePacerCore.cs` + 各家的 `TransitionInterpreter.CreateFramePacer` |
@@ -236,7 +236,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 ## 七、陷阱（带依据）
 
 1. **`effect.Clone()` 落到基类型。** `TransitionEffectCore<TPriorityCore>.Clone()` 里 `new TransitionEffectCore<TPriorityCore>()`（`Effects/TransitionEffect.cs`），不是适配器的 `TransitionEffect`。它**不是 virtual**（是 `new`），所以平台**无法**把子类新增的状态带进运行——因为运行的是克隆体。结论：给 `TransitionEffect` 子类加字段是无效的。目前七家的 `TransitionEffect` 都只覆写 `Priority`，所以没暴露问题。
-2. **共享静态 effect 会被直接赋值。** `.Effect(TransitionEffects.Theme)`（各家 `PlatformAdapters/TransitionEffects.cs` 提供的现成实例，`skills/veloxdev-switch-themes/SKILL.md` 的「Switching」一节）走的是 `TransitionCore.CoreEffect<T1,T2>(T2 effect)` 那个**直接赋值**分支（`this.effect = convertedEffect`），而运行体是每段克隆 —— 往共享 effect 上加 handler 会作用于它的**所有**使用者，且每帧每目标都触发。想挂平台帧钩子要用 `.Effect(e => {...})` 那个 setter 重载：它在 `CoreEffect(Action<T2>)` 里 `new` 一个实例。
+2. **共享静态 effect 会被直接赋值。** `.Effect(TransitionEffects.Theme)`（各家 `TransitionSystem/TransitionEffects.cs` 提供的现成实例，`skills/veloxdev-switch-themes/SKILL.md` 的「Switching」一节）走的是 `TransitionCore.CoreEffect<T1,T2>(T2 effect)` 那个**直接赋值**分支（`this.effect = convertedEffect`），而运行体是每段克隆 —— 往共享 effect 上加 handler 会作用于它的**所有**使用者，且每帧每目标都触发。想挂平台帧钩子要用 `.Effect(e => {...})` 那个 setter 重载：它在 `CoreEffect(Action<T2>)` 里 `new` 一个实例。
 3. **`state` 跨段与跨迭代共享**（`ExecuteCoreAsync` 里 `segments.Add(...)` 只克隆 effect），所以「一段的首趟备下的帧集被后续迭代复用」才成立；也意味着运行期改 `state` 是竞态。
 4. **`Execute` 返回时什么都没跑完**，且 `Transition<T>.Execute` 是 `async void` —— 想等它，只能读 target 的真实值或用 `AwaitThen` 串接。
 5. **`Transition.Exit` 默认只停互斥动画**（`IncludeMutual: true, IncludeNoMutual: false`，`TransitionCore.Exit` 的默认参数）。`CanMutualTask: false` 启动的那些不会被默认的 `Exit` 碰到。
