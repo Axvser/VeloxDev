@@ -246,7 +246,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 空白画布上的平移同一笔否决：`OnCanvasMouseDown` 路由后读同一个句柄（`WorkflowTreeView.OnCanvasMouseDown`）。
 宿主想否决某一次，订同一个 `PointerPressed` 即可，与基类订阅的先后无关。
 
-（校验脚本已泛化：入口是 `Src/Verification/verify-workflow-item-templates-all.ps1` —— 七家平台通吃，`-Platform <name>` 选一家、`-Strict` 严格模式；旧的 `verify-workflow-item-templates.ps1` / `verify-jalium-item-templates.ps1` 现在是薄转发，老调用照常可用。）
+（校验脚本已泛化：入口是 `Src/Test/Harness/verify-workflow-item-templates-all.ps1` —— 七家平台通吃，`-Platform <name>` 选一家、`-Strict` 严格模式；旧的 `verify-workflow-item-templates.ps1` / `verify-jalium-item-templates.ps1` 现在是薄转发，老调用照常可用。）
 
 ### 4.10 `new Region()` 是**无限**区域，不是空的 —— 用户报的「黑色盒子」就是它（2026-10-03 修）
 

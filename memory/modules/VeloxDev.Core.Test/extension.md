@@ -63,10 +63,10 @@
 |---|---|
 | 真实渲染输出（WPF 不因 gradient stop 写入而重绘这类） | `Examples/<模块>/<GUI>/Demo` |
 | 平台定时器的 tick 时序（`DispatcherTimer`、WinForms `Timer`） | 同上 |
-| 平台采样器的覆盖面（`RotationDirection` 只被适配器消费） | `Examples/Transition/AUTO TEST/` |
+| 平台采样器的覆盖面（`RotationDirection` 只被适配器消费） | `Src/Test/AutoTest/` |
 | 真实 UI 线程的 `SynchronizationContext` 语义 | 手写替身能验「逻辑对不对」，验不了「平台是不是这样」 |
 | 跨 TFM 行为（netstandard2.0 / net461 / netcoreapp3.0 / net5.0） | 给测试 csproj 加 TFM |
-| AOT / 裁剪下的可达性 | `Src/Verification/VeloxDev.TrimProbe/` —— 仓库外的工作流，与测试项目互不管辖（`architecture.md` §一） |
+| AOT / 裁剪下的可达性 | 仓库外的探针工作流，与测试项目互不管辖（`architecture.md` §一） |
 
 **判据**：一条测试如果需要一个「真实的 X」，而 X 住在 `Src/Adapters/` 或某个平台程序集里 —— 它不属于本模块。
 

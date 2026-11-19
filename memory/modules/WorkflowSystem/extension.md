@@ -55,9 +55,9 @@
 > - **取焦点一定会带来「平台把画布卷进视口」的连带效应**，各家都要挡：WPF/Avalonia/Jalium 是吃掉 `RequestBringIntoView`，Razor 是 `preventScroll`。
 > - ⚠ **`UserControl` / `Control` 的 `Focusable` 默认是 `false`**（WPF、Avalonia 都是）——「退回宿主」这条兜底不生效：焦点落不到宿主上，键也就不来。WPF/Avalonia 的适配器因此在 Attach 里自己开 `control.Focusable = true`，**不要删**。WinUI 没有这个属性（用 `Focus(FocusState)`，宿主本来就能拿焦点）。
 
-> 🧪 **怎么验这一类东西：`Src/Verification/agent-ui-harness.ps1`。** 「悬停一下再按 Delete」用构建验不了、读代码也读不出来 —— 上面那五家的缺口正是这么漏的。这个脚本用真实输入驱动桌面 demo 并截图：
+> 🧪 **怎么验这一类东西：`Src/Test/Harness/agent-ui-harness.ps1`。** 「悬停一下再按 Delete」用构建验不了、读代码也读不出来 —— 上面那五家的缺口正是这么漏的。这个脚本用真实输入驱动桌面 demo 并截图：
 > ```
-> powershell -NoProfile -ExecutionPolicy Bypass -File Src/Verification/agent-ui-harness.ps1 `
+> powershell -NoProfile -ExecutionPolicy Bypass -File Src/Test/Harness/agent-ui-harness.ps1 `
 >   -Exe <demo.exe> -Actions "drag:687,399,757,433; wait:600; move:724,414; wait:700; probe:724,414; key:Delete; wait:900; probe:724,414"
 > ```
 > 坐标是**窗口相对**（直接照着截图读），`probe` 报一个像素的颜色，所以可以断言状态而不是靠看。两个坑都要守：进程必须 **DPI aware**（否则三套坐标互相错位，输入看着像「没到」）；`INPUT` 结构必须是 **40 字节**（并集按最大成员算），小一号时 `SendInput` **静默**返回 0，所有按键凭空消失 —— 脚本现在会报 REJECTED。
@@ -67,7 +67,7 @@
 > ⚠ **`Add-Type` 用的是老编译器（C# 5）**，表达式体成员（`=>` 方法）编译不过 —— 脚本里的 C# 一律写完整方法体。
 > ⚠ **`SetCursorPos` 挪动的指针不一定派发 `PointerMoved`**（WinUI 的老毛病，见 §二·4 附的实测）。所以「悬停有没有生效」这类断言会**偶发假阴性**：同一串动作第一次打不中、第二次打中。探到反例时先在同一个点上多打几次再下结论。
 >
-> **Razor 那一家它够不着，用 `Src/Verification/agent-web-harness.ps1`**（CDP 驱动浏览器）：Blazor 是页，`SendInput` 打进的是浏览器外壳而不是文档，而这一家的 Delete 恰恰由页面自己的 `@onkeydown` 处理。那套的动作里 `eval`（在页面里跑 JS，断言直接是数字）与 `cursor:<js>`（把指针移到**页面自己算出来**的点）比像素探针强得多 —— 打一条画在带变换的 SVG 里、又被卡片压住的曲线时，猜坐标必然打偏。
+> **Razor 那一家它够不着，用 `Src/Test/Harness/agent-web-harness.ps1`**（CDP 驱动浏览器）：Blazor 是页，`SendInput` 打进的是浏览器外壳而不是文档，而这一家的 Delete 恰恰由页面自己的 `@onkeydown` 处理。那套的动作里 `eval`（在页面里跑 JS，断言直接是数字）与 `cursor:<js>`（把指针移到**页面自己算出来**的点）比像素探针强得多 —— 打一条画在带变换的 SVG 里、又被卡片压住的曲线时，猜坐标必然打偏。
 > ⚠ **它要打 `https://`**：`http://localhost:49302` 会 **307 跳到 `https://localhost:49301`**（应用强制 HTTPS），而 headless Chrome 跟过去时若证书不被信任就是一张**浏览器错误页**。这台机器上开发证书是受信任的，所以用 `-Url https://localhost:49301` 直接进。
 > ⚠ **而且它那时会骗你**：导航到错误页时 `waitfor:<选择器>` 照样报 `done`（它只轮询 `!!document.querySelector(...)`，超时不报错）。**判据是 `eval:` 读回来的东西** —— `document.querySelectorAll('.veloxdev-wf-scroll').length` 是 0、或 `[id]` 列表里出现 `main-frame-error` / `reload-button`，就是错误页。
 > ⚠ **`keydown:Shift` 不给页面派发键盘事件**：它只把修饰位挂到随后的**鼠标**事件上。所以「由统一 KEY 输入跟踪 Shift」的宿主在浏览器里收不到 Shift —— 要 `eval:` 自己 `dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',code:'ShiftLeft',bubbles:true}))`。（桌面 harness 的 `keydown:` 走 SendInput，是**真的**键事件，没有这个问题。）
@@ -251,7 +251,7 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 3. 只写自己负责的数组：位置是 `X`/`Y`，分层/排序/走线用预留的 `Rank`/`Order`/`RouteX`/`RouteY`。pinned 节点一律不写。
 4. **不读模型**：`Problem.Nodes`/`Edges` 是快照，`Problem.Sources` 只给 applier；cost 也只读 solved 数组（不读视图已发布曲线）。
 5. 并行只能按不相交的 band 分；跨 band 的只读值（如水平软目标）要在并行循环**之前**算好。
-6. 测试放 `Src/Core/VeloxDev.Core.Test/WorkflowSystem/Layout/`，用 `LayoutTestKit` 建树，不碰适配器。
+6. 测试放 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/Layout/`，用 `LayoutTestKit` 建树，不碰适配器。
 
 ---
 

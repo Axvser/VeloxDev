@@ -74,7 +74,7 @@
 
 七家适配器把**同名类型放在同一个命名空间**：`VeloxDev.TransitionSystem.{Interpolator, State, Transition, Transition<T>, TransitionEffect, TransitionEffects, UIThreadInspector, TransitionInterpreter, TransitionScheduler<T>}`、`VeloxDev.WorkflowSystem.AttachedBehaviors.*`、`VeloxDev.Adapters.NativeSamplers.*`（逐家 grep 命名空间，七家一致）。两条后果：
 
-- 同时引用两家的项目里直接写这些类型名会 **CS0433**。仓库里为此在测试工程用程序集限定反射：`Examples/Transition/AUTO TEST/Samplers/AvaloniaEntries.cs` 的 `CrossAdapter`，它上方的注释就是这条。
+- 同时引用两家的项目里直接写这些类型名会 **CS0433**。仓库里为此在测试工程用程序集限定反射：`Src/Test/AutoTest/Samplers/AvaloniaEntries.cs` 的 `CrossAdapter`，它上方的注释就是这条。
 - 这家的采样器里 **一部分与别家重名**（Brush / Color / CornerRadius / GridLength / Point / Size / Thickness / Transform，各自与 WPF/WinUI/Jalium 中的至少一家撞名），只能反射取；另 **一部分是这家独有**（BoxShadows / PixelPoint / PixelRect / PixelSize / RelativePoint / RelativeRect），测试里直接写类型名。该文件的 `Entry(...)` 条目分走 `typeof(...)` 与 `CrossAdapter("…")` 两条路。
 
 ---

@@ -241,7 +241,7 @@ return accepted;
 - TransitionSystem 侧的采样器逐一分析、`DispatcherQueueTimer` 帧 pacer、`Lifetime.SetAlive` 的取舍 —— `memory/modules/TransitionSystem/adapters/winui.md`。
 - 主题切换的完整流向、两级缓存、转换器如何被**生成器**激活 —— `memory/modules/DynamicTheme/architecture.md`。
 - 工作流宿主怎么写（`using:` 命名空间、`Clip="{x:Null}"`、offset frame 的模板写法、`NodeView` 的 Viewbox 与 `PART_*` 摆位）—— `skills/veloxdev-create-workflow/references/gui/winui.md`。
-- 本模块的验证线在 `Examples/Transition/AUTO TEST/`（`Samplers/VeloxDev.SamplerTest.csproj` 直接引本模块，`Samplers/WinUiEntries.cs`、`Conformance/WinUiConformance.cs`、`LoadMode/WinUiLoadMode.cs`、`Drivers/WinUIDemoDriver.cs` 是这家的几个入口）；工作流侧可跑的宿主就是 §六 表末那一组 `.xaml` 所在的 demo。
+- 本模块的验证线在 `Src/Test/AutoTest/`（`Samplers/VeloxDev.SamplerTest.csproj` 直接引本模块，`Samplers/WinUiEntries.cs`、`Conformance/WinUiConformance.cs`、`LoadMode/WinUiLoadMode.cs`、`Drivers/WinUIDemoDriver.cs` 是这家的几个入口）；工作流侧可跑的宿主就是 §六 表末那一组 `.xaml` 所在的 demo。
 
 6. **WinUI 的 demo 工作台现在是完整四区外壳**（2026-11-18）：32px 标题条 + 48 活动栏 + 272 侧栏 + 主区（`流程图`/`输出` 两个标签）+ 348 检查器（`属性`/`AI 助手`）+ 24 状态栏。`Views/Workflow/TreeView.xaml` 是整壳，`TreeView.xaml.cs` 绑定 `TreeViewModel.Runs`/`SelectedElement`/`CompiledStructure`/`ExecutionLog`；`Themes/Tokens.xaml` 提供色板，`WorkbenchConverters.cs` 提供 Bool/Null/Zero 可见性转换。运行管理器直接绑 `Runs.Tasks`，`Runs.PropertyChanged` 只在 `Selected` 变化时把选中行同步给 ListView（`_syncingRunSelection` 门）；元素列表与运行列表的选择同步都有 `_syncing...` 门，**不要再加无门的双向 SelectedItem 绑定**。
    - **XAML 编译器的旧失败仍要记住**：上一轮一次性替换整份外壳时，WinUI 的 XAML 编译器会静默以退出码 1 失败（`MSB3073`，`output.json` 没有 error，stderr 为空）。这次的整壳是逐块加出来的，最终 `dotnet build` 0 错误；下次改大结构要沿用「逐块加 + 清 obj + 先验 XML」，不要整体替换。

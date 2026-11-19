@@ -131,13 +131,13 @@ MAUI 的 `LinkLayer.Handles`（连线 overlay）、WinUI 的 `DispatcherQueuePri
 
 ## 六、有头性能基准
 
-- 共享核心：`Src/Verification/VeloxDev.Adapters.Benchmarks.Headed`（`HeadedOptions` / `SyntheticWorkflow` / `HeadedReport` / `HeadedBenchmarkCore`），宿主工程只实现 `IHeadedBenchmarkHost`。
-- 同进程控制台宿主：`Src/Verification/VeloxDev.Adapters.Benchmarks` 的 `headed` 模式（**不是 BenchmarkDotNet**），`--adapter avalonia|wpf|winforms|jalium`，入口 `Headed/HeadedBenchmarkRunner.cs`。
-- 独立宿主：`Src/Verification/VeloxDev.Adapters.Benchmarks.WinUI`（unpackaged WinUI 3，`--adapter winui`）与 `.MAUI`（Windows 目标，`--adapter maui`）。WinUI 宿主运行时用 Windows App SDK **1.8.251003001**：适配器编译在 1.6 上，但 1.6 运行时无法启动 .NET 10 进程（`0xC000027B`），不要把宿主降回 1.6。
-- Razor 例外：`Src/Verification/VeloxDev.Adapters.Benchmarks.Razor` 是 **headless renderer benchmark**（`HtmlRenderer` 驱动真实 `ViewPool`），不是 `IHeadedBenchmarkHost`，不能与有头窗口数字直接横比。
+- 共享核心：`Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.Headed`（`HeadedOptions` / `SyntheticWorkflow` / `HeadedReport` / `HeadedBenchmarkCore`），宿主工程只实现 `IHeadedBenchmarkHost`。
+- 同进程控制台宿主：`Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks` 的 `headed` 模式（**不是 BenchmarkDotNet**），`--adapter avalonia|wpf|winforms|jalium`，入口 `Headed/HeadedBenchmarkRunner.cs`。
+- 独立宿主：`Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.WinUI`（unpackaged WinUI 3，`--adapter winui`）与 `.MAUI`（Windows 目标，`--adapter maui`）。WinUI 宿主运行时用 Windows App SDK **1.8.251003001**：适配器编译在 1.6 上，但 1.6 运行时无法启动 .NET 10 进程（`0xC000027B`），不要把宿主降回 1.6。
+- Razor 例外：`Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.Razor` 是 **headless renderer benchmark**（`HtmlRenderer` 驱动真实 `ViewPool`），不是 `IHeadedBenchmarkHost`，不能与有头窗口数字直接横比。
 - 每适配器接缝：`IHeadedBenchmarkHost`（`ResetScenarioAsync` / `MeasureInitialAsync` / `MeasureScrollAsync` / `MeasureFullAsync`）。
 - 指标：墙钟（包含 Pool 批次排空 + 一次真实布局/渲染回合，不是 GPU 帧时）、`GC.GetTotalAllocatedBytes`、Gen0/1/2、池的 `Active/Pending/Recycled/Created/Reused/Destroyed`、`VisibleItems`；`ViewPoolCore` 为此公开了 `CreatedViewCount` / `ReusedViewCount` / `DestroyedViewCount`。
-- 结果写各自工程下的 `BenchmarkDotNet.Artifacts/view-pipeline/*.md` 与 `*.json`；一轮先 warmup，再取中位数/P95，不是均值。运行命令与纪律见 `Src/Verification/README.md`。
+- 结果写各自工程下的 `BenchmarkDotNet.Artifacts/view-pipeline/*.md` 与 `*.json`；一轮先 warmup，再取中位数/P95，不是均值。运行命令与纪律见 `Src/Test/README.md`。
 - 一次只跑一家，别并行驱动多个 UI 进程；WinUI / MAUI 独立宿主直接运行产物，不经过 `dotnet run`。
 - Razor 的 2000 节点 / 3000 连线 / 20 步场景（`HtmlRenderer`，`InProcessEmitToolchain`，依赖图 `-p:Optimize=true`）：Initial 约 0.36 ms / 0.04 MB；每个视口步约 0.88 ms / 0.15 MB（合并集合通知前的旧值是 18.5 ms / 6.85 MB）。`ViewPool` 的 `OnCollectionChanged` 现在只排队一次 `Task.Yield` 后的快照 + `StateHasChanged`，不再为虚拟化发出的每个 Add/Remove 重渲染。它量的是 renderer 构造渲染树 + 静态 HTML，不含 Blazor 的 DOM patch/JS transport，也不是窗口布局；节点模板比 demo 轻，所以只能同 Razor 自身前后比。BDN optimizer validator 保持开启，依赖未优化时拒绝运行。`--probe` 是“renderer 确实重渲染了真实 `ViewPool`”的证据。
 
@@ -170,5 +170,5 @@ Razor 的 `ViewPool` 组件**不接** `ViewSourcePipelineCore`，这是刻意的
 
 ## 八、测试锚点
 
-- `Src/Core/VeloxDev.Core.Test/WorkflowSystem/ViewPoolTests.cs`：用 `FakeScene` 组合全部层，覆盖分批、按类型复用、Reset、缺模板缓存、单项失败隔离、Dispose、调度被拒与重试；另覆盖 `LinkLayer.IsActive` / `Handles` 跳过主池、`LayerPolicy`/`MeasureHost` 被调用、回收上限生效。
-- `Src/Verification/HeadlessAdapters/VeloxDev.Avalonia.Headless.Tests/Tests/ViewPoolHeadlessTests.cs`：`ViewPool` 把可见项变成子视图、移除后保留并隐藏；无选择器走面板 `DataTemplates`；换 TemplateSelector 不重复挂 Detach 处理器。
+- `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/ViewPoolTests.cs`：用 `FakeScene` 组合全部层，覆盖分批、按类型复用、Reset、缺模板缓存、单项失败隔离、Dispose、调度被拒与重试；另覆盖 `LinkLayer.IsActive` / `Handles` 跳过主池、`LayerPolicy`/`MeasureHost` 被调用、回收上限生效。
+- `Src/Test/Headless/VeloxDev.Avalonia.Headless.Tests/Tests/ViewPoolHeadlessTests.cs`：`ViewPool` 把可见项变成子视图、移除后保留并隐藏；无选择器走面板 `DataTemplates`；换 TemplateSelector 不重复挂 Detach 处理器。

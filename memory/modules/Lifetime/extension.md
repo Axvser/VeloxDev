@@ -50,7 +50,7 @@
 1. **`CanSetValue()` 恒 `true`** ⇒ 关停之后帧照旧入队。真正的后果由**另一条轴**决定（Threading）：
    - `PostCore` **乐观恒 true**（Avalonia 形状）：`PostAsync` 的消费者永远等一个不完成的 TCS。它唯一消费者是 `Awake`，而 `Awake` 是在**持有 scheduler `_gate` 时** `await` 的 ⇒ 那条 `_gate` 永不释放 ⇒ **该 target 之后每一次动画都永久排队**。依据：`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs` 的 `PostAsync`、`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `Awake`（`_gate.WaitAsync` → `host.PostAsync` → `finally _gate.Release`）。这是「不接线」最贵的一种组合；该家现状与「要不要修」的评估见 `memory/modules/TransitionSystem/adapters/avalonia.md` §三.1。
    - `PostCore` **诚实拒绝**（WPF/Jalium 形状）：帧被丢，`SamplerSet.Apply` 报一次 `Warn(WarnStage.Dropped, …)` —— 有迹象，不成灾。
-2. **没有任何检查会变红**：没有测试、没有断言、没有日志会因为「声明了 `IApplicationState` 却从不写」而失败。树内唯一的存活相关用例是反向的 —— `Src/Core/VeloxDev.Core.Test/TransitionSystem/SamplerSetTests.cs` 的 `Apply_WhenAppDead_SkipsWrites`（把宿主的 `Alive` 设成 `false`，断言 `InvokeCount == 0` 且 target 没被写）。
+2. **没有任何检查会变红**：没有测试、没有断言、没有日志会因为「声明了 `IApplicationState` 却从不写」而失败。树内唯一的存活相关用例是反向的 —— `Src/Test/Unit/Core/VeloxDev.Core.Test/TransitionSystem/SamplerSetTests.cs` 的 `Apply_WhenAppDead_SkipsWrites`（把宿主的 `Alive` 设成 `false`，断言 `InvokeCount == 0` 且 target 没被写）。
 3. **另一条轴的替代品只能顶一部分**：`Post` 返回 false 也会让帧不落地。区别是 `IsAlive` 的判断发生在**入队之前**（`SamplerSet.Apply`），而 `Post` 的 false 发生在**投递那一刻**；前者省一次投递、后者只省一次写入。所以「有 `HasShutdownStarted` 就不必接线 `Lifetime`」在**不挂起任何等待者**的前提下成立（WPF/Jalium 就是这样），一旦该家 `PostCore` 开始乐观返回 true，这个前提就没了。
 
 ---
@@ -71,4 +71,4 @@
 
 - `IApplicationState` **全树只有一个实现**：`ApplicationState`（`sealed`）。没有哪家适配器自己实现接口。
 - `ApplicationState.SetAlive` **全树只有一个调用点**：WinUI 的 `PostCore`。
-- `CanSetValue()` 虽然是 `public`，树内（`Src/`、`Examples/`、`Src/Core/VeloxDev.Core.Test/`）只在 `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 内部被读（`CanSetValue` 定义，`Apply`/`ApplyCore` 两处判断），没有外部调用者。
+- `CanSetValue()` 虽然是 `public`，树内（`Src/`、`Examples/`、`Src/Test/Unit/Core/VeloxDev.Core.Test/`）只在 `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 内部被读（`CanSetValue` 定义，`Apply`/`ApplyCore` 两处判断），没有外部调用者。

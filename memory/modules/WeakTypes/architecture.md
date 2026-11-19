@@ -1,7 +1,7 @@
 # WeakTypes — 架构
 
 > 代码：`Src/Core/VeloxDev.Core/WeakTypes/`（命名空间 `VeloxDev.WeakTypes`）。
-> 测试：`Src/Core/VeloxDev.Core.Test/WeakTypes/`。
+> 测试：`Src/Test/Unit/Core/VeloxDev.Core.Test/WeakTypes/`。
 > **无平台轴** —— 这些文件只 `using System.*`（`WeakReference<T>`、`ConditionalWeakTable`、`Queue`/`Stack`、`System.Collections`），不引用任何 GUI，所以本模块没有 `adapters/`。
 > 公开文档**不在本仓库里**（`Docs/` 那套文档站点，`.gitignore` 的 `/Docs/` 规则排除，`git ls-files Docs/` 为空），它与本仓库各自独立、不随本模块的改动一起记账。
 
@@ -47,7 +47,7 @@
 | 测试**从未**断言"目标已死 → 条目被清掉" | 测试文件里 `GC.` 只出现在少数几处（`WeakCacheTests.AddOrUpdate_ManyItems_TriggersCleanup` 是 `GC.KeepAlive`；`WeakDelegateTests.ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent` 是 `Collect`×2 + `WaitForPendingFinalizers`；`WeakDelegateTests.InvokingNoneOrOneDoesNotAllocate` 里是 `GetAllocatedBytesForCurrentThread`×2 + `KeepAlive`） |
 | Queue/Stack/Cache 测试全用 `string` 字面量或显式保活的 `object` | Queue/Stack 一律 `Enqueue("hello")` 之类；`WeakCacheTests.AddOrUpdate_ManyItems_TriggersCleanup` 用一批 `new object()` 并 `GC.KeepAlive(keys)` 收尾 |
 | 字符串字面量被驻留 → 永不回收 | 上面那条的后果 —— 测试喂进容器的全是字面量（`Enqueue("hello")` 之类），字面量被驻留，等于永远有一条强引用 |
-| 唯一断言回收方向的测试断言的是**相反**方向 | `Src/Core/VeloxDev.Core.Test/WeakTypes/WeakDelegateTests.cs` 的 `ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent`：`GC.Collect()` 后 `Assert.IsTrue(weak.IsAlive)` |
+| 唯一断言回收方向的测试断言的是**相反**方向 | `Src/Test/Unit/Core/VeloxDev.Core.Test/WeakTypes/WeakDelegateTests.cs` 的 `ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent`：`GC.Collect()` 后 `Assert.IsTrue(weak.IsAlive)` |
 | 唯一的性能断言 | `WeakDelegateTests.InvokingNoneOrOneDoesNotAllocate`：一批 `GetInvocationList()?.Invoke()` 前后 `GC.GetAllocatedBytesForCurrentThread()` 必须相等（走 `DynamicInvoke` 的 `Invoke(object?[])` 会自己分配，掩盖测量） |
 
 所以想验证"弱"这一侧，只能自己写：在 helper 方法里造对象、`Release` 之后静默 GC，且**不挂调试器**（调试器会延长对象寿命，回收不可复现），**仓内没有现成先例**。

@@ -2,7 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs` 的「框架自带的能力 provider」区。
 > 宿主接线：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`（`WithTodoTracking` / `WithAgentModes`）。
-> 测试：`Src/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/AgentCapabilityProvidersTests.cs`。
+> 测试：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/AgentCapabilityProvidersTests.cs`。
 
 **这三条不是本仓库实现的**。它们全是 `Microsoft.Agents.AI` 自带的 `AIContextProvider`，本科目只做「挂上去」这一件事。所以本文件记的不是「怎么实现」，而是**「挂的时候哪里会咬人」**。
 

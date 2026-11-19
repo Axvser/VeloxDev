@@ -38,7 +38,7 @@
 `ViewPool` / `WorkflowSurfaceBehavior` / `WorkflowMinimapOverlay` 这些类型名在**七家适配器里逐家各有一份**，且都在 `VeloxDev.WorkflowSystem.AttachedBehaviors` 这一个命名空间下（全仓 `git grep -l 'namespace VeloxDev.WorkflowSystem.AttachedBehaviors'` 命中大量 `.cs`，全部在 `Src/Adapters/*/Attached/`，Core 没有命中，其中本家也贡献了一份）。视图池的新分层（`ViewFactory`、`ViewContainer`、`ViewArranger`、`ViewSourcePipeline` 等）同名地住在 `VeloxDev.WorkflowSystem.ViewHosting`，同样是每家一份。后果：
 
 1. **宿主 XAML 必须写 `assembly=`**：`xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"`（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml`）。写成 `assembly=VeloxDev.Core` 一个行为类型都找不到。
-2. **同时引用两家适配器的 C# 项目会 CS0433**。代价的真实样貌见 `Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs` 的 `Entry<TValue>`：它按程序集 `GetType($"VeloxDev.Adapters.NativeSamplers.{samplerName}", throwOnError: true)` 反射取类型。
+2. **同时引用两家适配器的 C# 项目会 CS0433**。代价的真实样貌见 `Src/Test/AutoTest/Samplers/MauiEntries.cs` 的 `Entry<TValue>`：它按程序集 `GetType($"VeloxDev.Adapters.NativeSamplers.{samplerName}", throwOnError: true)` 反射取类型。
 3. **给某个公开类型改名 = 跨七家的决定**，且漏改的项目只在「同时引两家」时才炸 —— 见 `extension.md` §四。
 
 ### 1.3 不解决什么（常被误以为在这里）
@@ -167,7 +167,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
    - **后果**：声明为 `Microsoft.Maui.Graphics.RectF` 的属性走注册表解析（精确类型命中，Core `InterpolatorCore.TryGetInterpolator`；`RectF` 是 struct，基类链走到 `ValueType`/`object` 就没了，没有别的回退），**第一帧抛 `InvalidCastException`**；`SamplerSet.ApplyCore` 的 `catch` 接住，报一条 `ErrorStage.Sampling` 诊断，`CancelQuietly()`，返回 —— **整条 run 被取消，不是静默降级**。
    - **不受这条键影响的**：`System.Drawing.RectangleF` 由 **Core** 注册（`InterpolatorCore` 静态构造里的 `RectangleFSampler`），根本不经过这条键；`Microsoft.Maui.Graphics.Rect` 走同一个静态构造里的 `RectSampler`，是对的。
    - **对齐方式**：名字 / 键 / 实现三处都解 `Microsoft.Maui.Graphics.RectF`（改采样器体，不留 `System.Drawing` 的 using）。**不能**走另一条路（把键改成 `typeof(System.Drawing.RectangleF)`）：那会经 `AddOrUpdate` **顶掉 Core 的 `RectangleFSampler`**（安装是 last-writer-wins，`InterpolatorCore.RegisterInterpolator`）。**同名从来不是问题**（键是 `Type`，`InterpolatorCore.Interpolators`），同一个 `Type` 才是。
-   - **测试为什么抓不到**：`SamplerCoverageTests` 对的是**采样器类型**集合，不是 `(键, 采样器)` 配对。这类断言在 `Examples/Transition/AUTO TEST/Samplers/SamplerKeyTests.cs`：它拿真实注册表问「条目声明的类型解析到谁」，`EveryEntry_ValueTypeResolvesToTheSamplerItNames` 比采样器类型、`EveryEntry_SamplerTheRegistryResolves_AcceptsAValueOfThatKey` 跑一帧看接不接得住。
+   - **测试为什么抓不到**：`SamplerCoverageTests` 对的是**采样器类型**集合，不是 `(键, 采样器)` 配对。这类断言在 `Src/Test/AutoTest/Samplers/SamplerKeyTests.cs`：它拿真实注册表问「条目声明的类型解析到谁」，`EveryEntry_ValueTypeResolvesToTheSamplerItNames` 比采样器类型、`EveryEntry_SamplerTheRegistryResolves_AcceptsAValueOfThatKey` 跑一帧看接不接得住。
    - 与 `memory/modules/TransitionSystem/adapters/maui.md` §四·1 的结论一致，**不冲突**。
 
 2. **模板查找只有「`TemplateSelector` 选中」这一条路**：`ViewFactory.CreateView` 只问 `DataTemplateSelector`，没有从 resources 按 key 找模板的第二条路 —— 与 `ViewPool.Ensure` 要求 `GetTemplateSelector(layout) is not null` 正好印证。⇒ **不要以为放一个 `DataTemplate` 到 `Resources` 里就能被选中**。
@@ -176,7 +176,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 
 4. **`#if WINDOWS` 在本家会编出两个不同的程序集**。csproj 的 TFM 是 `net10.0;net10.0-windows10.0.19041.0`，**七家里只有本家是「平台中立 + windows」一对**（WinUI 是两个 `-windows`；WPF/WinForms 是 `netframework4.6.1;net5.0-windows;netcoreapp3.0`；Avalonia `netstandard2.0;net6.0`；其余单一 TFM）。所以 **多处 `#if WINDOWS`**（Surface、Minimap、LinkOverlay、NodeDrag、SlotLayout、SlotConnection 各有多处）在两个 TFM 下是**两份不同的实现**，而它们在 `TransitionSystem/` 里**一处也没有**（Transition 轴只有与 TFM 无关的 `#if !NETSTANDARD2_0`）。
 
-   **顺带一条宿主侧的事实**：MAUI demo 的 Windows TFM 是**条件的** —— `Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj` 用 `Condition="$([MSBuild]::IsOSPlatform('windows'))"` 才把 `net10.0-windows10.0.19041.0` 追加进去。⇒ **在非 Windows 机器上编译，这些分支一个都不参与编译**，出了错也看不见。反过来 Windows 上跑起来的那份 exe 路径在 `Examples/Transition/AUTO TEST/Drivers/MauiDemoDriver.cs`。
+   **顺带一条宿主侧的事实**：MAUI demo 的 Windows TFM 是**条件的** —— `Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj` 用 `Condition="$([MSBuild]::IsOSPlatform('windows'))"` 才把 `net10.0-windows10.0.19041.0` 追加进去。⇒ **在非 Windows 机器上编译，这些分支一个都不参与编译**，出了错也看不见。反过来 Windows 上跑起来的那份 exe 路径在 `Src/Test/AutoTest/Drivers/MauiDemoDriver.cs`。
 
 5. **`Microsoft.Maui.Graphics.RectF` 与 `System.Drawing.RectangleF` 在本模块里共存**，凡是新写采样器都要先问「键是哪一侧」。反面教材就是坑 1；正面做法是 `PointFSampler.cs`（不 import `System.Drawing`），而 `Transition.cs` 里那组 `System.Drawing.*` 重载是**逐字全限定**写的 —— 这不是啰嗦，是唯一能让两类同名类型在一个文件里共存的办法。**绝不要在 `Interpolator.cs` 顶部加 `using System.Drawing;`**：`RegisterInterpolator(typeof(PointF), ...)` 与 `RegisterInterpolator(typeof(SizeF), ...)` 会静默改指 `System.Drawing`，变成注册 Core 的类型。
 
@@ -240,7 +240,7 @@ Core 的 `TransitionCore` **不提供** `Property(...)`。所以每个适配器�
 - **主题切换的完整流向** —— DynamicTheme 模块。本家这边只有一条可写的事实，写在下面。
 - **`ThemeValueConverters.cs` 在本仓库里没有任何消费者。** 文件里是 `VeloxDev.DynamicTheme` 下的一组 `IThemeValueConverter` 实现（`DoubleConverter`、`PointConverter`、`ThicknessConverter`、`CornerRadiusConverter`、`ColorConverter`、`BrushConverter`、`ObjectConverter`，加一个 `ThemeResourceLookup` 辅助），但**全仓没有任何 .cs / .xaml 引用它们**，`Examples/Theme/` 下也**没有 MAUI 主题 demo**（只有 Avalonia 与 WPF）。⇒ 改这里**跑不出任何症状**，也别把它当成 Transition/Workflow 契约的一部分（`TransitionSystem/adapters/maui.md` §四·4 同结论）。
 - **人面向的「怎么用这套模板搭一个 MAUI 工作流视图」** —— `skills/veloxdev-create-workflow/references/gui/maui.md`（`Docs/` 那套文档站点**不在本仓库**）。
-- **本家的验证线在哪**：Transition 轴有自动验收（`Examples/Transition/AUTO TEST/`，含 `Drivers/MauiDemoDriver.cs` 与 `Conformance/MauiConformance.cs`、`Samplers/MauiEntries.cs`）；**Workflow 轴在本仓库没有任何自动验收** —— `Examples/Workflow/` 下不存在 `AUTO TEST` 目录，唯一的执行样本是 `Examples/Workflow/MAUI Trimmed/Demo/` 本身。
+- **本家的验证线在哪**：Transition 轴有自动验收（`Src/Test/AutoTest/`，含 `Drivers/MauiDemoDriver.cs` 与 `Conformance/MauiConformance.cs`、`Samplers/MauiEntries.cs`）；**Workflow 轴在本仓库没有任何自动验收** —— `Examples/Workflow/` 下不存在 `AUTO TEST` 目录，唯一的执行样本是 `Examples/Workflow/MAUI Trimmed/Demo/` 本身。
 
 ## Demo 工作台外壳（示例侧）
 

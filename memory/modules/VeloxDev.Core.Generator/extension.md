@@ -95,7 +95,7 @@
 |---|---|
 | 1 | `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` |
 | 2 | `Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj` |
-| 3 | `Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
+| 3 | `Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
 | 4 | `Examples/Workflow/Directory.Build.props` |
 | 5 | `Examples/Theme/Directory.Build.props` |
 | 6 | `Examples/AOP/WPF/Demo/Demo.csproj` |
@@ -105,7 +105,7 @@
 | 10 | `Examples/MVVM/Common/Lib/Lib.csproj` |
 | 11 | `Examples/Tickable/WPF/Demo/Demo.csproj` |
 
-（`Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` 不在这张表里：它**不分 Debug/Release**，无条件走 `ProjectReference`，只钉一个 `Microsoft.CodeAnalysis.CSharp` 包，没有生成器 `PackageReference` —— 见 [architecture.md](architecture.md) §五。）
+（`Src/Test/Unit/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` 不在这张表里：它**不分 Debug/Release**，无条件走 `ProjectReference`，只钉一个 `Microsoft.CodeAnalysis.CSharp` 包，没有生成器 `PackageReference` —— 见 [architecture.md](architecture.md) §五。）
 
 **为什么每处都要重复写**：Debug 走 `ProjectReference`、Release 走包，而**分析器不随 `ProjectReference` 传递**（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的注释原文：「Debug 用本地生成器源码，Release 用包。analyzer 不随 ProjectReference 传递，所以用到生成器特性的项目都要各自重复这一对。」）。`Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj` 又重复了一遍同样的理由。
 
@@ -148,7 +148,7 @@ rm -rf ~/.nuget/packages/veloxdev.core.generator/<版本>
 
 ## 六、改生成器或裁剪相关代码后，必须跑裁剪验证
 
-**先记事实：探针本体不在本仓库。** `Src/Verification/VeloxDev.TrimProbe/` 在工作区里只剩 `bin/` 与 `obj/`，没有任何 `.cs` 与 `.csproj`；`VeloxDev.slnx` 里没有 `TrimProbe`。**所以这里给不出可复核的探针路径 —— 它在仓库外，本记忆只能记「有这么一条验证线，动生成器后必须走一遍」这件事本身。**
+**先记事实：探针本体不在本仓库。** 仓库里没有它的源码或工程文件（`git ls-files` 零命中，`VeloxDev.slnx` 里没有 `TrimProbe`）。**所以这里给不出可复核的探针路径 —— 它在仓库外，本记忆只能记「有这么一条验证线，动生成器后必须走一遍」这件事本身。**
 
 仓库内可复核的**输入侧**锚点：
 
@@ -159,8 +159,6 @@ rm -rf ~/.nuget/packages/veloxdev.core.generator/<版本>
 | 裁剪 demo **不再**显式 root `VeloxDev.Core.Extension` —— 反射面已改走编译期的 Agent 上下文树与归档序列化器，没有 trim 警告了 | `Examples/Workflow/Avalonia Trimmed/Directory.Build.props` 的注释 |
 
 **为什么改生成器必须跑它**：生成器改的是「哪些类型/成员存在」，而裁剪删的是「没人引用的类型/成员」—— 两条轴正好作用在同一个集合上（`architecture.md` §六·8 已确认生成器**不产出任何裁剪提示**，所以没有任何自动保护）。**本地 Debug 构建看不出任何问题。**
-
-> **复核（2026-10-04）**：`Src/Verification/VeloxDev.TrimProbe/` 底下**只有 `bin/` 与 `obj/`**，没有源码 —— `git ls-files` 对它零命中。但注意 `Src/Verification/` 这一层**并非全空**：`git ls-files Src/Verification/` 现在命中若干被跟踪的 `.ps1`（`agent-ui-harness.ps1`、`agent-web-harness.ps1`、`verify-jalium-item-templates.ps1`、`verify-workflow-item-templates.ps1`），磁盘上还有一个尚未 `git add` 的新脚本 `verify-workflow-item-templates-all.ps1`（另有同名脚本是转发到它的薄包装）。准确的说法是「**TrimProbe 本体无被跟踪文件**」—— 不是「`Src/Verification/` 为空」。`VeloxDev.slnx` 里依旧没有 `TrimProbe`。**结论不变：这里没有可写的代码事实，裁剪探针的本体在仓库外。**
 
 ---
 

@@ -1,7 +1,7 @@
 # VeloxDev.Core.Extension — Dashboard（宿主面板投影）
 
 > 代码：`Src/Core/VeloxDev.Core.Extension/Agent/Dashboard/`。
-> 测试：`Src/Core/VeloxDev.Core.Extension.Test/Agent/Dashboard/AgentDashboardViewModelTests.cs`。
+> 测试：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/Agent/Dashboard/AgentDashboardViewModelTests.cs`。
 
 ---
 

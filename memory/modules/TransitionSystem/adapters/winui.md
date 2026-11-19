@@ -23,7 +23,7 @@
 采样器（`TransitionSystem/Interpolator.cs` 的静态构造）：Brush / Thickness / Point / CornerRadius / Transform /
 Projection / Size / Rect / GridLength / Color。其中 Brush、Projection、Transform 的端点值是 WinRT
 对象，**在纯数据进程里无法构造**，所以它们不在闭式解套件里、改由真跑起来的 AT 覆盖
-（`Examples/Transition/AUTO TEST/Samplers/UnreachableSamplers.cs` 里 `VeloxDev.WinUI` 的那几条、`Samplers/WinUiEntries.cs` 的 remarks）。
+（`Src/Test/AutoTest/Samplers/UnreachableSamplers.cs` 里 `VeloxDev.WinUI` 的那几条、`Samplers/WinUiEntries.cs` 的 remarks）。
 
 ---
 

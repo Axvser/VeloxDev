@@ -5,7 +5,7 @@
 > **外部包**：MAF 固定在 `Microsoft.Agents.AI` **1.22.0**（`Microsoft.Extensions.AI` 必须 ≥ 10.10.0，`ModelContextProtocol` 2.2.0）。MAF 有一批类型标着 `[Experimental]`（MAAI001），**整个 `Microsoft.Agents.AI.Compaction` 命名空间在内** —— 见 `native-capabilities.md`。
 > 嵌入资源：`Resources/Workflow/{en,zh}/{References,Safety,Skills}/`，若干 .md。
 > 宿主样例：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`。
-> 测试：`Src/Core/VeloxDev.Core.Extension.Test/`（条数与耗时以 `dotnet test` 现跑为准）。
+> 测试：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/`（条数与耗时以 `dotnet test` 现跑为准）。
 
 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
@@ -319,7 +319,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 ### 八·二、逐字节兼容
 
 新引擎的输出与旧 Newtonsoft 引擎**逐字节相同**，这是硬要求（用户机器上已有存档）。冻结在
-`Src/Core/VeloxDev.Core.Extension.Test/Serialization/Golden/` 的文档是契约，由
+`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/Serialization/Golden/` 的文档是契约，由
 `VeloxJsonSerializerTests` 逐字节比对。**成员顺序是最难的一条**，量出来的规则是：
 
 > 手写的可写属性按声明顺序在前，`[VeloxProperty]` 提升出来的属性按字段顺序在后。

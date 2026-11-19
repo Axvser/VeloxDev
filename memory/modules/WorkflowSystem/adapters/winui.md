@@ -115,7 +115,7 @@ WinUI 是七家里唯一需要挂两级的。
 `DispatcherQueue.GetForCurrentThread()?.CreateTimer()` 用 `?.` + `catch (COMException)` 兜住
 （构造函数）：在非 UI 线程构造就是**永不重绘且不报错**；
 在纯数据进程里构造则是类激活失败（同 TransitionSystem 那侧，见
-`Examples/Transition/AUTO TEST/Samplers/UnreachableSamplers.cs` 里 MAUI `BindableObject` 那几条 —— `BrushSampler` / `ShadowSampler` / `TransformSampler`）。
+`Src/Test/AutoTest/Samplers/UnreachableSamplers.cs` 里 MAUI `BindableObject` 那几条 —— `BrushSampler` / `ShadowSampler` / `TransformSampler`）。
 
 **L8 · 命中测试全走 `DataContext` 契约类型，只剩一个 WinUI 内部类型靠比名字符串。** `IsSurfaceBlankInteraction`
 对节点/插槽用 `DataContext is IWorkflowNodeViewModel or IWorkflowSlotViewModel`（`IsWorkflowNodeOrSlotVisual`），

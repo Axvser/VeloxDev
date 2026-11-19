@@ -28,7 +28,7 @@
 
 ### 1. 忘记调 `InitializeTheme()` ⇒ 对象对切换完全免疫
 
-`ThemeManager.Register` 在 `Src/` 里**唯一的调用者是生成的 `InitializeTheme()`**（`Theme.cs` 生成的 `ThemeManager.Register(this)`；另一个调用点是测试 `Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs`，那里的 `Subject` 是手写的 `IThemeObject`）。`ThemeManager.RegisterType` 同样只在生成的 `InitializeTheme` 里（`Theme.cs` 生成的 `ThemeCache.RegisterType` 调用）。
+`ThemeManager.Register` 在 `Src/` 里**唯一的调用者是生成的 `InitializeTheme()`**（`Theme.cs` 生成的 `ThemeManager.Register(this)`；另一个调用点是测试 `Src/Test/Unit/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs`，那里的 `Subject` 是手写的 `IThemeObject`）。`ThemeManager.RegisterType` 同样只在生成的 `InitializeTheme` 里（`Theme.cs` 生成的 `ThemeCache.RegisterType` 调用）。
 
 **错的捷径**：写了 `[ThemeConfig<...>]`、编译通过、属性也有值（`InitializeTheme` 里那句 `pi.SetValue` 会立即写），但切换主题时**一点反应都没有** —— 因为 `activeThemes` 里从来没有它。
 
@@ -38,7 +38,7 @@
 
 `RunSwitch` 的第二个分支就是 `interpolator is null → ApplyImmediately`（`ThemeManager.RunSwitch` 里的 `interpolator is null` 判断）。所以**不调它不会报错**，只是「有动画的切换」静默退化成瞬切。
 
-调用点在 Examples 与测试：`Examples/Theme/WPF/Demo/App.xaml.cs`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs`、`Examples/Theme/Avalonia/Demo/App.axaml.cs`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs`。**`Src/Adapters/` 里一个都没有**；`Src/` 里只有测试在调（`Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs`）—— 对适配器而言这是纯用户责任。
+调用点在 Examples 与测试：`Examples/Theme/WPF/Demo/App.xaml.cs`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs`、`Examples/Theme/Avalonia/Demo/App.axaml.cs`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs`。**`Src/Adapters/` 里一个都没有**；`Src/` 里只有测试在调（`Src/Test/Unit/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs`）—— 对适配器而言这是纯用户责任。
 
 **官方做法**：`ThemeManager.SetPlatformInterpolator(new Interpolator());`（每家适配器各有一个 `Interpolator` 类型）。它同时也是「平台的 sampler 注册」被触发的时机。
 

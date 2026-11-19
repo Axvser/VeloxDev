@@ -184,7 +184,7 @@
 
 > ⚠ **上面这套矩阵来自仓库外的一次性探针，树里复核不到**（没有留在仓库里）。要重跑就是「读黄金 →
 > `JsonConvert` 过一遍 → 喂回 `VeloxJsonSerializer`」，两个开关与 `ComparisonBenchmarks.cs` 的 `PreserveReferencesHandling`/`TypeNameHandling` 设置逐字相同。
-> 想让它可复核，得把探针落进 `Src/Verification/`。
+> 想让它可复核，得把探针落进 `Src/Test/Harness/`。
 
 **STJ 那两格没变**：它的 `$type` 是基准桥接**自己定的**（`StjSerializationBridge.DiscriminatorOf` = `type.FullName`），
 不是 STJ 的任何标准 —— 换个人写就是另一个词表。

@@ -19,7 +19,7 @@
 | 但仍然进解决方案 | `VeloxDev.slnx` 的 `/Templates/` 文件夹列了七个项目（Jalium 那行的路径没有 `working/`，见 §二） |
 
 ⇒ 由此得出第一件必须记住的事：**模板产物编译不过，本仓库的任何构建都不会发现**。
-（2026-10-04 起七家共用 `Src/Verification/verify-workflow-item-templates-all.ps1`；装包 → 生成七个条目 → 一起编译 →
+（2026-10-04 起七家共用 `Src/Test/Harness/verify-workflow-item-templates-all.ps1`；装包 → 生成七个条目 → 一起编译 →
 与镜像比对，并对残留的 `replaces` 占位符当场报错。旧的两条 `verify-workflow-item-templates.ps1` /
 `verify-jalium-item-templates.ps1` 现在只是转发到它的 `-Platform WinForms` / `-Platform Jalium`。见 `extension.md` §一。）
 
@@ -34,7 +34,7 @@
 - **不是适配器**。七个角色的实现全在 `Src/Adapters/VeloxDev.<GUI>/WorkflowSystem/AttachedBehaviors/`。
 - **不是"一套模板七家共享"**。同一角色在七家**结构不同**（§六），不是同一份文件换个后缀。
 - **改动无法独立验证（已被统一脚本取代）**。仓库里没有测试项目、模板目录下没有 `.md`；2026-10-04 起七家统一走
-  `Src/Verification/verify-workflow-item-templates-all.ps1`（装包 → 生成七个条目 → 一起编译 → 与镜像比对 +
+  `Src/Test/Harness/verify-workflow-item-templates-all.ps1`（装包 → 生成七个条目 → 一起编译 → 与镜像比对 +
   残留 `replaces` 断言）。旧的两条 `verify-workflow-item-templates.ps1` / `verify-jalium-item-templates.ps1`
   现在是薄转发。
 - **不是新设计**。每个条目文件都是该平台 `Examples/Workflow/<GUI> Trimmed/` 里同名文件的一份改名副本
@@ -103,7 +103,7 @@
 | 七个条目**必须落进同一个命名空间**，机制是 tree-view 用 `xmlns:local` 与 `xmlns:workflowViews` **两个前缀指向同一个** `clr-namespace:TemplateNamespace` | `workflow-tree-view/TemplateClass.xaml` 的这两个 `xmlns`，随后 `NodeTemplate` / `LinkTemplate` / `TemplateSelector` / `GridDecorator` / `MinimapOverlay` 都用 `workflowViews:` 取兄弟 |
 | `sourceName: "TemplateClass"` 是**全局文本替换的锚**：`-n` 同时改文件名、类名、`x:Class` 和别处的引用 | 所有条目的 `template.json` 的 `sourceName` 都是这个值 |
 | `preferNameDirectory: false` ⇒ 产物不建子目录 | 所有条目 |
-| **改动无法验证（已被校验脚本取代）**：模板没有构建产物；2026-10-04 起七家由 `Src/Verification/verify-workflow-item-templates-all.ps1` 一起生成+编译+比对镜像（旧两条是转发） | §一 |
+| **改动无法验证（已被校验脚本取代）**：模板没有构建产物；2026-10-04 起七家由 `Src/Test/Harness/verify-workflow-item-templates-all.ps1` 一起生成+编译+比对镜像（旧两条是转发） | §一 |
 | 替换是**纯文本**的，所以颜色占位符也会被替换进生成文件的**注释**里 | 见 `skills/veloxdev-create-workflow/references/templates.md` 的同一条 |
 
 ---
@@ -269,7 +269,7 @@ Jalium 的薄壳设四个颜色符号（`workflow-minimap-overlay/TemplateClass.
 | minimap-overlay | `.cs` |
 | template-selector | `.cs` |
 
-⇒ Jalium 的 `WorkflowSystem/AttachedBehaviors/` 现在是若干文件（附着行为 + 池 + 小地图），另有模板侧的一套产物。校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`。见 `extension.md` §4.1。
+⇒ Jalium 的 `WorkflowSystem/AttachedBehaviors/` 现在是若干文件（附着行为 + 池 + 小地图），另有模板侧的一套产物。校验：`Src/Test/Harness/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`。见 `extension.md` §4.1。
 
 ---
 

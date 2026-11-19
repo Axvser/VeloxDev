@@ -15,15 +15,10 @@
     <Project Path="Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj" />
   </Folder>
   <Folder Name="/Cli/">
-    <Project Path="Src/Cli/VeloxDev.Cli.Test.Copy/VeloxDev.Cli.Test.Copy.csproj" />
-    <Project Path="Src/Cli/VeloxDev.Cli.Test.Plugin/VeloxDev.Cli.Test.Plugin.csproj" />
-    <Project Path="Src/Cli/VeloxDev.Cli.Test/VeloxDev.Cli.Test.csproj" />
     <Project Path="Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj" />
   </Folder>
   <Folder Name="/Core/">
-    <Project Path="Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj" />
     <Project Path="Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj" />
-    <Project Path="Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj" />
     <Project Path="Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" />
   </Folder>
   <Folder Name="/Examples/" />
@@ -180,21 +175,32 @@
     <Project Path="Src/Templates/VeloxDev.WinUI.Templates/working/VeloxDev.WinUI.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj" />
   </Folder>
-  <Folder Name="/Verification/">
-    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks/VeloxDev.Adapters.Benchmarks.csproj" />
-    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks.Headed/VeloxDev.Adapters.Benchmarks.Headed.csproj" />
-    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks.MAUI/VeloxDev.Adapters.Benchmarks.MAUI.csproj" />
-    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks.Razor/VeloxDev.Adapters.Benchmarks.Razor.csproj" />
-    <Project Path="Src/Verification/VeloxDev.Adapters.Benchmarks.WinUI/VeloxDev.Adapters.Benchmarks.WinUI.csproj" />
-    <Project Path="Src/Verification/VeloxDev.Maui.Benchmarks/VeloxDev.Maui.Benchmarks.csproj" />
-    <Project Path="Src/Verification/VeloxDev.Serialization.Benchmarks/VeloxDev.Serialization.Benchmarks.csproj" />
+  <Folder Name="/Test/" />
+  <Folder Name="/Test/Unit/" />
+  <Folder Name="/Test/Unit/Core/">
+    <Project Path="Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj" />
+    <Project Path="Src/Test/Unit/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj" />
   </Folder>
-  <Folder Name="/Verification/Headless/">
-    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.AdapterTestKit/VeloxDev.AdapterTestKit.csproj" />
-    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.WPF.Headless.Tests/VeloxDev.WPF.Headless.Tests.csproj" />
-    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.Avalonia.Headless.Tests/VeloxDev.Avalonia.Headless.Tests.csproj" />
-    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.WinForms.Headless.Tests/VeloxDev.WinForms.Headless.Tests.csproj" />
-    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.Razor.Headless.Tests/VeloxDev.Razor.Headless.Tests.csproj" />
-    <Project Path="Src/Verification/HeadlessAdapters/VeloxDev.Jalium.Headless.Tests/VeloxDev.Jalium.Headless.Tests.csproj" />
+  <Folder Name="/Test/Unit/Cli/">
+    <Project Path="Src/Test/Unit/Cli/VeloxDev.Cli.Test.Copy/VeloxDev.Cli.Test.Copy.csproj" />
+    <Project Path="Src/Test/Unit/Cli/VeloxDev.Cli.Test.Plugin/VeloxDev.Cli.Test.Plugin.csproj" />
+    <Project Path="Src/Test/Unit/Cli/VeloxDev.Cli.Test/VeloxDev.Cli.Test.csproj" />
+  </Folder>
+  <Folder Name="/Test/Headless/">
+    <Project Path="Src/Test/Headless/VeloxDev.AdapterTestKit/VeloxDev.AdapterTestKit.csproj" />
+    <Project Path="Src/Test/Headless/VeloxDev.WPF.Headless.Tests/VeloxDev.WPF.Headless.Tests.csproj" />
+    <Project Path="Src/Test/Headless/VeloxDev.Avalonia.Headless.Tests/VeloxDev.Avalonia.Headless.Tests.csproj" />
+    <Project Path="Src/Test/Headless/VeloxDev.WinForms.Headless.Tests/VeloxDev.WinForms.Headless.Tests.csproj" />
+    <Project Path="Src/Test/Headless/VeloxDev.Razor.Headless.Tests/VeloxDev.Razor.Headless.Tests.csproj" />
+    <Project Path="Src/Test/Headless/VeloxDev.Jalium.Headless.Tests/VeloxDev.Jalium.Headless.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Test/Benchmarks/">
+    <Project Path="Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks/VeloxDev.Adapters.Benchmarks.csproj" />
+    <Project Path="Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.Headed/VeloxDev.Adapters.Benchmarks.Headed.csproj" />
+    <Project Path="Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.MAUI/VeloxDev.Adapters.Benchmarks.MAUI.csproj" />
+    <Project Path="Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.Razor/VeloxDev.Adapters.Benchmarks.Razor.csproj" />
+    <Project Path="Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.WinUI/VeloxDev.Adapters.Benchmarks.WinUI.csproj" />
+    <Project Path="Src/Test/Benchmarks/VeloxDev.Maui.Benchmarks/VeloxDev.Maui.Benchmarks.csproj" />
+    <Project Path="Src/Test/Benchmarks/VeloxDev.Serialization.Benchmarks/VeloxDev.Serialization.Benchmarks.csproj" />
   </Folder>
 </Solution>

@@ -176,8 +176,8 @@
    - Core 类型 → `TransitionSystem/Sampling/Interpolator.cs` 的静态构造。
    - 平台类型 → `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/Interpolator.cs` 的静态构造。
 3. **声明入口**（只有 Razor 一定需要）：六家的 `Transition<T>` 有泛型 `Property<TValue>`（Avalonia、WinForms、WinUI、MAUI、WPF、Jalium 各自 `TransitionSystem/Transition.cs` 里的 `Property<TValue>`），**Razor 没有**，它是逐类型手写重载（`Razor/TransitionSystem/Transition.cs` 的逐类型 `Property` 重载）——**Razor 上 Core 有采样器但没重载的类型就是声明不出来**（例如 `long`：`Sampling/Interpolator.cs` 的静态构造注册了 `LongSampler`，Razor 的重载表里没有 `long`）。在 Razor 上加一个类型必须顺手补重载。
-4. **测试表**：`Examples/Transition/AUTO TEST/Samplers/` 下该家的 `<平台>Entries.cs` 加一条。
-   - 端点值在这个纯数据进程里造不出来时（要真 XAML/MAUI 运行时）→ 改加进 `UnreachableSamplers.cs`，并在 `Examples/Transition/AUTO TEST/Conformance/*Conformance.cs` 里补同名条目（见 §四）。
+4. **测试表**：`Src/Test/AutoTest/Samplers/` 下该家的 `<平台>Entries.cs` 加一条。
+   - 端点值在这个纯数据进程里造不出来时（要真 XAML/MAUI 运行时）→ 改加进 `UnreachableSamplers.cs`，并在 `Src/Test/AutoTest/Conformance/*Conformance.cs` 里补同名条目（见 §四）。
 5. **demo**：`Examples/Transition/<GUI>/Demo` 的 probe/subject 加一行（照着现有行抄）。
 6. **跑测试**：`SamplerCoverageTests`（`Samplers/SamplerCoverageTests.cs`）。
 
@@ -253,9 +253,9 @@
 | 1 | `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/Samplers/XSampler.cs` | —— |
 | 2 | 该家 `TransitionSystem/Interpolator.cs` 静态构造里的 `RegisterInterpolator` | 该类型全程不可动画，`Warn(WarnStage.Unsampled, …)` 每趟一次 |
 | 3 | 该家 `TransitionSystem/Transition.cs` 的 `Property` 重载 | 只有 Razor 会漏到「声明不出来」（它逐类型手写）；六家泛型 `Property<TValue>` 自动覆盖 |
-| 4 | `Examples/Transition/AUTO TEST/Samplers/<平台>Entries.cs` | `SamplerCoverageTests.EveryShippedSampler_IsAccountedFor`（`SamplerCoverageTests.cs`）**红** |
+| 4 | `Src/Test/AutoTest/Samplers/<平台>Entries.cs` | `SamplerCoverageTests.EveryShippedSampler_IsAccountedFor`（`SamplerCoverageTests.cs`）**红** |
 | 5 | `Samplers/AdapterSamplerEntries.cs` 的 `All` 聚合数组 | 只有新增**平台**时才要；漏了则该家整张表不进注册表 → 同 4 红 |
-| 6 | 若端点值造不出来：`Samplers/UnreachableSamplers.cs` + `Examples/Transition/AUTO TEST/Conformance/<平台>Conformance.cs` | `EveryUnreachableSampler_IsCoveredByTheAcceptanceTables`（`SamplerCoverageTests.cs`）按**名字**对账，两边都漏就红；一边漏也红 |
+| 6 | 若端点值造不出来：`Samplers/UnreachableSamplers.cs` + `Src/Test/AutoTest/Conformance/<平台>Conformance.cs` | `EveryUnreachableSampler_IsCoveredByTheAcceptanceTables`（`SamplerCoverageTests.cs`）按**名字**对账，两边都漏就红；一边漏也红 |
 | 7 | `Examples/Transition/<GUI>/Demo` 的 probe/subject 一行 | 无自动失败；人工验收时这个类型没被真正画出来过 |
 
 ### 4.2 加一个 **Core** 采样器（无 GUI 依赖）
@@ -275,12 +275,12 @@
 | 2 | `Examples/.../Samplers/<平台>Entries.cs` | 覆盖校验少一批 |
 | 3 | `Samplers/AdapterSamplerEntries.cs` 聚合 | 同上 |
 | 4 | `Samplers/SamplerCoverageTests.cs` 的 `ExpectedAdapterAssemblies` | 程序集没被反射到 → 覆盖校验**在少验一批的情况下显示绿色**（该测试就是为此存在的） |
-| 5 | `Examples/Transition/AUTO TEST/.../VeloxDev.SamplerTest.csproj` 的引用 | 程序集根本不加载 → 同 4 |
-| 6 | `Examples/Transition/AUTO TEST/Drivers/DemoCatalog.cs`（一行） | 该家的 demo 不进验收套件 |
-| 7 | `Examples/Transition/AUTO TEST/Suites/PlatformSuites.cs`（一个类，负责开/关 demo） | 同上 |
+| 5 | `Src/Test/AutoTest/.../VeloxDev.SamplerTest.csproj` 的引用 | 程序集根本不加载 → 同 4 |
+| 6 | `Src/Test/AutoTest/Drivers/DemoCatalog.cs`（一行） | 该家的 demo 不进验收套件 |
+| 7 | `Src/Test/AutoTest/Suites/PlatformSuites.cs`（一个类，负责开/关 demo） | 同上 |
 | 8 | 跑不起来的采样器：`UnreachableSamplers` + `Conformance/<平台>Conformance.cs` | 见 4.1-6 |
 
-（6/7 的操作指南在 `Examples/Transition/AUTO TEST/AGENTS.md`，见 `adapter.md` 的「Verifying an adapter」小节最后一条。）
+（6/7 的操作指南在 `Src/Test/AutoTest/AGENTS.md`，见 `adapter.md` 的「Verifying an adapter」小节最后一条。）
 
 ### 4.4 加一条链式动词
 

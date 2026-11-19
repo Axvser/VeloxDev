@@ -190,7 +190,7 @@ Terminal compilation walks backward over valid edges — gated by the same `Acce
 
 ⚙ **Independent cone producers that do not funnel into one common join** → `InvalidOperationException`. The compiler throws instead of inventing a merge order.
 
-The test suite is the specification here: `CompileToReverseTests.cs` and `RuntimeEngineRunTests.cs` in `Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`.
+The test suite is the specification here: `CompileToReverseTests.cs` and `RuntimeEngineRunTests.cs` in `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`.
 
 ## Joins
 

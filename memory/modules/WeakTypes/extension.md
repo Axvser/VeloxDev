@@ -1,7 +1,7 @@
 # WeakTypes — 扩展
 
 > 契约/行为的代码事实在 `architecture.md`，本文只写「要动手时走哪条路、哪条路看着能编译但是错的」。
-> 代码：`Src/Core/VeloxDev.Core/WeakTypes/`，测试 `Src/Core/VeloxDev.Core.Test/WeakTypes/`。
+> 代码：`Src/Core/VeloxDev.Core/WeakTypes/`，测试 `Src/Test/Unit/Core/VeloxDev.Core.Test/WeakTypes/`。
 
 ---
 
@@ -23,7 +23,7 @@
 ### 1. 「让订阅者可回收」：官方是退订，不是靠类型名
 
 - **官方**：订阅者自己持有一个 delegate 变量，用完 `RemoveHandler(handler)`。类型 remarks 明说这条路：`a subscriber that needs to be collectable keeps its own reference to the delegate and unsubscribes`（`WeakDelegate` 的类 remarks）。
-- **错的捷径 A**：以为 `WeakDelegate` 这个名字就意味着"订户随时会被回收"。组合委托是 `volatile` **强**字段（`WeakDelegate._combinedDelegate` 与 `RebuildCache` 里的 `Delegate.Combine`），handler 一旦被拼进去就不可回收；测试 `Src/Core/VeloxDev.Core.Test/WeakTypes/WeakDelegateTests.cs` 的 `ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent` 断言的正是"订阅保活"。
+- **错的捷径 A**：以为 `WeakDelegate` 这个名字就意味着"订户随时会被回收"。组合委托是 `volatile` **强**字段（`WeakDelegate._combinedDelegate` 与 `RebuildCache` 里的 `Delegate.Combine`），handler 一旦被拼进去就不可回收；测试 `Src/Test/Unit/Core/VeloxDev.Core.Test/WeakTypes/WeakDelegateTests.cs` 的 `ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent` 断言的正是"订阅保活"。
 - **错的捷径 B**：用 `AddHandler(handler, CanUpdateCache: false)` 当"永久可回收开关"。**重建一次就失效** —— `RebuildCache` 只区分活/死，不记得当初怎么加的；任何 `CanUpdateCache:true` 的加删、缓存为 null 的 `GetInvocationList()`、`Clone()` 都会把它拼进强缓存。
 
 ### 2. 事件挂在**哪个实例**上，决定订阅者会不会被钉住
@@ -65,7 +65,7 @@
 
 **联动清单（漏一处通常不报错，只是少一个能力）**：
 
-1. `Src/Core/VeloxDev.Core.Test/WeakTypes/` 加 `WeakXTests.cs` —— **别在测试里断言回收**（字符串会被驻留），要断言就自己在 helper 方法里造对象 + `Release` 且不挂调试器（仓内没有现成先例，见 `architecture.md` §二末）。
+1. `Src/Test/Unit/Core/VeloxDev.Core.Test/WeakTypes/` 加 `WeakXTests.cs` —— **别在测试里断言回收**（字符串会被驻留），要断言就自己在 helper 方法里造对象 + `Release` 且不挂调试器（仓内没有现成先例，见 `architecture.md` §二末）。
 2. 本模块记忆：`architecture.md` §一/§二的表。
 3. **不必**动：各适配器、`Src/Generators/`、`Src/Templates/` —— 本模块是纯 `System.*` 的，没有任何平台或生成器联动（这也是它与仓内其它模块最大的不同）。
 

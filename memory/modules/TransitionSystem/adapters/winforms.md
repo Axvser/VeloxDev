@@ -108,7 +108,7 @@
 
 ### 4.3 `SetPlatformInterpolator` 从没为 WinForms 调用过 ⇒ `CreateScheduler` 在仓库内没有执行路径
 
-`Examples/` 下只有少量调用，全在 Avalonia / WPF 的 theme demo（`Examples/Theme/Avalonia/Demo/App.axaml.cs`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs`、`Examples/Theme/WPF/Demo/App.xaml.cs`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs` 里的 `SetPlatformInterpolator(new Interpolator())`；`Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs` 另有若干处用 `TestInterpolator`）——`Examples/Theme/` 下**没有** WinForms 目录（只有 Avalonia、Avalonia Trimmed、WPF、WPF Trimmed）。而 `CreateScheduler` 的唯一调用者是 `ThemeManager.RunSwitch` 里的 `interpolator.CreateScheduler(...)`。
+`Examples/` 下只有少量调用，全在 Avalonia / WPF 的 theme demo（`Examples/Theme/Avalonia/Demo/App.axaml.cs`、`Examples/Theme/Avalonia Trimmed/Demo/Views/MainWindow.axaml.cs`、`Examples/Theme/WPF/Demo/App.xaml.cs`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs` 里的 `SetPlatformInterpolator(new Interpolator())`；`Src/Test/Unit/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs` 另有若干处用 `TestInterpolator`）——`Examples/Theme/` 下**没有** WinForms 目录（只有 Avalonia、Avalonia Trimmed、WPF、WPF Trimmed）。而 `CreateScheduler` 的唯一调用者是 `ThemeManager.RunSwitch` 里的 `interpolator.CreateScheduler(...)`。
 
 ⇒ 本家 `Interpolator.CreateScheduler`（`Interpolator.cs` 的 `CreateScheduler`）是**给下游消费者的接口，不是现成能力**：没有主题动画的 demo 覆盖它。要用主题动画，得自己在 `Application.Run` 之前调一次 `ThemeManager.SetPlatformInterpolator(new Interpolator())`。
 
@@ -118,7 +118,7 @@
 
 另外两点（都是与 Core 同族的有意对照，不是缺陷）：
 - `PaddingSampler` 忽略 `options`（签名收了 `object? options` 但 `InsertFrame` 体里没用）⇒ `interpolationOptions` 对 `Padding` 无效。
-- `SizeSampler` 特意让宽高共享一个 `BoundedProgress` 并在 0 处停住（`SizeSampler.cs` 里 `BoundedProgress` 那段注释：负尺寸不可表示）；`Padding` 的四条边各算各的，因为四个 int 接受负值 —— **这就是验收表把这条判成 `SamplerRule.Extrapolate` 而不是饱和的原因**（`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs` 的 `Expected` 上方注释与实现，写明了「收缩的一侧在 t > 1 处会算出负的 Padding，而 Padding 只是四个 int，接受负值」）。
+- `SizeSampler` 特意让宽高共享一个 `BoundedProgress` 并在 0 处停住（`SizeSampler.cs` 里 `BoundedProgress` 那段注释：负尺寸不可表示）；`Padding` 的四条边各算各的，因为四个 int 接受负值 —— **这就是验收表把这条判成 `SamplerRule.Extrapolate` 而不是饱和的原因**（`Src/Test/AutoTest/Samplers/WinFormsEntries.cs` 的 `Expected` 上方注释与实现，写明了「收缩的一侧在 t > 1 处会算出负的 Padding，而 Padding 只是四个 int，接受负值」）。
 
 ### 4.5 静态构造的触发时机：这家的注册只有一个，漏掉等于「全部不动画」
 
@@ -130,4 +130,4 @@
 
 - **契约与注册位置**（每个类各自必须提供什么、`NonPriority` 怎么选）：`memory/modules/TransitionSystem/extension.md` §三·C。
 - **人面向的「怎么写」**：`skills/veloxdev-create-animation/references/adapter.md`。
-- **验收套件与联动清单**：`extension.md` §四·4.1/4.3。这里只记这家的一条事实：WinForms 的验收表**只有少量 entry**（`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.cs` 的 `All`），而 `Examples/Transition/AUTO TEST/Samplers/SamplerCoverageTests.cs` 的 `ExpectedAdapterAssemblies` 里那个 `"VeloxDev.WinForms"` 字符串是「这家还在名单上」的唯一依据 —— 改采样器时覆盖率测试会不会真的验到这家，全靠它。
+- **验收套件与联动清单**：`extension.md` §四·4.1/4.3。这里只记这家的一条事实：WinForms 的验收表**只有少量 entry**（`Src/Test/AutoTest/Samplers/WinFormsEntries.cs` 的 `All`），而 `Src/Test/AutoTest/Samplers/SamplerCoverageTests.cs` 的 `ExpectedAdapterAssemblies` 里那个 `"VeloxDev.WinForms"` 字符串是「这家还在名单上」的唯一依据 —— 改采样器时覆盖率测试会不会真的验到这家，全靠它。

@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<!--
+			Razor 适配器的无头渲染基准。ViewPool 是 renderer-native 的，没有可驱动的
+			ViewSourcePipeline，所以这里量的是框架 renderer 为真实 ViewPool 构造渲染树的工作，
+			不是有头窗口管线。不进任何包，也不该被 dotnet test 发现。
+		-->
+		<IsPackable>false</IsPackable>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+		<ProjectReference Include="..\..\..\Adapters\VeloxDev.Razor\VeloxDev.Razor.csproj" />
+		<!-- 合成树与有头基准共用：两边跑同一份 2000 节点 / 3000 条本地连线的场景，数字才可比。 -->
+		<ProjectReference Include="..\VeloxDev.Adapters.Benchmarks.Headed\VeloxDev.Adapters.Benchmarks.Headed.csproj" />
+	</ItemGroup>
+
+</Project>

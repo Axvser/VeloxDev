@@ -193,9 +193,9 @@ Use the framework's dispatcher-priority type when it has one, and `NonPriority` 
 
 ⚙ Copy the shape of `Examples/Transition/<GUI>/Demo`: a window listing one case per sampler, a case that starts a real transition on a real control, and a payload the automation can read.
 
-⚙ If the project also runs the acceptance suite, an adapter is registered in two places — `Drivers/DemoCatalog.cs` (one line) and `Suites/PlatformSuites.cs` (one class that opens and closes the demo). `Examples/Transition/AUTO TEST/AGENTS.md` is the operating guide.
+⚙ If the project also runs the acceptance suite, an adapter is registered in two places — `Drivers/DemoCatalog.cs` (one line) and `Suites/PlatformSuites.cs` (one class that opens and closes the demo). `Src/Test/AutoTest/AGENTS.md` is the operating guide.
 
-⚙ The acceptance suite verifies **every published sampler** (`Examples/Transition/AUTO TEST/Samplers/`): most against a closed form, and the framework-object samplers that cannot be constructed in a process with no XAML/MAUI runtime in a real running app by the AT suite. A coverage test fails if a published sampler has no entry in either list. Adding a sampler means adding its row there.
+⚙ The acceptance suite verifies **every published sampler** (`Src/Test/AutoTest/Samplers/`): most against a closed form, and the framework-object samplers that cannot be constructed in a process with no XAML/MAUI runtime in a real running app by the AT suite. A coverage test fails if a published sampler has no entry in either list. Adding a sampler means adding its row there.
 
 ⚙ Each row also carries the **declared type of the property it animates**, and that type is the registration key. The suite resolves it against the live registry (it runs your adapter's `Interpolator` static constructor to get one) and fails when the key lands on a different sampler or on none at all.
 

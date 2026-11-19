@@ -71,4 +71,4 @@ TickManager.Start("physics");
 
 ⚙ The one consumer inside the library is `TreeHelper<T>` (`[Tickable(channel: nameof(TreeHelper), fps: 10)]`), which runs the workflow canvas's virtualization on its own channel. It starts `nameof(TreeHelper)` if that channel is not already running, registers only when virtualization is enabled, and calls `CloseTickable()` on uninstall.
 
-⚙ Tests: `dotnet test Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj --filter "FullyQualifiedName~TimeLine"` covers the tick bus, the manager, the event args and the attribute; `TimelineControlTests` and the theme timeline test match the same filter.
+⚙ Tests: `dotnet test Src/Test/Unit/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj --filter "FullyQualifiedName~TimeLine"` covers the tick bus, the manager, the event args and the attribute; `TimelineControlTests` and the theme timeline test match the same filter.

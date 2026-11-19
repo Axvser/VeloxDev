@@ -144,7 +144,7 @@
 
 也就是说 **Timing 只服务 `TransitionSystem`、`DynamicTheme` 与 `TimeLine` 这几个模块**（都与本模块同在 `Src/Core/VeloxDev.Core/` 内）。`Src/Adapters/` 下 GUI 适配器**一家都不直接引用 Timing**（它们经 `Transition<T>`/`TransitionHostBase` 间接用）。
 
-**`Src/` 里的注册者全是测试。** `RegisterTimeSource`/`RegisterTimeSampler` 的调用者只有 `TimerCore` 的静态构造和测试（`Src/Core/VeloxDev.Core.Test/Timing/TimerCoreRegistryTests.cs`）。宿主自有钟那条缝（`protected TimeSourceCore(Func<long>, long)` + `SetHostFeeding`）在生产代码里**没有任何实现**——仓库内只有测试走过它（`Src/Core/VeloxDev.Core.Test/Timing/HostTimeSourceTests.cs` 的 `PullHostSource`/`PushHostSource`）；`FakeTimeSource` 则是直接实现 `ITimeSourceControl`，不走这条缝。所以那条缝是「给未来的宿主预留的、已建好但没人走的路」。
+**`Src/` 里的注册者全是测试。** `RegisterTimeSource`/`RegisterTimeSampler` 的调用者只有 `TimerCore` 的静态构造和测试（`Src/Test/Unit/Core/VeloxDev.Core.Test/Timing/TimerCoreRegistryTests.cs`）。宿主自有钟那条缝（`protected TimeSourceCore(Func<long>, long)` + `SetHostFeeding`）在生产代码里**没有任何实现**——仓库内只有测试走过它（`Src/Test/Unit/Core/VeloxDev.Core.Test/Timing/HostTimeSourceTests.cs` 的 `PullHostSource`/`PushHostSource`）；`FakeTimeSource` 则是直接实现 `ITimeSourceControl`，不走这条缝。所以那条缝是「给未来的宿主预留的、已建好但没人走的路」。
 
 ---
 

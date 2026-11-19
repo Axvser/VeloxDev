@@ -1,6 +1,6 @@
 # VeloxDev.Core.Extension.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Extension.Test/`（不含 `bin/`、`obj/`、`TestResults/`）。具体条数与运行结果以 `dotnet test` 现跑为准，不在这里维护。
+> 代码：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/`（不含 `bin/`、`obj/`、`TestResults/`）。具体条数与运行结果以 `dotnet test` 现跑为准，不在这里维护。
 > 属性数**小于**运行条数：`[DataRow]` 会把一条展开成多条。别拿属性数去对运行结果。
 > 被测：`Src/Core/VeloxDev.Core.Extension/`（AI 工具面，命名空间 `VeloxDev.AI.*`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Test/`。两者只共享「逐字相同的一行并行设置」，其余差异很大 —— 见 §六那张对照表。
@@ -19,7 +19,7 @@
 |---|---|
 | 真调模型 / 真连 MCP 服务器 | **没有**。网络只用于**构造选项对象**：URL 只用 `example.com` / `.invalid` / `localhost` |
 | 验七家面板的渲染 | `Examples/*/Agent/*` 的 demo 面板。本模块守住的是**共享层自己的契约**（`AgentLog` 的行数/前缀、`ConversationMarkdown` 的形状、结构化模型映射），**不是面板渲染** —— 没有面板绑 `AgentMessageViewModel`，见 §一 |
-| 验 Workflow 的 GUI / 缩放 | 姊妹模块 `Src/Core/VeloxDev.Core.Test/WorkflowSystem/` |
+| 验 Workflow 的 GUI / 缩放 | 姊妹模块 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/` |
 | 验 Core 的过渡 / 时钟 / 主题 | 姊妹模块 |
 
 **为什么 `Examples/AgentTranscriptTests.cs` 长在这里** —— 因为只有本项目引了 `Lib`，所以任何守 `Lib` 契约的测试只能放这。（它的 `using` 是 `Demo.ViewModels` —— 命名空间来自 `Lib`，不是本模块的。）
@@ -81,7 +81,7 @@ csproj 的 `PackageReference` 只有 MSTest / Newtonsoft.Json / coverlet 这几�
 
 | 项 | 值 |
 |---|---|
-| 命令 | `dotnet test Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
+| 命令 | `dotnet test Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` |
 | 条数与耗时 | 以 `dotnet test` 现跑为准，不在这里维护。默认套件跳过门控的真模型用例；打开开关后每条用例另算 |
 | 门控用例 | 真模型用例集中在 `Agent/Workflow/AgentWorkflowLiveTests.cs` 与 `Agent/SubAgents/SubAgentLiveTests.cs`，由 `Agent/LiveModelGate.cs` 的 `VELOXDEV_LIVE` 决定是否执行；不设开关时全部 `Inconclusive` |
 | 布局集成 | `Examples/DemoGraphTests.cs` 的 `Layout_FanInMergeSitsOnTheAnalyserGroupCentre`：用真实 demo 图跑 `tree.Arrange`，断言 Merge Report 中心 = 三个分析节点的包围盒中心、左边缘 = 最右父右边缘 + 64。它同时守住 demo 图的扇出/扇入连接形状 |
@@ -99,7 +99,7 @@ csproj 的 `PackageReference` 只有 MSTest / Newtonsoft.Json / coverlet 这几�
 VELOXDEV_LIVE=1 dotnet test … --filter "FullyQualifiedName~LiveTests"
 ```
 
-跑法也记在 `Src/Verification/README.md` 开篇（那一处列的是所有「不在默认测试里跑」的验证）。
+跑法也记在 `Src/Test/README.md` 开篇（那一处列的是所有「不在默认测试里跑」的验证）。
 
 **为什么离线部分比姊妹模块快得多**：这里几乎没有真实时钟。全部真实等待只有三处：
 
@@ -139,7 +139,7 @@ System.InvalidOperationException: Environment variable 'API_KEY_DEEPSEEK' is not
 与姊妹模块**逐字相同**的一行：
 
 ```
-Src/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs
+Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/MSTestSettings.cs
 [assembly: Parallelize(Scope = ExecutionScope.MethodLevel)]
 ```
 
@@ -219,7 +219,7 @@ Check the source index, length, and the array's lower bounds. (Parameter 'source
 
 **修法**：`RuntimeContext` 加 `_logsGate`，读写都从它过；新增 `SnapshotLogs()` 供跨线程读取。`WorkflowAgentToolkit` 那一侧同样处理了 `CompiledRun.Failures`（`List<ExecutionError>`，同样的读写并发，只是会抛 `Collection was modified` 而不是数组越界）。**没有改任何接口** —— `SnapshotLogs()` 挂在具体类型上，`IRuntimeContext` 不动。
 
-**回归守卫**：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/RuntimeContextLogConcurrencyTests.cs`。去掉锁重跑，它以 `System.Array.Copy` 失败 —— 与真实故障同一个异常。
+**回归守卫**：`Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/RuntimeContextLogConcurrencyTests.cs`。去掉锁重跑，它以 `System.Array.Copy` 失败 —— 与真实故障同一个异常。
 
 **排查过程中被证伪的**（留个记录，别再查一遍）：`ManualExecutionGate` 写得很扎实；重试路径不走（`session?.RetryPolicy is not {} policy` 直接返回）；并行分支的 `SemaphoreSlim` 配平；`SaveCheckpointAsync` 无 store 早退、有异常吞掉；`WorkflowDemoSession.Observe` 是纯同步计数器。`FileCheckpointStore` 的锁也配平。
 

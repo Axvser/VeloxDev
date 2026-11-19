@@ -159,12 +159,12 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 
 ## 五、仓库里到底被消费了什么（实测）
 
-引用 `VeloxDev.Jalium` **项目**的工程只有少数几个（`git grep -ln 'VeloxDev.Jalium.csproj' -- Examples Src`）：`Examples/Transition/Jalium/Demo/`、`Examples/Transition/AUTO TEST/Samplers/VeloxDev.SamplerTest.csproj`、`Examples/Workflow/Jalium/Demo/`、`Examples/Workflow/Jalium Trimmed/Demo/`。逐个核它们真正用到的类型：
+引用 `VeloxDev.Jalium` **项目**的工程只有少数几个（`git grep -ln 'VeloxDev.Jalium.csproj' -- Examples Src`）：`Examples/Transition/Jalium/Demo/`、`Src/Test/AutoTest/Samplers/VeloxDev.SamplerTest.csproj`、`Examples/Workflow/Jalium/Demo/`、`Examples/Workflow/Jalium Trimmed/Demo/`。逐个核它们真正用到的类型：
 
 | 工程 | 用到的适配器类型 |
 |---|---|
 | `Examples/Transition/Jalium/Demo/` | 只用到 `TransitionSystem/` 的 `TransitionEffect` 与 `Transition<T>`（`MainWindow.cs` 一族）；**`Interpolator` / `UIThreadInspector` 名字零命中**（`TransitionScheduler` **不是** —— `MainWindow.NoMutualCount` 直接调了 `TransitionScheduler.TryGetNoMutualScheduler`）—— 前两个只在 `Transition<T>` 的类型实参里被间接使用 |
-| `Examples/Transition/AUTO TEST/Samplers/` | 只走**反射**（`JaliumEntries.cs`、`SamplerCoverageTests.cs` 的 `ExpectedAdapterAssemblies`） |
+| `Src/Test/AutoTest/Samplers/` | 只走**反射**（`JaliumEntries.cs`、`SamplerCoverageTests.cs` 的 `ExpectedAdapterAssemblies`） |
 | `Examples/Workflow/Jalium Trimmed/Demo/` | 附着行为挂了**若干**（`WorkflowSurfaceBehavior` 最多，另有 `WorkflowSlotLayoutBehavior`、`WorkflowNodeDragBehavior`、`WorkflowSlotConnectionBehavior`）—— 第五个 `WorkflowEvents` 在这个 demo 的标记里**没有引用**，加 `WorkflowLinkBounds`、`WorkflowMinimapOverlay`，以及标记里绑的 `ViewPool.ItemsSource`/`TemplateSelector`；`GridDecorator` 实现 `IWorkflowGridDecorator` |
 | `Examples/Workflow/Jalium/Demo/` | 只有 `WorkflowMinimapOverlay`（作为基类）；**不用**池化，也不派生其它基类（它自己写 `NodeEditorSurface`） |
 

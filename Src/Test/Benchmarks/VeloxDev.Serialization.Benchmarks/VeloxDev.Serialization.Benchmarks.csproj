@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net10.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<!-- 不进任何包，也不该被 dotnet test 发现：这个项目的产物只有一张表。 -->
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+		<!-- 只给 ComparisonBenchmarks 用：同一个对象图过三家序列化器，才谈得上「快不快」。
+		     本目录不打包、不进任何 PackageReference，所以这里多一个引用不牵连产品。 -->
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<!-- 报告要写出 CPU 的**商品名**（"11th Gen Intel(R) Core(TM) i7-11800H"）而不是
+		     "Intel64 Family 6 Model 141 Stepping 1"，靠读注册表；非 Windows 上读不到就退回环境变量。
+		     Microsoft.Win32.Registry 在 net10.0 已随框架提供，显式 PackageReference 只会换来 NU1510。 -->
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+	</ItemGroup>
+
+</Project>

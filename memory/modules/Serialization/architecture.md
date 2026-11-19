@@ -125,7 +125,7 @@
 
 ## 三、逐字节契约（以及两道闸强度不同）
 
-四份冻结文档：`Src/Core/VeloxDev.Core.Extension.Test/Serialization/Golden/*.json`。**任何改动都不得让它们差一个字节。**
+四份冻结文档：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/Serialization/Golden/*.json`。**任何改动都不得让它们差一个字节。**
 
 两道闸，**强度不一样**，这是最容易误判的地方：
 
@@ -154,7 +154,7 @@
 
 ## 四、性能：改了什么，量出来多少
 
-基准在 `Src/Verification/VeloxDev.Serialization.Benchmarks/`（跑法见 `Src/Verification/README.md`）。
+基准在 `Src/Test/Benchmarks/VeloxDev.Serialization.Benchmarks/`（跑法见 `Src/Test/README.md`）。
 
 **工具的形状（2026-10-04 起）**：两个基准类共享 `Scales.cs` 里的四档当量 —— 小 100 / 中 1 000 / 大 10 000 /
 超大 30 000 个节点。**默认四档全跑**（报告因此恒为五张表），`--scale N` 收窄到一档；档位走 `[ParamsSource]` 而不是
@@ -347,7 +347,7 @@
 > ⚠ **别拿被污染的那次当结论 —— 量基准时不要在机器上做别的事。** 机器上同时跑了 demo 与重建时，归档读在大档到超大档量到「3× 数据换 6.8× 时间」（污染值）；干净跑出来是 3.24×（线性）。这条比任何一条数字都值得记。
 
 **STJ 在这张图上的失败，以及 2026-10-04 用配置补上它们的过程**（全部实测，不是推测）。
-补在 `Src/Verification/VeloxDev.Serialization.Benchmarks/StjSerializationBridge.cs`：
+补在 `Src/Test/Benchmarks/VeloxDev.Serialization.Benchmarks/StjSerializationBridge.cs`：
 
 - **写**：默认设置对 NaN/±Infinity 抛 `ArgumentException`，要 `AllowNamedFloatingPointLiterals` 才写得出去 —— 与 §三 那条「非有限值写成字符串」正是同一个分歧。
 - **读，第一处**：`Each parameter in the deserialization constructor on type 'Offset' must bind to an object property or field`。这些 ViewModel 是**主构造器类**，提升出来的属性名（`Horizontal`）与构造器形参名（`left`）不同；`IncludeFields` 也救不了（字段是 `_horizontal`）。修法是 `TypeInfoResolver` 的修饰器把 `CreateObject` 换成 `GetUninitializedObject` —— 跳过构造器建实例，与生成器 `Create()` 同源。**只对没有公开无参构造的类型生效**，所以落在 `Offset` 这类叶子上，不是每个对象都多一笔。

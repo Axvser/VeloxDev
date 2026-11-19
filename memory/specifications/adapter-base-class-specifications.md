@@ -148,7 +148,7 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 - `template.json` 的 `primaryOutputs` / `symbols` / `dotnetcli.host.json`：颜色 token 一般不用动（仍在模板里，只是从
   `ParseColor` 的参数变成属性的赋值）。**改名或新增文件才要动 `primaryOutputs`。**
 - **文本没有构建产物**（模板项目 `EnableDefaultCompileItems=false`），所以「生成 → 一起编译 → 与镜像比对」必须脚本化。
-  **七家统一走** `Src/Verification/verify-workflow-item-templates-all.ps1`（`-Platform <平台名>` 选一家、
+  **七家统一走** `Src/Test/Harness/verify-workflow-item-templates-all.ps1`（`-Platform <平台名>` 选一家、
   `-Strict` 严格模式；不传 `-Platform` 就是七家一起）。两个旧的平台专用脚本现在是它的**薄转发**，老调用照常可用。
   它还会**硬断言生成文件里不残留任何 `replaces` 占位符** —— Jalium 那个 `TemplateLinkColor` 缺陷就是这条抓到的
   （旧的 Jalium 脚本会把 `ColorConverter.ConvertFromString("…")` 归一化掉，正好抹掉要查的东西）。
@@ -172,7 +172,7 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 （助手，2026-10-04）。
 另有三个共用件：`WorkflowSurfaceColors`（颜色解析）、`WorkflowSurfaceGraphics`（圆角矩形）、
 `WorkflowSurfaceGrid`（网格线判定与刻度标签格式化，此前在包内有**两份**逐字相同的私有副本）。
-校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform WinForms -Strict` 全绿。
+校验：`Src/Test/Harness/verify-workflow-item-templates-all.ps1 -Platform WinForms -Strict` 全绿。
 
 **Jalium 的七个角色**（适配器在 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/`，2026-10-05 转标记驱动后重写；
 **网格装饰器与另外六家一样归模板**，见 §2.2）：
@@ -184,7 +184,7 @@ Jalium 两样都齐：完整 `.jalxaml` 工具链（`Jalium.UI.Build` 的 `Enabl
 **没有** `WorkflowTreeView`、三个 `*Attachment`、适配器里的 `WorkflowGridDecorator`、`WorkflowPortGeometry`、
 `WorkflowPortLayout`、`IWorkflowTemplateSelector` —— 那一整套已删。
 四个模板条目是 `TemplateClass.jalxaml` + `.jalxaml.cs`（node / slot / link / tree），三个仍是 `.cs`。
-校验：`Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict` 全绿
+校验：`Src/Test/Harness/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict` 全绿
 （generated 7/7、built True、match 9 / expected-diff 2 / drift 0）。
 
 **外观那一半也归用户**（2026-10-04）：WinForms 的 `WorkflowLinkAttachment` **只画静息线、且只在用户调 `Paint` 时才画**；

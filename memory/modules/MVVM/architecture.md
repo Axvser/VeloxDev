@@ -13,7 +13,7 @@
 | 半边 | 归谁 | 本质 |
 |---|---|---|
 | 命令的**运行期语义** | `CommandPipeline{TParam,TResult}.cs`（管道本体：队列/锁/并发/事件）+ `CommandEventArgs.cs` / `CommandEventArgs{TParam,TResult}.cs` / `CommandEventType.cs`；`VeloxCommand.cs` 只剩兜底面形状的构造与工厂 | 一个比 `ICommand` 重得多的实现：**上限并发 + 排队 + 强制锁 + 一组生命周期事件 + 可取消的异步执行** |
-| 命令的**可等待**与**忙碌读模型** | `CommandCompletion.cs` + `Interfaces/MVVM/IVeloxCommandCompletion.cs`、`IVeloxCommandStatus.cs` + `VeloxCommandExtensions.cs` | 2026-10-01 新增。**故意不放进 `IVeloxCommand`** —— 往接口上加成员会打碎仓内几个手写实现方（`Src/Core/VeloxDev.Core.Test/WorkflowSystem/Support/WorkflowTestKit.cs` 的 `StubCommand`、`WorkflowSystem/SlotEnumeratorTests.cs` 的 `StubCommand` / `TrackingCreateSlotCommand`、`WorkflowSystem/CompilerEx/ProbeNodes.cs` 的 `TestCommand`）以及所有库外实现方，而 `net461`/`netstandard2.0` 上没法用默认接口成员兜底。见 §九 |
+| 命令的**可等待**与**忙碌读模型** | `CommandCompletion.cs` + `Interfaces/MVVM/IVeloxCommandCompletion.cs`、`IVeloxCommandStatus.cs` + `VeloxCommandExtensions.cs` | 2026-10-01 新增。**故意不放进 `IVeloxCommand`** —— 往接口上加成员会打碎仓内几个手写实现方（`Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/Support/WorkflowTestKit.cs` 的 `StubCommand`、`WorkflowSystem/SlotEnumeratorTests.cs` 的 `StubCommand` / `TrackingCreateSlotCommand`、`WorkflowSystem/CompilerEx/ProbeNodes.cs` 的 `TestCommand`）以及所有库外实现方，而 `net461`/`netstandard2.0` 上没法用默认接口成员兜底。见 §九 |
 | 集合属性的**订阅兜底** | `ObservableCollectionTracker.cs` | 一个静态去重订阅器，用来补「字段初始化器绕过 setter」这个洞 |
 | 两者的**声明方式** | 生成器（`MVVMWriter` / `CommandWriter`）+ 标注特性 | `[VeloxProperty]` / `[VeloxCommand]` —— 都只是**给生成器看的信号**，运行期不认识它们 |
 

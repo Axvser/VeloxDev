@@ -49,7 +49,7 @@
 |---|---|---|
 | `ThreadFor(object)` | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `host.ThreadFor(target)`（每趟解析一次并钉到 run 上）、`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply`（没有 run 时的回落）、基类内部 `IsCurrent` / `Post` / `PostAsync` / `Run<T>` 等处、各家的 `CreateFramePacer` | 唯一的「解析线程」入口 |
 | `Post(target, thread, action, priority)` | `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply` | **写路径的唯一出口**，线程是钉好的那条 |
-| `Post(target, action, priority)`（三参便利重载） | **零调用者**（`Src/`、`Examples/`、`Src/Core/VeloxDev.Core.Test/` 全域搜不到） | 每次自己解析线程；写路径刻意不用它 |
+| `Post(target, action, priority)`（三参便利重载） | **零调用者**（`Src/`、`Examples/`、`Src/Test/Unit/Core/VeloxDev.Core.Test/` 全域搜不到） | 每次自己解析线程；写路径刻意不用它 |
 | `PostAsync` | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `PostAsync`（Awake） | 只给 `Awake` 用 |
 | `Run<T>` | `Interpolator`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `host.Run<object?>`） | 只给 `Prepare` 读起点用 |
 | `IsCurrent(object)` | `Src/Adapters/VeloxDev.WinForms/TransitionSystem/TransitionInterpreter.cs` 的 `CreateFramePacer` | 全树唯一消费者：决定这家要不要 pacer |
@@ -130,6 +130,6 @@ Post(target, thread, action, priority)
 
 - `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs`：非泛型基类 `TransitionEffectCore` **显式**实现 `ITransitionEffect<NonPriority>`（同文件 `TransitionEffectCore` 的 `NonPriority ITransitionEffect<NonPriority>.Priority`）。也就是说「无优先级」在 Core 里是一条**一等公民**的路径，不是缺省兜底。
 - `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs`：`TransitionInterpreterCore<TTransitionEffectCore>`（单型参版）就是 `ITransitionInterpreter<NonPriority>` 那一支，其注释写明它走 `frameSet.Apply(target, easedT)`，「`NonPriority` 每帧不花任何代价」。
-- MAUI / WinForms / Razor 适配器的第七型参、`SamplerSet<NonPriority>`、以及 `Src/Core/VeloxDev.Core.Test/` 里几乎所有宿主都是它。
+- MAUI / WinForms / Razor 适配器的第七型参、`SamplerSet<NonPriority>`、以及 `Src/Test/Unit/Core/VeloxDev.Core.Test/` 里几乎所有宿主都是它。
 - 它是 `readonly struct` 且**从不被实例化**（全树搜不到 `new NonPriority`），实际流动的值是 `default(NonPriority)`（如 `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply` 默认参 `priority = default!`）。空 struct 正是为此选的：`default` 是**真值**，所以 `is TPriorityCore` 这类检查（`Src/Adapters/VeloxDev.MAUI/TransitionSystem/Interpolator.cs` 的 `is ITransitionEffect<NonPriority>`）不用为它开特例（`NonPriority.cs` 的类注释）。
 - 型参**无约束**（全树无 `where TPriorityCore`），所以 `default!` 与「传一个装箱的类」都能编译；这是刻意留下的自由度，不是遗漏。

@@ -112,7 +112,7 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 **只有一个地方**：`Base/AopNames.cs`。接口名与代理名由 `InterfaceFor` / `ProxyFor` 派生（`ProxyFor` = `InterfaceFor + "Proxy"`），扩展类名用的是同一个 `Segment`（`AopWriter.WriteExtension`）。这三者必须对同一个类给出一致的名字 —— 三处各算一遍会在全局命名空间下产出非法的 `<global namespace>`（宿主只报 CS8785）。**不要在任何一处重新手写拼接**；要改就改 `AopNames`。
 
-本仓库的 `Src/Adapters/` **没有任何** AOP 使用者（`Src/` 里只有契约、生成器与测试提到这个命名空间），所以这类回归**跑不出来** —— 但 `Src/Core/VeloxDev.Core.Test/AspectOriented/` 与 `Examples/AOP/*` 会先红。
+本仓库的 `Src/Adapters/` **没有任何** AOP 使用者（`Src/` 里只有契约、生成器与测试提到这个命名空间），所以这类回归**跑不出来** —— 但 `Src/Test/Unit/Core/VeloxDev.Core.Test/AspectOriented/` 与 `Examples/AOP/*` 会先红。
 
 ---
 
@@ -120,6 +120,6 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 - **重载 = 生成代码编译失败**：两个同名方法撞同一个 `_hooks_{名}` 字段（`AopSurface.Slot`）⇒ CS0102；`SetHooks` 的 switch 也会撞重复 `case`。实测复现。`SKILL.md` §Pitfalls 把它写成「不要标记重载方法」。
 - **表达式体属性 = 生成代码编译失败**：`AccessorList` 为 null 时 `hasGetter` / `hasSetter` 都是 false（`AopSurface.GenerateSource` 的属性分支）⇒ 生成 `{ }` ⇒ CS0548，接口与代理各报一次。实测复现（`public string X => "x";`）。
-- **代理会回收**：两张静态强引用表（`ProxyInstances` / `ProxyIDs`）随旧实现删除，现在只剩两个 `ConditionalWeakTable`。实测钉在 `Src/Core/VeloxDev.Core.Test/AspectOriented/AopProxyTests.AProxyIsCollectableOnceItsTargetIs`（弱引用 + 强制 GC，稳定通过）。**这条是为重构回归写的** —— 重新引入静态注册表只会让这一条红。
+- **代理会回收**：两张静态强引用表（`ProxyInstances` / `ProxyIDs`）随旧实现删除，现在只剩两个 `ConditionalWeakTable`。实测钉在 `Src/Test/Unit/Core/VeloxDev.Core.Test/AspectOriented/AopProxyTests.AProxyIsCollectableOnceItsTargetIs`（弱引用 + 强制 GC，稳定通过）。**这条是为重构回归写的** —— 重新引入静态注册表只会让这一条红。
 - **AOT 可用**：NativeAOT 发布 + 运行实测通过，零 IL 警告。做法、环境坑（`vswhere.exe` 不在 PATH）与 IL2091 的成因写在 architecture.md §八。
 - **`#if NET`**：运行期 .cs 全在 `#if NET` 内，`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 含 `netstandard2.0`/`netframework4.6.1` ⇒ 那两个 TFM 上命名空间不存在。`SKILL.md` §Which package 也这么写（「.NET 5 及以后」）。

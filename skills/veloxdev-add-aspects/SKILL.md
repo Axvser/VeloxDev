@@ -52,4 +52,4 @@ Wrap behaviour around an existing member — log it, veto it, replace it, react 
 
 ⚙ `Src/Generators/VeloxDev.Core.Generator/` — `AopSurface.cs` (interface + proxy), `AopProxy.cs` and `Writers/AopWriter.cs` (the `Aop()` extension), `Base/AopNames.cs` (the one naming algorithm).
 
-⚙ `Src/Core/VeloxDev.Core.Test/AspectOriented/` — `AopFixture.cs` and `AopProxyTests.cs` pin stage order, replacement, caching/collectability and the error paths.
+⚙ `Src/Test/Unit/Core/VeloxDev.Core.Test/AspectOriented/` — `AopFixture.cs` and `AopProxyTests.cs` pin stage order, replacement, caching/collectability and the error paths.

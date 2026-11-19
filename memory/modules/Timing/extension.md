@@ -129,7 +129,7 @@
 | 改 `Advance` 的溢出守卫 | `TimeSourceContractTests.cs` / `HostTimeSourceTests.cs` |
 | 让某个契约注册变得「可选」 | `CreateTimeSource` 无回退（`CreateTimeSource` 的 remarks），去掉默认注册会让**所有**消费者在运行时抛 |
 
-**写测试时必须用「标记契约」模式，不要拿 `ITimeSourceControl` 做实验。** `TimerCoreRegistryTests.cs` 私有定义 `IMarkerSource`/`IMarkerSampler`，注册、断言、`finally` 里 `Unregister` 全部走标记契约。直接 `RegisterTimeSource<ITimeSourceControl>(...)` 会把 Core 默认从**整个进程**里换掉，而这类测试是并行跑的（`Src/Core/VeloxDev.Core.Test` 的方法级并行）—— 受害的是完全无关的动画测试，症状是「一个 park 在冻结时钟上的动画不失败，它挂住」。
+**写测试时必须用「标记契约」模式，不要拿 `ITimeSourceControl` 做实验。** `TimerCoreRegistryTests.cs` 私有定义 `IMarkerSource`/`IMarkerSampler`，注册、断言、`finally` 里 `Unregister` 全部走标记契约。直接 `RegisterTimeSource<ITimeSourceControl>(...)` 会把 Core 默认从**整个进程**里换掉，而这类测试是并行跑的（`Src/Test/Unit/Core/VeloxDev.Core.Test` 的方法级并行）—— 受害的是完全无关的动画测试，症状是「一个 park 在冻结时钟上的动画不失败，它挂住」。
 
 ---
 
@@ -137,7 +137,7 @@
 
 | 扩展点 | 状态 | 依据 |
 |---|---|---|
-| `protected TimeSourceCore(Func<long>, long)` | **生产代码里零实现**。`Src/` 与 `Examples/` 下的生产代码没有任何子类 | 仅测试 `Src/Core/VeloxDev.Core.Test/Timing/HostTimeSourceTests.cs` 的 `PullHostSource` 与 `PushHostSource` 用到；`FakeTimeSource` 直接实现 `ITimeSourceControl`，不是这条缝 |
+| `protected TimeSourceCore(Func<long>, long)` | **生产代码里零实现**。`Src/` 与 `Examples/` 下的生产代码没有任何子类 | 仅测试 `Src/Test/Unit/Core/VeloxDev.Core.Test/Timing/HostTimeSourceTests.cs` 的 `PullHostSource` 与 `PushHostSource` 用到；`FakeTimeSource` 直接实现 `ITimeSourceControl`，不是这条缝 |
 | `SetHostFeeding` | 同上，零非测试调用者 | 同上 |
 | `RegisterTimeSource` / `RegisterTimeSampler` | **`Src/` 内非测试调用者为零**，只有 `TimerCore` 的静态构造 | — |
 | `UnregisterTimeSource` / `UnregisterTimeSampler` | 只有测试调用 | `TimerCoreRegistryTests.cs` 的各 `Unregister` 断言 |

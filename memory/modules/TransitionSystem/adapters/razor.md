@@ -107,7 +107,7 @@ Core 注册的那一族本来就够。
   这一格在**六家都存在**（WPF/Avalonia/WinUI/MAUI/WinForms/Razor 的重载表都有 `decimal`；**只有 Jalium 没有**，它的 `Transition.cs` 里搜不到 `decimal`），不是 Razor 特有；写在这是因为手写表没有编译器帮你对账。
 
 **加一个类型的完整动作**：写采样器 → 在该家 `Interpolator` 静态构造里注册 → **顺手在这张手写表里补一个重载**
-→ 补 `Examples/Transition/AUTO TEST/Samplers/RazorEntries.cs` 的一行（现行只有 `SamplerRule.Saturate`）
+→ 补 `Src/Test/AutoTest/Samplers/RazorEntries.cs` 的一行（现行只有 `SamplerRule.Saturate`）
 → 跑 `SamplerCoverageTests`。漏第三步的后果与其他家不同：别家漏了是运行期静默，这里是**声明期就写不出来**。
 
 ### 4. `SynchronizationContext` 属于 circuit，不属于进程

@@ -15,9 +15,9 @@
 1. **写类**：`Src/Adapters/VeloxDev.WinUI/TransitionSystem/Samplers/<名字>Sampler.cs`，命名空间必须是 `VeloxDev.Adapters.NativeSamplers`（本模块的采样器全在这个命名空间，见 `Samplers/PointSampler.cs` 的 `namespace`）。
    形状照 `Samplers/PointSampler.cs`（最小的一份）：实现 `ISampler` 的那几个方法 `NormalizeStart` / `NormalizeEnd` / `InsertFrame`；`ISampler` 由 `GlobalUsings.cs` 的 `global using VeloxDev.TransitionSystem.Abstractions;` 提供，**不要**再写一行 `using`。
 2. **注册**：在 `TransitionSystem/Interpolator.cs` 静态构造函数里加一行 `RegisterInterpolator(typeof(你要动画的类型), new <名字>Sampler());`。这一张表就是全部注册；没有别的注册点。
-3. **登记到闭式解套件**（只有「产出的值本身是值」的采样器才能走这条）：`Examples/Transition/AUTO TEST/Samplers/WinUiEntries.cs` 加一条 `SamplerEntry`，并在同文件的 `Target` 类上补一个属性让 `Write` 有真实目标可写。
-4. **登记到验收表**（产出的值是 **WinRT `DependencyObject`** 的那一类走这条）：`Examples/Transition/AUTO TEST/Conformance/WinUiConformance.cs`（`All` 成员）加一条，并由真跑起来的 demo 驱动（`Samplers/UnreachableSamplers.cs` 是这条路的名字来源）。
-5. **跑两条验证线**：`Examples/Transition/AUTO TEST/Samplers/VeloxDev.SamplerTest.csproj`（`SamplerCoverageTests` + `SamplerConformanceTests`）与 `Examples/Transition/AUTO TEST/`（`Conformance/`、`LoadMode/WinUiLoadMode.cs`、`Drivers/WinUIDemoDriver.cs`）。
+3. **登记到闭式解套件**（只有「产出的值本身是值」的采样器才能走这条）：`Src/Test/AutoTest/Samplers/WinUiEntries.cs` 加一条 `SamplerEntry`，并在同文件的 `Target` 类上补一个属性让 `Write` 有真实目标可写。
+4. **登记到验收表**（产出的值是 **WinRT `DependencyObject`** 的那一类走这条）：`Src/Test/AutoTest/Conformance/WinUiConformance.cs`（`All` 成员）加一条，并由真跑起来的 demo 驱动（`Samplers/UnreachableSamplers.cs` 是这条路的名字来源）。
+5. **跑两条验证线**：`Src/Test/AutoTest/Samplers/VeloxDev.SamplerTest.csproj`（`SamplerCoverageTests` + `SamplerConformanceTests`）与 `Src/Test/AutoTest/`（`Conformance/`、`LoadMode/WinUiLoadMode.cs`、`Drivers/WinUIDemoDriver.cs`）。
 
 ### 联动清单（漏一处的后果）
 
@@ -111,11 +111,11 @@
 
 | 改这里 | 必须同步 |
 |---|---|
-| `VeloxDev.WinUI.csproj` 的 `TargetFrameworks` | 各 WinUI demo 各自的 `SetTargetFramework`（`Examples/Workflow/WinUI Trimmed/Demo/Demo.csproj`、`Examples/Transition/WinUI/Demo/Demo.csproj`、`Examples/Workflow/WinUI/Demo/Demo.csproj`）—— 几处**写死的 TFM 与各 Workflow demo 的 `TargetFramework` 分别对齐**，不锁就会用错框架引用；`Examples/Transition/AUTO TEST/Drivers/WinUIDemoDriver.cs` 还把 `net8.0-windows10.0.19041.0` 连同 RID 一起写死在启动路径里 |
+| `VeloxDev.WinUI.csproj` 的 `TargetFrameworks` | 各 WinUI demo 各自的 `SetTargetFramework`（`Examples/Workflow/WinUI Trimmed/Demo/Demo.csproj`、`Examples/Transition/WinUI/Demo/Demo.csproj`、`Examples/Workflow/WinUI/Demo/Demo.csproj`）—— 几处**写死的 TFM 与各 Workflow demo 的 `TargetFramework` 分别对齐**，不锁就会用错框架引用；`Src/Test/AutoTest/Drivers/WinUIDemoDriver.cs` 还把 `net8.0-windows10.0.19041.0` 连同 RID 一起写死在启动路径里 |
 | `RuntimeIdentifier`（默认 `win-x64`）/ `RuntimeIdentifiers` | 产物路径里会多一层 `win-x64/`；`WinUIDemoDriver.cs` 的启动路径是**整条硬编码**的字符串（含配置、TFM、RID 三段），改其中任何一段都会让它指向一个不存在的 exe ⇒ 表现为 AutoTest 直接找不到进程 |
 | `PackageReference Microsoft.WindowsAppSDK`（现 1.6.241114003） | **demo 侧是 1.8.x**，两个版本号同进程并存是现状；升其中一侧前先确认另一侧是否要跟 |
 | `VeloxDev.Core` 的 Debug/Release 双轨（`ProjectReference` / `PackageReference`） | 与生成器那套同形，**两条必须互斥**；Release 走的是包 `Version 11.0.0` |
-| 采样器的引用（`Examples/Transition/AUTO TEST/Samplers/VeloxDev.SamplerTest.csproj` 里指向 `VeloxDev.WinUI` 的 `ProjectReference`） | 摘掉会让 `EveryAdapterAssembly_IsLoadedSoItsSamplersAreCounted` 失败（设计如此，消息直接指过来） |
+| 采样器的引用（`Src/Test/AutoTest/Samplers/VeloxDev.SamplerTest.csproj` 里指向 `VeloxDev.WinUI` 的 `ProjectReference`） | 摘掉会让 `EveryAdapterAssembly_IsLoadedSoItsSamplersAreCounted` 失败（设计如此，消息直接指过来） |
 | 想让新类型出现在模板里 | `Src/Templates/VeloxDev.WinUI.Templates/` 是**纯内容包**，改它不产生任何依赖；面向用户的一侧在 `skills/veloxdev-create-workflow/references/gui/winui.md` |
 
 **加 TFM 之前先问一句**：本模块唯一一处条件编译是 `TransitionSystem/Transition.cs` 的 `#if !NETSTANDARD2_0`（`System.Numerics` 那组重载），而现有两个 TFM 都不带 netstandard ⇒ **它恒为真，是死守卫**。加一个 `netstandard2.0` 会让那些重载真的消失（这正是 Avalonia 那条同款守卫存在的意义）—— 这是改 TFM 时**唯一**一处会被动的代码，其余全是 MSBuild 层的事。

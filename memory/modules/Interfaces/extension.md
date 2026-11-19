@@ -127,5 +127,5 @@
 | 3 | Core 侧的**默认实现**：`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/*DefaultViewModel.cs`、`TransitionSystem/{Runtime/TransitionInterpreter,Runtime/TransitionScheduler,Effects/TransitionEffect,Binding/TransitionProperty}.cs` | 编译失败 |
 | 4 | `Src/Templates/*/working/content/<契约名>/` 与 `Examples/`（`IWorkflowGridDecorator` 不在适配器本体的那几家在这里补；`IWorkflowMinimapOverlay` 现已七家全在适配器本体） | 该平台的示例/模板缺能力 |
 | 5 | 若是注册表键：`TimerCore.RegisterTimeSource<…>` 的所有调用点（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs` 定义，`TransitionSystem/Sampling/SamplerSet.cs` 的 `Run`、`TransitionSystem/Effects/Transition.cs` 的 `TimerCore.CreateTimeSource<ITimeSourceControl>()` 调用） | 运行期抛「未注册」，编译期无感 |
-| 6 | `Tests`：`Src/Core/VeloxDev.Core.Test/` 下的手写实现（`DynamicTheme/ThemeTransitionTests.cs` 的 `Subject`、`TimeLine/TickableBusTests.cs` 的 `PushCounter` 是 `IThemeObject`/`ITickable` 仅存的手写实现） | 测试编译失败 |
+| 6 | `Tests`：`Src/Test/Unit/Core/VeloxDev.Core.Test/` 下的手写实现（`DynamicTheme/ThemeTransitionTests.cs` 的 `Subject`、`TimeLine/TickableBusTests.cs` 的 `PushCounter` 是 `IThemeObject`/`ITickable` 仅存的手写实现） | 测试编译失败 |
 | 7 | **不必**动：`Interfaces/` 内的目录结构（挪文件不改命名空间，见 `architecture.md` §一），也不影响任何 `using` | — |

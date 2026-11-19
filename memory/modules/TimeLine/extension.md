@@ -92,7 +92,7 @@
 7. **在同一时机成对调 `CloseTickable()`**（通常在窗口/控件关闭处），并 `StopAsync`（不 await 是合理的：两条泵都是后台线程，`MainWindow.xaml.cs` 的 `StopAsync` 调用）。
 8. **钩子里的数据只往外发，不往回编组**：写 `Interlocked`/`Volatile` 字段 + 队列，UI 侧轮询。
 9. **若要动画共享这条时间轴**，把 `TickManager.Bus(通道名)` 传给 `Execute(target, timeline)`。
-10. **加测试**：参照 `Src/Core/VeloxDev.Core.Test/TimeLine/TickManagerTests.cs`（channel 生命周期）、`TickableBusTests.cs`（总线与动画共享）、`TickableAttributeTests.cs`、`TimeLineEventArgsTests.cs`。
+10. **加测试**：参照 `Src/Test/Unit/Core/VeloxDev.Core.Test/TimeLine/TickManagerTests.cs`（channel 生命周期）、`TickableBusTests.cs`（总线与动画共享）、`TickableAttributeTests.cs`、`TimeLineEventArgsTests.cs`。
 
 ---
 
@@ -102,7 +102,7 @@
 
 | 改动 | 联动 |
 |---|---|
-| 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs`（这个名字曾带 ZWSP，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1）② `TickWriter` 的 `GenerateBody` 模板与 `GenerateBaseInterfaces` ③ 各个 `partial void` 声明 ④ `Src/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
+| 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs`（这个名字曾带 ZWSP，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1）② `TickWriter` 的 `GenerateBody` 模板与 `GenerateBaseInterfaces` ③ 各个 `partial void` 声明 ④ `Src/Test/Unit/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
 | 加/改 `[Tickable]` 的参数 | ① `TickableAttribute.cs` ② `TickWriter.ReadTickableConfig`（位置参数 + 命名参数两条读取路径，**命名参数覆盖位置参数**）③ `TickableAttributeTests.cs` |
 | 改 `TriggerAttributes` 的组合方式 | `Src/Generators/VeloxDev.Core.Generator/Base/Analizer.cs` 的 `TriggerAttributes`；`"VeloxDev.TimeLine.TickableAttribute"` 是其中一项。**它同时决定了「哪些类会进入生成器」**，删掉它等于整个特性失效 |
 | 改事件参数族的形状 | `TransitionSystem`（`Runtime/TransitionDiagnostics.cs` 的 `Raise`、`Runtime/TransitionInterpreter.cs` 三处 `Args.Handled` 检查、`Effects/Transition.cs` 的 `InvokeError`）+ `Events/TransitionEventArgs{TStage,TValue}.cs`、`Interfaces/TransitionSystem/Enums/{Warn,Error}Stage.cs` + `TimeLineEventArgsTests.cs` |

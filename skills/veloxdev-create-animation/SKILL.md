@@ -116,6 +116,6 @@ Read the symptom first, then the pitfall file. Each entry is a failure the repos
 
 ⚙ `Examples/Transition/<GUI>/Demo` — one runnable demo per supported GUI, all exercising the same API. (Blazor's is nested one level deeper: `Examples/Transition/Blazor/Demo/Demo`.) `SamplerSubject.cs` is the object the animations write into; `SamplerProbe.cs` is one row per sampler and the two indexed paths. Both are `internal` to the demo project — read them for the shape, do not reference them. Blazor has no `SamplerSubject.cs`; it animates a plain `INotifyPropertyChanged` model (`Demo/Demo/Models/BoxModel.cs`).
 
-⚙ `Examples/Transition/AUTO TEST/AGENTS.md` — how the acceptance suite is run and extended.
+⚙ `Src/Test/AutoTest/AGENTS.md` — how the acceptance suite is run and extended.
 
-⚙ The engine contract is pinned by `Src/Core/VeloxDev.Core.Test/TransitionSystem/` and `.../Timing/`; run them with `dotnet test Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj --filter "FullyQualifiedName~TransitionSystem|FullyQualifiedName~Timing"`.
+⚙ The engine contract is pinned by `Src/Test/Unit/Core/VeloxDev.Core.Test/TransitionSystem/` and `.../Timing/`; run them with `dotnet test Src/Test/Unit/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj --filter "FullyQualifiedName~TransitionSystem|FullyQualifiedName~Timing"`.

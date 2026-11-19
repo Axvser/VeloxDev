@@ -1,6 +1,6 @@
 # WorkflowSystem 自动布局（扇出规范化 + 分离投影，第一版）
 
-> 负责「节点自动布局」的管道：契约在 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Layout/`，实现在 `Src/Core/VeloxDev.Core/WorkflowSystem/Layout/`，测试在 `Src/Core/VeloxDev.Core.Test/WorkflowSystem/Layout/`。
+> 负责「节点自动布局」的管道：契约在 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Layout/`，实现在 `Src/Core/VeloxDev.Core/WorkflowSystem/Layout/`，测试在 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/Layout/`。
 > 这一版实现两件事：**层级对齐**（`HierarchyAlignmentStage`：扇出组、扇入合流点、单子边）与**坐标后的分离约束投影**（`TileSeparationStage`）。没有 Sugiyama 分层、没有层内排序、没有正交走线。管道与数据模型已经按可替换阶段立起来，上面三种是后面往里插的阶段。
 
 ## 一、命名空间必须是 `VeloxDev.WorkflowSystem`，不能是 `.Layout`
@@ -147,7 +147,7 @@ WorkflowLayoutEx.Arrange(node, options)                 ← 从 Parent 找 tree 
 
 ## 九、测试锚点
 
-- `Src/Core/VeloxDev.Core.Test/WorkflowSystem/Layout/SeparationProjectionTests.cs`：重叠修复、硬违规无视 tolerance、钉住不动、扇出组中心对齐父、负坐标/越界生长、缩放下的世界帧往返、跨列跨行的全局重叠修复、两枚 pinned 的无解用例。
+- `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/Layout/SeparationProjectionTests.cs`：重叠修复、硬违规无视 tolerance、钉住不动、扇出组中心对齐父、负坐标/越界生长、缩放下的世界帧往返、跨列跨行的全局重叠修复、两枚 pinned 的无解用例。
 - `.../PositionToleranceTests.cs`：容忍内整组不动、超出才对齐、`0` 严格写规范位置。
 - `.../FanOutLayoutTests.cs`：扇出规范位置不依赖初始摆位、容差内整组不动、组内 pinned 整组跳过。
 - `.../HierarchyAlignmentTests.cs`：单子边居中并放到父右侧、链式传递列与中心、扇入取父组包围盒中心（含不等高）并放到最右父右侧、扇出后再扇入仍对齐组中心与列、容差内保留、容差按轴独立、pinned 不动。

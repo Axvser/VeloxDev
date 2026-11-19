@@ -52,4 +52,4 @@
 - **`post` 必须异步且返回真实的入队结果**：WinUI 的 `TryEnqueue`、WinForms 的 `BeginInvoke` 都可能拒绝；返回 `true` 却什么都没排，队列会永远停在已排程状态。
 - **`Flush` 先清队再执行**：不要改成「执行完再清」。同步过程中写 `slot.Anchor` 会触发下游属性通知，执行完再清会把那一轮新请求一起吞掉。
 - **指纹里的插槽控件数要算上枚举容器**：只算具名插槽时，枚举插槽增删在固定外框下不会改变任何指纹字段，锚点会停在旧值。
-- **测试锚点**：`Src/Core/VeloxDev.Core.Test/WorkflowSystem/WorkflowLayoutBatchTests.cs`（合并、指纹、投递失败、执行中再请求）；七家无头套件的 `SlotLayout*` / `SurfaceContract*` 用例验证锚点仍能写回。
+- **测试锚点**：`Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/WorkflowLayoutBatchTests.cs`（合并、指纹、投递失败、执行中再请求）；七家无头套件的 `SlotLayout*` / `SurfaceContract*` 用例验证锚点仍能写回。

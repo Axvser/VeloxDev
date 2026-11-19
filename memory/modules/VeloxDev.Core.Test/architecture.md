@@ -1,6 +1,6 @@
 # VeloxDev.Core.Test — 架构
 
-> 代码：`Src/Core/VeloxDev.Core.Test/`（不含 `bin/`、`obj/`、`TestResults/`）。具体条数与耗时以 `dotnet test` 现跑为准，不在这里维护。
+> 代码：`Src/Test/Unit/Core/VeloxDev.Core.Test/`（不含 `bin/`、`obj/`、`TestResults/`）。具体条数与耗时以 `dotnet test` 现跑为准，不在这里维护。
 > `WorkflowSystem/Layout` 下有独立的布局测试与 `LayoutTestKit`；布局的规范与坑见 [WorkflowSystem/layout.md](../WorkflowSystem/layout.md)。
 > 被测：`Src/Core/VeloxDev.Core/`（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 是五目标 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Extension.Test/`（那个引 `Lib`、测 AI 工具面）。两者的共享面只有「同样一行并行设置」。
@@ -18,9 +18,9 @@
 | 你以为在这里 | 其实在哪 |
 |---|---|
 | 验 GUI / 渲染 / 命中测试 | **哪儿也没有**。两个测试项目都不引用任何 `Src/Adapters/VeloxDev.*`；测试源码里没出现过 `VeloxDev.WPF`/`Avalonia`/`MAUI`/`WinUI`/`WinForms`/`Razor`/`Jalium` 命名空间。要验渲染只能靠 `Examples/<模块>/<GUI>/Demo` 手工跑 |
-| 验适配器采样器的覆盖面 | `Examples/Transition/AUTO TEST/`（独立 csproj，不在 `VeloxDev.slnx`） |
-| 验 AOT / 裁剪 | `Src/Verification/VeloxDev.TrimProbe/`。**这条边界是双向的**：那目录在工作区里只剩 `bin/Debug/net10.0/win-x64/` 产物，没有源码、无被跟踪文件、不在 `VeloxDev.slnx` —— 它不跑这里的测试，这里的测试也覆盖不到它（它有自己的验证线） |
-| 验 CLI 入口 | `Src/CLI/`，独立模块 |
+| 验适配器采样器的覆盖面 | `Src/Test/AutoTest/`（独立 csproj，不在 `VeloxDev.slnx`） |
+| 验 AOT / 裁剪 | **仓库外**。仓库里没有探针源码或工程文件（`git ls-files` 零命中，`VeloxDev.slnx` 无 `TrimProbe`）—— 它不跑这里的测试，这里的测试也覆盖不到它（它有自己的验证线） |
+| 验 CLI 入口 | `Src/Cli/`，独立模块 |
 | 跨 TFM 行为一致 | 只有 **net8.0** 这一份资产被真正执行，见 §二 |
 
 ---
@@ -29,9 +29,9 @@
 
 Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Core.Test.csproj` 的 `TargetFramework`），所以 ProjectReference 从 Core 的五份资产里挑出**最近兼容的那一份 = `net8.0`**。
 
-实测（`Src/Core/VeloxDev.Core/bin/Debug/net8.0/VeloxDev.Core.dll` 与 `Src/Core/VeloxDev.Core.Test/bin/Debug/net10.0/VeloxDev.Core.dll` 的 md5 相同，故这是硬结论而非推断；该读数随每次重建变化，不可复核）。
+实测（`Src/Core/VeloxDev.Core/bin/Debug/net8.0/VeloxDev.Core.dll` 与 `Src/Test/Unit/Core/VeloxDev.Core.Test/bin/Debug/net10.0/VeloxDev.Core.dll` 的 md5 相同，故这是硬结论而非推断；该读数随每次重建变化，不可复核）。
 
-旁证：`Src/Core/VeloxDev.Core.Test/obj/project.assets.json` 里 `VeloxDev.Core` 资产的 `"framework": ".NETCoreApp,Version=v8.0"`。
+旁证：`Src/Test/Unit/Core/VeloxDev.Core.Test/obj/project.assets.json` 里 `VeloxDev.Core` 资产的 `"framework": ".NETCoreApp,Version=v8.0"`。
 
 | TFM | 被测试执行? | 后果 |
 |---|---|---|
@@ -76,8 +76,8 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 
 | 命令 | 说明 |
 |---|---|
-| `dotnet test Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` | 单项目 |
-| `dotnet test Src/Core/VeloxDev.Core.Test --filter "FullyQualifiedName~CompilerEx"` | 按命名空间定位一个目录 |
+| `dotnet test Src/Test/Unit/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` | 单项目 |
+| `dotnet test Src/Test/Unit/Core/VeloxDev.Core.Test --filter "FullyQualifiedName~CompilerEx"` | 按命名空间定位一个目录 |
 
 条数与耗时以 `dotnet test` 现跑为准，不在这里维护；测试方法的分布见 §五。`TestResults/` 被 `.gitignore` 的 `[Tt]est[Rr]esult*/` 排除 —— 里面 `.trx` 是本地产物，**不可作为依据**。连跑偶发失败的结构性原因见 §六。
 
@@ -127,7 +127,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 **并行设置只有一行，全仓没有 `.runsettings`**：
 
 ```
-Src/Core/VeloxDev.Core.Test/MSTestSettings.cs
+Src/Test/Unit/Core/VeloxDev.Core.Test/MSTestSettings.cs
 [assembly: Parallelize(Scope = ExecutionScope.MethodLevel)]
 ```
 

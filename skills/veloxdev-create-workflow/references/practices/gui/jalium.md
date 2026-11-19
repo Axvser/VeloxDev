@@ -120,4 +120,4 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 
 ⚙ Colours are substituted into parser calls (`ColorConverter.ConvertFromString("TemplateSlotColor")`), not into literals — which is why the mirror comparison normalises colour spelling before diffing.
 
-⚙ Verification is one script for all seven platforms: `Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`. It packs, installs, generates all seven, compiles them together against the adapter, compares each against its `Examples/Workflow/Jalium Trimmed/` mirror (normalising the colour spelling first), and **fails any generated file that still contains a `replaces` placeholder token**.
+⚙ Verification is one script for all seven platforms: `Src/Test/Harness/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`. It packs, installs, generates all seven, compiles them together against the adapter, compares each against its `Examples/Workflow/Jalium Trimmed/` mirror (normalising the colour spelling first), and **fails any generated file that still contains a `replaces` placeholder token**.

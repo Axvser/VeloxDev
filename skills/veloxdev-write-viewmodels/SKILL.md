@@ -65,4 +65,4 @@ The workflow idiom is **fields for plain state, `partial` properties for anythin
 
 ⚙ `Src/Core/VeloxDev.Core/MVVM/` and `Src/Core/VeloxDev.Core/Interfaces/MVVM/` — the runtime types, including `CommandArities.cs` and `ObservableCollectionTracker.cs`.
 
-⚙ `Src/Core/VeloxDev.Core.Test/MVVM/` — the behavioural contract, including `CommandSignatureTests`, `CommandArityTests`, `TypedCommandEventTests`, `VeloxCommandLifecycleTests`, `VeloxCommandCompletionTests`, `CommandSignatureDiagnosticsTests` and `CommandAllocationTests`.
+⚙ `Src/Test/Unit/Core/VeloxDev.Core.Test/MVVM/` — the behavioural contract, including `CommandSignatureTests`, `CommandArityTests`, `TypedCommandEventTests`, `VeloxCommandLifecycleTests`, `VeloxCommandCompletionTests`, `CommandSignatureDiagnosticsTests` and `CommandAllocationTests`.

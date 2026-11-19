@@ -53,7 +53,7 @@
 ### `[AgentContext]` 的四条硬规则（读代码得出，不是读注释得出）
 
 1. **说明不沿继承链或接口下沉。** 类型/成员上的 `[AgentContext]` 在编译期就落到它自己那个目录节点上，运行期没有「继承」这一步：`AgentContextReader.EntryFor(member)` 按 `member.DeclaringType` 查节点（`AgentContextReader.cs` 的 `EntryFor(MemberInfo)`），所以继承来的成员读的是**基类**那条说明，派生类型不会多出一份；属性/方法也不扫接口。命名空间里已经不存在 `inherit:` 参数 —— 说明本就不从元数据读取。
-2. **有语言回退，且是「整目标、全有或全无」。** 规则集中在 `AgentTextSelection.Select`（`AgentText.cs`）：先取 `Language == language` 的；若**一条都没有**且请求的不是 `English`，则整体改取 `English` 的那些。所以「同语言命中 ≥ 1 条」时**不会**混入英文；`English` 自身无处可退。测试 `Src/Core/VeloxDev.Core.Test/AI/AgentContextReaderTests.cs`：`..._FallsBackToEnglish`、`..._FallbackIsAllOrNothing`、`..._EnglishRequestNeverFallsBack`、`..._NoEnglishEither_ReturnsEmpty`。**各助手走 `AIContextMembers.DescriptionsFor(node, language)`（`AIContextMembers.cs`），按 `MemberInfo`/`Type` 进来的走 `AgentContextReader`** —— 两条都只是转调 `Select`，规则不再有第二份拷贝，改它只需改 `Select` 一处。
+2. **有语言回退，且是「整目标、全有或全无」。** 规则集中在 `AgentTextSelection.Select`（`AgentText.cs`）：先取 `Language == language` 的；若**一条都没有**且请求的不是 `English`，则整体改取 `English` 的那些。所以「同语言命中 ≥ 1 条」时**不会**混入英文；`English` 自身无处可退。测试 `Src/Test/Unit/Core/VeloxDev.Core.Test/AI/AgentContextReaderTests.cs`：`..._FallsBackToEnglish`、`..._FallbackIsAllOrNothing`、`..._EnglishRequestNeverFallsBack`、`..._NoEnglishEither_ReturnsEmpty`。**各助手走 `AIContextMembers.DescriptionsFor(node, language)`（`AIContextMembers.cs`），按 `MemberInfo`/`Type` 进来的走 `AgentContextReader`** —— 两条都只是转调 `Select`，规则不再有第二份拷贝，改它只需改 `Select` 一处。
 3. **`HasAgentContext` 不看语言**（`AgentContextReader.HasAgentContext`）：只要有任何语言的标注就为 true，与 `GetContexts` 的选取无关。
 4. **一个语言可写多条，全部返回且保序**（`AllowMultiple = true`，`AgentContextAttribute.cs` 的 `AttributeUsage`；测试 `.../AgentContextReaderTests.cs` 断言 English 命中多条）。`Context` 默认空串，所以 `[AgentContext(AgentLanguages.English)]` 合法但什么都不说明。
 
@@ -89,7 +89,7 @@ SetProperty(obj, "Name", v)     → 节点（CanWrite 标志）→ 访问器 Set
 
 ## 四、不变量
 
-1. **`CanExecute` 只被报告，从不拦截。** `AgentCommandDiscoverer.Execute` 不查 `CanExecute`，消费方也不查 —— `AgentObjectToolkit` 把 `CanExecute` 原样放进 `ListCommands` 的输出，而 `ExecuteCommand` 直接调 `Execute`（`.../Agent/AgentObjectToolkit.cs` 的 `ListCommands` / `ExecuteCommand`）。要拦只能由工具层自己拦。**生成器那条闸不存在**：`WriteTryExecuteCommand` **不**发 `if (!c.CanExecute(parameter)) return false;`（那与 `IAIContextAccessor.CanExecuteCommand` 的注释直接矛盾）。按不变量不查，`Src/Core/VeloxDev.Core.Test/AI/AgentCommandDiscovererTests.cs` 的 `CanExecute_IsReportedAndNeverEnforced` 锁住。
+1. **`CanExecute` 只被报告，从不拦截。** `AgentCommandDiscoverer.Execute` 不查 `CanExecute`，消费方也不查 —— `AgentObjectToolkit` 把 `CanExecute` 原样放进 `ListCommands` 的输出，而 `ExecuteCommand` 直接调 `Execute`（`.../Agent/AgentObjectToolkit.cs` 的 `ListCommands` / `ExecuteCommand`）。要拦只能由工具层自己拦。**生成器那条闸不存在**：`WriteTryExecuteCommand` **不**发 `if (!c.CanExecute(parameter)) return false;`（那与 `IAIContextAccessor.CanExecuteCommand` 的注释直接矛盾）。按不变量不查，`Src/Test/Unit/Core/VeloxDev.Core.Test/AI/AgentCommandDiscovererTests.cs` 的 `CanExecute_IsReportedAndNeverEnforced` 锁住。
 2. **`CanExecute` 的实参恒为 `null`**（`AgentCommandDiscoverer.cs` 的 `DiscoverCommands` 与 `CanExecuteCommand`）—— 命令的 `ParameterType` 完全不参与。后果：需要非空参数才返回 `true` 的命令被报成 `canExecute: false`（假阴）。
 3. **命令名规范化单向且大小写敏感**：`name.EndsWith("Command") ? name : name + "Command"`（`AgentCommandDiscoverer.NormalizeCommandName`）。发现时给的是**原始属性名**（`"SaveCommand"`），执行时 `"Save"` 与 `"SaveCommand"` 都行，但 `"savecommand"` 会被拼成 `"savecommandCommand"` 然后找不到。
 4. **`[AgentContext]` 的语言参数占了位置参数第一位**（`AgentContextAttribute.cs` 的 `AgentContextAttribute` 构造），所以写不出 `[AgentContext("说明")]`（字符串撞 `AgentLanguages`，编译不过）。官方写法是 `[AgentContext(AgentLanguages.Chinese, "说明")]`，全仓一致，例 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Common/IWorkflowViewModel.cs` 的接口级 `[AgentContext]`。
@@ -195,9 +195,9 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 ### 验证在哪
 
-- `Src/Core/VeloxDev.Core.Test/AI/AIContextTreeTests.cs` —— 注册、目录列举、条目查找、访问器读写与执行。含**反向对照**：一个没被标注的类型必须查不到路径也没有访问器 —— 目录一旦放宽收录规则，那条会先红。
-- `Src/Core/VeloxDev.Core.Test/AI/AIContextTreeGeneratorTests.cs` —— 走 `GeneratorProbe` 驱动生成器，断言提升名、命令名、重载诊断、以及没有 Agent 面时**不产出**。
-- `Src/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/AgentContextTreeParityTests.cs` —— **最重要的一条**（运行时遍历 `Framework/` 下每个类型条目 × 各语言）：目录渲染与反射渲染逐字对比。它是「换数据源不换输出」的唯一保证。**块数不可静态复核** —— 2026-10-08 实测 **226 个块**（失败信息里直接报 `8 of 226`），以测试实际遍历为准。
+- `Src/Test/Unit/Core/VeloxDev.Core.Test/AI/AIContextTreeTests.cs` —— 注册、目录列举、条目查找、访问器读写与执行。含**反向对照**：一个没被标注的类型必须查不到路径也没有访问器 —— 目录一旦放宽收录规则，那条会先红。
+- `Src/Test/Unit/Core/VeloxDev.Core.Test/AI/AIContextTreeGeneratorTests.cs` —— 走 `GeneratorProbe` 驱动生成器，断言提升名、命令名、重载诊断、以及没有 Agent 面时**不产出**。
+- `Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/AgentContextTreeParityTests.cs` —— **最重要的一条**（运行时遍历 `Framework/` 下每个类型条目 × 各语言）：目录渲染与反射渲染逐字对比。它是「换数据源不换输出」的唯一保证。**块数不可静态复核** —— 2026-10-08 实测 **226 个块**（失败信息里直接报 `8 of 226`），以测试实际遍历为准。
 
   ⚠ **它有一个盲点，直到 2026-10-08 才补上**：oracle（`ReflectionContextOracle`）调的是 `AgentContextCollector.GetAgentContext(MemberInfo, …)`，而那一路当时对**提升字段**永远返回空（见 §七·十三）—— 于是 oracle 的「提升字段」那一趟是死代码，`Framework/` 里又没有这种形状的组件（没有一个 `[VeloxProperty]` 字段带 `[AgentContext]`），两件事叠在一起让 `Class` 表**把提升属性列两遍**这个缺陷在绿着的 parity 下活了很久。**parity 绿 ≠ 这一档被验过**：它只验 Framework 根，且 oracle 自己也曾是错的。修 §七·十三 时只修一半，parity 立刻以 `8 of 226` 报出来 —— 那一刻它才真正开始守这一档。
 
@@ -446,7 +446,7 @@ Agent 在一处列表里读到 `List<X>`，去问 X 是「不在目录里」。�
 **症状**：宿主**挂起**，且只在并发下出现 —— 所以它看起来像测试抖动。实测复现、挂起转储与定位手法记在
 [`VeloxDev.Core.Extension.Test/architecture.md`](../VeloxDev.Core.Extension.Test/architecture.md) §五。
 
-**守卫**：`Src/Core/VeloxDev.Core.Test/AI/AIContextTreeLockingTests.cs`（`[DoNotParallelize]`）。
+**守卫**：`Src/Test/Unit/Core/VeloxDev.Core.Test/AI/AIContextTreeLockingTests.cs`（`[DoNotParallelize]`）。
 它**不**去赛两个 `PathFor` —— 那个窗口在索引建好之后就永久关闭，赛出来的用例无论锁持没持都会绿，是空验证。
 它把环直接摆出来：探针分片的 `TypeNames` 被读到时放行另一个线程去做一次普通 `PathFor`（**那正是要拿这把锁的操作**），
 再看那次查找能否在本次读取返回之前完成。持锁的写法下它 **5 秒超时后断言失败**（不是挂起整轮），撤掉修复即红。
@@ -499,7 +499,7 @@ Agent 在一处列表里读到 `List<X>`，去问 X 是「不在目录里」。�
 - `WorkflowAgentScope.ContextKey` 把选中集 revision 与 `Version`、`UsageBand` 分开打包（24/24/3 位）；selection 改 → 上下文重渲染，但 `Version` 不变 → `BuildDynamicTools` 不重建工具。**这是「不加工具」的机制保证**。
 - `RenderEnvelope` 在闸门之前调 `AppendAgentSelection`；标题 `## Current Node Selection` / `## 当前选中的节点`，最多列 64 个身份，计数仍是全量。
 - 渲染仍然只读快照，不回头读 `tree.Nodes`（避免在 agent 线程遍历 UI 集合）；删除、重父、从 `Nodes` 移除、集合清空/替换由上面的订阅在 UI 线程上驱动。
-- 守卫：`Src/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/WorkflowAgentSelectionTests.cs`（并集/去重/重复注册不计数/跨树分别注册/未挂载跳过/空集为 0/null 集合为 0/静默 -1/版本不变/工具不变/上下文重渲染/同集复用/语言/快照/截断/单删/多删保序/未选中不重渲染/删除后自释放/跨树移除/删除命令/父变更/父树更换/集合移除/集合清空/Deleted 事件/Nodes 集合替换）。
+- 守卫：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/Agent/Workflow/WorkflowAgentSelectionTests.cs`（并集/去重/重复注册不计数/跨树分别注册/未挂载跳过/空集为 0/null 集合为 0/静默 -1/版本不变/工具不变/上下文重渲染/同集复用/语言/快照/截断/单删/多删保序/未选中不重渲染/删除后自释放/跨树移除/删除命令/父变更/父树更换/集合移除/集合清空/Deleted 事件/Nodes 集合替换）。
 
 ### 八点五、Demo 接线：Ctrl+click 与卡片光环（2026-10-18）
 

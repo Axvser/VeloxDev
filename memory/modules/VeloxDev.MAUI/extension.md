@@ -46,7 +46,7 @@
 
 **为什么不能反过来改键**：`RegisterInterpolator` 是 `AddOrUpdate`、**last-writer-wins**（Core `InterpolatorCore.RegisterInterpolator`），把键写成 `typeof(System.Drawing.RectangleF)` 会**顶掉 Core 的 `RectangleFSampler`** —— 一个适配器版本静默替换 Core 的实现，之后两家各自演化。**同名不冲突**（注册键就是 `Type`），**同一个 `Type`** 才冲突。
 
-**下次遇到同形状的错**（注册键的 `Type` 与采样器解箱的类型不是同一个）：`dotnet build` **不会报错** —— 但**采样器套件现在会红**（2026-09-20 补的网）：`Examples/Transition/AUTO TEST/Samplers/SamplerKeyTests.cs` 把本家 `Interpolator` 的静态构造真跑起来，再拿**真实注册表**问「条目声明的类型解析到谁」，与条目写的采样器逐字比（`EveryEntry_ValueTypeResolvesToTheSamplerItNames`）。依据是条目里的 `ValueType` 字段（= 属性的**声明类型**，也就是注册键）。**新加采样器时不用额外写什么** —— 那个字段由 `EntryFactory.Create` / 各家 `Entry(...)` 从 `property.PropertyType` 自动填。
+**下次遇到同形状的错**（注册键的 `Type` 与采样器解箱的类型不是同一个）：`dotnet build` **不会报错** —— 但**采样器套件现在会红**（2026-09-20 补的网）：`Src/Test/AutoTest/Samplers/SamplerKeyTests.cs` 把本家 `Interpolator` 的静态构造真跑起来，再拿**真实注册表**问「条目声明的类型解析到谁」，与条目写的采样器逐字比（`EveryEntry_ValueTypeResolvesToTheSamplerItNames`）。依据是条目里的 `ValueType` 字段（= 属性的**声明类型**，也就是注册键）。**新加采样器时不用额外写什么** —— 那个字段由 `EntryFactory.Create` / 各家 `Entry(...)` 从 `property.PropertyType` 自动填。
 
 完整的后果链在 `architecture.md` §五·1。
 
@@ -79,7 +79,7 @@
 1. 那些文件**靠命名空间嵌套**白拿 Core 的类型（`architecture.md` §1.1）。挪走会一次性打断对 `IWorkflowTreeViewModel`、`Viewport`、`WorkflowSurfaceMath` 的全部引用，报错是一整串「找不到类型」，看不出是命名空间的事。
 2. 宿主的 XAML `assembly=VeloxDev.MAUI` 与这个命名空间是**一对**约定，七家共享。只改一家 = 七家不再同形。
 
-**官方做法**：CS0433 是**已知代价**，用别名/反射绕（`Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs` 的 `Entry<TValue>`）。
+**官方做法**：CS0433 是**已知代价**，用别名/反射绕（`Src/Test/AutoTest/Samplers/MauiEntries.cs` 的 `Entry<TValue>`）。
 
 ### 2.7 「给 `WorkflowNodeDragBehavior` 补一个 `PointerGestureRecognizer`」
 
@@ -104,8 +104,8 @@
 1. **写采样器**：`TransitionSystem/Samplers/XxxSampler.cs`，照 `PointFSampler.cs` 的形状 —— `NormalizeStart`/`NormalizeEnd` 原样返回，`InsertFrame` 里解**MAUI**的类型。值类型是引用型或带内部结构时，草稿放 `ref object? working`（`ShadowSampler.cs` 的复用形状），**不要把状态挂到采样器字段上**（注册表是进程级的）。
 2. **注册**：`TransitionSystem/Interpolator.cs` 的静态构造加一行。**这一步唯一要核的是「键的类型 == 采样器里解的类型」** —— 本文件没有 `using System.Drawing`，所以短名天然取 MAUI 那一侧；要用 `System.Drawing` 的类型就**逐字全限定**（见 §2.1、`architecture.md` §五·1）。
 3. **（可选）表达式重载**：需要 `anim.Property(x => x.Xxx, value)` 有编译期类型约束时，在 `TransitionSystem/Transition.cs` 加一段；不需要就靠第一个泛型 `Property<TValue>` 兜底。除 `Transform` 外，体都是「`state.SetValue` + 可选 `state.SetOptions`」两行。
-4. **验收登记**：`Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs` 里 `Entry<...>("XxxSampler", rule, start, end, selector, expected)` 补一条闭式解，并在私有 `Target` 类上补一条同类型属性。**不登记会红**：`SamplerCoverageTests.EveryShippedSampler_IsAccountedFor` 反射产品程序集里所有 `ISampler` 类，要求每个都在 `SamplerRegistry.Entries` 或 `UnreachableSamplers.All` 里。
-5. **驱动不起来的**（端点值要真 MAUI 运行时）：登记到 `Samplers/UnreachableSamplers.cs`（`SamplerType` + `RepresentativeValue` + `Reason` 的形状），再到 `Examples/Transition/AUTO TEST/Conformance/MauiConformance.cs` 补一条。**这条名册是可证伪的**：`EveryUnreachableSampler_NeedsAValueThatCannotBeBuiltHere` 会真去造那个值，造得出来测试就失败。
+4. **验收登记**：`Src/Test/AutoTest/Samplers/MauiEntries.cs` 里 `Entry<...>("XxxSampler", rule, start, end, selector, expected)` 补一条闭式解，并在私有 `Target` 类上补一条同类型属性。**不登记会红**：`SamplerCoverageTests.EveryShippedSampler_IsAccountedFor` 反射产品程序集里所有 `ISampler` 类，要求每个都在 `SamplerRegistry.Entries` 或 `UnreachableSamplers.All` 里。
+5. **驱动不起来的**（端点值要真 MAUI 运行时）：登记到 `Samplers/UnreachableSamplers.cs`（`SamplerType` + `RepresentativeValue` + `Reason` 的形状），再到 `Src/Test/AutoTest/Conformance/MauiConformance.cs` 补一条。**这条名册是可证伪的**：`EveryUnreachableSampler_NeedsAValueThatCannotBeBuiltHere` 会真去造那个值，造得出来测试就失败。
 6. **只在 MAUI 有的类型**（`PointF`/`SizeF`/`RectF`/`Shadow` 这一族）：只有本家要加这几步，别家不动。判据是**键的类型**，不是类名。
 
 ### 3.2 新增一个附着行为
@@ -138,7 +138,7 @@
 
 1. **改任何一个公开类型名**（`ViewPool`、`ViewSourcePipeline`、`ViewFactory`、`ViewContainer`、`WorkflowSurfaceBehavior`、`WorkflowMinimapOverlay`、`WorkflowLinkOverlay`、`WorkflowSlotLayoutBehavior`、`WorkflowNodeDragBehavior`、`WorkflowSlotConnectionBehavior`、`WorkflowEvents`）→ **七家各有一份同名类型，同在一个命名空间**（`architecture.md` §1.2）。漏改的症状只在「同时引用两家」的项目里出现（CS0433）。至少检查：`Src/Templates/VeloxDev.MAUI.Templates/working/content/` 下带 `assembly=VeloxDev.MAUI` 的 XAML、`Examples/Workflow/MAUI*/` 的 XAML、`skills/veloxdev-create-workflow/references/gui/maui.md`。
 2. **改公开附着属性名** → 同上：模板包（各模板）、MAUI workflow demo 的 XAML、`ViewPool` 的 `ItemsSource`/`TemplateSelector` 用法，以及其它六家的同名属性。
-3. **加/删一个采样器类** → `Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs`（闭式解）或 `UnreachableSamplers.cs`（造不出端点值）+ `Conformance/MauiConformance.cs`（真 app 侧）。**覆盖率测试读的是产品程序集里的 `ISampler` 类型集合**，所以新类不被登记就一定红；反过来，登记表按**类名**取类型（`MauiEntries.Entry<TValue>` 的程序集限定反射）。
+3. **加/删一个采样器类** → `Src/Test/AutoTest/Samplers/MauiEntries.cs`（闭式解）或 `UnreachableSamplers.cs`（造不出端点值）+ `Conformance/MauiConformance.cs`（真 app 侧）。**覆盖率测试读的是产品程序集里的 `ISampler` 类型集合**，所以新类不被登记就一定红；反过来，登记表按**类名**取类型（`MauiEntries.Entry<TValue>` 的程序集限定反射）。
 4. **动 `#if WINDOWS`** → 记住本家有两个 TFM（中立 + windows），多处分支会编出**两份不同的实现**；而 demo 的 Windows TFM 是**条件的**（`Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj` 的 `IsOSPlatform('windows')`），非 Windows 机器上这些分支根本不参与编译。改完至少在一台 Windows 上编一次。
 5. **动 `MauiVersion` 或 Windows TFM 的下限** → 会整体决定「`#if WINDOWS` 的代码能不能编进库」（csproj 顶部注释记着 `10.0.0` 那版就是这么丢的）。同时 `Microsoft.WindowsAppSDK` 的版本要与消费 app 里 MAUI 解析到的那个对齐。
 6. **不需要联动的**：生成器/分析器（本项目不引用它，`VeloxDev.MAUI.csproj` 的引用项）；`Docs/`（那套文档站点**不在本仓库**）。

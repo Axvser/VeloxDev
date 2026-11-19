@@ -36,7 +36,7 @@
 | # | 错的捷径 | 为什么错 | 官方做法 | 依据 |
 |---|---|---|---|---|
 | 1 | 在 `Samplers/` 加一个 `ISampler` 类就以为生效了 | 注册表是唯一开关；没登记 = 该采样器**永不运行**，而库里没有任何东西会报错 | 同时在 `Interpolator` 的静态构造里加一行 | `TransitionSystem/Interpolator.cs` 的静态构造函数 |
-| 2 | 把注册代码写在采样器自己的文件里 / `App` 里 / `Main` 里 | 没人保证它会跑在第一个 `new Transition<T>()` 之前；`RegisterInterpolator` 是**末位胜出**，谁先谁后直接改解析结果 | 只在静态构造里集中登记 | Core `Effects/Transition.cs` 的字段初始化器 `protected TInterpolatorCore interpolator = new();`；`Src/Core/VeloxDev.Core.Test/TransitionSystem/InterpolatorCoreTests.cs` 的 `RegisterInterpolator_OverwritesExisting` |
+| 2 | 把注册代码写在采样器自己的文件里 / `App` 里 / `Main` 里 | 没人保证它会跑在第一个 `new Transition<T>()` 之前；`RegisterInterpolator` 是**末位胜出**，谁先谁后直接改解析结果 | 只在静态构造里集中登记 | Core `Effects/Transition.cs` 的字段初始化器 `protected TInterpolatorCore interpolator = new();`；`Src/Test/Unit/Core/VeloxDev.Core.Test/TransitionSystem/InterpolatorCoreTests.cs` 的 `RegisterInterpolator_OverwritesExisting` |
 | 3 | 主题转换器做成单例 / `internal` / 带参构造 | 生成器**内联** `((IThemeValueConverter)Activator.CreateInstance(typeof(TConverter))!).Convert(...)`，所以「public + 无参」是**运行期**要求；`ThemeConfigAttribute` 只约束 `where TConverter : class, IThemeValueConverter`（没有 `new()`），错的写法**编译得过** | 每个转换器都写 `public class` + 隐式无参构造 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs` 的 `Activator.CreateInstance`；`Src/Core/VeloxDev.Core/DynamicTheme/ThemeConfigAttribute.cs` |
 | 4 | 在 `VeloxDev.DynamicTheme` 命名空间里用短名 `BrushConverter` / `ColorConverter` / `ThicknessConverter` / `CornerRadiusConverter` | 这四个名字本文件里也有，短名解析到**本项目**那一个，且不报错，转换结果只是悄悄不对 | 要用 WPF 自带的那个就全限定：`new System.Windows.Media.BrushConverter()` | `DynamicTheme/ThemeValueConverters.cs` 里 `BrushConverter`/`ObjectConverter` 的三处 `new System.Windows.Media.BrushConverter()` |
 | 5 | 新附着行为放进别的命名空间（哪怕更合理的名字） | 宿主 XAML 的 `xmlns` 写的是 `clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF`，换命名空间 = XAML 找不到，**且不报错** | 命名空间固定为 `VeloxDev.WorkflowSystem.AttachedBehaviors` | 该命名空间在 Core 里没有、七家适配器各声明一次（`git grep -l "namespace VeloxDev.WorkflowSystem.AttachedBehaviors"`）；宿主写法见 `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/TreeView.xaml` 的 `xmlns:behaviors` |
@@ -45,7 +45,7 @@
 | 8 | 用静态 `Dictionary<element, state>` 存每元素状态 | 会漏 `Detach` 时的清理，多个同类型元素之间还会串 | 私有附着 DP `"State"`（三个行为的既有形） | `WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` 各自的 `StateProperty` |
 | 9 | 以为重复置 `IsEnabled="True"` 会叠加订阅 | 每个 `OnIsEnabledChanged` 都**先 `Detach` 再 `Attach`**，并 `ClearValue(StateProperty)` 顺带丢状态 | 直接依赖这个幂等性 | `WorkflowSurfaceBehavior.OnIsEnabledChanged`（`Attach` 第一行 `Detach(control)`）、`Detach` 末尾的 `ClearValue(StateProperty)` |
 | 10 | 把 `WorkflowSurfaceBehavior.Refresh(host)` 当「总是会重算」用 | 第一行就被 `IsEnabled` 挡掉：没打开开关时它**什么也不做、不抛** | 先确认开关已开，再调 | `WorkflowSurfaceBehavior.Refresh` 第一行的 `if (!GetIsEnabled(host)) return;` |
-| 11 | 改采样器类名（如 `PointSampler` → `WpfPointSampler`）只改文件 | 测试工程按**字符串**反射取类型（`GetType($"VeloxDev.Adapters.NativeSamplers.{samplerName}", throwOnError: true)`），编译不报错，测试运行时才炸 | 改名要同步 `WpfEntries.cs` 里的字符串 | `Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs` 的 `CrossAdapter` |
+| 11 | 改采样器类名（如 `PointSampler` → `WpfPointSampler`）只改文件 | 测试工程按**字符串**反射取类型（`GetType($"VeloxDev.Adapters.NativeSamplers.{samplerName}", throwOnError: true)`），编译不报错，测试运行时才炸 | 改名要同步 `WpfEntries.cs` 里的字符串 | `Src/Test/AutoTest/Samplers/WpfEntries.cs` 的 `CrossAdapter` |
 | 12 | 以为登记的先后有意义；或随手登记一个具体类型 | 顺序无意义（精确命中优先），但**登记基类型会接住整族**：`typeof(Brush)`、`typeof(Transform)`、`typeof(Effect)` 就是这种「一登记一个家族」的写法。最后一条是 2026-09-20 补的 —— WPF 自己的 `UIElement.Effect` DP 声明成 `Effect`，注册具体类型会让它静默 `Unsampled` | 登记基类型时，把子类型差异在采样器内部写完：能插的插，插不了（异型效果）就**如实交出端点**而不是造替身（代价样貌见 `Samplers/TransformSampler.cs`、`Samplers/DropShadowEffectSampler.cs`） | `TransitionSystem/Interpolator.cs` 静态构造函数里的 `RegisterInterpolator(typeof(Brush)/typeof(Transform)/typeof(Effect), …)` |
 | 13 | 想「把两条 `NoWarn` 合起来」于是只改一行、或新增一行 | 同名 MSBuild 属性按序求值、**后者覆盖前者**。旧写法是两条（`1573`、`1591`），实际只有 `1591` 生效 | 写成一条分号分隔的列表 —— **现状已是** `NoWarn` `1573;1591`（`VeloxDev.WPF.csproj` 的 `NoWarn`），别再拆行 | `VeloxDev.WPF.csproj` 的 `NoWarn`；正确形见 `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `NoWarn` |
 
@@ -57,7 +57,7 @@
 
 1. **建文件** `TransitionSystem/Samplers/XxxSampler.cs`，命名空间 `VeloxDev.Adapters.NativeSamplers`，实现 `ISampler`。端点约定：`t == 0` / `t == 1` 原样交出调用方给的起点/终点实例（范式见 `TransitionSystem/Samplers/TransformSampler.cs`）。
 2. **登记**：`TransitionSystem/Interpolator.cs` 静态构造函数加一行 `RegisterInterpolator(typeof(X), new XxxSampler());`。
-3. **补验证表**（**最容易漏的一步**）：`Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs` 加 ① 私有 `Target` 类上的一条属性，② 一条 `Entry(CrossAdapter("XxxSampler"), SamplerRule.Xxx, start, end, selector, t => …)`，③ 放进 `All`。漏了这三步不会在库里报错，但 `EveryShippedSampler_IsAccountedFor` 会红 —— 判定是**反射**所有 `VeloxDev.*` 程序集里的 `ISampler`（`Samplers/SamplerCoverageTests.cs` 的 `ShippedSamplers`）再与 `SamplerRegistry.Entries` 求差，而 `Entries` 的传递链是 `SamplerRegistry.Entries` → `AdapterSamplerEntries.All` → `WpfEntries.All`。
+3. **补验证表**（**最容易漏的一步**）：`Src/Test/AutoTest/Samplers/WpfEntries.cs` 加 ① 私有 `Target` 类上的一条属性，② 一条 `Entry(CrossAdapter("XxxSampler"), SamplerRule.Xxx, start, end, selector, t => …)`，③ 放进 `All`。漏了这三步不会在库里报错，但 `EveryShippedSampler_IsAccountedFor` 会红 —— 判定是**反射**所有 `VeloxDev.*` 程序集里的 `ISampler`（`Samplers/SamplerCoverageTests.cs` 的 `ShippedSamplers`）再与 `SamplerRegistry.Entries` 求差，而 `Entries` 的传递链是 `SamplerRegistry.Entries` → `AdapterSamplerEntries.All` → `WpfEntries.All`。
 4. **命名空间不能换**：新类型的名字若与 Core 或别家适配器撞名，`VeloxDev.Adapters.NativeSamplers` 是唯一能让它编得过去的位置（七家都用这个名字，所以同时引用两家的工程必然 CS0433，绕法就是 `WpfEntries.cs` 的 `CrossAdapter`）。
 5. **同步 `memory/modules/TransitionSystem/adapters/wpf.md`** 的条数与清单。
 
@@ -100,7 +100,7 @@
 
 - [ ] `Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/XxxSampler.cs`
 - [ ] `Src/Adapters/VeloxDev.WPF/TransitionSystem/Interpolator.cs` 静态构造函数里登记（**不登记 = 永不运行**）
-- [ ] `Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs`：`Target` 属性 + 一条 `Entry` + 放进 `All` —— **漏了直接红**
+- [ ] `Src/Test/AutoTest/Samplers/WpfEntries.cs`：`Target` 属性 + 一条 `Entry` + 放进 `All` —— **漏了直接红**
 - [ ] 与 Core / 别家撞名时，命名空间留在 `VeloxDev.Adapters.NativeSamplers`
 - [ ] `memory/modules/TransitionSystem/adapters/wpf.md`（采样器条数与清单；同时引用两家的探针工程要不要加别名）
 - [ ] 这条类型在别家也该有时：各家的 `Interpolator.cs` 各加一份 —— **各家的采样器数量本来就不等**（见 `memory/modules/TransitionSystem/adapters/wpf.md`），别按 WPF 的数去猜

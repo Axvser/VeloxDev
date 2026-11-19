@@ -50,7 +50,7 @@
 | # | 错的捷径 | 为什么错 | 官方做法 | 依据 |
 |---|---|---|---|---|
 | 1 | 在 `Samplers/` 加一个 `ISampler` 类就以为生效了 | 登记表是唯一开关；没登记 = 该采样器**永不运行**，且库里没有任何东西会报错 | 同时在 `Interpolator` 的静态构造里加一行 | `TransitionSystem/Interpolator.cs` 的静态构造 |
-| 2 | 登记了但忘了改测试表 | 不会编译错，运行到 `EveryShippedSampler_IsAccountedFor` 才红：它反射所有 `VeloxDev.*` 程序集里的 `ISampler`，再与 `SamplerRegistry.Entries` ∪ `UnreachableSamplers.All` 求差 | `Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 加一条 `Entry(...)`（`All` 属性、`Adapter` 常量） | `Samplers/SamplerCoverageTests.cs` 的 `EveryShippedSampler_IsAccountedFor`；`SamplerRegistry.cs` → `AdapterSamplerEntries.All` → `JaliumEntries.All` |
+| 2 | 登记了但忘了改测试表 | 不会编译错，运行到 `EveryShippedSampler_IsAccountedFor` 才红：它反射所有 `VeloxDev.*` 程序集里的 `ISampler`，再与 `SamplerRegistry.Entries` ∪ `UnreachableSamplers.All` 求差 | `Src/Test/AutoTest/Samplers/JaliumEntries.cs` 加一条 `Entry(...)`（`All` 属性、`Adapter` 常量） | `Samplers/SamplerCoverageTests.cs` 的 `EveryShippedSampler_IsAccountedFor`；`SamplerRegistry.cs` → `AdapterSamplerEntries.All` → `JaliumEntries.All` |
 | 3 | 改采样器类名只改文件 | 测试按**字符串**反射取类型：`Type.GetType($"VeloxDev.Adapters.NativeSamplers.{name}, {JaliumAssembly}", throwOnError: true)`。编译不报错，**测试运行时才炸** | 改名要同步 `JaliumEntries.cs` 里的字符串 | `JaliumEntries` 的类型解析表达式（`throwOnError: true`） |
 | 4 | 把登记代码写在采样器自己的文件里 / `App` 里 / `Main` 里 | 没人保证它会跑在第一个 `new Transition<T>()` 之前；`RegisterInterpolator` 是**末位胜出** | 只在静态构造里集中登记 | Core `Effects/Transition.cs` 的字段初始化器 |
 | 5 | 照 WPF 的样子「登记基类型接住整族」，于是给 `TranslateTransform` / `RotateTransform` / `TransformGroup` 各登记一条 | 这家的姿态是**只登记基类型**（`typeof(Transform)`）＋ 精确类型的少数几条；多余登记会被精确命中抢先 | 只登记 `Transform` 与 `Media3D.Transform3D` 两条 | `TransitionSystem/Interpolator.cs` 静态构造里的那两条 |
@@ -69,7 +69,7 @@
 
 1. **建文件** `TransitionSystem/Samplers/XxxSampler.cs`，命名空间 **`VeloxDev.Adapters.NativeSamplers`**（七家共用这个名字），实现 `ISampler`。端点约定：`t == 0` / `t == 1` 原样交出调用方给的起点/终点实例（范式见 `TransitionSystem/Samplers/TransformSampler.cs`）。
 2. **登记**：`TransitionSystem/Interpolator.cs` 的静态构造加一行 `RegisterInterpolator(typeof(X), new XxxSampler());`。要登记的是**基类型**还是**精确类型**，照 §二·5 的姿态选。
-3. **补验证表**（**最容易漏的一步**）：`Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 加 ① 私有 `Target` 类上的一条属性，② 一条 `Entry("XxxSampler", SamplerRule.…, start, end, x => x.属性, t => 闭式解)`，放进 `All` 属性。漏了不会在库里报错，但 `EveryShippedSampler_IsAccountedFor` 会红。
+3. **补验证表**（**最容易漏的一步**）：`Src/Test/AutoTest/Samplers/JaliumEntries.cs` 加 ① 私有 `Target` 类上的一条属性，② 一条 `Entry("XxxSampler", SamplerRule.…, start, end, x => x.属性, t => 闭式解)`，放进 `All` 属性。漏了不会在库里报错，但 `EveryShippedSampler_IsAccountedFor` 会红。
 4. **可选**：给 `.Property(...)` 加一个对应重载（§三·D），否则调用方只能走泛型 `Property<TValue>`。
 5. **同步 `memory/modules/TransitionSystem/adapters/jalium.md`** 的条数与清单。
 
@@ -85,7 +85,7 @@
 4. **网格/标尺**：改 `workflow-grid-decorator/TemplateClass.cs`（`sealed class : Grid, IWorkflowGridDecorator`），设调色板与 `GridStep` / `MajorLineEvery`。
 5. **端口图形与连接手势**：改 `workflow-slot-view` 的标记与 code-behind（`SlotState` 配色），手势挂 `WorkflowSlotConnectionBehavior`。**没有 `WorkflowPortLayout` 值了** —— 端口位置是量测出来的。
 6. **选择器**：改 `workflow-template-selector/TemplateClass.cs`（`sealed class : DataTemplateSelector`，一组 `DataTemplate?` 属性），tree-view 模板的 `Resources` 里构造它并交给 `ViewPool.TemplateSelector`（或由表面行为按资源键设）。
-7. **模板与 Trimmed demo 是镜像**（`Src/Templates/…/working/content/` 与 `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/`），同一笔改两处；改完跑 `Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`（旧的 `verify-jalium-item-templates.ps1` 现在是它的转发器，调用照旧可用）。
+7. **模板与 Trimmed demo 是镜像**（`Src/Templates/…/working/content/` 与 `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/`），同一笔改两处；改完跑 `Src/Test/Harness/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`（旧的 `verify-jalium-item-templates.ps1` 现在是它的转发器，调用照旧可用）。
 
 ### C. 让宿主接上适配器
 
@@ -118,7 +118,7 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 
 - [ ] `Src/Adapters/VeloxDev.Jalium/TransitionSystem/Samplers/XxxSampler.cs`（命名空间 `VeloxDev.Adapters.NativeSamplers`）
 - [ ] `Src/Adapters/VeloxDev.Jalium/TransitionSystem/Interpolator.cs` 的静态构造登记（**不登记 = 永不运行**）
-- [ ] `Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs`：`Target` 属性 + 一条 `Entry`（**漏了直接红**）
+- [ ] `Src/Test/AutoTest/Samplers/JaliumEntries.cs`：`Target` 属性 + 一条 `Entry`（**漏了直接红**）
 - [ ] 要进流的 `.Property(...)` 重载：`Src/Adapters/VeloxDev.Jalium/TransitionSystem/Transition.cs`
 - [ ] 与 Core / 别家撞名时，命名空间留在 `VeloxDev.Adapters.NativeSamplers`（绕法是 `JaliumEntries` 里按程序集限定名反射的那条）
 - [ ] `memory/modules/TransitionSystem/adapters/jalium.md`（条数与清单）
@@ -131,7 +131,7 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 - [ ] **表面 / 卡片 / 连线 / 网格 / 选择器**：`Src/Templates/VeloxDev.Jalium.Templates/working/content/` 下对应条目（`workflow-tree-view` / `-node-view` / `-slot-view` / `-link-view` / `-grid-decorator` / `-minimap-overlay` / `-template-selector`）与镜像 `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/`（**同形，两处一起改**）。
 - [ ] 若新表面要池化：在 `PART_Canvas` 上同时给 `ViewPool.ItemsSource` 与 `ViewPool.TemplateSelector`（**两个都要**）
 - [ ] 两套 demo 都要过：`Examples/Workflow/Jalium/Demo/`（自己写的 `NodeEditorSurface : Canvas`，不接适配器行为）与 `Examples/Workflow/Jalium Trimmed/Demo/`（标记 + 行为那条）
-- [ ] 跑 `Src/Verification/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`（旧的 `verify-jalium-item-templates.ps1` 是它的转发器）
+- [ ] 跑 `Src/Test/Harness/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`（旧的 `verify-jalium-item-templates.ps1` 是它的转发器）
   - 这个通用校验（2026-10-04 起）能抓到一类**pack 缺陷**：模板引用了自己 pack 未声明的符号 —— 例如 `jalium-v-tree` 若调用 `ColorConverter.ConvertFromString("TemplateLinkColor")` 而 tree pack 无 `linkColor` 符号，字面量会直达运行期。模板现硬编码颜色，七个 tree pack 的参数集保持一致。
 - [ ] `skills/veloxdev-create-workflow/references/gui/jalium.md`
 - [ ] `memory/modules/WorkflowSystem/adapters/jalium.md`

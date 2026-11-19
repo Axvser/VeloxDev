@@ -62,7 +62,7 @@
 1. `TransitionSystem/Samplers/XxxSampler.cs`，`namespace VeloxDev.Adapters.NativeSamplers`，实现 `ISampler` 那几个方法（`PaddingSampler.cs` 是唯一先例）。
 2. 在 `TransitionSystem/Interpolator.cs` 的静态构造里 `RegisterInterpolator(typeof(T), new XxxSampler());`。
 3. 要能被 `Transition` 面用上，可能需要在 `TransitionSystem/Transition.cs` 加 `Property` 重载（先是泛型 `Property<TValue>` 兜底，其后是一组手写重载，`System.Numerics` 那几个在 `#if !NETSTANDARD2_0` 里）。
-4. **必须**给 `Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.All` 加一条 `EntryFactory.Create<...>`：`SamplerCoverageTests` 会反射产品程序集里所有 `ISampler` 与注册表比对，**漏了就直接失败**。
+4. **必须**给 `Src/Test/AutoTest/Samplers/WinFormsEntries.All` 加一条 `EntryFactory.Create<...>`：`SamplerCoverageTests` 会反射产品程序集里所有 `ISampler` 与注册表比对，**漏了就直接失败**。
 5. 闭式解怎么定、`SamplerRule` 该选哪个 —— 见 `memory/modules/TransitionSystem/extension.md`；采样器在本平台的行为差异见 `TransitionSystem/adapters/winforms.md`。
 
 ### 3.3 加一个主题转换器
@@ -110,7 +110,7 @@
 ### 4.3 加一个采样器
 
 - [ ] `TransitionSystem/Samplers/` 新文件 + `Interpolator` 静态构造注册
-- [ ] **`Examples/Transition/AUTO TEST/Samplers/WinFormsEntries.All`** —— 漏了会被 `SamplerCoverageTests` 反射比对直接判失败（`ExpectedAdapterAssemblies` 里必须有 `VeloxDev.WinForms`）
+- [ ] **`Src/Test/AutoTest/Samplers/WinFormsEntries.All`** —— 漏了会被 `SamplerCoverageTests` 反射比对直接判失败（`ExpectedAdapterAssemblies` 里必须有 `VeloxDev.WinForms`）
 - [ ] 若端点值在这个进程里造不出来 → 进 `UnreachableSamplers.All`（**可证伪**的登记，不是垃圾桶）
 - [ ] `AdapterSamplerEntries.cs` **不用改**（聚合器已经引用 `WinFormsEntries.All`）
 - [ ] `TransitionSystem/adapters/winforms.md` 与本文

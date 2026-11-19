@@ -123,20 +123,20 @@ Transition 侧不需要额外处理 —— pacer 的 tick 只调基类 `Fire()`�
 - **对齐方式 = 让体去解自己那条键的类型**：不留 `using System.Drawing;`，解 Maui `RectF`
   （`Samplers/RectFSampler.cs` 的 `InsertFrame` 是 `(RectF)(start ?? new RectF())`）。名字 / 注册键 / 实现就此对齐。
   `System.Drawing.RectangleF` 的覆盖不丢：它由 Core 那条独立承担，纯数据套件里也一直有自己的表项
-  （`Examples/Transition/AUTO TEST/Samplers/CoreSamplerEntries.cs` 的 `new RectangleFSampler()` 条目，标着 `"Core"`）。
+  （`Src/Test/AutoTest/Samplers/CoreSamplerEntries.cs` 的 `new RectangleFSampler()` 条目，标着 `"Core"`）。
 - **反方向不能走**：把键改成 `typeof(System.Drawing.RectangleF)` 会经 `AddOrUpdate` **顶掉 Core 的
   `RectangleFSampler`**（安装是 last-writer-wins，`../extension.md` §二·1）—— 一个适配器版本静默替换 Core 的实现，
   之后两家各自演化。**同一个 `Type` 才会顶，同名不会。**
 - **测试抓不到这类错**：`SamplerCoverageTests` 对的是**采样器类型**集合（反射 vs 两张表），不是 `(键, 采样器)`
-  配对，所以「键与体不符」在库里完全不可见（`Examples/Transition/AUTO TEST/Samplers/SamplerCoverageTests.cs` 的 `EveryShippedSampler_IsAccountedFor`）。
-  这道网在 `Examples/Transition/AUTO TEST/Samplers/SamplerKeyTests.cs`：它先把七家 + Core 的注册入口
+  配对，所以「键与体不符」在库里完全不可见（`Src/Test/AutoTest/Samplers/SamplerCoverageTests.cs` 的 `EveryShippedSampler_IsAccountedFor`）。
+  这道网在 `Src/Test/AutoTest/Samplers/SamplerKeyTests.cs`：它先把七家 + Core 的注册入口
   在这个进程里真跑起来，再问**真实注册表**「条目声明的类型解析到谁」，断言它等于条目写的那条采样器、且接得住该类型的值
   （`EveryEntry_ValueTypeResolvesToTheSamplerItNames`、`EveryEntry_SamplerTheRegistryResolves_AcceptsAValueOfThatKey`）。
   依据是条目的 `ValueType`（声明类型 = 注册键）与 `UnregisteredReason`（`SamplerEntry.cs` 的 `ValueType` 与 `UnregisteredReason`）。
 - **连带要一起动的几处**（都不在 `Src/` 里）：
   1. demo 的 subject 属性用 `MauiRectF`（`Examples/Transition/MAUI/Demo/SamplerSubject.cs` 的 `Register(nameof(AreaF), …)` 与 `AreaF`），
      端点工厂同步（同目录 `SamplerProbe.cs` 的 `RectFSampler` 探针与 `MauiRectF` 端点工厂）；
-  2. 纯数据表 `MauiEntries` 的 `Target.BoundsF` 与端点（`Examples/Transition/AUTO TEST/Samplers/MauiEntries.cs` 的 `Target.BoundsF` 与 `RectFSampler` 条目的端点）——
+  2. 纯数据表 `MauiEntries` 的 `Target.BoundsF` 与端点（`Src/Test/AutoTest/Samplers/MauiEntries.cs` 的 `Target.BoundsF` 与 `RectFSampler` 条目的端点）——
      注意这张表是**按名字反射**到 `VeloxDev.Adapters.NativeSamplers.RectFSampler` 的（`MauiEntries.Entry` 里 `SamplerAssembly.GetType("VeloxDev.Adapters.NativeSamplers.{samplerName}")`），端点类型不对会直接炸；
   3. live 载荷的**类型标签**是 `"RectF"`（`SamplerProbe.cs` 的 `MauiRectF rectF => new("RectF", …)`），`MauiConformance.cs` 的 `new("RectFSampler", "RectF", …)` 同步 ——
      `ConformanceEntry.TypeTag` 的定义就是「产物必须有的类型名」，由 `ConformanceChecks.cs` 的 `live.TypeTag != entry.TypeTag` 检查与 demo 报回的标签逐字比对。

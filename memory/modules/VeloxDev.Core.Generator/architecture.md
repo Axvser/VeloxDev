@@ -166,7 +166,7 @@ context.RegisterSourceOutput(
 
 **多形参走 arity 族**（`Src/Core/VeloxDev.Core/MVVM/CommandArities.cs`）：调用方传的是实参，打包成元组藏在 facade 之后，公开面保持无元组。多形参、无返回值时只能包一层 `async` lambda 从结果入口走（arity 族没有无返回体的公开入口，见 `Writers/CommandWriter.cs` 里 arity 结果通道那一段）。
 
-**强转是运行期的**：传错类型不会静默，但也不是编译错误 —— 它变成一次 `Failed` 执行，`Exception` 是 `InvalidCastException`。机制已从「生成 lambda 里显式强转」变成「强类型属性派生自非强类型 `IVeloxCommand`，基接口的 `object?` 重载始终可达」。`ATypedParameterOfTheWrongType_FailsTheExecutionInsteadOfSilentlyDoingNothing`（`Src/Core/VeloxDev.Core.Test/MVVM/CommandSignatureTests.cs` 的同名测试）钉住了这个代价。
+**强转是运行期的**：传错类型不会静默，但也不是编译错误 —— 它变成一次 `Failed` 执行，`Exception` 是 `InvalidCastException`。机制已从「生成 lambda 里显式强转」变成「强类型属性派生自非强类型 `IVeloxCommand`，基接口的 `object?` 重载始终可达」。`ATypedParameterOfTheWrongType_FailsTheExecutionInsteadOfSilentlyDoingNothing`（`Src/Test/Unit/Core/VeloxDev.Core.Test/MVVM/CommandSignatureTests.cs` 的同名测试）钉住了这个代价。
 
 **thunk 的形参个数同时决定绑到哪个构造入口** —— 让四种形态与 `Task` 那四种**一一对称**（下表是**非强类型**那一路的 ValueTask thunk；强类型那一路走 `Typed*` / `TypedResult*` 构造）：
 
@@ -192,7 +192,7 @@ context.RegisterSourceOutput(
 
 AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间片段 —— 那两处不走 `NamespaceFileSegment()`，走 `Base/AopNames.cs` 的 `Segment()`（算法等价，同样把全局命名空间写成 `"Global"`）。代理类必须与接口**同名同命名空间**，所以 AOP 这套名字只能有一个算法（`AopNames.InterfaceFor` / `ProxyFor`）。
 
-回归守卫：`Src/Core/VeloxDev.Core.Test/MVVM/GlobalNamespaceCommandViewModel.cs` 故意不写命名空间，它一存在，上面两处任何一处回退都会让构建立刻失败。
+回归守卫：`Src/Test/Unit/Core/VeloxDev.Core.Test/MVVM/GlobalNamespaceCommandViewModel.cs` 故意不写命名空间，它一存在，上面两处任何一处回退都会让构建立刻失败。
 
 ### 外层类必须原样带上类型形参
 
@@ -225,8 +225,8 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 |---|---|---|
 | `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` | `ProjectReference` | `PackageReference` |
 | `Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj` | `ProjectReference` | `PackageReference` |
-| `Src/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` | `ProjectReference` | `PackageReference` |
-| `Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj`（**不分 Debug/Release**，见下） | `ProjectReference` | 无（只钉 `Microsoft.CodeAnalysis.CSharp`） |
+| `Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/VeloxDev.Core.Extension.Test.csproj` | `ProjectReference` | `PackageReference` |
+| `Src/Test/Unit/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj`（**不分 Debug/Release**，见下） | `ProjectReference` | 无（只钉 `Microsoft.CodeAnalysis.CSharp`） |
 | `Examples/Workflow/Directory.Build.props`（整棵树一次） | `ProjectReference` | `PackageReference` |
 | `Examples/Theme/Directory.Build.props`（整棵树一次） | `ProjectReference` | `PackageReference` |
 | `Examples/AOP/WPF/Demo/Demo.csproj` | `ProjectReference` | `PackageReference` |
@@ -238,7 +238,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 
 **上表就是 `ProjectReference` 与 `PackageReference` 的完整配对。** 包自己的 `<Version>` 是 `11.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）；各处引用已全部对齐 `11.0.0`（含 `Examples/*/Directory.Build.props` 的 `PackageReference`）。版本落差的历史与「要不要补齐」的判断见 [extension.md](extension.md) §四。
 
-`VeloxDev.Core.Test.csproj` 是**唯一不分 Debug/Release** 的一处（`Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` 里 `ProjectReference` 上方的注释）：它测的对象就是生成器源码本身，测一个已发布的快照等于没测，所以无条件走 `ProjectReference`，且因为要直接驱动 `Command` 生成器断言诊断，**保留程序集引用**（`OutputItemType="Analyzer"`，`ReferenceOutputAssembly` 默认 true）。
+`VeloxDev.Core.Test.csproj` 是**唯一不分 Debug/Release** 的一处（`Src/Test/Unit/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` 里 `ProjectReference` 上方的注释）：它测的对象就是生成器源码本身，测一个已发布的快照等于没测，所以无条件走 `ProjectReference`，且因为要直接驱动 `Command` 生成器断言诊断，**保留程序集引用**（`OutputItemType="Analyzer"`，`ReferenceOutputAssembly` 默认 true）。
 
 **「两者必须互斥」是被注释明确写下的硬约束**（`Examples/Workflow/Directory.Build.props` 的注释）：两条同时生效会**生成器执行两次、报重复成员**。另外同一条注释提醒路径基准是导入方项目目录，必须走 `MSBuildThisFileDirectory`。
 
@@ -280,7 +280,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 
 ## 七、验证线在哪（以及它不在哪）
 
-**裁剪/AOT 的验证探针不在本仓库。** `Src/Verification/VeloxDev.TrimProbe/` 在工作区里**只剩 `bin/` 与 `obj/`**：没有 `.cs`、没有 `.csproj`，也没有被跟踪文件（`git ls-files` 对它零命中）；`VeloxDev.slnx` 里没有 `TrimProbe`。（注意 `Src/Verification/` 这一层另有若干被跟踪的 `.ps1` 脚本 —— `agent-ui-harness.ps1`、`agent-web-harness.ps1`、`verify-jalium-item-templates.ps1`、`verify-workflow-item-templates.ps1`、`verify-workflow-item-templates-all.ps1`，所以「整目录无被跟踪文件」不成立 —— 缺文件的是 `TrimProbe/` 本身。）**所以本记忆给不出探针本体的可复核路径 —— 它在仓库外。**
+**裁剪/AOT 的验证探针不在本仓库。** 仓库里没有它的源码或工程文件：`git ls-files` 对 `TrimProbe` 零命中，`VeloxDev.slnx` 里也没有它 —— 它有一条自己的仓库外验证线。**所以本记忆给不出探针本体的可复核路径 —— 它在仓库外。**
 
 仓库内能锚住的只有这条轴的**输入侧**：
 

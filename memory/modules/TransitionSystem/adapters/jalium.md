@@ -25,7 +25,7 @@
 | 共有 | `Point`/`Rect`/`Thickness`/`CornerRadius`/`Size`/`Color`/`Brush`/`Transform` | 同 |
 
 - **三维面换了一个类型**：Jalium 用**一个聚合类型** `Jalium.UI.Media.Media3D.Transform3D`（反射 `Jalium.UI.Managed` 可证其存在）替掉 WPF 的 `Point3D` + `Vector3D` ⇒ 两家的三维动画**声明面不同形**（`Transition.cs` 的 `Property(Expression<Func<T, Jalium.UI.Media.Media3D.Transform3D?>>…)` 是 Jalium 的 `Transform3D` 重载，WPF 没有）。`Transform3DSampler.cs` 的 `RotateTransform3D` 轴守卫 + `Matrix3D` 回退就是为这个聚合类型付的代价。
-- **`Vector` 与 `Vector3D` 的类型存在、但没有采样器**：`Jalium.UI.Vector` 与 `Jalium.UI.Media.Media3D.Vector3D` 都反射得到（后者在 `Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 顶部还被 `using` 别名引用，说明可编译）。⇒ **Jalium 上 `Vector` / `Vector3D` 属性不可动画，这是缺口不是平台限制**，代码与注释里都没写理由。要补就照 WPF 的 `Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/VectorSampler.cs`：加注册 +（要声明就）加重载。
+- **`Vector` 与 `Vector3D` 的类型存在、但没有采样器**：`Jalium.UI.Vector` 与 `Jalium.UI.Media.Media3D.Vector3D` 都反射得到（后者在 `Src/Test/AutoTest/Samplers/JaliumEntries.cs` 顶部还被 `using` 别名引用，说明可编译）。⇒ **Jalium 上 `Vector` / `Vector3D` 属性不可动画，这是缺口不是平台限制**，代码与注释里都没写理由。要补就照 WPF 的 `Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/VectorSampler.cs`：加注册 +（要声明就）加重载。
 
 ### 1.2 `Property` 重载面：泛型 + 一批手写
 
@@ -51,7 +51,7 @@
 
 **同族里只有这两个有这条限制**（同一轮 IL 检查）：`CornerRadius`、`Thickness`、`Point`、`Color` 的构造器**都不抛** ⇒ 它们的采样器逐分量按原始 `t` 线性外推，**没有** `BoundedProgress`（`Samplers/CornerRadiusSampler.cs`、`ThicknessSampler.cs`、`PointSampler.cs`）。**别照着 `RectSampler` 去"统一"它们** —— 那是把一条平台限制抄成了风格。
 
-独立佐证（不是同一份判断的第二遍）：`Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs` 里按采样器登记 `SamplerRule` —— Rect/Size/Brush/Color 是 `Saturate`，CornerRadius/Point 是 `Extrapolate`，与该文件的注释一致。
+独立佐证（不是同一份判断的第二遍）：`Src/Test/AutoTest/Samplers/JaliumEntries.cs` 里按采样器登记 `SamplerRule` —— Rect/Size/Brush/Color 是 `Saturate`，CornerRadius/Point 是 `Extrapolate`，与该文件的注释一致。
 
 ### 2.2 `Color` 的三通道必须在 0..255 停住，Alpha 自成一界
 
@@ -97,7 +97,7 @@
 2. **`RectSampler` / `SizeSampler` 的 `BoundedProgress(t, 0, +∞)` 是 2.1 的平台补偿，不是审美。** 换成 `Clamp01` 之类会同时改掉两件事：上界从 `+∞` 变成 1（过冲被夹，但那两个采样器本来就该允许过冲）与位置的外推方式。
 3. **`BrushSampler` 的第三条路（复用 scratch `SolidColorBrush` 写 `Color`/`Opacity`）是兜底，不要"优化"回真交叉淡出** —— 见 2.3 的实测数字。
 4. **`ColorSampler` 的 `BoundedProgress(t, 0, 255)` 与饱和 `Channel()` 成对出现**，删一个另一个就不够。画刷那条同款在 `Samplers/BrushSampler.cs` 的 `InterpolateColor`。
-5. **测试表没有逃逸口。** Jalium 的采样器**全部**能在纯数据进程里造出端点（`Examples/Transition/AUTO TEST/Samplers/JaliumEntries.cs`），**一条都不在** `Examples/Transition/AUTO TEST/Samplers/UnreachableSamplers.cs`（那份只有 WinUI 与 MAUI 的条目）。⇒ 漏一行 `JaliumEntries.cs` 就是 `SamplerCoverageTests.EveryShippedSampler_IsAccountedFor` 直接红，没有"这个造不出来"可退。
+5. **测试表没有逃逸口。** Jalium 的采样器**全部**能在纯数据进程里造出端点（`Src/Test/AutoTest/Samplers/JaliumEntries.cs`），**一条都不在** `Src/Test/AutoTest/Samplers/UnreachableSamplers.cs`（那份只有 WinUI 与 MAUI 的条目）。⇒ 漏一行 `JaliumEntries.cs` 就是 `SamplerCoverageTests.EveryShippedSampler_IsAccountedFor` 直接红，没有"这个造不出来"可退。
 6. **`JaliumEntries.cs` 顶部记着一条形状上的坑，写别家适配器也会撞上**：七个适配器把采样器放在同一个命名空间 `VeloxDev.Adapters.NativeSamplers` 且类名相同，而桌面 SDK 的隐式 `using`（`System.Drawing` / `System.Windows.Media` / `System.Windows.Media.Media3D`）与 Jalium 的类型在 `Point`/`Rect`/`Size`/`Thickness`/`CornerRadius`/`Color`/`Brush`/`Transform` 上大量同名 ⇒ 那份文件用一长串 `using X = Jalium.UI...` 别名把类型钉死。**任何同时引用 Jalium 与别家的项目都要付这份成本**（WPF 侧同形，见 `memory/modules/TransitionSystem/adapters/wpf.md` 的坑 6）。
 7. **`Transform3DSampler` 的 `RotateTransform3D` 分支有轴守卫 + `Matrix3D` 回退**（`Samplers/Transform3DSampler.cs`）。聚合类型的轴/角度形状和 WPF 的结构不同，改三维插值时别照 WPF 的 `LerpAngle` 形状直接搬。
 

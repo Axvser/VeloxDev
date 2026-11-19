@@ -69,7 +69,7 @@
 3. **补手写重载**（**这家独有、别家不需要的一步**）：若新类型要能被用户声明出来，在 `TransitionSystem/Transition.cs`
    的 `Property` 重载表里加一个 —— 这张表是手写的，没有泛型兜底。**只加采样器不加重载的后果在这家是「写不出来」**。
    表的两处已知缺口见 `memory/modules/TransitionSystem/adapters/razor.md` §二·3。
-4. **补验证条目**（**最容易漏、漏了直接红**）：`Examples/Transition/AUTO TEST/Samplers/RazorEntries.cs` 里加一个带目标属性的私有 `Target` 类、一条 `EntryFactory.Create<XxxSampler, Target, T>(...)`、放进 `All`。
+4. **补验证条目**（**最容易漏、漏了直接红**）：`Src/Test/AutoTest/Samplers/RazorEntries.cs` 里加一个带目标属性的私有 `Target` 类、一条 `EntryFactory.Create<XxxSampler, Target, T>(...)`、放进 `All`。
    判定是**反射**所有 `VeloxDev.*` 程序集里的 `ISampler` 再与 `SamplerRegistry.Entries` 求差
    （`Samplers/SamplerCoverageTests.cs` 的 `EveryShippedSampler_IsAccountedFor`），而 `VeloxDev.Razor` 必须在
    `ExpectedAdapterAssemblies` 名单里、且被真正加载（`EveryAdapterAssembly_IsLoadedSoItsSamplersAreCounted`）。
@@ -136,7 +136,7 @@
 - [ ] `Src/Adapters/VeloxDev.Razor/TransitionSystem/Samplers/XxxSampler.cs`（命名空间 `VeloxDev.Adapters.NativeSamplers`，类名全仓唯一）
 - [ ] `TransitionSystem/Interpolator.cs` 的静态构造登记（**不登记 = 永不运行**）
 - [ ] `TransitionSystem/Transition.cs` 补手写 `Property` 重载（这家独有；缺了是「声明不出来」）
-- [ ] `Examples/Transition/AUTO TEST/Samplers/RazorEntries.cs`：`Target` 属性 + 一条 `Entry` + 放进 `All`（**漏了直接红**）
+- [ ] `Src/Test/AutoTest/Samplers/RazorEntries.cs`：`Target` 属性 + 一条 `Entry` + 放进 `All`（**漏了直接红**）
 - [ ] `memory/modules/TransitionSystem/adapters/razor.md`
 - [ ] 这条类型在别家也该有时：各家 `Interpolator.cs` 各加一份 —— **条数本来就不等**，别按这家猜
 

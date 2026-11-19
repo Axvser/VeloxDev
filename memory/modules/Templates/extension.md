@@ -14,7 +14,7 @@
 | 探针 | 结果 |
 |---|---|
 | `Src/Generators/VeloxDev.Core.Generator` 里搜 `Templates` | **零命中** |
-| 本仓库搜脚本（`.ps1` / `.sh` / `.yml` / `.py`）里的 `Templates` | 2026-10-04 起 `Src/Verification/verify-workflow-item-templates-all.ps1` 会引用 `Src/Templates/`（旧的 `verify-workflow-item-templates.ps1` / `verify-jalium-item-templates.ps1` 现在是它的薄转发）；其余脚本零命中 |
+| 本仓库搜脚本（`.ps1` / `.sh` / `.yml` / `.py`）里的 `Templates` | 2026-10-04 起 `Src/Test/Harness/verify-workflow-item-templates-all.ps1` 会引用 `Src/Templates/`（旧的 `verify-workflow-item-templates.ps1` / `verify-jalium-item-templates.ps1` 现在是它的薄转发）；其余脚本零命中 |
 | `Src/Templates/` 下的 `.md` / `.sln` / 测试 | `find -name "*.md"` 零命中 |
 
 ⇒ **全部条目都靠手写维护。下面所有清单都是"你必须亲手去改的地方"，不是"某个脚本会替你跟上的地方"。**
@@ -29,7 +29,7 @@
 `EnableDefaultCompileItems=false` + `IncludeBuildOutput=false`（`VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj`）
 ⇒ 构建它等于什么都不做，**生成的代码编译不过不会被任何构建发现**。
 
-**2026-10-04 起七家共用一条自动化**：入口 `Src/Verification/verify-workflow-item-templates-all.ps1`
+**2026-10-04 起七家共用一条自动化**：入口 `Src/Test/Harness/verify-workflow-item-templates-all.ps1`
 （`-Platform <name…>` 默认七家全跑，另有 `-Strict`、`-KeepProbe`）。旧的两条现在是薄转发：
 `verify-workflow-item-templates.ps1` → `-Platform WinForms`、`verify-jalium-item-templates.ps1` → `-Platform Jalium`，
 已有调用照旧。对每家它证明：七个 CLI 短名能解析、**没有任何 `replaces` 占位符漏进生成文件**（脚本读该平台所有

@@ -143,5 +143,5 @@ Input -1 · Default 0 · Loaded 1 · UiThreadRender 2 · AfterRender 3 · Render
    - 不改名单的后果是自定义子类走矩阵路径：能动画，但产物是 `MatrixTransform` / `TransformGroup`（端点两帧例外，`InsertFrame` 的 `t == 0d` / `t == 1d` 会把调用方自己的实例原样写回，所以嵌套路径的运行时类型仍然保得住）。
    - 这是这家采样器里唯一一处「类型名单」硬编码，也是唯一一处会抛的路径。
 6. **`netstandard2.0` 那条腿不要按想象改。** 框架列表在 csproj 里（§二.6）；`Transition.cs` 里 `System.Numerics` 那几个重载的 `#if` 与 `BoxShadowsSampler.cs` 的 `#if NETSTANDARD` 都是为它服务的。`netstandard2.0` 下没有 `System.Numerics` 的那几个重载，声明端会少一批 —— 调试「某个重载找不到」时先确认 TFM。
-7. **`Examples/Transition/AUTO TEST/Samplers/AvaloniaEntries.cs` 用程序集限定反射取采样器类型**（`SamplerAssembly.GetType("VeloxDev.Adapters.NativeSamplers." + name)`）。原因写在文件里：WPF/WinUI/Jalium 把**同名**采样器（`BrushSampler`、`PointSampler`……）放在同一个命名空间 `VeloxDev.Adapters.NativeSamplers`，编译期直接写类型名会 CS0433。**给 Avalonia 加采样器时照抄这条反射路径**，不要在测试工程里直接引类型名。
+7. **`Src/Test/AutoTest/Samplers/AvaloniaEntries.cs` 用程序集限定反射取采样器类型**（`SamplerAssembly.GetType("VeloxDev.Adapters.NativeSamplers." + name)`）。原因写在文件里：WPF/WinUI/Jalium 把**同名**采样器（`BrushSampler`、`PointSampler`……）放在同一个命名空间 `VeloxDev.Adapters.NativeSamplers`，编译期直接写类型名会 CS0433。**给 Avalonia 加采样器时照抄这条反射路径**，不要在测试工程里直接引类型名。
    - 顺带：Avalonia 的采样器**全部能在纯数据进程里构造**，所以 `UnreachableSamplers.cs` 里**没有 Avalonia 的条目**（那份只有 WinUI 与 MAUI 的条目）。这是这家测试面比别家轻的原因。

@@ -44,7 +44,7 @@
 - 生成器的 `<Version>`（`VeloxDev.Core.Generator.csproj`）
 - 每一处 `PackageReference Include="VeloxDev.Core.Generator"` —— **11 处**，其中 `Examples/*/Directory.Build.props` 那两处容易滞后
 - 每一处配套的 `ProjectReference`（`Condition="'$(Configuration)' == 'Debug'"`）—— **12 处**
-- `Src/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` 是唯一不分 Debug/Release 的一处，动机写在它的注释里
+- `Src/Test/Unit/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` 是唯一不分 Debug/Release 的一处，动机写在它的注释里
 
 > ⚠ **这条链今天根本没接通**：仓库无法在 Release 下构建。理由与证据在 [architecture.md](architecture.md) §五。
 > 所以「改了生成器」目前**只在 Debug 生效**，升版本号那一步是单独一件事，别顺手做。
@@ -56,7 +56,7 @@
 1. `Base/VeloxJsonModel.cs` 的 `Classify` 决定成员算标量、集合还是字典 —— 新形状先在这里加。它的返回值是四元组 `(Kind, Element, Key, InterfaceKeyed)`：**`Key` 是字典的键类型，也是 `Reachable` 的入口之一**（2026-10-04 起），新形状要么给它一个键，要么显式给 `null`。
 2. 若它需要**读回来**（不是只写得出去），还要 `CollectNestedContainers` 与 `IsContainerReadable` 认它。**只加写侧是一条已知的坑**：只加写侧会让嵌套容器写得出去、读不回来，见 `VeloxJsonRegistry.RegisterContainerFactory` 的 remarks。
 3. `Writers/VeloxJsonCodeWriter.cs` 的 `ReadMember` 发对应的读法。
-4. 跑 `Src/Core/VeloxDev.Core.Extension.Test` —— 逐字节黄金与幂等测试会当场告诉你产物变了没有。
+4. 跑 `Src/Test/Unit/Core/VeloxDev.Core.Extension.Test` —— 逐字节黄金与幂等测试会当场告诉你产物变了没有。
 
 **成员收录顺序是契约的一部分**：手写可写属性（声明顺序）在前，`[VeloxProperty]` 提升出来的字段（字段顺序）在后，继承来的再往后。规则在 `Base/VeloxJsonModel.cs` 的 `ReadMembers`。**改它会直接打翻黄金文件**，改之前先看 `SerializationOrderTests`。
 

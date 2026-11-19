@@ -62,6 +62,6 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** the coverage test fails after a sampler is added.
 
-**Cause:** every published sampler needs a row in `Examples/Transition/AUTO TEST/Samplers/` (or the unreachable list). The suite reflects over the product assemblies and fails when one is unaccounted for.
+**Cause:** every published sampler needs a row in `Src/Test/AutoTest/Samplers/` (or the unreachable list). The suite reflects over the product assemblies and fails when one is unaccounted for.
 
 **Fix:** add the row with its declared type and closed form; add it to the unreachable list only when its endpoint cannot be constructed in a headless process.

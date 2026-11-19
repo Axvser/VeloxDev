@@ -146,7 +146,7 @@ RunSwitch (:201)
 | 生成出来的 `IThemeObject` 实现长什么样 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs`（生成的 `InitializeTheme`、`SetThemeValue`、`UpdatePropertyToCurrentTheme`） |
 | 字符串/画刷怎么解析成值 | 各家的 `ThemeValueConverters.cs`（Avalonia `DynamicTheme/`，其余 `TransitionSystem/`） |
 | **「主题切换为什么在这个平台不animate」** | 该家的 `Interpolator.CreateScheduler`。契约与各家的差异见 `memory/modules/TransitionSystem/architecture.md` §六末行与 `memory/modules/TransitionSystem/adapters/<平台>.md` |
-| 「谁调了 `SetPlatformInterpolator`」 | 只调在 Examples 与 `Src/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs` 里，点见 `memory/modules/TransitionSystem/adapters/winforms.md`（Brush 采样器缺失与 `SetPlatformInterpolator` 调用点） |
+| 「谁调了 `SetPlatformInterpolator`」 | 只调在 Examples 与 `Src/Test/Unit/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs` 里，点见 `memory/modules/TransitionSystem/adapters/winforms.md`（Brush 采样器缺失与 `SetPlatformInterpolator` 调用点） |
 | 缓存的两级与键形状 | `ThemeCache.cs`（静态 `_staticCache`、活动 `_activeCache`、合并 `CollectStaticForType`） |
 
 ---

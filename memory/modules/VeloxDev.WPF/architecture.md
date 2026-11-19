@@ -27,7 +27,7 @@
 两个直接后果：
 
 1. **`VeloxDev.WorkflowSystem.AttachedBehaviors` 在 Core 里不存在** —— 它是七家适配器各自声明的一份同名命名空间（`git grep -l "namespace VeloxDev.WorkflowSystem.AttachedBehaviors"` 命中七家、Core 没有命中）。所以宿主 XAML 必须写 `assembly=`：`xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"`（`Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/TreeView.xaml` 的 `xmlns:behaviors`，同文件的 `xmlns:workflowViews` 走 demo 自己的命名空间）。**写成 `assembly=VeloxDev.Core` 是找不到行为类型的**（同 demo 的完整版里 `Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml` 的 `xmlns:workflow` 才是 `assembly=VeloxDev.Core`，那指的是 VM 契约）。
-2. 一个同时引用两家适配器的项目里，这些**类型名会歧义**（`ViewPool`/`WorkflowSurfaceBehavior` 多家同名；WPF 与 Avalonia 的 `WorkflowSystem/ViewHosting/` 还同名暴露 `ViewSourcePipeline` / `ViewFactory` / `ViewContainer` 等）。代价的真实样貌见 `Examples/Transition/AUTO TEST/Samplers/WpfEntries.cs` 顶部：一排显式类型别名 + 注释「本工程同时引用了 WinForms 与 MAUI 适配器」。
+2. 一个同时引用两家适配器的项目里，这些**类型名会歧义**（`ViewPool`/`WorkflowSurfaceBehavior` 多家同名；WPF 与 Avalonia 的 `WorkflowSystem/ViewHosting/` 还同名暴露 `ViewSourcePipeline` / `ViewFactory` / `ViewContainer` 等）。代价的真实样貌见 `Src/Test/AutoTest/Samplers/WpfEntries.cs` 顶部：一排显式类型别名 + 注释「本工程同时引用了 WinForms 与 MAUI 适配器」。
 
 **不解决什么（常被误以为在这里）：**
 

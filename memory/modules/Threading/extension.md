@@ -32,7 +32,7 @@
 | 往 `ThreadFor` 加 `catch { return null; }` 之外的语义 | 「没有线程拥有它」已经是 `ThreadRef.None` 这个**答案**，不是异常；返 None 的后果是确定的：pacer 得到 `null`、`PostCore` 该丢帧 | `ThreadRef.cs` 的 `None`、`Src/Adapters/VeloxDev.Avalonia/TransitionSystem/TransitionInterpreter.cs` 的 `CreateFramePacer`（`IsNone ? null`） |
 | 用三参 `Post(target, action, priority)` 做写路径 | 它每次自己解析线程（`ThreadDispatcherBase.Post` 的 `Post(target, ThreadFor(target), ...)`），在「答案随调用者变化」的宿主上必然解析错；写路径必须用钉好的那条 | `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply`、`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `host.ThreadFor(target)` |
 | 以为 `Post` 的 `true` 意味着「跑完了」 | 它只意味着「入队了」。要等就得用 `PostAsync`，而 `PostAsync` 也只在真入队时才等 | `IThreadDispatcher.cs` 中 `Post` 与 `PostAsync` 的注释 |
-| 把 `ThreadRef` 存起来当「UI 线程身份」跨进程/跨 circuit 复用 | 它是不透明句柄、相等即引用相等；Razor 上句柄随 circuit 变，缓存第一个就等于把所有 circuit 的帧投进第一个 | `ThreadRef.cs` 的 `TryGet` 与 `Equals`；`Src/Core/VeloxDev.Core.Test/TransitionSystem/TransitionRunThreadAffinityTests.cs` 的 `EachRunPostsToTheCircuitItWasStartedOn` 是这条的回归测试（两个 circuit 各投各的） |
+| 把 `ThreadRef` 存起来当「UI 线程身份」跨进程/跨 circuit 复用 | 它是不透明句柄、相等即引用相等；Razor 上句柄随 circuit 变，缓存第一个就等于把所有 circuit 的帧投进第一个 | `ThreadRef.cs` 的 `TryGet` 与 `Equals`；`Src/Test/Unit/Core/VeloxDev.Core.Test/TransitionSystem/TransitionRunThreadAffinityTests.cs` 的 `EachRunPostsToTheCircuitItWasStartedOn` 是这条的回归测试（两个 circuit 各投各的） |
 
 **没有「官方 vs 捷径」的一条提醒**：`Post`/`PostAsync`/`Run` 三条路径对**异常**的处理不同 —— `Run`/`PostAsync` 把动作异常装进完成源（`Run` 再在 `GetResult` 处重抛，`PostAsync` 由 `await` 处重抛），`Post` 让异常落在泵它的线程上。写路径的异常已经被 `SamplerSet.ApplyCore` 收口（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `ApplyCore` 里那个 `catch (Exception)`），**不要在适配器里再加一层 catch**。
 
@@ -47,7 +47,7 @@
 5. **有优先级就覆写 `InternalPriority`**；没有优先级就把第七型参填 `NonPriority`（`NonPriority.cs`），不需要碰它。
 6. **存活**：见 `memory/modules/Lifetime/extension.md`。这一条是可以**先不做**的，但要知道代价（同一份文件里写了）。
 7. **pacer 必须用 `affinity.ThreadFor(target)`**，不能用平台侧的等价调用去另推一次 —— 两者不一致 = 每帧一次 dispatch（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs` 的 `CreateFramePacer` 注释「host should derive the pacer from `affinity.ThreadFor(target)`」）。`CreateFramePacer` 只拿到 `IThreadAffinity`，正是为了让这家无法悄悄拿到投递/存活。
-8. 跑 `Src/Core/VeloxDev.Core.Test/` 里已有的宿主形状（`Src/Core/VeloxDev.Core.Test/TestHosts.cs` 的 `ImmediateHost` 全 inline、`InlinePostHost` 永不在线程上、`DeferredHost` 入队后手动 `Pump()`）—— 它们覆盖了「真投递」「优先级参数」「fire-and-forget 落地」三件事，新宿主至少要在同形的位置有对应物。
+8. 跑 `Src/Test/Unit/Core/VeloxDev.Core.Test/` 里已有的宿主形状（`Src/Test/Unit/Core/VeloxDev.Core.Test/TestHosts.cs` 的 `ImmediateHost` 全 inline、`InlinePostHost` 永不在线程上、`DeferredHost` 入队后手动 `Pump()`）—— 它们覆盖了「真投递」「优先级参数」「fire-and-forget 落地」三件事，新宿主至少要在同形的位置有对应物。
 
 ---
 
@@ -59,12 +59,12 @@
 | 2 | 有优先级时覆写 `InternalPriority` | 编译过、跑得像好的 —— 只在拿不到 target 那条线程时，`Run<T>` 那次读的排队档位不对 |
 | 3 | **第七型参 `TPriorityCore` 各处必须一致**：该家 `UIThreadInspector` 的基类型参、`TransitionScheduler`、`Transition`、`Interpolator.CreateScheduler` 里的 `is ITransitionEffect<TPriorityCore>` | `CreateScheduler` 那处写错 ⇒ 主题切换**静默降级为瞬切**（`Src/Adapters/VeloxDev.MAUI/TransitionSystem/Interpolator.cs` 的 `is ITransitionEffect<NonPriority>` 是正确形状） |
 | 4 | `memory/modules/TransitionSystem/adapters/<平台>.md` 记一条本家在存活/线程归属上的差异 | 下一家接平台的人会照抄错的默认（`memory/modules/TransitionSystem/adapters/avalonia.md` §三.1 的比对本就是为这个存在的） |
-| 5 | 若该家 `IsAlive`/`PostCore` 是「乐观恒真」：`Src/Core/VeloxDev.Core.Test/` 里补一条宿主形状，覆盖「关停后投递会怎样」 | 该类缺陷验收套件看不见（单 circuit/单线程跑不出来） |
+| 5 | 若该家 `IsAlive`/`PostCore` 是「乐观恒真」：`Src/Test/Unit/Core/VeloxDev.Core.Test/` 里补一条宿主形状，覆盖「关停后投递会怎样」 | 该类缺陷验收套件看不见（单 circuit/单线程跑不出来） |
 
 ---
 
 ## 五、树内没有验证过的路径（省掉无谓的搜索）
 
-- **三参 `Post(target, action, priority)` 零调用者**（`Src/`、`Examples/`、`Src/Core/VeloxDev.Core.Test/`）。它是接口上的便利面，但没有任何测试或 demo 走过它 —— 改基类时别以为它被覆盖了。
+- **三参 `Post(target, action, priority)` 零调用者**（`Src/`、`Examples/`、`Src/Test/Unit/Core/VeloxDev.Core.Test/`）。它是接口上的便利面，但没有任何测试或 demo 走过它 —— 改基类时别以为它被覆盖了。
 - **`IThreadAffinity.IsCurrent` 只有一个消费者**：WinForms 的 `Src/Adapters/VeloxDev.WinForms/TransitionSystem/TransitionInterpreter.cs` 的 `CreateFramePacer`。所以「`IsCurrent` 的实现对不对」在其余各家里是**没有任何测试压力**的。
-- **`IThreadDispatcher` 在树内只有 `ThreadDispatcherBase` 实现**；测试里的宿主（`Src/Core/VeloxDev.Core.Test/TestHosts.cs` 的 `ImmediateHost` / `InlinePostHost` / `DeferredHost` + `TransitionSchedulerExitTests.cs` 的 `DeferredInspector`、`TransitionSchedulerAwakeTests.cs` 的 `OffThreadInspector`、`TransitionRunThreadAffinityTests.cs` 的 `CircuitHost`、`TransitionDiagnosticsTests.cs` 的 `RefusingHost` 等）全部派生自它，其中只有 `DeferredHost` 覆写了 `Run<T>`（`TestHosts.cs` 的 `DeferredHost.Run<T>`，把读改成 inline）。
+- **`IThreadDispatcher` 在树内只有 `ThreadDispatcherBase` 实现**；测试里的宿主（`Src/Test/Unit/Core/VeloxDev.Core.Test/TestHosts.cs` 的 `ImmediateHost` / `InlinePostHost` / `DeferredHost` + `TransitionSchedulerExitTests.cs` 的 `DeferredInspector`、`TransitionSchedulerAwakeTests.cs` 的 `OffThreadInspector`、`TransitionRunThreadAffinityTests.cs` 的 `CircuitHost`、`TransitionDiagnosticsTests.cs` 的 `RefusingHost` 等）全部派生自它，其中只有 `DeferredHost` 覆写了 `Run<T>`（`TestHosts.cs` 的 `DeferredHost.Run<T>`，把读改成 inline）。

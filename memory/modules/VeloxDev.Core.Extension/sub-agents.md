@@ -2,7 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core.Extension/Agent/SubAgents/`（命名空间 `VeloxDev.AI.SubAgents`）。
 > 账本：`Agent/Workflow/Functions/ToolCallLedger.cs`（`internal` 类型，跨子代理与 Workflow 两侧）。
-> 测试：`Src/Core/VeloxDev.Core.Extension.Test/Agent/SubAgents/`。
+> 测试：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/Agent/SubAgents/`。
 > 不依赖 MAF 的 `BackgroundAgentsProvider`：那个类型构造时吃死的 `IEnumerable<AIAgent>`，**没有「按次配置子能力」这个概念**，且整体标着 `[Experimental("MAAI001")]`。
 
 本文只写「读完这些文件才知道的东西」。

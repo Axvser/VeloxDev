@@ -14,9 +14,9 @@
 1. `TransitionSystem/Samplers/XxxSampler.cs`：`public class XxxSampler : ISampler`，**命名空间必须写 `VeloxDev.Adapters.NativeSamplers`**（`Interpolator.cs` 的 `using VeloxDev.Adapters.NativeSamplers;`）。**必须是 public 且无参构造**：测试侧两条路都靠它 —— 独有类型直接 `typeof(X)`，撞名的走 `SamplerAssembly.GetType("VeloxDev.Adapters.NativeSamplers." + name)`（`AvaloniaEntries.cs` 的 `CrossAdapter`，`SamplerAssembly` 是该文件的静态字段），两条路最后都落到 `Activator.CreateInstance(samplerType)`。
 2. `TransitionSystem/Interpolator.cs` 静态 ctor 加一行 `RegisterInterpolator(typeof(你的类型), new XxxSampler());`（登记都在其中）。注册接口（`IBrush`/`ITransform` 那种）也合法，且比注册基类覆盖面更大。
 3. **可选**：想让它出现在 `Transition<T>` 的强类型重载表里，就在 `TransitionSystem/Transition.cs` 的 `Property(...)` 重载组里加一条。`Property<TValue>(…)` 泛型重载已经能走通，所以「不加」不是遗漏。
-4. **测试联动（硬闸）**：`Examples/Transition/AUTO TEST/Samplers/AvaloniaEntries.cs` 加一条 `Entry(...)`（`All` 成员）。**与别家撞名的用 `CrossAdapter("XxxSampler")` 反射取，独有类型直接 `typeof(XxxSampler)`**（判别法：`architecture.md` §五）。
-5. 不做第 4 步**测试必红**（是测试期硬闸，不是编译错）：`SamplerCoverageTests.EveryShippedSampler_IsAccountedFor`（`Examples/Transition/AUTO TEST/Samplers/SamplerCoverageTests.cs`）反射产品程序集里每个 `ISampler`，与注册表 + `UnreachableSamplers` 对账。注册表本身在那里（`SamplerRegistry.Entries`）。
-6. 只有在**纯数据进程里造不出端点值**时才进 `UnreachableSamplers`：`SamplerCoverageTests.cs` 会真的去构造那个值来证伪理由，且条目必须以类型名出现在 `AUTO TEST/Conformance/*Conformance.cs` 表里。**这家的采样器全部可在纯数据进程构造，名单里没有 Avalonia 条目。**
+4. **测试联动（硬闸）**：`Src/Test/AutoTest/Samplers/AvaloniaEntries.cs` 加一条 `Entry(...)`（`All` 成员）。**与别家撞名的用 `CrossAdapter("XxxSampler")` 反射取，独有类型直接 `typeof(XxxSampler)`**（判别法：`architecture.md` §五）。
+5. 不做第 4 步**测试必红**（是测试期硬闸，不是编译错）：`SamplerCoverageTests.EveryShippedSampler_IsAccountedFor`（`Src/Test/AutoTest/Samplers/SamplerCoverageTests.cs`）反射产品程序集里每个 `ISampler`，与注册表 + `UnreachableSamplers` 对账。注册表本身在那里（`SamplerRegistry.Entries`）。
+6. 只有在**纯数据进程里造不出端点值**时才进 `UnreachableSamplers`：`SamplerCoverageTests.cs` 会真的去构造那个值来证伪理由，且条目必须以类型名出现在 `Src/Test/AutoTest/Conformance/*Conformance.cs` 表里。**这家的采样器全部可在纯数据进程构造，名单里没有 Avalonia 条目。**
 7. 接一家新平台时的额外联动：新 `<家>Entries.cs` → 挂进 `AdapterSamplerEntries.All` → 程序集名加进 `SamplerCoverageTests` 的 `ExpectedAdapterAssemblies`。**最后这一处的机制要说清，很容易反过来理解**：采样器是「反射所有**已加载**的 `VeloxDev.*` 程序集」数出来的（`SamplerCoverageTests.ProductAssemblies`），所以只要引用在，忘了加表**照样数得到、套件照样绿**；`ExpectedAdapterAssemblies` 唯一的作用是在**引用被摘掉**（程序集根本没加载）时把「安静变瞎」变成红。⇒ 漏了它不会当场暴露，是等到有人摘引用时才发现这个家从来没被验过。
 8. **不要动 Core 的注册表**去补缺口。反过来说：`Avalonia.Rect` / `Avalonia.Vector` 的缺口只能在**本家**补（Core 不可能注册 Avalonia 的类型），补不补是个决定，见 `TransitionSystem/adapters/avalonia.md` §二.7。
 
@@ -65,11 +65,11 @@
 
 | 你加/改什么 | 必须同步的位置 |
 |---|---|
-| 一个采样器 | `TransitionSystem/Samplers/XxxSampler.cs` + `TransitionSystem/Interpolator.cs` 静态 ctor +（可选）`TransitionSystem/Transition.cs` 的 `Property(...)` 重载 + `AUTO TEST/Samplers/AvaloniaEntries.cs`（+ `AdapterSamplerEntries.All` 若新增聚合） |
+| 一个采样器 | `TransitionSystem/Samplers/XxxSampler.cs` + `TransitionSystem/Interpolator.cs` 静态 ctor +（可选）`TransitionSystem/Transition.cs` 的 `Property(...)` 重载 + `Src/Test/AutoTest/Samplers/AvaloniaEntries.cs`（+ `AdapterSamplerEntries.All` 若新增聚合） |
 | 一个主题转换器 | `DynamicTheme/ThemeValueConverters.cs` + **消费方**的 `[ThemeConfig<>]`（适配器侧无需登记） |
 | 一个附着行为 | 本模块新类 + demo XAML + `Src/Templates/VeloxDev.Avalonia.Templates/` 的 item 模板 |
 | 一个被解析的具名控件 | §三.3 那组配套改动 + demo XAML |
-| 接一家新平台 | `Src/Adapters/VeloxDev.<家>/` + `VeloxDev.slnx` + `AUTO TEST/Samplers/<家>Entries.cs` + `AdapterSamplerEntries.All` + `SamplerCoverageTests` 的 `ExpectedAdapterAssemblies` |
+| 接一家新平台 | `Src/Adapters/VeloxDev.<家>/` + `VeloxDev.slnx` + `Src/Test/AutoTest/Samplers/<家>Entries.cs` + `AdapterSamplerEntries.All` + `SamplerCoverageTests` 的 `ExpectedAdapterAssemblies` |
 | Avalonia 版本升级 | `VeloxDev.Avalonia.csproj` 的 `AvaloniaVersion` 一处（各处 `PackageReference` 共用）；升完要重判两篇 `adapters/avalonia.md` 里标了「11.1.0 实测」的结论 |
 
 ---
