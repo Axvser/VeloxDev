@@ -151,8 +151,8 @@
 - **形状不符直接拒**，而且在动会话之前抛 `InvalidOperationException`（`Status` 仍停在 `Idle`，不是谎称在跑）—— `RequireSameShape`。
 - **节点键**是 `RuntimeId`（节点实现 `IWorkflowIdentifiable` 时），否则 `类型名#序号`。后者让测试探针也能用。**序列化往返过的图**（还原节点的 `RuntimeId` 全是新的）默认被拒 —— 那些确实是不同的节点对象，把旧产物喂给它们就是猜；**要接上就显式迁移**：`ExecutionCheckpoint.Rekey(place, graph)` 按**位置**重新归档（先核结构：节点数与**节点类型**的驱动序都要一致，`Types` 是为此新加的成员），返回一份新的检查点，引擎的形状核对随之通过。这就是崩溃恢复的形状（存盘 → 重载图 → 接着跑），`Core.Extension.Test/Serialization/ExecutionCheckpointMigrationTests.cs` 钉住：原样传被拒、re-key 后通过且已完成节点不再驱动。
 - **`IGroupData` 归一化**：`Snapshot()` 把载荷与产物里的 `IGroupData` 换成**以节点键为键的普通字典**。节点引用写不进文件，而且序列化会顺着它把整棵树拖进去（与 `CompiledGraphEx` 排除 `Parent` 同一个坑）。运行中的对象不动，只换快照里那一份。
-- **数字不保类型（实测）**：载荷是 `object`，JSON 只有一种整数 ⇒ `int` 回来是 `long`、`float` 是 `double`，`TypeNameHandling.All` **也救不回来**（试过了）。引擎自己的字段精确；`InMemoryCheckpointStore` 没有这个缺口。三个 TFM 里 `KeyValuePair` 也没有 `Deconstruct`，遍历产物表要显式取 `Key`/`Value`。
-- DTO 是**纯数据**，所以不走 `ComponentModelEx` 的公开序列化面（那一面被 `INotifyPropertyChanged` 约束住了，它是为 VM 写的），而是用同程序集 `internal` 的 `CreateJsonSerializer()` —— 于是它继承库里的全部默认设置（保留引用、循环忽略、字典键转换器）。
+- **数字不保类型（实测）**：载荷是 `object`，归档格式按设计把 primitive 写成裸 JSON 值、把 enum 写成底层整数 ⇒ `int` 回来是 `long`、`float` 是 `double`，没有设置能救（`CheckpointEx` 的 remarks 写明这是格式的形状，不是缺陷）。引擎自己的字段精确；`InMemoryCheckpointStore` 没有这个缺口。三个 TFM 里 `KeyValuePair` 也没有 `Deconstruct`，遍历产物表要显式取 `Key`/`Value`。
+- DTO 是**纯数据**，所以不走 `ViewModelSerializer` 的公开序列化面（那一面约束在 `INotifyPropertyChanged`，是为 VM 写的）：它用 `[Archivable]` 加入归档格式，再由 `VeloxJsonSerializer` 直接读写（`CheckpointEx.cs` 的 `SerializeCheckpoint` / `DeserializeCheckpoint`）。
 
 测试：`Core.Test/…/ExecutionCheckpointTests.cs` + `Core.Extension.Test/Serialization/ExecutionCheckpointSerializationTests.cs`。判别性最强的一条是「半途停 → 恢复」：断言既要求没跑过的分支被驱动，也要求**被跳过的那个节点在汇合点里仍读得到它当初的产物** —— 只测「跳过了」的话，产物铺没铺回去是看不出来的。
 
