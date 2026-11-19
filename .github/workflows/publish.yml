@@ -20,14 +20,23 @@ name: publish
 #   downstream syncing to Core, templates staying put) are the developer's decision, not a gate
 #   here.
 #
+# CLI tests (merged from the former cli-tests workflow):
+#   The CLI is the one component whose tests cross the process boundary on every run. They live in
+#   this workflow: after the version stage finds VeloxDev.Cli missing on NuGet, a two-host matrix
+#   (Windows + Ubuntu) runs the suite and the packed-tool smoke test. The publish job waits for
+#   that matrix whenever a CLI version is being released; a red matrix blocks the release before
+#   anything is packed. Pull requests run the same matrix without the version/publish stages.
+#
 # Trigger:
 #   - push to master when package sources change. Each package's own <Version> is read, and only
 #     the packages NuGet is still missing for that version are packed and pushed. When nothing is
 #     missing, the release job is skipped; bump a <Version> to publish.
+#   - pull_request: run the CLI test matrix only. The version and publish jobs stay out of PRs.
 #   - manual workflow_dispatch; the default run publishes only the missing packages, so a run
 #     that failed halfway can be retried without repacking what already landed. `force` treats
 #     every package as missing and re-runs the whole pipeline (duplicates are skipped with
-#     --skip-duplicate).
+#     --skip-duplicate). A manual run also exercises the CLI matrix even when the CLI is already
+#     published, so the workflow can be used as a test-only dispatch.
 #
 # Auto vs manual:
 #   The push trigger is only acted on when the repository variable AUTO_PUBLISH is set to
@@ -47,6 +56,14 @@ on:
     paths:
       - 'Src/**'
       - '.github/workflows/publish.yml'
+  pull_request:
+    paths:
+      - 'Src/Cli/**'
+      - 'Src/Core/**'
+      - 'Src/Generators/**'
+      - 'Src/Test/Unit/**'
+      - 'Examples/Workflow/Common/**'
+      - '.github/workflows/publish.yml'
   workflow_dispatch:
     inputs:
       force:
@@ -60,14 +77,15 @@ permissions:
   id-token: write
 
 concurrency:
-  group: veloxdev-publish
-  cancel-in-progress: false
+  # PR runs supersede each other; releases stay serialized and are never cancelled midway.
+  group: veloxdev-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   version:
     # Manual runs always proceed. Push runs only proceed when the repository variable
-    # AUTO_PUBLISH is "true"; otherwise the run is a no-op.
-    if: github.event_name == 'workflow_dispatch' || vars.AUTO_PUBLISH == 'true'
+    # AUTO_PUBLISH is "true"; PR runs only exercise the CLI test job.
+    if: github.event_name != 'pull_request' && (github.event_name == 'workflow_dispatch' || vars.AUTO_PUBLISH == 'true')
     runs-on: ubuntu-latest
     outputs:
       publish: ${{ steps.read.outputs.publish }}
@@ -159,9 +177,59 @@ jobs:
           "rest_missing=$restJson" >> $env:GITHUB_OUTPUT
           "missing=$missingJson" >> $env:GITHUB_OUTPUT
 
-  publish:
+  cli_test:
+    name: CLI tests (${{ matrix.os }})
     needs: version
-    if: needs.version.outputs.publish == 'true'
+    # PRs always run the matrix; manual runs do too, so the workflow doubles as a test-only dispatch.
+    # Push runs it only when the version stage found a new VeloxDev.Cli — that is the gate before
+    # packing it. always() is required for the PR path because `version` is skipped there.
+    if: |
+      always() && !cancelled() && (
+        github.event_name == 'pull_request' ||
+        github.event_name == 'workflow_dispatch' ||
+        (needs.version.result == 'success' && needs.version.outputs.cli_missing == 'true')
+      )
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run the CLI test suite
+        run: dotnet test Src/Test/Unit/Cli/VeloxDev.Cli.Test/VeloxDev.Cli.Test.csproj -c Debug --nologo
+
+      # Packaging is part of the contract: a tool package that installs on Windows may still have a
+      # bad DotnetToolSettings or a missing dependency. Build and install it on both hosts.
+      - name: Pack the tool
+        run: dotnet pack Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj -c Debug -o "${{ runner.temp }}/pack" --nologo
+
+      - name: Install the packed tool
+        shell: bash
+        run: |
+          VERSION=$(grep -o '<Version>[^<]*' Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj | head -1 | sed 's/<Version>//')
+          dotnet tool install --tool-path "$RUNNER_TEMP/tool" --add-source "$RUNNER_TEMP/pack" VeloxDev.Cli --version "$VERSION"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            "$RUNNER_TEMP/tool/veloxdev.exe" --help
+          else
+            "$RUNNER_TEMP/tool/veloxdev" --help
+          fi
+
+  publish:
+    needs: [version, cli_test]
+    # The release waits for the CLI matrix whenever it ran. A skipped matrix means the CLI version
+    # was already on NuGet, so the other packages may still go out. always() lets this job run when
+    # cli_test is skipped, and keeps PR/no-op runs from entering the publish stages.
+    if: |
+      always() && !cancelled() &&
+      needs.version.result == 'success' &&
+      needs.version.outputs.publish == 'true' &&
+      (needs.cli_test.result == 'success' || needs.cli_test.result == 'skipped')
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
