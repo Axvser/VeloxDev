@@ -39,6 +39,8 @@
 
 模板注释**只解释扩展点，永远不解释机制、原理** —— 细则见 [code-comment-specifications.md](code-comment-specifications.md) §五。
 
+**七家的注释保持同一粒度**：同一个条目在每家都只留同一组一句话提示；不要一家写成机制长文、另一家只留一句。平台差异本身需要说明时，压成一行「为什么这里写法不同」，其余推导留在模块记忆或提交信息。
+
 ---
 
 ## 五、现状：与第三节不一致的地方
@@ -47,7 +49,7 @@
 
 - **Avalonia 的建视图路径是 `template.Build(item)`**（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/ViewHosting/ViewFactory.cs` 的 `CreateView`），而 Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的是选择器自己，轮到 `Build` 时它才去挑内层模板；传 `null` 就无从下手（选择器的 `SelectTemplate(null)` 抛异常）⇒ **视图一个都不建，且不报错**（画布空白）。传 VM，选择器因此可用。
 - **判定顺序**（四家 `FindDataTemplate` 同形）：按 VM **类型**的缓存 → 选择器 → 平台自带的查找（Avalonia：`ViewFactory.FindTemplate` 的缓存 → 选择器 → 面板 / 祖先 / `Application`）⇒ 「选择器命中就跳过平台机制、没命中就退化到平台机制」成立；但选择器若**按实例**判定，第一个实例的判定会被整个类型沿用。
-- **WinForms 的池没有平台兜底**：选择器是唯一的创建路径（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/IWorkflowTemplateSelector.cs` 的 `CreateView(item)`），所以「退化到平台机制」在那家不存在。
+- **WinForms 的池没有平台兜底**：选择器是唯一的创建路径（`Src/Adapters/VeloxDev.WinForms/Xaml/TemplateSelector.cs` 的 `SelectTemplate(item)` → `DataTemplate`），所以「退化到平台机制」在那家不存在。
 - **WinForms 的连线默认不池化**：`ViewLinkLayer.IsActive=true`，`workflow-tree-view` 在 `PART_Canvas` 上挂 `behaviors:WorkflowLinkLayer.*`，由它一趟画完所有可见线；`workflow-link-view` 条目仍存在，但只是显式 per-link opt-in，默认 tree 不实例化它。其余平台仍按角色池化连线（MAUI 是单 overlay 的例外）。
 - **连线的命中与删除是库能力；高亮等外观是 demo 专属**（2026-10-04 用户改定。分层的完整规则见 [layer-ownership-specifications.md](layer-ownership-specifications.md)）：连线视图只负责**画出自己那条曲线并把它发布出去**，其余由 Core、适配器、demo 三方分担 ——
   - 命中判定归 Core（`LinkHitTestEx` 对着已发布的曲线判距，半径 `LinkHitTestEx.DefaultHitRadius`）；

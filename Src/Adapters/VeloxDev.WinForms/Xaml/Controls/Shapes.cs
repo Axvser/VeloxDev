@@ -1,0 +1,312 @@
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Windows.Forms;
+
+namespace VeloxDev.WinForms.Xaml.Controls.Shapes;
+
+using VeloxDev.WinForms.Xaml.Controls;
+
+/// <summary>
+/// The shared fill and stroke surface of the vector shape controls.
+/// </summary>
+/// <remarks>
+/// A shape draws its geometry in the control's content rectangle. <see cref="Fill"/> paints the interior;
+/// <see cref="Stroke"/> paints the outline with <see cref="StrokeThickness"/>.
+/// </remarks>
+public abstract class Shape : Control
+{
+    /// <summary>The interior colour; transparent by default.</summary>
+    public static readonly DependencyProperty FillProperty = DependencyProperty.Register(
+        nameof(Fill),
+        typeof(Color),
+        typeof(Shape),
+        new PropertyMetadata(Color.Transparent, OnVisualPropertyChanged));
+
+    /// <summary>The outline colour; black by default.</summary>
+    public static readonly DependencyProperty StrokeProperty = DependencyProperty.Register(
+        nameof(Stroke),
+        typeof(Color),
+        typeof(Shape),
+        new PropertyMetadata(Color.Black, OnVisualPropertyChanged));
+
+    /// <summary>The outline width in pixels; one by default.</summary>
+    public static readonly DependencyProperty StrokeThicknessProperty = DependencyProperty.Register(
+        nameof(StrokeThickness),
+        typeof(float),
+        typeof(Shape),
+        new PropertyMetadata(1f, OnVisualPropertyChanged));
+
+    /// <summary>Gets or sets the interior colour.</summary>
+    public Color Fill
+    {
+        get => (Color)GetValue(FillProperty)!;
+        set => SetValue(FillProperty, value);
+    }
+
+    /// <summary>Gets or sets the outline colour.</summary>
+    public Color Stroke
+    {
+        get => (Color)GetValue(StrokeProperty)!;
+        set => SetValue(StrokeProperty, value);
+    }
+
+    /// <summary>Gets or sets the outline width in pixels.</summary>
+    public float StrokeThickness
+    {
+        get => (float)GetValue(StrokeThicknessProperty)!;
+        set => SetValue(StrokeThicknessProperty, value);
+    }
+
+    /// <summary>Creates the geometry for the current bounds.</summary>
+    protected abstract GraphicsPath CreatePath(RectangleF bounds);
+
+    /// <inheritdoc />
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var bounds = XamlLayout.ContentBounds(this);
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        using var path = CreatePath(bounds);
+        PaintPath(e.Graphics, path, closed: true);
+    }
+
+    /// <summary>Fills and strokes one geometry.</summary>
+    /// <param name="graphics">The target surface.</param>
+    /// <param name="path">The geometry.</param>
+    /// <param name="closed">Whether fill is allowed.</param>
+    protected void PaintPath(Graphics graphics, GraphicsPath path, bool closed)
+    {
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        if (closed && Fill.A > 0)
+        {
+            using var brush = new SolidBrush(Fill);
+            graphics.FillPath(brush, path);
+        }
+
+        if (Stroke.A > 0 && StrokeThickness > 0f)
+        {
+            using var pen = new Pen(Stroke, StrokeThickness);
+            graphics.DrawPath(pen, path);
+        }
+    }
+
+    private static void OnVisualPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Control control && !control.IsDisposed)
+        {
+            control.Invalidate();
+        }
+    }
+}
+
+/// <summary>A rectangle with optional rounded corners.</summary>
+public class Rectangle : Shape
+{
+    /// <summary>The horizontal corner radius in pixels.</summary>
+    public static readonly DependencyProperty RadiusXProperty = DependencyProperty.Register(
+        nameof(RadiusX),
+        typeof(float),
+        typeof(Rectangle),
+        new PropertyMetadata(0f, OnVisualPropertyChanged));
+
+    /// <summary>The vertical corner radius in pixels.</summary>
+    public static readonly DependencyProperty RadiusYProperty = DependencyProperty.Register(
+        nameof(RadiusY),
+        typeof(float),
+        typeof(Rectangle),
+        new PropertyMetadata(0f, OnVisualPropertyChanged));
+
+    /// <summary>Gets or sets the horizontal corner radius.</summary>
+    public float RadiusX
+    {
+        get => (float)GetValue(RadiusXProperty)!;
+        set => SetValue(RadiusXProperty, value);
+    }
+
+    /// <summary>Gets or sets the vertical corner radius.</summary>
+    public float RadiusY
+    {
+        get => (float)GetValue(RadiusYProperty)!;
+        set => SetValue(RadiusYProperty, value);
+    }
+
+    /// <inheritdoc />
+    protected override GraphicsPath CreatePath(RectangleF bounds)
+        => XamlDrawing.RoundedRectangle(bounds, RadiusX, RadiusY);
+
+    private static void OnVisualPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Control control && !control.IsDisposed)
+        {
+            control.Invalidate();
+        }
+    }
+}
+
+/// <summary>An ellipse that fills its content rectangle.</summary>
+public class Ellipse : Shape
+{
+    /// <inheritdoc />
+    protected override GraphicsPath CreatePath(RectangleF bounds)
+    {
+        var path = new GraphicsPath();
+        path.AddEllipse(bounds);
+        return path;
+    }
+}
+
+/// <summary>A straight line between two points in the control's content rectangle.</summary>
+public class Line : Shape
+{
+    /// <summary>The horizontal start coordinate.</summary>
+    public static readonly DependencyProperty X1Property = DependencyProperty.Register(
+        nameof(X1), typeof(float), typeof(Line), new PropertyMetadata(0f, OnVisualPropertyChanged));
+
+    /// <summary>The vertical start coordinate.</summary>
+    public static readonly DependencyProperty Y1Property = DependencyProperty.Register(
+        nameof(Y1), typeof(float), typeof(Line), new PropertyMetadata(0f, OnVisualPropertyChanged));
+
+    /// <summary>The horizontal end coordinate.</summary>
+    public static readonly DependencyProperty X2Property = DependencyProperty.Register(
+        nameof(X2), typeof(float), typeof(Line), new PropertyMetadata(0f, OnVisualPropertyChanged));
+
+    /// <summary>The vertical end coordinate.</summary>
+    public static readonly DependencyProperty Y2Property = DependencyProperty.Register(
+        nameof(Y2), typeof(float), typeof(Line), new PropertyMetadata(0f, OnVisualPropertyChanged));
+
+    /// <summary>Gets or sets the horizontal start coordinate.</summary>
+    public float X1 { get => (float)GetValue(X1Property)!; set => SetValue(X1Property, value); }
+
+    /// <summary>Gets or sets the vertical start coordinate.</summary>
+    public float Y1 { get => (float)GetValue(Y1Property)!; set => SetValue(Y1Property, value); }
+
+    /// <summary>Gets or sets the horizontal end coordinate.</summary>
+    public float X2 { get => (float)GetValue(X2Property)!; set => SetValue(X2Property, value); }
+
+    /// <summary>Gets or sets the vertical end coordinate.</summary>
+    public float Y2 { get => (float)GetValue(Y2Property)!; set => SetValue(Y2Property, value); }
+
+    /// <inheritdoc />
+    protected override GraphicsPath CreatePath(RectangleF bounds)
+    {
+        var path = new GraphicsPath();
+        path.AddLine(X1, Y1, X2, Y2);
+        return path;
+    }
+
+    /// <inheritdoc />
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        using var path = CreatePath(RectangleF.Empty);
+        PaintPath(e.Graphics, path, closed: false);
+    }
+
+    /// <inheritdoc />
+    public override Size GetPreferredSize(Size proposedSize)
+        => new(
+            (int)Math.Ceiling(Math.Max(X1, X2)) + (int)Math.Ceiling(StrokeThickness),
+            (int)Math.Ceiling(Math.Max(Y1, Y2)) + (int)Math.Ceiling(StrokeThickness));
+
+    private static void OnVisualPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Control control && !control.IsDisposed)
+        {
+            control.Invalidate();
+        }
+    }
+}
+
+/// <summary>
+/// A vector path written in the common SVG path syntax.
+/// </summary>
+/// <remarks>
+/// Coordinates are in the control's own pixels by default. Set <see cref="Stretch"/> to scale the parsed path into
+/// the control instead. Supported commands are <c>M</c>, <c>L</c>, <c>H</c>, <c>V</c>, <c>C</c>, <c>S</c>,
+/// <c>Q</c>, <c>T</c>, <c>A</c> and <c>Z</c>, in both absolute and relative forms.
+/// </remarks>
+public class Path : Shape
+{
+    /// <summary>The path data in SVG syntax.</summary>
+    public static readonly DependencyProperty DataProperty = DependencyProperty.Register(
+        nameof(Data),
+        typeof(string),
+        typeof(Path),
+        new PropertyMetadata(string.Empty, OnDataPropertyChanged));
+
+    /// <summary>How the parsed path is fitted into the control; <see cref="Stretch.None"/> by default.</summary>
+    public static readonly DependencyProperty StretchProperty = DependencyProperty.Register(
+        nameof(Stretch),
+        typeof(Stretch),
+        typeof(Path),
+        new PropertyMetadata(Stretch.None, OnDataPropertyChanged));
+
+    /// <summary>Gets or sets the path data in SVG syntax.</summary>
+    public string Data
+    {
+        get => (string?)GetValue(DataProperty) ?? string.Empty;
+        set => SetValue(DataProperty, value);
+    }
+
+    /// <summary>Gets or sets how the parsed path is fitted into the control.</summary>
+    public Stretch Stretch
+    {
+        get => (Stretch)GetValue(StretchProperty)!;
+        set => SetValue(StretchProperty, value);
+    }
+
+    /// <inheritdoc />
+    protected override GraphicsPath CreatePath(RectangleF bounds)
+    {
+        var path = PathGeometry.Parse(Data);
+        if (Stretch == Stretch.None || path.PointCount == 0 || bounds.Width <= 0f || bounds.Height <= 0f)
+        {
+            return path;
+        }
+
+        var source = path.GetBounds();
+        if (source.Width <= 0f || source.Height <= 0f)
+        {
+            return path;
+        }
+
+        var scaleX = bounds.Width / source.Width;
+        var scaleY = bounds.Height / source.Height;
+        if (Stretch is Stretch.Uniform or Stretch.UniformToFill)
+        {
+            var scale = Stretch == Stretch.Uniform ? Math.Min(scaleX, scaleY) : Math.Max(scaleX, scaleY);
+            scaleX = scale;
+            scaleY = scale;
+        }
+
+        var offsetX = bounds.X + ((bounds.Width - (source.Width * scaleX)) / 2f);
+        var offsetY = bounds.Y + ((bounds.Height - (source.Height * scaleY)) / 2f);
+        using var transform = new Matrix();
+        transform.Scale(scaleX, scaleY);
+        transform.Translate(offsetX, offsetY);
+        transform.Translate(-source.X, -source.Y, MatrixOrder.Append);
+        path.Transform(transform);
+        return path;
+    }
+
+    /// <inheritdoc />
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        using var path = PathGeometry.Parse(Data);
+        var bounds = path.GetBounds();
+        return new Size(
+            (int)Math.Ceiling(bounds.Right + StrokeThickness),
+            (int)Math.Ceiling(bounds.Bottom + StrokeThickness));
+    }
+
+    private static void OnDataPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Control control && !control.IsDisposed)
+        {
+            control.Invalidate();
+            control.Parent?.PerformLayout();
+        }
+    }
+}

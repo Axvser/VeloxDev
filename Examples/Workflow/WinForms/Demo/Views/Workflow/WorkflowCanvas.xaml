@@ -20,8 +20,12 @@
 
   <v:UserControl.Resources>
     <v:ResourceDictionary>
+      <v:DataTemplate x:Key="NodeTemplate">
+        <local:WorkflowNodeCard />
+      </v:DataTemplate>
       <!-- VeloxDev customization: which view each pooled item kind gets. -->
-      <local:TemplateSelector x:Key="WorkflowTemplateSelector" />
+      <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
+                                    NodeTemplate="{StaticResource NodeTemplate}" />
       <!-- The bars draw themselves; these setters keep them on the demo's dark palette. -->
       <v:Style x:Key="SurfaceScrollBarStyle" TargetType="v:ScrollBar">
         <v:Style.Setters>

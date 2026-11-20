@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 using NativeControl = System.Windows.Forms.Control;
@@ -103,13 +104,13 @@ internal sealed class TestGridDecorator : NativePanel, IWorkflowGridDecorator
     public double RulerBand => 0;
 }
 
-internal sealed class TestTemplateSelector : IWorkflowTemplateSelector
+internal sealed class TestTemplateSelector : TemplateSelector
 {
-    public NativeControl CreateView(object item) => new NativePanel
-    {
-        Width = item is IWorkflowNodeViewModel ? 160 : 12,
-        Height = item is IWorkflowNodeViewModel ? 90 : 12,
-    };
+    private static readonly DataTemplate NodeTemplate = new(() => new NativePanel { Width = 160, Height = 90 });
+    private static readonly DataTemplate LinkTemplate = new(() => new NativePanel { Width = 12, Height = 12 });
+
+    public override DataTemplate? SelectTemplate(object? item)
+        => item is IWorkflowNodeViewModel ? NodeTemplate : LinkTemplate;
 }
 
 // Simple-name resolution uses the surface's own namespace, so the typed views sit next to it.

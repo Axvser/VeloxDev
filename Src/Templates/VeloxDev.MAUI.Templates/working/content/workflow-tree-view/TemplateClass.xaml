@@ -1,4 +1,4 @@
-<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the local type names below if you renamed them. -->
+<!-- VeloxDev customization: generate the sibling views, then update the local type names if you renamed them. -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:TemplateNamespace"
@@ -17,12 +17,9 @@
         <DataTemplate x:Key="NodeTemplate">
             <local:NodeView WidthRequest="{Binding Size.Width}" HeightRequest="{Binding Size.Height}" />
         </DataTemplate>
-        <!-- Links are NOT pooled anymore: the shared link layer renders them in one viewport-sized
-             GraphicsView (see LinkView below), so the pool only materializes node views and the
-             selector needs no LinkTemplate. -->
+        <!-- VeloxDev customization: one viewport-sized link layer; the pool only materializes nodes. -->
         <local:TemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" />
-        <!-- The link context menu: add or remove MenuFlyoutItem entries to change it. Each item's Command
-             binds to the pressed link, so a new entry needs no code. The surface below shows this menu. -->
+        <!-- VeloxDev customization: add or remove the link menu's entries; each item receives the pressed link. -->
         <MenuFlyout x:Key="LinkContextMenu">
         </MenuFlyout>
     </ContentView.Resources>
@@ -34,9 +31,7 @@
                 StrokeShape="RoundRectangle TemplateSurfaceCornerRadius"
                 BackgroundColor="TemplateSurfaceBackground">
             <local:GridDecorator x:Name="PART_GridDecorator">
-                <!-- Viewport-sized link layer (sibling of the scroll viewer, never inside the growing
-                     world canvas → no Win2D texture cap on deep zoom). One GraphicsView draw at
-                     px = Ruler + anchor + ContentOffset − Scroll. z order: grid < links < nodes < rulers. -->
+                <!-- VeloxDev customization: the link layer stays viewport-sized; keep it outside the world canvas. -->
                 <local:LinkView WorkflowTree="{Binding BindingContext, Source={x:Reference Root}}"
                                 InteractionSource="{x:Reference Root}"
                                 ScrollOffsetX="{Binding ScrollOffsetX, Source={x:Reference PART_GridDecorator}}"

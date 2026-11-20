@@ -30,7 +30,7 @@
     "slotBackground": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Slot background color. Must be opaque: WinForms throws on a translucent BackColor (A < 255) unless SupportsTransparentBackColor is set.",
+      "description": "Slot background color; use #01000000 to let the card show through, or an opaque color for a flat port.",
       "defaultValue": "#01000000",
       "replaces": "TemplateSlotBackground"
     },

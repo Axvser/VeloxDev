@@ -1,21 +1,14 @@
-// VeloxDev customization: Per-link view (opt-in). The default surface draws links in one WorkflowLinkLayer pass;
-// change WorkflowLinkLayer.LineColor / Thickness on the tree's PART_Canvas for that path. Use this item only when a
-// host gives each link its own control; its palette then applies.
+// VeloxDev customization: per-link view (opt-in); its palette is set here.
 using System.Globalization;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
-using VeloxDev.WinForms.Xaml.Controls;
 
 namespace TemplateNamespace;
 
-/// <summary>
-/// A passive workflow link view that paints the resting curve. Hover feedback belongs to the host.
-/// </summary>
-public sealed partial class TemplateClass : UserControl
+public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
     private readonly WorkflowLinkAttachment _attachment;
 
-    /// <summary>Creates the link view and applies the generated palette.</summary>
     public TemplateClass()
     {
         InitializeComponent();
@@ -32,7 +25,6 @@ public sealed partial class TemplateClass : UserControl
         _attachment.Thickness = float.Parse("TemplateLinkThickness", CultureInfo.InvariantCulture);
     }
 
-    /// <summary>Gets or sets the link this view renders.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public IWorkflowLinkViewModel? ViewModel
@@ -41,7 +33,6 @@ public sealed partial class TemplateClass : UserControl
         set => _attachment.Bind(value);
     }
 
-    /// <inheritdoc />
     protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
     {
         base.OnPaint(e);

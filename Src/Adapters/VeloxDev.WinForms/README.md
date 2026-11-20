@@ -2,12 +2,42 @@
 
 Package: `VeloxDev.WinForms` · Namespace: `VeloxDev.WorkflowSystem.AttachedBehaviors`
 
-WinForms has no attached-property system and no data binding. This adapter mirrors the exact
-attached-property surface of the WPF/Avalonia/WinUI/MAUI adapters using **static `Get`/`Set`
-methods** that store per-control state in a `ConditionalWeakTable<Control, State>`. The API shape
-is therefore: attach behavior `X` to a control by calling `WorkflowXxxBehavior.SetYyy(control, value)`.
+The adapter has two surfaces. The **XAML layer** ships a dependency-property runtime, a Roslyn
+generator and a WPF/Avalonia-shaped control library (see [XAML control library](#xaml-control-library)).
+The **code-first behaviours** keep the old shape: static `Get`/`Set` methods that store per-control
+state in a `ConditionalWeakTable<Control, State>`; attach behaviour `X` to a control by calling
+`WorkflowXxxBehavior.SetYyy(control, value)`.
 
-```
+## XAML control library
+
+The XAML layer lives in `VeloxDev.WinForms.Xaml` (runtime) and `VeloxDev.WinForms.Xaml.Controls`
+(controls and layout primitives); vector shapes are in `VeloxDev.WinForms.Xaml.Controls.Shapes`.
+Every control derives from the XAML `Control`, so its properties are dependency properties and the
+style, trigger, transition and binding pipeline applies.
+
+| Family | Types |
+| --- | --- |
+| Layout | `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `Border`, `ScrollViewer`, `ContentControl`, `ItemsControl` |
+| Text | `TextBlock`, `Label`, `TextBox`, `PasswordBox` |
+| Selection | `Button`, `RepeatButton`, `ToggleButton`, `CheckBox`, `RadioButton`, `ListBox`, `ComboBox` |
+| Range / media | `ProgressBar`, `Slider`, `Image`, `Separator` |
+| Shapes | `Rectangle`, `Ellipse`, `Line`, `Path` |
+
+View selection is the generic `VeloxDev.WinForms.Xaml.TemplateSelector` (`object?` → `DataTemplate?`), not a workflow-specific base; derive it, expose the templates your host supports, and hand it to `WorkflowSurfaceBehavior.TemplateSelector` or `ViewPool.SetTemplateSelector`.
+
+Prefix rules are strict: `v:` means a VeloxDev type, `local:` means a template/Demo type, and **no
+prefix means native WinForms only**. An unprefixed VeloxDev type is `VELOX_XAML019`; the generator
+does not silently prefer the adapter over a same-named native control. Code-behind names its XAML
+base with the full namespace, for example
+`public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserControl`.
+
+Attached coordinates use the same `v:` spelling: `v:Canvas.Left`, `v:Grid.Row`,
+`v:DockPanel.Dock`. `Width`, `Height`, `MinWidth`, `MinHeight`, `MaxWidth`, `MaxHeight`, `Margin`,
+`Padding`, `Background`, `Foreground`, `Font`, `Visibility`, `IsEnabled`, `HorizontalAlignment`
+and `VerticalAlignment` are dependency properties on every XAML control; native controls can still
+receive attached values but have no XAML property change pipeline.
+
+```csharp
 WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(myCanvas, true);
 WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(myCanvas, tree);
 ```
@@ -52,7 +82,7 @@ public sealed class TreeView : WorkflowTreeView
 | Member | Notes |
 |--------|-------|
 | `CreateNodeView` · `CreateLinkView` | **Required.** The card should implement `IWorkflowSurfaceNodeView` so the surface can place it on every pan; a link view needs nothing — its geometry follows its endpoints. |
-| `TemplateSelector` | Optional. Replaces the two factories; the surface still records each view's role from the item it was created for. |
+| `TemplateSelector` | Optional. Returns a `DataTemplate` per item type; the surface still records each view's role from the item it was created for. |
 | `ViewModel` · `MinimapOverlay` | The tree, and an optional minimap (`IWorkflowMinimapOverlay`, plus `IWorkflowMinimapScrollSource` to have its viewport drags pan the surface). |
 | `SurfaceBackground` · `SurfaceBorderBrush` · `SurfaceBorderThickness` · `SurfaceCornerRadius` | Chrome styling, applied as they are set. |
 | `PART_ScrollViewer` · `PART_Canvas` · `PART_GridDecorator` · `PART_MinimapOverlay` | The named parts the surface behaviour resolves. |
@@ -191,9 +221,9 @@ WorkflowBehaviors.ViewPool.SetTemplateSelector(container, selector);
 | API | Notes |
 |-----|-------|
 | `Get/SetItemsSource(Control, INotifyCollectionChanged?)` | The pooled collection. |
-| `Get/SetTemplateSelector(Control, IWorkflowTemplateSelector?)` | Creates a view per item type. |
+| `Get/SetTemplateSelector(Control, TemplateSelector?)` | Selects a `DataTemplate` per item type. |
 
-When both are set, a `ViewManager` starts: it creates a `Control` per item via the selector,
+When both are set, a `ViewManager` starts: it creates a `Control` per item from the selected `DataTemplate`,
 **recycles pooled views per item type** (a `Queue<Control>`), applies the item as context, and
 keeps them in sync with collection add/remove/reset/replace. Set either to `null` to stop.
 

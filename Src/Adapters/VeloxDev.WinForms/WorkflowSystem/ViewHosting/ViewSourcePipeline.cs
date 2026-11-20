@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace VeloxDev.WorkflowSystem.ViewHosting;
@@ -23,7 +24,7 @@ public sealed class ViewSourcePipeline : ViewSourcePipelineCore<
     /// <param name="poolPolicy">The batch/recycle policy; defaults to <see cref="AdaptiveViewPoolPolicy"/>.</param>
     public ViewSourcePipeline(
         Control host,
-        IWorkflowTemplateSelector templateSelector,
+        TemplateSelector templateSelector,
         INotifyCollectionChanged source,
         IViewPoolPolicy? poolPolicy = null)
         : base(

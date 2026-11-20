@@ -1,5 +1,4 @@
-// VeloxDev customization: The workflow grid. This file owns the surface, the world grid, the axes and both
-// ruler bands; change the palette and the spacing here.
+// VeloxDev customization: the grid palette and spacing live here.
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -10,14 +9,10 @@ using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace TemplateNamespace;
 
-/// <summary>
-/// A workflow surface decorator that draws the world grid and the rounded surface outline.
-/// </summary>
 public sealed class TemplateClass : Panel, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
-    // Extension point: ruler-band thickness.
     private const double DefaultRulerThickness = 36;
 
     private Color _gridBackground = WorkflowSurfaceColors.Parse("TemplateGridBackground");
@@ -39,7 +34,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
     private float _surfaceBorderThickness = 1f;
     private float _surfaceCornerRadius = 3f;
 
-    /// <summary>Creates the grid and enables its double-buffered paint style.</summary>
     public TemplateClass()
     {
         DoubleBuffered = true;
@@ -52,7 +46,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
             true);
     }
 
-    /// <summary>The surface behind the grid.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color GridBackground
@@ -67,7 +60,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         }
     }
 
-    /// <summary>Colour of the minor grid lines.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color MinorGridColor
@@ -76,7 +68,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_minorGridColor != value) { _minorGridColor = value; Invalidate(); } }
     }
 
-    /// <summary>Colour of the major grid lines.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color MajorGridColor
@@ -85,7 +76,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_majorGridColor != value) { _majorGridColor = value; Invalidate(); } }
     }
 
-    /// <summary>Colour of the world axes.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color AxisColor
@@ -94,7 +84,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_axisColor != value) { _axisColor = value; Invalidate(); } }
     }
 
-    /// <summary>Fill of the two ruler bands.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color RulerBackground
@@ -103,7 +92,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { _rulerBackground = value; }
     }
 
-    /// <summary>Colour of the ruler ticks.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color RulerTickColor
@@ -112,7 +100,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { _rulerTickColor = value; }
     }
 
-    /// <summary>Colour of the ruler labels.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color RulerLabelColor
@@ -121,7 +108,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { _rulerLabelColor = value; }
     }
 
-    /// <summary>Colour of the lines dividing each band from the grid.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color RulerDividerColor
@@ -130,7 +116,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { _rulerDividerColor = value; }
     }
 
-    /// <summary>Colour of the rounded outline around the whole surface.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public Color SurfaceBorderBrush
@@ -139,7 +124,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_surfaceBorderBrush != value) { _surfaceBorderBrush = value; Invalidate(); } }
     }
 
-    /// <summary>Width of the rounded outline around the whole surface, in pixels.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public float SurfaceBorderThickness
@@ -148,7 +132,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_surfaceBorderThickness != value) { _surfaceBorderThickness = value; Invalidate(); } }
     }
 
-    /// <summary>Corner radius of the rounded outline, in pixels.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public float SurfaceCornerRadius
@@ -157,7 +140,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_surfaceCornerRadius != value) { _surfaceCornerRadius = value; Invalidate(); } }
     }
 
-    /// <summary>World distance between minor grid lines, in pixels.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public double GridSpacing
@@ -166,7 +148,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_gridSpacing != value) { _gridSpacing = value; Invalidate(); } }
     }
 
-    /// <summary>How many minor lines make a major one. Values below one are treated as one.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public int MajorLineEvery
@@ -175,7 +156,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_majorLineEvery != value) { _majorLineEvery = value; Invalidate(); } }
     }
 
-    /// <summary>Thickness of the ruler band the surface reserves and its floating overlay draws, in pixels.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public double RulerThickness
@@ -184,7 +164,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_rulerThickness != value) { _rulerThickness = value; Invalidate(); } }
     }
 
-    /// <inheritdoc />
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public double ScrollOffsetX
@@ -193,7 +172,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_scrollOffsetX != value) { _scrollOffsetX = value; Invalidate(); } }
     }
 
-    /// <inheritdoc />
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public double ScrollOffsetY
@@ -202,7 +180,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_scrollOffsetY != value) { _scrollOffsetY = value; Invalidate(); } }
     }
 
-    /// <inheritdoc />
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public double ContentOffsetX
@@ -211,7 +188,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_contentOffsetX != value) { _contentOffsetX = value; Invalidate(); } }
     }
 
-    /// <inheritdoc />
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public double ContentOffsetY
@@ -220,10 +196,8 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         set { if (_contentOffsetY != value) { _contentOffsetY = value; Invalidate(); } }
     }
 
-    /// <inheritdoc />
     public double RulerBand => RulerThickness;
 
-    /// <inheritdoc />
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         if (e is null) throw new ArgumentNullException(nameof(e));
@@ -232,7 +206,6 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
         Render(e.Graphics);
     }
 
-    /// <inheritdoc />
     protected override void OnPaint(PaintEventArgs e)
     {
     }
@@ -334,12 +307,8 @@ public sealed class TemplateClass : Panel, IWorkflowGridDecorator
     }
 }
 
-/// <summary>
-/// The viewport: a XAML scrollable control that lets the grid decorator paint through it.
-/// </summary>
 public sealed class SurfaceScrollableControl : VeloxDev.WinForms.Xaml.Controls.ScrollableControl
 {
-    /// <summary>Creates the viewport with a transparent background.</summary>
     public SurfaceScrollableControl()
     {
         SetStyle(ControlStyles.SupportsTransparentBackColor, true);
@@ -347,12 +316,8 @@ public sealed class SurfaceScrollableControl : VeloxDev.WinForms.Xaml.Controls.S
     }
 }
 
-/// <summary>
-/// The pool host: a XAML canvas that lets the grid decorator paint through it.
-/// </summary>
 public sealed class SurfaceCanvas : VeloxDev.WinForms.Xaml.Controls.Canvas
 {
-    /// <summary>Creates the canvas with a transparent background.</summary>
     public SurfaceCanvas()
     {
         SetStyle(ControlStyles.SupportsTransparentBackColor, true);

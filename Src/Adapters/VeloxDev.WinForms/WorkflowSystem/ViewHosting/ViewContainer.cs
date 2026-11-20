@@ -10,7 +10,8 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// <remarks>
 /// A pooled control stays in <see cref="Control.Controls"/> while it is recycled; deactivation only hides it and
 /// clears the context, so the next item can reuse the same window without a handle round-trip. Binding itself
-/// belongs to the node, slot and link attachments, which already know how to release their subscriptions. Because
+/// belongs to the node and link attachments and to the slot view's <c>ViewModel</c> property, which already know
+/// how to release their subscriptions. Because
 /// WinForms has no z-order property, the container also keeps link views behind node views when a view is attached.
 /// </remarks>
 public sealed class ViewContainer : IViewContainer<Control, Control, IWorkflowViewModel>

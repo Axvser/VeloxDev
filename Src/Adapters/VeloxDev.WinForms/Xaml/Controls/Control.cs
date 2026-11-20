@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace VeloxDev.WinForms.Xaml.Controls;
@@ -68,6 +69,105 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         typeof(Control),
         new PropertyMetadata(Thickness.Empty, OnPaddingPropertyChanged));
 
+    /// <summary>The background colour; a WPF-named alias for the native <see cref="System.Windows.Forms.Control.BackColor"/>.</summary>
+    /// <remarks>Unlike the native property, this is a dependency property, so a style, trigger or transition can drive it.</remarks>
+    public static readonly DependencyProperty BackColorProperty = DependencyProperty.Register(
+        nameof(BackColor),
+        typeof(Color),
+        typeof(Control),
+        new PropertyMetadata(Color.Empty, OnBackColorPropertyChanged));
+
+    /// <summary>The WPF/Avalonia spelling of <see cref="BackColorProperty"/>.</summary>
+    public static readonly DependencyProperty BackgroundProperty = BackColorProperty;
+
+    /// <summary>The text colour; a WPF-named alias for the native <see cref="System.Windows.Forms.Control.ForeColor"/>.</summary>
+    /// <remarks>Unlike the native property, this is a dependency property, so a style, trigger or transition can drive it.</remarks>
+    public static readonly DependencyProperty ForeColorProperty = DependencyProperty.Register(
+        nameof(ForeColor),
+        typeof(Color),
+        typeof(Control),
+        new PropertyMetadata(Color.Empty, OnForeColorPropertyChanged));
+
+    /// <summary>The WPF/Avalonia spelling of <see cref="ForeColorProperty"/>.</summary>
+    public static readonly DependencyProperty ForegroundProperty = ForeColorProperty;
+
+    /// <summary>The font used by this control; null means the native <see cref="System.Windows.Forms.Control.Font"/>.</summary>
+    public static readonly DependencyProperty FontProperty = DependencyProperty.Register(
+        nameof(Font),
+        typeof(Font),
+        typeof(Control),
+        new PropertyMetadata(null, OnFontPropertyChanged));
+
+    /// <summary>The requested width in pixels; a negative value leaves the native width in charge.</summary>
+    public static readonly DependencyProperty WidthProperty = DependencyProperty.Register(
+        nameof(Width),
+        typeof(int),
+        typeof(Control),
+        new PropertyMetadata(-1, OnWidthPropertyChanged));
+
+    /// <summary>The requested height in pixels; a negative value leaves the native height in charge.</summary>
+    public static readonly DependencyProperty HeightProperty = DependencyProperty.Register(
+        nameof(Height),
+        typeof(int),
+        typeof(Control),
+        new PropertyMetadata(-1, OnHeightPropertyChanged));
+
+    /// <summary>The smallest width layout may assign, in pixels.</summary>
+    public static readonly DependencyProperty MinWidthProperty = DependencyProperty.Register(
+        nameof(MinWidth),
+        typeof(int),
+        typeof(Control),
+        new PropertyMetadata(0, OnSizeConstraintChanged));
+
+    /// <summary>The smallest height layout may assign, in pixels.</summary>
+    public static readonly DependencyProperty MinHeightProperty = DependencyProperty.Register(
+        nameof(MinHeight),
+        typeof(int),
+        typeof(Control),
+        new PropertyMetadata(0, OnSizeConstraintChanged));
+
+    /// <summary>The largest width layout may assign, in pixels; <see cref="int.MaxValue"/> means unbounded.</summary>
+    public static readonly DependencyProperty MaxWidthProperty = DependencyProperty.Register(
+        nameof(MaxWidth),
+        typeof(int),
+        typeof(Control),
+        new PropertyMetadata(int.MaxValue, OnSizeConstraintChanged));
+
+    /// <summary>The largest height layout may assign, in pixels; <see cref="int.MaxValue"/> means unbounded.</summary>
+    public static readonly DependencyProperty MaxHeightProperty = DependencyProperty.Register(
+        nameof(MaxHeight),
+        typeof(int),
+        typeof(Control),
+        new PropertyMetadata(int.MaxValue, OnSizeConstraintChanged));
+
+    /// <summary>Whether the control and its children are painted and laid out.</summary>
+    public static readonly DependencyProperty VisibilityProperty = DependencyProperty.Register(
+        nameof(Visibility),
+        typeof(Visibility),
+        typeof(Control),
+        new PropertyMetadata(Visibility.Visible, OnVisibilityPropertyChanged));
+
+    /// <summary>Whether the control accepts input; mirrors the native <see cref="System.Windows.Forms.Control.Enabled"/>.</summary>
+    public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.Register(
+        nameof(IsEnabled),
+        typeof(bool),
+        typeof(Control),
+        new PropertyMetadata(true, OnIsEnabledPropertyChanged));
+
+    /// <summary>How a layout panel places this control horizontally inside its slot.</summary>
+    public static readonly DependencyProperty HorizontalAlignmentProperty = DependencyProperty.Register(
+        nameof(HorizontalAlignment),
+        typeof(HorizontalAlignment),
+        typeof(Control),
+        new PropertyMetadata(HorizontalAlignment.Stretch, OnLayoutAffectingPropertyChanged));
+
+    /// <summary>How a layout panel places this control vertically inside its slot.</summary>
+    public static readonly DependencyProperty VerticalAlignmentProperty = DependencyProperty.Register(
+        nameof(VerticalAlignment),
+        typeof(VerticalAlignment),
+        typeof(Control),
+        new PropertyMetadata(VerticalAlignment.Stretch, OnLayoutAffectingPropertyChanged));
+
     private readonly Dictionary<DependencyProperty, object?> _values = [];
     private readonly Dictionary<DependencyProperty, BindingExpression> _bindings = [];
     private readonly List<BindingExpression> _attachedBindings = [];
@@ -93,6 +193,15 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     private bool _pointerCaptured;
     private bool _disposed;
 
+    // DP 清除（样式/触发器退出）时要还原到接管前的原生值，否则原生属性会停在最后一帧。
+    private Color? _nativeBackColorFallback;
+    private Color? _nativeForeColorFallback;
+    private Font? _nativeFontFallback;
+    private int? _nativeWidthFallback;
+    private int? _nativeHeightFallback;
+    private Padding? _nativeMarginFallback;
+    private Padding? _nativePaddingFallback;
+
     /// <summary>Creates the control and connects its resource change signal.</summary>
     public Control()
     {
@@ -101,7 +210,8 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         SetStyle(
             ControlStyles.AllPaintingInWmPaint |
             ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw,
+            ControlStyles.ResizeRedraw |
+            ControlStyles.SupportsTransparentBackColor,
             true);
 
         _resources.Changed += OnResourcesChanged;
@@ -132,7 +242,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public new Thickness Margin
     {
-        get => HasLocalValue(MarginProperty) ? (Thickness)GetValue(MarginProperty)! : Thickness.FromPadding(base.Margin);
+        get => HasXamlValue(MarginProperty) ? (Thickness)GetValue(MarginProperty)! : Thickness.FromPadding(base.Margin);
         set => SetValue(MarginProperty, value);
     }
 
@@ -147,9 +257,187 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public new Thickness Padding
     {
-        get => HasLocalValue(PaddingProperty) ? (Thickness)GetValue(PaddingProperty)! : Thickness.FromPadding(base.Padding);
+        get => HasXamlValue(PaddingProperty) ? (Thickness)GetValue(PaddingProperty)! : Thickness.FromPadding(base.Padding);
         set => SetValue(PaddingProperty, value);
     }
+
+    /// <summary>Gets or sets the background colour.</summary>
+    /// <remarks>An unset value falls back to the native <see cref="System.Windows.Forms.Control.BackColor"/>.</remarks>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public new Color BackColor
+    {
+        get
+        {
+            var value = (Color)GetValue(BackColorProperty)!;
+            return value.IsEmpty ? base.BackColor : value;
+        }
+        set => SetValue(BackColorProperty, value);
+    }
+
+    /// <summary>Gets or sets the background colour using the WPF/Avalonia property name.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color Background
+    {
+        get => BackColor;
+        set => BackColor = value;
+    }
+
+    /// <summary>Gets or sets the text colour.</summary>
+    /// <remarks>An unset value falls back to the native <see cref="System.Windows.Forms.Control.ForeColor"/>.</remarks>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public new Color ForeColor
+    {
+        get
+        {
+            var value = (Color)GetValue(ForeColorProperty)!;
+            return value.IsEmpty ? base.ForeColor : value;
+        }
+        set => SetValue(ForeColorProperty, value);
+    }
+
+    /// <summary>Gets or sets the text colour using the WPF/Avalonia property name.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color Foreground
+    {
+        get => ForeColor;
+        set => ForeColor = value;
+    }
+
+    /// <summary>Gets or sets the font; null falls back to the native <see cref="System.Windows.Forms.Control.Font"/>.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public new Font Font
+    {
+        get => (Font?)GetValue(FontProperty) ?? base.Font;
+        set => SetValue(FontProperty, value);
+    }
+
+    /// <summary>Gets or sets the requested width in pixels; a negative value leaves the native width in charge.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public new int Width
+    {
+        get
+        {
+            var value = (int)GetValue(WidthProperty)!;
+            return value >= 0 ? value : base.Width;
+        }
+        set => SetValue(WidthProperty, value);
+    }
+
+    /// <summary>Gets or sets the requested height in pixels; a negative value leaves the native height in charge.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public new int Height
+    {
+        get
+        {
+            var value = (int)GetValue(HeightProperty)!;
+            return value >= 0 ? value : base.Height;
+        }
+        set => SetValue(HeightProperty, value);
+    }
+
+    /// <summary>Gets or sets the smallest width layout may assign, in pixels.</summary>
+    public int MinWidth
+    {
+        get => (int)GetValue(MinWidthProperty)!;
+        set => SetValue(MinWidthProperty, value);
+    }
+
+    /// <summary>Gets or sets the smallest height layout may assign, in pixels.</summary>
+    public int MinHeight
+    {
+        get => (int)GetValue(MinHeightProperty)!;
+        set => SetValue(MinHeightProperty, value);
+    }
+
+    /// <summary>Gets or sets the largest width layout may assign, in pixels.</summary>
+    public int MaxWidth
+    {
+        get => (int)GetValue(MaxWidthProperty)!;
+        set => SetValue(MaxWidthProperty, value);
+    }
+
+    /// <summary>Gets or sets the largest height layout may assign, in pixels.</summary>
+    public int MaxHeight
+    {
+        get => (int)GetValue(MaxHeightProperty)!;
+        set => SetValue(MaxHeightProperty, value);
+    }
+
+    /// <summary>Gets or sets whether this control is painted, laid out and able to receive input.</summary>
+    public Visibility Visibility
+    {
+        get => (Visibility)GetValue(VisibilityProperty)!;
+        set => SetValue(VisibilityProperty, value);
+    }
+
+    /// <summary>Gets or sets whether the control accepts input; mirrors the native <see cref="System.Windows.Forms.Control.Enabled"/>.</summary>
+    public bool IsEnabled
+    {
+        get => (bool)GetValue(IsEnabledProperty)!;
+        set => SetValue(IsEnabledProperty, value);
+    }
+
+    /// <summary>Gets or sets how a layout panel places this control horizontally inside its slot.</summary>
+    public HorizontalAlignment HorizontalAlignment
+    {
+        get => (HorizontalAlignment)GetValue(HorizontalAlignmentProperty)!;
+        set => SetValue(HorizontalAlignmentProperty, value);
+    }
+
+    /// <summary>Gets or sets how a layout panel places this control vertically inside its slot.</summary>
+    public VerticalAlignment VerticalAlignment
+    {
+        get => (VerticalAlignment)GetValue(VerticalAlignmentProperty)!;
+        set => SetValue(VerticalAlignmentProperty, value);
+    }
+
+    // 布局是否要为它留槽位：Collapsed 连槽位都不要，Hidden 只是不画。
+    internal bool OccupiesLayoutSpace => Visibility != Visibility.Collapsed;
+
+    /// <summary>Returns the size this control wants inside <paramref name="availableSize"/>.</summary>
+    /// <param name="availableSize">The room the parent can offer; zero means unconstrained.</param>
+    /// <remarks>The explicit width and height win over <see cref="GetPreferredSize"/>.</remarks>
+    public Size Measure(Size availableSize) => MeasureCore(availableSize);
+
+    /// <summary>Returns the size this control wants inside <paramref name="availableSize"/>.</summary>
+    /// <param name="availableSize">The room the parent can offer; zero means unconstrained.</param>
+    /// <remarks>Derive and override to give a custom control or panel its own measure pass.</remarks>
+    protected internal virtual Size MeasureCore(Size availableSize)
+    {
+        var preferred = GetPreferredSize(Size.Empty);
+        var width = MeasureAxis(WidthProperty, preferred.Width, MinWidth, MaxWidth, availableSize.Width);
+        var height = MeasureAxis(HeightProperty, preferred.Height, MinHeight, MaxHeight, availableSize.Height);
+        return new Size(width, height);
+    }
+
+    private int MeasureAxis(
+        DependencyProperty sizeProperty,
+        int preferred,
+        int minimum,
+        int maximum,
+        int available)
+    {
+        var explicitValue = (int)GetValue(sizeProperty)!;
+        var value = explicitValue >= 0 ? explicitValue : preferred;
+        if (explicitValue < 0 && available > 0 && value <= 0)
+        {
+            // 没有显式尺寸、也没有首选尺寸时占满可用空间；否则容器会在 0 尺寸上反复测量。
+            value = available;
+        }
+
+        value = Math.Max(value, Math.Max(0, minimum));
+        return Math.Min(value, Math.Max(0, maximum));
+    }
+
+    // 自身内容是否要画：Hidden/Collapsed 都不画。
+    internal bool IsPainted => Visibility == Visibility.Visible;
 
     /// <summary>Moves keyboard focus to this control when it is focusable.</summary>
     /// <returns><see langword="true"/> when the control received focus.</returns>
@@ -222,7 +510,19 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
 
         if (target is Control control)
         {
-            control.ApplyNativeMargin(margin);
+            if (!control.HasXamlValue(MarginProperty))
+            {
+                if (control._nativeMarginFallback is { } fallback)
+                {
+                    control.NativeMargin = fallback;
+                    control._nativeMarginFallback = null;
+                }
+
+                return;
+            }
+
+            control._nativeMarginFallback ??= control.NativeMargin;
+            control.NativeMargin = margin.ToPadding();
             return;
         }
 
@@ -243,7 +543,19 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
 
         if (target is Control control)
         {
-            control.ApplyNativePadding(padding);
+            if (!control.HasXamlValue(PaddingProperty))
+            {
+                if (control._nativePaddingFallback is { } fallback)
+                {
+                    control.NativePadding = fallback;
+                    control._nativePaddingFallback = null;
+                }
+
+                return;
+            }
+
+            control._nativePaddingFallback ??= control.NativePadding;
+            control.NativePadding = padding.ToPadding();
             return;
         }
 
@@ -254,22 +566,263 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         }
     }
 
-    // DP 是作者面，原生属性是布局面；每次变化都把后者写一遍，WinForms 的停靠/滚动/边距才和 XAML 看到的一致。
-    private void ApplyNativeMargin(Thickness margin)
+    private static void OnBackColorPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
     {
-        var native = margin.ToPadding();
-        if (base.Margin != native)
+        if (target is not Control control)
         {
-            base.Margin = native;
+            return;
+        }
+
+        if (e.NewValue is Color color && !color.IsEmpty)
+        {
+            control._nativeBackColorFallback ??= control.NativeBackColor;
+            control.NativeBackColor = color;
+            control.Invalidate();
+            return;
+        }
+
+        if (control._nativeBackColorFallback is { } fallback)
+        {
+            control.NativeBackColor = fallback;
+            control._nativeBackColorFallback = null;
+            control.Invalidate();
         }
     }
 
-    private void ApplyNativePadding(Thickness padding)
+    private static void OnForeColorPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
     {
-        var native = padding.ToPadding();
-        if (base.Padding != native)
+        if (target is not Control control)
         {
-            base.Padding = native;
+            return;
+        }
+
+        if (e.NewValue is Color color && !color.IsEmpty)
+        {
+            control._nativeForeColorFallback ??= control.NativeForeColor;
+            control.NativeForeColor = color;
+            control.Invalidate();
+            return;
+        }
+
+        if (control._nativeForeColorFallback is { } fallback)
+        {
+            control.NativeForeColor = fallback;
+            control._nativeForeColorFallback = null;
+            control.Invalidate();
+        }
+    }
+
+    // BackColor/ForeColor 是 WinForms 的 virtual 属性；这里用隐藏属性把 DP 接到原生布局与绘制上。
+    private Color NativeBackColor
+    {
+        get => base.BackColor;
+        set
+        {
+            if (base.BackColor != value)
+            {
+                base.BackColor = value;
+            }
+        }
+    }
+
+    private Color NativeForeColor
+    {
+        get => base.ForeColor;
+        set
+        {
+            if (base.ForeColor != value)
+            {
+                base.ForeColor = value;
+            }
+        }
+    }
+
+    private static void OnFontPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not Control control)
+        {
+            return;
+        }
+
+        if (e.NewValue is Font font)
+        {
+            control._nativeFontFallback ??= control.NativeFont;
+            control.NativeFont = font;
+            control.Invalidate();
+            control.Parent?.PerformLayout();
+            return;
+        }
+
+        if (control._nativeFontFallback is { } fallback)
+        {
+            control.NativeFont = fallback;
+            control._nativeFontFallback = null;
+            control.Invalidate();
+            control.Parent?.PerformLayout();
+        }
+    }
+
+    private Font NativeFont
+    {
+        get => base.Font;
+        set
+        {
+            if (!Equals(base.Font, value))
+            {
+                base.Font = value;
+            }
+        }
+    }
+
+    private static void OnWidthPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not Control control)
+        {
+            return;
+        }
+
+        if (e.NewValue is int width && width >= 0)
+        {
+            control._nativeWidthFallback ??= control.NativeWidth;
+            control.NativeWidth = width;
+        }
+        else if (control._nativeWidthFallback is { } fallback)
+        {
+            control.NativeWidth = fallback;
+            control._nativeWidthFallback = null;
+        }
+
+        control.Parent?.PerformLayout();
+    }
+
+    private static void OnHeightPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not Control control)
+        {
+            return;
+        }
+
+        if (e.NewValue is int height && height >= 0)
+        {
+            control._nativeHeightFallback ??= control.NativeHeight;
+            control.NativeHeight = height;
+        }
+        else if (control._nativeHeightFallback is { } fallback)
+        {
+            control.NativeHeight = fallback;
+            control._nativeHeightFallback = null;
+        }
+
+        control.Parent?.PerformLayout();
+    }
+
+    private int NativeWidth
+    {
+        get => base.Width;
+        set
+        {
+            if (base.Width != value)
+            {
+                base.Width = value;
+            }
+        }
+    }
+
+    private int NativeHeight
+    {
+        get => base.Height;
+        set
+        {
+            if (base.Height != value)
+            {
+                base.Height = value;
+            }
+        }
+    }
+
+    private static void OnSizeConstraintChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not Control control)
+        {
+            return;
+        }
+
+        var minimum = new Size(Math.Max(0, control.MinWidth), Math.Max(0, control.MinHeight));
+        if (control.MinimumSize != minimum)
+        {
+            control.MinimumSize = minimum;
+        }
+
+        var maximum = new Size(
+            control.MaxWidth == int.MaxValue ? 0 : Math.Max(0, control.MaxWidth),
+            control.MaxHeight == int.MaxValue ? 0 : Math.Max(0, control.MaxHeight));
+        if (control.MaximumSize != maximum)
+        {
+            control.MaximumSize = maximum;
+        }
+
+        control.Parent?.PerformLayout();
+    }
+
+    private static void OnVisibilityPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not Control control || e.NewValue is not Visibility visibility)
+        {
+            return;
+        }
+
+        var visible = visibility == Visibility.Visible;
+        if (control.Visible != visible)
+        {
+            control.Visible = visible;
+        }
+
+        control.Parent?.PerformLayout();
+    }
+
+    private static void OnIsEnabledPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not Control control || e.NewValue is not bool enabled)
+        {
+            return;
+        }
+
+        if (control.Enabled != enabled)
+        {
+            control.Enabled = enabled;
+        }
+    }
+
+    private static void OnLayoutAffectingPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Control control && !control.IsDisposed)
+        {
+            control.Parent?.PerformLayout();
+        }
+    }
+
+    // DP 是作者面，原生属性是布局面；每次变化都把后者写一遍，WinForms 的停靠/滚动/边距才和 XAML 看到的一致。
+    private Padding NativeMargin
+    {
+        get => base.Margin;
+        set
+        {
+            if (base.Margin != value)
+            {
+                base.Margin = value;
+            }
+        }
+    }
+
+    private Padding NativePadding
+    {
+        get => base.Padding;
+        set
+        {
+            if (base.Padding != value)
+            {
+                base.Padding = value;
+            }
         }
     }
 
@@ -433,6 +986,12 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         if (property is null) throw new ArgumentNullException(nameof(property));
         return _values.ContainsKey(property);
     }
+
+    // 值可能来自本地、样式或样式触发器；Margin/Padding 的 getter 要区分「没人写过」和「写了默认值」。
+    internal bool HasXamlValue(DependencyProperty property)
+        => _values.ContainsKey(property)
+        || _styleValues.ContainsKey(property)
+        || (_styleTriggerValues.TryGetValue(property, out var layers) && layers.Count > 0);
 
     /// <summary>
     /// Binds a dependency property to a path on the effective data context.
@@ -600,6 +1159,27 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     /// <summary>Called when this control's effective data context changes.</summary>
     protected virtual void OnDataContextChanged()
     {
+    }
+
+    /// <inheritdoc />
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        // 没有作者设置背景时保持透明：WPF/Avalonia 的默认背景是透明，尤其不能让自绘文本/图形
+        // 在暗色表面上盖出一块系统灰。
+        if (!HasXamlValue(BackColorProperty) && base.BackColor == DefaultBackColor)
+        {
+            return;
+        }
+
+        var background = Background;
+        if (background.A > 0)
+        {
+            using var brush = new SolidBrush(background);
+            e.Graphics.FillRectangle(brush, ClientRectangle);
+            return;
+        }
+
+        base.OnPaintBackground(e);
     }
 
     /// <inheritdoc />

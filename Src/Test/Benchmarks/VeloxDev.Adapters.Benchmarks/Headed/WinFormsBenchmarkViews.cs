@@ -3,6 +3,7 @@ extern alias wf;
 using System.ComponentModel;
 using VeloxDev.WorkflowSystem;
 using WfAttached = wf::VeloxDev.WorkflowSystem.AttachedBehaviors;
+using WfXaml = wf::VeloxDev.WinForms.Xaml;
 
 namespace VeloxDev.Adapters.Benchmarks.Headed;
 
@@ -109,10 +110,11 @@ internal sealed class WinFormsBenchmarkLinkView : Panel
     }
 }
 
-internal sealed class WinFormsBenchmarkTemplateSelector : WfAttached.IWorkflowTemplateSelector
+internal sealed class WinFormsBenchmarkTemplateSelector : WfXaml.TemplateSelector
 {
-    public Control CreateView(object item)
-        => item is IWorkflowNodeViewModel
-            ? new WinFormsBenchmarkNodeView()
-            : new WinFormsBenchmarkLinkView();
+    private static readonly WfXaml.DataTemplate NodeTemplate = new(() => new WinFormsBenchmarkNodeView());
+    private static readonly WfXaml.DataTemplate LinkTemplate = new(() => new WinFormsBenchmarkLinkView());
+
+    public override WfXaml.DataTemplate? SelectTemplate(object? item)
+        => item is IWorkflowNodeViewModel ? NodeTemplate : LinkTemplate;
 }

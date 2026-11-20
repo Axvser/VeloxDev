@@ -664,7 +664,7 @@ foreach ($name in $Platform) {
         try {
             foreach ($key in $itemOrder) {
                 $shortName = Get-CliShortName $config $key
-                $generated = $itemDefs[$key].Generated
+                $generated = if ($key -eq 'selector' -and $name -eq 'WinForms') { 'CustomTemplateSelector' } else { $itemDefs[$key].Generated }
                 Invoke-Step "generate $shortName" {
                     dotnet new $shortName -n $generated -ns $config.ProbeNs -o Views | Out-Null
                 }
@@ -722,7 +722,7 @@ foreach ($name in $Platform) {
 
         Write-Host 'Comparing each generated file against its mirror' -ForegroundColor Cyan
         foreach ($key in $itemOrder) {
-            $generatedBase = $itemDefs[$key].Generated
+            $generatedBase = if ($key -eq 'selector' -and $name -eq 'WinForms') { 'CustomTemplateSelector' } else { $itemDefs[$key].Generated }
             $mirrorBase = if ($config.MirrorBase.Contains($key)) { $config.MirrorBase[$key] } else { $generatedBase }
             $files = Get-ItemFiles $config $key
             $expectedReason = if ($config.Expected.Contains($key)) { $config.Expected[$key] } else { $null }

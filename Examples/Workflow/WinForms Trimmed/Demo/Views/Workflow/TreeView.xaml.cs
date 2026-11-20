@@ -3,7 +3,6 @@
 using System.ComponentModel;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
-using VeloxDev.WinForms.Xaml.Controls;
 
 namespace Demo.Views.Workflow;
 
@@ -11,7 +10,7 @@ namespace Demo.Views.Workflow;
 /// The workflow surface: a XAML tree of viewport, canvas, grid decorator and minimap wired through
 /// <see cref="WorkflowSurfaceBehavior"/>, plus this project's node/link views and canvas HUD.
 /// </summary>
-public sealed partial class TreeView : UserControl
+public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
     private IWorkflowTreeViewModel? _tree;
     private IInputEvents? _events;

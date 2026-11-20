@@ -1,20 +1,25 @@
-// VeloxDev customization: which view each pooled item kind gets. Links are not pooled on the default surface
-// (WorkflowLinkLayer draws them); LinkViewFactory is used only by a host that opts into per-link views.
-// Rename the view types below if you renamed those items; add SlotViewFactory / TreeViewFactory if your host pools
-// slots or whole trees.
-using VeloxDev.WorkflowSystem.AttachedBehaviors;
+// VeloxDev customization: assign the DataTemplates your tree declares; add the slot/tree templates if the host pools them.
+using VeloxDev.WinForms.Xaml;
+using VeloxDev.WorkflowSystem;
 
 namespace TemplateNamespace;
 
-/// <summary>
-/// The view selector: the adapter's <see cref="WorkflowTemplateSelector"/> with this project's node and link views.
-/// </summary>
-public sealed class TemplateClass : WorkflowTemplateSelector
+public sealed class TemplateClass : TemplateSelector
 {
-    /// <summary>Creates the selector and points each pooled item kind at the generated view.</summary>
-    public TemplateClass()
+    public DataTemplate? NodeTemplate { get; set; }
+
+    public DataTemplate? SlotTemplate { get; set; }
+
+    public DataTemplate? LinkTemplate { get; set; }
+
+    public DataTemplate? TreeTemplate { get; set; }
+
+    public override DataTemplate? SelectTemplate(object? item) => item switch
     {
-        NodeViewFactory = _ => new NodeView();
-        LinkViewFactory = link => new LinkView { ViewModel = link };
-    }
+        IWorkflowLinkViewModel => LinkTemplate,
+        IWorkflowSlotViewModel => SlotTemplate,
+        IWorkflowNodeViewModel => NodeTemplate,
+        IWorkflowTreeViewModel => TreeTemplate,
+        _ => null,
+    };
 }

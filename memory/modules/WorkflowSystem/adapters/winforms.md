@@ -2,7 +2,7 @@
 
 > **另：连线的那个基类已换成附加助手**（2026-10-04）—— 这一角色现在由用户自己的控件 + `WorkflowLinkAttachment.Attach(this)` 组成，
 > 下文凡是 `WorkflowLinkView` 的类名，按 `WorkflowLinkAttachment` 读；机制（自盒化 / 雕窗口区域 / 端点订阅 / 命中发布）没变。
-> **另（2026-10-04）：slot / node 的基类也换成了附加助手** —— `WorkflowSlotAttachment` / `WorkflowNodeAttachment`；
+> **另（2026-10-04）：node 的基类换成了附加助手 `WorkflowNodeAttachment`；slot 模板后来改回通用 `ViewModel` + `v:Path` + `WorkflowSlotConnectionBehavior`，`WorkflowSlotAttachment` 只保留给旧式自定义视图。
 > 树（`WorkflowTreeView`）仍是基类（它是引擎不是视图），但 WinForms 那家的表面行为是**按对象**交部件（不按名字找）。
 > 下文凡提 `WorkflowSlotView` / `WorkflowNodeView` 的类名，按对应的 `*Attachment` 读。
 >
@@ -25,7 +25,7 @@
 |---|---|---|
 | 画布宿主 | `WorkflowSurfaceBehavior`（`sealed class` + 静态 `Get/Set` + `ConditionalWeakTable<Control, SurfaceState>`，`WorkflowSurfaceBehavior.cs`）；画布控件本体也是适配器里的 `WorkflowTreeView`（`WorkflowTreeView.cs`） | 同时是**滚轮汇报/缩放的 `IMessageFilter` 宿主**（`SurfaceState : IMessageFilter`）；过滤器跟着 `IsEnabled` 挂、看得见**每一笔** `WM_MOUSEWHEEL`（`EnsureMessageFilter`／`SetIsEnabled` 调用，`_filterAdded` 守卫） |
 | 画布变换 | `WorkflowCanvasTransformBehavior`（`static class`，CWT 存一个 `Offset`，`WorkflowCanvasTransformBehavior.cs`） | 只是一个**值载体**，而且是结构体不是变换对象 |
-| 视图池 | `ViewPool`（挂点）+ `ViewHosting/ViewSourcePipeline`（Core `ViewSourcePipelineCore` 在这家的闭合），层实现是 `ViewHosting/` 下的 `ViewFactory` / `ViewContainer` / `ViewArranger` / `ViewScheduler` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` / `ViewMeasureHost`；创建路径是 `ViewFactory` 包住的 `IWorkflowTemplateSelector`（`IWorkflowTemplateSelector.cs`） | 用**自定义接口**代替 `DataTemplateSelector`（没有 XAML，没有 `DataTemplate`）；调度走 `Control.BeginInvoke` 异步分批，`TPriorityCore` 是 `NonPriority` |
+| 视图池 | `ViewPool`（挂点）+ `ViewHosting/ViewSourcePipeline`（Core `ViewSourcePipelineCore` 在这家的闭合），层实现是 `ViewHosting/` 下的 `ViewFactory` / `ViewContainer` / `ViewArranger` / `ViewScheduler` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` / `ViewMeasureHost`；创建路径是 `ViewFactory` 包住的通用 `VeloxDev.WinForms.Xaml.TemplateSelector`（`SelectTemplate` → `DataTemplate`） | 选择器类型是通用的，不绑定工作流；调度走 `Control.BeginInvoke` 异步分批，`TPriorityCore` 是 `NonPriority` |
 | 节点拖拽 | `WorkflowNodeDragBehavior`（`WorkflowNodeDragBehavior.cs`） | 递归挂**整棵控件树**的 `MouseDown`（`HookControlTree`），不是一次命中测试 |
 | 插槽连接 | `WorkflowSlotConnectionBehavior`（`WorkflowSlotConnectionBehavior.cs`） | 应用级 `IMessageFilter` + `WindowFromPoint`（静态 `_messageFilter` / `_activeConnection`、`FindSurfaceControl`、`ConnectionMessageFilter`） |
 | 插槽布局 | `WorkflowSlotLayoutBehavior`（`WorkflowSlotLayoutBehavior.cs`） | 是七家里唯一额外提供**同步重测**入口 `SyncNow` 的 |
@@ -49,7 +49,7 @@
 
 - **静态 `Get/Set` + `ConditionalWeakTable`**：每个 Behavior 都是 `sealed class`（或 `static class`）+ 一对 `GetXxx/SetXxx(Control, …)`，状态放 CWT（`WorkflowSurfaceBehavior.cs` 的 `States`、`WorkflowSlotLayoutBehavior.cs` 的 `States`、`WorkflowNodeDragBehavior.cs` 的 `DragState`、`ViewPool.cs` 的 `PoolState`）。⇒ **`ConditionalWeakTable` 不可枚举**，需要「遍历所有已挂载控件」时得另存一个普通集合。
 - **没有 `DataContext` ⇒ 反射填上下文**：`ViewHosting/ViewContainer` 的 `ApplyBinding`（节点/插槽/连线的视图先分派给各自的 `*Attachment`，其余角色走下面这条）先 `view.Tag = item`，再对 `"ViewModel"` / `"DataContext"` / `"BindingContext"` 三个属性名做反射 `SetValue`（`ViewHosting/ViewContainer.cs` 的 `ApplyBinding`）。⇒ **视图控件想拿到 VM，要么读 `Tag`，要么有那三个名字之一的属性**；其它名字静默拿不到（不报错）。
-- **没有 `DataTemplate` ⇒ `IWorkflowTemplateSelector`**：一个自定义接口，`Control CreateView(object item)`（`IWorkflowTemplateSelector.cs` 的 `IWorkflowTemplateSelector`）。契约要求由用户实现并把选择器交给 `ViewPool.SetTemplateSelector`（`SetTemplateSelector`）；`ViewHosting/ViewFactory` 是它唯一的调用方。
+- **选择器是通用 `TemplateSelector`**：抽象 `SelectTemplate(object?)` 返回 `DataTemplate?`（`Xaml/TemplateSelector.cs`）。用户派生它、暴露模板属性，并交给 `ViewPool.SetTemplateSelector` / `WorkflowSurfaceBehavior.TemplateSelector`；`ViewHosting/ViewFactory` 负责 `CreateContent()`。
 - **没有 z 序属性，层级按角色在挂树时定**：`ViewHosting/ViewContainer.Attach` 在第一次物化时 `Controls.Add`，随后 —— 节点 `BringToFront`、连线 `SendToBack`（`Controls` 的序号 0 是最前面，`Add` 追加到末尾 = 最后面）。回收时视图留在 `Controls` 里，`SetZOrder` 是空操作。⇒ **池是异步物化的，`ArrangeLinkViews` 在可见集变化时跑在视图生成之前，所以新视图的层级必须在挂树这一趟当场定下来**；`WorkflowTreeView.ArrangeLinkViews` 仍会在可见集变化时补发连线投影并 `SendToBack`。别家靠 `Panel.ZIndex`，这家没有对应物。
 
 ### 2.2 没有路由/隧道事件 ⇒ `Application.AddMessageFilter`，而且是**进程级单例**
@@ -67,7 +67,7 @@
 
 - `WorkflowTreeView.cs` 里标尺浮层 `RulerOverlayForm` 的说明（类就是 `RulerOverlayForm`）：「**WinForms 子控件总是画在父控件的 `OnPaintBackground` 之上，所以画在那里的半透明标尺带永远压不暗从它下面滚过的、不透明的节点卡片 —— 卡片把带子盖住了。**」唯一能做这件事的机制是 `WS_EX_LAYERED` 顶层弹窗 + `UpdateLayeredWindow` 逐像素 alpha（还带 `WM_NCHITTEST → HTTRANSPARENT` 让下面的平移与拖拽继续可用）。
 - 节点卡片照这个结论写：整卡用**不透明**填充（适配器 `WorkflowNodeAttachment` 构造函数里 `Color.FromArgb(255, surfaceBackdrop)` 强制 A=255），注释明写「**no `SupportsTransparentBackColor` anywhere**」（`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-node-view/TemplateClass.cs`，理由还包含「不透明填充把双缓冲彻底擦干净，`SetSelector` 重建后的旧行标签不会以鬼影透出来」）。
-- 插槽视图同理：`BackColor = Opaque(slotBackground)`（A 强制 255，适配器 `WorkflowSlotAttachment` 构造函数里 `Opaque(slotBackground)`，`Opaque` 本体在同一文件），注释说明**必须 A=255**，因为 `Control.BackColor` 在 A≠255 且未声明 `SupportsTransparentBackColor` 时抛；而模板视图的 `OnPaintBackground` 里 `Clear(Parent?.BackColor ?? BackColor)`（`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-slot-view/TemplateClass.cs`）。
+- 插槽视图现在走通用形态：`v:UserControl` 里一个 `v:Path`（`Stretch="Uniform"` 把 1024 图形缩到槽大小），`WorkflowSlotConnectionBehavior` 挂在根上；code-behind 只订阅 `ViewModel.PropertyChanged` 的 `State` 并把颜色写到 `Path.Fill`。`WorkflowNodeRowsBehavior` 优先写 `ViewModel`/`Tag`，只有没有该属性的旧式视图才回退到 `WorkflowSlotAttachment`。
 - ⇒ **要接一家新平台的人从这里能抄到的是「结论」，不是做法**：WPF/Avalonia/WinUI/MAUI 的透明叠加（半透明标尺、发光描边、阴影）在这家一律要换成**不透明绘制**或**顶层分层窗口**，没有第三条路。
 
 ### 2.4 平移有两套模型，宿主各异（`AutoScroll` vs 有符号 pan）

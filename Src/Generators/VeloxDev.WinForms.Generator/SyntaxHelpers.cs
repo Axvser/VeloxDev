@@ -65,6 +65,7 @@ internal static class SyntaxHelpers
     public const string PresentationNamespace = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
     public const string RuntimeNamespace = "VeloxDev.WinForms.Xaml";
     public const string ControlsNamespace = "VeloxDev.WinForms.Xaml.Controls";
+    public const string ShapesNamespace = "VeloxDev.WinForms.Xaml.Controls.Shapes";
     public const string XamlControlMetadataName = "VeloxDev.WinForms.Xaml.Controls.Control";
     public const string ControlMetadataName = "System.Windows.Forms.Control";
     public const string DependencyPropertyMetadataName = "VeloxDev.WinForms.Xaml.DependencyProperty";
@@ -402,6 +403,10 @@ internal static class LiteralFactory
 
             case "VeloxDev.WinForms.Xaml.Controls.Thickness":
                 expression = $"{SyntaxHelpers.Fqn("XamlRuntime")}.ParseThickness({SyntaxHelpers.Quote(text)})";
+                return true;
+
+            case "VeloxDev.WinForms.Xaml.Controls.GridLength":
+                expression = $"global::{SyntaxHelpers.ControlsNamespace}.GridLength.Parse({SyntaxHelpers.Quote(text)})";
                 return true;
 
             case "System.Drawing.Size":

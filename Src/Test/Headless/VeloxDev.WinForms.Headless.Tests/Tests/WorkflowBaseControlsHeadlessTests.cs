@@ -70,6 +70,18 @@ public sealed class WorkflowBaseControlsHeadlessTests
     }
 
     [TestMethod]
+    public void SlotConnectionBehavior_RegistersItsXamlAttachedProperty()
+    {
+        using var view = new Panel();
+
+        var property = VeloxDev.WinForms.Xaml.XamlRuntime.RequireAttached(
+            typeof(WorkflowSlotConnectionBehavior), "IsEnabled");
+        property.SetValue(view, true);
+
+        Assert.IsTrue(WorkflowSlotConnectionBehavior.GetIsEnabled(view));
+    }
+
+    [TestMethod]
     public void NodeRowsBehavior_BuildsARowForEachOutputSlot()
     {
         var graph = TestGraph.Create(connect: false);
@@ -84,6 +96,25 @@ public sealed class WorkflowBaseControlsHeadlessTests
 
         var rowsHost = Descendants(card).Single(control => control.Name == "PART_DynamicOutputs");
         Assert.IsTrue(rowsHost.Controls.Count > 0, "the bound node's slots must produce rows");
+    }
+
+    [TestMethod]
+    public void NodeRowsBehavior_BindsAViewModelSlotViewWithoutAnAttachment()
+    {
+        var graph = TestGraph.Create(connect: false);
+        using var card = CreateCardWithRowsHost();
+        var attachment = WorkflowNodeAttachment.Attach(card);
+
+        WorkflowNodeRowsBehavior.SetSlotViewFactory(card, () => new ViewModelSlotView());
+        WorkflowNodeRowsBehavior.SetIsEnabled(card, true);
+
+        attachment.Node = graph.Left;
+        Application.DoEvents();
+
+        var slotViews = Descendants(card).OfType<ViewModelSlotView>().ToList();
+        Assert.IsTrue(slotViews.Count > 0, "the bound node's slots must produce view-model slot views");
+        Assert.IsTrue(slotViews.All(view => view.ViewModel is not null));
+        Assert.IsTrue(slotViews.All(view => WorkflowSlotAttachment.For(view) is null));
     }
 
     [TestMethod]
@@ -133,5 +164,12 @@ public sealed class WorkflowBaseControlsHeadlessTests
                 yield return nested;
             }
         }
+    }
+
+    private sealed class ViewModelSlotView : Panel
+    {
+        [System.ComponentModel.Browsable(false)]
+        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+        public IWorkflowSlotViewModel? ViewModel { get; set; }
     }
 }

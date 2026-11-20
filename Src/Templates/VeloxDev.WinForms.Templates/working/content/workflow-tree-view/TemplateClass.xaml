@@ -1,4 +1,4 @@
-<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the local type names below if you renamed them. -->
+<!-- VeloxDev customization: generate the sibling views, then update the local type names if you renamed them. -->
 <v:UserControl
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -16,15 +16,21 @@
     behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
     behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_Surface">
 
-  <!-- VeloxDev customization: the surface shell. Keep the PART_* names in step with the attached properties.
-       Links are NOT pooled: PART_Canvas's WorkflowLinkLayer draws every visible link in one paint pass;
-       LineColor / Thickness below (not the workflow-link-view item's palette) are the resting-line values. -->
+  <!-- VeloxDev customization: keep the PART_* names in step with the attached properties above. -->
 
   <v:UserControl.Resources>
     <v:ResourceDictionary>
-      <!-- VeloxDev customization: which view each pooled item kind gets. -->
-      <local:TemplateSelector x:Key="WorkflowTemplateSelector" />
-      <!-- Restyle the surface scroll bars here; the bar draws itself instead of the native theme. -->
+      <v:DataTemplate x:Key="NodeTemplate">
+        <local:NodeView />
+      </v:DataTemplate>
+      <v:DataTemplate x:Key="LinkTemplate">
+        <local:LinkView />
+      </v:DataTemplate>
+      <!-- VeloxDev customization: choose the view each pooled item kind gets. -->
+      <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
+                              NodeTemplate="{StaticResource NodeTemplate}"
+                              LinkTemplate="{StaticResource LinkTemplate}" />
+      <!-- VeloxDev customization: restyle the surface scroll bars here. -->
       <v:Style x:Key="SurfaceScrollBarStyle" TargetType="v:ScrollBar">
         <v:Style.Setters>
           <v:Setter Property="TrackBrush" Value="#22FFFFFF" />

@@ -288,7 +288,42 @@ internal sealed class XamlCompiler
         var childHost = IsXamlControl(type) ? expression : hostExpression;
         ApplyAttributes(element, type, expression, childHost);
         ProcessChildren(element, type, expression, childHost);
+        EmitTextContent(element, type, expression);
         return expression;
+    }
+
+    /// <summary>
+    /// Writes an element's text body to its content property.
+    /// </summary>
+    /// <remarks>
+    /// WPF and Avalonia authors write <c>&lt;Button&gt;OK&lt;/Button&gt;</c> rather than a <c>Content</c> attribute.
+    /// The text body is accepted only when the element has no child elements; mixed content stays unsupported.
+    /// </remarks>
+    private void EmitTextContent(XElement element, ITypeSymbol type, string expression)
+    {
+        if (element.Elements().Any())
+        {
+            return;
+        }
+
+        var text = element.Value;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        var property = FindProperty(type, "Content") ?? FindProperty(type, "Text");
+        if (property is null || property.SetMethod is null)
+        {
+            return;
+        }
+
+        if (!LiteralFactory.TryCreate(property.Type, text.Trim(), out var valueExpression, out _))
+        {
+            return;
+        }
+
+        _current.Line($"{expression}.{property.Name} = {valueExpression};");
     }
 
     private void ApplyAttributes(XElement element, ITypeSymbol type, string targetExpression, string? hostExpression)
@@ -1431,6 +1466,22 @@ internal sealed class XamlCompiler
 
         if (sourceNamespace is null)
         {
+            // 样式 setter 的 Property="Grid.Row" 没有标记前缀；目标类型的命名空间也不一定和 owner 相同
+            // （形状在 .Controls.Shapes 里），所以最后按适配器命名空间找一次。
+            foreach (var adapterNamespace in new[]
+                     {
+                         SyntaxHelpers.ControlsNamespace,
+                         SyntaxHelpers.ShapesNamespace,
+                         SyntaxHelpers.RuntimeNamespace,
+                     })
+            {
+                var candidate = _compilation.GetTypeByMetadataName(adapterNamespace + "." + ownerName);
+                if (candidate is not null)
+                {
+                    return candidate;
+                }
+            }
+
             return null;
         }
 
@@ -2452,75 +2503,47 @@ internal sealed class XamlCompiler
     private ITypeSymbol? ResolveAdapterType(string localName, XObject? source)
     {
         var controlType = _compilation.GetTypeByMetadataName(SyntaxHelpers.ControlsNamespace + "." + localName);
-        var runtimeType = _compilation.GetTypeByMetadataName(SyntaxHelpers.RuntimeNamespace + "." + localName);
-
-        if (controlType is not null
-            && runtimeType is not null
-            && !SymbolEqualityComparer.Default.Equals(controlType, runtimeType))
+        if (controlType is not null)
         {
-            if (source is not null)
-            {
-                _ambiguousSources.Add(source);
-            }
-
-            Report(
-                Diagnostics.AmbiguousType,
-                source,
-                localName,
-                controlType.ToDisplayString(),
-                runtimeType.ToDisplayString());
-            return null;
+            return controlType;
         }
 
-        return controlType ?? runtimeType;
+        var shapeType = _compilation.GetTypeByMetadataName(SyntaxHelpers.ShapesNamespace + "." + localName);
+        if (shapeType is not null)
+        {
+            return shapeType;
+        }
+
+        return _compilation.GetTypeByMetadataName(SyntaxHelpers.RuntimeNamespace + "." + localName);
     }
 
     /// <summary>
-    /// Resolves an unprefixed type name using the adapter-first rules:
-    /// exactly one of <c>v</c>/<c>local</c> wins outright; when both define the name the reference is ambiguous and
-    /// needs an explicit prefix; the native WinForms table is the fallback.
+    /// Resolves an unprefixed type name against the native WinForms presentation table only.
     /// </summary>
+    /// <remarks>
+    /// No prefix means native WinForms. A VeloxDev control needs <c>v:</c> and a template/Demo type needs
+    /// <c>local:</c>; letting an unprefixed name fall back to either would make the same markup mean different
+    /// things depending on which assemblies happen to be referenced.
+    /// </remarks>
     private ITypeSymbol? ResolveUnprefixedType(string localName, XObject? source)
     {
-        var adapterType = ResolveAdapterType(localName, source);
-        if (IsAmbiguous(source))
+        if (PresentationTypes.TryGetValue(localName, out var metadataName))
         {
-            return null;
+            return _compilation.GetTypeByMetadataName(metadataName);
         }
 
-        var localType = ResolveLocalType(localName);
-
-        if (adapterType is not null
-            && localType is not null
-            && !SymbolEqualityComparer.Default.Equals(adapterType, localType))
+        if (ResolveAdapterType(localName, null) is not null || ResolveLocalType(localName) is not null)
         {
             if (source is not null)
             {
+                // 同一处不再补一条泛化的 UnknownType：两条诊断说的是同一件事。
                 _ambiguousSources.Add(source);
             }
 
-            Report(
-                Diagnostics.AmbiguousType,
-                source,
-                localName,
-                adapterType.ToDisplayString(),
-                localType.ToDisplayString());
-            return null;
+            Report(Diagnostics.UnprefixedTypeNotNative, source, localName);
         }
 
-        if (adapterType is not null)
-        {
-            return adapterType;
-        }
-
-        if (localType is not null)
-        {
-            return localType;
-        }
-
-        return PresentationTypes.TryGetValue(localName, out var metadataName)
-            ? _compilation.GetTypeByMetadataName(metadataName)
-            : null;
+        return null;
     }
 
     private bool IsAmbiguous(XObject? source) => source is not null && _ambiguousSources.Contains(source);

@@ -5,9 +5,9 @@ using VeloxDev.WinForms.Xaml.Test.Infrastructure;
 namespace VeloxDev.WinForms.Xaml.Test;
 
 /// <summary>
-/// Element type resolution: <c>v:</c> maps to the adapter namespace, <c>local:</c> to the template namespace, and an
-/// unprefixed name prefers the adapter, requires an explicit prefix when local also defines it, and otherwise falls
-/// back to the native WinForms table.
+/// Element type resolution is prefix-strict: <c>v:</c> maps to the adapter, <c>local:</c> to the template namespace,
+/// and an unprefixed name means native WinForms only. A VeloxDev type written without <c>v:</c> is an error, even when
+/// the native table has a same-named type.
 /// </summary>
 [TestClass]
 public sealed class PrefixResolutionTests
@@ -28,7 +28,7 @@ public sealed class PrefixResolutionTests
         """;
 
     [TestMethod]
-    public void UnprefixedControl_PrefersTheAdapterOverTheNativeType()
+    public void UnprefixedControl_ResolvesToTheNativeType()
     {
         const string xaml = """
             <local:ProbeView
@@ -36,17 +36,17 @@ public sealed class PrefixResolutionTests
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
                 x:Class="Probe.ProbeView">
-              <Control x:Name="xamlHost" />
+              <Control x:Name="nativeHost" />
             </local:ProbeView>
             """;
 
-        var (run, output) = Run("PrefixAdapterFirst", Source, xaml);
+        var (run, output) = Run("PrefixNativeControl", Source, xaml);
 
         Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
         Assert.IsEmpty(Errors(output), GeneratorProbe.Describe(Errors(output)));
         StringAssert.Contains(
             run.GeneratedText(),
-            "private global::VeloxDev.WinForms.Xaml.Controls.Control xamlHost = null!;");
+            "private global::System.Windows.Forms.Control nativeHost = null!;");
     }
 
     [TestMethod]
@@ -72,6 +72,27 @@ public sealed class PrefixResolutionTests
     }
 
     [TestMethod]
+    public void UnprefixedAdapterOnlyName_IsAnError()
+    {
+        const string xaml = """
+            <local:ProbeView
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:local="clr-namespace:Probe"
+                x:Class="Probe.ProbeView">
+              <StackPanel x:Name="stack" />
+            </local:ProbeView>
+            """;
+
+        var (run, output) = Run("PrefixAdapterWithoutV", Source, xaml);
+
+        Assert.IsNotNull(output);
+        var diagnostic = AssertSingle(run, "VELOX_XAML019");
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
+        StringAssert.Contains(diagnostic.GetMessage(), "v:StackPanel");
+    }
+
+    [TestMethod]
     public void ExplicitVPrefix_ResolvesAnAdapterControl()
     {
         const string xaml = """
@@ -81,7 +102,7 @@ public sealed class PrefixResolutionTests
                 xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
                 xmlns:local="clr-namespace:Probe"
                 x:Class="Probe.ProbeView">
-              <v:Panel x:Name="panel" />
+              <v:StackPanel x:Name="stack" />
             </local:ProbeView>
             """;
 
@@ -91,11 +112,34 @@ public sealed class PrefixResolutionTests
         Assert.IsEmpty(Errors(output), GeneratorProbe.Describe(Errors(output)));
         StringAssert.Contains(
             run.GeneratedText(),
-            "private global::VeloxDev.WinForms.Xaml.Controls.Panel panel = null!;");
+            "private global::VeloxDev.WinForms.Xaml.Controls.StackPanel stack = null!;");
     }
 
     [TestMethod]
-    public void UnprefixedLocalName_ResolvesWhenTheAdapterDoesNotDefineIt()
+    public void ExplicitVShapePrefix_ResolvesTheShapeNamespace()
+    {
+        const string xaml = """
+            <local:ProbeView
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+                xmlns:local="clr-namespace:Probe"
+                x:Class="Probe.ProbeView">
+              <v:Rectangle x:Name="shape" Width="40" Height="20" />
+            </local:ProbeView>
+            """;
+
+        var (run, output) = Run("PrefixShape", Source, xaml);
+
+        Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
+        Assert.IsEmpty(Errors(output), GeneratorProbe.Describe(Errors(output)));
+        StringAssert.Contains(
+            run.GeneratedText(),
+            "private global::VeloxDev.WinForms.Xaml.Controls.Shapes.Rectangle shape = null!;");
+    }
+
+    [TestMethod]
+    public void ExplicitLocalPrefix_ResolvesTheTemplateType()
     {
         const string xaml = """
             <local:ProbeView
@@ -103,11 +147,11 @@ public sealed class PrefixResolutionTests
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
                 x:Class="Probe.ProbeView">
-              <ProbeCard x:Name="localCard" />
+              <local:ProbeCard x:Name="localCard" />
             </local:ProbeView>
             """;
 
-        var (run, output) = Run("PrefixLocalWinner", Source, xaml);
+        var (run, output) = Run("PrefixExplicitLocal", Source, xaml);
 
         Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
         Assert.IsEmpty(Errors(output), GeneratorProbe.Describe(Errors(output)));
@@ -117,34 +161,33 @@ public sealed class PrefixResolutionTests
     }
 
     [TestMethod]
-    public void UnprefixedRoot_ResolvesTheLocalClass()
+    public void UnprefixedRoot_IsNoLongerImplicitLocal()
     {
         const string xaml = """
             <ProbeView
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:local="clr-namespace:Probe"
                 x:Class="Probe.ProbeView">
-              <ProbeCard x:Name="localCard" />
+              <local:ProbeCard x:Name="localCard" />
             </ProbeView>
             """;
 
-        var (run, output) = Run("PrefixUnprefixedRoot", Source, xaml);
+        var (run, _) = Run("PrefixUnprefixedRoot", Source, xaml);
 
-        Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
-        Assert.IsEmpty(Errors(output), GeneratorProbe.Describe(Errors(output)));
-        StringAssert.Contains(run.GeneratedText(), "private void InitializeComponent()");
-        StringAssert.Contains(run.GeneratedText(), "private global::Probe.ProbeCard localCard = null!;");
+        var diagnostic = AssertSingle(run, "VELOX_XAML019");
+        StringAssert.Contains(diagnostic.GetMessage(), "ProbeView");
     }
 
     [TestMethod]
-    public void UnprefixedNameDefinedByBothVAndLocal_IsAmbiguous()
+    public void UnprefixedName_IsNotDisambiguatedAgainstLocal()
     {
         const string source = """
             using VeloxDev.WinForms.Xaml;
 
             namespace Probe;
 
-            // A local type with the same simple name as an adapter base control.
+            // A local type with the same simple name as a native WinForms type.
             public class Control : System.Windows.Forms.Control
             {
             }
@@ -160,25 +203,20 @@ public sealed class PrefixResolutionTests
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
                 x:Class="Probe.ProbeView">
-              <Control />
+              <Control x:Name="nativeControl" />
               <local:Control x:Name="localControl" />
             </local:ProbeView>
             """;
 
-        var result = GeneratorProbe.Run(
-            new XamlFileGenerator(),
-            source,
-            "PrefixAmbiguous",
-            new InMemoryAdditionalText("ProbeView.xaml", xaml));
+        var (run, output) = Run("PrefixStrict", source, xaml);
 
-        var diagnostic = AssertSingle(result, "VELOX_XAML018");
-        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
-        StringAssert.Contains(diagnostic.GetMessage(), "ambiguous");
-        StringAssert.Contains(diagnostic.GetMessage(), "v:Control");
-
-        // An explicit prefix picks one side even while the unprefixed name is ambiguous.
+        Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
+        Assert.IsEmpty(Errors(output), GeneratorProbe.Describe(Errors(output)));
         StringAssert.Contains(
-            result.GeneratedText(),
+            run.GeneratedText(),
+            "private global::System.Windows.Forms.Control nativeControl = null!;");
+        StringAssert.Contains(
+            run.GeneratedText(),
             "private global::Probe.Control localControl = null!;");
     }
 

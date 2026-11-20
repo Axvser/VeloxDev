@@ -23,6 +23,7 @@ VELOX_XAML015 | VeloxDev.Xaml | Error | InitializeComponent already declared
 VELOX_XAML016 | VeloxDev.Xaml | Warning | Ambiguous event handler
 VELOX_XAML017 | VeloxDev.Xaml | Warning | Invalid event handler signature
 VELOX_XAML018 | VeloxDev.Xaml | Error | Ambiguous XAML type
+VELOX_XAML019 | VeloxDev.Xaml | Error | Unprefixed type is not native
 VELOX_XAMLP001 | VeloxDev.Xaml | Error | XamlProperty must be partial
 VELOX_XAMLP002 | VeloxDev.Xaml | Error | XamlProperty owner unsupported
 VELOX_XAMLP003 | VeloxDev.Xaml | Error | Invalid attached property accessors

@@ -26,8 +26,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// view pooling, layout scheduling, the floating ruler and teardown. No base class or constructor hand-off is needed.
 /// </para>
 /// <para>
-/// Node and slot views stay ordinary controls: they attach <see cref="WorkflowNodeAttachment"/> and
-/// <see cref="WorkflowSlotAttachment"/> themselves and paint whatever they like. Links are not pooled — the behavior
+/// Node views stay ordinary controls and attach <see cref="WorkflowNodeAttachment"/>; slot views expose a
+/// <c>ViewModel</c> property (or use <see cref="WorkflowSlotAttachment"/> for a legacy code-first view). Links are not pooled — the behavior
 /// enables <see cref="WorkflowLinkLayer"/> on the canvas, which paints every visible link in one pass. This behavior
 /// only supplies the shared surface machinery.
 /// </para>
@@ -83,7 +83,7 @@ public sealed class WorkflowSurfaceBehavior
 
     /// <summary>The template selector handed to the view pool; takes precedence over the two view-type names.</summary>
     public static readonly DependencyProperty TemplateSelectorProperty = DependencyProperty.RegisterAttached(
-        "TemplateSelector", typeof(IWorkflowTemplateSelector), typeof(WorkflowSurfaceBehavior),
+        "TemplateSelector", typeof(TemplateSelector), typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(null, OnPartConfigurationChanged));
 
     /// <summary>The tree bound to the surface when no ancestor data context carries one.</summary>
@@ -151,11 +151,11 @@ public sealed class WorkflowSurfaceBehavior
     public static void SetLinkViewType(Control element, string? value) => SetRequired(element, LinkViewTypeProperty, value);
 
     /// <summary>Gets the template selector handed to the view pool.</summary>
-    public static IWorkflowTemplateSelector? GetTemplateSelector(Control element)
-        => (IWorkflowTemplateSelector?)GetRequired(element, TemplateSelectorProperty);
+    public static TemplateSelector? GetTemplateSelector(Control element)
+        => (TemplateSelector?)GetRequired(element, TemplateSelectorProperty);
 
     /// <summary>Sets the template selector handed to the view pool.</summary>
-    public static void SetTemplateSelector(Control element, IWorkflowTemplateSelector? value)
+    public static void SetTemplateSelector(Control element, TemplateSelector? value)
         => SetRequired(element, TemplateSelectorProperty, value);
 
     /// <summary>Gets the explicitly bound workflow tree.</summary>
@@ -710,7 +710,7 @@ public sealed class WorkflowSurfaceBehavior
         }
     }
 
-    private static IWorkflowTemplateSelector? BuildGeneratedSelector(Control host, SurfaceState state)
+    private static TemplateSelector? BuildGeneratedSelector(Control host, SurfaceState state)
     {
         var nodeType = GetNodeViewType(host);
         var linkType = GetLinkViewType(host);
@@ -1955,27 +1955,31 @@ public sealed class WorkflowSurfaceBehavior
 
     // ── template selector ────────────────────────────────────────────────────
 
-    private sealed class SurfaceTemplateSelector : IWorkflowTemplateSelector
+    private sealed class SurfaceTemplateSelector : TemplateSelector
     {
         private readonly System.Reflection.Assembly assembly;
         private readonly string? namespaceName;
-        private readonly string? nodeTypeName;
-        private readonly string? linkTypeName;
+        private readonly DataTemplate? nodeTemplate;
+        private readonly DataTemplate? linkTemplate;
 
         public SurfaceTemplateSelector(
             System.Reflection.Assembly assembly, string? namespaceName, string? nodeTypeName, string? linkTypeName)
         {
             this.assembly = assembly;
             this.namespaceName = namespaceName;
-            this.nodeTypeName = nodeTypeName;
-            this.linkTypeName = linkTypeName;
+            nodeTemplate = string.IsNullOrWhiteSpace(nodeTypeName)
+                ? null
+                : new DataTemplate(() => Instantiate(nodeTypeName, "node"));
+            linkTemplate = string.IsNullOrWhiteSpace(linkTypeName)
+                ? null
+                : new DataTemplate(() => Instantiate(linkTypeName, "link"));
         }
 
-        public Control CreateView(object item) => item switch
+        public override DataTemplate? SelectTemplate(object? item) => item switch
         {
-            IWorkflowNodeViewModel => Instantiate(nodeTypeName, "node"),
-            IWorkflowLinkViewModel => Instantiate(linkTypeName, "link"),
-            _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}"),
+            IWorkflowNodeViewModel => nodeTemplate,
+            IWorkflowLinkViewModel => linkTemplate,
+            _ => null,
         };
 
         [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage(
@@ -2228,7 +2232,7 @@ public sealed class WorkflowSurfaceBehavior
 
         public IWorkflowSurfaceScroller? Scroller { get; set; }
 
-        public IWorkflowTemplateSelector? PoolSelector { get; set; }
+        public TemplateSelector? PoolSelector { get; set; }
 
         public Control? PoolCanvas { get; set; }
 

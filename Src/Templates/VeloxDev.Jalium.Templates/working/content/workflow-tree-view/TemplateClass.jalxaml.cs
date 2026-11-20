@@ -8,14 +8,8 @@ namespace TemplateNamespace;
 
 public partial class TemplateClass : UserControl
 {
-    /// <summary>
-    /// The world-to-view translation the pooled node and link views follow.
-    /// </summary>
-    /// <remarks>
-    /// It is the surface's <see cref="WorkflowSurfaceBehavior.CanvasTransform"/> re-exposed under a name a
-    /// binding can address — this platform's bindings cannot read an attached property, so the templates bind
-    /// this CLR property instead. Same value, same notifications; only the way it is spelled differs.
-    /// </remarks>
+    /// <summary>The world-to-view translation the pooled node and link views follow.</summary>
+    /// <remarks>This platform cannot bind an attached property, so the template binds this CLR mirror.</remarks>
     public static readonly DependencyProperty CanvasTransformProperty = WorkflowSurfaceBehavior.CanvasTransformProperty;
 
     /// <summary>The world-to-view translation the pooled node and link views follow.</summary>

@@ -1,4 +1,4 @@
-<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the local type names below if you renamed them. -->
+<!-- VeloxDev customization: generate the sibling views, then update the local type names if you renamed them. -->
 <UserControl x:Class="TemplateNamespace.TemplateClass"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -33,7 +33,7 @@
         <local:TemplateSelector x:Key="WorkflowTemplateSelector"
                                 NodeTemplate="{StaticResource NodeTemplate}"
                                 LinkTemplate="{StaticResource LinkTemplate}" />
-        <!-- Add or remove the link menu's entries here; each item is bound to the right-clicked link. -->
+        <!-- VeloxDev customization: add or remove the link menu's entries; each item receives the pressed link. -->
         <MenuFlyout x:Key="LinkContextMenu">
         </MenuFlyout>
     </UserControl.Resources>

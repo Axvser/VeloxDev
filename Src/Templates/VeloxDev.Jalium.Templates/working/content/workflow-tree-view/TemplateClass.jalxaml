@@ -1,4 +1,4 @@
-<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the local type names below if you renamed them. -->
+<!-- VeloxDev customization: generate the sibling views, then update the local type names if you renamed them. -->
 <UserControl xmlns="http://schemas.jalium.com/jalxaml"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:TemplateNamespace"
@@ -14,10 +14,7 @@
              behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
              behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu">
     <UserControl.Resources>
-        <!-- The world-to-view translation comes from WorkflowSurfaceBehavior as an attached property, which this
-             template's own class re-exposes as a plain `CanvasTransform` property — this platform's bindings
-             cannot address an attached property. Binding to that plain property is the same per-view mirror the
-             other XAML adapters do; only the spelling differs. -->
+        <!-- VeloxDev customization: bind the per-view mirror; this platform cannot bind the attached transform directly. -->
         <DataTemplate x:Key="NodeTemplate">
             <workflowViews:NodeView Width="{Binding Size.Width}"
                                     Height="{Binding Size.Height}"
@@ -37,7 +34,7 @@
         <workflowViews:TemplateSelector x:Key="WorkflowTemplateSelector"
                                         NodeTemplate="{StaticResource NodeTemplate}"
                                         LinkTemplate="{StaticResource LinkTemplate}" />
-        <!-- Right-click menu for a link; its DataContext is that link. Add or remove entries here. -->
+        <!-- VeloxDev customization: add or remove the link menu's entries; each item receives the pressed link. -->
         <ContextMenu x:Key="LinkContextMenu">
         </ContextMenu>
     </UserControl.Resources>

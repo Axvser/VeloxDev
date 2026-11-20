@@ -4,6 +4,7 @@ using System.Diagnostics;
 using VeloxDev.WorkflowSystem;
 using WfViewHosting = wf::VeloxDev.WorkflowSystem.ViewHosting;
 using WfAttached = wf::VeloxDev.WorkflowSystem.AttachedBehaviors;
+using WfXaml = wf::VeloxDev.WinForms.Xaml;
 
 namespace VeloxDev.Adapters.Benchmarks.Headed;
 
@@ -13,7 +14,7 @@ internal sealed class WinFormsHeadedHost : IHeadedBenchmarkHost
     private readonly HeadedOptions _options;
     private readonly Form _form;
     private readonly Panel _panel;
-    private readonly WfAttached.IWorkflowTemplateSelector _templateSelector;
+    private readonly WfXaml.TemplateSelector _templateSelector;
     private SyntheticWorkflow? _workflow;
     private WfViewHosting.ViewSourcePipeline? _system;
 

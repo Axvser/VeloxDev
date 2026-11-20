@@ -1,7 +1,4 @@
-<!-- VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the local type names below if you renamed them.
-     The tree's DataContext is your concrete tree ViewModel (it drives Layout / Helper.VisibleItems), and compiled
-     bindings need a concrete x:DataType as their starting type. Point xmlns:vm at your ViewModels namespace and
-     x:DataType at your tree VM class below; until you do, the build fails HERE on vm:TreeViewModel. -->
+<!-- VeloxDev customization: generate the sibling views, then set x:DataType to your tree VM and update the local type names. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -40,12 +37,12 @@
                             RenderTransform="{Binding $parent[local:TemplateClass].(behaviors:WorkflowCanvasTransformBehavior.Transform)}" />
         </DataTemplate>
 
-        <!-- VeloxDev customization: assign the view each component gets here. -->
+        <!-- VeloxDev customization: choose the view each component gets. -->
         <local:TemplateSelector x:Key="WorkflowTemplateSelector"
                                 NodeTemplate="{StaticResource NodeTemplate}"
                                 LinkTemplate="{StaticResource LinkTemplate}" />
 
-        <!-- VeloxDev customization: add or remove the link menu's items here. -->
+        <!-- VeloxDev customization: add or remove the link menu's entries; each item receives the pressed link. -->
         <ContextMenu x:Key="WorkflowTreeMenu">
         </ContextMenu>
     </UserControl.Resources>

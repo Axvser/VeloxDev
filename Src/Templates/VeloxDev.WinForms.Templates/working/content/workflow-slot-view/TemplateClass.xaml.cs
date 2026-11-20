@@ -1,53 +1,77 @@
-// VeloxDev customization: The glyph path and palette are the extension points.
+// VeloxDev customization: the glyph lives in XAML; the state colours are assigned here.
+using System.ComponentModel;
+using System.Drawing;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
-using VeloxDev.WinForms.Xaml.Controls;
 
 namespace TemplateNamespace;
 
-/// <summary>
-/// A workflow slot port: one SVG glyph painted by this view, with the binding and interaction supplied by
-/// <see cref="WorkflowSlotAttachment"/>.
-/// </summary>
-public sealed partial class TemplateClass : UserControl
+public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
-    private readonly WorkflowSlotAttachment _attachment;
+    private IWorkflowSlotViewModel? slot;
+    private INotifyPropertyChanged? notifier;
 
-    /// <summary>Creates the port and applies the generated glyph and palette.</summary>
     public TemplateClass()
     {
         InitializeComponent();
-        DoubleBuffered = true;
-
-        _attachment = WorkflowSlotAttachment.For(this) ?? WorkflowSlotAttachment.Attach(this);
-        _attachment.SlotPath = "TemplateSlotPath";
-        _attachment.SlotBackground = WorkflowSurfaceColors.Parse("TemplateSlotBackground");
-        _attachment.StandbyColor = WorkflowSurfaceColors.Parse("TemplateSlotColor");
-        _attachment.BorderColor = WorkflowSurfaceColors.Parse("TemplateSlotBorderColor");
-
-        // Extension point: keep drag-to-connect enabled unless the port is display-only.
-        WorkflowSlotConnectionBehavior.SetIsEnabled(this, true);
+        UpdateGlyph();
     }
 
-    /// <summary>Gets or sets the slot this port renders.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public IWorkflowSlotViewModel? ViewModel
     {
-        get => _attachment.Slot;
-        set => _attachment.Slot = value;
+        get => slot;
+        set
+        {
+            if (ReferenceEquals(slot, value))
+            {
+                return;
+            }
+
+            if (notifier is not null)
+            {
+                notifier.PropertyChanged -= OnSlotPropertyChanged;
+            }
+
+            slot = value;
+            Tag = value;
+            notifier = value;
+            if (notifier is not null)
+            {
+                notifier.PropertyChanged += OnSlotPropertyChanged;
+            }
+
+            UpdateGlyph();
+        }
     }
 
-    /// <inheritdoc />
-    protected override void OnPaintBackground(System.Windows.Forms.PaintEventArgs e)
+    protected override void Dispose(bool disposing)
     {
-        e.Graphics.Clear(Parent?.BackColor ?? BackColor);
+        if (disposing && notifier is not null)
+        {
+            notifier.PropertyChanged -= OnSlotPropertyChanged;
+        }
+
+        base.Dispose(disposing);
     }
 
-    /// <inheritdoc />
-    protected override void OnPaint(System.Windows.Forms.PaintEventArgs e)
+    private void OnSlotPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        base.OnPaint(e);
-        _attachment.Paint(e.Graphics);
+        if (e.PropertyName is nameof(IWorkflowSlotViewModel.State) or null)
+        {
+            UpdateGlyph();
+        }
+    }
+
+    private void UpdateGlyph()
+    {
+        RootPath.Fill = (slot?.State ?? SlotState.StandBy) switch
+        {
+            var state when state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver) => Color.Violet,
+            var state when state.HasFlag(SlotState.Sender) => Color.Tomato,
+            var state when state.HasFlag(SlotState.Receiver) => Color.Lime,
+            _ => WorkflowSurfaceColors.Parse("TemplateSlotColor"),
+        };
     }
 }

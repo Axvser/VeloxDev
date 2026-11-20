@@ -16,7 +16,7 @@
 | 一种新的插槽图形 | **`WorkflowSlotAttachment.Attach(this)`** | `WorkflowSystem/AttachedBehaviors/WorkflowSlotAttachment.Attach` |
 | 一种新的连线图形 | **自己的控件 + `WorkflowLinkAttachment.Attach(this)`**，在 `OnPaint` 里画（2026-10-04 起不再是基类） | `WorkflowLinkAttachment.cs` |
 | 换网格/标尺外观 | **派生 `WorkflowGridDecorator`**，设调色板与间距 | `WorkflowGridDecorator` |
-| 「item 类型 → 视图」的工厂 | `WorkflowTemplateSelector`（设四个工厂）或直接实现 `IWorkflowTemplateSelector.CreateView(object item)` | `WorkflowTemplateSelector` / `IWorkflowTemplateSelector.cs` |
+| 「item 类型 → 视图」的选择器 | 派生 `VeloxDev.WinForms.Xaml.TemplateSelector`（`DataTemplate` 属性 + `SelectTemplate`） | `Xaml/TemplateSelector.cs` + 模板里的派生类 |
 | 一个新的附着行为 | 新建 `public static class` + `ConditionalWeakTable<Control, State>` + 静态 `Get`/`Set`，命名空间写 `VeloxDev.WorkflowSystem.AttachedBehaviors` | `WorkflowSystem/AttachedBehaviors/` 下新文件；若需要 `Refresh` 推数据，改 `WorkflowSurfaceBehavior.Refresh` |
 | 一个新的「名字」通道 | 状态里加 `string? XxxName` + 用 `FindControlByName` 解析 | `WorkflowSlotLayoutBehavior.FindControlByName` |
 | 一个新的 Win32 补偿 | `NativeWindowStyleHelper` 加常量 + 方法 | `NativeWindowStyleHelper` 的样式常量与 `ApplyStyle`；**必须同时加调用点**（现有几处） |

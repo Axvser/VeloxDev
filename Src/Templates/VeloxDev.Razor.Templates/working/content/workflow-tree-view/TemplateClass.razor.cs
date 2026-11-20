@@ -4,13 +4,7 @@ using VeloxDev.WorkflowSystem;
 
 namespace TemplateNamespace;
 
-/// <summary>
-/// A Razor/Blazor workflow tree surface composing the surface behavior, grid decorator,
-/// minimap, and a pooled node/link view layer. Set <see cref="Tree"/> to an
-/// <see cref="IWorkflowTreeViewModel"/> to render; re-rendering, slot enumeration and the
-/// default palette are supplied by the surface behavior. Override <see cref="NodeTemplate"/>
-/// to replace the generated node card.
-/// </summary>
+/// <summary>A Razor/Blazor workflow tree surface over the shared surface behavior.</summary>
 public partial class TemplateClass : ComponentBase
 {
     /// <summary>Gets or sets the workflow tree rendered by this surface.</summary>

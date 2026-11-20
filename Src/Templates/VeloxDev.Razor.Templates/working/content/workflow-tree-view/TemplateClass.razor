@@ -2,7 +2,7 @@
 @using VeloxDev.WorkflowSystem
 @using VeloxDev.WorkflowSystem.AttachedBehaviors
 @using TemplateNamespace
-@* VeloxDev customization: Generate the Node, Slot, Link, selector, minimap, and grid-decorator templates, then update the type names below if you renamed them. *@
+@* VeloxDev customization: generate the sibling views, then update the type names if you renamed them. *@
 
 @if (Tree is not null)
 {
@@ -29,44 +29,31 @@
                                 ScrollViewerId="@ScrollViewerId" />
             </Minimap>
             <ChildContent Context="sc">
-                @* VeloxDev customization: assign the view each component gets here — the pooled layer below
-                   renders every visible node and link (the gesture's virtual link included); swap the selector
-                   or the two templates to change which view a component gets. *@
+                @* VeloxDev customization: choose the view each component gets. *@
                 <TemplateSelector Items="Tree.GetHelper().VisibleItems" KeySelector="i => i"
                                   NodeTemplate="NodeTemplate ?? RenderGenericNode"
                                   LinkTemplate="RenderGenericLink(sc)" />
             </ChildContent>
-            @* VeloxDev customization: the link context menu's entries. The surface renders the chrome,
-               positions the menu, and suspends the input router while it is open; each entry receives the
-               link it acts on. Add or remove the item buttons here. *@
+            @* VeloxDev customization: add or remove the link menu's entries; each entry receives the pressed link. *@
             <LinkMenu Context="link">
-                @* Add the entries this project wants; each one receives the link it acts on.
-                   Nothing is here by default — deleting, renaming, opening properties are all yours to write. *@
             </LinkMenu>
         </WorkflowSurfaceBehavior>
     </div>
 }
 
 @code {
-    // Link template for the pooled layer: swap it for your own markup, and keep the wrapper
-    // non-interactive — the surface's canvas gestures rely on that.
+    // VeloxDev customization: swap this template for your own; keep the wrapper non-interactive.
     private static RenderFragment<IWorkflowLinkViewModel> RenderGenericLink(SurfaceCanvas canvas)
         => link => @<div style="display:contents;pointer-events:none;">
                         <LinkView Link="link" CanvasWidth="@canvas.Width" CanvasHeight="@canvas.Height" />
                     </div>;
 
-    /// <summary>
-    /// Default node template used when the caller does not supply <see cref="TemplateClass.NodeTemplate"/>:
-    /// the generated <c>NodeView</c> with input/output slot hosts populated generically
-    /// from <c>Node.Slots</c> (channel-based input/output split).
-    /// </summary>
+    /// <summary>Default node template used when the caller does not supply <see cref="TemplateClass.NodeTemplate"/>.</summary>
     private RenderFragment<IWorkflowNodeViewModel> RenderGenericNode => node => @<text>
         @{ var names = WorkflowPresentation.SlotNamesOf(node); }
         <NodeView Node="node" Tree="Tree" AllowOverflow="true">
             <InputSlots>
-                @* SlotView already opens the connection behavior for its slot; do not wrap it in
-                   another one (a double-stamped wrapper doubles the measured anchors and the
-                   connection gesture handlers). *@
+                @* SlotView already opens the connection behavior; do not wrap it in another pointer target. *@
                 @foreach (var slot in WorkflowPresentation.InputSlotsOf(node))
                 {
                     <SlotView Slot="slot" Tree="Tree" SlotSize="18" />

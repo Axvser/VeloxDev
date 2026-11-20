@@ -3,12 +3,11 @@
 using System.Globalization;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
-using VeloxDev.WinForms.Xaml.Controls;
 
 namespace Demo.Views.Workflow;
 
 /// <summary>A workflow link: one painted resting curve. Hover feedback belongs to the host.</summary>
-public sealed partial class LinkView : UserControl
+public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
     private readonly WorkflowLinkAttachment _attachment;
 

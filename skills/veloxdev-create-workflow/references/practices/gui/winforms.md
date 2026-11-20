@@ -4,7 +4,7 @@
 
 There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md`. This is the summary a consumer needs.
 
-⚙ **Reference implementation:** `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` — the four markup items are the tree, node, slot and link views (`*.xaml` + `*.xaml.cs`); `GridDecorator`, `MinimapOverlay` and `TemplateSelector` are code-only. The Full demo lives at `Examples/Workflow/WinForms/Demo/Views/Workflow/`.
+⚙ **Reference implementation:** `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` — the four markup items are the tree, node, slot and link views (`*.xaml` + `*.xaml.cs`); `GridDecorator`, `MinimapOverlay` and `CustomTemplateSelector` are code-only. The Full demo lives at `Examples/Workflow/WinForms/Demo/Views/Workflow/`.
 
 ⚙ **The "Trimmed" in that path means *minimal demo*.** It is a demo-size choice, not a publish setting — see [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
 
@@ -12,11 +12,12 @@ There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md
 
 WinForms has no platform XAML, so this adapter ships its own small runtime (`Src/Adapters/VeloxDev.WinForms/Xaml/`) and a Roslyn generator (`Src/Generators/VeloxDev.WinForms.Generator/`). The generated `InitializeComponent()` builds ordinary WinForms controls:
 
-- `v:` prefix = `VeloxDev.WinForms.Xaml` / `.Controls` (`UserControl`, `Panel`, `Border`, `ScrollViewer`, `ScrollBar`, `Style`, `Trigger`, `DataTemplate`, …).
-- Native WinForms types are written without a prefix (`Label`, `TableLayoutPanel`, `Button`, …).
-- `local:` is your own namespace; the item templates use it for sibling views.
+- `v:` prefix = `VeloxDev.WinForms.Xaml` / `.Controls` / `.Controls.Shapes` (`UserControl`, `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `Border`, `ScrollViewer`, `Button`, `TextBox`, `ListBox`, `ComboBox`, `TextBlock`, `Rectangle`, `Path`, `Style`, `Trigger`, `DataTemplate`, …).
+- **No prefix means native WinForms only** (`Label`, `TableLayoutPanel`, `Button`, …). A VeloxDev control written without `v:` is `VELOX_XAML019`, even when the native table has the same name.
+- `local:` is your own namespace; the item templates use it for sibling views. **The root view is prefixed too**: `<local:TreeView …>` / `<v:UserControl …>`.
 - Dependency properties, attached properties, `{Binding}`, `{StaticResource}`, `Style`, `Trigger`, `DataTrigger`, `MultiTrigger`, `TransitionAction`, `DataTemplate` and `ControlTemplate` are supported.
-- An **object resource** is an empty element with an `x:Key`: `<local:TemplateSelector x:Key="WorkflowTemplateSelector" />`.
+- A **selector** is an object resource whose `DataTemplate` properties point at template resources:
+  `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" />`.
 - Every DP change on a XAML `Control` calls `Invalidate()` automatically. Mark configuration properties with `new PropertyMetadata(...) { AffectsRender = false }` if they never paint.
 
 ```xml
@@ -35,11 +36,49 @@ xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembl
 </ItemGroup>
 ```
 
-The XAML views take `Control`/`UserControl`/`Panel` from the XAML runtime, so demos remove the implicit WinForms using:
+**Code-behind names the adapter base with its full namespace.** This is the one place where the prefix rules cannot help: `System.Windows.Forms.UserControl` and the XAML one share a short name. Write the base explicitly so the file states which world it is in:
+
+```csharp
+public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserControl
+```
+
+## Base control library
+
+`VeloxDev.WinForms` ships a WPF/Avalonia-shaped control set under `v:`. Every type derives from the XAML `Control`, so its properties are dependency properties and styles, triggers, transitions and bindings work; a native WinForms element written without `v:` keeps native behaviour and only supports attached values.
+
+| Family | Controls |
+| --- | --- |
+| Layout | `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `Border`, `ScrollViewer`, `ContentControl`, `ItemsControl` |
+| Text | `TextBlock` (WPF naming), `Label` (Content alias), `TextBox`, `PasswordBox` |
+| Selection | `Button`, `RepeatButton`, `ToggleButton`, `CheckBox`, `RadioButton`, `ListBox`, `ComboBox` |
+| Range / media | `ProgressBar`, `Slider`, `Image`, `Separator` |
+| Shapes | `Rectangle`, `Ellipse`, `Line`, `Path` |
+
+Attached coordinates follow the same `v:Owner.Property` spelling:
 
 ```xml
-<Using Remove="System.Windows.Forms" />
+<v:Grid x:Name="layout">
+  <v:Grid.RowDefinitions>
+    <v:RowDefinition Height="Auto" />
+    <v:RowDefinition Height="*" />
+  </v:Grid.RowDefinitions>
+  <v:Border v:Grid.Row="1" />
+</v:Grid>
+
+<v:Canvas>
+  <v:Border v:Canvas.Left="10" v:Canvas.Top="20" />
+</v:Canvas>
+
+<v:StackPanel Spacing="4">
+  <v:Button Content="OK" Click="OnOk" />
+  <v:TextBlock>a text body works too</v:TextBlock>
+</v:StackPanel>
 ```
+
+- `Width` / `Height` / `Min*` / `Max*`, `Margin`, `Padding`, `Background`, `Foreground`, `Font`, `Visibility`, `IsEnabled`, `HorizontalAlignment` and `VerticalAlignment` are dependency properties on every XAML control.
+- `Canvas.Left/Top/Right/Bottom`, `Grid.Row/Column/RowSpan/ColumnSpan` and `DockPanel.Dock` are attached dependency properties.
+- Native children are still laid out by the `v:` panels; attach `v:` coordinates when a native control needs a cell.
+- `ItemsControl` is the template host: `ItemsSource` + `ItemTemplate` creates one control per item. `ListBox` and `ComboBox` wrap the native selectors for selection and scrolling, so they render the native item text and `DisplayMemberPath`, not an arbitrary `ItemTemplate`.
 
 ## Writing the surface
 
@@ -57,7 +96,11 @@ The tree template is a `v:UserControl`; the parts are resolved by native `Contro
                behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_Surface">
   <v:UserControl.Resources>
     <v:ResourceDictionary>
-      <local:TemplateSelector x:Key="WorkflowTemplateSelector" />
+      <v:DataTemplate x:Key="NodeTemplate">
+        <local:NodeView />
+      </v:DataTemplate>
+      <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
+                                    NodeTemplate="{StaticResource NodeTemplate}" />
     </v:ResourceDictionary>
   </v:UserControl.Resources>
   <v:Panel Name="PART_Surface" Dock="Fill">
@@ -141,15 +184,15 @@ The surface opens the strip on a right-press on a link, positions it, and suspen
 |---|---|---|
 | tree | `v:UserControl` + `WorkflowSurfaceBehavior`; `PART_Canvas` carries `WorkflowLinkLayer` | the palette, the selector resource, the link layer's line colour/width |
 | node | `v:UserControl` + `WorkflowNodeViewBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeRowsBehavior` | the card shell (`PART_Card`, `PART_Header`, `PART_Title`, `PART_OutputSlots`) and its colours |
-| slot | `v:UserControl` + `WorkflowSlotAttachment` | the glyph path and by-state colours |
+| slot | `v:UserControl` + `WorkflowSlotConnectionBehavior` + `v:Path` | the glyph path and by-state colours |
 | link | `v:UserControl` + `WorkflowLinkAttachment` — **per-link opt-in**; the default surface draws links in `WorkflowLinkLayer` | the resting curve and palette |
 | minimap | `WorkflowMinimapOverlay` | the four palette colours |
 | grid decorator | `Panel, IWorkflowGridDecorator` plus `SurfaceCanvas` | grid/ruler palette, spacing, major-line frequency |
-| template selector | `WorkflowTemplateSelector` | which view each pooled item kind gets (node; link only for the opt-in path) |
+| template selector | `TemplateSelector` | the `DataTemplate` each pooled item kind gets (node; link only for the opt-in path) |
 
 ⚙ **The tree references siblings by type name**, so generate all seven items into one namespace. The tree needs `GridDecorator` / `SurfaceCanvas` and `TemplateSelector`; the selector needs `NodeView` / `LinkView`. Missing one is a compile error, not a runtime fallback.
 
-⚙ **The tree's selector is a resource, not a type-name property.** Declare `<local:TemplateSelector x:Key="WorkflowTemplateSelector" />` and point `behaviors:WorkflowSurfaceBehavior.TemplateSelector` at it. `NodeViewType` / `LinkViewType` still exist as a built-in type-name fallback, but the generated templates do not use them.
+⚙ **The tree's selector is a resource, not a type-name property.** Derive from `VeloxDev.WinForms.Xaml.TemplateSelector`, expose `DataTemplate` properties, and point `behaviors:WorkflowSurfaceBehavior.TemplateSelector` at the instance. `NodeViewType` / `LinkViewType` are only the built-in reflection fallback.
 
 ⚙ **Three helpers are shared by all items:** `WorkflowSurfaceColors.Parse`, `WorkflowSurfaceGraphics.RoundedRectangle`, `WorkflowSurfaceGrid` (grid-line classification and ruler-label formatting).
 

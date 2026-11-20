@@ -22,7 +22,7 @@ namespace VeloxDev.WinForms.Xaml.Controls;
 public class Border : Control
 {
     /// <summary>The rounded body colour; a colour with alpha composites over <see cref="Backdrop"/>.</summary>
-    public static readonly DependencyProperty BackgroundProperty = DependencyProperty.Register(
+    public new static readonly DependencyProperty BackgroundProperty = DependencyProperty.Register(
         nameof(Background),
         typeof(Color),
         typeof(Border),
@@ -69,7 +69,7 @@ public class Border : Control
     }
 
     /// <summary>Gets or sets the rounded body colour.</summary>
-    public Color Background
+    public new Color Background
     {
         get => (Color)GetValue(BackgroundProperty)!;
         set => SetValue(BackgroundProperty, value);
@@ -115,7 +115,9 @@ public class Border : Control
         var bounds = new RectangleF(0, 0, Width, Height);
 
         // 子窗口不与父窗口合成：先用不透明底色擦一遍，带 alpha 的 Background 才有确定的合成结果。
-        var backdrop = Backdrop.IsEmpty ? BackColor : Backdrop;
+        var backdrop = Backdrop.IsEmpty
+            ? (HasXamlValue(BackColorProperty) ? BackColor : Color.Transparent)
+            : Backdrop;
         if (backdrop.A > 0)
         {
             using var backdropBrush = new SolidBrush(backdrop);

@@ -113,7 +113,7 @@ public sealed class ThicknessTests
     [TestMethod]
     public void AttachedPadding_AlsoWritesTheNativePaddingOnANativeControl()
     {
-        using var label = new Label();
+        using var label = new System.Windows.Forms.Label();
 
         VeloxDev.WinForms.Xaml.Controls.Control.PaddingProperty.SetValue(label, new Thickness(2f, 4f, 6f, 8f));
 

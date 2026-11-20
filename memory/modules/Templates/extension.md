@@ -55,7 +55,7 @@ item template 的 `replaces` token，逐个在生成文件里搜，残留即“�
 差异只有下面五类机械改动。这不是推理，按下面的方法可以逐行量出来；具体行数与差异行数会随两边改动漂移，
 不在这里抄录（旧版那张表已过期）。
 
-已知的一处实质差异：`workflow-template-selector` 与 demo 只差一行 —— 模板侧 `LinkViewFactory` 上方多一句注释
+已知的一处实质差异：`workflow-template-selector` 与 demo 只差模板类名与 DataTemplate 资源名
 「连线视图由适配器那份『附加』收绑…」，其余是命名空间与类名的机械改名。
 
 对照方法（可复现）：把模板文件的 `TemplateNamespace` 换成该 demo 的命名空间、`TemplateClass` 换成
@@ -80,7 +80,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 | 1 | 命名空间与类名 token 化 | `TemplateNamespace` / `TemplateClass` |
 | 2 | 字面量换成 `Template*` 占位符，并在 `template.json` 里配 `replaces` | WinForms demo 的 `TreeView.xaml` 写 `BackColor="#FF1E1E1E"`、`GridDecorator` 写 `GridSpacing="40"`，模板写 `BackColor="TemplateSurfaceBackground"` / `ParseGridValue("TemplateGridSpacing")`；WPF demo 的 `<Border … Background="#1E1E1E" BorderBrush="#33FFFFFF" BorderThickness="1">` 在模板里是四个 `Template*`（`workflow-tree-view/TemplateClass.xaml` 的 `PART_SurfaceBorder`） |
 | 3 | **删掉 demo 的 `InfoOverlay` HUD 及其绑定** | 模板里没有任何 InfoOverlay；demo 每个平台都有（如 `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/InfoOverlay.razor`，模板 tree-view 只把它连同 `<InfoOverlay …>` 那一行一起拿掉） |
-| 4 | **兄弟类型改名**：demo 用 `WorkflowGridDecorator` / `CustomTemplateSelector`，模板条目必须叫 `GridDecorator` / `TemplateSelector` | WPF demo `TreeView.xaml` 里是 `<workflowViews:WorkflowGridDecorator>`，模板里是 `<workflowViews:GridDecorator>`；因为 tree-view 是按 `defaultName` 引用兄弟的（`architecture.md` §五） |
+| 4 | **兄弟类型改名**：demo 用 `WorkflowGridDecorator` / `CustomTemplateSelector`，模板条目必须叫 `GridDecorator` / `TemplateSelector`（WinForms 的选择器默认叫 `CustomTemplateSelector`，避免与通用基类同名） | WPF demo `TreeView.xaml` 里是 `<workflowViews:WorkflowGridDecorator>`，模板里是 `<workflowViews:GridDecorator>`；因为 tree-view 是按 `defaultName` 引用兄弟的（`architecture.md` §五） |
 | 5 | 头注释换成 `… VeloxDev customization: …` 那一句 | 每个条目文件的第一行 |
 | 6 | **把注释翻成英文**：demo 的注释是简体中文，模板产物一律英文、一行说清、只标扩展点 | [code-comment-specifications.md](../../specifications/code-comment-specifications.md) §五；七家 `workflow-tree-view` 2026-10-03 已清到零中文 |
 
@@ -151,7 +151,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 `WorkflowTreeView`（装配、网格、分层窗口标尺、平移引擎、视图池）、`WorkflowNodeView`（绑定、定位、缩放折叠、
 反射读标题/输入口/插槽标签）、`WorkflowSlotAttachment`（含那个 SVG 路径解析器，`SvgPathParser.cs` 的 `BuildPath`）、`WorkflowLinkAttachment`
 （雕窗口区域、端点订阅、几何）、`WorkflowMinimapOverlay`、`WorkflowGridDecorator`（网格与标尺的绘制）、
-`WorkflowTemplateSelector`（四个工厂与分流）。模板因此只剩薄壳。
+通用 `TemplateSelector`（`DataTemplate` 按类型选择）。模板因此只剩薄壳。
 - Jalium（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/`）：**2026-10-05 起不再走这条** ——
 角色落成附着行为（`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` /
 `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds`）+ 小地图 `WorkflowMinimapOverlay` +

@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.StandardEx;
 
@@ -32,6 +33,13 @@ public sealed class WorkflowSlotConnectionBehavior
     private static ConnectionMessageFilter? _messageFilter;
     private static ActiveConnectionState? _activeConnection;
 
+    /// <summary>Whether the slot participates in drag-to-connect.</summary>
+    public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
+        "IsEnabled",
+        typeof(bool),
+        typeof(WorkflowSlotConnectionBehavior),
+        new PropertyMetadata(false, OnIsEnabledPropertyChanged));
+
     /// <summary>
     /// Gets whether workflow slot connection behavior is enabled for the specified control.
     /// </summary>
@@ -42,7 +50,7 @@ public sealed class WorkflowSlotConnectionBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).IsEnabled;
+        return (bool)IsEnabledProperty.GetValue(element)!;
     }
 
     /// <summary>
@@ -55,22 +63,32 @@ public sealed class WorkflowSlotConnectionBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        var state = GetState(element);
+        IsEnabledProperty.SetValue(element, value);
+    }
+
+    private static void OnIsEnabledPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not Control control || e.NewValue is not bool value)
+        {
+            return;
+        }
+
+        var state = GetState(control);
         if (state.IsEnabled == value)
         {
             return;
         }
 
-        element.MouseDown -= OnMouseDown;
-        element.MouseUp -= OnMouseUp;
-        element.Disposed -= OnDisposed;
+        control.MouseDown -= OnMouseDown;
+        control.MouseUp -= OnMouseUp;
+        control.Disposed -= OnDisposed;
 
         state.IsEnabled = value;
         if (value)
         {
-            element.MouseDown += OnMouseDown;
-            element.MouseUp += OnMouseUp;
-            element.Disposed += OnDisposed;
+            control.MouseDown += OnMouseDown;
+            control.MouseUp += OnMouseUp;
+            control.Disposed += OnDisposed;
         }
     }
 
@@ -312,23 +330,26 @@ public sealed class WorkflowSlotConnectionBehavior
             throw new ArgumentNullException(nameof(control));
         }
 
-        if (control.Tag is IWorkflowSlotViewModel taggedSlot)
-        {
-            return taggedSlot;
-        }
-
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-        foreach (var propertyName in new[] { "ViewModel", "DataContext", "BindingContext" })
+        for (var current = control; current is not null; current = current.Parent)
         {
-            var property = control.GetType().GetProperty(propertyName, flags);
-            if (property?.CanRead != true || property.GetIndexParameters().Length != 0)
+            if (current.Tag is IWorkflowSlotViewModel taggedSlot)
             {
-                continue;
+                return taggedSlot;
             }
 
-            if (property.GetValue(control) is IWorkflowSlotViewModel slot)
+            foreach (var propertyName in new[] { "ViewModel", "DataContext", "BindingContext" })
             {
-                return slot;
+                var property = current.GetType().GetProperty(propertyName, flags);
+                if (property?.CanRead != true || property.GetIndexParameters().Length != 0)
+                {
+                    continue;
+                }
+
+                if (property.GetValue(current) is IWorkflowSlotViewModel slot)
+                {
+                    return slot;
+                }
             }
         }
 

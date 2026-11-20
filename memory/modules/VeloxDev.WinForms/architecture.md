@@ -2,6 +2,7 @@
 
 > 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/AttachedBehaviors/` 最大的几个是 `WorkflowSurfaceBehavior.cs`、`WorkflowNodeRowsBehavior.cs`、`WorkflowRulerOverlayForm.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowNodeDragBehavior.cs`、`WorkflowLinkAttachment.cs`、`WorkflowNodeAttachment.cs`；`Xaml/` 是 XAML 运行时；`TransitionSystem/` 最大的是 `Transition.cs`、`TransitionInterpreter.cs`、`UIThreadInspector.cs`，其下另有一个采样器；`DynamicTheme/ThemeValueConverters.cs`；顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。**`WorkflowTreeView` 与 `WorkflowGridDecorator` 已删除**：表面由 XAML 根 + `WorkflowSurfaceBehavior` 接管，网格装饰器归模板。
 > **当前是 XAML-first 架构**：适配器包含 XAML 运行时；生成器独立在 `Src/Generators/VeloxDev.WinForms.Generator/`；Surface、节点/插槽/连线模板与两个 Demo 的视觉壳由 XAML 定义，低层 attachment/behavior 仍留在 code-behind。包版本 11.2.0。
+> **XAML 基础控件库在 `Xaml/Controls/`**：布局（`StackPanel`/`DockPanel`/`WrapPanel`/`Grid`/`Canvas`）、内容（`ContentControl`/`ItemsControl`/`Border`）、文本（`TextBlock`/`Label`/`TextBox`/`PasswordBox`）、选择（`Button`/`ToggleButton`/`CheckBox`/`RadioButton`/`ListBox`/`ComboBox`）、范围/媒体（`ProgressBar`/`Slider`/`Image`/`Separator`）与形状（`Xaml/Controls/Shapes/` 下的 `Rectangle`/`Ellipse`/`Line`/`Path`）。它们全部派生 XAML `Control`，属性走 DP，因而 Style/Trigger/Binding/Transition 都可用；原生 WinForms 元素只能接收附加值。**XAML 前缀严格**：`v:` = VeloxDev，`local:` = 模板/Demo，无前缀 = 原生；根元素也要带前缀。XAML 视图 code-behind 的基类写完整命名空间（`VeloxDev.WinForms.Xaml.Controls.UserControl`）。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这处）。
 >
 > 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
@@ -39,7 +40,7 @@
 | `WorkflowNodeAttachment` | 附到用户的 `Control` 上 | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画整张卡 | `Node`/`Title`/`Collapse`/`SurfacePanOffset`/`SurfaceContentOffset`；`ApplySurfacePosition`；事件 `Rebound`/`TitleChanged`/`CollapseChanged`/`AnchorChanged`/`Moving`…`Deleted` |
 | `WorkflowSlotAttachment` | 附到用户的 `Control` 上 | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画 | `Slot`/`SlotPath`/`PathViewBox`/`SlotBackground`/`StandbyColor`/`BorderColor`/`IconPath`/`GlyphColor`；事件 `ChannelChanging`/`ChannelChanged`；`SvgPathParser` |
 | `WorkflowLinkAttachment` | 附到用户的 `Control` 上 | 视图构造里 `WorkflowLinkAttachment.Attach(this)`，自己在 `OnPaint` 里画 | `LineColor`/`Thickness`/`PullMinimum`/`SurfaceBackground`/`Curve`/`Link`；`Paint(Graphics)`/`Bind(link)`/`Attach`/`For`；事件 `PointerEntered`/`PointerLeft`/`PointerPressed`/`PointerReleased` |
-| `WorkflowTemplateSelector` | `IWorkflowTemplateSelector` 基类 | 派生并在构造里设工厂；tree 的资源按 `{StaticResource}` 引用 | `NodeViewFactory`/`SlotViewFactory`/`LinkViewFactory`/`TreeViewFactory`、`CreateView` |
+| `VeloxDev.WinForms.Xaml.TemplateSelector` | 通用选择器基类 | 派生类用 `DataTemplate` 属性按 item 类型选模板；tree 的资源按 `{StaticResource}` 引用 | `SelectTemplate(object?)` → `DataTemplate?` |
 | `WorkflowNodeRowsBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeViewBehavior` | 节点侧的三个附着行为 | 节点 XAML 声明 `PART_Card` / `PART_Header` / `PART_Title` / `PART_OutputSlots` | 行重建、标题缩放、拖动/槽布局接线 |
 | `WorkflowMinimapOverlay` | `Panel, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource` | 模板派生，只给调色板 | 定位、拖拽映射、`ScrollOffsetX/Y` |
 
@@ -131,7 +132,7 @@
 | 节点卡片 | `WorkflowSystem/AttachedBehaviors/WorkflowNodeAttachment.cs`（附加）+ 用户卡片自己的 `OnPaint` |
 | 插槽 / 连线图形 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotAttachment.cs`、`WorkflowLinkAttachment.cs` |
 | 网格/标尺调色板与间距 | 模板条目 `workflow-grid-decorator/TemplateClass.cs`（含同文件的 `SurfaceCanvas`） |
-| 「item 类型 → 视图」的工厂 | `WorkflowSystem/AttachedBehaviors/WorkflowTemplateSelector.cs` / `IWorkflowTemplateSelector.cs` |
+| 「item 类型 → 视图」的选择器 | `Src/Adapters/VeloxDev.WinForms/Xaml/TemplateSelector.cs`（通用基类）+ 模板里的派生类 |
 | 滚轮缩放 / Ctrl 判定 / 消息过滤器 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`（`SetZoomEnabled`、`SurfaceState.OnMessage`） |
 | 名字解析、`Refresh` 推给装饰器/小地图的偏移 | 同上（`FindControlByName` 在 `WorkflowSlotLayoutBehavior.cs`；`Refresh` 在 `WorkflowSurfaceBehavior.cs`） |
 | 节点拖拽的落点、坐标宿主、拖拽期重画 | `WorkflowSystem/AttachedBehaviors/WorkflowNodeDragBehavior.cs` |
@@ -160,7 +161,7 @@
 `Examples/Workflow/WinForms/Demo/Form1.cs` 的 `BuildWorkbenchFrame` 在 Designer 的 `splitContainer` 外面套 32px 标题条 + 24px 状态条，`BuildSidebar` 再把 `Panel1` 换成 48px 活动栏 + 侧栏；`Panel1/2.Padding=Empty`、`SplitterWidth=4`、`SplitterDistance=320` 是工作台版式。**全部工作流视图在 `Views/Workflow/`、命名空间 `Demo.Views.Workflow`**：表面是 `WorkflowCanvas.xaml` + `.xaml.cs`，节点卡 `WorkflowNodeCard.xaml` + `.xaml.cs`，网格/`SurfaceCanvas` 在 `GridDecorator.cs`，连线和端口在 `LinkView.cs` / `SlotView.cs`，HUD/小地图在 `InfoOverlay.cs` / `MinimapOverlay.cs`，色板与自绘原语在 `CardTheme.cs` / `FramePanel.cs` / `GhostButton.cs`；`Views/Workbench/` 只放外壳件。WinForms 没有 `BorderThickness`/圆角属性，分隔线用 1px `Panel`/自绘。
 
 - **Designer 只保留仍在用的控件**：`splitContainer`、五个动作按钮（reload/undo/redo/save/select）、权限模式标签与选择器、Agent 日志与输入、执行日志、`workflowSurfaceControl`。工作台在 `BuildExplorerPage` / `BuildAgentPage` / `BuildOutputPanel` / `BuildMainArea` 里重新挂载它们；旧 `toolbarPanel` / `logTabControl` 与 20 多个不可达控件已删除，相应事件处理器也一并删除。
-- **两个 demo 的视图选择器同形**：tree/canvas 的 `Resources` 声明 `<local:TemplateSelector x:Key="WorkflowTemplateSelector" />`，根上 `TemplateSelector="{StaticResource WorkflowTemplateSelector}"`；`TemplateSelector` 派生适配器的 `WorkflowTemplateSelector` 并给 node/link 工厂。键/滚轮策略（Delete、Ctrl+Z/Y、Shift+滚轮横滚）订在树的 `IInputEvents` 上，两边一致。
+- **两个 demo 的视图选择器同形**：tree/canvas 的 `Resources` 声明 `NodeTemplate`/`LinkTemplate` 两个 `v:DataTemplate` 与 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" … />`，根上 `TemplateSelector="{StaticResource WorkflowTemplateSelector}"`；派生类继承通用 `VeloxDev.WinForms.Xaml.TemplateSelector` 并按 item 类型返回模板。键/滚轮策略（Delete、Ctrl+Z/Y、Shift+滚轮横滚）订在树的 `IInputEvents` 上，两边一致。
 
 - **四区外壳现在是完整的**（2026-11-18）：主区（`流程图`/`输出`）+ 348px 检查器（`属性`/`AI 助手`）；运行侧栏由 `Views/Workflow/RunManagerPanel.cs` 绑 `TreeViewModel.Runs`，检查器由 `Views/Workflow/WorkflowInspectorPanel.cs` 绑 `SelectedElement`/`CompiledStructure`，子代理面板是 `SubAgentPanel.cs`；`Views/Workbench/` 放共享外壳件（`WorkbenchPalette` / `StatusBarStrip` / `WorkbenchTabButton`）。
 - **标题条现在也有菜单与命令中心**：`BuildTitleStrip` 用 `GhostButton` 做“文件/编辑/视图/帮助”和居中的“搜索命令 Ctrl+Shift+P”；下拉是 `Views/Workbench/DarkPopupMenu`（无边框 `Form`，自己画 panel/hover/快捷键列），不是 `ContextMenuStrip`。**实测 2026-11-18**：`ContextMenuStrip` 即使设了自定义 `ToolStripRenderer`、`ToolStripManager.Renderer` 和 `Application.SetColorMode(SystemColorMode.Dark)`，弹层仍是浅色面板 + 浅色字；换自己的 Form 才稳定。原生窗口边框继续负责最小化/最大化/关闭，不画假按钮。

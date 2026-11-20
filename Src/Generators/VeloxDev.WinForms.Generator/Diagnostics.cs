@@ -98,6 +98,11 @@ internal static class Diagnostics
         "The XAML type '{0}' is ambiguous: both '{1}' and '{2}' define it; use an explicit prefix (for example 'v:{0}' or 'local:{0}')",
         XamlCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor UnprefixedTypeNotNative = new(
+        "VELOX_XAML019", "Unprefixed type is not native",
+        "The unprefixed type '{0}' is not a native WinForms type; write 'v:{0}' for a VeloxDev control or 'local:{0}' for a template/Demo type",
+        XamlCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
     public static readonly DiagnosticDescriptor PropertyNotPartial = new(
         "VELOX_XAMLP001", "XamlProperty must be partial",
         "A [XamlProperty] property must be declared partial and have no accessor bodies",

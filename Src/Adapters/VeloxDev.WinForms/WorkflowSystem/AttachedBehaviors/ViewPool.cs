@@ -2,6 +2,7 @@ using System;
 using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem.ViewHosting;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -13,7 +14,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// Mirrors the XAML adapters' <c>ViewPool.ItemsSource</c> / <c>ViewPool.TemplateSelector</c> attached properties.
 /// Because WinForms has no attached-property system, the values are stored per control in a
 /// <see cref="ConditionalWeakTable{TKey, TValue}"/>. When both an items source and an
-/// <see cref="IWorkflowTemplateSelector"/> are configured, a <see cref="ViewSourcePipeline"/> starts and the Core
+/// <see cref="TemplateSelector"/> are configured, a <see cref="ViewSourcePipeline"/> starts and the Core
 /// pool materializes one view per visible node into the host control. Link items are handled by
 /// <see cref="WorkflowLinkLayer"/> on the surface canvas instead; a host that uses this attached property directly
 /// must enable that layer, or links will not be drawn.
@@ -23,7 +24,7 @@ public sealed class ViewPool
     private sealed class PoolState
     {
         public INotifyCollectionChanged? ItemsSource { get; set; }
-        public IWorkflowTemplateSelector? TemplateSelector { get; set; }
+        public TemplateSelector? TemplateSelector { get; set; }
     }
 
     private static readonly ConditionalWeakTable<Control, PoolState> States = new();
@@ -70,7 +71,7 @@ public sealed class ViewPool
     /// <summary>
     /// Gets the configured template selector.
     /// </summary>
-    public static IWorkflowTemplateSelector? GetTemplateSelector(Control element)
+    public static TemplateSelector? GetTemplateSelector(Control element)
     {
         if (element is null)
         {
@@ -84,7 +85,7 @@ public sealed class ViewPool
     /// Sets the configured template selector. Together with <see cref="SetItemsSource"/> this starts view pooling
     /// for the host control.
     /// </summary>
-    public static void SetTemplateSelector(Control element, IWorkflowTemplateSelector? value)
+    public static void SetTemplateSelector(Control element, TemplateSelector? value)
     {
         if (element is null)
         {

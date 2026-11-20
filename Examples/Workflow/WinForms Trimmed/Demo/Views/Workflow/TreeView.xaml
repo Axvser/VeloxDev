@@ -20,8 +20,16 @@
 
   <v:UserControl.Resources>
     <v:ResourceDictionary>
+      <v:DataTemplate x:Key="NodeTemplate">
+        <local:NodeView />
+      </v:DataTemplate>
+      <v:DataTemplate x:Key="LinkTemplate">
+        <local:LinkView />
+      </v:DataTemplate>
       <!-- VeloxDev customization: which view each pooled item kind gets. -->
-      <local:TemplateSelector x:Key="WorkflowTemplateSelector" />
+      <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
+                                    NodeTemplate="{StaticResource NodeTemplate}"
+                                    LinkTemplate="{StaticResource LinkTemplate}" />
       <!-- Restyle the surface scroll bars here; the bar draws itself instead of the native theme. -->
       <v:Style x:Key="SurfaceScrollBarStyle" TargetType="v:ScrollBar">
         <v:Style.Setters>

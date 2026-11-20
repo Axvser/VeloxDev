@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
@@ -17,8 +18,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// A template or demo declares an ordinary control for the card and one child panel for the rows, names that panel
 /// with <see cref="SetRowsHostName"/>, and supplies the slot view through <see cref="SetSlotViewFactory"/> or
 /// <see cref="SetSlotViewType"/>. This helper rebuilds the rows whenever the node is rebound, applies the surface's
-/// zoom collapse to the row metrics, and binds each created slot view through
-/// <see cref="WorkflowSlotAttachment"/>. The card itself keeps its own paint.
+/// zoom collapse to the row metrics, and writes the slot into the view's <c>ViewModel</c> property (falling back to
+/// <see cref="WorkflowSlotAttachment"/> for a legacy view without one). The card itself keeps its own paint.
 /// </para>
 /// <para>
 /// The helper enables <see cref="WorkflowSlotLayoutBehavior"/> on the card for the rows host, because the slot
@@ -394,10 +395,35 @@ public sealed class WorkflowNodeRowsBehavior
         {
             var view = SlotViewFactory?.Invoke() ?? InstantiateSlotView() ?? new Panel();
 
-            // 模板自己的插槽视图会带附加；没有的话这里补一份，拖拽连线与状态着色才有宿主。
+            // 通用插槽视图暴露 ViewModel；旧的附加式视图才需要补一份 attachment。
+            if (TrySetSlotViewModel(view, slot))
+            {
+                return view;
+            }
+
             var slotAttachment = WorkflowSlotAttachment.For(view) ?? WorkflowSlotAttachment.Attach(view);
             slotAttachment.Slot = slot;
             return view;
+        }
+
+        private static bool TrySetSlotViewModel(Control view, IWorkflowSlotViewModel slot)
+        {
+            var property = view.GetType().GetProperty("ViewModel", BindingFlags.Instance | BindingFlags.Public);
+            if (property is null || !property.CanWrite || !property.PropertyType.IsInstanceOfType(slot))
+            {
+                return false;
+            }
+
+            try
+            {
+                property.SetValue(view, slot);
+                view.Tag = slot;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage(

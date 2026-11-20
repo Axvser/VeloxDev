@@ -58,7 +58,7 @@
 | WPF | `Panel` / `FrameworkElement` | `DispatcherPriority.Background` | 绑定，`ViewArranger` no-op | 逐条池化 | 模板选择器 + 资源回退 |
 | WinUI | `Panel` / `FrameworkElement` | `DispatcherQueuePriority.Low` | 命令式 Canvas，`ViewLayoutTracker` 订阅属性变化 | 逐条池化 | `TryEnqueue` 拒绝时返回 false |
 | MAUI | `Layout` / `View` | `NonPriority` + 16ms 一次性 timer | `AbsoluteLayout` + 节点 Anchor/Size 订阅 | `ViewLinkLayer.IsActive=true`，overlay 继续画 | 池不物化 link |
-| WinForms | `Control` / `Control` | `NonPriority` + `Control.BeginInvoke` | Attachment 摆位 | `ViewLinkLayer.IsActive=true`，`WorkflowLinkLayer` 在画布 Paint 里一趟画完 | `IWorkflowTemplateSelector`；Attach 时节点 `BringToFront`（不再有连线视图，`SendToBack` 路径空转） |
+| WinForms | `Control` / `Control` | `NonPriority` + `Control.BeginInvoke` | Attachment 摆位 | `ViewLinkLayer.IsActive=true`，`WorkflowLinkLayer` 在画布 Paint 里一趟画完 | `TemplateSelector`（`DataTemplate` 回调）；Attach 时节点 `BringToFront`（不再有连线视图，`SendToBack` 路径空转） |
 | Jalium | `Panel` / `FrameworkElement` | `DispatcherPriority.Background` | 绑定，`ViewArranger` no-op | 逐条池化；`WorkflowLinkBounds` 自盒化不动 | 模板选择器 + 资源回退 |
 
 **适配器类都是 `public sealed`**，不是 `internal` —— 它们是本家对外的开放面；类名也不带平台前缀（`ViewFactory` / `ViewContainer` / `ViewSourcePipeline` …）。七家不能同时安装，同名类型正是这套设计的前提。
