@@ -31,7 +31,7 @@ Answer these before writing code. Each one has a right answer determined by the 
 
 If the host gives you a scroll viewer and a canvas, take them: the surface behaviour resolves them by name, writes `Viewport` from the scroll offsets, and everything downstream is automatic. This is what WPF, Avalonia, WinUI and Blazor do.
 
-If it does not — a self-drawn surface, or a framework with no scroll viewer — **you** own the scroll: compute `scroll − ActualOffset`, write `Viewport` yourself, and clamp with `ClampScrollOffset`. WinForms is the worked example, and the only adapter that also synthesizes its scroll from `ViewportOffset`.
+If it does not — a surface that places its own children, or a framework with no scroll viewer — **you** own the scroll: compute `scroll − ActualOffset`, write `Viewport` yourself, and clamp with `ClampScrollOffset`. WinForms is the worked example: its `WorkflowSurfaceBehavior` drives its own XAML `ScrollViewer`, positions node cards in code and paints links in one canvas pass; it is also the only adapter that synthesizes its scroll from `ViewportOffset`.
 
 ⚙ Whichever you choose, `Viewport` is written **only by the adapter**, and always in canvas-local coordinates.
 
@@ -113,7 +113,7 @@ Use the framework's dispatcher-priority type when it has one, and `NonPriority` 
 
 Push is better. If the framework has bindings, bind the node's position and size to the collapsed `Anchor`/`Size` and let the binding re-evaluate; the only thing you must remember is re-raising those two properties after a re-virtualization — which Core's `BroadcastVisibleItemLayout()` already does for you.
 
-Pull is survivable but costly: the caller must refresh after every mutation, and you will need a synchronous escape hatch for the cases where a value must be correct in the same frame (see WinForms' `SyncNow`). Choose it only when the framework offers nothing else.
+Pull is survivable but costly: the caller must refresh after every mutation, and you will need a synchronous escape hatch for the cases where a value must be correct in the same frame (see WinForms' `SyncNow`). WinForms is the mixed case to study: its XAML layer has bindings and DPs, yet card placement is written in code, so `Refresh` stays part of the contract; links are the exception because `WorkflowLinkLayer` subscribes to model changes itself.
 
 ## Writing the adapter
 

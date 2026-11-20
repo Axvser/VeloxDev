@@ -30,7 +30,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** right-pressing a link opens an empty menu, or no menu.
 
-**Cause:** the packs declare and wire the menu but add no entries. WinForms' base override adds none either.
+**Cause:** the packs declare and wire the menu but add no entries. WinForms' `SetLinkMenuBuilder` delegate starts empty too.
 
 **Fix:** add the entries in the resource/fragment/override the pack declares. Each entry is bound to the pressed link; `Command="{Binding DeleteCommand}"` is a complete entry. If no menu opens, check `LinkMenuKey` names an existing resource and the platform's right-press wiring.
 

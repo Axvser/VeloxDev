@@ -191,19 +191,19 @@ if (DataContext is IConnectionPreviewLink link)
 
 ### The link context menu
 
-Right-pressing a link shows the menu the surface declares: the adapter resolves the link, and (unless a subscriber on the link itself set `Handle.PreventDefault`) pops the resource named by `WorkflowSurfaceBehavior.LinkMenuKey`. Adding an entry is one declaration in your markup — or one line in WinForms' `OnBuildLinkMenu` override.
+Right-pressing a link shows the menu the surface declares: the adapter resolves the link, and (unless a subscriber on the link itself set `Handle.PreventDefault`) pops the resource named by `WorkflowSurfaceBehavior.LinkMenuKey`. Adding an entry is one declaration in your markup — or one line in WinForms' `SetLinkMenuBuilder` delegate.
 
 | GUI | How the menu is declared |
 |---|---|
 | WPF / WinUI / MAUI | `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` on the tree root, plus a menu resource with that key |
 | Avalonia | the same property with the key its template emits (`WorkflowTreeMenu`) |
 | Razor | a `<LinkMenu Context="link">…</LinkMenu>` fragment parameter on the surface component |
-| WinForms | override `OnBuildLinkMenu(menu, link)` on the generated tree subclass |
+| WinForms | `WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, (menu, link) => …)` in the generated tree's code-behind |
 | Jalium | the same `LinkMenuKey` + menu resource the markup platforms use |
 
-⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms adds or removes items in the `OnBuildLinkMenu` override; Jalium declares them in the menu resource.
+⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms adds or removes items in the `SetLinkMenuBuilder` delegate; Jalium declares them in the menu resource.
 
-⚙ **The generated menus are empty, and WinForms' base override adds nothing.** The packs declare the resource/fragment/override and wire it; every entry is yours, including Delete. The library supplies the event and the timing; the host decides the actions.
+⚙ **The generated menus are empty, and WinForms' builder adds nothing.** The packs declare the resource/fragment/builder and wire it; every entry is yours, including Delete. The library supplies the event and the timing; the host decides the actions.
 
 ⚙ **The surface owns the open/closed bookkeeping.** It sets `WorkflowInput.IsSuspended` while its menu is up, so the pointer travelling onto the menu cannot clear the link the menu acts on, and releases it on close. When the link an open menu was about leaves the tree (Delete, Undo, an agent edit) the tree reports it through `GetHelper().LinkRemoved` — close your popup when it names yours. The surface opens the menu off the routed right-press.
 
@@ -250,7 +250,7 @@ link.Locate();   // the midpoint of its two endpoint nodes' centers
 
 A settled link carries a **travelling highlight**, so its direction is read from motion rather than from a mark a few pixels wide. Every full demo does this; the Trimmed suites leave it out because it is decoration rather than part of the editor.
 
-⚙ **Animate a scalar phase on the flow owner, and derive the drawing from it.** The WPF/Avalonia/WinUI link views read `BandHead` / `BandIntensity` from the tree's shared `WorkflowFlowClock`; the WinForms canvas and the Jalium surface own the same pair (Jalium uses `FlowPhase`) and animate it once per surface; the Blazor link is drawn by `flow.js`. Give the flow owner an animatable scalar that triggers a repaint, and compute geometry and colour from it in the draw pass. See [the animation skill's flow reference](../../../veloxdev-create-animation/references/practices/flow.md).
+⚙ **Animate a scalar phase on the flow owner, and derive the drawing from it.** The WPF/Avalonia/WinUI link views read `BandHead` / `BandIntensity` from the tree's shared `WorkflowFlowClock`; the WinForms `WorkflowLinkLayer` owns `FlowHead` / `FlowIntensity` (one animation for every link) and the Jalium surface owns `FlowPhase`; the Blazor link is drawn by `flow.js`. Give the flow owner an animatable scalar that triggers a repaint, and compute geometry and colour from it in the draw pass. See [the animation skill's flow reference](../../../veloxdev-create-animation/references/practices/flow.md).
 
 ⚙ **The line rests dim and the band is the same colour at full strength.** Dim the resting line by alpha (about three fifths) and keep the hue; the contrast then sits where the eye finds it. Pushing the link's colour towards white changes one channel of three on a 2px line and is invisible.
 
@@ -280,7 +280,7 @@ The adapters fall into two camps, and which one you are in decides whether you m
 | Node position | bound to the collapsed `Anchor`; the binding re-evaluates | repositioned in code, every pass |
 | After a mutation | automatic | you must call `Refresh(host)` |
 
-⚙ **On WinForms, `Refresh` is part of the contract.** Nothing binds, so a node that moved without a refresh is still drawn where it was — and a slot anchor written after a deferred refresh is a frame stale, which is why that adapter also exposes a synchronous re-sync. Your GUI's reference has the details.
+⚙ **WinForms is XAML-first now, but its placement is still pull-driven.** The tree has real DPs, bindings and attached properties, yet `WorkflowNodeAttachment` writes each card's `Location`/`Size` in code, so `Refresh(host)` remains part of the contract; `SyncNow` is the same-frame escape hatch for slot measurements. The link layer is different: it subscribes to node/link/slot changes and repaints from `WorkflowLinkLayer`, so links track a drag without a host refresh.
 
 ## Checking your views
 

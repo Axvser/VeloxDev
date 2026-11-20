@@ -151,7 +151,8 @@ private IWorkflowTreeViewModel? _tree;
 private IInputEvents? _input;
 
 // Call whenever the surface is handed a tree: DataContextChanged on WPF/Avalonia,
-// BindingContextChanged on MAUI, OnParametersSet on Blazor, SetTree on WinForms/Jalium.
+// BindingContextChanged on MAUI, OnParametersSet on Blazor,
+// WorkflowSurfaceBehavior.SetWorkflowTree on WinForms, the tree attached property on Jalium.
 private void BindTree(IWorkflowTreeViewModel? tree)
 {
     if (_input is not null) _input.Input.KeyDown -= OnKeyDown;

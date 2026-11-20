@@ -94,6 +94,14 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** the model changed; the card is still drawn where it was.
 
-**Cause:** WinForms is pull-driven. Nothing binds; the surface must be told to refresh.
+**Cause:** WinForms is XAML-first, but placement is still pull-driven: `WorkflowNodeAttachment` writes each card's `Location`/`Size` in code, so the surface must be told to refresh.
 
 **Fix:** call `WorkflowSurfaceBehavior.Refresh(host)` after a mutation. When a slot anchor must be correct in the same frame, use the adapter's `SyncNow` escape hatch.
+
+## A WinForms link endpoint lags the node or flips its bend while dragging
+
+**Symptom:** the card moves, the curve arrives a frame late; or a long link alternates between two bend directions as the canvas pans.
+
+**Cause:** the endpoint was derived from the measured `slot.Anchor` minus the current pan. When a node leaves the visible set its measurement stops while the projection keeps moving, so the model endpoint drifts and `PortOutward` can change edge; a canvas repaint that runs before the geometry refresh shows the previous frame.
+
+**Fix:** use `WorkflowSlotLayoutBehavior.TryGetLocalAnchor(slot)` — the port's centre in the node's client coordinates — and add the current `node.Anchor`; it is pan-independent. The link layer must subscribe to the endpoint nodes' `PropertyChanged`, and `ApplyPanCore` must call `WorkflowLinkLayer.Refresh` before `canvas.Update()`. See [winforms.md](../practices/gui/winforms.md#links--one-layer-paints-the-whole-graph).
