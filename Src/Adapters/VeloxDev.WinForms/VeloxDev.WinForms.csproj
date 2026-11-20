@@ -1,20 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows</TargetFrameworks>
-		<EnableTrimAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableTrimAnalyzer>
-		<EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+		<EnableAotAnalyzer>true</EnableAotAnalyzer>
 		<Nullable>enable</Nullable>
 		<UseWindowsForms>true</UseWindowsForms>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<LangVersion>latest</LangVersion>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+		<!-- WFO1000: the adapter's existing public designer properties are not designer-serialized.
+		     IL2026/IL2075: the XAML layer intentionally uses TypeDescriptor/reflection for native properties. -->
+		<NoWarn>$(NoWarn);WFO1000;IL2026;IL2059;IL2067;IL2075</NoWarn>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<PackageId>VeloxDev.WinForms</PackageId>
 		<Title>VeloxDev.WinForms</Title>
 		<Version>11.2.0</Version>
 		<Authors>Axvser</Authors>
-		<Description>VeloxDev.Core + WinForms</Description>
+		<Description>VeloxDev.Core + WinForms, including the XAML-first view runtime.</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
+		<PackageTags>winforms;xaml;workflow;ui;veloxdev</PackageTags>
+		<RepositoryUrl>https://github.com/Axvser/VeloxDev</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -22,8 +29,21 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- The XAML source generator compiles these into the generated InitializeComponent. -->
+		<AdditionalFiles Include="**/*.xaml" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
 		<PackageReference Include="VeloxDev.Core" Version="11.2.0" Condition="'$(Configuration)' != 'Debug'" />
+		<!-- Debug uses the local generator source; Release resolves the analyzer package from NuGet,
+		     which is what the published adapter depends on and what the release workflow gates on. -->
+		<ProjectReference Include="..\..\Generators\VeloxDev.WinForms.Generator\VeloxDev.WinForms.Generator.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false"
+		                  Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="VeloxDev.WinForms.Generator" Version="12.0.0"
+		                  Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 </Project>

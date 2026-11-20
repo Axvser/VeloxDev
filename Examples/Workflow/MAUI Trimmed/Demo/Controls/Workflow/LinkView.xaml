@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8" ?>
 <!-- VeloxDev customization: The shared, viewport-sized links layer. Hosts the adapter's
      WorkflowLinkOverlay — ONE GraphicsView that draws every visible link plus the virtual preview.
      Per-link GraphicsViews were removed from the Trimmed demos (a canvas-sized / per-link GraphicsView

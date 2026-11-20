@@ -78,7 +78,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 | # | 改什么 | 例 |
 |---|---|---|
 | 1 | 命名空间与类名 token 化 | `TemplateNamespace` / `TemplateClass` |
-| 2 | 字面量换成 `Template*` 占位符，并在 `template.json` 里配 `replaces` | WinForms demo 的 `TreeView.cs` 写 `ParseColor("#1E1E1E")`，模板写 `ParseColor("TemplateSurfaceBackground")`（`workflow-tree-view/TemplateClass.cs` 构造器里四行同形）；WPF demo 的 `<Border … Background="#1E1E1E" BorderBrush="#33FFFFFF" BorderThickness="1">` 在模板里是四个 `Template*`（`workflow-tree-view/TemplateClass.xaml` 的 `PART_SurfaceBorder`） |
+| 2 | 字面量换成 `Template*` 占位符，并在 `template.json` 里配 `replaces` | WinForms demo 的 `TreeView.xaml` 写 `BackColor="#FF1E1E1E"`、`GridDecorator` 写 `GridSpacing="40"`，模板写 `BackColor="TemplateSurfaceBackground"` / `ParseGridValue("TemplateGridSpacing")`；WPF demo 的 `<Border … Background="#1E1E1E" BorderBrush="#33FFFFFF" BorderThickness="1">` 在模板里是四个 `Template*`（`workflow-tree-view/TemplateClass.xaml` 的 `PART_SurfaceBorder`） |
 | 3 | **删掉 demo 的 `InfoOverlay` HUD 及其绑定** | 模板里没有任何 InfoOverlay；demo 每个平台都有（如 `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/InfoOverlay.razor`，模板 tree-view 只把它连同 `<InfoOverlay …>` 那一行一起拿掉） |
 | 4 | **兄弟类型改名**：demo 用 `WorkflowGridDecorator` / `CustomTemplateSelector`，模板条目必须叫 `GridDecorator` / `TemplateSelector` | WPF demo `TreeView.xaml` 里是 `<workflowViews:WorkflowGridDecorator>`，模板里是 `<workflowViews:GridDecorator>`；因为 tree-view 是按 `defaultName` 引用兄弟的（`architecture.md` §五） |
 | 5 | 头注释换成 `… VeloxDev customization: …` 那一句 | 每个条目文件的第一行 |
@@ -161,9 +161,8 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 判据是**「这段代码是不是用户该改的扩展点」**：平台硬限制与机械装配进包，策略（调色板、卡片长什么样、用哪个图形）留在模板里。
 
 ⚠ **判据不是「这个角色像不像用户的」，也不是「离群不离群」** —— 后者不能当理由跳过 `grid-decorator`，
-那个角色照样含平台机制。用户把
-「每一个需要 item template 的角色都要有可重写基类」定成了规范，见
-[`adapter-base-class-specifications.md`](../../specifications/adapter-base-class-specifications.md)。
+那个角色照样含平台机制。机制与策略的分层见
+[`layer-ownership-specifications.md`](../../specifications/layer-ownership-specifications.md)。
 
 ⇒ 已经"抽"过的公共物只有一件：`TemplateSlotPath` 那段 SVG。它是**每个条目的 `template.json` 里各存一份字面量**
 （七个平台的 `defaultValue` 逐字节相同，viewBox 1024×1024），**改图标要改每一处**，
@@ -196,9 +195,9 @@ Razor 的 `slotBackground` 就是这一类的正面样本：它的 `description`
 
 | 常量 | 被复制到 |
 |---|---|
-| 标尺厚度（28 或 36） | 模板侧唯一副本是 **Razor**：`workflow-tree-view/TemplateClass.razor` 的 `RulerThickness="28"`。**WinForms 与 Jalium 都是单一来源**：WinForms 在适配器 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowGridDecorator.cs` 的 `DefaultRulerThickness`（tree-view 的 `RulerReserve` 读它，`WorkflowTreeView.cs`，2026-10-03 起），Jalium 在**模板** `workflow-grid-decorator/TemplateClass.cs` 的 `DefaultRulerThickness = 36`（2026-10-05 起），模板其余文件零副本 |
+| 标尺厚度（28 或 36） | 模板侧唯一副本是 **Razor**：`workflow-tree-view/TemplateClass.razor` 的 `RulerThickness="28"`。**WinForms 与 Jalium 都是单一来源**：WinForms 在**模板** `workflow-grid-decorator/TemplateClass.cs` 的 `DefaultRulerThickness = 36`（`SurfaceCanvas` 使用，标尺浮层由适配器的 `WorkflowRulerOverlayForm` 画）；Jalium 同样在 `workflow-grid-decorator/TemplateClass.cs`，模板其余文件零副本 |
 | 节点设计尺寸 `260×180` | WPF / WinUI `workflow-node-view/TemplateClass.xaml` 的 `Grid Width="260" Height="180"`、MAUI `workflow-node-view/TemplateClass.xaml.cs` 的 `DesignWidth`、Razor `workflow-node-view/TemplateClass.razor.cs` 的 `DesignWidth`、Jalium `workflow-node-view/TemplateClass.jalxaml` 的 `Grid Width="260"/Height="180"` |
-| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `workflow-link-view/TemplateClass.axaml.cs` 的 `PullMinimum`、WPF `workflow-link-view/TemplateClass.xaml.cs` 的 `MinimumPull`、WinUI `workflow-link-view/TemplateClass.xaml.cs` 的 `BuildCurve` 里字面量 `40`、Razor `workflow-link-view/TemplateClass.razor.cs` 的 `PullMinimum`；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js`）；无标记语言的 WinForms 与 MAUI 在适配器各一份（WinForms `WorkflowLinkAttachment.cs` 的 `pullMinimum`、MAUI `WorkflowLinkOverlay.cs` 的 `PullMinimum`），Jalium 在模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `MinimumPull = 40`。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
+| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `workflow-link-view/TemplateClass.axaml.cs` 的 `PullMinimum`、WPF `workflow-link-view/TemplateClass.xaml.cs` 的 `MinimumPull`、WinUI `workflow-link-view/TemplateClass.xaml.cs` 的 `BuildCurve` 里字面量 `40`、Razor `workflow-link-view/TemplateClass.razor.cs` 的 `PullMinimum`；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js`）；WinForms 默认单层绘制的 `pullMinimum` 在 `WorkflowLinkLayer.cs`，per-link 路径另有 `WorkflowLinkAttachment.cs` 的一份；MAUI 在 `WorkflowLinkOverlay.cs` 的 `PullMinimum`，Jalium 在模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `MinimumPull = 40`。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
 
 绑定式的那几家（WPF/Avalonia/WinUI/MAUI 的 tree-view 把 `TranslateTransform` 绑到
 `PART_GridDecorator.RulerThickness`）会自动跟随，**复制式的那几处不会**。

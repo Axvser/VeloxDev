@@ -13,8 +13,8 @@ namespace Demo.Views.Workflow;
 /// elements materialized by the Core virtualization. Purely model-driven — it reads
 /// <see cref="IWorkflowTreeViewModelHelper.Viewport"/> (kept current by the surface's pan/layout
 /// pump), <see cref="CanvasLayout"/> and <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>.
-/// The TreeView host calls <see cref="UpdateText"/> from its surface-refresh hook and binds the tree in
-/// <see cref="Bind"/>; the 复制 button copies the current multi-line info to the clipboard.
+/// The surface repaints it with the canvas frame and binds the tree in <see cref="Bind"/>; the 复制 button
+/// copies the current multi-line info to the clipboard.
 /// </summary>
 public sealed class InfoOverlay : Panel
 {
@@ -110,11 +110,23 @@ public sealed class InfoOverlay : Panel
     private void OnModelChanged(object? sender, EventArgs e) => UpdateText();
 
     /// <summary>Recomputes lines from the model and sizes/paints the panel.</summary>
+    /// <remarks>
+    /// Called from the canvas' <c>Paint</c>; it must be a no-op when nothing the HUD shows has changed, otherwise
+    /// the overlay invalidates itself inside the canvas' paint and the two windows keep re-painting each other.
+    /// </remarks>
     public void UpdateText()
     {
-        _lines = BuildLines();
-        _copyText = string.Join(Environment.NewLine, _lines);
-        _copy.Text = "复制";
+        var lines = BuildLines();
+        var copyText = string.Join(Environment.NewLine, lines);
+        var changed = copyText != _copyText || !LinesEqual(_lines, lines);
+
+        _lines = lines;
+        _copyText = copyText;
+
+        if (_copy.Text != "复制")
+        {
+            _copy.Text = "复制";
+        }
 
         int maxW = 0;
         int lineH = 0;
@@ -130,10 +142,25 @@ public sealed class InfoOverlay : Panel
         if (Width != w || Height != h)
         {
             SetBounds(Left, Math.Max(0, (Parent?.ClientSize.Height ?? 0) - h - 12), w, h);
+            changed = true;
         }
 
         LayoutButton();
-        Invalidate();
+        if (changed)
+        {
+            Invalidate();
+        }
+    }
+
+    private static bool LinesEqual(string[] left, string[] right)
+    {
+        if (left.Length != right.Length) return false;
+        for (var i = 0; i < left.Length; i++)
+        {
+            if (!string.Equals(left[i], right[i], StringComparison.Ordinal)) return false;
+        }
+
+        return true;
     }
 
     /// <summary>Positions the copy button at the panel's bottom-right and pins the overlay bottom-left of its parent.</summary>

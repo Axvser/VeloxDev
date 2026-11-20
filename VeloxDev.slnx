@@ -159,6 +159,7 @@
   </Folder>
   <Folder Name="/Generators/">
     <Project Path="Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" />
+    <Project Path="Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" />
   </Folder>
   <Folder Name="/Repository/">
     <File Path=".gitattributes" />
@@ -185,6 +186,9 @@
     <Project Path="Src/Test/Unit/Cli/VeloxDev.Cli.Test.Copy/VeloxDev.Cli.Test.Copy.csproj" />
     <Project Path="Src/Test/Unit/Cli/VeloxDev.Cli.Test.Plugin/VeloxDev.Cli.Test.Plugin.csproj" />
     <Project Path="Src/Test/Unit/Cli/VeloxDev.Cli.Test/VeloxDev.Cli.Test.csproj" />
+  </Folder>
+  <Folder Name="/Test/Unit/WinFormsXaml/">
+    <Project Path="Src/Test/Unit/WinFormsXaml/VeloxDev.WinForms.Xaml.Test/VeloxDev.WinForms.Xaml.Test.csproj" />
   </Folder>
   <Folder Name="/Test/Headless/">
     <Project Path="Src/Test/Headless/VeloxDev.AdapterTestKit/VeloxDev.AdapterTestKit.csproj" />

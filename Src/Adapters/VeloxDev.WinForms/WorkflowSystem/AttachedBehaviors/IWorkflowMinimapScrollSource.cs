@@ -9,8 +9,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// Kept off <see cref="IWorkflowMinimapOverlay"/> so the shared Core interface stays framework-agnostic — the
 /// event carries screen-space scroll, which only a host with its own scroll model can consume.
 /// <para>
-/// Declared by the adapter rather than by the generated minimap: <see cref="WorkflowTreeView"/> subscribes to it,
-/// so a tree-only host would otherwise fail to compile for want of an interface that only the minimap item emits.
+/// Declared by the adapter rather than by the generated minimap: <see cref="WorkflowSurfaceBehavior"/> subscribes
+/// to it, so a tree-only host would otherwise fail to compile for want of an interface that only the minimap item emits.
 /// </para>
 /// </remarks>
 public interface IWorkflowMinimapScrollSource

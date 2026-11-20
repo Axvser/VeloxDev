@@ -25,9 +25,39 @@ public sealed class WorkflowSlotLayoutBehavior
         public Type? CoordinateHostType { get; set; }
         public string? ParentHostName { get; set; }
         public HashSet<string> SlotPropertyNames { get; } = [];
+
+        // 自动模式（没有命名插槽）每次同步都要遍历整棵子控件树并反射找 ViewModel —— 平移的每个鼠标
+        // 消息都会走一遍。树在两次行重建之间是稳定的，所以把解析结果缓存起来；ControlAdded/Removed
+        // 与 Refresh 把它置脏。
+        public List<Control>? CachedSlotControls { get; set; }
+        public bool SlotControlsDirty { get; set; } = true;
     }
 
     private static readonly ConditionalWeakTable<Control, LayoutState> States = new();
+    private static readonly ConditionalWeakTable<IWorkflowSlotViewModel, LocalAnchorBox> LocalAnchors = new();
+
+    /// <summary>The slot's centre in its node view's client coordinates, in the same units as the node's Anchor/Size.</summary>
+    private sealed class LocalAnchorBox
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+
+    // 曲线要的是「端口在节点内的局部位置」：它只随布局/缩放变，不随画布平移变。从控件左/上逐级
+    // 累加到节点根即可得到，完全不经过屏幕坐标，因此不会在测量滞后时把平移量混进来。
+    internal static bool TryGetLocalAnchor(IWorkflowSlotViewModel slot, out double x, out double y)
+    {
+        if (slot is not null && LocalAnchors.TryGetValue(slot, out var box))
+        {
+            x = box.X;
+            y = box.Y;
+            return true;
+        }
+
+        x = 0d;
+        y = 0d;
+        return false;
+    }
 
     /// <summary>
     /// Gets whether workflow slot layout behavior is enabled for the specified control.
@@ -89,7 +119,9 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        GetState(element).SlotNames = value;
+        var state = GetState(element);
+        state.SlotNames = value;
+        state.SlotControlsDirty = true;
         RequestSync(element);
     }
 
@@ -116,7 +148,9 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        GetState(element).SlotEnumeratorNames = value;
+        var state = GetState(element);
+        state.SlotEnumeratorNames = value;
+        state.SlotControlsDirty = true;
         RequestSync(element);
     }
 
@@ -211,6 +245,7 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(control));
         }
 
+        GetState(control).SlotControlsDirty = true;
         RequestSync(control);
     }
 
@@ -293,6 +328,8 @@ public sealed class WorkflowSlotLayoutBehavior
             state.PropertyChangedHandler = null;
         }
 
+        state.CachedSlotControls = null;
+        state.SlotControlsDirty = true;
         CancelSync(control);
     }
 
@@ -332,6 +369,12 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (sender is Control control)
         {
+            // 子树（含插槽行）变了：下一次同步重新解析，绝不沿用可能已经销毁的控件。
+            if (States.TryGetValue(control, out var state))
+            {
+                state.SlotControlsDirty = true;
+            }
+
             RequestSync(control);
         }
     }
@@ -478,8 +521,14 @@ public sealed class WorkflowSlotLayoutBehavior
 
         if (slotNames.Length == 0 && enumeratorNames.Length == 0)
         {
-            foreach (var slotView in EnumerateDescendants(control).Where(x => ResolveSlot(x) is not null))
+            var slotViews = ResolveAutoSlotControls(control, state);
+            foreach (var slotView in slotViews)
             {
+                if (slotView.IsDisposed)
+                {
+                    continue;
+                }
+
                 SyncSlot(control, coordinateHost, slotView, node);
             }
 
@@ -495,6 +544,61 @@ public sealed class WorkflowSlotLayoutBehavior
         {
             SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
         }
+
+    }
+
+    // 自动模式下的插槽控件表。控件树在两次行重建之间稳定，所以只在脏标记或缓存失效时重新解析。
+    private static List<Control> ResolveAutoSlotControls(Control control, LayoutState? state)
+    {
+        if (state is not null
+            && !state.SlotControlsDirty
+            && state.CachedSlotControls is { } cached
+            && IsSlotCacheValid(cached, control))
+        {
+            return cached;
+        }
+
+        var list = new List<Control>();
+        foreach (var descendant in EnumerateDescendants(control))
+        {
+            if (ResolveSlot(descendant) is not null)
+            {
+                list.Add(descendant);
+            }
+        }
+
+        if (state is not null)
+        {
+            state.CachedSlotControls = list;
+            state.SlotControlsDirty = false;
+        }
+
+        return list;
+    }
+
+    private static bool IsSlotCacheValid(List<Control> cached, Control root)
+    {
+        for (var i = 0; i < cached.Count; i++)
+        {
+            var slot = cached[i];
+            if (slot is null || slot.IsDisposed)
+            {
+                return false;
+            }
+
+            var ancestor = slot.Parent;
+            while (ancestor is not null && !ReferenceEquals(ancestor, root))
+            {
+                ancestor = ancestor.Parent;
+            }
+
+            if (ancestor is null)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static void SyncNamedSlot(Control parentHost, Control host, Control? coordinateHost, IWorkflowNodeViewModel node, string slotName)
@@ -542,6 +646,13 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         var center = new System.Drawing.Point(slotControl.Width / 2, slotControl.Height / 2);
+        if (ResolveLocalCenter(host, slotControl) is { } localCenter)
+        {
+            var box = LocalAnchors.GetValue(slot, static _ => new LocalAnchorBox());
+            box.X = localCenter.X;
+            box.Y = localCenter.Y;
+        }
+
         var screenPoint = slotControl.PointToScreen(center);
 
         if (coordinateHost is not null)
@@ -559,6 +670,26 @@ public sealed class WorkflowSlotLayoutBehavior
             node.Anchor.Horizontal, node.Anchor.Vertical, localPoint.X, localPoint.Y, slot.Anchor.Layer);
     }
 
+    // 从插槽控件沿父链累加 Left/Top 到节点根，得到节点客户区里的中心点；不经过屏幕坐标。
+    private static System.Drawing.PointF? ResolveLocalCenter(Control host, Control slotControl)
+    {
+        var x = slotControl.Width / 2d;
+        var y = slotControl.Height / 2d;
+
+        for (var current = slotControl; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, host))
+            {
+                return new System.Drawing.PointF((float)x, (float)y);
+            }
+
+            x += current.Left;
+            y += current.Top;
+        }
+
+        return null;
+    }
+
     private static Control? ResolveCoordinateHost(Control control, Control parentHost)
     {
         var hostName = GetCoordinateHostName(control);
@@ -569,6 +700,12 @@ public sealed class WorkflowSlotLayoutBehavior
             {
                 return namedHost;
             }
+        }
+
+        // 没有显式坐标宿时，先认表面行为手里那块画布；泛型 v:Canvas 不继承 Panel，按类型找不到。
+        if (WorkflowSurfaceBehavior.FindSurfaceCanvas(control) is { } surfaceCanvas)
+        {
+            return surfaceCanvas;
         }
 
         var hostType = GetCoordinateHostType(control) ?? typeof(Panel);

@@ -71,6 +71,29 @@ public sealed class WorkflowNodeDragBehavior
     }
 
     /// <summary>
+    /// Re-hooks the control tree after a pooled node view is hidden and shown again.
+    /// </summary>
+    /// <remarks>
+    /// A recycled node view can rebuild its generated rows while hidden; those new children never existed
+    /// when the original hook pass ran. Re-running the hook pass is idempotent and keeps the card draggable.
+    /// </remarks>
+    public static void RefreshHooks(Control element)
+    {
+        if (element is null)
+        {
+            throw new ArgumentNullException(nameof(element));
+        }
+
+        if (!States.TryGetValue(element, out var state) || !state.IsEnabled)
+        {
+            return;
+        }
+
+        UnhookControlTree(element, state);
+        HookControlTree(element, element);
+    }
+
+    /// <summary>
     /// Gets the configured coordinate host name for drag calculations.
     /// </summary>
     public static string? GetCoordinateHostName(Control element)
@@ -220,6 +243,11 @@ public sealed class WorkflowNodeDragBehavior
         if (node.MoveCommand.CanExecute(new Offset(dx, dy)))
         {
             node.MoveCommand.Execute(new Offset(dx, dy));
+
+            // 节点锚点变了，插槽的世界锚点也变了；连线几何订阅的是插槽锚点，不是节点锚点。
+            // 这里同步重测插槽，别等布局批次——否则拖动节点时连线会停在旧端点，尤其在只拖节点、
+            // 不拖画布的时候（Trimmed 模板就是这种路径）。
+            WorkflowSlotLayoutBehavior.SyncNow(control);
 
             // WinForms 的 Invalidate() 只排队重绘请求，WM_PAINT 要等消息循环空闲才合并。拖拽中鼠标消息高频到达，画布重绘一直被推迟，节点旧位置的卡片影像与旧连线几何来不及擦掉，留下拖影。移动后立刻同步重绘坐标宿（画布：网格/连线），连线便能跟上且无残影。
             host.Invalidate();
@@ -405,6 +433,12 @@ public sealed class WorkflowNodeDragBehavior
             {
                 return namedHost;
             }
+        }
+
+        // 没有显式坐标宿时，先认表面行为手里那块画布；泛型 v:Canvas 不继承 Panel，按类型找不到。
+        if (WorkflowSurfaceBehavior.FindSurfaceCanvas(control) is { } surfaceCanvas)
+        {
+            return surfaceCanvas;
         }
 
         var hostType = GetCoordinateHostType(control) ?? typeof(Panel);

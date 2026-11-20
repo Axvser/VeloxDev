@@ -58,7 +58,7 @@
 | WPF | `Panel` / `FrameworkElement` | `DispatcherPriority.Background` | 绑定，`ViewArranger` no-op | 逐条池化 | 模板选择器 + 资源回退 |
 | WinUI | `Panel` / `FrameworkElement` | `DispatcherQueuePriority.Low` | 命令式 Canvas，`ViewLayoutTracker` 订阅属性变化 | 逐条池化 | `TryEnqueue` 拒绝时返回 false |
 | MAUI | `Layout` / `View` | `NonPriority` + 16ms 一次性 timer | `AbsoluteLayout` + 节点 Anchor/Size 订阅 | `ViewLinkLayer.IsActive=true`，overlay 继续画 | 池不物化 link |
-| WinForms | `Control` / `Control` | `NonPriority` + `Control.BeginInvoke` | Attachment 摆位 | 逐条池化 | `IWorkflowTemplateSelector`；Attach 时节点 `BringToFront` / 连线 `SendToBack` |
+| WinForms | `Control` / `Control` | `NonPriority` + `Control.BeginInvoke` | Attachment 摆位 | `ViewLinkLayer.IsActive=true`，`WorkflowLinkLayer` 在画布 Paint 里一趟画完 | `IWorkflowTemplateSelector`；Attach 时节点 `BringToFront`（不再有连线视图，`SendToBack` 路径空转） |
 | Jalium | `Panel` / `FrameworkElement` | `DispatcherPriority.Background` | 绑定，`ViewArranger` no-op | 逐条池化；`WorkflowLinkBounds` 自盒化不动 | 模板选择器 + 资源回退 |
 
 **适配器类都是 `public sealed`**，不是 `internal` —— 它们是本家对外的开放面；类名也不带平台前缀（`ViewFactory` / `ViewContainer` / `ViewSourcePipeline` …）。七家不能同时安装，同名类型正是这套设计的前提。
@@ -149,12 +149,12 @@ MAUI 的 `LinkLayer.Handles`（连线 overlay）、WinUI 的 `DispatcherQueuePri
 |---|---:|---:|---:|---:|
 | Avalonia | 12.28 | 11.98 | 232.52 | 61.8 |
 | WPF | 9.38 | 4.22 | 262.26 | 43.9 |
-| WinForms | 101.44 | 49.07 | 13430.48 | 381.0 |
+| WinForms | 60.0 | 23.0 | 4137.0 | 438.8 |
 | Jalium | 3.38 | 1.00 | 302.70 | 66.3 |
 | WinUI | 29.40 | 6.00 | 392.53 | 10.0 |
 | MAUI | 286.46 | 37.54 | 5070.75 | 357.0 |
 
-WinForms 的 Full 是 5001 个真实 WinForms 控件（每个都带窗口句柄）的物化/布局成本；早先一次矩阵跑到 327 ms 是 benchmark 宿主每轮只 `Controls.Clear()` 不 `Dispose()`，多轮后句柄耗尽，池只物化出 107 个视图 —— 现在 `WinFormsHeadedHost` 在每轮 Reset 时 Dispose 旧控件。`ViewScheduler` 又把每批包进 `SuspendLayout` / `ResumeLayout(false)`，Full 从 15.3 s 降到 13.4 s；逐视图 `BringToFront` / `SendToBack` 仍是这家最贵的一步，改成每批统一 `SendToBack` 的延迟方案反而跑到 212 s，已回退。MAUI 的 Active 只到 2000/5001，因为它的 `ViewLinkLayer` 把 3000 条连线交给 overlay，主池只物化节点；它的 Full 5.07 s 是 2000 个节点的成本，不是 5001 个视图。两者的 Full 不能与另外四家按视图数直接横比。`BatchBegin/BatchCommit` 与主线程 `MainThread.BeginInvoke` 两种 MAUI 改法都实测更慢，已保留原 16 ms timer。
+WinForms 的 Full 现在是 **2000 个节点窗口** 的成本：`ViewLinkLayer` 把 3000 条连线挡在主池外，`WorkflowLinkLayer` 在画布 `Paint` 里一趟画完。旧实现（每线一个窗口）Full 是 13.4–15.3 s；单层后约 4.14 s，Initial 60 ms、Scroll 23 ms。剩余成本是节点 HWND 本身（裸 WinForms 探针：2000 个含子控件的视图 `Controls.Add` ≈ 2.3 s）。MAUI 的 Active 也只到 2000/5001，同样是 overlay 把连线挡在主池外。两者的 Full 不能与另外四家按视图数直接横比；单层连线的分配更高（每次几何变脏重发采样曲线），正确性优先。
 
 当前管线的关键成本控制：pending 用 `Queue + HashSet`（增删查 O(1)，移除后留下 tombstone 由出队时跳过）；Avalonia `ViewContainer` 用引用比较 `HashSet<Control>` 做挂载去重，不再 `Children.Contains`；`LinkLayer.IsActive=false` 时完全跳过整集枚举；每批受 `BatchSize=1024` 与 16ms 双重限制。
 

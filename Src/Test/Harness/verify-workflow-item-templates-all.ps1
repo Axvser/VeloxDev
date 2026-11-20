@@ -79,18 +79,23 @@ $configs = [ordered]@{
         MirrorNamespaces = @('Demo.Views.Workflow')
         ProbeNs         = 'Probe.Views'
         ProbeKind       = 'WinForms'
-        MarkupExt       = $null
+        # The WinForms items ship a markup file plus a sibling code-behind (TreeView.xaml + TreeView.xaml.cs),
+        # named after the markup like the other six platforms.
+        MarkupExt       = '.xaml'
+        CodeBehindExt   = '.xaml.cs'
         RazorAllMarkup  = $false
         MirrorBase      = @{}
         Aliases         = [ordered]@{}
         Expected        = @{
-            'tree' = 'the mirror carries the demo HUD and the demo''s own key/wheel policy (Ctrl+Z/Y undo-redo, Shift+wheel horizontal scroll) - the template ships neither'
-            'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
-            'node' = 'the mirror sets card.NodeTitle with its own node type; the template cannot - NodeTitle is a Func<IWorkflowNodeViewModel, string> and the node''s name property belongs to the project, so the template ships that line commented out as guidance'
+            'tree' = 'the demo tree is the host shell: it derives from the adapter surface, adds the demo-only InfoOverlay HUD, the host''s link-menu entries and its own key/wheel policy - the template is a self-contained v:UserControl wired through WorkflowSurfaceBehavior and ships none of those'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false
         UseWinForms     = $true
+        # The WinForms generator compiles every AdditionalFiles .xaml into InitializeComponent; emit its sources so
+        # the harness can read the declaration's accessibility instead of trusting the generator's comment.
+        EmitGeneratedFiles = $true
+        VerifyInitializeComponent = $true
     }
     Jalium = @{
         PackId          = 'VeloxDev.Jalium.Templates'
@@ -265,7 +270,8 @@ function Uninstall-TemplatePack([string] $packId) {
 function Get-ItemFiles($config, [string] $key) {
     if ($config.RazorAllMarkup -or $itemDefs[$key].Kind -eq 'markup') {
         if (-not $config.MarkupExt) { return @('.cs') }
-        return @($config.MarkupExt, ($config.MarkupExt + '.cs'))
+        $codeBehind = if ($config.Contains('CodeBehindExt')) { $config.CodeBehindExt } else { $config.MarkupExt + '.cs' }
+        return @($config.MarkupExt, $codeBehind)
     }
     return @('.cs')
 }
@@ -291,6 +297,7 @@ function New-ProbeProject($config, [string] $probeDir) {
 
     switch ($config.ProbeKind) {
         'WinForms' {
+            $xamlGenerator = Join-Path $repoRoot 'Src\Generators\VeloxDev.WinForms.Generator\VeloxDev.WinForms.Generator.csproj'
             $project = @"
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -299,9 +306,20 @@ function New-ProbeProject($config, [string] $probeDir) {
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- Emit the XAML generator's sources so the probe can prove InitializeComponent stays private. -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
   <ItemGroup>
+    <!-- The generated views take their base types from VeloxDev.WinForms.Xaml; the implicit WinForms namespace
+         would make Control/UserControl/Panel ambiguous in those files, exactly as in the trimmed demo. -->
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="$adapter" />
+    <!-- The WinForms XAML generator is an analyzer on the adapter; analyzers do not flow through a
+         ProjectReference, and the probe owns the generated .xaml files, so both are wired here. -->
+    <ProjectReference Include="$xamlGenerator" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <AdditionalFiles Include="Views/**/*.xaml" />
   </ItemGroup>
 </Project>
 "@
@@ -486,6 +504,10 @@ function Normalize-Text([string] $text, [string[]] $namespaces, [System.Collecti
         $text = [regex]::Replace($text, 'Color\.FromArgb\("[^"]*"\)', '<color>')
         $text = [regex]::Replace($text, 'Colors\.\w+', '<color>')
     }
+    # The WinForms xmlns is written with and without the assembly qualifier; both name the same CLR namespace.
+    if ($kind -eq 'WinForms') {
+        $text = $text -replace ';assembly=VeloxDev\.WinForms', ''
+    }
     # A double written 2 vs 2.0 is the same value; only word-bounded literals are touched so net10.0 etc. survive.
     $text = [regex]::Replace($text, '(?<![\w.])(\d+)\.0(?![\w.])', '$1')
     return $text
@@ -582,6 +604,32 @@ function Show-Hunk($result, [string] $colour) {
     }
 }
 
+# The WinForms XAML generator writes InitializeComponent into a partial declaration of the x:Class. It must stay
+# private: a wider one would collide with a consumer's own initializer, and the adapter's XAML layer documents it as
+# generated. The probe emits the generator's sources so this reads the real declaration, not a copy of the template.
+function Assert-PrivateInitializeComponent([string] $probeDir, [string[]] $markupNames) {
+    $generated = @(Get-ChildItem (Join-Path $probeDir 'obj') -Recurse -File -Filter 'Xaml.*.g.cs' -ErrorAction SilentlyContinue)
+    if ($generated.Count -eq 0) {
+        throw 'the XAML generator emitted no source; cannot verify InitializeComponent visibility'
+    }
+
+    $owners = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($file in $generated) {
+        $text = Get-Content $file.FullName -Raw -Encoding UTF8
+        if ($text -notmatch '(?m)^\s*private\s+void\s+InitializeComponent\s*\(\s*\)') {
+            throw "$($file.Name) does not declare a private InitializeComponent()"
+        }
+        $match = [regex]::Match($text, '(?m)^\s*partial\s+class\s+(\w+)')
+        if ($match.Success) { [void]$owners.Add($match.Groups[1].Value) }
+    }
+
+    foreach ($name in $markupNames) {
+        if (-not $owners.Contains($name)) {
+            throw "no generated InitializeComponent() was found for $name"
+        }
+    }
+}
+
 $summary = @()
 $failedPlatforms = @()
 
@@ -595,7 +643,7 @@ foreach ($name in $Platform) {
     $templateProject = Join-Path $repoRoot $config.TemplateProject
     $mirrorRoot = Join-Path $repoRoot $config.MirrorRoot
 
-    $result = [pscustomobject]@{ Platform = $name; Items = @(); Generated = 0; Built = $false; Matches = 0; Differs = 0; Expected = 0; Comments = 0; Warnings = 0; Error = $null }
+    $result = [pscustomobject]@{ Platform = $name; Items = @(); Generated = 0; Built = $false; Matches = 0; Differs = 0; Expected = 0; Comments = 0; Warnings = 0; ErrorCount = 0; InitializeComponentPrivate = $null; InitializeComponentError = $null; Error = $null }
 
     try {
         New-Item -ItemType Directory -Force -Path $probe, $nupkgs, (Join-Path $probe 'Views') | Out-Null
@@ -640,19 +688,36 @@ foreach ($name in $Platform) {
             if ($LASTEXITCODE -eq 0) { $built = $true } else { Start-Sleep -Seconds 5 }
         }
         if (-not $built) {
-            Write-Host (($buildOutput | Select-Object -Last 40) -join "`n")
-            throw 'build failed'
+            Write-Host (($buildOutput | Select-Object -Last 60) -join "`n")
+            Write-Host '  build failed; continuing so the mirror and generator checks still report' -ForegroundColor Red
         }
-        $result.Built = $true
+        $result.Built = $built
 
         # A warning is a warning: the generated set must build clean, and the same log is the only place that says so.
         # Dependencies are in this log too (the adapter and Core are built through the reference), which is what a
         # consumer of the template will see on their first build.
         $warnings = @($buildOutput | Where-Object { $_ -match '\bwarning\s+[A-Za-z]+\d+' })
         $result.Warnings = $warnings.Count
+        # MSBuild prints each diagnostic twice (build + summary); dedupe so the count matches the distinct errors.
+        $result.ErrorCount = @($buildOutput | Where-Object { $_ -match '\berror\s+[A-Za-z]+\d+' } | Sort-Object -Unique).Count
         if ($warnings.Count -gt 0) {
             Write-Host "  $($warnings.Count) warning(s):" -ForegroundColor Yellow
             $warnings | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+        }
+
+        if ($config.Contains('VerifyInitializeComponent') -and $config.VerifyInitializeComponent) {
+            Write-Host 'Checking the generated InitializeComponent visibility' -ForegroundColor Cyan
+            $markupNames = @($itemOrder | Where-Object { $itemDefs[$_].Kind -eq 'markup' } | ForEach-Object { $itemDefs[$_].Generated })
+            try {
+                Assert-PrivateInitializeComponent $probe $markupNames
+                $result.InitializeComponentPrivate = $true
+                Write-Host '  InitializeComponent is private in every generated view' -ForegroundColor Green
+            }
+            catch {
+                $result.InitializeComponentPrivate = $false
+                $result.InitializeComponentError = $_.Exception.Message
+                Write-Host "  $($result.InitializeComponentError)" -ForegroundColor Red
+            }
         }
 
         Write-Host 'Comparing each generated file against its mirror' -ForegroundColor Cyan
@@ -697,6 +762,16 @@ foreach ($name in $Platform) {
         $result.Differs = @($result.Items | Where-Object { $_.Status -eq 'drift' }).Count
         $result.Expected = @($result.Items | Where-Object { $_.Status -eq 'expected' }).Count
         $result.Comments = @($result.Items | Where-Object { $_.Status -eq 'formatting' }).Count
+
+        # The comparison above still ran, but a platform that could not build (or whose generated initializer is not
+        # private) is an error, not a drift — the summary keeps both the counts and the reason.
+        $problems = @()
+        if (-not $result.Built) { $problems += "build failed ($($result.ErrorCount) error(s))" }
+        if ($result.InitializeComponentPrivate -eq $false) { $problems += $result.InitializeComponentError }
+        if ($problems.Count -gt 0) {
+            $result.Error = ($problems -join '; ')
+            if ($failedPlatforms -notcontains $name) { $failedPlatforms += $name }
+        }
     }
     catch {
         $result.Error = $_.Exception.Message
@@ -716,6 +791,7 @@ Write-Host '===== Summary =====' -ForegroundColor Cyan
 foreach ($r in $summary) {
     if ($r.Error) {
         Write-Host ("{0,-9} ERROR  {1}" -f $r.Platform, $r.Error) -ForegroundColor Red
+        Write-Host ("          generated {0}/7  built {1}  match {2}  formatting {3}  expected-diff {4}  drift {5}  warnings {6}  errors {7}" -f $r.Generated, $r.Built, $r.Matches, $r.Comments, $r.Expected, $r.Differs, $r.Warnings, $r.ErrorCount) -ForegroundColor Red
     }
     else {
         $colour = if ($r.Differs -gt 0) { 'Red' } elseif (($r.Expected + $r.Comments + $r.Warnings) -gt 0) { 'Yellow' } else { 'Green' }

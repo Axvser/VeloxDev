@@ -11,13 +11,13 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Implements <see cref="IWorkflowMinimapOverlay"/> so <see cref="WorkflowSurfaceBehavior"/> and
-/// <see cref="WorkflowTreeView"/> push the offsets it draws with. Dragging the viewport block requests a pan through
-/// <see cref="IWorkflowMinimapScrollSource"/>, which the surface subscribes to.
+/// Implements <see cref="IWorkflowMinimapOverlay"/> so <see cref="WorkflowSurfaceBehavior"/> pushes the offsets it
+/// draws with. Dragging the viewport block requests a pan through <see cref="IWorkflowMinimapScrollSource"/>, which
+/// the surface subscribes to.
 /// </para>
 /// <para>
 /// Derive from it only to restyle it — the layout maths, the drag mapping and the anchoring are the same in every
-/// host. Assign it to <see cref="WorkflowTreeView.MinimapOverlay"/> and the wiring is done.
+/// host. Name the instance with <see cref="WorkflowSurfaceBehavior.SetMinimapOverlayName"/> and the wiring is done.
 /// </para>
 /// </remarks>
 public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource

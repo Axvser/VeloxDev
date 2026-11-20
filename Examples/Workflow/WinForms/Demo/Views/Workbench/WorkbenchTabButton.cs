@@ -4,6 +4,8 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
+using Demo.Views.Workflow;
+
 namespace Demo.Views.Workbench;
 
 /// <summary>

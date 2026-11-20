@@ -96,7 +96,7 @@
 ### 4.1 改任何 `Set*` / `Get*` 的名字或语义（这家最重的联动）
 
 - [ ] **本模块 README**（`Src/Adapters/VeloxDev.WinForms/README.md`，逐表列 API；它自己就是消费者入口）
-- [ ] **各模板条目**（`Src/Templates/VeloxDev.WinForms.Templates/working/content/*/`；`tree-view` 现在派生 `WorkflowTreeView`、`node-view` 用 `WorkflowNodeAttachment.Attach`、`slot-view` 用 `WorkflowSlotAttachment.Attach`、`link-view`/`grid-decorator`/`minimap-overlay`/`template-selector` 各有形状）
+- [ ] **各模板条目**（`Src/Templates/VeloxDev.WinForms.Templates/working/content/*/`；`tree-view` 是 `v:UserControl` + `WorkflowSurfaceBehavior`，画布上挂 `WorkflowLinkLayer`；`node-view` 用 `WorkflowNodeAttachment.Attach`，`slot-view` 用 `WorkflowSlotAttachment.Attach`；`link-view` 是 per-link 可选路径；`grid-decorator`/`minimap-overlay`/`template-selector` 各有形状）
 - [ ] **两个 Workflow demo**：`Examples/Workflow/WinForms/Demo/` 与 `Examples/Workflow/WinForms Trimmed/Demo/`
 - [ ] `skills/veloxdev-create-workflow/references/gui/winforms.md`
 - [ ] `memory/modules/{WorkflowSystem,TransitionSystem,Templates}/adapters/winforms.md` + 本文

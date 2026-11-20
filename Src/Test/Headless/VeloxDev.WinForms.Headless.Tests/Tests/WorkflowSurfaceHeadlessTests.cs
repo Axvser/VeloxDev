@@ -7,8 +7,8 @@ using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;
 
-// WinForms 的表面契约与 WPF/Avalonia 同形，但刷新不检查 IsEnabled（Host 自己控制生命周期），
-// 所以这里不断言「禁用后 Refresh 不写模型」；禁用只清滚动口。
+// The surface contract mirrors the WPF/Avalonia shape: a plain root control with named parts and the
+// surface behavior attached. Refresh does not check IsEnabled; disabling only clears the scroller.
 [STATestClass]
 public sealed class WorkflowSurfaceHeadlessTests
 {
@@ -84,15 +84,93 @@ public sealed class WorkflowSurfaceHeadlessTests
     }
 
     [TestMethod]
-    public void ViewPool_CreatesOneViewPerVisibleItem()
+    public void ViewPool_CreatesOneViewPerVisibleNode()
     {
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
 
+        var visibleNodes = graph.Tree.Helper.VisibleItems.Count(item => item is IWorkflowNodeViewModel);
+
         Assert.AreEqual(
-            graph.Tree.Helper.VisibleItems.Count,
-            surface.View.PART_Canvas.Controls.Count,
-            "the pool must materialize exactly one view for each visible item");
+            visibleNodes,
+            surface.View.Canvas.Controls.Count,
+            "links are drawn by WorkflowLinkLayer; the pool only materializes nodes");
+        Assert.IsFalse(
+            surface.View.Canvas.Controls.OfType<HeadlessLinkView>().Any(),
+            "a link must not get a view of its own");
+    }
+
+    [TestMethod]
+    public void BuiltInSelector_ResolvesTheNodeViewTypeAndTheLinkLayerTakesOverLinks()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph, typedViews: true);
+
+        Assert.IsTrue(
+            surface.View.Canvas.Controls.OfType<HeadlessNodeView>().Any(),
+            "the named node view type must be materialized by the pool");
+        Assert.IsTrue(
+            WorkflowLinkLayer.GetIsEnabled(surface.View.Canvas),
+            "the surface must enable the single link layer on its canvas");
+    }
+
+    [TestMethod]
+    public void LinkLayer_PublishesTheCurveWithoutAPerLinkView()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+
+        WorkflowLinkLayer.Refresh(surface.View.Canvas);
+
+        Assert.IsNotNull(
+            graph.Link!.HitTarget()?.Curve,
+            "the single layer must publish the curve the surface hit-tests against");
+        Assert.IsFalse(
+            surface.View.Canvas.Controls.OfType<HeadlessLinkView>().Any(),
+            "a pooled link view must not be created");
+    }
+
+    [TestMethod]
+    public void LinkLayer_KeepsTheModelCurveWhenTheSlotMeasurementIsStale()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        var canvas = surface.View.Canvas;
+
+        var link = graph.Link!;
+        WorkflowLinkLayer.Refresh(canvas);
+        var before = link.HitTarget()?.Curve;
+        Assert.IsNotNull(before);
+
+        // A pooled endpoint can stop being measured while the projection keeps moving. The layer must
+        // keep the model-space curve (and therefore the port's outward direction) and shift it with the pan.
+        surface.View.GridDecorator.ScrollOffsetX = -100;
+        WorkflowLinkLayer.Refresh(canvas);
+        var after = link.HitTarget()?.Curve;
+        Assert.IsNotNull(after);
+
+        Assert.AreEqual(before.XAt(0) + 100d, after.XAt(0), 1d);
+        Assert.AreEqual(before.YAt(0), after.YAt(0), 1d);
+    }
+
+    [TestMethod]
+    public void LinkLayer_FollowsANodeAnchorChange()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        var link = graph.Link!;
+
+        WorkflowLinkLayer.Refresh(surface.View.Canvas);
+        var before = link.HitTarget()?.Curve;
+        Assert.IsNotNull(before);
+
+        var anchor = graph.Left.Anchor;
+        graph.Left.Anchor = new Anchor(anchor.Horizontal + 50, anchor.Vertical, anchor.Layer);
+        WorkflowLinkLayer.Refresh(surface.View.Canvas);
+        var after = link.HitTarget()?.Curve;
+        Assert.IsNotNull(after);
+
+        Assert.AreEqual(before.XAt(0) + 50d, after.XAt(0), 1d);
     }
 
     [TestMethod]
@@ -106,6 +184,48 @@ public sealed class WorkflowSurfaceHeadlessTests
         WorkflowSurfaceBehavior.SetIsEnabled(surface.View, false);
 
         Assert.IsNull(WorkflowInput.For(graph.Tree).Scroller);
+    }
+
+    [TestMethod]
+    public void XamlScrollViewer_ShowsBarsForALargerExtent()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph, xamlScrollViewer: true);
+
+        var viewer = surface.View.XamlScrollViewer!;
+        var extent = graph.Tree.Layout.ActualSize;
+
+        Assert.IsTrue(
+            extent.Width > viewer.ClientSize.Width && extent.Height > viewer.ClientSize.Height,
+            "the default graph extent must exceed the viewport for the bars to matter");
+        Assert.IsTrue(viewer.HorizontalScrollBar.Visible, "a wider extent must show the horizontal bar");
+        Assert.IsTrue(viewer.VerticalScrollBar.Visible, "a taller extent must show the vertical bar");
+        Assert.IsTrue(
+            viewer.HorizontalScrollBar.Maximum > 0,
+            "the horizontal bar must carry the scrollable range");
+    }
+
+    [TestMethod]
+    public void XamlScrollViewer_BarValueMovesTheViewport()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph, xamlScrollViewer: true);
+
+        var viewer = surface.View.XamlScrollViewer!;
+        var before = graph.Tree.Helper.Viewport.Vertical;
+
+        viewer.VerticalScrollBar.Value = 200;
+        Application.DoEvents();
+        WorkflowSurfaceBehavior.Refresh(surface.View);
+        Application.DoEvents();
+
+        Assert.AreEqual(
+            200d, graph.Tree.Helper.Viewport.Vertical, 2d,
+            "the scroll bar offset must become the viewport offset");
+        Assert.IsTrue(graph.Tree.Helper.Viewport.Vertical > before, "the viewport must move down");
+        Assert.AreEqual(
+            200, viewer.ScrollOffset.Y, 1,
+            "the synced offset must survive the feedback pass unchanged");
     }
 
     [TestMethod]

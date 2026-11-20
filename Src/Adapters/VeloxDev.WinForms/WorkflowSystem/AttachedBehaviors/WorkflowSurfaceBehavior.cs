@@ -1,660 +1,1164 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Drawing;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml;
+using VeloxDev.WorkflowSystem.StandardEx;
 using PlatformInput = System.Windows.Forms;
 using Wf = VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.StandardEx;
+using XamlScrollViewer = VeloxDev.WinForms.Xaml.Controls.ScrollViewer;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// WinForms does not support attached properties, but this type mirrors the workflow surface API shape used by other adapters.
+/// The whole lifecycle of a WinForms workflow surface, attached to a plain root control.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The surface is a normal <see cref="System.Windows.Forms.Control"/> (a XAML <c>UserControl</c> or <c>Panel</c>)
+/// whose named parts are declared in its own markup. Set <see cref="SetIsEnabled"/> on that root and name the
+/// viewport, canvas, grid decorator, minimap and pointer-press source with the corresponding attached properties;
+/// the behavior resolves them by <see cref="System.Windows.Forms.Control.Name"/> and wires pan, zoom, input routing,
+/// view pooling, layout scheduling, the floating ruler and teardown. No base class or constructor hand-off is needed.
+/// </para>
+/// <para>
+/// Node and slot views stay ordinary controls: they attach <see cref="WorkflowNodeAttachment"/> and
+/// <see cref="WorkflowSlotAttachment"/> themselves and paint whatever they like. Links are not pooled — the behavior
+/// enables <see cref="WorkflowLinkLayer"/> on the canvas, which paints every visible link in one pass. This behavior
+/// only supplies the shared surface machinery.
+/// </para>
+/// </remarks>
 public sealed class WorkflowSurfaceBehavior
 {
-    private sealed class SurfaceState : IMessageFilter
-    {
-        public bool IsEnabled { get; set; }
-        public bool ZoomEnabled { get; set; }
-        public Control? ScrollViewer { get; set; }
-        public Control? Canvas { get; set; }
-        public Control? GridDecorator { get; set; }
-        public Control? MinimapOverlay { get; set; }
-        public IWorkflowTreeViewModel? WorkflowTree { get; set; }
-
-        // 挂在输入路由上的画布滚动口。本类拥有它，宿主拿它去滚；换树/解绑时连同旧树一起摘。
-        public IWorkflowSurfaceScroller? Scroller { get; set; }
-
-        // Scroller 当前挂在哪棵树上：换树/解绑时用它只摘自己挂的那一个，不动同一棵树上别的表面挂的。
-        public IWorkflowTreeViewModel? ScrollerTree { get; set; }
-
-        // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
-        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
-        public bool HasPendingRestore { get; set; }
-        public bool RestoreQueued { get; set; }
-        public double PendingRestoreX { get; set; }
-        public double PendingRestoreY { get; set; }
-
-        private const int WmMouseWheel = 0x020A;
-        private const int WmMouseHWheel = 0x020E;
-        private const int WmLeftButtonDown = 0x0201;
-        private const int WmRightButtonDown = 0x0204;
-        private const int WmMiddleButtonDown = 0x0207;
-
-        // 过滤器归**启用**管，不归缩放管：关掉缩放的宿主一样要收到滚轮汇报（报告与手势是两件事）。
-        private bool _filterAdded;
-
-        internal void EnsureMessageFilter()
-        {
-            if (_filterAdded)
-            {
-                return;
-            }
-
-            Application.AddMessageFilter(this);
-            _filterAdded = true;
-        }
-
-        internal void RemoveMessageFilter()
-        {
-            if (!_filterAdded)
-            {
-                return;
-            }
-
-            Application.RemoveMessageFilter(this);
-            _filterAdded = false;
-        }
-
-        // 应用层预处理：滚轮发给谁取决于焦点，挂在控件上的处理器收不齐（实测三格零到达），所以按**指针底下**
-        // 的控件认领。普通滚轮整笔归适配器 —— 先过内层闸门：指针底下若有能滚的内层控件就**放行整笔**让它自己滚；
-        // 否则路由之后执行默认竖滚/横滚，并吞掉消息，平台的滚动容器一次都不许滚画布；Ctrl+滚轮是缩放，同样在
-        // 消息层接住。按下的那一支只把键盘焦点收到画布，消息照常放行。
-        bool IMessageFilter.PreFilterMessage(ref Message m)
-        {
-            // 表面上任何一次按下（画布、卡片、插槽、连线）都先把键盘焦点收到画布，Ctrl+Z 这类树级按键才有
-            // 路由。画布之外的按下（缩略图、HUD）与可编辑控件里的按下不动它 —— 见 FocusSurfaceForPress。
-            if (m.Msg is WmLeftButtonDown or WmRightButtonDown or WmMiddleButtonDown)
-            {
-                FocusSurfaceForPress();
-                return false;
-            }
-
-            // 两种滚轮都要接：竖滚轮是本家一直认的那条；倾斜滚轮 WM_MOUSEHWHEEL 是**另一条消息**，原先整条
-            // 没人接（既不放行也不路由），横向滚轮因此是这块表面的一条盲区。
-            if (m.Msg is not (WmMouseWheel or WmMouseHWheel))
-            {
-                return false;
-            }
-
-            // 按**指针底下**认领这一笔：消息发给谁取决于焦点，焦点不在表面上时按消息目标解析会认错人。
-            var under = GetControlAtScreenPoint(Cursor.Position);
-            var host = ResolveSurfaceHost(under) ?? ResolveSurfaceHost(m.HWnd);
-            if (host is null)
-            {
-                return false;
-            }
-
-            var tree = ResolveTree(host);
-            if (tree is null)
-            {
-                return false;
-            }
-
-            // 两种滚轮的增量都在 wParam 的高字，正方向都是「远离/向右」。竖滚轮走 Y、倾斜滚轮走 X（正 = 向右）。
-            var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
-            var deltaX = m.Msg == WmMouseHWheel ? delta : 0;
-            var deltaY = m.Msg == WmMouseWheel ? delta : 0;
-
-            // 内层闸门（前瞻式）：本家的过滤器在内层控件**之前**，所以「别插手」就是**放行整笔消息** ——
-            // 指针底下沿父链、还没走到表面宿主之前，若有能往这个方向滚的 ScrollableControl / TextBoxBase，
-            // 这一笔归它，直接 return false（不放行任何东西都不动，因为我们现在是把它吞掉的）。到边时找不到
-            // 有余量的内层控件，于是落回下面的路由 → 裁决 → 默认滚，由画布接。
-            if (InnerScrollableHasRoom(under, host, deltaX, deltaY))
-            {
-                return false;
-            }
-
-            // 普通滚轮（或这家关掉了缩放）**整笔归适配器**：先路由，订阅方置 PreventDefault 就是「这一笔
-            // 不滚」，由他走 Scroller 决定往哪滚；否则执行默认竖滚/横滚。两条都吞掉消息，平台一次都不滚画布。
-            // 缩放只吃竖滚轮（倾斜滚轮不缩放）。
-            var zoomGesture = m.Msg == WmMouseWheel
-                && Control.ModifierKeys == Keys.Control
-                && GetState(host).ZoomEnabled;
-
-            if (!zoomGesture)
-            {
-                if (!RouteWheel(host, tree, under ?? host, deltaX, deltaY))
-                {
-                    GetState(host).Scroller?.ScrollBy(deltaX, deltaY);
-                }
-
-                m.Result = IntPtr.Zero;
-                return true; // 吞掉消息：平台自己一次都不滚画布
-            }
-
-            // 缩放也要能被订阅者否决。滚轮在消息层就被这里接住、画布收不到它，所以路由只能在这一层补一次；
-            // 否决即吞掉消息 —— 不缩放，也不让任何控件滚动。
-            if (RouteWheel(host, tree, under ?? host, 0d, deltaY))
-            {
-                m.Result = IntPtr.Zero;
-                return true;
-            }
-
-            // 滚轮向上（增量为正）放大：Scale 是折叠因子，放大要除以 1/1.1。
-            var factor = delta > 0 ? 1 / 1.1 : 1.1;
-            var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
-            var layout = tree.Layout;
-
-            if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
-            {
-                var scrollOffset = ResolveScrollOffset(host, tree);
-                var clientSize = ResolveClientSize(host);
-                var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
-                    scrollOffset.Horizontal, scrollOffset.Vertical, clientSize.Width, clientSize.Height, layout);
-                layout.CollapsePivot = new Anchor(wx, wy, 0);
-                layout.Scale = new Scale(next, next);
-                // 深度放大把负向内容折叠到 w/Scale、越过固定 NegativeOffset；先扩大覆盖（单调，只有正向内容时无事），下面的 PivotCenterScroll 与 Refresh 才会读到新的 ActualOffset。
-                WorkflowSurfaceMath.EnsureNegativeCover(tree);
-                var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, clientSize.Width, clientSize.Height);
-                ApplyScrollOffset(host, tx, ty);
-                Refresh(host);
-            }
-            else
-            {
-                layout.Scale = new Scale(next, next);
-                // 世界原点缩放保持内容左上对齐：下游没人读新的 ActualOffset，所以把长大的覆盖（若有）显式经重绘路径推出去。
-                if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
-                {
-                    Refresh(host);
-                }
-            }
-
-            m.Result = IntPtr.Zero;
-            return true; // swallow the message: the target control never scrolls
-        }
-
-        private Control? ResolveSurfaceHost(IntPtr hwnd) => ResolveSurfaceHost(Control.FromHandle(hwnd));
-
-        // 从命中控件沿父链认领表面：判据是**启用**着的表面，不是「开着缩放」的 —— 关掉缩放的宿主一样要收到滚轮汇报。
-        private static Control? ResolveSurfaceHost(Control? hit)
-        {
-            var host = hit;
-            while (host is not null)
-            {
-                if (States.TryGetValue(host, out var state) && state.IsEnabled)
-                {
-                    return host;
-                }
-
-                host = host.Parent;
-            }
-
-            return null;
-        }
-
-        internal static Control? GetControlAtScreenPoint(Point screenPoint)
-        {
-            var handle = WindowFromPoint(screenPoint);
-            return handle == IntPtr.Zero ? null : Control.FromChildHandle(handle) ?? Control.FromHandle(handle);
-        }
-
-        // 内层闸门：指针底下、到表面宿主之前的那一段里，有没有能沿这一笔方向滚的容器。判据是**各自的滚动态** ——
-        // ScrollableControl 读 VerticalScroll/HorizontalScroll，TextBoxBase 读它自己的窗口滚动条。只要有一段还
-        // 有余量，这一笔就归它；到边（或根本没有这样的控件）返回 false，让画布接。前瞻式：本过滤器在内层**之前**，
-        // 所以「放手」是放行整笔消息，不是等它滚完了再补一刀。
-        private static bool InnerScrollableHasRoom(Control? under, Control host, int deltaX, int deltaY)
-        {
-            if (under is null || (deltaX == 0 && deltaY == 0))
-            {
-                return false;
-            }
-
-            for (var current = under; current is not null && !ReferenceEquals(current, host); current = current.Parent)
-            {
-                switch (current)
-                {
-                    case TextBoxBase text:
-                        if (TextBoxHasRoom(text, deltaY))
-                        {
-                            return true;
-                        }
-
-                        break;
-
-                    case ScrollableControl scrollable:
-                        if (ScrollableControlHasRoom(scrollable, deltaX, deltaY))
-                        {
-                            return true;
-                        }
-
-                        break;
-                }
-            }
-
-            return false;
-        }
-
-        // 沿方向的绝对余量：向下/向右滚看 Value 还没到 Max - LargeChange + 1，向上/向左看还大于 Minimum。
-        // 滚动条不可见的容器没有余量（默认不溢出的 AutoScroll 面板就落在这里），于是那一笔仍归画布。
-        private static bool ScrollableControlHasRoom(ScrollableControl scrollable, int deltaX, int deltaY)
-        {
-            var vertical = scrollable.VerticalScroll;
-            var horizontal = scrollable.HorizontalScroll;
-
-            var verticalRoom = deltaY == 0
-                || (vertical.Visible && (deltaY > 0
-                    ? vertical.Value > vertical.Minimum
-                    : vertical.Value < vertical.Maximum - vertical.LargeChange + 1));
-            var horizontalRoom = deltaX == 0
-                || (horizontal.Visible && (deltaX > 0
-                    ? horizontal.Value < horizontal.Maximum - horizontal.LargeChange + 1
-                    : horizontal.Value > horizontal.Minimum));
-
-            return verticalRoom && horizontalRoom;
-        }
-
-        // 多行文本框的滚动态只有它自己那对滚动条知道（TextBoxBase 没有托管 API），读窗口的滚动条信息。
-        // ⚠ 只判竖轴：实测底下的 EDIT 认 WM_MOUSEWHEEL（一格 3 行），但**不认** WM_MOUSEHWHEEL —— 放行整笔
-        // 横滚后它的 nPos 纹丝不动（h=[0/0..742 p134] 两格后仍是 0）。所以横滚永远不归文本框，归画布；
-        // 若照竖轴那样也按「有余量」放行，指针压在文本框上时横滚会掉进一个两边都不接的空档。
-        private static bool TextBoxHasRoom(TextBoxBase text, int deltaY)
-        {
-            if (!text.IsHandleCreated || deltaY == 0)
-            {
-                return false;
-            }
-
-            return WindowBarHasRoom(text.Handle, SbVert, deltaY);
-        }
-
-        // 窗口滚动条到边的判据与 Win32 一致：nPos 能落在 [nMin, nMax − nPage + 1]。
-        private static bool WindowBarHasRoom(IntPtr hwnd, int bar, int delta)
-        {
-            var info = new ScrollInfo
-            {
-                cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<ScrollInfo>(),
-                fMask = SifAll,
-            };
-
-            if (!GetScrollInfo(hwnd, bar, ref info))
-            {
-                return false;
-            }
-
-            var max = info.nMax - Math.Max(0, info.nPage - 1);
-            return delta > 0 ? info.nPos > info.nMin : info.nPos < max;
-        }
-
-        private const int SbVert = 1;
-        private const uint SifAll = 0x17; // SIF_RANGE(2) | SIF_PAGE(4) | SIF_POS(8) | SIF_TRACKPOS(16)
-
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-        private struct ScrollInfo
-        {
-            public uint cbSize;
-            public uint fMask;
-            public int nMin;
-            public int nMax;
-            public int nPage;
-            public int nPos;
-            public int nTrackPos;
-        }
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern bool GetScrollInfo(IntPtr hwnd, int bar, ref ScrollInfo info);
-
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern IntPtr WindowFromPoint(Point point);
-    }
-
     private static readonly ConditionalWeakTable<Control, SurfaceState> States = new();
 
+    /// <summary>Whether the surface lifecycle is active on the control.</summary>
+    public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
+        "IsEnabled", typeof(bool), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(false, OnIsEnabledChanged));
+
+    /// <summary>Whether Ctrl + mouse-wheel zoom is enabled for the surface.</summary>
+    public static readonly DependencyProperty ZoomEnabledProperty = DependencyProperty.RegisterAttached(
+        "ZoomEnabled", typeof(bool), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(false));
+
+    /// <summary>Name of the control that is the surface viewport.</summary>
+    public static readonly DependencyProperty ScrollViewerNameProperty = DependencyProperty.RegisterAttached(
+        "ScrollViewerName", typeof(string), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnPartConfigurationChanged));
+
+    /// <summary>Name of the control that hosts the pooled node and link views.</summary>
+    public static readonly DependencyProperty CanvasNameProperty = DependencyProperty.RegisterAttached(
+        "CanvasName", typeof(string), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnPartConfigurationChanged));
+
+    /// <summary>Name of the control that implements <see cref="IWorkflowGridDecorator"/>.</summary>
+    public static readonly DependencyProperty GridDecoratorNameProperty = DependencyProperty.RegisterAttached(
+        "GridDecoratorName", typeof(string), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnPartConfigurationChanged));
+
+    /// <summary>Name of the minimap control that implements <see cref="IWorkflowMinimapOverlay"/>.</summary>
+    public static readonly DependencyProperty MinimapOverlayNameProperty = DependencyProperty.RegisterAttached(
+        "MinimapOverlayName", typeof(string), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnPartConfigurationChanged));
+
+    /// <summary>Name of the control that receives the blank-surface press that starts a pan.</summary>
+    public static readonly DependencyProperty PointerPressSourceNameProperty = DependencyProperty.RegisterAttached(
+        "PointerPressSourceName", typeof(string), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnPartConfigurationChanged));
+
+    /// <summary>Simple or full type name of the node view created by the built-in pool selector.</summary>
+    public static readonly DependencyProperty NodeViewTypeProperty = DependencyProperty.RegisterAttached(
+        "NodeViewType", typeof(string), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnPartConfigurationChanged));
+
+    /// <summary>Simple or full type name of the link view created by the built-in pool selector.</summary>
+    public static readonly DependencyProperty LinkViewTypeProperty = DependencyProperty.RegisterAttached(
+        "LinkViewType", typeof(string), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnPartConfigurationChanged));
+
+    /// <summary>The template selector handed to the view pool; takes precedence over the two view-type names.</summary>
+    public static readonly DependencyProperty TemplateSelectorProperty = DependencyProperty.RegisterAttached(
+        "TemplateSelector", typeof(IWorkflowTemplateSelector), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnPartConfigurationChanged));
+
+    /// <summary>The tree bound to the surface when no ancestor data context carries one.</summary>
+    public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.RegisterAttached(
+        "WorkflowTree", typeof(IWorkflowTreeViewModel), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnPartConfigurationChanged));
+
+    /// <summary>Fills the link context menu the surface opens on a right press.</summary>
+    public static readonly DependencyProperty LinkMenuBuilderProperty = DependencyProperty.RegisterAttached(
+        "LinkMenuBuilder", typeof(Action<ContextMenuStrip, IWorkflowLinkViewModel>), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null));
+
+    /// <summary>Gets whether the surface lifecycle is active on <paramref name="element"/>.</summary>
+    public static bool GetIsEnabled(Control element) => (bool)GetRequired(element, IsEnabledProperty)!;
+
+    /// <summary>Starts or stops the surface lifecycle on <paramref name="element"/>.</summary>
+    public static void SetIsEnabled(Control element, bool value) => SetRequired(element, IsEnabledProperty, value);
+
+    /// <summary>Gets whether Ctrl + mouse-wheel zoom is enabled.</summary>
+    public static bool GetZoomEnabled(Control element) => (bool)GetRequired(element, ZoomEnabledProperty)!;
+
+    /// <summary>Sets whether Ctrl + mouse-wheel zoom is enabled.</summary>
+    public static void SetZoomEnabled(Control element, bool value) => SetRequired(element, ZoomEnabledProperty, value);
+
+    /// <summary>Gets the viewport part name.</summary>
+    public static string? GetScrollViewerName(Control element) => (string?)GetRequired(element, ScrollViewerNameProperty);
+
+    /// <summary>Names the viewport part.</summary>
+    public static void SetScrollViewerName(Control element, string? value) => SetRequired(element, ScrollViewerNameProperty, value);
+
+    /// <summary>Gets the canvas part name.</summary>
+    public static string? GetCanvasName(Control element) => (string?)GetRequired(element, CanvasNameProperty);
+
+    /// <summary>Names the canvas part.</summary>
+    public static void SetCanvasName(Control element, string? value) => SetRequired(element, CanvasNameProperty, value);
+
+    /// <summary>Gets the grid-decorator part name.</summary>
+    public static string? GetGridDecoratorName(Control element) => (string?)GetRequired(element, GridDecoratorNameProperty);
+
+    /// <summary>Names the grid-decorator part.</summary>
+    public static void SetGridDecoratorName(Control element, string? value) => SetRequired(element, GridDecoratorNameProperty, value);
+
+    /// <summary>Gets the minimap part name.</summary>
+    public static string? GetMinimapOverlayName(Control element) => (string?)GetRequired(element, MinimapOverlayNameProperty);
+
+    /// <summary>Names the minimap part.</summary>
+    public static void SetMinimapOverlayName(Control element, string? value) => SetRequired(element, MinimapOverlayNameProperty, value);
+
+    /// <summary>Gets the pointer-press-source part name.</summary>
+    public static string? GetPointerPressSourceName(Control element) => (string?)GetRequired(element, PointerPressSourceNameProperty);
+
+    /// <summary>Names the pointer-press-source part.</summary>
+    public static void SetPointerPressSourceName(Control element, string? value) => SetRequired(element, PointerPressSourceNameProperty, value);
+
+    /// <summary>Gets the node view type name used by the built-in pool selector.</summary>
+    public static string? GetNodeViewType(Control element) => (string?)GetRequired(element, NodeViewTypeProperty);
+
+    /// <summary>Sets the node view type name used by the built-in pool selector.</summary>
+    public static void SetNodeViewType(Control element, string? value) => SetRequired(element, NodeViewTypeProperty, value);
+
+    /// <summary>Gets the link view type name used by the built-in pool selector.</summary>
+    public static string? GetLinkViewType(Control element) => (string?)GetRequired(element, LinkViewTypeProperty);
+
+    /// <summary>Sets the link view type name used by the built-in pool selector.</summary>
+    public static void SetLinkViewType(Control element, string? value) => SetRequired(element, LinkViewTypeProperty, value);
+
+    /// <summary>Gets the template selector handed to the view pool.</summary>
+    public static IWorkflowTemplateSelector? GetTemplateSelector(Control element)
+        => (IWorkflowTemplateSelector?)GetRequired(element, TemplateSelectorProperty);
+
+    /// <summary>Sets the template selector handed to the view pool.</summary>
+    public static void SetTemplateSelector(Control element, IWorkflowTemplateSelector? value)
+        => SetRequired(element, TemplateSelectorProperty, value);
+
+    /// <summary>Gets the explicitly bound workflow tree.</summary>
+    public static IWorkflowTreeViewModel? GetWorkflowTree(Control element)
+        => (IWorkflowTreeViewModel?)GetRequired(element, WorkflowTreeProperty);
+
+    /// <summary>Binds a workflow tree explicitly; otherwise the surface resolves one from an ancestor data context.</summary>
+    public static void SetWorkflowTree(Control element, IWorkflowTreeViewModel? value)
+        => SetRequired(element, WorkflowTreeProperty, value);
+
+    /// <summary>Gets the link-menu builder.</summary>
+    public static Action<ContextMenuStrip, IWorkflowLinkViewModel>? GetLinkMenuBuilder(Control element)
+        => (Action<ContextMenuStrip, IWorkflowLinkViewModel>?)GetRequired(element, LinkMenuBuilderProperty);
+
+    /// <summary>Sets the builder that fills the link context menu.</summary>
+    public static void SetLinkMenuBuilder(Control element, Action<ContextMenuStrip, IWorkflowLinkViewModel>? value)
+        => SetRequired(element, LinkMenuBuilderProperty, value);
+
     /// <summary>
-    /// Gets whether the workflow surface behavior is enabled for the specified control.
+    /// Re-reads the named parts, pushes the current layout into the viewport, grid decorator, ruler and minimap,
+    /// re-places the pooled views and writes the visible viewport back to the model.
     /// </summary>
-    public static bool GetIsEnabled(Control element)
+    /// <param name="host">The root control the surface is attached to.</param>
+    public static void Refresh(Control host)
     {
-        if (element is null)
+        if (host is null) throw new ArgumentNullException(nameof(host));
+
+        var state = GetState(host);
+        EnsureParts(host, state);
+
+        if (state.Attached)
         {
-            throw new ArgumentNullException(nameof(element));
+            EnsureTree(host, state);
+        }
+        else if (!ReferenceEquals(state.Tree, ResolveTree(host)))
+        {
+            state.Tree = ResolveTree(host);
         }
 
-        return GetState(element).IsEnabled;
+        CaptureViewportRestore(state);
+        ApplyPan(host, state);
+        PersistViewport(state);
+        QueueViewportRestore(host, state);
     }
 
-    /// <summary>
-    /// Sets whether the workflow surface behavior is enabled for the specified control.
-    /// </summary>
-    public static void SetIsEnabled(Control element, bool value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
+    // ── attached-property plumbing ──────────────────────────────────────────
 
-        var state = GetState(element);
-        if (state.IsEnabled == value)
+    private static object? GetRequired(Control element, DependencyProperty property)
+    {
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        return property.GetValue(element);
+    }
+
+    private static void SetRequired(Control element, DependencyProperty property, object? value)
+    {
+        if (element is null) throw new ArgumentNullException(nameof(element));
+        property.SetValue(element, value);
+    }
+
+    private static void OnIsEnabledChanged(Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (Equals(e.NewValue, true))
+        {
+            Attach(target);
+        }
+        else
+        {
+            Detach(target);
+        }
+    }
+
+    private static void OnPartConfigurationChanged(Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (!States.TryGetValue(target, out var state) || !state.Attached)
         {
             return;
         }
 
-        state.IsEnabled = value;
+        EnsureParts(target, state);
+        EnsureTree(target, state);
+        ScheduleLayout(target, state);
+    }
 
-        if (value)
+    // ── lifecycle ────────────────────────────────────────────────────────────
+
+    private static void Attach(Control host)
+    {
+        var state = GetState(host);
+        if (state.Attached)
         {
-            // 滚轮的汇报入口：消息过滤器在应用层看得见**每一笔**滚轮（消息发给谁取决于焦点，事件层的
-            // 处理器在画布没焦点时一笔都收不到 —— 实测三格零到达）。开关跟着 IsEnabled 走。
-            state.EnsureMessageFilter();
+            return;
+        }
 
-            // 宿主画布启用时自动编排 Win32 窗口样式，消除自绘画布与子窗口（节点卡片）重绘分离造成的闪烁/残影：画布窗口加 WS_CLIPCHILDREN，其顶层窗体加 WS_EX_COMPOSITED（DWM 合成整个窗体树）。宿主无需改动。
-            NativeWindowStyleHelper.EnsureClipChildren(element);
-            NativeWindowStyleHelper.EnsureComposited(element);
+        state.Attached = true;
+        state.EnsureMessageFilter();
+
+        // 画布与卡片是两套子窗口：父窗口重绘前剪掉子窗口区域，顶层窗体再交给 DWM 合成，闪烁才不会漏出来。
+        NativeWindowStyleHelper.EnsureClipChildren(host);
+        NativeWindowStyleHelper.EnsureComposited(host);
+
+        host.HandleCreated += OnHostHandleCreated;
+        host.Disposed += OnHostDisposed;
+        host.Layout += OnHostLayout;
+        host.SizeChanged += OnHostSizeChanged;
+        host.ParentChanged += OnHostParentChanged;
+        host.ControlAdded += OnHostControlAdded;
+        host.ControlRemoved += OnHostControlRemoved;
+
+        SubscribeDataContext(host, state);
+
+        EnsureParts(host, state);
+        EnsureTree(host, state);
+        Refresh(host);
+    }
+
+    private static void Detach(Control host)
+    {
+        if (!States.TryGetValue(host, out var state) || !state.Attached)
+        {
+            return;
+        }
+
+        state.Attached = false;
+        state.RemoveMessageFilter();
+
+        host.HandleCreated -= OnHostHandleCreated;
+        host.Disposed -= OnHostDisposed;
+        host.Layout -= OnHostLayout;
+        host.SizeChanged -= OnHostSizeChanged;
+        host.ParentChanged -= OnHostParentChanged;
+        host.ControlAdded -= OnHostControlAdded;
+        host.ControlRemoved -= OnHostControlRemoved;
+
+        UnsubscribeDataContext(host, state);
+
+        DetachTree(host, state);
+        ClearParts(state);
+        state.EndInitialReveal();
+        state.ReleaseZoomTimer();
+        state.PanOffset = new Point(0, 0);
+        state.HasPendingRestore = false;
+        state.LastRestoreTree = null;
+
+        States.Remove(host);
+    }
+
+    private static void OnHostDisposed(object? sender, EventArgs e)
+    {
+        if (sender is Control host)
+        {
+            Detach(host);
+        }
+    }
+
+    private static void OnHostHandleCreated(object? sender, EventArgs e)
+    {
+        if (sender is Control host)
+        {
+            EnsureParts(host, GetState(host));
+            EnsureTree(host, GetState(host));
+            Refresh(host);
+        }
+    }
+
+    private static void OnHostLayout(object? sender, LayoutEventArgs e)
+    {
+        if (sender is Control host)
+        {
+            ScheduleLayout(host, GetState(host));
+        }
+    }
+
+    private static void OnHostSizeChanged(object? sender, EventArgs e)
+    {
+        if (sender is Control host)
+        {
+            ScheduleLayout(host, GetState(host));
+        }
+    }
+
+    private static void OnHostParentChanged(object? sender, EventArgs e)
+    {
+        if (sender is Control host)
+        {
+            ScheduleLayout(host, GetState(host));
+        }
+    }
+
+    private static void OnHostControlAdded(object? sender, ControlEventArgs e)
+    {
+        if (sender is Control host)
+        {
+            ScheduleLayout(host, GetState(host));
+        }
+    }
+
+    private static void OnHostControlRemoved(object? sender, ControlEventArgs e)
+    {
+        if (sender is Control host)
+        {
+            ScheduleLayout(host, GetState(host));
+        }
+    }
+
+    private static void SubscribeDataContext(Control host, SurfaceState state)
+    {
+        state.DataContextHandler = OnHostDataContextChanged;
+
+        // XAML Control 隐藏了 WinForms 的 DataContext/事件；两者要分别订，才知道宿主换了数据上下文。
+        if (host is VeloxDev.WinForms.Xaml.Controls.Control xaml)
+        {
+            xaml.DataContextChanged += state.DataContextHandler;
         }
         else
         {
-            state.RemoveMessageFilter();
-            ClearScroller(element);
+            host.DataContextChanged += state.DataContextHandler;
         }
     }
 
-    /// <summary>Gets whether Ctrl + mouse-wheel zoom is enabled for the specified surface control.</summary>
-    public static bool GetZoomEnabled(Control element)
+    private static void UnsubscribeDataContext(Control host, SurfaceState state)
     {
-        if (element is null)
+        if (state.DataContextHandler is null)
         {
-            throw new ArgumentNullException(nameof(element));
+            return;
         }
 
-        return GetState(element).ZoomEnabled;
-    }
-
-    /// <summary>Sets whether Ctrl + mouse-wheel zoom is enabled for the specified surface control.</summary>
-    public static void SetZoomEnabled(Control element, bool value)
-    {
-        if (element is null)
+        if (host is VeloxDev.WinForms.Xaml.Controls.Control xaml)
         {
-            throw new ArgumentNullException(nameof(element));
+            xaml.DataContextChanged -= state.DataContextHandler;
         }
-
-        // 只记状态：接住 Ctrl+滚轮的是消息过滤器（它跟着 IsEnabled 挂）。滚轮在消息层就被过滤器吞掉，
-        // 控件自己的 MouseWheel 一笔都收不到，所以这里不再另挂一条 —— 那只会是一份不走输入路由的重复缩放。
-        GetState(element).ZoomEnabled = value;
-    }
-
-    /// <summary>Gets the scroll viewer the host handed over, when it has one.</summary>
-    public static Control? GetScrollViewer(Control element)
-    {
-        if (element is null) throw new ArgumentNullException(nameof(element));
-        return GetState(element).ScrollViewer;
-    }
-
-    /// <summary>Hands the scroll viewer over to the behaviour — the object, not a control name to look up.</summary>
-    public static void SetScrollViewer(Control element, Control? value)
-    {
-        if (element is null) throw new ArgumentNullException(nameof(element));
-        GetState(element).ScrollViewer = value;
-        EnsureClipChildrenFor(element, value);
-    }
-
-    /// <summary>Gets the canvas the host handed over, when it has one.</summary>
-    public static Control? GetCanvas(Control element)
-    {
-        if (element is null) throw new ArgumentNullException(nameof(element));
-        return GetState(element).Canvas;
-    }
-
-    /// <summary>Hands the canvas over to the behaviour — the object, not a control name to look up.</summary>
-    public static void SetCanvas(Control element, Control? value)
-    {
-        if (element is null) throw new ArgumentNullException(nameof(element));
-        GetState(element).Canvas = value;
-        EnsureClipChildrenFor(element, value);
-    }
-
-    /// <summary>Gets the grid decorator the host handed over, when it has one.</summary>
-    public static Control? GetGridDecorator(Control element)
-    {
-        if (element is null) throw new ArgumentNullException(nameof(element));
-        return GetState(element).GridDecorator;
-    }
-
-    /// <summary>Hands the grid decorator over to the behaviour — the object, not a control name to look up.</summary>
-    public static void SetGridDecorator(Control element, Control? value)
-    {
-        if (element is null) throw new ArgumentNullException(nameof(element));
-        GetState(element).GridDecorator = value;
-        EnsureClipChildrenFor(element, value);
-    }
-
-    /// <summary>Gets the minimap overlay the host handed over, when it has one.</summary>
-    public static Control? GetMinimapOverlay(Control element)
-    {
-        if (element is null)
+        else
         {
-            throw new ArgumentNullException(nameof(element));
+            host.DataContextChanged -= state.DataContextHandler;
         }
 
-        return GetState(element).MinimapOverlay;
+        state.DataContextHandler = null;
     }
 
-    /// <summary>
-    /// Hands the minimap overlay over to the behaviour — the object, not a control name to look up. When it
-    /// implements <see cref="IWorkflowMinimapOverlay"/>, <see cref="Refresh"/> pushes scroll, content offset,
-    /// viewport, and tree values into it on every refresh cycle.
-    /// </summary>
-    public static void SetMinimapOverlay(Control element, Control? value)
+    private static void OnHostDataContextChanged(object? sender, EventArgs e)
     {
-        if (element is null)
+        if (sender is Control host)
         {
-            throw new ArgumentNullException(nameof(element));
+            var state = GetState(host);
+            EnsureParts(host, state);
+            EnsureTree(host, state);
+            ScheduleLayout(host, state);
         }
-
-        GetState(element).MinimapOverlay = value;
     }
 
-    /// <summary>
-    /// Gets the workflow tree bound to the surface host, if one was set via <see cref="SetWorkflowTree"/>.
-    /// </summary>
-    public static IWorkflowTreeViewModel? GetWorkflowTree(Control element)
+    // ── parts ────────────────────────────────────────────────────────────────
+
+    private static void EnsureParts(Control host, SurfaceState state)
     {
-        if (element is null)
+        var scrollViewer = FindNamed(host, GetScrollViewerName(host)) ?? host;
+        if (!ReferenceEquals(state.ScrollViewer, scrollViewer))
         {
-            throw new ArgumentNullException(nameof(element));
+            state.ScrollViewer = scrollViewer;
         }
 
-        return GetState(element).WorkflowTree;
-    }
-
-    /// <summary>
-    /// Explicitly binds the workflow tree to the surface host so <see cref="Refresh"/> can push the
-    /// visible viewport and decorator/minimap offsets. Mirrors setting the host <c>DataContext</c> in
-    /// the XAML adapters.
-    /// </summary>
-    public static void SetWorkflowTree(Control element, IWorkflowTreeViewModel? value)
-    {
-        if (element is null)
+        // 只有 XAML 层的 ScrollViewer 提供滚动条与 ScrollOffset；旧的 ScrollableControl 视口保持原样。
+        var xamlViewer = scrollViewer as XamlScrollViewer;
+        if (!ReferenceEquals(state.XamlScrollViewer, xamlViewer))
         {
-            throw new ArgumentNullException(nameof(element));
+            UnhookXamlScrollViewer(state);
+            state.XamlScrollViewer = xamlViewer;
         }
 
-        GetState(element).WorkflowTree = value;
-        RegisterScroller(element, value);
+        if (state.Attached && xamlViewer is not null && !state.XamlScrollViewerHooked)
+        {
+            HookXamlScrollViewer(state);
+        }
+
+        var canvas = FindNamed(host, GetCanvasName(host));
+        if (!ReferenceEquals(state.Canvas, canvas))
+        {
+            if (state.Canvas is { } previousCanvas)
+            {
+                WorkflowLinkLayer.SetIsEnabled(previousCanvas, false);
+                UnhookCanvas(state, previousCanvas);
+                ViewPool.SetItemsSource(previousCanvas, null);
+                if (state.PoolSelector is not null)
+                {
+                    ViewPool.SetTemplateSelector(previousCanvas, null);
+                }
+
+                state.PoolCanvas = null;
+                state.PoolSelector = null;
+                state.PoolItemsSource = null;
+            }
+
+            state.Canvas = canvas;
+            state.CanvasHooked = false;
+        }
+
+        if (state.Attached && canvas is not null && !state.CanvasHooked)
+        {
+            HookCanvas(state, canvas);
+            state.CanvasHooked = true;
+        }
+
+        // 连线不再按条池化成窗口：画布的 Paint 一趟画完（WorkflowLinkLayer），池的 ViewLinkLayer 只挡下连线项。
+        if (state.Attached && canvas is not null)
+        {
+            WorkflowLinkLayer.SetIsEnabled(canvas, true);
+            WorkflowLinkLayer.Refresh(canvas);
+        }
+
+        // 合成层仍由 NativeWindowStyleHelper 按子窗口数量决定：小型 workflow 表面启用 WS_EX_COMPOSITED，
+        // 整棵窗口树一帧合成；大型工作台超过阈值时保留 WS_CLIPCHILDREN，避免 DWM 为几百个子窗口维护表面。
+        var gridDecorator = FindNamed(host, GetGridDecoratorName(host));
+        if (gridDecorator is null && canvas is IWorkflowGridDecorator)
+        {
+            // 旧式画布本身就是装饰器；新式模板会显式命名独立的装饰器。
+            gridDecorator = canvas;
+        }
+
+        state.GridDecorator = gridDecorator;
+
+        var minimap = FindNamed(host, GetMinimapOverlayName(host));
+        if (!ReferenceEquals(state.MinimapOverlay, minimap))
+        {
+            if (state.MinimapHooked && state.MinimapOverlay is IWorkflowMinimapScrollSource previousMinimap)
+            {
+                previousMinimap.ViewportScrollRequested -= state.OnMinimapScrollRequested;
+            }
+
+            state.MinimapOverlay = minimap;
+            state.MinimapHooked = false;
+        }
+
+        if (state.Attached && minimap is IWorkflowMinimapScrollSource source && !state.MinimapHooked)
+        {
+            source.ViewportScrollRequested += state.OnMinimapScrollRequested;
+            state.MinimapHooked = true;
+        }
+
+        // 视口、画布与装饰器都是自绘/透明窗口：父窗口重画前剪掉子窗口区域，子窗口才会各自重画，
+        // 不会被一次画布失效拖着整棵树一起重排重绘。句柄重建后样式会丢，Ensure* 自己挂在 HandleCreated 上。
+        if (state.ScrollViewer is { } scrollViewerPart)
+        {
+            NativeWindowStyleHelper.EnsureClipChildren(scrollViewerPart);
+        }
+
+        if (canvas is { } canvasPart)
+        {
+            NativeWindowStyleHelper.EnsureClipChildren(canvasPart);
+        }
+
+        if (state.GridDecorator is { } gridPart)
+        {
+            NativeWindowStyleHelper.EnsureClipChildren(gridPart);
+        }
+
+        var pressSource = FindNamed(host, GetPointerPressSourceName(host));
+        if (!ReferenceEquals(state.PointerPressSource, pressSource))
+        {
+            UnhookPressSource(state);
+            state.PointerPressSource = pressSource;
+            state.PressSourceHooked = false;
+        }
+
+        // 同一个控件已经按画布挂过一次，别再挂第二份处理器。
+        if (state.Attached && pressSource is not null
+            && !ReferenceEquals(pressSource, canvas) && !state.PressSourceHooked)
+        {
+            HookPressSource(state);
+            state.PressSourceHooked = true;
+        }
+
+        if (state.Attached)
+        {
+            EnsureRulerOverlay(host, state);
+        }
     }
 
-    // 把画布滚动口挂到当前这棵树的路由上；换树/解绑时先摘掉自己挂的旧那一个（只摘自己的）。
-    private static void RegisterScroller(Control host, IWorkflowTreeViewModel? tree)
+    private static void ClearParts(SurfaceState state)
     {
-        ClearScroller(host);
+        if (state.Canvas is { } canvas)
+        {
+            ViewPool.SetItemsSource(canvas, null);
+            if (state.PoolSelector is not null)
+            {
+                ViewPool.SetTemplateSelector(canvas, null);
+            }
+
+            WorkflowLinkLayer.SetIsEnabled(canvas, false);
+            UnhookCanvas(state, canvas);
+            state.Canvas = null;
+        }
+
+        UnhookPressSource(state);
+        state.PointerPressSource = null;
+
+        if (state.MinimapHooked && state.MinimapOverlay is IWorkflowMinimapScrollSource minimap)
+        {
+            minimap.ViewportScrollRequested -= state.OnMinimapScrollRequested;
+        }
+
+        UnhookXamlScrollViewer(state);
+        state.XamlScrollViewer = null;
+
+        state.MinimapHooked = false;
+        state.MinimapOverlay = null;
+        state.CanvasHooked = false;
+        state.PressSourceHooked = false;
+        state.GridDecorator = null;
+        state.ScrollViewer = null;
+        state.PoolCanvas = null;
+        state.PoolSelector = null;
+        state.PoolItemsSource = null;
+
+        DisposeRulerOverlay(state);
+    }
+
+    private static Control? FindNamed(Control root, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        foreach (var control in EnumerateSelfAndDescendants(root))
+        {
+            if (string.Equals(control.Name, name, StringComparison.Ordinal))
+            {
+                return control;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<Control> EnumerateSelfAndDescendants(Control root)
+    {
+        yield return root;
+        foreach (var descendant in EnumerateDescendants(root))
+        {
+            yield return descendant;
+        }
+    }
+
+    private static IEnumerable<Control> EnumerateDescendants(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            yield return child;
+            foreach (var nested in EnumerateDescendants(child))
+            {
+                yield return nested;
+            }
+        }
+    }
+
+    // ── tree and view pool ───────────────────────────────────────────────────
+
+    private static void EnsureTree(Control host, SurfaceState state)
+    {
+        var resolved = GetWorkflowTree(host) ?? ResolveTree(host);
+        if (!ReferenceEquals(resolved, state.Tree))
+        {
+            AttachTree(host, state, resolved);
+            return;
+        }
+
+        EnsurePool(host, state);
+    }
+
+    private static void AttachTree(Control host, SurfaceState state, IWorkflowTreeViewModel? tree)
+    {
+        DetachTree(host, state);
+        state.Tree = tree;
         if (tree is null)
         {
             return;
         }
 
-        var state = GetState(host);
-        var scroller = new SurfaceScroller(host);
+        if (tree is INotifyPropertyChanged notifier)
+        {
+            state.TreeNotifier = notifier;
+            notifier.PropertyChanged += state.OnTreePropertyChanged;
+        }
+
+        RegisterScroller(state, tree);
+        AttachLinkInput(host, state);
+        EnsurePool(host, state);
+        ScheduleLayout(host, state);
+    }
+
+    private static void DetachTree(Control host, SurfaceState state)
+    {
+        if (state.TreeNotifier is not null)
+        {
+            state.TreeNotifier.PropertyChanged -= state.OnTreePropertyChanged;
+            state.TreeNotifier = null;
+        }
+
+        DetachLinkInput(state);
+        ClearScroller(state);
+
+        if (state.PoolCanvas is { } canvas)
+        {
+            ViewPool.SetItemsSource(canvas, null);
+            if (state.PoolSelector is not null)
+            {
+                ViewPool.SetTemplateSelector(canvas, null);
+            }
+        }
+
+        state.PoolCanvas = null;
+        state.PoolSelector = null;
+        state.PoolItemsSource = null;
+        state.Tree = null;
+    }
+
+    private static void EnsurePool(Control host, SurfaceState state)
+    {
+        if (state.Canvas is not { } canvas || state.Tree is not { } tree)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(state.PoolCanvas, canvas))
+        {
+            state.PoolCanvas = canvas;
+            state.PoolItemsSource = null;
+            state.PoolSelector = null;
+        }
+
+        var selector = GetTemplateSelector(host) ?? BuildGeneratedSelector(host, state);
+        if (selector is not null)
+        {
+            if (!ReferenceEquals(state.PoolSelector, selector))
+            {
+                ViewPool.SetTemplateSelector(canvas, selector);
+                state.PoolSelector = selector;
+            }
+        }
+        else if (state.PoolSelector is not null)
+        {
+            ViewPool.SetTemplateSelector(canvas, null);
+            state.PoolSelector = null;
+        }
+
+        var items = tree.GetHelper().VisibleItems;
+        if (!ReferenceEquals(state.PoolItemsSource, items))
+        {
+            // 首次换源：先冻结表面，等 Core 池把所有可见视图物化完再一次性显示。
+            state.BeginInitialReveal(host, canvas, state.GridDecorator);
+            ViewPool.SetItemsSource(canvas, items);
+            state.PoolItemsSource = items;
+        }
+    }
+
+    private static IWorkflowTemplateSelector? BuildGeneratedSelector(Control host, SurfaceState state)
+    {
+        var nodeType = GetNodeViewType(host);
+        var linkType = GetLinkViewType(host);
+        if (string.IsNullOrWhiteSpace(nodeType) && string.IsNullOrWhiteSpace(linkType))
+        {
+            state.GeneratedSelector = null;
+            state.GeneratedNodeType = null;
+            state.GeneratedLinkType = null;
+            return null;
+        }
+
+        if (state.GeneratedSelector is not null
+            && string.Equals(state.GeneratedNodeType, nodeType, StringComparison.Ordinal)
+            && string.Equals(state.GeneratedLinkType, linkType, StringComparison.Ordinal))
+        {
+            return state.GeneratedSelector;
+        }
+
+        state.GeneratedNodeType = nodeType;
+        state.GeneratedLinkType = linkType;
+        state.GeneratedSelector = new SurfaceTemplateSelector(
+            host.GetType().Assembly, host.GetType().Namespace, nodeType, linkType);
+        return state.GeneratedSelector;
+    }
+
+    private static void RegisterScroller(SurfaceState state, IWorkflowTreeViewModel tree)
+    {
+        ClearScroller(state);
+        var scroller = new SurfaceScroller(state);
         state.Scroller = scroller;
-        state.ScrollerTree = tree;
+
         var input = WorkflowInput.For(tree);
         input.Scroller = scroller;
         input.Navigator = scroller;
     }
 
-    // 从挂着的树上摘下滚动口 —— 只在自己挂的那一个还挂着时摘，同一棵树上别的表面挂的留给它。
-    private static void ClearScroller(Control host)
+    private static void ClearScroller(SurfaceState state)
     {
-        var state = GetState(host);
-        if (state.ScrollerTree is { } tree && state.Scroller is { } scroller
-            && ReferenceEquals(WorkflowInput.For(tree).Scroller, scroller))
+        if (state.Tree is { } tree && state.Scroller is { } scroller)
         {
             var input = WorkflowInput.For(tree);
-            input.Scroller = null;
-            input.Navigator = null;
+            if (ReferenceEquals(input.Scroller, scroller))
+            {
+                input.Scroller = null;
+                input.Navigator = null;
+            }
         }
 
         state.Scroller = null;
-        state.ScrollerTree = null;
     }
 
-    // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长再平移画布 ──
-    // 用的是本家自己那套平移（与缩略图拖拽同一条路），不是去动滚动容器的偏移。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
+    // ── layout and pan ───────────────────────────────────────────────────────
+
+    private static void ScheduleLayout(Control host, SurfaceState state)
     {
-        // 一格滚轮是 WHEEL_DELTA（120）。本家没有原生滚动步长可复刻（PART_ScrollViewer 的 AutoScroll 是关的，
-        // 视口由平移引擎拥有），所以取系统设置的滚轮行数 × 行高 16px —— 默认 3 行 = 48px，与 WPF 那边一致。
-        private const double Notch = 120d;
-        private const double LineHeight = 16d;
-
-        private readonly Control host;
-
-        public SurfaceScroller(Control host) => this.host = host;
-
-        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
+        if (state.LayoutPending || host.IsDisposed)
         {
-            var tree = ResolveTree(host);
-            var current = ResolveScrollOffset(host, tree);
-            var clientSize = ResolveClientSize(host);
-
-            // WheelScrollLines 为 -1 是「按页滚」，与平台自己的解释一致。
-            var lines = SystemInformation.MouseWheelScrollLines;
-            var stepX = lines > 0 ? lines * LineHeight : clientSize.Width;
-            var stepY = lines > 0 ? lines * LineHeight : clientSize.Height;
-
-            // 横轴正 = 向右，偏移同向取加；纵轴正 = 远离用户 = 视口上移，偏移取减 —— 两轴的「正」不是同一个物理方向。
-            // 只算增量**非零**的那一轴 —— 另一轴原样沿用当前位置
-            // （IWorkflowSurfaceScroller.ScrollBy 的 remarks：零增量不动那一轴），横滚轮就不该动竖位置。
-            var dx = wheelDeltaX != 0d ? (wheelDeltaX / Notch) * stepX : 0d;
-            var dy = wheelDeltaY != 0d ? -(wheelDeltaY / Notch) * stepY : 0d;
-
-            ApplyScrollOffset(host, current.Horizontal + dx, current.Vertical + dy);
+            return;
         }
 
-        public void CenterOn(double worldX, double worldY)
+        state.LayoutPending = true;
+        void Update()
         {
-            if (ResolveTree(host) is null) return;
+            state.LayoutPending = false;
+            if (host.IsDisposed)
+            {
+                return;
+            }
 
-            var clientSize = ResolveClientSize(host);
-            // 这家没有原生滚动偏移：ApplyScrollOffset 收的是「有效滚动」（视口原点的世界坐标），
-            // 所以这里直接减半个视口，不再加 ActualOffset。
-            ApplyScrollOffset(host, worldX - clientSize.Width / 2d, worldY - clientSize.Height / 2d);
-        }
-    }
-
-    /// <summary>
-    /// Requests the host to refresh its layout and redraw, mirroring other workflow surface adapters.
-    /// In addition to <c>PerformLayout</c>/<c>Invalidate</c>, this pushes the current scroll/content
-    /// offsets into any named <see cref="IWorkflowGridDecorator"/>/<see cref="IWorkflowMinimapOverlay"/>
-    /// controls and updates the workflow tree's visible viewport from the host scroll position.
-    /// </summary>
-    public static void Refresh(Control host)
-    {
-        if (host is null)
-        {
-            throw new ArgumentNullException(nameof(host));
+            EnsureParts(host, state);
+            Refresh(host);
         }
 
-        var state = GetState(host);
-        var tree = ResolveTree(host);
-        CaptureViewportRestore(tree, state);
-        var scrollOffset = ResolveScrollOffset(host, tree, out var measuredScroll);
-        var clientSize = ResolveClientSize(host);
-        var contentOffset = tree?.Layout?.ActualOffset ?? new Offset();
-
-        // 更新树的视口，让消费者（如空间虚拟化）观察到当前可见区；尽力而为，刷新周期里绝不抛异常。
-        if (tree is not null && clientSize.Width > 0 && clientSize.Height > 0)
+        if (host.IsHandleCreated)
         {
             try
             {
-                tree.GetHelper().Viewport = new Viewport(
-                    WorkflowSurfaceMath.ToWorld(scrollOffset.Horizontal, contentOffset.Horizontal),
-                    WorkflowSurfaceMath.ToWorld(scrollOffset.Vertical, contentOffset.Vertical),
-                    clientSize.Width,
-                    clientSize.Height);
+                host.BeginInvoke(new Action(Update));
             }
-            catch
+            catch (Exception exception) when (exception is InvalidOperationException or ObjectDisposedException)
             {
-                // 某些宿主上树 helper 可能不支持写视口；忽略。
-            }
-
-            // 持久化与上面交给视口相同的世界位置，画布位置才能熬过存/取。用 measuredScroll 把关：未测量的偏移本就来自 ViewportOffset 自身。
-            if (measuredScroll)
-            {
-                tree.Layout.ViewportOffset = WorkflowSurfaceMath.ViewportOffsetFromScroll(
-                    scrollOffset.Horizontal, scrollOffset.Vertical, tree.Layout);
+                // 窗口正在销毁：这一次布局不再排，控件已经没得画了。
+                state.LayoutPending = false;
             }
         }
-
-        if (state.GridDecorator is IWorkflowGridDecorator decorator)
+        else
         {
-            decorator.ScrollOffsetX = scrollOffset.Horizontal;
-            decorator.ScrollOffsetY = scrollOffset.Vertical;
-            decorator.ContentOffsetX = contentOffset.Horizontal;
-            decorator.ContentOffsetY = contentOffset.Vertical;
-
-            // 让虚拟化可见区修正与装饰器的浮动标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
-            tree?.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
+            state.LayoutPending = false;
         }
+    }
+
+    private static void ApplyCanvasSize(SurfaceState state)
+    {
+        if (state.Canvas is not { } canvas || (canvas.Width > 0 && canvas.Height > 0))
+        {
+            return;
+        }
+
+        canvas.Size = ResolveClientSize(state);
+    }
+
+    private static void ApplyPan(Control host, SurfaceState state)
+    {
+        if (host.IsDisposed)
+        {
+            return;
+        }
+
+        // 小地图拖动、布局刷新是「改一批子窗口几何 + 最后重画」，需要整帧提交。直接拖动画布是
+        // 每帧都改 PanOffset 的手势，之前已经靠 canvas.Update 保证跟手；再套 WM_SETREDRAW 会在
+        // 每次鼠标移动时冻/解整棵窗口树，反而造成高频闪烁，所以画笔手势走原路径。
+        if (state.IsPanning || host.Capture)
+        {
+            ApplyPanCore(host, state);
+            return;
+        }
+
+        // 逐个子窗口更新时，WinForms 可能先画到一半状态；这里把 host/canvas/grid/所有池化视图的
+        // WM_SETREDRAW 一起关掉，最后逐级恢复并统一重绘一次。缩放/首次物化已有更外层 scope，
+        // 引用计数会正确嵌套。
+        var targets = new List<Control>();
+        var seen = new HashSet<Control>();
+        void Freeze(Control? control)
+        {
+            if (control is null || !seen.Add(control))
+            {
+                return;
+            }
+
+            targets.Add(control);
+            NativeWindowStyleHelper.BeginRedraw(control);
+        }
+
+        Freeze(host);
+        Freeze(state.Canvas);
+        Freeze(state.GridDecorator);
+        if (state.Canvas is { } canvasPart)
+        {
+            foreach (Control child in canvasPart.Controls)
+            {
+                Freeze(child);
+            }
+        }
+
+        try
+        {
+            ApplyPanCore(host, state);
+        }
+        finally
+        {
+            for (var index = targets.Count - 1; index >= 0; index--)
+            {
+                NativeWindowStyleHelper.EndRedraw(targets[index]);
+            }
+        }
+    }
+
+    private static void ApplyPanCore(Control host, SurfaceState state)
+    {
+        ApplyCanvasSize(state);
+
+        var tree = state.Tree;
+        var layout = tree?.Layout;
+
+        FoldPositivePan(state, layout);
+
+        // 负 Pan = 视口向右/下滚。滚过 ActualSize 的右/下边界时，把超出的部分写进 PositiveOffset，
+        // 否则画布范围不变，滚动条最大值也停在旧位置，向右侧延展后拖动条仍按旧范围走。
+        if (layout is not null && state.PanOffset.X < 0 || layout is not null && state.PanOffset.Y < 0)
+        {
+            var viewport = ResolveClientSize(state);
+            var maxX = Math.Max(0d, layout.ActualSize.Width - viewport.Width);
+            var maxY = Math.Max(0d, layout.ActualSize.Height - viewport.Height);
+
+            if (state.PanOffset.X < 0)
+            {
+                var desiredX = -state.PanOffset.X;
+                var appliedX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxX, layout, horizontal: true);
+                if (appliedX != desiredX)
+                {
+                    // 正向越界刚刚写入 PositiveOffset，ActualSize 已经变大；旧的 max 不能继续
+                    // 夹住目标，否则一次定位/拖动只能滚到旧边界，下一帧再从错误位置起算。
+                    var grownMaxX = Math.Max(0d, layout.ActualSize.Width - viewport.Width);
+                    appliedX = Math.Min(desiredX, grownMaxX);
+                    state.PanOffset = new Point(-(int)Math.Round(appliedX), state.PanOffset.Y);
+                }
+            }
+
+            if (state.PanOffset.Y < 0)
+            {
+                var desiredY = -state.PanOffset.Y;
+                var appliedY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxY, layout, horizontal: false);
+                if (appliedY != desiredY)
+                {
+                    var grownMaxY = Math.Max(0d, layout.ActualSize.Height - viewport.Height);
+                    appliedY = Math.Min(desiredY, grownMaxY);
+                    state.PanOffset = new Point(state.PanOffset.X, -(int)Math.Round(appliedY));
+                }
+            }
+        }
+
+        if (state.Attached)
+        {
+            EnsureRulerOverlay(host, state);
+        }
+
+        var content = layout?.ActualOffset ?? new Offset();
+        var contentVisual = VisualContentOffset(state);
+        var rulerBand = contentVisual.Horizontal - content.Horizontal;
+
+        // 先把滚动宿主的 Offset 落下去，再量节点/插槽：否则插槽锚点量到的是旧视口，
+        // 而连线的模型坐标用新偏移还原，端点会随平移一帧一帧地漂，曲线的出线方向就会翻。
+        if (state.XamlScrollViewer is { } viewportViewer)
+        {
+            SyncXamlScrollViewer(state, viewportViewer, layout, ResolveClientSize(state));
+        }
+
+        if (state.Canvas is { } canvas)
+        {
+            WorkflowLinkAttachment.BeginBatch();
+            try
+            {
+                foreach (Control child in canvas.Controls.OfType<Control>().ToArray())
+                {
+                    HookView(state, child);
+
+                    if (WorkflowNodeAttachment.For(child) is { } card)
+                    {
+                        card.ApplySurfacePosition(state.PanOffset, contentVisual);
+                        WorkflowSlotLayoutBehavior.SyncNow(child);
+                    }
+
+                    WorkflowLinkAttachment.For(child)?.ApplySurfacePosition(state.PanOffset, contentVisual);
+                }
+            }
+            finally
+            {
+                WorkflowLinkAttachment.EndBatch();
+            }
+        }
+
+        if (state.GridDecorator is IWorkflowGridDecorator grid)
+        {
+            grid.ScrollOffsetX = -state.PanOffset.X;
+            grid.ScrollOffsetY = -state.PanOffset.Y;
+            grid.ContentOffsetX = contentVisual.Horizontal;
+            grid.ContentOffsetY = contentVisual.Vertical;
+
+            // 画布是透明的且铺满装饰器：它的 WM_PAINT 会把网格背景印进画布 DC，装饰器自己的
+            // 同步重画是同一趟工作再做一遍。这里只排队，不再 Update()。
+            state.GridDecorator.Invalidate();
+        }
+
+        // 连线的曲线几何在画布上单层绘制；装饰器的 scroll/content 已经更新，现在重发一次，
+        // 命中与悬停不读上一帧的旧曲线。
+        if (state.Canvas is { } linkCanvas)
+        {
+            WorkflowLinkLayer.Refresh(linkCanvas);
+
+            // 重发之后再同步重画：拖动画布时鼠标消息比 WM_PAINT 先到，异步重绘会拖影；
+            // 先 Refresh 再 Update，同一帧里画出来的就是这一步的新几何，而不是上一帧的。
+            if (state.IsPanning || host.Capture)
+            {
+                linkCanvas.Update();
+            }
+        }
+
+        SyncRulerOverlay(state, contentVisual);
 
         if (state.MinimapOverlay is IWorkflowMinimapOverlay minimap)
         {
-            minimap.ScrollOffsetX = scrollOffset.Horizontal;
-            minimap.ScrollOffsetY = scrollOffset.Vertical;
-            minimap.ContentOffsetX = contentOffset.Horizontal;
-            minimap.ContentOffsetY = contentOffset.Vertical;
-            minimap.ViewportWidth = clientSize.Width;
-            minimap.ViewportHeight = clientSize.Height;
+            var size = ResolveClientSize(state);
+            minimap.ScrollOffsetX = -state.PanOffset.X;
+            minimap.ScrollOffsetY = -state.PanOffset.Y;
+            minimap.ContentOffsetX = contentVisual.Horizontal;
+            minimap.ContentOffsetY = contentVisual.Vertical;
+            minimap.ViewportWidth = size.Width;
+            minimap.ViewportHeight = size.Height;
             minimap.WorkflowTree = tree;
+            state.MinimapOverlay.Invalidate();
         }
 
-        // 把平移变换作为通知载体发布给宿主画布。
-        WorkflowCanvasTransformBehavior.Apply(host, contentOffset);
-
-        host.PerformLayout();
-
-        // 异步失效：WM_PAINT 由消息循环合并。非交互场景（运行时状态刷新、滚动、集合变化）频繁调用 Refresh，总同步重绘会让自绘画布每帧重画并卡顿，所以默认保持异步。
-        // 例外：宿主捕获鼠标时（画布平移/拖拽进行中）同步重绘 —— 否则高频鼠标消息一直推迟 WM_PAINT，节点旧位置与旧连线来不及擦掉、留下残影。
-        // 节点拖拽的同步重绘由 WorkflowNodeDragBehavior 单独触发，这里不重复。
-        host.Invalidate();
-        if (host.Capture)
+        if (tree is not null)
         {
-            host.Update();
+            tree.SetVirtualizeInset(left: rulerBand, top: rulerBand);
+            var size = ResolveClientSize(state);
+            try
+            {
+                tree.GetHelper().Viewport = new Viewport(
+                    -state.PanOffset.X - content.Horizontal,
+                    -state.PanOffset.Y - content.Vertical,
+                    size.Width,
+                    size.Height);
+            }
+            catch
+            {
+                // 有些宿主上的树 helper 不支持写视口；忽略。
+            }
         }
 
-        QueueViewportRestore(host, state);
+        WorkflowCanvasTransformBehavior.Apply(host, content);
+        RefreshLinkHover(host, state);
     }
 
-    // 树刚挂上来且不是上一棵：把它存档里的视口位置排进待恢复（世界 → 有效滚动）。
-    // 必须在写 Viewport / ViewportOffset 之前 —— 那一步会拿宿主当前（还没滚过去的）位置把它覆盖掉。
-    private static void CaptureViewportRestore(IWorkflowTreeViewModel? tree, SurfaceState state)
+    // ScrollViewer 的 Offset 是「滚动坐标」：viewportWorld + ActualOffset（也就是 -PanOffset）。
+    // 不能把 ActualOffset 再减一次；拿视图世界坐标直接喂滚动条，会在画布向左/上扩展后把 thumb
+    // 钉回 0，拖动条自然从旧起点开始。
+    private static void SyncXamlScrollViewer(
+        SurfaceState state, XamlScrollViewer viewer, CanvasLayout? layout, System.Drawing.Size viewport)
     {
-        if (ReferenceEquals(tree, state.LastRestoreTree)) return;
+        if (state.SyncingXamlScrollViewer)
+        {
+            return;
+        }
+
+        state.SyncingXamlScrollViewer = true;
+        try
+        {
+            viewer.ViewportWidth = viewport.Width;
+            viewer.ViewportHeight = viewport.Height;
+            viewer.ExtentWidth = layout?.ActualSize.Width ?? 0d;
+            viewer.ExtentHeight = layout?.ActualSize.Height ?? 0d;
+            viewer.ScrollOffset = new Point(
+                (int)Math.Round((double)-state.PanOffset.X),
+                (int)Math.Round((double)-state.PanOffset.Y));
+        }
+        finally
+        {
+            state.SyncingXamlScrollViewer = false;
+        }
+    }
+
+    private static void OnXamlScrollViewerScrolled(SurfaceState state)
+    {
+        if (state.SyncingXamlScrollViewer || state.XamlScrollViewer is not { } viewer)
+        {
+            return;
+        }
+
+        var offset = viewer.ScrollOffset;
+        SetScrollOffset(state.Host, state, offset.X, offset.Y);
+    }
+
+    private static void HookXamlScrollViewer(SurfaceState state)
+    {
+        if (state.XamlScrollViewer is not { } viewer)
+        {
+            return;
+        }
+
+        state.XamlScrollViewerScroll = (_, _) => OnXamlScrollViewerScrolled(state);
+        viewer.Scroll += state.XamlScrollViewerScroll;
+        state.XamlScrollViewerHooked = true;
+    }
+
+    private static void UnhookXamlScrollViewer(SurfaceState state)
+    {
+        if (state.XamlScrollViewerHooked
+            && state.XamlScrollViewer is { } viewer
+            && state.XamlScrollViewerScroll is { } handler)
+        {
+            viewer.Scroll -= handler;
+        }
+
+        state.XamlScrollViewerHooked = false;
+        state.XamlScrollViewerScroll = null;
+    }
+
+    // 正向平移折进 NegativeOffset：画布只会往右下长，折进去之后 PanOffset 归零，锚点继续落在这个新原点附近。
+    // 缩放枢轴目标（PivotCenterScroll）读的是 ActualOffset，所以必须在读它之前调用一次。
+    private static void FoldPositivePan(SurfaceState state, CanvasLayout? layout)
+    {
+        if (layout is null || (state.PanOffset.X <= 0 && state.PanOffset.Y <= 0))
+        {
+            return;
+        }
+
+        var growX = Math.Max(0, state.PanOffset.X);
+        var growY = Math.Max(0, state.PanOffset.Y);
+        layout.NegativeOffset += new Offset(growX, growY);
+
+        // 折进 NegativeOffset 之后，拖拽起点也要按同一量回退，否则下一次增量会把同一段再折一遍。
+        // 不能改 PanPressScreen：下一帧公式是 PanOffsetAtPress + (cursor - PanPressScreen)，
+        // 改起点而不改锚点，恰好会把 grow 再加回来。
+        state.PanOffsetAtPress = new Point(
+            state.PanOffsetAtPress.X - growX,
+            state.PanOffsetAtPress.Y - growY);
+        state.PanOffset = new Point(state.PanOffset.X - growX, state.PanOffset.Y - growY);
+    }
+
+    private static void SetScrollOffset(Control host, SurfaceState state, double scrollX, double scrollY)
+    {
+        state.PanOffset = new Point(
+            (int)Math.Round(-scrollX),
+            (int)Math.Round(-scrollY));
+        ApplyPan(host, state);
+    }
+
+    private static void PersistViewport(SurfaceState state)
+    {
+        if (state.Tree?.Layout is not { } layout)
+        {
+            return;
+        }
+
+        layout.ViewportOffset = WorkflowSurfaceMath.ViewportOffsetFromScroll(
+            -state.PanOffset.X, -state.PanOffset.Y, layout);
+    }
+
+    private static Offset VisualContentOffset(SurfaceState state)
+    {
+        var content = state.Tree?.Layout?.ActualOffset ?? new Offset();
+        var band = (state.GridDecorator as IWorkflowGridDecorator)?.RulerBand ?? 0d;
+        return new Offset(content.Horizontal + band, content.Vertical + band);
+    }
+
+    private static System.Drawing.Size ResolveClientSize(SurfaceState state)
+    {
+        if (state.ScrollViewer is { ClientSize.Width: > 0, ClientSize.Height: > 0 } viewer)
+        {
+            return viewer.ClientSize;
+        }
+
+        if (state.Canvas is { ClientSize.Width: > 0, ClientSize.Height: > 0 } canvas)
+        {
+            return canvas.ClientSize;
+        }
+
+        var host = state.Host;
+        return host.ClientSize.Width > 0 ? host.ClientSize : host.Size;
+    }
+
+    // ── viewport restore ─────────────────────────────────────────────────────
+
+    private static void CaptureViewportRestore(SurfaceState state)
+    {
+        var tree = state.Tree;
+        if (ReferenceEquals(tree, state.LastRestoreTree))
+        {
+            return;
+        }
 
         state.LastRestoreTree = tree;
         state.HasPendingRestore = false;
 
-        if (tree is null || !WorkflowSurfaceMath.HasViewportRestore(tree.Layout)) return;
+        if (tree is null || !WorkflowSurfaceMath.HasViewportRestore(tree.Layout))
+        {
+            return;
+        }
 
         var scroll = WorkflowSurfaceMath.ViewportRestoreScroll(tree.Layout);
         state.PendingRestoreX = scroll.Horizontal;
@@ -662,25 +1166,470 @@ public sealed class WorkflowSurfaceBehavior
         state.HasPendingRestore = true;
     }
 
-    // 布局稳定后再滚：挂树这一刻宿主往往还没创建句柄（没排版，可滚范围还是 0，滚了会被夹没）。
-    // 句柄没创建时留着标记不清 —— HandleCreated / InitialSync 那两条路会再走一次 Refresh，那时才排。
     private static void QueueViewportRestore(Control host, SurfaceState state)
     {
-        if (!state.HasPendingRestore || state.RestoreQueued || !host.IsHandleCreated) return;
+        if (!state.HasPendingRestore || state.RestoreQueued || !host.IsHandleCreated)
+        {
+            return;
+        }
 
         state.RestoreQueued = true;
-        host.BeginInvoke(new Action(() =>
+        try
         {
+            host.BeginInvoke(new Action(() =>
+            {
+                state.RestoreQueued = false;
+
+                if (!state.HasPendingRestore || !state.Attached || host.IsDisposed)
+                {
+                    return;
+                }
+
+                state.HasPendingRestore = false;
+                SetScrollOffset(host, state, state.PendingRestoreX, state.PendingRestoreY);
+                Refresh(host);
+            }));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            // 窗口正在销毁：恢复留给下一次挂载，别在 teardown 里抛。
             state.RestoreQueued = false;
+        }
+    }
 
-            if (!state.HasPendingRestore || !state.IsEnabled) return;
+    // ── canvas hooks ─────────────────────────────────────────────────────────
 
-            state.HasPendingRestore = false;
-            ApplyScrollOffset(host, state.PendingRestoreX, state.PendingRestoreY);
+    private static void HookCanvas(SurfaceState state, Control canvas)
+    {
+        canvas.MouseDown += state.OnCanvasMouseDown;
+        canvas.MouseMove += state.OnCanvasMouseMove;
+        canvas.MouseUp += state.OnCanvasMouseUp;
+        canvas.MouseCaptureChanged += state.OnCanvasMouseCaptureChanged;
+        canvas.MouseEnter += state.OnCanvasMouseEnter;
+        canvas.MouseLeave += state.OnCanvasMouseLeave;
+        canvas.KeyDown += state.OnCanvasKeyDown;
+        canvas.KeyUp += state.OnCanvasKeyUp;
+        canvas.ControlAdded += state.OnCanvasControlAdded;
+    }
 
-            // 滚动落地后立刻把位置写回模型，免得控件与 Layout.ViewportOffset 各说各话。
-            Refresh(host);
-        }));
+    private static void UnhookCanvas(SurfaceState state, Control canvas)
+    {
+        state.CanvasHooked = false;
+        canvas.MouseDown -= state.OnCanvasMouseDown;
+        canvas.MouseMove -= state.OnCanvasMouseMove;
+        canvas.MouseUp -= state.OnCanvasMouseUp;
+        canvas.MouseCaptureChanged -= state.OnCanvasMouseCaptureChanged;
+        canvas.MouseEnter -= state.OnCanvasMouseEnter;
+        canvas.MouseLeave -= state.OnCanvasMouseLeave;
+        canvas.KeyDown -= state.OnCanvasKeyDown;
+        canvas.KeyUp -= state.OnCanvasKeyUp;
+        canvas.ControlAdded -= state.OnCanvasControlAdded;
+    }
+
+    private static void HookPressSource(SurfaceState state)
+    {
+        if (state.PointerPressSource is not { } source)
+        {
+            return;
+        }
+
+        source.MouseDown += state.OnCanvasMouseDown;
+        source.MouseMove += state.OnCanvasMouseMove;
+        source.MouseUp += state.OnCanvasMouseUp;
+        source.MouseCaptureChanged += state.OnCanvasMouseCaptureChanged;
+        source.MouseEnter += state.OnCanvasMouseEnter;
+        source.MouseLeave += state.OnCanvasMouseLeave;
+    }
+
+    private static void UnhookPressSource(SurfaceState state)
+    {
+        state.PressSourceHooked = false;
+        if (state.PointerPressSource is not { } source)
+        {
+            return;
+        }
+
+        source.MouseDown -= state.OnCanvasMouseDown;
+        source.MouseMove -= state.OnCanvasMouseMove;
+        source.MouseUp -= state.OnCanvasMouseUp;
+        source.MouseCaptureChanged -= state.OnCanvasMouseCaptureChanged;
+        source.MouseEnter -= state.OnCanvasMouseEnter;
+        source.MouseLeave -= state.OnCanvasMouseLeave;
+    }
+
+    private static void HookView(SurfaceState state, Control view)
+    {
+        if (state.ViewHooks.Add(view))
+        {
+            view.VisibleChanged += state.OnCanvasViewVisibilityChanged;
+        }
+
+        if (WorkflowNodeAttachment.For(view) is { } node)
+        {
+            state.AnchorHooks.GetValue(node, _ =>
+            {
+                node.AnchorChanged += state.OnNodeAnchorChanged;
+                return new object();
+            });
+        }
+    }
+
+    private static void ApplyViewProjection(SurfaceState state, Control view)
+    {
+        var contentVisual = VisualContentOffset(state);
+        if (WorkflowNodeAttachment.For(view) is { } node)
+        {
+            node.ApplySurfacePosition(state.PanOffset, contentVisual);
+            WorkflowSlotLayoutBehavior.SyncNow(view);
+        }
+
+        if (WorkflowLinkAttachment.For(view) is { } link)
+        {
+            link.ApplySurfacePosition(state.PanOffset, contentVisual);
+            link.Refresh();
+        }
+
+        WorkflowNodeDragBehavior.RefreshHooks(view);
+    }
+
+    // ── ruler overlay ────────────────────────────────────────────────────────
+
+    private static void EnsureRulerOverlay(Control host, SurfaceState state)
+    {
+        if (state.RulerOverlay is { } existing)
+        {
+            if (!existing.IsDisposed)
+            {
+                return;
+            }
+
+            // 句柄被重建后旧弹窗已销毁：先摘掉它挂在宿主/owner 上的订阅，再建新的。
+            DisposeRulerOverlay(state);
+        }
+
+        if (state.GridDecorator is not IWorkflowGridDecorator grid || grid.RulerBand <= 0)
+        {
+            return;
+        }
+
+        if (host.IsDisposed || !host.IsHandleCreated)
+        {
+            return;
+        }
+
+        var owner = host.FindForm();
+        if (owner is null || owner.IsDisposed)
+        {
+            return;
+        }
+
+        var target = state.ScrollViewer ?? state.Canvas ?? host;
+        var overlay = new WorkflowRulerOverlayForm(target, grid.RulerBand);
+        overlay.Show(owner);
+        state.RulerOverlay = overlay;
+        state.RulerHost = target;
+        state.RulerOwner = owner;
+
+        target.Resize += state.OnRulerHostChanged;
+        target.LocationChanged += state.OnRulerHostChanged;
+        owner.Move += state.OnRulerOwnerMoved;
+        owner.Resize += state.OnRulerHostChanged;
+        SyncRulerOverlay(state, VisualContentOffset(state));
+    }
+
+    private static void SyncRulerOverlay(SurfaceState state, Offset contentVisual)
+    {
+        if (state.RulerOverlay is not { IsDisposed: false } overlay)
+        {
+            return;
+        }
+
+        overlay.ScrollOffsetX = -state.PanOffset.X;
+        overlay.ScrollOffsetY = -state.PanOffset.Y;
+        overlay.ContentOffsetX = contentVisual.Horizontal;
+        overlay.ContentOffsetY = contentVisual.Vertical;
+        overlay.SyncSurface();
+    }
+
+    private static void DisposeRulerOverlay(SurfaceState state)
+    {
+        if (state.RulerHost is { } target)
+        {
+            target.Resize -= state.OnRulerHostChanged;
+            target.LocationChanged -= state.OnRulerHostChanged;
+        }
+
+        if (state.RulerOwner is { } owner)
+        {
+            owner.Move -= state.OnRulerOwnerMoved;
+            owner.Resize -= state.OnRulerHostChanged;
+        }
+
+        state.RulerHost = null;
+        state.RulerOwner = null;
+
+        if (state.RulerOverlay is { } overlay)
+        {
+            state.RulerOverlay = null;
+            overlay.Dispose();
+        }
+    }
+
+    // ── pointer and key routing ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Routes one press that landed on a component view rather than on the surface's canvas.
+    /// </summary>
+    /// <param name="source">The control the press landed on.</param>
+    /// <param name="target">The workflow component <paramref name="source"/> renders.</param>
+    /// <param name="button">Which button went down.</param>
+    /// <param name="clickCount">How many clicks this press completes.</param>
+    /// <returns>The handle the route produced, or <see langword="null"/> when no surface or tree was found.</returns>
+    internal static WorkflowEventHandle? RouteComponentPress(
+        Control source, IWorkflowViewModel target, PlatformInput.MouseButtons button, int clickCount)
+    {
+        var host = FindSurfaceHost(source);
+        if (host is null)
+        {
+            return null;
+        }
+
+        var state = GetState(host);
+        if (state.Tree is not { } tree)
+        {
+            return null;
+        }
+
+        var canvas = state.Canvas ?? host;
+        var point = canvas.PointToClient(Cursor.Position);
+        var handle = new WorkflowEventHandle();
+
+        WorkflowInput.For(tree).Route(new Wf.PointerPressedEventArgs(
+            new Anchor(point.X, point.Y, 0), Modifiers(), canvas, target, ToButton(button), clickCount, handle));
+        return handle;
+    }
+
+    internal static IWorkflowViewModel? ResolveTarget(
+        Control? hit, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    {
+        for (var current = hit; current is not null; current = current.Parent)
+        {
+            var model = ResolveValue(current, "ViewModel")
+                ?? ResolveValue(current, "DataContext")
+                ?? ResolveValue(current, "BindingContext")
+                ?? current.Tag;
+
+            switch (model)
+            {
+                case IWorkflowNodeViewModel node:
+                    return node;
+                case IWorkflowSlotViewModel slot:
+                    return slot;
+            }
+        }
+
+        return tree.HitTestVisibleLinks(x, y, radius);
+    }
+
+    private static WorkflowEventHandle RoutePointer(
+        SurfaceState state, IWorkflowTreeViewModel tree, Point point,
+        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
+    {
+        var canvas = state.Canvas ?? state.Host;
+        var hit = canvas.GetChildAtPoint(point);
+        var anchor = new Anchor(point.X, point.Y, 0);
+        var input = WorkflowInput.For(tree);
+        var target = ResolveTarget(hit, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
+        var handle = new WorkflowEventHandle();
+
+        input.Route(args(anchor, target, handle));
+
+        if (input.HoveredLink is not null)
+        {
+            FocusCanvas(state);
+        }
+
+        return handle;
+    }
+
+    private static void RefreshLinkHover(Control host, SurfaceState state)
+    {
+        if (!state.PointerInside || state.Tree is not { } tree)
+        {
+            return;
+        }
+
+        RoutePointer(state, tree, state.LastPointerClient,
+            (anchor, target, handle) => new Wf.PointerMovedEventArgs(anchor, Modifiers(), state.Canvas ?? host, target, handle));
+    }
+
+    private static void FocusCanvas(SurfaceState state)
+    {
+        if (state.Canvas is { CanFocus: true } canvas)
+        {
+            canvas.Focus();
+        }
+        else if (state.Host.CanFocus)
+        {
+            state.Host.Focus();
+        }
+    }
+
+    private static WorkflowEventHandle RouteWheel(
+        Control host, SurfaceState state, IWorkflowTreeViewModel tree, Control hit, double deltaX, double deltaY)
+    {
+        var canvas = state.Canvas ?? host;
+        var point = canvas.PointToClient(Cursor.Position);
+        var anchor = new Anchor(point.X, point.Y, 0);
+        var input = WorkflowInput.For(tree);
+        var target = ResolveTarget(hit, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
+        var handle = new WorkflowEventHandle();
+
+        input.Route(new Wf.PointerWheelEventArgs(anchor, Modifiers(), canvas, target, deltaX, deltaY, handle));
+        return handle;
+    }
+
+    private static void ApplyZoomFactor(Control host, SurfaceState state, IWorkflowTreeViewModel tree, double factor)
+    {
+        // 缩放会同时改 Scale、节点卡片尺寸/字号、连线几何和 grid；这些更新必须在同一帧落地。
+        // 只节流滚轮还不够：中间一帧会以「新尺寸 + 旧位置」或「旧后缓冲被拉伸」出现。整个事务停
+        // 掉画布/节点/连线的重绘，最后统一 RedrawWindow 一次。
+        var redrawTargets = new List<Control>();
+        var redrawSeen = new HashSet<Control>();
+        void Freeze(Control? control)
+        {
+            if (control is null || !redrawSeen.Add(control))
+            {
+                return;
+            }
+
+            redrawTargets.Add(control);
+            NativeWindowStyleHelper.BeginRedraw(control);
+        }
+
+        Freeze(host);
+        Freeze(state.Canvas);
+        Freeze(state.GridDecorator);
+        if (state.Canvas is { } frozenCanvas)
+        {
+            foreach (Control child in frozenCanvas.Controls)
+            {
+                Freeze(child);
+            }
+        }
+
+        try
+        {
+            var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
+            var layout = tree.Layout;
+            var size = ResolveClientSize(state);
+
+            if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
+            {
+                var (wx, wy) = WorkflowSurfaceMath.WorldAtViewportCenter(
+                    -state.PanOffset.X, -state.PanOffset.Y, size.Width, size.Height, layout);
+                layout.CollapsePivot = new Anchor(wx, wy, 0);
+                layout.Scale = new Scale(next, next);
+
+                // 深度放大把负向内容折叠越过固定画布平移；扩大覆盖要在读取枢轴目标之前完成。
+                WorkflowSurfaceMath.EnsureNegativeCover(tree);
+
+                // ApplyPan 原本会把正向平移折进 NegativeOffset，而枢轴目标读的正是折叠后的 ActualOffset —— 这里
+                // 先单独做这一步，再把最终滚动量一次性交给 ApplyPan。旧写法连着调 ApplyPan / SetScrollOffset /
+                // Refresh，同一份结果算了三趟，每个滚轮格都同步重画三次整张表面。
+                FoldPositivePan(state, layout);
+
+                var (tx, ty) = WorkflowSurfaceMath.PivotCenterScroll(wx, wy, layout, size.Width, size.Height);
+                state.PanOffset = new Point((int)Math.Round(-tx), (int)Math.Round(-ty));
+                Refresh(host);
+                return;
+            }
+
+            layout.Scale = new Scale(next, next);
+            if (WorkflowSurfaceMath.EnsureNegativeCover(tree))
+            {
+                Refresh(host);
+            }
+        }
+        finally
+        {
+            // 子窗口先恢复，父窗口最后恢复；父窗口的 RDW_ALLCHILDREN 才不会在子窗口仍冻结时落下。
+            for (var index = redrawTargets.Count - 1; index >= 0; index--)
+            {
+                NativeWindowStyleHelper.EndRedraw(redrawTargets[index]);
+            }
+        }
+    }
+
+    private static void FocusSurfaceForPress()
+    {
+        var under = SurfaceState.GetControlAtScreenPoint(Cursor.Position);
+        if (under is null)
+        {
+            return;
+        }
+
+        var host = FindSurfaceHost(under);
+        if (host is null)
+        {
+            return;
+        }
+
+        var state = GetState(host);
+        if (state.Canvas is not { } canvas || !IsWithinCanvas(under, canvas) || IsInsideEditable(under))
+        {
+            return;
+        }
+
+        FocusCanvas(state);
+    }
+
+    private static bool IsWithinCanvas(Control? control, Control canvas)
+    {
+        for (var current = control; current is not null; current = current.Parent)
+        {
+            if (ReferenceEquals(current, canvas))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsInsideEditable(Control? control)
+    {
+        for (var current = control; current is not null; current = current.Parent)
+        {
+            if (current is TextBoxBase)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    private static Control? FindSurfaceHost(Control control)
+    {
+        for (var current = control; current is not null; current = current.Parent)
+        {
+            if (States.TryGetValue(current, out var state) && state.Attached)
+            {
+                return current;
+            }
+        }
+
+        return null;
+    }
+
+    // 节点/插槽行为没有显式坐标宿时的兜底：沿父链找到本行为的表面，再用它的画布。
+    internal static Control? FindSurfaceCanvas(Control control)
+    {
+        var host = FindSurfaceHost(control);
+        return host is not null && States.TryGetValue(host, out var state) ? state.Canvas : null;
     }
 
     private static IWorkflowTreeViewModel? ResolveTree(Control host)
@@ -708,148 +1657,17 @@ public sealed class WorkflowSurfaceBehavior
         return null;
     }
 
-    // 滚轮这一笔的路由：位置取光标在画布客户区的坐标（与表面自己那条滚轮路同一系），目标用与表面同一套
-    // 解析。两个增量都原样转发（横滚轮走 deltaX、竖滚轮走 deltaY，订阅方按 Shift 改轴时读的就是它们）。
-    // 返回 true 表示订阅者否决了这一次（缩放支用它表示「不缩放」，默认滚支用它表示「不滚」）。
-    private static bool RouteWheel(Control host, IWorkflowTreeViewModel tree, Control hit, double deltaX, double deltaY)
+    private static object? ResolveValue(Control control, string propertyName)
     {
-        var canvas = ResolveCanvas(host) ?? host;
-        var point = canvas.PointToClient(Cursor.Position);
-        var anchor = new Anchor(point.X, point.Y, 0);
-        var input = WorkflowInput.For(tree);
-        var target = ResolveTarget(hit, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
-        var handle = new WorkflowEventHandle();
-
-        input.Route(new Wf.PointerWheelEventArgs(anchor, Modifiers(), canvas, target, deltaX, deltaY, handle));
-        return handle.PreventDefault;
-    }
-
-    /// <summary>
-    /// Routes one press that landed on a component view rather than on the surface's canvas.
-    /// </summary>
-    /// <param name="source">The control the press landed on — a node card or a slot view, or a control inside one.</param>
-    /// <param name="target">The workflow component <paramref name="source"/> renders.</param>
-    /// <param name="button">Which button went down.</param>
-    /// <param name="clickCount">How many clicks this press completes.</param>
-    /// <returns>The handle the route produced, or <see langword="null"/> when no surface or tree was found.</returns>
-    /// <remarks>
-    /// WinForms delivers a press to the enabled child control under the pointer, so the surface's own
-    /// <c>MouseDown</c> never runs for a node card or a slot. Its gesture behaviours route the press here instead,
-    /// with the component itself as the target — which is what makes the slot → node → tree chain reachable. A
-    /// subscriber that sets <see cref="WorkflowEventHandle.PreventDefault"/> on the returned handle refuses this one
-    /// press, exactly as it would on the surface.
-    /// </remarks>
-    internal static WorkflowEventHandle? RouteComponentPress(
-        Control source, IWorkflowViewModel target, PlatformInput.MouseButtons button, int clickCount)
-    {
-        var host = FindSurfaceHost(source);
-        if (host is null) return null;
-
-        var tree = ResolveTree(host);
-        if (tree is null) return null;
-
-        var canvas = ResolveCanvas(host) ?? host;
-        var point = canvas.PointToClient(Cursor.Position);
-        var handle = new WorkflowEventHandle();
-
-        WorkflowInput.For(tree).Route(new Wf.PointerPressedEventArgs(
-            new Anchor(point.X, point.Y, 0), Modifiers(), canvas, target, ToButton(button), clickCount, handle));
-        return handle;
-    }
-
-    // 指针底下是什么：先沿命中控件及其可视祖先找节点/插槽 —— 本家没有标记语言，视图把模型放在
-    // Tag/ViewModel/DataContext 上 —— 找不到再回退到共享的曲线判定。只认连线的话，输入链里
-    // slot → node → tree 那两级永远走不到。
-    internal static IWorkflowViewModel? ResolveTarget(
-        Control? hit, IWorkflowTreeViewModel tree, double x, double y, double radius)
-    {
-        for (var current = hit; current is not null; current = current.Parent)
+        const System.Reflection.BindingFlags flags =
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var property = control.GetType().GetProperty(propertyName, flags);
+        if (property?.CanRead != true || property.GetIndexParameters().Length != 0)
         {
-            var model = ResolveValue(current, "ViewModel")
-                ?? ResolveValue(current, "DataContext")
-                ?? ResolveValue(current, "BindingContext")
-                ?? current.Tag;
-
-            switch (model)
-            {
-                case IWorkflowNodeViewModel node:
-                    return node;
-                case IWorkflowSlotViewModel slot:
-                    return slot;
-            }
+            return null;
         }
 
-        return tree.HitTestVisibleLinks(x, y, radius);
-    }
-
-    // 沿父链找启用着本行为的表面宿主 —— 与 zoom 过滤器那条 ResolveSurfaceHost 同一判据。
-    private static Control? FindSurfaceHost(Control control)
-    {
-        for (var current = control; current is not null; current = current.Parent)
-        {
-            if (States.TryGetValue(current, out var state) && state.IsEnabled)
-            {
-                return current;
-            }
-        }
-
-        return null;
-    }
-
-    // 表面上任何一次按下（画布、卡片、插槽、连线）都把键盘焦点收到画布 —— Ctrl+Z 这类树级按键要有人接才
-    // 进得来。画布之外的按下（缩略图、HUD 按钮）与可编辑控件里的按下不动它：在那里按 Ctrl+Z 撤的是文字。
-    private static void FocusSurfaceForPress()
-    {
-        var under = SurfaceState.GetControlAtScreenPoint(Cursor.Position);
-        if (under is null)
-        {
-            return;
-        }
-
-        var host = FindSurfaceHost(under);
-        if (host is null)
-        {
-            return;
-        }
-
-        var canvas = GetState(host).Canvas;
-        if (canvas is null || !IsWithinCanvas(under, canvas) || IsInsideEditable(under))
-        {
-            return;
-        }
-
-        if (canvas.CanFocus)
-        {
-            canvas.Focus();
-        }
-    }
-
-    // 这一笔是否落在表面上：沿父链走到画布。缩略图与 HUD 挂在宿主上、不在画布里，因此被排除。
-    private static bool IsWithinCanvas(Control? control, Control canvas)
-    {
-        for (var current = control; current is not null; current = current.Parent)
-        {
-            if (ReferenceEquals(current, canvas))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    // 落在可编辑控件里的按下，焦点归那个控件 —— 表面不该把它抢走。
-    private static bool IsInsideEditable(Control? control)
-    {
-        for (var current = control; current is not null; current = current.Parent)
-        {
-            if (current is TextBoxBase)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return property.GetValue(control);
     }
 
     private static Wf.InputModifiers Modifiers()
@@ -872,161 +1690,955 @@ public sealed class WorkflowSurfaceBehavior
         _ => Wf.MouseButton.None,
     };
 
-    private static Offset ResolveScrollOffset(Control host, IWorkflowTreeViewModel? tree)
-        => ResolveScrollOffset(host, tree, out _);
-
-    // 解析宿主的有效滚动位置。measured 表示它来自真实的平移量、而不是 ViewportOffset 那条兜底 ——
-    // 只有量到的才允许写回：兜底返回的就是要写的那个值本身，写回去等于让它穿过一次下面注释警告过的那次相减。
-    private static Offset ResolveScrollOffset(Control host, IWorkflowTreeViewModel? tree, out bool measured)
+    private static Wf.InputKey ToKey(Keys key)
     {
-        // 有效滚动 = 宿主世界原点平移的负值，让 WorldAtViewportCenter 看到的滚动空间与节点定位一致。节点视图位于 node.Anchor + pan（对单独平移内容的宿主再加 ActualOffset），
-        // 绝不在 node.Anchor + ViewportOffset —— 退回 ViewportOffset 会把内容偏移减两次，抓取的枢轴每个滚轮格都漂。
-        if (host is ScrollableControl scrollable && scrollable.AutoScroll)
-        {
-            // 完整示例宿主：节点平移 = _panOffset + AutoScrollPosition；滚动范围夹在 >= 0，枢轴只能在其内到达（越界被夹）。
-            var pan = ResolvePanOffset(host) ?? new System.Drawing.Point();
-            measured = true;
-            return new Offset(-(pan.X + scrollable.AutoScrollPosition.X), -(pan.Y + scrollable.AutoScrollPosition.Y));
-        }
+        if (key >= Keys.A && key <= Keys.Z) return Wf.InputKey.A + ((int)key - (int)Keys.A);
+        if (key >= Keys.D0 && key <= Keys.D9) return Wf.InputKey.D0 + ((int)key - (int)Keys.D0);
+        if (key >= Keys.F1 && key <= Keys.F12) return Wf.InputKey.F1 + ((int)key - (int)Keys.F1);
 
-        // 带符号平移宿主（模板/Trimmed 示例）：画布固定在视口上、节点视图定位在 node.Anchor + PanOffset，所以有效滚动 = -PanOffset。
-        var signedPan = ResolvePanOffset(host);
-        if (signedPan is not null)
+        return key switch
         {
-            measured = true;
-            return new Offset(-signedPan.Value.X, -signedPan.Value.Y);
-        }
-
-        // 未暴露平移：退回持久化的视口偏移（世界坐标）。
-        measured = false;
-        return tree?.Layout?.ViewportOffset ?? new Offset();
+            Keys.None => Wf.InputKey.None,
+            Keys.Cancel => Wf.InputKey.Cancel,
+            Keys.Back => Wf.InputKey.Back,
+            Keys.Tab => Wf.InputKey.Tab,
+            Keys.Enter => Wf.InputKey.Enter,
+            Keys.Escape => Wf.InputKey.Escape,
+            Keys.Space => Wf.InputKey.Space,
+            Keys.PageUp => Wf.InputKey.PageUp,
+            Keys.PageDown => Wf.InputKey.PageDown,
+            Keys.End => Wf.InputKey.End,
+            Keys.Home => Wf.InputKey.Home,
+            Keys.Left => Wf.InputKey.Left,
+            Keys.Up => Wf.InputKey.Up,
+            Keys.Right => Wf.InputKey.Right,
+            Keys.Down => Wf.InputKey.Down,
+            Keys.Insert => Wf.InputKey.Insert,
+            Keys.Delete => Wf.InputKey.Delete,
+            Keys.LShiftKey => Wf.InputKey.LeftShift,
+            Keys.RShiftKey => Wf.InputKey.RightShift,
+            Keys.LControlKey => Wf.InputKey.LeftCtrl,
+            Keys.RControlKey => Wf.InputKey.RightCtrl,
+            Keys.LMenu => Wf.InputKey.LeftAlt,
+            Keys.RMenu => Wf.InputKey.RightAlt,
+            Keys.LWin => Wf.InputKey.LWin,
+            Keys.RWin => Wf.InputKey.RWin,
+            Keys.ShiftKey => Wf.InputKey.LeftShift,
+            Keys.ControlKey => Wf.InputKey.LeftCtrl,
+            Keys.Menu => Wf.InputKey.LeftAlt,
+            _ => Wf.InputKey.Unknown,
+        };
     }
 
-    // 把一次滚动（有效滚动空间）交给宿主自己的平移入口 —— 与拖画布、小地图同一只手：有符号平移宿主把
-    // _panOffset 置成 (-x, -y)、越界折进 NegativeOffset，于是**滚轮与平移共用一套边界语义**，到边能像拖一样
-    // 撑出去。只有完全不暴露平移入口的宿主机才退回 AutoScrollPosition（它被 WinForms 夹在原生范围里）。
-    // 交给宿主还保证私有平移字段、节点位置、网格/小地图与视口保持一致 —— 直接写画布 PanOffset 属性会被
-    // Layout 变更排下的延迟 ApplyPan 覆盖掉。
-    private static void ApplyScrollOffset(Control host, double x, double y)
+    private static SurfaceState GetState(Control host)
+        => States.GetValue(host, static control => new SurfaceState(control));
+
+    // ── link menu ────────────────────────────────────────────────────────────
+
+    private static void AttachLinkInput(Control host, SurfaceState state)
     {
-        if (ApplyViaHostPan(host, x, y))
+        DetachLinkInput(state);
+        if (state.Tree is not { } tree)
         {
             return;
         }
 
-        if (host is ScrollableControl scrollable && scrollable.AutoScroll)
+        if (tree.GetHelper() is Wf.IInputEvents events)
         {
-            // 宿主没暴露平移入口时才走这里：AutoScrollPosition 被夹在原生范围，到边即停。
-            // WinForms 的 AutoScrollPosition setter 会取反参数（getter = −setter），而节点平移含平移偏移，所以要把有效滚动落到 (x, y)，setter 必须收到 (x + panOffset)。
-            // 验证：getter scr = −(x + pan)，有效滚动 = −(pan + scr) = x。(x + pan) 的形状与示例自己的缩略图补偿一致（_panOffset = −sx − scroll → setter = sx + panOffset）。
-            var pan = ResolvePanOffset(host) ?? new System.Drawing.Point();
-            scrollable.AutoScrollPosition = new System.Drawing.Point((int)Math.Round(x + pan.X), (int)Math.Round(y + pan.Y));
+            state.MenuPressed = (_, e) => ShowLinkMenu(host, state, e);
+            events.Input.PointerPressed += state.MenuPressed;
+        }
+
+        state.MenuLinkRemoved = (_, link) =>
+        {
+            if (!ReferenceEquals(state.MenuLink, link))
+            {
+                return;
+            }
+
+            state.LinkMenu?.Close();
+        };
+        tree.GetHelper().LinkRemoved += state.MenuLinkRemoved;
+    }
+
+    private static void DetachLinkInput(SurfaceState state)
+    {
+        if (state.Tree is { } tree)
+        {
+            var helper = tree.GetHelper();
+            if (state.MenuPressed is not null && helper is Wf.IInputEvents events)
+            {
+                events.Input.PointerPressed -= state.MenuPressed;
+            }
+
+            if (state.MenuLinkRemoved is not null)
+            {
+                helper.LinkRemoved -= state.MenuLinkRemoved;
+            }
+        }
+
+        state.MenuPressed = null;
+        state.MenuLinkRemoved = null;
+        state.MenuLink = null;
+
+        if (state.LinkMenu is { } menu)
+        {
+            state.LinkMenu = null;
+            menu.Close();
+            menu.Dispose();
+        }
+
+        // 解绑前清掉指针目标：路由跟着树活着，比这次绑定久。
+        if (state.Tree is { } detachedTree)
+        {
+            WorkflowInput.For(detachedTree).Route(new Wf.PointerExitedEventArgs(
+                new Anchor(), Wf.InputModifiers.None, state.Canvas ?? state.Host, null, new WorkflowEventHandle()));
         }
     }
 
-    // 请宿主自己的平移入口执行滚动（与拖画布 / 小地图同一条路）。返回 false 表示宿主没暴露这个入口。
-    // 反射查方法要**逐级基类**地找（DeclaredOnly）：私有成员不被派生类型继承，而宿主的运行时类型是派生类
-    // （Trimmed demo 的 TreeView），只查 p.GetType() 找不到基类 WorkflowTreeView 上那个私有方法。
-    private static bool ApplyViaHostPan(Control host, double x, double y)
+    private static void ShowLinkMenu(Control host, SurfaceState state, Wf.PointerPressedEventArgs e)
     {
-        var target = ResolveCanvas(host) ?? host;
-        for (var p = target; p is not null; p = p.Parent)
+        if (e.Button != Wf.MouseButton.Right)
         {
-            for (var type = p.GetType(); type is not null; type = type.BaseType)
-            {
-                var method = type.GetMethod(
-                    "OnMinimapScrollRequested",
-                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly,
-                    binder: null,
-                    new[] { typeof(double), typeof(double) },
-                    modifiers: null);
-                if (method is null)
-                {
-                    continue;
-                }
+            return;
+        }
 
+        if (e.Target is not IWorkflowLinkViewModel link)
+        {
+            return;
+        }
+
+        if (e.Handle.PreventDefault || state.LinkMenu?.Visible == true)
+        {
+            return;
+        }
+
+        var menu = new ContextMenuStrip();
+        GetLinkMenuBuilder(host)?.Invoke(menu, link);
+
+        var canvas = state.Canvas ?? host;
+        var screen = canvas.PointToScreen(new Point((int)e.Position.Horizontal, (int)e.Position.Vertical));
+
+        menu.Closed += (_, _) =>
+        {
+            if (state.Tree is { } tree)
+            {
+                WorkflowInput.For(tree).IsSuspended = false;
+            }
+
+            if (ReferenceEquals(state.LinkMenu, menu))
+            {
+                state.LinkMenu = null;
+                state.MenuLink = null;
+            }
+
+            if (!host.IsDisposed)
+            {
                 try
                 {
-                    method.Invoke(p, new object[] { x, y });
+                    host.BeginInvoke(new Action(menu.Dispose));
                 }
-                catch
+                catch (Exception exception) when (exception is InvalidOperationException or ObjectDisposedException)
                 {
-                    // 尽力而为；之后那次刷新周期仍会重推视口。
+                    menu.Dispose();
+                }
+            }
+        };
+
+        state.LinkMenu = menu;
+        state.MenuLink = link;
+
+        if (state.Tree is { } suspendedTree)
+        {
+            WorkflowInput.For(suspendedTree).IsSuspended = true;
+        }
+
+        menu.Show(screen);
+    }
+
+    // ── scroller ─────────────────────────────────────────────────────────────
+
+    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
+    {
+        private const double Notch = 120d;
+        private const double LineHeight = 16d;
+
+        private readonly SurfaceState state;
+
+        public SurfaceScroller(SurfaceState state) => this.state = state;
+
+        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
+        {
+            var lines = SystemInformation.MouseWheelScrollLines;
+            var size = ResolveClientSize(state);
+            var stepX = lines > 0 ? lines * LineHeight : size.Width;
+            var stepY = lines > 0 ? lines * LineHeight : size.Height;
+
+            var dx = wheelDeltaX != 0d ? (wheelDeltaX / Notch) * stepX : 0d;
+            var dy = wheelDeltaY != 0d ? -(wheelDeltaY / Notch) * stepY : 0d;
+
+            SetScrollOffset(
+                state.Host,
+                state,
+                -state.PanOffset.X + dx,
+                -state.PanOffset.Y + dy);
+        }
+
+        public void CenterOn(double worldX, double worldY)
+        {
+            if (state.Tree?.Layout is not { } layout)
+            {
+                return;
+            }
+
+            var size = ResolveClientSize(state);
+
+            // 节点的 Anchor/Size 是「折叠后」的画布局部坐标；视口还必须加上 CanvasLayout.ActualOffset
+            // （负向扩展后的画布原点）。只做 world - viewport/2 会在平移/缩放后把目标送偏同样的偏移。
+            var (scrollX, scrollY) = WorkflowSurfaceMath.CenterScroll(
+                worldX,
+                worldY,
+                size.Width,
+                size.Height,
+                layout);
+
+            // 标尺浮层占据左上角 band 像素；卡片实际位置 = Anchor + Pan + ActualOffset + band。
+            // 少了 band 这一项，定位结果会固定往左上偏一条标尺。
+            var visualContent = VisualContentOffset(state);
+            scrollX += visualContent.Horizontal - layout.ActualOffset.Horizontal;
+            scrollY += visualContent.Vertical - layout.ActualOffset.Vertical;
+
+            SetScrollOffset(state.Host, state, scrollX, scrollY);
+        }
+    }
+
+    // ── template selector ────────────────────────────────────────────────────
+
+    private sealed class SurfaceTemplateSelector : IWorkflowTemplateSelector
+    {
+        private readonly System.Reflection.Assembly assembly;
+        private readonly string? namespaceName;
+        private readonly string? nodeTypeName;
+        private readonly string? linkTypeName;
+
+        public SurfaceTemplateSelector(
+            System.Reflection.Assembly assembly, string? namespaceName, string? nodeTypeName, string? linkTypeName)
+        {
+            this.assembly = assembly;
+            this.namespaceName = namespaceName;
+            this.nodeTypeName = nodeTypeName;
+            this.linkTypeName = linkTypeName;
+        }
+
+        public Control CreateView(object item) => item switch
+        {
+            IWorkflowNodeViewModel => Instantiate(nodeTypeName, "node"),
+            IWorkflowLinkViewModel => Instantiate(linkTypeName, "link"),
+            _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}"),
+        };
+
+        [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage(
+            "Trimming", "IL2072",
+            Justification = "The view type is named by the host and ships with the application.")]
+        private Control Instantiate(string? name, string role)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new InvalidOperationException($"No {role} view type is configured on the surface.");
+            }
+
+            var type = ResolveType(name!, role);
+            return Activator.CreateInstance(type) as Control
+                ?? throw new InvalidOperationException(
+                    $"The {role} view type '{type.FullName}' is not a WinForms control or has no parameterless constructor.");
+        }
+
+        private Type ResolveType(string name, string role)
+        {
+            name = name.Trim();
+            var resolved = assembly.GetType(name, throwOnError: false);
+
+            if (resolved is null && name.IndexOf('.') < 0 && !string.IsNullOrEmpty(namespaceName))
+            {
+                resolved = assembly.GetType(namespaceName + "." + name, throwOnError: false);
+            }
+
+            return resolved ?? throw new InvalidOperationException(
+                $"The {role} view type '{name}' was not found in '{assembly.GetName().Name}'.");
+        }
+    }
+
+    // ── state ────────────────────────────────────────────────────────────────
+
+    private sealed class SurfaceState : IMessageFilter
+    {
+        private const int WmMouseWheel = 0x020A;
+        private const int WmMouseHWheel = 0x020E;
+        private const int WmLeftButtonDown = 0x0201;
+        private const int WmRightButtonDown = 0x0204;
+        private const int WmMiddleButtonDown = 0x0207;
+        private const int SbVert = 1;
+        private const uint SifAll = 0x17;
+
+        private bool filterAdded;
+
+        // 滚轮是离散消息：高分辨率滚轮/触控板一帧能发很多笔。把缩放因子累到一个 16ms 的 UI 帧里，
+        // 每帧最多做一次完整缩放，而不是每一笔都重排/重绘整张表面。
+        private const int ZoomFrameIntervalMilliseconds = 16;
+        private System.Windows.Forms.Timer? zoomTimer;
+
+        // 首次物化会把节点/连线分多批塞进画布；在池排空之前冻结整棵表面，避免每批都露出一帧
+        // 「已经到 0,0 / 还没摆好」的残影，最后统一提交一次。
+        private const int InitialRevealSettleTicks = 2;
+        private const int InitialRevealTimeoutMilliseconds = 2000;
+        private System.Windows.Forms.Timer? initialRevealTimer;
+        private readonly List<Control> initialRevealTargets = [];
+        private readonly HashSet<Control> initialRevealSeen = new();
+        private bool initialRevealHeld;
+        private int initialRevealSettleTicks;
+        private long initialRevealStarted;
+
+        public SurfaceState(Control host) => Host = host;
+
+        public void BeginInitialReveal(Control host, Control canvas, Control? grid)
+        {
+            if (initialRevealHeld)
+            {
+                return;
+            }
+
+            initialRevealHeld = true;
+            initialRevealSettleTicks = 0;
+            initialRevealStarted = Environment.TickCount64;
+
+            HoldInitialReveal(host);
+            HoldInitialReveal(canvas);
+            HoldInitialReveal(grid);
+            foreach (Control child in canvas.Controls)
+            {
+                HoldInitialReveal(child);
+            }
+
+            if (initialRevealTimer is null)
+            {
+                initialRevealTimer = new System.Windows.Forms.Timer
+                {
+                    Interval = ZoomFrameIntervalMilliseconds,
+                };
+                initialRevealTimer.Tick += OnInitialRevealTick;
+            }
+
+            initialRevealTimer.Start();
+        }
+
+        public void HoldInitialRevealView(Control view)
+        {
+            if (initialRevealHeld)
+            {
+                HoldInitialReveal(view);
+            }
+        }
+
+        private void HoldInitialReveal(Control? control)
+        {
+            if (control is null || !initialRevealSeen.Add(control))
+            {
+                return;
+            }
+
+            initialRevealTargets.Add(control);
+            NativeWindowStyleHelper.BeginRedraw(control);
+        }
+
+        private void OnInitialRevealTick(object? sender, EventArgs e)
+        {
+            if (!initialRevealHeld)
+            {
+                return;
+            }
+
+            var pending = Canvas is { } canvas ? ViewPool.GetPendingViewCount(canvas) : 0;
+            if (pending == 0)
+            {
+                initialRevealSettleTicks++;
+            }
+            else
+            {
+                initialRevealSettleTicks = 0;
+            }
+
+            var timedOut = Environment.TickCount64 - initialRevealStarted >= InitialRevealTimeoutMilliseconds;
+            if (initialRevealSettleTicks >= InitialRevealSettleTicks || timedOut)
+            {
+                EndInitialReveal();
+            }
+        }
+
+        public void EndInitialReveal()
+        {
+            if (!initialRevealHeld)
+            {
+                return;
+            }
+
+            initialRevealHeld = false;
+            if (initialRevealTimer is { } timer)
+            {
+                timer.Stop();
+                timer.Tick -= OnInitialRevealTick;
+                timer.Dispose();
+                initialRevealTimer = null;
+            }
+
+            // 子窗口先恢复、父窗口最后恢复，随后一次重绘提交最终布局。
+            for (var index = initialRevealTargets.Count - 1; index >= 0; index--)
+            {
+                NativeWindowStyleHelper.EndRedraw(initialRevealTargets[index]);
+            }
+
+            initialRevealTargets.Clear();
+            initialRevealSeen.Clear();
+        }
+
+        public void QueueZoom(Control host, IWorkflowTreeViewModel tree, double factor)
+        {
+            pendingZoomFactor *= factor;
+
+            if (zoomTimer is null)
+            {
+                zoomTimer = new System.Windows.Forms.Timer { Interval = ZoomFrameIntervalMilliseconds };
+                zoomTimer.Tick += OnZoomTimerTick;
+            }
+
+            if (!zoomTimer.Enabled)
+            {
+                zoomTimer.Start();
+            }
+        }
+
+        private void OnZoomTimerTick(object? sender, EventArgs e)
+        {
+            if (zoomTimer is not { } timer)
+            {
+                return;
+            }
+
+            timer.Stop();
+            var factor = pendingZoomFactor;
+            pendingZoomFactor = 1d;
+
+            if (factor == 1d || Host.IsDisposed || Tree is not { } tree)
+            {
+                return;
+            }
+
+            ApplyZoomFactor(Host, this, tree, factor);
+        }
+
+        public void ReleaseZoomTimer()
+        {
+            if (zoomTimer is not { } timer)
+            {
+                return;
+            }
+
+            timer.Stop();
+            timer.Tick -= OnZoomTimerTick;
+            timer.Dispose();
+            zoomTimer = null;
+            pendingZoomFactor = 1d;
+        }
+
+        public Control Host { get; }
+
+        public bool Attached { get; set; }
+
+        public Control? ScrollViewer { get; set; }
+
+        public XamlScrollViewer? XamlScrollViewer { get; set; }
+
+        public bool XamlScrollViewerHooked { get; set; }
+
+        public EventHandler? XamlScrollViewerScroll { get; set; }
+
+        // 同步滚动条值时它会不会回抛 Scroll：这个标记把回程路径截断。
+        public bool SyncingXamlScrollViewer { get; set; }
+
+        public Control? Canvas { get; set; }
+
+        public bool CanvasHooked { get; set; }
+
+        public bool PressSourceHooked { get; set; }
+
+        public bool MinimapHooked { get; set; }
+
+        public Control? GridDecorator { get; set; }
+
+        public Control? MinimapOverlay { get; set; }
+
+        public Control? PointerPressSource { get; set; }
+
+        public IWorkflowTreeViewModel? Tree { get; set; }
+
+        public INotifyPropertyChanged? TreeNotifier { get; set; }
+
+        public IWorkflowSurfaceScroller? Scroller { get; set; }
+
+        public IWorkflowTemplateSelector? PoolSelector { get; set; }
+
+        public Control? PoolCanvas { get; set; }
+
+        public object? PoolItemsSource { get; set; }
+
+        public SurfaceTemplateSelector? GeneratedSelector { get; set; }
+
+        public string? GeneratedNodeType { get; set; }
+
+        public string? GeneratedLinkType { get; set; }
+
+        public bool LayoutPending { get; set; }
+
+        private double pendingZoomFactor = 1d;
+
+        public Point PanOffset { get; set; }
+
+        public bool IsPanning { get; set; }
+
+        public Point PanPressScreen { get; set; }
+
+        public Point PanOffsetAtPress { get; set; }
+
+        public Point LastPointerClient { get; set; }
+
+        public bool PointerInside { get; set; }
+
+        public ContextMenuStrip? LinkMenu { get; set; }
+
+        public IWorkflowLinkViewModel? MenuLink { get; set; }
+
+        public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
+
+        public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
+
+        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
+
+        public bool HasPendingRestore { get; set; }
+
+        public bool RestoreQueued { get; set; }
+
+        public double PendingRestoreX { get; set; }
+
+        public double PendingRestoreY { get; set; }
+
+        public WorkflowRulerOverlayForm? RulerOverlay { get; set; }
+
+        public Control? RulerHost { get; set; }
+
+        public Form? RulerOwner { get; set; }
+
+        public EventHandler? DataContextHandler { get; set; }
+
+        public ConditionalWeakTable<WorkflowNodeAttachment, object> AnchorHooks { get; } = new();
+
+        public HashSet<Control> ViewHooks { get; } = new();
+
+        internal void EnsureMessageFilter()
+        {
+            if (filterAdded)
+            {
+                return;
+            }
+
+            Application.AddMessageFilter(this);
+            filterAdded = true;
+        }
+
+        internal void RemoveMessageFilter()
+        {
+            if (!filterAdded)
+            {
+                return;
+            }
+
+            Application.RemoveMessageFilter(this);
+            filterAdded = false;
+        }
+
+        public void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(IWorkflowTreeViewModel.Layout)
+                or nameof(IWorkflowTreeViewModel.Nodes)
+                or nameof(IWorkflowTreeViewModel.Links))
+            {
+                ScheduleLayout(Host, this);
+            }
+        }
+
+        public void OnMinimapScrollRequested(double scrollX, double scrollY)
+        {
+            SetScrollOffset(Host, this, scrollX, scrollY);
+        }
+
+        public void OnNodeAnchorChanged()
+        {
+            if (MinimapOverlay is { IsDisposed: false } minimap)
+            {
+                minimap.Invalidate();
+            }
+        }
+
+        public void OnRulerHostChanged(object? sender, EventArgs e) => SyncRulerOverlay(this, VisualContentOffset(this));
+
+        public void OnRulerOwnerMoved(object? sender, EventArgs e) => SyncRulerOverlay(this, VisualContentOffset(this));
+
+        public void OnCanvasControlAdded(object? sender, ControlEventArgs e)
+        {
+            if (e.Control is not { } view)
+            {
+                return;
+            }
+
+            HoldInitialRevealView(view);
+            HookView(this, view);
+
+            // 池化视图是在 SetItemsSource/视口变化之后才创建的：Node 绑定只做了默认投影 (0,0)，
+            // 必须在这里补上当前的 PanOffset + ActualOffset + ruler band，否则定位后新物化的节点
+            // 会停在世界原点附近，看起来像其它节点没有重新测绘。
+            ApplyViewProjection(this, view);
+        }
+
+        public void OnCanvasViewVisibilityChanged(object? sender, EventArgs e)
+        {
+            if (sender is not Control view || !view.Visible || view.IsDisposed)
+            {
+                return;
+            }
+
+            // 池回收只隐藏视图；再次进入可见区时不会触发 ControlAdded。这里补投影、槽布局和拖拽钩子，
+            // 否则移出可见区再移回来的节点会停在旧投影且无法拖动，Link 也停留在未就绪状态。
+            ApplyViewProjection(this, view);
+        }
+
+        public void OnCanvasMouseDown(object? sender, MouseEventArgs e)
+        {
+            if (Tree is not { } tree)
+            {
+                return;
+            }
+
+            var canvas = Canvas ?? Host;
+            var point = canvas.PointToClient(Cursor.Position);
+
+            if (e.Button == MouseButtons.Right)
+            {
+                RoutePointer(this, tree, point, (p, t, h) => new Wf.PointerPressedEventArgs(
+                    p, Modifiers(), canvas, t, Wf.MouseButton.Right, 1, h));
+                return;
+            }
+
+            if (e.Button == MouseButtons.Middle)
+            {
+                RoutePointer(this, tree, point, (p, t, h) => new Wf.PointerPressedEventArgs(
+                    p, Modifiers(), canvas, t, Wf.MouseButton.Middle, 1, h));
+                return;
+            }
+
+            if (e.Button != MouseButtons.Left || IsPanning)
+            {
+                return;
+            }
+
+            var press = RoutePointer(this, tree, point, (p, t, h) => new Wf.PointerPressedEventArgs(
+                p, Modifiers(), canvas, t, Wf.MouseButton.Left, 1, h));
+
+            if (press.PreventDefault)
+            {
+                return;
+            }
+
+            IsPanning = true;
+            PanPressScreen = Cursor.Position;
+            PanOffsetAtPress = PanOffset;
+            canvas.Capture = true;
+        }
+
+        public void OnCanvasMouseMove(object? sender, MouseEventArgs e)
+        {
+            if (Tree is not { } tree)
+            {
+                return;
+            }
+
+            var canvas = Canvas ?? Host;
+            LastPointerClient = canvas.PointToClient(Cursor.Position);
+
+            if (IsPanning)
+            {
+                var current = Cursor.Position;
+                PanOffset = new Point(
+                    PanOffsetAtPress.X + (current.X - PanPressScreen.X),
+                    PanOffsetAtPress.Y + (current.Y - PanPressScreen.Y));
+                ApplyPan(Host, this);
+                return;
+            }
+
+            RoutePointer(this, tree, LastPointerClient, (p, t, h) => new Wf.PointerMovedEventArgs(
+                p, Modifiers(), canvas, t, h));
+        }
+
+        public void OnCanvasMouseUp(object? sender, MouseEventArgs e)
+        {
+            if (Tree is { } tree)
+            {
+                var canvas = Canvas ?? Host;
+                var point = canvas.PointToClient(Cursor.Position);
+                RoutePointer(this, tree, point, (p, t, h) => new Wf.PointerReleasedEventArgs(
+                    p, Modifiers(), canvas, t, ToButton(e.Button), 1, h));
+            }
+
+            if (!IsPanning)
+            {
+                return;
+            }
+
+            IsPanning = false;
+            if (Canvas is { } canvasControl)
+            {
+                canvasControl.Capture = false;
+            }
+
+            ApplyPan(Host, this);
+        }
+
+        public void OnCanvasMouseCaptureChanged(object? sender, EventArgs e)
+        {
+            if (Canvas is { Capture: false })
+            {
+                IsPanning = false;
+            }
+        }
+
+        public void OnCanvasMouseEnter(object? sender, EventArgs e)
+        {
+            PointerInside = true;
+            if (Tree is { } tree)
+            {
+                var canvas = Canvas ?? Host;
+                RoutePointer(this, tree, LastPointerClient, (p, t, h) => new Wf.PointerEnteredEventArgs(
+                    p, Modifiers(), canvas, t, h));
+            }
+        }
+
+        public void OnCanvasMouseLeave(object? sender, EventArgs e)
+        {
+            PointerInside = false;
+            if (Tree is { } tree)
+            {
+                WorkflowInput.For(tree).Route(new Wf.PointerExitedEventArgs(
+                    new Anchor(), Modifiers(), Canvas ?? Host, null, new WorkflowEventHandle()));
+            }
+        }
+
+        public void OnCanvasKeyDown(object? sender, PlatformInput.KeyEventArgs e)
+        {
+            if (Tree is not { } tree)
+            {
+                return;
+            }
+
+            var input = WorkflowInput.For(tree);
+            input.Route(new Wf.KeyDownEventArgs(
+                ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false,
+                Canvas ?? Host, input.PointerTarget, new WorkflowEventHandle()));
+
+            if (e.KeyCode == Keys.Delete)
+            {
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        public void OnCanvasKeyUp(object? sender, PlatformInput.KeyEventArgs e)
+        {
+            if (Tree is not { } tree)
+            {
+                return;
+            }
+
+            var input = WorkflowInput.For(tree);
+            input.Route(new Wf.KeyUpEventArgs(
+                ToKey(e.KeyCode), (int)e.KeyCode, Modifiers(), false,
+                Canvas ?? Host, input.PointerTarget, new WorkflowEventHandle()));
+        }
+
+        public bool PreFilterMessage(ref Message m)
+        {
+            if (m.Msg is WmLeftButtonDown or WmRightButtonDown or WmMiddleButtonDown)
+            {
+                FocusSurfaceForPress();
+                return false;
+            }
+
+            if (m.Msg is not (WmMouseWheel or WmMouseHWheel))
+            {
+                return false;
+            }
+
+            var under = GetControlAtScreenPoint(Cursor.Position);
+            var host = ResolveSurfaceHost(under) ?? ResolveSurfaceHost(m.HWnd);
+            if (host is null || !States.TryGetValue(host, out var state))
+            {
+                return false;
+            }
+
+            var tree = state.Tree ?? ResolveTree(host);
+            if (tree is null)
+            {
+                return false;
+            }
+
+            var delta = unchecked((short)((uint)m.WParam.ToInt64() >> 16));
+            var deltaX = m.Msg == WmMouseHWheel ? delta : 0;
+            var deltaY = m.Msg == WmMouseWheel ? delta : 0;
+
+            if (InnerScrollableHasRoom(under, host, deltaX, deltaY))
+            {
+                return false;
+            }
+
+            var zoomGesture = m.Msg == WmMouseWheel
+                && Control.ModifierKeys == Keys.Control
+                && GetZoomEnabled(host);
+
+            if (!zoomGesture)
+            {
+                var handle = RouteWheel(host, state, tree, under ?? host, deltaX, deltaY);
+
+                // 订阅方在这笔滚轮上置了 PreventDefault 就由它接管；否则走适配器默认的平移步长。
+                if (!handle.PreventDefault)
+                {
+                    state.Scroller?.ScrollBy(deltaX, deltaY);
                 }
 
+                m.Result = IntPtr.Zero;
                 return true;
             }
-        }
 
-        return false;
-    }
-
-    /// <summary>The canvas the host handed over, if any.</summary>
-    private static Control? ResolveCanvas(Control host)
-    {
-        var state = GetState(host);
-        return state.Canvas;
-    }
-
-    /// <summary>
-    /// Reads the signed pan translate a host exposes as a <c>Point PanOffset</c> property (the
-    /// template / Trimmed demo surface canvas) or keeps in a private <c>_panOffset</c> field (the
-    /// full demo's self-drawn canvas). Same reflective lookup as the node-view template's
-    /// <c>GetCanvasPanOffset</c> — the surface canvas is a private nested control, so the adapter
-    /// cannot name its type. Returns <see langword="null"/> when no pan translate exists.
-    /// </summary>
-    private static System.Drawing.Point? ResolvePanOffset(Control host)
-    {
-        // 平移量在命名画布上（宿主树视图私有持有并在 ApplyPan 里推），所以反射从画布开始，不从宿主。
-        var canvas = ResolveCanvas(host);
-        for (var p = canvas ?? host; p is not null; p = p.Parent)
-        {
-            var property = p.GetType().GetProperty("PanOffset");
-            if (property?.CanRead == true && property.PropertyType == typeof(System.Drawing.Point))
+            var zoomHandle = RouteWheel(host, state, tree, under ?? host, 0d, deltaY);
+            if (zoomHandle.PreventDefault)
             {
-                return (System.Drawing.Point)property.GetValue(p)!;
+                m.Result = IntPtr.Zero;
+                return true;
             }
 
-            // 完整示例（自绘画布）：平移量在私有 _panOffset 字段里。
-            var field = p.GetType().GetField(
-                "_panOffset", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            if (field?.FieldType == typeof(System.Drawing.Point))
+            // 每笔滚轮只累加目标因子；真正的缩放/重绘由 16ms UI 帧合并执行。
+            state.QueueZoom(host, tree, delta > 0 ? 1d / 1.1d : 1.1d);
+            m.Result = IntPtr.Zero;
+            return true;
+        }
+
+        private static Control? ResolveSurfaceHost(IntPtr hwnd) => ResolveSurfaceHost(Control.FromHandle(hwnd));
+
+        private static Control? ResolveSurfaceHost(Control? hit)
+        {
+            for (var current = hit; current is not null; current = current.Parent)
             {
-                return (System.Drawing.Point)field.GetValue(p)!;
+                if (States.TryGetValue(current, out var state) && state.Attached)
+                {
+                    return current;
+                }
             }
-        }
 
-        return null;
-    }
-
-    private static System.Drawing.Size ResolveClientSize(Control host)
-        => host.ClientSize.Width > 0 ? host.ClientSize : host.Size;
-
-    // 给分层容器的窗口自动加 WS_CLIPCHILDREN：它们重绘时裁剪子区域，避免层叠闪烁盖住节点视图/连线。
-    private static void EnsureClipChildrenFor(Control root, Control? control)
-    {
-        if (control is null)
-        {
-            return;
-        }
-
-        NativeWindowStyleHelper.EnsureClipChildren(control);
-    }
-
-
-    private static object? ResolveValue(Control control, string propertyName)
-    {
-        const System.Reflection.BindingFlags flags =
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
-        var property = control.GetType().GetProperty(propertyName, flags);
-        if (property?.CanRead != true || property.GetIndexParameters().Length != 0)
-        {
             return null;
         }
 
-        return property.GetValue(control);
-    }
+        internal static Control? GetControlAtScreenPoint(Point screenPoint)
+        {
+            var handle = WindowFromPoint(screenPoint);
+            return handle == IntPtr.Zero ? null : Control.FromChildHandle(handle) ?? Control.FromHandle(handle);
+        }
 
-    private static SurfaceState GetState(Control element)
-        => States.GetValue(element, static _ => new SurfaceState());
+        private static bool InnerScrollableHasRoom(Control? under, Control host, int deltaX, int deltaY)
+        {
+            if (under is null || (deltaX == 0 && deltaY == 0))
+            {
+                return false;
+            }
+
+            for (var current = under; current is not null && !ReferenceEquals(current, host); current = current.Parent)
+            {
+                switch (current)
+                {
+                    case TextBoxBase text when TextBoxHasRoom(text, deltaY):
+                        return true;
+                    case ScrollableControl scrollable when ScrollableControlHasRoom(scrollable, deltaX, deltaY):
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ScrollableControlHasRoom(ScrollableControl scrollable, int deltaX, int deltaY)
+        {
+            var vertical = scrollable.VerticalScroll;
+            var horizontal = scrollable.HorizontalScroll;
+
+            var verticalRoom = deltaY == 0
+                || (vertical.Visible && (deltaY > 0
+                    ? vertical.Value > vertical.Minimum
+                    : vertical.Value < vertical.Maximum - vertical.LargeChange + 1));
+            var horizontalRoom = deltaX == 0
+                || (horizontal.Visible && (deltaX > 0
+                    ? horizontal.Value < horizontal.Maximum - horizontal.LargeChange + 1
+                    : horizontal.Value > horizontal.Minimum));
+
+            return verticalRoom && horizontalRoom;
+        }
+
+        private static bool TextBoxHasRoom(TextBoxBase text, int deltaY)
+        {
+            if (!text.IsHandleCreated || deltaY == 0)
+            {
+                return false;
+            }
+
+            return WindowBarHasRoom(text.Handle, SbVert, deltaY);
+        }
+
+        private static bool WindowBarHasRoom(IntPtr hwnd, int bar, int delta)
+        {
+            var info = new ScrollInfo
+            {
+                cbSize = (uint)Marshal.SizeOf<ScrollInfo>(),
+                fMask = SifAll,
+            };
+
+            if (!GetScrollInfo(hwnd, bar, ref info))
+            {
+                return false;
+            }
+
+            var max = info.nMax - Math.Max(0, info.nPage - 1);
+            return delta > 0 ? info.nPos > info.nMin : info.nPos < max;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ScrollInfo
+        {
+            public uint cbSize;
+            public uint fMask;
+            public int nMin;
+            public int nMax;
+            public int nPage;
+            public int nPos;
+            public int nTrackPos;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool GetScrollInfo(IntPtr hwnd, int bar, ref ScrollInfo info);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(Point point);
+    }
 }

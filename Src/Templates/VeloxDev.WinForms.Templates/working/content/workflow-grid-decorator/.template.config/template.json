@@ -71,28 +71,28 @@
     "rulerBackground": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Ruler area background color. WinForms default uses alpha 0x70 (vs the other frameworks' 0xC8): WinForms cannot dim the opaque node-card children over the band, so lower opacity makes the grid pass visibly under the translucent band.",
+      "description": "Accepted for cross-GUI CLI parity; the WinForms surface draws its floating ruler in the adapter, which uses the same default.",
       "defaultValue": "#70252526",
       "replaces": "TemplateRulerBackground"
     },
     "rulerTickColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Ruler tick mark color.",
+      "description": "Accepted for cross-GUI CLI parity; the WinForms surface draws its floating ruler in the adapter, which uses the same default.",
       "defaultValue": "#555555",
       "replaces": "TemplateRulerTickColor"
     },
     "rulerLabelColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Ruler label text color.",
+      "description": "Accepted for cross-GUI CLI parity; the WinForms surface draws its floating ruler in the adapter, which uses the same default.",
       "defaultValue": "#888888",
       "replaces": "TemplateRulerLabelColor"
     },
     "rulerDividerColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Divider line between ruler and content area.",
+      "description": "Accepted for cross-GUI CLI parity; the WinForms surface draws its floating ruler in the adapter, which uses the same default.",
       "defaultValue": "#3A3D40",
       "replaces": "TemplateRulerDividerColor"
     }

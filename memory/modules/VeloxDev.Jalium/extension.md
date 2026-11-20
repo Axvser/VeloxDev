@@ -59,7 +59,7 @@
 | 8 | 把 `.Property(...)` 的某个重载「补进 Core」 | Core 的 `TransitionCore<...>` 里**一个 `Property` 都没有**，重载分别写在各家适配器里，数量不等 —— 补进 Core 等于改七家的形状 | 重载留在本家 `TransitionSystem/Transition.cs` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs` 全文无 `Property` 方法 |
 | 9 | 让 `AttachedBehaviors/` 里的东西直接驱动一个 `Transition<T>`（或反过来） | 两条轴在程序集内互不引用是既成事实；跨一条就再也拆不开 | 想跨轴就在宿主侧接线 | `architecture.md` §一 |
 | 10 | 按别家的条数猜这一家有几种采样器 | 条数本来就不等（各家的采样器与登记数量各不相同） | 按 `Interpolator` 静态构造现读 | 同左 |
-| 11 | 在模板/demo 里重写适配器行为已经做掉的机制（自己管缩放/视口、自己算端口锚点、自己写连线自盒化） | 机制与策略会分叉；两边都会编译通过，出问题时看不出谁是对的 | 平台机制改 `WorkflowSystem/AttachedBehaviors/` 下的行为 / 助手，策略留模板标记或 code-behind，判据见 `adapter-base-class-specifications.md` §2.1 | `architecture.md` §四；`Src/Templates/…/workflow-*`（表面/卡片/槽/连线是标记 + 薄 code-behind，网格/小地图/选择器是 `.cs`） |
+| 11 | 在模板/demo 里重写适配器行为已经做掉的机制（自己管缩放/视口、自己算端口锚点、自己写连线自盒化） | 机制与策略会分叉；两边都会编译通过，出问题时看不出谁是对的 | 平台机制改 `WorkflowSystem/AttachedBehaviors/` 下的行为 / 助手，策略留模板标记或 code-behind，分层判据见 `layer-ownership-specifications.md` | `architecture.md` §四；`Src/Templates/…/workflow-*`（表面/卡片/槽/连线是标记 + 薄 code-behind，网格/小地图/选择器是 `.cs`） |
 
 ---
 
@@ -127,7 +127,7 @@ Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附
 
 ### 4.2 加 / 换一个工作流视图角色（现在走「标记 + 薄 code-behind + 适配器附着行为」）
 
-- [ ] **平台机制**：先判断这段是不是扩展点（判据 §2.1 in `adapter-base-class-specifications.md`）。是机制 → 改 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/` 下对应的附着行为 / 助手；是策略（形状、配色、间距）→ 留在模板或 demo 的标记 / code-behind。
+- [ ] **平台机制**：先判断这段是不是扩展点（分层判据见 `layer-ownership-specifications.md`）。是机制 → 改 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/` 下对应的附着行为 / 助手；是策略（形状、配色、间距）→ 留在模板或 demo 的标记 / code-behind。
 - [ ] **表面 / 卡片 / 连线 / 网格 / 选择器**：`Src/Templates/VeloxDev.Jalium.Templates/working/content/` 下对应条目（`workflow-tree-view` / `-node-view` / `-slot-view` / `-link-view` / `-grid-decorator` / `-minimap-overlay` / `-template-selector`）与镜像 `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/`（**同形，两处一起改**）。
 - [ ] 若新表面要池化：在 `PART_Canvas` 上同时给 `ViewPool.ItemsSource` 与 `ViewPool.TemplateSelector`（**两个都要**）
 - [ ] 两套 demo 都要过：`Examples/Workflow/Jalium/Demo/`（自己写的 `NodeEditorSurface : Canvas`，不接适配器行为）与 `Examples/Workflow/Jalium Trimmed/Demo/`（标记 + 行为那条）

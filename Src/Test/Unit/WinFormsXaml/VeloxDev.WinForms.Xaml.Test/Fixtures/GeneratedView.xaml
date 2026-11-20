@@ -1,0 +1,153 @@
+<local:GeneratedView
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:VeloxDev.WinForms.Xaml.Test.Fixtures"
+    xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+    x:Class="VeloxDev.WinForms.Xaml.Test.Fixtures.GeneratedView"
+    Size="420, 320">
+
+  <local:GeneratedView.Resources>
+    <v:ResourceDictionary>
+      <local:GeneratedModel x:Key="ModelResource" Title="resource title" />
+      <x:Color x:Key="Accent">#FF5B8CFF</x:Color>
+      <x:String x:Key="Caption">caption from a static resource</x:String>
+      <x:String x:Key="ActionTag">style-resource</x:String>
+      <v:DataTemplate x:Key="ItemTemplate">
+        <local:GeneratedCard Title="{Binding Title}" AccentColor="{StaticResource Accent}" Size="160, 60" />
+      </v:DataTemplate>
+      <v:Style x:Key="CardStyle" TargetType="local:GeneratedCard">
+        <v:Style.Setters>
+          <v:Setter Property="StyleValue" Value="2" />
+        </v:Style.Setters>
+        <v:Style.Triggers>
+          <v:Trigger Property="IsHot" Value="True">
+            <v:Trigger.Setters>
+              <v:Setter Property="StyleValue" Value="4" />
+            </v:Trigger.Setters>
+          </v:Trigger>
+        </v:Style.Triggers>
+      </v:Style>
+      <v:Style x:Key="ChildCardStyle" TargetType="local:GeneratedCard" BasedOn="{StaticResource CardStyle}">
+        <v:Style.Setters>
+          <v:Setter Property="StyleValue" Value="3" />
+        </v:Style.Setters>
+        <v:Style.Triggers>
+          <v:Trigger Property="IsHot" Value="True">
+            <v:Trigger.Setters>
+              <v:Setter Property="StyleValue" Value="5" />
+            </v:Trigger.Setters>
+          </v:Trigger>
+        </v:Style.Triggers>
+      </v:Style>
+      <v:ControlTemplate x:Key="CardTemplate">
+        <local:CardChrome Label="{Binding Title}" />
+      </v:ControlTemplate>
+      <v:Style x:Key="TemplatedCardStyle" TargetType="local:GeneratedCard">
+        <v:Style.Setters>
+          <v:Setter Property="StyleValue" Value="31" />
+        </v:Style.Setters>
+        <v:Style.Template>
+          <StaticResource Key="CardTemplate" />
+        </v:Style.Template>
+      </v:Style>
+      <v:Style x:Key="NativeButtonStyle" TargetType="Button">
+        <v:Style.Setters>
+          <v:Setter Property="Text" Value="Styled probe" />
+          <v:Setter Property="BackColor" Value="#FF203040" />
+        </v:Style.Setters>
+      </v:Style>
+      <v:Style TargetType="local:GeneratedCard">
+        <v:Style.Setters>
+          <v:Setter Property="StyleValue" Value="11" />
+        </v:Style.Setters>
+        <v:Style.Triggers>
+          <v:DataTrigger Binding="{Binding Title}" Value="generated title">
+            <v:DataTrigger.Setters>
+              <v:Setter Property="Note" Value="data" />
+            </v:DataTrigger.Setters>
+          </v:DataTrigger>
+          <v:DataTrigger Binding="{Binding Column}" Value="5">
+            <v:DataTrigger.Setters>
+              <v:Setter Property="StyleValue" Value="15" />
+            </v:DataTrigger.Setters>
+          </v:DataTrigger>
+          <v:MultiTrigger>
+            <v:MultiTrigger.Conditions>
+              <v:Condition Property="IsHot" Value="True" />
+              <v:Condition Property="IsPinned" Value="True" />
+            </v:MultiTrigger.Conditions>
+            <v:MultiTrigger.Setters>
+              <v:Setter Property="Note" Value="multi" />
+            </v:MultiTrigger.Setters>
+          </v:MultiTrigger>
+          <v:Trigger Property="IsPinned" Value="True">
+            <v:Trigger.EnterAction>
+              <local:ConfigurableRecordingAction Tag="{StaticResource ActionTag}" Amount="5" />
+            </v:Trigger.EnterAction>
+          </v:Trigger>
+        </v:Style.Triggers>
+      </v:Style>
+    </v:ResourceDictionary>
+  </local:GeneratedView.Resources>
+
+  <Label x:Name="captionLabel"
+         Text="{Binding Caption}"
+         local:WorkflowPanel.Column="{Binding Column}"
+         local:WorkflowPanel.Label="{Binding Title, Mode=OneTime}"
+         Location="12, 12"
+         Size="240, 24" />
+
+  <local:GeneratedCard x:Name="card"
+                       Title="{Binding Title}"
+                       AccentColor="{StaticResource Accent}"
+                       Style="{StaticResource ChildCardStyle}"
+                       Location="12, 48"
+                       Size="240, 120">
+    <local:GeneratedCard.Triggers>
+      <v:Trigger Property="IsHot" Value="True">
+        <v:Trigger.Setters>
+          <v:Setter Property="BorderWidth" Value="4" />
+        </v:Trigger.Setters>
+        <v:Trigger.EnterAction>
+          <v:TransitionAction Property="Glow" To="1" Duration="0:0:0.1" />
+        </v:Trigger.EnterAction>
+        <v:Trigger.ExitAction>
+          <v:TransitionAction Property="Glow" To="0" Duration="0:0:0.1" />
+        </v:Trigger.ExitAction>
+      </v:Trigger>
+      <v:DataTrigger Binding="{Binding Title}" Value="generated title">
+        <v:DataTrigger.Setters>
+          <v:Setter Property="Note" Value="control-data" />
+        </v:DataTrigger.Setters>
+      </v:DataTrigger>
+      <v:MultiTrigger>
+        <v:MultiTrigger.Conditions>
+          <v:Condition Property="IsHot" Value="True" />
+          <v:Condition Property="IsPinned" Value="True" />
+        </v:MultiTrigger.Conditions>
+        <v:MultiTrigger.Setters>
+          <v:Setter Property="Note" Value="control-multi" />
+        </v:MultiTrigger.Setters>
+      </v:MultiTrigger>
+      <v:Trigger Property="IsPinned" Value="True">
+        <v:Trigger.EnterAction>
+          <local:ConfigurableRecordingAction Tag="entered" Amount="3" />
+        </v:Trigger.EnterAction>
+        <v:Trigger.ExitAction>
+          <local:ConfigurableRecordingAction Tag="exited" Amount="4" />
+        </v:Trigger.ExitAction>
+      </v:Trigger>
+    </local:GeneratedCard.Triggers>
+  </local:GeneratedCard>
+
+  <Button x:Name="probeButton"
+          Text="Probe"
+          Style="{StaticResource NativeButtonStyle}"
+          local:WorkflowPanel.Column="2"
+          local:WorkflowPanel.Label="{StaticResource Caption}"
+          local:GeneratedAttachments.Note="xaml note"
+          Location="12, 184"
+          Size="120, 32"
+          Click="OnProbeClick" />
+
+</local:GeneratedView>

@@ -1,6 +1,5 @@
 using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
-using Demo.Views;
 using Demo.Views.Workbench;
 using Demo.Views.Workflow;
 using Demo.Workflow;
@@ -18,7 +17,6 @@ namespace Demo
 {
     public partial class Form1 : Form
     {
-        private readonly BindingSource _controllerBindingSource = [];
         private WorkflowDemoSession? _demo;
 
         // Agent 一轮里每个工具调用都要求刷新，而一次刷新是全量的（重新定位命名控件、跑布局、重算可见区）。
@@ -98,9 +96,6 @@ namespace Demo
             BuildMainArea();
             BuildInspector();
             BuildSidebar();
-
-            WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(workflowSurfaceControl, true);
-            WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvas(workflowSurfaceControl, workflowSurfaceControl);
 
             _uiTimer.Tick += OnUiTimerTick;
             _uiTimer.Start();
@@ -221,7 +216,7 @@ namespace Demo
                 AutoSize = true,
                 ForeColor = WorkbenchPalette.TextPrimary,
                 BackColor = WorkbenchPalette.ActivityBar,
-                Font = new Font(Views.CardTheme.UiFamily, 9F, FontStyle.Bold),
+                Font = new Font(CardTheme.UiFamily, 9F, FontStyle.Bold),
                 Margin = new Padding(0, 0, 14, 0),
                 Anchor = AnchorStyles.Left,
             });
@@ -253,7 +248,7 @@ namespace Demo
                 Radius = 4,
                 TextColor = WorkbenchPalette.TextTertiary,
                 BackColor = WorkbenchPalette.Input,
-                Font = Views.CardTheme.Font(8.5f),
+                Font = CardTheme.Font(8.5f),
                 Anchor = AnchorStyles.None,
                 Margin = Padding.Empty,
             };
@@ -267,7 +262,7 @@ namespace Demo
                 AutoSize = true,
                 ForeColor = WorkbenchPalette.TextTertiary,
                 BackColor = WorkbenchPalette.ActivityBar,
-                Font = Views.CardTheme.Font(8f),
+                Font = CardTheme.Font(8f),
                 Anchor = AnchorStyles.Right,
                 Margin = Padding.Empty,
             };
@@ -286,7 +281,7 @@ namespace Demo
                 FrameWidth = 0F,
                 TextColor = WorkbenchPalette.TextSecondary,
                 BackColor = WorkbenchPalette.ActivityBar,
-                Font = Views.CardTheme.Font(8.5f),
+                Font = CardTheme.Font(8.5f),
                 Margin = new Padding(0, 0, 2, 0),
                 Anchor = AnchorStyles.Left,
             };
@@ -377,9 +372,6 @@ namespace Demo
         {
             splitContainer.Panel2.SuspendLayout();
 
-            // The minimap is adopted by the canvas's parent; detach it before the parent is cleared and adopt
-            // it again once the canvas sits in its new host.
-            workflowSurfaceControl.MinimapOverlay = null;
             splitContainer.Panel2.Controls.Clear();
             splitContainer.Panel2.BackColor = WorkbenchPalette.Window;
 
@@ -420,7 +412,7 @@ namespace Demo
             };
 
             workflowSurfaceControl.Dock = DockStyle.Fill;
-            workflowSurfaceControl.Margin = Padding.Empty;
+            workflowSurfaceControl.Margin = VeloxDev.WinForms.Xaml.Controls.Thickness.Empty;
             _mainContent.Controls.Add(workflowSurfaceControl);
 
             _outputPanel = BuildOutputPanel();
@@ -443,7 +435,6 @@ namespace Demo
             splitContainer.Panel2.Controls.Add(_rightSplit);
             splitContainer.Panel2.ResumeLayout(true);
 
-            workflowSurfaceControl.MinimapOverlay = minimapOverlay;
             SelectMainTab("canvas");
         }
 
@@ -483,7 +474,7 @@ namespace Demo
                 TextAlign = ContentAlignment.MiddleRight,
                 ForeColor = WorkbenchPalette.TextTertiary,
                 BackColor = Color.Transparent,
-                Font = Views.CardTheme.Font(8f),
+                Font = CardTheme.Font(8f),
                 Margin = Padding.Empty,
             };
 
@@ -593,7 +584,7 @@ namespace Demo
                 Text = "运行一次，或让 Agent 编译 / 运行工作流。节点开始、完成、重试、重定向和运行收尾都会按发生顺序落在这里。",
                 ForeColor = WorkbenchPalette.TextTertiary,
                 BackColor = Color.Transparent,
-                Font = Views.CardTheme.Font(8f),
+                Font = CardTheme.Font(8f),
                 Margin = new Padding(0, 0, 0, 6),
             };
 
@@ -620,7 +611,7 @@ namespace Demo
             executionLogListBox.IntegralHeight = false;
             executionLogListBox.HorizontalScrollbar = true;
             executionLogListBox.Margin = Padding.Empty;
-            executionLogListBox.Font = new Font(Views.CardTheme.MonoFamily, 9.5F);
+            executionLogListBox.Font = new Font(CardTheme.MonoFamily, 9.5F);
             body.Controls.Add(executionLogListBox, 0, 2);
 
             root.Controls.Add(headerHost, 0, 0);
@@ -635,7 +626,7 @@ namespace Demo
             AutoSize = true,
             ForeColor = color,
             BackColor = Color.Transparent,
-            Font = Views.CardTheme.Font(size, style),
+            Font = CardTheme.Font(size, style),
             Margin = new Padding(0, 0, 8, 0),
         };
 
@@ -777,11 +768,11 @@ namespace Demo
             AddStackRow(session, CreateSectionLabel("会话", WorkbenchPalette.Panel));
 
             StyleCaptionLabel(permissionModeLabel);
-            permissionModeLabel.Font = Views.CardTheme.Font(8.5f);
+            permissionModeLabel.Font = CardTheme.Font(8.5f);
             permissionModePicker.BackColor = WorkbenchPalette.Input;
             permissionModePicker.ForeColor = WorkbenchPalette.TextPrimary;
             permissionModePicker.FlatStyle = FlatStyle.Flat;
-            permissionModePicker.Font = Views.CardTheme.Font(8.5f);
+            permissionModePicker.Font = CardTheme.Font(8.5f);
             AddStackRow(session, CreatePairRow(permissionModeLabel, permissionModePicker, stretchValue: true, back: WorkbenchPalette.Panel));
 
             var chatHeader = new Label
@@ -791,7 +782,7 @@ namespace Demo
                 Text = "Agent 对话",
                 ForeColor = WorkbenchPalette.AccentText,
                 BackColor = Color.Transparent,
-                Font = Views.CardTheme.Font(9f, FontStyle.Bold),
+                Font = CardTheme.Font(9f, FontStyle.Bold),
                 Margin = new Padding(12, 4, 12, 6),
             };
 
@@ -802,7 +793,7 @@ namespace Demo
             agentLogListBox.IntegralHeight = false;
             agentLogListBox.HorizontalScrollbar = true;
             agentLogListBox.Margin = new Padding(12, 0, 12, 0);
-            agentLogListBox.Font = new Font(Views.CardTheme.MonoFamily, 9F);
+            agentLogListBox.Font = new Font(CardTheme.MonoFamily, 9F);
 
             agentInputPanel.BackColor = WorkbenchPalette.Panel;
             agentInputPanel.Dock = DockStyle.Fill;
@@ -810,7 +801,7 @@ namespace Demo
             agentInputTextBox.BackColor = WorkbenchPalette.Input;
             agentInputTextBox.ForeColor = WorkbenchPalette.TextPrimary;
             agentInputTextBox.BorderStyle = BorderStyle.FixedSingle;
-            agentInputTextBox.Font = Views.CardTheme.Font(9f);
+            agentInputTextBox.Font = CardTheme.Font(9f);
 
             StyleSessionButton(agentSendButton);
             agentSendButton.BackColor = WorkbenchPalette.Accent;
@@ -819,7 +810,7 @@ namespace Demo
             agentSendButton.FlatAppearance.MouseOverBackColor = WorkbenchPalette.AccentText;
             agentSendButton.AutoSize = false;
             agentSendButton.Width = 70;
-            agentSendButton.Font = Views.CardTheme.Font(9f, FontStyle.Bold);
+            agentSendButton.Font = CardTheme.Font(9f, FontStyle.Bold);
 
             _subAgentPanel = new SubAgentPanel
             {
@@ -890,7 +881,7 @@ namespace Demo
                 TextAlign = ContentAlignment.MiddleLeft,
                 ForeColor = SidebarText,
                 BackColor = SidebarBack,
-                Font = new Font(Views.CardTheme.UiFamily, 8.5F, FontStyle.Bold),
+                Font = new Font(CardTheme.UiFamily, 8.5F, FontStyle.Bold),
                 Padding = new Padding(12, 0, 12, 0),
                 Margin = Padding.Empty,
             };
@@ -959,10 +950,6 @@ namespace Demo
 
             splitContainer.Panel1.Controls.Add(rail);
             splitContainer.Panel1.ResumeLayout(true);
-
-            // Both old hosts are empty by now: every named child was re-parented above.
-            toolbarPanel.Dispose();
-            logTabControl.Dispose();
 
             SelectActivity("explorer");
             SelectMainTab("canvas");
@@ -1113,7 +1100,7 @@ namespace Demo
                 Text = "小地图",
                 ForeColor = SidebarText,
                 BackColor = Color.Transparent,
-                Font = Views.CardTheme.Font(8.5f),
+                Font = CardTheme.Font(8.5f),
                 Anchor = AnchorStyles.Left,
                 Margin = new Padding(0, 0, 8, 0),
             };
@@ -1121,7 +1108,7 @@ namespace Demo
             var toggle = new GhostButton
             {
                 Text = "开",
-                TextColor = Views.CardTheme.ActionCompile,
+                TextColor = CardTheme.ActionCompile,
                 AutoSize = false,
                 Size = new Size(44, 22),
                 Anchor = AnchorStyles.Left,
@@ -1129,12 +1116,12 @@ namespace Demo
             };
             toggle.Click += (_, _) =>
             {
-                var visible = !minimapOverlay.IsMinimapVisible;
-                minimapOverlay.IsMinimapVisible = visible;
-                minimapOverlay.Visible = visible;
-                minimapOverlay.Invalidate();
+                var visible = !workflowSurfaceControl.MinimapOverlay.IsMinimapVisible;
+                workflowSurfaceControl.MinimapOverlay.IsMinimapVisible = visible;
+                workflowSurfaceControl.MinimapOverlay.Visible = visible;
+                workflowSurfaceControl.MinimapOverlay.Invalidate();
                 toggle.Text = visible ? "开" : "关";
-                toggle.TextColor = visible ? Views.CardTheme.ActionCompile : Views.CardTheme.DisabledText;
+                toggle.TextColor = visible ? CardTheme.ActionCompile : CardTheme.DisabledText;
             };
 
             var row = new TableLayoutPanel
@@ -1241,7 +1228,7 @@ namespace Demo
             Dock = DockStyle.Top,
             ForeColor = WorkbenchPalette.TextSecondary,
             BackColor = back ?? SidebarBack,
-            Font = new Font(Views.CardTheme.UiFamily, 8.5F, FontStyle.Bold),
+            Font = new Font(CardTheme.UiFamily, 8.5F, FontStyle.Bold),
             Margin = new Padding(12, 14, 12, 6),
         };
 
@@ -1307,7 +1294,7 @@ namespace Demo
             button.Padding = new Padding(8, 3, 8, 3);
             button.Margin = new Padding(0, 0, 6, 6);
             button.Cursor = Cursors.Hand;
-            button.Font = Views.CardTheme.Font(8.5f);
+            button.Font = CardTheme.Font(8.5f);
         }
 
         private static void StyleSessionButton(Button button)
@@ -1328,11 +1315,6 @@ namespace Demo
             label.ForeColor = SidebarText;
             label.BackColor = Color.Transparent;
         }
-
-        private ControllerViewModel Controller => _demo!.Controller;
-
-        private async void StopWorkflow(object? sender, EventArgs e)
-            => await ExecuteAsync(() => Controller.CloseWorkflowCommand.ExecuteAsync(null), "Failed to stop workflow");
 
         private async void ReloadWorkflow(object? sender, EventArgs e)
             => await ExecuteAsync(ReloadWorkflowInternalAsync, "Failed to reset demo");
@@ -1386,9 +1368,6 @@ namespace Demo
             }
         }
 
-        private async void LoadNetworkDemo(object? sender, EventArgs e)
-            => await ExecuteAsync(ReloadWorkflowInternalAsync, "Failed to load demo");
-
         private async void OnFormClosing(object? sender, FormClosingEventArgs e)
         {
             if (_demo is not null)
@@ -1438,11 +1417,6 @@ namespace Demo
             SetupElementTab();
 
             _demo.Tree.GetHelper().VisibleItems.CollectionChanged += OnVisibleItemsChanged;
-
-            _controllerBindingSource.DataSource = _demo.Controller;
-
-            seedTextBox.DataBindings.Clear();
-            seedTextBox.DataBindings.Add(nameof(TextBox.Text), _controllerBindingSource, nameof(ControllerViewModel.SeedPayload), false, DataSourceUpdateMode.OnPropertyChanged);
 
             workflowSurfaceControl.Session = _demo;
 
@@ -1561,7 +1535,7 @@ namespace Demo
             {
                 Text = $"MCP: 存活 {status.ConnectedCount} · 错误 {status.ErrorCount} · 安装/连接 {status.WorkingCount}",
                 AutoSize = true,
-                ForeColor = Views.CardTheme.FromHex("#6BFFB8"),
+                ForeColor = CardTheme.FromHex("#6BFFB8"),
                 BackColor = Color.Transparent,
                 Font = new Font(Font, FontStyle.Bold),
             });
@@ -1794,17 +1768,6 @@ namespace Demo
         {
             UpdateZoom();
             SyncSubAgents();
-        }
-
-        // 门与检查点都在会话上、不在树上，所以这两件事只有拿得到会话时才可按；换过树（载入文件）就什么都别做
-        private void PauseWorkflow(object? sender, EventArgs e) => _demo?.Tree.Runs.Selected?.Pause();
-
-        private void ResumeWorkflow(object? sender, EventArgs e) => _demo?.Tree.Runs.Selected?.Resume();
-
-        private async void ContinueFromCheckpoint(object? sender, EventArgs e)
-        {
-            if (_demo is null) return;
-            await _demo.Controller.ResumeCommand.ExecuteAsync(null);
         }
 
         private async Task ExecuteAsync(Func<Task> action, string title)

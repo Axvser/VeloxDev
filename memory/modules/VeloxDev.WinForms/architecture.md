@@ -1,6 +1,7 @@
 # VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/AttachedBehaviors/` 最大的几个是 `WorkflowTreeView.cs`、`WorkflowSurfaceBehavior.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowNodeDragBehavior.cs`、`WorkflowLinkAttachment.cs`、`WorkflowNodeAttachment.cs`；`TransitionSystem/` 最大的是 `Transition.cs`、`TransitionInterpreter.cs`、`UIThreadInspector.cs`，其下另有一个采样器；`DynamicTheme/ThemeValueConverters.cs`；顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。
+> 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/AttachedBehaviors/` 最大的几个是 `WorkflowSurfaceBehavior.cs`、`WorkflowNodeRowsBehavior.cs`、`WorkflowRulerOverlayForm.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowNodeDragBehavior.cs`、`WorkflowLinkAttachment.cs`、`WorkflowNodeAttachment.cs`；`Xaml/` 是 XAML 运行时；`TransitionSystem/` 最大的是 `Transition.cs`、`TransitionInterpreter.cs`、`UIThreadInspector.cs`，其下另有一个采样器；`DynamicTheme/ThemeValueConverters.cs`；顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。**`WorkflowTreeView` 与 `WorkflowGridDecorator` 已删除**：表面由 XAML 根 + `WorkflowSurfaceBehavior` 接管，网格装饰器归模板。
+> **当前是 XAML-first 架构**：适配器包含 XAML 运行时；生成器独立在 `Src/Generators/VeloxDev.WinForms.Generator/`；Surface、节点/插槽/连线模板与两个 Demo 的视觉壳由 XAML 定义，低层 attachment/behavior 仍留在 code-behind。包版本 11.2.0。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这处）。
 >
 > 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
@@ -28,51 +29,47 @@
 
 ---
 
-## 二、这套适配器现在「给」什么：整套表面（2026-10-03 重构）
+## 二、这套适配器现在「给」什么：整套表面
 
-这家**不再是「薄适配器」**。2026-10-03 起它按 [adapter-base-class-specifications.md](../specifications/adapter-base-class-specifications.md) 的思路，把**平台机制整体搬进适配器基类**，模板/宿主只派生或赋参数。旧的「网格装饰器/小地图/连线视图的实现一个都没有」已是历史 —— 现在三种实现都在包里。
+表面引擎是 `WorkflowSurfaceBehavior`，**没有树基类**。模板/Demo 的 tree 是普通 `v:UserControl`，在根上挂 `behaviors:WorkflowSurfaceBehavior.*` 附着属性；行为按 `PART_*` 名称解析部件，接管 pan/zoom、输入路由、ViewPool、ruler/minimap、布局调度与 teardown。网格装饰器与小地图是**模板角色**（适配器只留 `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` 契约），`WorkflowGridDecorator` 类已删除。
 
-**基类层（新，宿主派生）：**
-
-| 类型 | 基类 | 宿主做什么 | 关键成员 |
+| 类型 | 形态 | 宿主/模板做什么 | 关键成员 |
 |---|---|---|---|
-| `WorkflowTreeView` | `UserControl`（`abstract`） | **派生**，实现 `CreateNodeView` / `CreateLinkView`，或改赋 `TemplateSelector` | 自带 `PART_ScrollViewer`/`PART_Canvas`/`PART_GridDecorator`（画布自己就是装饰器）、chrome 配色、签名平移引擎、自绘网格与浮动标尺层（owned layered popup，`RulerOverlayForm`）、视图池接线、布局调度；`RulerReserve = SurfaceCanvas.DefaultRulerThickness`；`Input`（`WorkflowInput`）；虚拟钩子 `OnTreeAttached`/`OnSurfaceRefreshed`/`OnConnecting`/`OnConnected`/`OnBuildLinkMenu` |
-| `WorkflowNodeAttachment` | 附到用户的 `Control` 上（2026-10-04 起；**不再是基类**） | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画整张卡 | `Node`/`Title`/`Collapse`/`SurfacePanOffset`/`SurfaceContentOffset`；`ApplySurfacePosition`（实现 `IWorkflowSurfaceNodeView`）；`ResolveInputSlot`/`ResolveSlotLabel`；事件 `Rebound`/`TitleChanged`/`CollapseChanged`/`AnchorChanged`/`Moving`…`Deleted` |
-| `WorkflowSlotAttachment` | 附到用户的 `Control` 上（2026-10-04 起；**不再是基类**） | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画 | `Slot`/`SlotPath`/`PathViewBox`/`SlotBackground`/`StandbyColor`/`BorderColor`/`IconPath`/`GlyphColor`；事件 `ChannelChanging`/`ChannelChanged`；图形解析器另立 `SvgPathParser.cs` |
-| `WorkflowLinkAttachment` | 附到用户的 `Control` 上（2026-10-04 起；**不再是基类**） | 用户在视图构造里 `WorkflowLinkAttachment.Attach(this)`，自己在 `OnPaint` 里画 | `LineColor`/`Thickness`/`PullMinimum`/`SurfaceBackground`/`Curve`/`Link`；`Paint(Graphics)`/`Bind(link)`/`Attach`/`For`；事件 `PointerEntered`/`PointerLeft`/`PointerPressed`/`PointerReleased` |
-| `WorkflowGridDecorator` | `Panel`，实现 `IWorkflowGridDecorator` | **派生**，设调色板/间距 | `DefaultRulerThickness = 36`、`GridSpacing`/`MajorLineEvery`、`RulerThickness`、`RulerBand => RulerThickness` |
-| `WorkflowTemplateSelector` | `IWorkflowTemplateSelector` | 设四个工厂 | `NodeViewFactory`/`SlotViewFactory`/`LinkViewFactory`/`TreeViewFactory`、`CreateView` |
+| `WorkflowSurfaceBehavior` | 附着行为（静态 `RegisterAttached`） | tree XAML 根上设 `IsEnabled` / `ZoomEnabled` / `TemplateSelector` 与五个 `*Name` | `EnsureParts` / `EnsurePool` / `ApplyPan` / `WorkflowTree` / `LinkMenuBuilder` |
+| `WorkflowNodeAttachment` | 附到用户的 `Control` 上 | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画整张卡 | `Node`/`Title`/`Collapse`/`SurfacePanOffset`/`SurfaceContentOffset`；`ApplySurfacePosition`；事件 `Rebound`/`TitleChanged`/`CollapseChanged`/`AnchorChanged`/`Moving`…`Deleted` |
+| `WorkflowSlotAttachment` | 附到用户的 `Control` 上 | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画 | `Slot`/`SlotPath`/`PathViewBox`/`SlotBackground`/`StandbyColor`/`BorderColor`/`IconPath`/`GlyphColor`；事件 `ChannelChanging`/`ChannelChanged`；`SvgPathParser` |
+| `WorkflowLinkAttachment` | 附到用户的 `Control` 上 | 视图构造里 `WorkflowLinkAttachment.Attach(this)`，自己在 `OnPaint` 里画 | `LineColor`/`Thickness`/`PullMinimum`/`SurfaceBackground`/`Curve`/`Link`；`Paint(Graphics)`/`Bind(link)`/`Attach`/`For`；事件 `PointerEntered`/`PointerLeft`/`PointerPressed`/`PointerReleased` |
+| `WorkflowTemplateSelector` | `IWorkflowTemplateSelector` 基类 | 派生并在构造里设工厂；tree 的资源按 `{StaticResource}` 引用 | `NodeViewFactory`/`SlotViewFactory`/`LinkViewFactory`/`TreeViewFactory`、`CreateView` |
+| `WorkflowNodeRowsBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeViewBehavior` | 节点侧的三个附着行为 | 节点 XAML 声明 `PART_Card` / `PART_Header` / `PART_Title` / `PART_OutputSlots` | 行重建、标题缩放、拖动/槽布局接线 |
+| `WorkflowMinimapOverlay` | `Panel, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource` | 模板派生，只给调色板 | 定位、拖拽映射、`ScrollOffsetX/Y` |
 
 **支撑件：**
 
 - `IWorkflowSurfaceNodeView`：`ApplySurfacePosition(Point panOffset, Offset contentOffset)` —— 表面不能按类型认用户的卡片，于是把投影交给卡片自己放。
-- `IWorkflowMinimapScrollSource`：`ViewportScrollRequested` 事件；**故意不进 Core 的 `IWorkflowMinimapOverlay`**（那个要框架中立），由 `WorkflowTreeView.MinimapOverlay` setter 订阅。
-- `ModelChangeRelay`（`internal`）：把「订阅、退订、`InvokeRequired` 编组」这一套收敛成一份，三个视图控件共用（这就是「code-only 平台把模型事件暴露成可重写钩子」那条提交的落地方式 —— 与四家 XAML 平台的 `WorkflowEvents` sink **不同形**）。
-- `WorkflowSurfaceColors`（解析 `#RRGGBB`/`#AARRGGBB`/颜色名）、`WorkflowSurfaceGraphics`（圆角矩形）、`WorkflowSurfaceGrid`（大/次网格线判定 + 标尺标签格式）—— 三份被多个表面控件共用的静态工具。
-
-**附着行为层（旧，仍在）：** `WorkflowSurfaceBehavior`、`WorkflowSlotLayoutBehavior`、`WorkflowNodeDragBehavior`、`WorkflowSlotConnectionBehavior`、`WorkflowCanvasTransformBehavior` 仍是静态 `Get/Set` 形态；`WorkflowMinimapOverlay` 现在是一个**真正的可继承实现**（`Panel, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource`），不再是「有 API 没读者」。`WorkflowTreeView` 的 ctor 自己把 `SetIsEnabled`/`SetZoomEnabled`/`SetScrollViewer`/`SetCanvas`/`SetGridDecorator` 调一遍。
-
-**这条链的因果**：没有标记语言 ⇒ 宿主只能用代码装配 ⇒ 适配器发可继承基类、模板只派生/填值；而 XAML 家惯用的 `WorkflowEvents` sink 在这里换成基类上的 `virtual` 钩子（转发由 `ModelChangeRelay` 做）。
+- `IWorkflowMinimapScrollSource`：`ViewportScrollRequested` 事件；**故意不进 Core 的 `IWorkflowMinimapOverlay`**（那个要框架中立），由表面行为订阅。
+- `ModelChangeRelay`（`internal`）：把「订阅、退订、`InvokeRequired` 编组」收敛成一份，三个视图控件共用。
+- `WorkflowRulerOverlayForm`：`IWorkflowGridDecorator.RulerBand` 驱动的分层标尺浮层；由表面行为在句柄建立后创建。
+- `WorkflowSurfaceColors`（解析 `#RRGGBB`/`#AARRGGBB`/颜色名）、`WorkflowSurfaceGraphics`（圆角矩形）、`WorkflowSurfaceGrid`（大/次网格线判定 + 标尺标签格式）。
 
 ---
 
-## 三、宿主怎么把它接起来：派生 `WorkflowTreeView` + 命令式 `Set*` + pull
+## 三、宿主怎么把它接起来：XAML 根 + 附着行为 + pull
 
-**没有属性系统、没有 `DataContext`、没有注册表。** 全模块 grep `ModuleInitializer` / `[assembly:` 零命中，唯一的静态构造是 `TransitionSystem/Interpolator.cs` 的静态构造（注册采样器）。状态一律存在 `ConditionalWeakTable<Control, State>` 里，附着属性退化成静态 `Get`/`Set`。
+**XAML 侧有 DP/附加属性；适配器内部状态仍存在 `ConditionalWeakTable<Control, State>` 里。** 没有跨模块的 `ModuleInitializer` / `[assembly:`；XAML 运行时由 `Xaml/DependencyProperty` 提供 DP，`WorkflowSurfaceBehavior` 用 `RegisterAttached` 暴露接线面。
 
-**名字仍是唯一的接线语言。** 所有 `Set*Name` 立即解析，解析器是 `FindControlByName`（`WorkflowSlotLayoutBehavior`）：**递归遍历宿主子树 + `Ordinal` 比较**，取第一个命中。⇒ 与 WPF 的 `NameScope` 不同：只管宿主子树、跨容器/非子孙一律找不到、**找不到不抛也不报**，只在那条数据推送处静默跳过。
+**名字仍是唯一的接线语言。** 表面行为按 `Control.Name` 解析 `PART_*`，解析器 `FindControlByName`（`WorkflowSlotLayoutBehavior`）：**递归遍历宿主子树 + `Ordinal` 比较**，取第一个命中。⇒ 与 WPF 的 `NameScope` 不同：只管宿主子树、跨容器/非子孙一律找不到、**找不到不抛也不报**，只在那条数据推送处静默跳过。`x:Name` 只生成字段，不会写原生 `Name`；模板里的 `Name="PART_*"` 才是契约。
 
-**三个开关各做什么（这家最容易误判的一处）：**
+**三个开关各做什么：**
 
 | 调什么 | 真的做了什么 |
 |---|---|
-| `Set*Name`（表面改交对象后是 `SetScrollViewer`/`SetCanvas`/`SetGridDecorator`） | 立即解析并接线；其中 ScrollViewer/Canvas/GridDecorator 三个还会顺带对交过来的控件加 `WS_CLIPCHILDREN`（`EnsureClipChildrenFor`） |
-| `SetIsEnabled(true)` | 置位 + 给宿主加 `WS_CLIPCHILDREN` + 顶层窗体加 `WS_EX_COMPOSITED`（`NativeWindowStyleHelper.EnsureClipChildren/EnsureComposited`）。**不订阅任何事件**，也没有早退（重复调用只重刷样式位） |
-| `SetZoomEnabled(true)` | 挂 `element.MouseWheel` **加上** `Application.AddMessageFilter(state)` —— `SurfaceState : IMessageFilter`；关掉时成对摘除（`RemoveMessageFilter`）。过滤器条件是 `WM_MOUSEWHEEL` + `Control.ModifierKeys != Keys.Control` 精确比较 + 「消息目标沿父链能找到 zoom-enabled 宿主」（`ResolveSurfaceHost`） |
+| `ScrollViewerName` / `CanvasName` / `GridDecoratorName` / `MinimapOverlayName` / `PointerPressSourceName` | 配置变化时 `EnsureParts` 立即解析并接线；ScrollViewer/Canvas/GridDecorator 还会顺带加 `WS_CLIPCHILDREN` |
+| `IsEnabled` | 启动/停止表面生命周期；加 `WS_CLIPCHILDREN` 与按子窗口数量启用的 `WS_EX_COMPOSITED`（`NativeWindowStyleHelper`） |
+| `ZoomEnabled` | 挂 `element.MouseWheel` **加上** `Application.AddMessageFilter(state)` —— `SurfaceState : IMessageFilter`；关掉时成对摘除。过滤器条件是 `WM_MOUSEWHEEL` + `ModifierKeys != Keys.Control` + 「消息目标沿父链能找到 zoom-enabled 宿主」 |
 
 - **`Refresh(Control)` 是唯一的重驱动入口**，第一行被 `IsEnabled` 门住；它把当前 scroll/content 偏移推给 GridDecorator/MinimapOverlay、调 `SetVirtualizeInset`，循环末尾 `PerformLayout()` + `Invalidate()`，而 `Update()`（同步重画）**只在 `host.Capture` 为真时**调。
-- **这家现在有自己的平移实现**（在 `WorkflowTreeView` 里，不在 `WorkflowSurfaceBehavior`）：`WorkflowSurfaceBehavior.ResolvePanOffset` 仍只**反射读**宿主的 `PanOffset` 属性或私有 `_panOffset` 字段（注释明说：平移由宿主的 tree-view 私有持有、在 `ApplyPan` 里推给画布）；`WorkflowTreeView` 把 `PART_Canvas`（`SurfaceCanvas`）的 `PanOffset` 写成签名偏移，卡片经 `IWorkflowSurfaceNodeView.ApplySurfacePosition` 自己落位。
-- **视图池由赋值触发**：`ItemsSource` 与 `TemplateSelector` **都**非空才起 `ViewSourcePipeline`（`ViewPool.UpdateSystem`），任一置 `null` 即停。池本身是 Core 的 `ViewPool`，在这家由 `ViewHosting/ViewScheduler` 经 `Control.BeginInvoke` 异步分批物化。
+- **平移在 `WorkflowSurfaceBehavior.ApplyPan` / `ApplyPanCore`**：`state.PanOffset` 持有视图世界偏移，直接推给画布、GridDecorator、Minimap 和每个池化视图；卡片经 `IWorkflowSurfaceNodeView.ApplySurfacePosition` 自己落位。
+- **视图池由赋值触发**：`EnsurePool` 把 `tree.GetHelper().VisibleItems` 与 `TemplateSelector`（或内置的 `NodeViewType`/`LinkViewType` 反射选择器）交给 `ViewPool`；池本身是 Core 的 `ViewPool`，由 `ViewHosting/ViewScheduler` 经 `Control.BeginInvoke` 异步分批物化。
 - **滚动宿主只当视口用**：`PART_ScrollViewer.AutoScroll = false`，因为平移直接改画布、且 WinForms 的 AutoScroll 位置被夹在 `>= 0`，只允许往右下平移。
 
 ---
@@ -106,9 +103,9 @@
 
    | 成员 | 写出处 | 读取处 |
    |---|---|---|
-   | `WorkflowCanvasTransformBehavior.GetTransform` | 公开 getter（值存在 `ConditionalWeakTable<Control, TransformBox>`）；写值走 `Apply` | 全仓零命中 —— 基类卡片靠 `IWorkflowSurfaceNodeView.ApplySurfacePosition` 拿投影，不读它 |
+   | `WorkflowCanvasTransformBehavior.GetTransform` | 公开 getter（值存在 `ConditionalWeakTable<Control, TransformBox>`）；写值走 `Apply` | 全仓零命中 —— 卡片靠 `IWorkflowSurfaceNodeView.ApplySurfacePosition` 拿投影，不读它 |
    | `WorkflowSlotLayoutBehavior.Get/SetLayoutPropertyName`、`Get/SetActualOffsetPropertyName` 与私有 `GetActualOffset` | — | 已于 2026-10-18 删除：整条链零调用者（README 里的描述也一并过期） |
-   | `WorkflowSurfaceBehavior.GetScrollViewer`/`GetCanvas`/`GetGridDecorator`/`GetMinimapOverlay` | 对应的 `SetScrollViewer`/`SetCanvas`/`SetGridDecorator`/`SetMinimapOverlay` 写进 state | 四个 getter 全仓零读取 |
+   | `WorkflowSurfaceBehavior` 的对象式 `Set/GetScrollViewer`、`Canvas`、`GridDecorator`、`MinimapOverlay` | — | 已随 `WorkflowTreeView` 一起删除；现在只有 `*Name` 附加属性 |
 
    ⇒ 这类「加完没人用」的成员是这家的历史包袱；改之前先 grep 调用点。
 
@@ -122,7 +119,7 @@
 
 6. **`NativeWindowStyleHelper` 里 `WS_CLIPCHILDREN` 与 `WS_EX_COMPOSITED` 是同一个数值 `0x02000000`**，却被喂给 `SetWindowLong` 的两个**不同 index**（普通样式 vs 扩展样式）。⇒ 改这两个常量时把两者当成「可互换的字面量」会静默改错样式位；`ApplyStyle` 只在对应位缺失时才调 `SetWindowPos(SWP_FRAMECHANGED)`，所以症状是「有时生效」。`CompositedMaxControlCount = 100`（判据 `CountDescendants`）不是防御性代码 —— 超了就不合成，坑的机制见 `WorkflowSystem/adapters/winforms.md`。
 
-7. **`WorkflowTreeView` 的平移与 AutoScroll 是互斥的两种模型。** 表面把 `PART_ScrollViewer.AutoScroll` 关掉并在画布上维护**签名** `PanOffset`；任何「把 AutoScroll 打开」或「去 `WorkflowSurfaceBehavior` 里补平移」的改动都会让两套平移打架（表面行为只负责**反射读** pan，见 §三）。
+7. **表面的平移与 AutoScroll 是互斥的两种模型。** `WorkflowSurfaceBehavior` 把 `PART_ScrollViewer.AutoScroll` 关掉并维护 `state.PanOffset`；任何「把 AutoScroll 打开」或另起一套 pan 的改动都会让两套平移打架（见 §三）。
 
 ---
 
@@ -130,10 +127,10 @@
 
 | 想改的东西 | 先打开 |
 |---|---|
-| 工作表表面：chrome / 平移 / 网格 / 标尺 / 池接线 / 布局调度 | `WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs`（派生类只实现两个工厂） |
+| 工作表表面：chrome / 平移 / 池接线 / 布局调度 / 标尺浮层 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`（模板只在 XAML 根上挂属性） |
 | 节点卡片 | `WorkflowSystem/AttachedBehaviors/WorkflowNodeAttachment.cs`（附加）+ 用户卡片自己的 `OnPaint` |
 | 插槽 / 连线图形 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotAttachment.cs`、`WorkflowLinkAttachment.cs` |
-| 网格/标尺调色板与间距 | `WorkflowSystem/AttachedBehaviors/WorkflowGridDecorator.cs` |
+| 网格/标尺调色板与间距 | 模板条目 `workflow-grid-decorator/TemplateClass.cs`（含同文件的 `SurfaceCanvas`） |
 | 「item 类型 → 视图」的工厂 | `WorkflowSystem/AttachedBehaviors/WorkflowTemplateSelector.cs` / `IWorkflowTemplateSelector.cs` |
 | 滚轮缩放 / Ctrl 判定 / 消息过滤器 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`（`SetZoomEnabled`、`SurfaceState.OnMessage`） |
 | 名字解析、`Refresh` 推给装饰器/小地图的偏移 | 同上（`FindControlByName` 在 `WorkflowSlotLayoutBehavior.cs`；`Refresh` 在 `WorkflowSurfaceBehavior.cs`） |
@@ -145,7 +142,7 @@
 | Win32 样式、100 个控件的阈值 | `WorkflowSystem/AttachedBehaviors/NativeWindowStyleHelper.cs` |
 | 线程、优先级、pacer、调度器、采样器 | `TransitionSystem/` —— 差异与坑见 `TransitionSystem/adapters/winforms.md` |
 | 主题字符串 → 值 | `DynamicTheme/ThemeValueConverters.cs` |
-| 「宿主怎么把这些接起来」 | 派生一个 `WorkflowTreeView` 子类的模板：`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-tree-view/TemplateClass.cs`；两个 demo 在 `Examples/Workflow/WinForms*/` |
+| 「宿主怎么把这些接起来」 | `Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-tree-view/TemplateClass.xaml` + `.xaml.cs`；两个 demo 在 `Examples/Workflow/WinForms Trimmed/` 与 `Examples/Workflow/WinForms/`，视觉壳均已 XAML 化 |
 | 包结构、TFM、双轨引用 | `VeloxDev.WinForms.csproj` |
 
 ---
@@ -155,12 +152,15 @@
 - 七个角色各自要暴露什么成员、附着属性名、`PART_*` 命名约定 —— `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3。
 - 这家的平台硬限制（无透明分层、两套平移模型、同步重画、反射接缝…）与逐条坑 —— `memory/modules/WorkflowSystem/adapters/winforms.md`。
 - TransitionSystem 侧：`NonPriority`、手写 `Property` 重载、`CreateFramePacer` 条件、`"WindowsFormsSynchronizationContext"` 字符串比较、`PaddingSampler` 的截断 —— `memory/modules/TransitionSystem/adapters/winforms.md`。
-- 模板侧：各条目产出什么形状、`IWorkflowMinimapScrollSource` 的 CS0246 耦合、多份 `ParseColor` —— `memory/modules/Templates/adapters/winforms.md`。
+- 模板侧：各条目产出什么形状、七个条目的编译期依赖、`x:Name` 与 `Name` 的分工、SvgPathParser、连线雕窗 —— `memory/modules/Templates/adapters/winforms.md`。
 - 「怎么用这套模板搭一个 WinForms 工作流视图」（人面向）—— `skills/veloxdev-create-workflow/references/gui/winforms.md`。
 
 ## Demo 工作台外壳（示例侧）
 
-`Examples/Workflow/WinForms/Demo/Form1.cs` 的 `BuildWorkbenchFrame` 在 Designer 的 `splitContainer` 外面套 32px 标题条 + 24px 状态条，`BuildSidebar` 再把 `Panel1` 换成 48px 活动栏 + 侧栏；`Panel1/2.Padding=Empty`、`SplitterWidth=4`、`SplitterDistance=320` 是工作台版式。节点卡色板/度量在 `Views/CardTheme.cs`；画布网格色在 `Controls/WorkflowCanvas.cs`，HUD 在 `Views/InfoOverlay.cs`，小地图在 `Views/MinimapOverlay.cs`。WinForms 没有 `BorderThickness`/圆角属性，分隔线用 1px `Panel`/自绘。
+`Examples/Workflow/WinForms/Demo/Form1.cs` 的 `BuildWorkbenchFrame` 在 Designer 的 `splitContainer` 外面套 32px 标题条 + 24px 状态条，`BuildSidebar` 再把 `Panel1` 换成 48px 活动栏 + 侧栏；`Panel1/2.Padding=Empty`、`SplitterWidth=4`、`SplitterDistance=320` 是工作台版式。**全部工作流视图在 `Views/Workflow/`、命名空间 `Demo.Views.Workflow`**：表面是 `WorkflowCanvas.xaml` + `.xaml.cs`，节点卡 `WorkflowNodeCard.xaml` + `.xaml.cs`，网格/`SurfaceCanvas` 在 `GridDecorator.cs`，连线和端口在 `LinkView.cs` / `SlotView.cs`，HUD/小地图在 `InfoOverlay.cs` / `MinimapOverlay.cs`，色板与自绘原语在 `CardTheme.cs` / `FramePanel.cs` / `GhostButton.cs`；`Views/Workbench/` 只放外壳件。WinForms 没有 `BorderThickness`/圆角属性，分隔线用 1px `Panel`/自绘。
+
+- **Designer 只保留仍在用的控件**：`splitContainer`、五个动作按钮（reload/undo/redo/save/select）、权限模式标签与选择器、Agent 日志与输入、执行日志、`workflowSurfaceControl`。工作台在 `BuildExplorerPage` / `BuildAgentPage` / `BuildOutputPanel` / `BuildMainArea` 里重新挂载它们；旧 `toolbarPanel` / `logTabControl` 与 20 多个不可达控件已删除，相应事件处理器也一并删除。
+- **两个 demo 的视图选择器同形**：tree/canvas 的 `Resources` 声明 `<local:TemplateSelector x:Key="WorkflowTemplateSelector" />`，根上 `TemplateSelector="{StaticResource WorkflowTemplateSelector}"`；`TemplateSelector` 派生适配器的 `WorkflowTemplateSelector` 并给 node/link 工厂。键/滚轮策略（Delete、Ctrl+Z/Y、Shift+滚轮横滚）订在树的 `IInputEvents` 上，两边一致。
 
 - **四区外壳现在是完整的**（2026-11-18）：主区（`流程图`/`输出`）+ 348px 检查器（`属性`/`AI 助手`）；运行侧栏由 `Views/Workflow/RunManagerPanel.cs` 绑 `TreeViewModel.Runs`，检查器由 `Views/Workflow/WorkflowInspectorPanel.cs` 绑 `SelectedElement`/`CompiledStructure`，子代理面板是 `SubAgentPanel.cs`；`Views/Workbench/` 放共享外壳件（`WorkbenchPalette` / `StatusBarStrip` / `WorkbenchTabButton`）。
 - **标题条现在也有菜单与命令中心**：`BuildTitleStrip` 用 `GhostButton` 做“文件/编辑/视图/帮助”和居中的“搜索命令 Ctrl+Shift+P”；下拉是 `Views/Workbench/DarkPopupMenu`（无边框 `Form`，自己画 panel/hover/快捷键列），不是 `ContextMenuStrip`。**实测 2026-11-18**：`ContextMenuStrip` 即使设了自定义 `ToolStripRenderer`、`ToolStripManager.Renderer` 和 `Application.SetColorMode(SystemColorMode.Dark)`，弹层仍是浅色面板 + 浅色字；换自己的 Form 才稳定。原生窗口边框继续负责最小化/最大化/关闭，不画假按钮。

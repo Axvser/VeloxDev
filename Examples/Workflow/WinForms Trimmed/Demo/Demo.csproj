@@ -8,7 +8,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The XAML views take their base types from VeloxDev.WinForms.Xaml; the implicit WinForms
+         namespace would make Control/UserControl/Panel ambiguous in those files. Every other file
+         imports it explicitly. -->
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj" />
     <ProjectReference Include="..\..\..\..\Src\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Generators\VeloxDev.WinForms.Generator\VeloxDev.WinForms.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="**/*.xaml" />
   </ItemGroup>
 </Project>

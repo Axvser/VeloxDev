@@ -1,4 +1,5 @@
 ﻿using VeloxDev.Adapters.NativeSamplers;
+using VeloxDev.WinForms.Xaml.Controls;
 
 namespace VeloxDev.TransitionSystem
 {
@@ -7,6 +8,7 @@ namespace VeloxDev.TransitionSystem
         static Interpolator()
         {
             RegisterInterpolator(typeof(Padding), new PaddingSampler());
+            RegisterInterpolator(typeof(Thickness), new ThicknessSampler());
         }
 
         /// <inheritdoc />

@@ -1,0 +1,9 @@
+<v:UserControl
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml;assembly=VeloxDev.WinForms"
+    x:Class="Demo.Views.Workflow.SlotView">
+
+  <!-- VeloxDev customization: the port is painted by this view; the glyph path and palette live in code-behind. -->
+
+</v:UserControl>

@@ -3,7 +3,7 @@ using System.Drawing;
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// A node card that <see cref="WorkflowTreeView"/> re-places on every pan.
+/// A node card that <see cref="WorkflowSurfaceBehavior"/> re-places on every pan.
 /// </summary>
 /// <remarks>
 /// The surface cannot name the card type — node views are generated into the host's own assembly and

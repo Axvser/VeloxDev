@@ -11,6 +11,13 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
     <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj" />
+    <ProjectReference Include="..\..\..\..\Src\Generators\VeloxDev.WinForms.Generator\VeloxDev.WinForms.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="**/*.xaml" />
   </ItemGroup>
 
 </Project>

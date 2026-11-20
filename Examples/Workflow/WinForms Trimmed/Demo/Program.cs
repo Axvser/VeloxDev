@@ -1,3 +1,5 @@
+using System.Windows.Forms;
+
 namespace Demo
 {
     internal static class Program

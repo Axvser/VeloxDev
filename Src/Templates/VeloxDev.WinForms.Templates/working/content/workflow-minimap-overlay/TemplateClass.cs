@@ -1,8 +1,4 @@
-// VeloxDev customization: The minimap overlay. The adapter's WorkflowMinimapOverlay already owns the layout
-// maths, the drag mapping and the top-right anchoring; this file supplies the palette only. Assign it to the
-// tree view's MinimapOverlay property to wire it up.
-using System.Drawing;
-using System.Windows.Forms;
+// VeloxDev customization: the minimap palette.
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace TemplateNamespace;
@@ -12,6 +8,7 @@ namespace TemplateNamespace;
 /// </summary>
 public sealed class TemplateClass : WorkflowMinimapOverlay
 {
+    /// <summary>Creates the overlay and applies the generated palette.</summary>
     public TemplateClass()
     {
         MinimapBackground = ParseColor("TemplateMinimapBackground");

@@ -80,7 +80,11 @@ public sealed class WorkflowSlotAttachment
     private WorkflowSlotAttachment(Control target)
     {
         this.target = target;
-        relay = new ModelChangeRelay(target, _ => target.Invalidate());
+        relay = new ModelChangeRelay(target, _ =>
+        {
+            target.Invalidate();
+            SlotChanged?.Invoke(this, EventArgs.Empty);
+        });
         eventSink = new SlotEventSink(this);
 
         // 全名限定：本文件的命名空间嵌在 VeloxDev.WorkflowSystem 里，裸写 `Size` 会解析成模型的那个 Size。
@@ -103,6 +107,9 @@ public sealed class WorkflowSlotAttachment
         };
         target.Disposed += (_, _) => Detach();
     }
+
+    /// <summary>Raised after this control was bound to another slot, or the bound slot changed.</summary>
+    public event EventHandler? SlotChanged;
 
     /// <summary>Raised before the bound slot's channel changes.</summary>
     /// <remarks>Set <see cref="WorkflowEventHandle.PreventDefault"/> on the argument's handle to keep the current channel.</remarks>
@@ -131,6 +138,7 @@ public sealed class WorkflowSlotAttachment
             modelEvents = value is null ? null : WorkflowEventRelay.Attach(value, eventSink);
 
             target.Invalidate();
+            SlotChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 

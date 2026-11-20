@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8" ?>
 <!-- Realtime canvas-info HUD. The root layer is InputTransparent (CascadeInputTransparent=False) so
      drags fall through to the surface; the Border + Label are also input-transparent, leaving only the
      复制 button interactive. The TreeView host refreshes it on scroll/viewport changes and it subscribes

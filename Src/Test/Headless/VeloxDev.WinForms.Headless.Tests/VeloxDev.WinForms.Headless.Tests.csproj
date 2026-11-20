@@ -5,7 +5,7 @@
     WinForms 没有可用的无头平台包；它的「无头」= 不创建可见窗口，但仍需要桌面 SDK。
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>

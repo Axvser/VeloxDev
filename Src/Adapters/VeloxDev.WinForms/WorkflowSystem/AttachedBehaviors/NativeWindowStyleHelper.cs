@@ -22,6 +22,12 @@ internal static class NativeWindowStyleHelper
     private const int GWL_EXSTYLE = -20;
     private const int WS_CLIPCHILDREN = 0x02000000;
     private const int WS_EX_COMPOSITED = 0x02000000;
+    private const int WM_SETREDRAW = 0x000B;
+    private const uint RDW_INVALIDATE = 0x0001;
+    private const uint RDW_ERASE = 0x0004;
+    private const uint RDW_NOERASE = 0x0020;
+    private const uint RDW_ALLCHILDREN = 0x0080;
+    private const uint RDW_UPDATENOW = 0x0100;
 
     // SetWindowPos 标志：强制系统在设置后重读样式（SWP_FRAMECHANGED），运行时经 SetWindowLong/SetWindowLongPtr 应用的样式才会立即生效。
     private const uint SWP_NOSIZE = 0x0001;
@@ -39,6 +45,7 @@ internal static class NativeWindowStyleHelper
     private static readonly ConditionalWeakTable<Control, object> ClipChildrenTracked = new();
     private static readonly ConditionalWeakTable<Control, object> CompositedTracked = new();
     private static readonly ConditionalWeakTable<Control, object> CompositedForms = new();
+    private static readonly ConditionalWeakTable<Control, object> CompositedSuppressed = new();
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
     private static extern IntPtr GetWindowLong32(IntPtr hWnd, int nIndex);
@@ -54,6 +61,61 @@ internal static class NativeWindowStyleHelper
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcUpdate, IntPtr hrgnUpdate, uint flags);
+
+    private sealed class RedrawState
+    {
+        public int Depth;
+    }
+
+    private static readonly ConditionalWeakTable<Control, RedrawState> RedrawStates = new();
+
+    /// <summary>
+    /// Pauses painting of <paramref name="control"/> until the matching <see cref="EndRedraw"/>.
+    /// Nested calls are reference-counted; the control is redrawn once when the outermost scope ends.
+    /// </summary>
+    public static void BeginRedraw(Control control)
+    {
+        if (control is null || !control.IsHandleCreated || control.IsDisposed)
+        {
+            return;
+        }
+
+        var state = RedrawStates.GetOrCreateValue(control);
+        if (state.Depth++ == 0)
+        {
+            SendMessage(control.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+
+    /// <summary>Ends a redraw scope and repaints the control and its children once when the outermost scope ends.</summary>
+    public static void EndRedraw(Control control)
+    {
+        if (control is null || !control.IsHandleCreated || control.IsDisposed)
+        {
+            return;
+        }
+
+        if (!RedrawStates.TryGetValue(control, out var state) || state.Depth == 0)
+        {
+            return;
+        }
+
+        if (--state.Depth == 0)
+        {
+            SendMessage(control.Handle, WM_SETREDRAW, new IntPtr(1), IntPtr.Zero);
+            RedrawWindow(
+                control.Handle,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                RDW_INVALIDATE | RDW_NOERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        }
+    }
 
     /// <summary>
     /// Ensures the control's window carries <c>WS_CLIPCHILDREN</c> so parent repaints do not cover its child controls.
@@ -103,6 +165,34 @@ internal static class NativeWindowStyleHelper
         }
     }
 
+    /// <summary>
+    /// Stops <c>WS_EX_COMPOSITED</c> from being applied for <paramref name="control"/>'s top-level form, and removes it
+    /// if this helper already applied it.
+    /// </summary>
+    /// <remarks>
+    /// A workflow surface materializes pooled node and link views as real child windows. With composited, every one
+    /// of those child repaints (the slot ripple/glow clocks run continuously) is turned into a repaint of the whole
+    /// form tree — the whole surface ends up re-rendering around 60 times a second even when only a few ports moved.
+    /// The surface's own <c>WS_CLIPCHILDREN</c> plus the gesture-time synchronous redraw are the supported way to
+    /// avoid flicker there; composited stays for static hosts that never grow a view pool.
+    /// </remarks>
+    public static void DisableComposited(Control control)
+    {
+        if (control is null)
+        {
+            throw new ArgumentNullException(nameof(control));
+        }
+
+        // 记住这份抑制：宿主句柄可能还没建，EnsureComposited 的 HandleCreated 回调稍后才会找顶层窗体。
+        CompositedSuppressed.GetValue(control, static _ => new object());
+
+        var top = control.FindForm() ?? control.TopLevelControl as Form;
+        if (top is not null && top.IsHandleCreated)
+        {
+            RemoveComposited(top.Handle);
+        }
+    }
+
     private static void OnClipChildrenHandleCreated(object? sender, EventArgs e)
     {
         if (sender is Control control && control.IsHandleCreated)
@@ -121,6 +211,12 @@ internal static class NativeWindowStyleHelper
 
     private static void ApplyCompositedToTopLevel(Control control)
     {
+        // 宿主已经声明自己会长出视图池（有画布）：合成层在运行时由显式关闭接管，句柄重建后也不再加回来。
+        if (CompositedSuppressed.TryGetValue(control, out _))
+        {
+            return;
+        }
+
         // FindForm 返回包含该控件的顶层 Form；控件本身已是顶层时返回它自己。
         var top = control.FindForm() ?? control.TopLevelControl;
         if (top is null)
@@ -183,6 +279,11 @@ internal static class NativeWindowStyleHelper
         ApplyStyle(hwnd, GWL_EXSTYLE, WS_EX_COMPOSITED);
     }
 
+    private static void RemoveComposited(IntPtr hwnd)
+    {
+        RemoveStyle(hwnd, GWL_EXSTYLE, WS_EX_COMPOSITED);
+    }
+
     private static void ApplyClipChildren(IntPtr hwnd)
     {
         ApplyStyle(hwnd, GWL_STYLE, WS_CLIPCHILDREN);
@@ -205,6 +306,25 @@ internal static class NativeWindowStyleHelper
             SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         }
+    }
+
+    private static void RemoveStyle(IntPtr hwnd, int index, int style)
+    {
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var current = GetLong(hwnd, index);
+        var value = current.ToInt64();
+        if ((value & (uint)style) == 0)
+        {
+            return;
+        }
+
+        SetLong(hwnd, index, new IntPtr(value & ~(long)(uint)style));
+        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
     }
 
     private static IntPtr GetLong(IntPtr hwnd, int index)

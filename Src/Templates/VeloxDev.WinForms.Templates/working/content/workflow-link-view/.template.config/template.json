@@ -5,11 +5,12 @@
     "VeloxDev",
     "Workflow",
     "WinForms",
+    "XAML",
     "Link"
   ],
   "identity": "VeloxDev.WinForms.WorkflowLinkView",
   "name": "VeloxDev WinForms Workflow Link View",
-  "description": "A minimal WinForms view for a VeloxDev workflow link component.",
+  "description": "A minimal XAML-first WinForms view for a VeloxDev workflow link component.",
   "shortName": "winforms-v-link",
   "sourceName": "TemplateClass",
   "defaultName": "LinkView",
@@ -50,7 +51,10 @@
   },
   "primaryOutputs": [
     {
-      "path": "TemplateClass.cs"
+      "path": "TemplateClass.xaml"
+    },
+    {
+      "path": "TemplateClass.xaml.cs"
     }
   ]
 }

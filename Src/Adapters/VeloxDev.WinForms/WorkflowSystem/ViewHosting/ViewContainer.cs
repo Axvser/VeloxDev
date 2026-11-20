@@ -62,6 +62,10 @@ public sealed class ViewContainer : IViewContainer<Control, Control, IWorkflowVi
         }
 
         ApplyBinding(view, item);
+
+        // Deactivate 清掉了 Tag，而附件在「同一视图再次绑回同一 item」时走 ReferenceEquals 早退，
+        // 不会把 Tag 写回。这里无条件恢复：ResolveNode / ResolveSlot 与表面的可见性重投影都靠它。
+        view.Tag = item;
         view.Visible = true;
     }
 

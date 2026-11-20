@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <!-- VeloxDev customization: Customize the node content; keep PART_* names synchronized with WorkflowSlotLayoutBehavior. -->
 <UserControl x:Class="TemplateNamespace.TemplateClass"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

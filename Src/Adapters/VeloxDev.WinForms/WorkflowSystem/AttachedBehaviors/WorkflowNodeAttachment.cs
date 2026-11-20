@@ -221,9 +221,16 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
             (int)Math.Round(node.Size.Width),
             (int)Math.Round(node.Size.Height));
 
-        // 卡片内部那些固定度量按折叠因子重排，否则低缩放时会裁掉。
-        Collapse = ComputeCollapseFactor();
-        CollapseChanged?.Invoke(this, new CollapseChangedEventArgs(Collapse));
+        // 卡片内部那些固定度量按折叠因子重排，否则低缩放时会裁掉。只在因子真的变了时才通知：
+        // 拖动一次会走很多次 ApplyPosition，而因子在缩放之间是常量 —— 每次都让卡片重排整棵文字树
+        // 是每帧几十毫秒的来源。
+        var collapse = ComputeCollapseFactor();
+        if (collapse != Collapse)
+        {
+            Collapse = collapse;
+            CollapseChanged?.Invoke(this, new CollapseChangedEventArgs(Collapse));
+        }
+
         Repositioned?.Invoke(this, EventArgs.Empty);
     }
 

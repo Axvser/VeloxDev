@@ -72,7 +72,7 @@
 **网格装饰器不在这里**：与 WPF / Avalonia / WinUI / MAUI / Razor 五家一致，它归**模板**
 （`workflow-grid-decorator`，`sealed class : Grid, IWorkflowGridDecorator`），适配器只留接口。
 
-**删掉的一整套**（想让它们回来之前先读 §〇 与 `adapter-base-class-specifications.md` §一）：
+**删掉的一整套**（想让它们回来之前先读 §〇）：
 `WorkflowTreeView`、`WorkflowNodeAttachment`、`WorkflowSlotAttachment`、`WorkflowLinkAttachment`、
 `WorkflowPortGeometry`、`WorkflowPortLayout`、`WorkflowGridDecorator`、`IWorkflowTemplateSelector`、
 `WorkflowTemplateSelector`。

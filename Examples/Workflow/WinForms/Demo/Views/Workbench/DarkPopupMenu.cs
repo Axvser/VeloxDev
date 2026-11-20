@@ -1,6 +1,8 @@
 using System.Drawing;
 using System.Windows.Forms;
 
+using Demo.Views.Workflow;
+
 namespace Demo.Views.Workbench;
 
 /// <summary>
@@ -68,7 +70,7 @@ internal sealed class DarkPopupMenu : Form
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = WorkbenchPalette.TextPrimary,
             BackColor = WorkbenchPalette.Panel,
-            Font = Views.CardTheme.Font(9F),
+            Font = CardTheme.Font(9F),
             Padding = new Padding(8, 0, 4, 0),
             Cursor = Cursors.Hand,
         };
@@ -81,7 +83,7 @@ internal sealed class DarkPopupMenu : Form
             TextAlign = ContentAlignment.MiddleRight,
             ForeColor = WorkbenchPalette.TextTertiary,
             BackColor = WorkbenchPalette.Panel,
-            Font = Views.CardTheme.Font(8.5F),
+            Font = CardTheme.Font(8.5F),
             Padding = new Padding(0, 0, 8, 0),
             Cursor = Cursors.Hand,
         };

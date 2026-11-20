@@ -14,7 +14,9 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// Because WinForms has no attached-property system, the values are stored per control in a
 /// <see cref="ConditionalWeakTable{TKey, TValue}"/>. When both an items source and an
 /// <see cref="IWorkflowTemplateSelector"/> are configured, a <see cref="ViewSourcePipeline"/> starts and the Core
-/// pool materializes one view per visible item into the host control.
+/// pool materializes one view per visible node into the host control. Link items are handled by
+/// <see cref="WorkflowLinkLayer"/> on the surface canvas instead; a host that uses this attached property directly
+/// must enable that layer, or links will not be drawn.
 /// </remarks>
 public sealed class ViewPool
 {
@@ -52,6 +54,17 @@ public sealed class ViewPool
 
         GetState(element).ItemsSource = value;
         UpdateSystem(element);
+    }
+
+    /// <summary>Gets the number of views still waiting to be materialized by the pool on <paramref name="element"/>.</summary>
+    public static int GetPendingViewCount(Control element)
+    {
+        if (element is null)
+        {
+            throw new ArgumentNullException(nameof(element));
+        }
+
+        return Systems.TryGetValue(element, out var system) ? system.Pool.PendingViewCount : 0;
     }
 
     /// <summary>

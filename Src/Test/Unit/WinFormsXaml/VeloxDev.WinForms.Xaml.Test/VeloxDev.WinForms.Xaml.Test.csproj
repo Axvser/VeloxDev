@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);MSTEST0032;MSTEST0037;CS0067;WFO1000</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.2" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <!-- 与生成器自身编译所用版本一致：driver 测试在进程内直接跑生成器。 -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj" />
+    <!-- 同时作为 analyzer（测生成产物）与普通引用（driver 测试要 new 生成器）：保留 ReferenceOutputAssembly。 -->
+    <ProjectReference Include="..\..\..\..\Generators\VeloxDev.WinForms.Generator\VeloxDev.WinForms.Generator.csproj"
+                      OutputItemType="Analyzer" />
+  </ItemGroup>
+
+  <!-- analyzer 路径只喂合法 XAML：诊断用的坏 XAML 全部走 driver 的 AdditionalText，不能进构建。 -->
+  <ItemGroup>
+    <AdditionalFiles Include="Fixtures\GeneratedView.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+</Project>

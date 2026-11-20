@@ -41,6 +41,8 @@ internal sealed class WinFormsHeadedHost : IHeadedBenchmarkHost
     {
         _system?.Dispose();
         _system = null;
+        WfAttached.WorkflowLinkLayer.SetIsEnabled(_panel, false);
+        WfAttached.WorkflowLinkLayer.SetWorkflowTree(_panel, null);
         ClearViews();
 
         _workflow = SyntheticWorkflow.Create(_options);
@@ -52,6 +54,11 @@ internal sealed class WinFormsHeadedHost : IHeadedBenchmarkHost
             _templateSelector,
             _workflow.Tree.GetHelper().VisibleItems,
             policy);
+
+        // Links are no longer pooled: the panel's paint pass draws them in one go (the MAUI-shaped layer).
+        WfAttached.WorkflowLinkLayer.SetWorkflowTree(_panel, _workflow.Tree);
+        WfAttached.WorkflowLinkLayer.SetThickness(_panel, 2f);
+        WfAttached.WorkflowLinkLayer.SetIsEnabled(_panel, true);
 
         await QuiesceAsync();
     }
@@ -84,6 +91,8 @@ internal sealed class WinFormsHeadedHost : IHeadedBenchmarkHost
 
     public void Dispose()
     {
+        WfAttached.WorkflowLinkLayer.SetIsEnabled(_panel, false);
+        WfAttached.WorkflowLinkLayer.SetWorkflowTree(_panel, null);
         _system?.Dispose();
         _system = null;
         ClearViews();

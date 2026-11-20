@@ -121,6 +121,8 @@ dotnet build Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks/VeloxDev.Adapters.
 #   --adapter wpf | winforms | jalium
 ```
 
+WinForms 的连线现在和 MAUI 一样不池化：`WorkflowLinkLayer` 在画布的 Paint 里一趟画完并发布曲线。基准里 `Active / Created` 只数节点视图；`Visible` 仍是树的可见项（含连线）。full-visibility 因此只创建节点窗口，不再创建每线一个 HWND。
+
 WinUI 与 MAUI 是独立可执行宿主（各自真实窗口，输出同一份 JSON）：
 
 ```bash

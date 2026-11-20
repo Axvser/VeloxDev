@@ -91,6 +91,8 @@ jobs:
       publish: ${{ steps.read.outputs.publish }}
       generator_missing: ${{ steps.read.outputs.generator_missing }}
       generator_version: ${{ steps.read.outputs.generator_version }}
+      wingen_missing: ${{ steps.read.outputs.wingen_missing }}
+      wingen_version: ${{ steps.read.outputs.wingen_version }}
       core_missing: ${{ steps.read.outputs.core_missing }}
       core_version: ${{ steps.read.outputs.core_version }}
       cli_missing: ${{ steps.read.outputs.cli_missing }}
@@ -106,6 +108,7 @@ jobs:
         run: |
           $projects = @(
             @{ Id = "VeloxDev.Core.Generator"; Kind = "generator"; Path = "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" },
+            @{ Id = "VeloxDev.WinForms.Generator"; Kind = "winforms_generator"; Path = "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" },
             @{ Id = "VeloxDev.Core"; Kind = "core"; Path = "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" },
             @{ Id = "VeloxDev.Core.Extension"; Kind = "dependent"; Path = "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj" },
             @{ Id = "VeloxDev.WPF"; Kind = "dependent"; Path = "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj" },
@@ -170,6 +173,8 @@ jobs:
           "publish=$(To-Bool ($missing.Count -gt 0))" >> $env:GITHUB_OUTPUT
           "generator_missing=$(To-Bool (Is-Missing 'generator'))" >> $env:GITHUB_OUTPUT
           "generator_version=$(Get-Version 'generator')" >> $env:GITHUB_OUTPUT
+          "wingen_missing=$(To-Bool (Is-Missing 'winforms_generator'))" >> $env:GITHUB_OUTPUT
+          "wingen_version=$(Get-Version 'winforms_generator')" >> $env:GITHUB_OUTPUT
           "core_missing=$(To-Bool (Is-Missing 'core'))" >> $env:GITHUB_OUTPUT
           "core_version=$(Get-Version 'core')" >> $env:GITHUB_OUTPUT
           "cli_missing=$(To-Bool (@($missing | Where-Object { $_.Id -eq 'VeloxDev.Cli' }).Count -gt 0))" >> $env:GITHUB_OUTPUT
@@ -274,7 +279,7 @@ jobs:
 
       - name: NuGet login (OIDC -> temporary key)
         id: login
-        if: needs.version.outputs.generator_missing == 'true' || needs.version.outputs.core_missing == 'true'
+        if: needs.version.outputs.generator_missing == 'true' || needs.version.outputs.core_missing == 'true' || needs.version.outputs.wingen_missing == 'true'
         uses: NuGet/login@v1
         with:
           user: Axvser
@@ -390,6 +395,68 @@ jobs:
           Push-One "VeloxDev.Core"
           Wait-One "VeloxDev.Core"
 
+      - name: Build and pack the WinForms generator
+        # Same build-then-pack contract as the Core generator: the analyzer DLL is packed through a
+        # custom None item, so pack must run after the DLL exists.
+        if: needs.version.outputs.wingen_missing == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.wingen_version }}
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          dotnet build "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" `
+            -c Release `
+            -p:GeneratePackageOnBuild=false
+          if ($LASTEXITCODE -ne 0) { throw "build failed: WinForms generator" }
+          dotnet pack "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" `
+            -c Release -o artifacts --no-build
+          if ($LASTEXITCODE -ne 0) { throw "pack failed: WinForms generator" }
+
+      - name: Push the WinForms generator and wait until NuGet can serve it
+        if: needs.version.outputs.wingen_missing == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.wingen_version }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          $file = Join-Path "artifacts" "VeloxDev.WinForms.Generator.${env:VERSION}.nupkg"
+          if (-not (Test-Path $file)) { throw "missing $file" }
+          dotnet nuget push $file --api-key $env:NUGET_API_KEY `
+            --source https://api.nuget.org/v3/index.json --skip-duplicate
+          if ($LASTEXITCODE -ne 0) { throw "push failed: VeloxDev.WinForms.Generator" }
+          $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.winforms.generator/${env:VERSION}/veloxdev.winforms.generator.${env:VERSION}.nupkg"
+          $deadline = (Get-Date).AddMinutes(15)
+          while ($true) {
+            try {
+              Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
+              return
+            } catch {
+              if ((Get-Date) -gt $deadline) { throw "VeloxDev.WinForms.Generator did not appear within 15 minutes" }
+              Start-Sleep -Seconds 10
+            }
+          }
+
+      - name: Wait for the WinForms generator on NuGet before the adapter
+        # The Release build of the adapter takes the generator as a PackageReference, so the exact
+        # generator version must be downloadable before the adapter is packed. This also covers the
+        # case where the generator was already published and its push step above was skipped.
+        if: contains(needs.version.outputs.rest_missing, 'VeloxDev.WinForms')
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.wingen_version }}
+        run: |
+          $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.winforms.generator/${env:VERSION}/veloxdev.winforms.generator.${env:VERSION}.nupkg"
+          $deadline = (Get-Date).AddMinutes(15)
+          while ($true) {
+            try {
+              Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
+              return
+            } catch {
+              if ((Get-Date) -gt $deadline) { throw "VeloxDev.WinForms.Generator $env:VERSION did not appear within 15 minutes" }
+              Start-Sleep -Seconds 10
+            }
+          }
+
       - name: Pack the dependents, templates and CLI against NuGet
         if: needs.version.outputs.rest_missing != '[]'
         shell: pwsh
@@ -464,11 +531,13 @@ jobs:
         shell: pwsh
         env:
           GENERATOR_VERSION: ${{ needs.version.outputs.generator_version }}
+          WINGEN_VERSION: ${{ needs.version.outputs.wingen_version }}
           CORE_VERSION: ${{ needs.version.outputs.core_version }}
           NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
         run: |
           $skip = @(
             "VeloxDev.Core.Generator.${env:GENERATOR_VERSION}.nupkg",
+            "VeloxDev.WinForms.Generator.${env:WINGEN_VERSION}.nupkg",
             "VeloxDev.Core.${env:CORE_VERSION}.nupkg"
           )
           Get-ChildItem artifacts -Filter "*.nupkg" |

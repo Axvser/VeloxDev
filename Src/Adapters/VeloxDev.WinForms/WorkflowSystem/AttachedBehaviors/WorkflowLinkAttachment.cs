@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using PlatformInput = System.Windows.Forms;
 using Wf = VeloxDev.WorkflowSystem;
@@ -49,7 +52,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </para>
 /// <para>
 /// The view belongs behind the node cards. Re-ordering pooled views is the surface's job — see
-/// <see cref="WorkflowTreeView"/>'s link-layer arrangement.
+/// <see cref="WorkflowSurfaceBehavior"/>'s link-layer arrangement.
 /// </para>
 /// </remarks>
 public sealed class WorkflowLinkAttachment
@@ -57,8 +60,56 @@ public sealed class WorkflowLinkAttachment
     // 一个控件一份：Attach 幂等，池与宿主都用 For 找它。
     private static readonly ConditionalWeakTable<Control, WorkflowLinkAttachment> Attachments = new();
 
+    // 表面一次 ApplyPan 会移动所有卡片，每张卡的锚点写回又各自触发一次几何重建；同一条线经常在一次
+    // 平移里被重建两三遍（中间态还不是整体平移）。批处理把这一趟里的重建合并成每条线一次。
+    private static readonly HashSet<WorkflowLinkAttachment> PendingGeometry = [];
+    private static int batchDepth;
+
+    /// <summary>Starts a gesture batch: link geometry changes are collected until <see cref="EndBatch"/>.</summary>
+    internal static void BeginBatch() => batchDepth++;
+
+    /// <summary>Ends the batch and rebuilds each link whose geometry changed, once.</summary>
+    internal static void EndBatch()
+    {
+        if (batchDepth > 0)
+        {
+            batchDepth--;
+        }
+
+        if (batchDepth > 0 || PendingGeometry.Count == 0)
+        {
+            return;
+        }
+
+        var pending = PendingGeometry.ToArray();
+        PendingGeometry.Clear();
+        foreach (var attachment in pending)
+        {
+            attachment.RebuildGeometry();
+        }
+    }
+
     /// <summary>Extra width the region gets on each side of the stroke, so the antialiased edge is not clipped.</summary>
     private const float RegionPad = 1.5f;
+
+    private const int GwlExStyle = -20;
+    private const int WsExLayered = 0x00080000;
+    private const int LwaColorKey = 0x00000001;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+    private static extern IntPtr GetWindowLong32(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+    private static extern IntPtr SetWindowLong32(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
 
     private readonly Control target;
     private readonly ModelChangeRelay relay;
@@ -75,6 +126,11 @@ public sealed class WorkflowLinkAttachment
     // 没东西可画时为 null。
     private PointF[]? windowCurve;
     private Region? windowRegion;
+
+    // 上一帧的画布绝对曲线与虚实状态。平移画布时四个点只是整体平移：窗口局部几何与雕出的区域完全不变，
+    // 只挪窗口位置即可 —— 不必每帧重建 GraphicsPath / 加宽 / 生成 Region / 重设窗口区域。
+    private PointF[]? lastAbsoluteCurve;
+    private bool lastVirtual;
 
     // 表面现在的投影，与节点卡片收到的是同一份。端点本身是**画布系**，而判「这个口贴着节点哪条边」
     // 的依据（node.Anchor / node.Size）是**模型系** —— 两者正好差这个平移，所以方向那一趟要先搬过去。
@@ -108,6 +164,13 @@ public sealed class WorkflowLinkAttachment
         target.TabStop = false;
         target.Enabled = false;
         ApplyRegion(null);
+
+        target.HandleCreated += OnTargetHandleCreated;
+        target.HandleDestroyed += OnTargetHandleDestroyed;
+        if (target.IsHandleCreated)
+        {
+            ApplyColorKey();
+        }
 
         target.Disposed += (_, _) => Detach();
     }
@@ -188,6 +251,7 @@ public sealed class WorkflowLinkAttachment
             if (surfaceBackground == value) return;
             surfaceBackground = value;
             target.BackColor = value;
+            ApplyColorKey();
             target.Invalidate();
         }
     }
@@ -301,6 +365,15 @@ public sealed class WorkflowLinkAttachment
         RebuildGeometry();
     }
 
+    /// <summary>Forces a geometry/texture rebuild after a pooled view becomes visible again.</summary>
+    public void Refresh()
+    {
+        if (!target.IsDisposed)
+        {
+            RebuildGeometry();
+        }
+    }
+
     /// <summary>Parses a <c>#RRGGBB</c>, <c>#AARRGGBB</c> or named colour.</summary>
     /// <param name="hex">The colour text.</param>
     /// <returns>The colour.</returns>
@@ -343,8 +416,51 @@ public sealed class WorkflowLinkAttachment
     private void OnInputKeyUp(object? sender, Wf.KeyUpEventArgs e) => KeyUp?.Invoke(this, e);
 
     // 控件销毁：退订、撤曲线、交还区域。
+    private void OnTargetHandleCreated(object? sender, EventArgs e) => ApplyColorKey();
+
+    private void OnTargetHandleDestroyed(object? sender, EventArgs e)
+    {
+        // Handle 重建后 layered 样式会丢；下一次 HandleCreated 会重新装。
+    }
+
+    // Link 窗口仍然是独立子窗口，但只把「surface 底色」设为色键透明：交叉处下面那条线能透出来，
+    // 不再被上一条线的描边带背景整段擦掉。区域仍然只保留描边带，所以窗口不会覆盖周围的网格。
+    private void ApplyColorKey()
+    {
+        if (!target.IsHandleCreated || target.IsDisposed)
+        {
+            return;
+        }
+
+        var handle = target.Handle;
+        var exStyle = IntPtr.Size == 8
+            ? GetWindowLongPtr64(handle, GwlExStyle)
+            : GetWindowLong32(handle, GwlExStyle);
+        var value = exStyle.ToInt64();
+        if ((value & WsExLayered) == 0)
+        {
+            var layered = new IntPtr(value | WsExLayered);
+            if (IntPtr.Size == 8)
+            {
+                SetWindowLongPtr64(handle, GwlExStyle, layered);
+            }
+            else
+            {
+                SetWindowLong32(handle, GwlExStyle, layered);
+            }
+        }
+
+        SetLayeredWindowAttributes(
+            handle,
+            (uint)ColorTranslator.ToWin32(surfaceBackground),
+            0,
+            LwaColorKey);
+    }
+
     private void Detach()
     {
+        target.HandleCreated -= OnTargetHandleCreated;
+        target.HandleDestroyed -= OnTargetHandleDestroyed;
         HookInput(link, null);
         RetractCurve();
         relay.Clear();
@@ -383,6 +499,17 @@ public sealed class WorkflowLinkAttachment
     // 盒子直接用，不加节点视图自己加的那份平移。
     private void RebuildGeometry()
     {
+        if (target.IsDisposed)
+        {
+            return;
+        }
+
+        if (batchDepth > 0)
+        {
+            PendingGeometry.Add(this);
+            return;
+        }
+
         var current = link;
         // NaN 门：插槽锚点在画布测量之前是 NaN，真实连线要等就绪；虚拟连线占位（Parent 为 null）豁免。
         if (current is null || !canRender || !WorkflowSlotUpdateGate.IsLinkRenderReady(current))
@@ -412,11 +539,15 @@ public sealed class WorkflowLinkAttachment
         // 把这条线画出来的几何提交给 Core：命中判定与绘制从此共用同一条曲线，不再各推一遍。
         // 坐标是画布局部坐标（slot.Anchor 的空间），也是表面指针事件所在的空间 —— 两边必须同系。
         // 发布不依赖视图是否真的画了一笔：几何与可见性这里都知道，画法归用户，命中契约归这里。
-        current.PublishCurve(
-            LinkCurve.FromCubic(
-                points[0].X, points[0].Y, points[1].X, points[1].Y,
-                points[2].X, points[2].Y, points[3].X, points[3].Y),
-            target);
+        var curve = LinkCurve.FromCubic(
+            points[0].X, points[0].Y, points[1].X, points[1].Y,
+            points[2].X, points[2].Y, points[3].X, points[3].Y);
+        current.PublishCurve(curve, target);
+
+        if (TryTranslate(points, isVirtual))
+        {
+            return;
+        }
 
         using var strokePath = new GraphicsPath();
         strokePath.AddBezier(points[0], points[1], points[2], points[3]);
@@ -451,6 +582,51 @@ public sealed class WorkflowLinkAttachment
         target.Invalidate();
     }
 
+    // 四个点相对上一帧只是整体平移时，窗口局部几何与区域都不变：只挪窗口，返回 true。
+    // 只在平移量是整数时走这条路 —— 表面平移与锚点都是整数像素，浮点余量会改变局部坐标，那就老实重建。
+    private bool TryTranslate(PointF[] points, bool virtualNow)
+    {
+        if (windowCurve is null || lastAbsoluteCurve is not { } previous
+            || previous.Length != points.Length || virtualNow != lastVirtual)
+        {
+            lastAbsoluteCurve = points;
+            lastVirtual = virtualNow;
+            return false;
+        }
+
+        var dx = points[0].X - previous[0].X;
+        var dy = points[0].Y - previous[0].Y;
+        for (var i = 1; i < points.Length; i++)
+        {
+            if (Math.Abs(points[i].X - previous[i].X - dx) > 0.01f
+                || Math.Abs(points[i].Y - previous[i].Y - dy) > 0.01f)
+            {
+                lastAbsoluteCurve = points;
+                lastVirtual = virtualNow;
+                return false;
+            }
+        }
+
+        if (Math.Abs(dx - Math.Round(dx)) > 0.01f || Math.Abs(dy - Math.Round(dy)) > 0.01f)
+        {
+            lastAbsoluteCurve = points;
+            lastVirtual = virtualNow;
+            return false;
+        }
+
+        lastAbsoluteCurve = points;
+        lastVirtual = virtualNow;
+
+        var ix = (int)Math.Round(dx);
+        var iy = (int)Math.Round(dy);
+        if (ix != 0 || iy != 0)
+        {
+            target.Location = new Point(target.Left + ix, target.Top + iy);
+        }
+
+        return true;
+    }
+
     // 命中区域的加宽画笔只依赖线宽，线宽不变就复用，拖拽时不再每帧创建 GDI+ 句柄。
     private Pen GetRegionPen()
     {
@@ -469,6 +645,7 @@ public sealed class WorkflowLinkAttachment
     private void Clear()
     {
         windowCurve = null;
+        lastAbsoluteCurve = null;
         RetractCurve();
         ApplyRegion(null);
         target.Invalidate();

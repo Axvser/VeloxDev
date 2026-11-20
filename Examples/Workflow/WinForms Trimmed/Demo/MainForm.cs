@@ -1,9 +1,10 @@
 using Demo.ViewModels.Workflow;
 using Demo.ViewModels.Workflow.Enums;
+using System.Windows.Forms;
 using VeloxDev.WorkflowSystem;
-// `TreeView` collides with System.Windows.Forms.TreeView (implicit using); alias
-// the template product so `new WorkflowTreeView()` is unambiguous in code.
-using WorkflowTreeView = Demo.Views.Workflow.TreeView;
+// `TreeView` collides with System.Windows.Forms.TreeView; alias
+// the surface product so `new WorkflowSurface()` is unambiguous in code.
+using WorkflowSurface = Demo.Views.Workflow.TreeView;
 // `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; the drawing
 // alias keeps `new Size(1200, 800)` (ClientSize) unambiguous.
 using Size = System.Drawing.Size;
@@ -12,7 +13,7 @@ namespace Demo;
 
 public sealed class MainForm : Form
 {
-    private readonly WorkflowTreeView _treeView;
+    private readonly WorkflowSurface _treeView;
 
     public MainForm()
     {
@@ -20,14 +21,11 @@ public sealed class MainForm : Form
         ClientSize = new Size(1200, 800);
         BackColor = Color.FromArgb(30, 30, 30);
 
-        _treeView = new WorkflowTreeView { Dock = DockStyle.Fill };
+        _treeView = new WorkflowSurface { Dock = DockStyle.Fill };
         Controls.Add(_treeView);
 
-        // Minimap before ViewModel: the tree template's AttachTree refreshes only
-        // when both the tree and the minimap overlay are present, so attach the
-        // overlay first to get the initial decorator/minimap offsets pushed.
-        _treeView.MinimapOverlay = new Demo.Views.Workflow.MinimapOverlay();
-
+        // The grid decorator, minimap and HUD are PART_* controls declared in TreeView.xaml; the surface
+        // behavior resolves them by name and pushes the layout into them once the tree is bound.
         var tree = new TreeViewModel();
         LoadTree(tree);
         _treeView.ViewModel = tree;
@@ -58,5 +56,22 @@ public sealed class MainForm : Form
         nodes[0].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
         nodes[1].InputSlot.SetChannelCommand.Execute(SlotChannel.MultipleSources);
         nodes[2].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
+        nodes[3].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
+
+        // 端口默认 SlotChannel.None，不能收发连接；先给三个输出端口开 OneTarget，再走标准收发路径连线。
+        foreach (var node in nodes[..3])
+        {
+            node.OutputSlots[0].SetChannelCommand.Execute(SlotChannel.OneTarget);
+        }
+
+        Connect(tree, nodes[0].OutputSlots[0], nodes[1].InputSlot);
+        Connect(tree, nodes[1].OutputSlots[0], nodes[3].InputSlot);
+        Connect(tree, nodes[2].OutputSlots[0], nodes[0].InputSlot);
+    }
+
+    private static void Connect(TreeViewModel tree, SlotViewModel sender, SlotViewModel receiver)
+    {
+        tree.GetHelper().SendConnection(sender);
+        tree.GetHelper().ReceiveConnection(receiver);
     }
 }
