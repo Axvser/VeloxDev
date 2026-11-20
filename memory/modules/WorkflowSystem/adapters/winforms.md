@@ -230,7 +230,8 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 1. **`LinkHitRadius = 6f`，带宽 ≈ ±5.5px，不是线体那 2px**。命中判定现在全在 Core：`LinkHitTestEx.HitTest` 只问「这条线发布过曲线没有、点在不在曲线的半径内」（默认半径 `DefaultHitRadius = 6d`）；**画出来的每一层描边都是可命中内容**，悬停命中的是**最外那圈辉光管壁**（`WorkflowLinkLayer` 的 `Glow` 画 `thickness + 9`：线宽 2f，半宽 5.5px）。7px 落在这圈之内：七家一致，且都等于「只有画出来的部分能命中」。
 2. **虚拟连线与端点未量出的线不参与命中**：前者是指针下的橡皮筋（永远贴在指针上，选中它没有意义），由 `LinkHitTestEx.HitTestVisibleLinks` 显式跳过 `tree.VirtualLink`；后者是端点没量到、曲线已被撤回（`WorkflowLinkLayer.EnsureGeometry` 在端点不 ready 时 `PublishCurve(null)`），`Contains` 自然答否。判据在 `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkHitTestEx.cs` 的 `HitTestVisibleLinks`。
 3. **焦点必须与「上色」同一拍发生**：悬停命中与高亮是同一次指针移动里的动作；画布在命中时 `Focus()`（`WorkflowCanvas.xaml.cs`），层的下一帧从 `HoveredLink` 上色。画布靠 `ControlStyles.Selectable` 才获焦、靠 `TabStop = false` 不进制表位。写成「被点击才给焦点」就会重演 Avalonia 那个 bug：悬停变红但 Delete 要先点一下（见 `adapters/avalonia.md`）。
-4. **已知代价：连线被卡片/浮层窗口盖住的那一段不可悬停**。指针落在卡片（或小地图/HUD）的真窗口上时画布收不到 `MouseMove`，只有画在空白画布上的那段可命中。这是「画布代画连线」这一形状的固有代价；要全段命中就得回到每线一个窗口，而那种形状要付 §2.1 的 z 序与 §2.3 的透明代价（也是单层方案要避免的）。
+4. **输入路由的 target 由消息过滤器统一解析**：节点/插槽是子窗口，表面根收不到它们的 `MouseMove`；`WM_MOUSEMOVE` 在 `IMessageFilter` 里翻译后 `Route`，`ResolveTarget` **Tag 优先**（继承的 `DataContext` 可能是树）。节点/插槽行为把每个按钮的 press/release 都路由；离开表面由 pointer watch 补 `PointerExited`，target 传前一个 `PointerTarget`。见 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `RouteHoverFromCursor` / `RoutePointerExit`。
+5. **已知代价：连线被卡片/浮层窗口盖住的那一段不可悬停**。指针落在卡片（或小地图/HUD）的真窗口上时画布收不到 `MouseMove`，只有画在空白画布上的那段可命中。这是「画布代画连线」这一形状的固有代价；要全段命中就得回到每线一个窗口，而那种形状要付 §2.1 的 z 序与 §2.3 的透明代价（也是单层方案要避免的）。
 
 ### 4.11 基类上的两处 `protected virtual`（2026-10-03）
 

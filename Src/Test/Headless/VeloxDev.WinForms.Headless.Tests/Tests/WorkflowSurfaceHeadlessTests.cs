@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Windows.Forms;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.WinForms.Headless.Tests.Infrastructure;
@@ -171,6 +172,38 @@ public sealed class WorkflowSurfaceHeadlessTests
         Assert.IsNotNull(after);
 
         Assert.AreEqual(before.XAt(0) + 50d, after.XAt(0), 1d);
+    }
+
+    [TestMethod]
+    public void ComponentPressAndRelease_ReachCoreWithTheNodeTarget()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        var press = typeof(WorkflowSurfaceBehavior).GetMethod(
+            "RouteComponentPress", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var release = typeof(WorkflowSurfaceBehavior).GetMethod(
+            "RouteComponentRelease", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        press.Invoke(null, [surface.View, graph.Left, MouseButtons.Left, 1]);
+        Assert.AreSame(graph.Left, WorkflowInput.For(graph.Tree).PointerTarget);
+
+        release.Invoke(null, [surface.View, graph.Left, MouseButtons.Left, 1]);
+        Assert.AreSame(graph.Left, WorkflowInput.For(graph.Tree).PointerTarget);
+    }
+
+    [TestMethod]
+    public void ResolveTarget_PrefersTheAttachmentTagOverAnInheritedDataContext()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        using var child = new Panel { Tag = graph.Left };
+        surface.View.Canvas.Controls.Add(child);
+
+        var resolve = typeof(WorkflowSurfaceBehavior).GetMethod(
+            "ResolveTarget", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var target = resolve.Invoke(null, [child, graph.Tree, 0d, 0d, 6d]);
+
+        Assert.AreSame(graph.Left, target);
     }
 
     [TestMethod]

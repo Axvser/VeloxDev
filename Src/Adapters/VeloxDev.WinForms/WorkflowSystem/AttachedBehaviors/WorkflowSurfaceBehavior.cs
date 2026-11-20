@@ -294,6 +294,7 @@ public sealed class WorkflowSurfaceBehavior
         DetachTree(host, state);
         ClearParts(state);
         state.EndInitialReveal();
+        state.ReleasePointerWatch();
         state.ReleaseZoomTimer();
         state.PanOffset = new Point(0, 0);
         state.HasPendingRestore = false;
@@ -1405,7 +1406,46 @@ public sealed class WorkflowSurfaceBehavior
         var handle = new WorkflowEventHandle();
 
         WorkflowInput.For(tree).Route(new Wf.PointerPressedEventArgs(
-            new Anchor(point.X, point.Y, 0), Modifiers(), canvas, target, ToButton(button), clickCount, handle));
+            new Anchor(point.X, point.Y, 0), Modifiers(), source, target, ToButton(button), clickCount, handle));
+        return handle;
+    }
+
+    // 离开表面时必须把「原来那个 target」交给 Exited：Core 对显式 Exited 不再合成前一个目标的
+    // Exited，target 传 null 只会通知树，节点/插槽的 Input.PointerExited 会漏掉。
+    private static void RoutePointerExit(IWorkflowTreeViewModel tree, object? source)
+    {
+        var input = WorkflowInput.For(tree);
+        input.Route(new Wf.PointerExitedEventArgs(
+            new Anchor(), Modifiers(), source, input.PointerTarget, new WorkflowEventHandle()));
+    }
+
+    /// <summary>Routes one release that landed on a component view rather than on the surface's canvas.</summary>
+    /// <param name="source">The control the release landed on.</param>
+    /// <param name="target">The workflow component <paramref name="source"/> renders.</param>
+    /// <param name="button">Which button came up.</param>
+    /// <param name="clickCount">How many clicks the gesture that just ended had.</param>
+    /// <returns>The handle the route produced, or <see langword="null"/> when no surface or tree was found.</returns>
+    internal static WorkflowEventHandle? RouteComponentRelease(
+        Control source, IWorkflowViewModel target, PlatformInput.MouseButtons button, int clickCount)
+    {
+        var host = FindSurfaceHost(source);
+        if (host is null)
+        {
+            return null;
+        }
+
+        var state = GetState(host);
+        if (state.Tree is not { } tree)
+        {
+            return null;
+        }
+
+        var canvas = state.Canvas ?? host;
+        var point = canvas.PointToClient(Cursor.Position);
+        var handle = new WorkflowEventHandle();
+
+        WorkflowInput.For(tree).Route(new Wf.PointerReleasedEventArgs(
+            new Anchor(point.X, point.Y, 0), Modifiers(), source, target, ToButton(button), clickCount, handle));
         return handle;
     }
 
@@ -1414,10 +1454,12 @@ public sealed class WorkflowSurfaceBehavior
     {
         for (var current = hit; current is not null; current = current.Parent)
         {
-            var model = ResolveValue(current, "ViewModel")
-                ?? ResolveValue(current, "DataContext")
-                ?? ResolveValue(current, "BindingContext")
-                ?? current.Tag;
+            // Tag 优先：节点/插槽附件把它写成所属模型；DataContext 可能继承的是树或别的
+            // 上下文，非模型的值不能把同一控件上的 Tag 挡住。
+            var model = current.Tag as IWorkflowViewModel
+                ?? ResolveValue(current, "ViewModel") as IWorkflowViewModel
+                ?? ResolveValue(current, "DataContext") as IWorkflowViewModel
+                ?? ResolveValue(current, "BindingContext") as IWorkflowViewModel;
 
             switch (model)
             {
@@ -1485,7 +1527,7 @@ public sealed class WorkflowSurfaceBehavior
         var target = ResolveTarget(hit, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
         var handle = new WorkflowEventHandle();
 
-        input.Route(new Wf.PointerWheelEventArgs(anchor, Modifiers(), canvas, target, deltaX, deltaY, handle));
+        input.Route(new Wf.PointerWheelEventArgs(anchor, Modifiers(), hit ?? canvas, target, deltaX, deltaY, handle));
         return handle;
     }
 
@@ -1791,8 +1833,7 @@ public sealed class WorkflowSurfaceBehavior
         // 解绑前清掉指针目标：路由跟着树活着，比这次绑定久。
         if (state.Tree is { } detachedTree)
         {
-            WorkflowInput.For(detachedTree).Route(new Wf.PointerExitedEventArgs(
-                new Anchor(), Wf.InputModifiers.None, state.Canvas ?? state.Host, null, new WorkflowEventHandle()));
+            RoutePointerExit(detachedTree, state.Canvas ?? state.Host);
         }
     }
 
@@ -1972,6 +2013,9 @@ public sealed class WorkflowSurfaceBehavior
 
     private sealed class SurfaceState : IMessageFilter
     {
+        private static long lastHoverStamp;
+
+        private const int WmMouseMove = 0x0200;
         private const int WmMouseWheel = 0x020A;
         private const int WmMouseHWheel = 0x020E;
         private const int WmLeftButtonDown = 0x0201;
@@ -2242,6 +2286,56 @@ public sealed class WorkflowSurfaceBehavior
 
         public HashSet<Control> ViewHooks { get; } = new();
 
+        private System.Windows.Forms.Timer? pointerWatch;
+
+        // 指针从子控件直接移出应用时，WinForms 不一定给表面根发 MouseLeave；用一个轻量计时器
+        // 兜住「离开表面」这件事，保证 Core 的 PointerTarget 不会停在最后那个节点/插槽上。
+        internal void EnsurePointerWatch()
+        {
+            if (pointerWatch is null)
+            {
+                pointerWatch = new System.Windows.Forms.Timer { Interval = 50 };
+                pointerWatch.Tick += OnPointerWatchTick;
+            }
+
+            if (!pointerWatch.Enabled)
+            {
+                pointerWatch.Start();
+            }
+        }
+
+        internal void ReleasePointerWatch()
+        {
+            if (pointerWatch is null) return;
+            pointerWatch.Stop();
+            pointerWatch.Tick -= OnPointerWatchTick;
+            pointerWatch.Dispose();
+            pointerWatch = null;
+        }
+
+        private void OnPointerWatchTick(object? sender, EventArgs e)
+        {
+            if (!Attached)
+            {
+                ReleasePointerWatch();
+                return;
+            }
+
+            var under = GetControlAtScreenPoint(Cursor.Position);
+            var host = ResolveSurfaceHost(under);
+            if (host is not null && ReferenceEquals(host, Host))
+            {
+                return;
+            }
+
+            PointerInside = false;
+            ReleasePointerWatch();
+            if (Tree is { } tree)
+            {
+                RoutePointerExit(tree, null);
+            }
+        }
+
         internal void EnsureMessageFilter()
         {
             if (filterAdded)
@@ -2379,11 +2473,9 @@ public sealed class WorkflowSurfaceBehavior
                     PanOffsetAtPress.X + (current.X - PanPressScreen.X),
                     PanOffsetAtPress.Y + (current.Y - PanPressScreen.Y));
                 ApplyPan(Host, this);
-                return;
             }
 
-            RoutePointer(this, tree, LastPointerClient, (p, t, h) => new Wf.PointerMovedEventArgs(
-                p, Modifiers(), canvas, t, h));
+            // 指针移动由 SurfaceState 的消息过滤器统一路由：节点/插槽的子窗口在这里收不到 MouseMove。
         }
 
         public void OnCanvasMouseUp(object? sender, MouseEventArgs e)
@@ -2421,21 +2513,26 @@ public sealed class WorkflowSurfaceBehavior
         public void OnCanvasMouseEnter(object? sender, EventArgs e)
         {
             PointerInside = true;
-            if (Tree is { } tree)
-            {
-                var canvas = Canvas ?? Host;
-                RoutePointer(this, tree, LastPointerClient, (p, t, h) => new Wf.PointerEnteredEventArgs(
-                    p, Modifiers(), canvas, t, h));
-            }
+            LastPointerClient = (Canvas ?? Host).PointToClient(Cursor.Position);
+            EnsurePointerWatch();
+            // 进入/离开由 Core 根据 PointerMoved 的目标变化合成；这里不再单独 Route 一次。
         }
 
         public void OnCanvasMouseLeave(object? sender, EventArgs e)
         {
+            // 指针从画布进入它的子控件时，WinForms 也会给画布发 MouseLeave；那不是离开表面。
+            var under = GetControlAtScreenPoint(Cursor.Position);
+            var host = ResolveSurfaceHost(under);
+            if (host is not null && ReferenceEquals(host, Host))
+            {
+                return;
+            }
+
             PointerInside = false;
+            ReleasePointerWatch();
             if (Tree is { } tree)
             {
-                WorkflowInput.For(tree).Route(new Wf.PointerExitedEventArgs(
-                    new Anchor(), Modifiers(), Canvas ?? Host, null, new WorkflowEventHandle()));
+                RoutePointerExit(tree, Canvas ?? Host);
             }
         }
 
@@ -2471,8 +2568,64 @@ public sealed class WorkflowSurfaceBehavior
                 Canvas ?? Host, input.PointerTarget, new WorkflowEventHandle()));
         }
 
+        // 把光标所在的表面/目标翻译成 Core 的 PointerMoved。节点、插槽是子窗口，表面根的
+        // MouseMove 收不到它们；消息过滤器则对所有窗口都可见，因此 target 的更新不再取决于是谁命中。
+        private void RouteHoverFromCursor(IntPtr messageHandle)
+        {
+            var under = GetControlAtScreenPoint(Cursor.Position);
+            var host = ResolveSurfaceHost(under) ?? ResolveSurfaceHost(messageHandle);
+            if (host is null
+                || !States.TryGetValue(host, out var state)
+                || !state.Attached
+                || state.Tree is not { } tree)
+            {
+                return;
+            }
+
+            var canvas = state.Canvas ?? host;
+            var point = canvas.PointToClient(Cursor.Position);
+            state.LastPointerClient = point;
+            state.PointerInside = true;
+            state.EnsurePointerWatch();
+
+            var anchor = new Anchor(point.X, point.Y, 0);
+            var input = WorkflowInput.For(tree);
+            IWorkflowViewModel? target = null;
+
+            // 指针在画布之外（滚动条、小地图、表面边框）时没有组件目标；不要拿画布坐标
+            // 去命中一条实际被覆盖住的连线。
+            if (IsWithinCanvas(under, canvas))
+            {
+                // 用光标下真正的控件（可能是卡片的 Label、插槽的子控件）向上找模型；
+                // GetChildAtPoint 只给直接子控件，深层子控件会漏成空目标。
+                target = ResolveTarget(under, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
+            }
+
+            input.Route(new Wf.PointerMovedEventArgs(
+                anchor, Modifiers(), under ?? canvas, target, new WorkflowEventHandle()));
+
+            if (input.HoveredLink is not null)
+            {
+                FocusCanvas(state);
+            }
+        }
+
         public bool PreFilterMessage(ref Message m)
         {
+            if (m.Msg == WmMouseMove)
+            {
+                // 节点/插槽是子窗口：表面根收不到它们上面的 MouseMove，Core 的 PointerTarget 就不会更新。
+                // 与滚轮同一条路，在消息入口统一翻译成标准输入，再交给 WorkflowInput 路由。
+                var stamp = ((long)m.Msg << 48) ^ m.LParam.ToInt64() ^ ((long)(uint)m.WParam.ToInt64() << 16) ^ m.HWnd.ToInt64();
+                if (stamp != lastHoverStamp)
+                {
+                    lastHoverStamp = stamp;
+                    RouteHoverFromCursor(m.HWnd);
+                }
+
+                return false;
+            }
+
             if (m.Msg is WmLeftButtonDown or WmRightButtonDown or WmMiddleButtonDown)
             {
                 FocusSurfaceForPress();

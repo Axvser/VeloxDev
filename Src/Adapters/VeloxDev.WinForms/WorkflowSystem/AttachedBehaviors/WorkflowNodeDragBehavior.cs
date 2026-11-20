@@ -164,7 +164,7 @@ public sealed class WorkflowNodeDragBehavior
 
     private static void OnMouseDown(object? sender, MouseEventArgs e)
     {
-        if (e.Button != MouseButtons.Left || sender is not Control source)
+        if (sender is not Control source)
         {
             return;
         }
@@ -181,15 +181,17 @@ public sealed class WorkflowNodeDragBehavior
             return;
         }
 
-        if (node.Parent?.VirtualLink.IsVisible == true)
+        // 每个按钮都过表面路由 —— 右键/中键的组件级动作与左键拖动共用同一套 Core 输入事件。
+        var press = WorkflowSurfaceBehavior.RouteComponentPress(control, node, e.Button, e.Clicks);
+
+        if (e.Button != MouseButtons.Left || node.Parent?.VirtualLink.IsVisible == true)
         {
             return;
         }
 
-        // 这一笔按下由表面路由 —— 卡片是启用的子控件，画布自己的 MouseDown 收不到它。订阅者在节点自己的
-        // InputRelay 上置 PreventDefault 就是「这一次别拖」；不读它，节点上任何按住拖的定制都会和拖动
-        // 抢同一串指针事件。
-        if (WorkflowSurfaceBehavior.RouteComponentPress(control, node, e.Button, 1)?.PreventDefault == true)
+        // 订阅者在节点自己的 InputRelay 上置 PreventDefault 就是「这一次别拖」；不读它，
+        // 节点上任何按住拖的定制都会和拖动抢同一串指针事件。
+        if (press?.PreventDefault == true)
         {
             return;
         }
@@ -262,7 +264,7 @@ public sealed class WorkflowNodeDragBehavior
 
     private static void OnMouseUp(object? sender, MouseEventArgs e)
     {
-        if (e.Button != MouseButtons.Left || sender is not Control source)
+        if (sender is not Control source)
         {
             return;
         }
@@ -273,7 +275,16 @@ public sealed class WorkflowNodeDragBehavior
             return;
         }
 
-        StopDragging(control);
+        var node = ResolveNode(source);
+        if (node is not null)
+        {
+            WorkflowSurfaceBehavior.RouteComponentRelease(control, node, e.Button, e.Clicks);
+        }
+
+        if (e.Button == MouseButtons.Left)
+        {
+            StopDragging(control);
+        }
     }
 
     private static void OnMouseCaptureChanged(object? sender, EventArgs e)

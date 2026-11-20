@@ -62,19 +62,21 @@ public sealed class WorkflowSlotConnectionBehavior
         }
 
         element.MouseDown -= OnMouseDown;
+        element.MouseUp -= OnMouseUp;
         element.Disposed -= OnDisposed;
 
         state.IsEnabled = value;
         if (value)
         {
             element.MouseDown += OnMouseDown;
+            element.MouseUp += OnMouseUp;
             element.Disposed += OnDisposed;
         }
     }
 
     private static void OnMouseDown(object? sender, MouseEventArgs e)
     {
-        if (e.Button != MouseButtons.Left || sender is not Control control)
+        if (sender is not Control control)
         {
             return;
         }
@@ -90,9 +92,11 @@ public sealed class WorkflowSlotConnectionBehavior
             return;
         }
 
-        // 这一笔按下由表面路由 —— 插槽是启用的子控件，画布自己的 MouseDown 收不到它。订阅者在插槽自己的
-        // InputRelay 上置 PreventDefault 就是「这一笔别连」，无论它是开始还是完成。
-        if (WorkflowSurfaceBehavior.RouteComponentPress(control, slot, e.Button, 1)?.PreventDefault == true)
+        // 每个按钮都过表面路由 —— 订阅者在插槽自己的 InputRelay 上置 PreventDefault 就是
+        // 「这一笔别连」，无论它是开始还是完成；右键/中键的动作也走同一套 Core 输入事件。
+        var press = WorkflowSurfaceBehavior.RouteComponentPress(control, slot, e.Button, e.Clicks);
+
+        if (e.Button != MouseButtons.Left || press?.PreventDefault == true)
         {
             return;
         }
@@ -128,6 +132,20 @@ public sealed class WorkflowSlotConnectionBehavior
 
         EnsureMessageFilter();
         WorkflowSurfaceBehavior.Refresh(surface);
+    }
+
+    private static void OnMouseUp(object? sender, MouseEventArgs e)
+    {
+        if (sender is not Control control)
+        {
+            return;
+        }
+
+        var slot = ResolveSlot(control);
+        if (slot is not null)
+        {
+            WorkflowSurfaceBehavior.RouteComponentRelease(control, slot, e.Button, e.Clicks);
+        }
     }
 
     private static void OnDisposed(object? sender, EventArgs e)

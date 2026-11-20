@@ -95,6 +95,17 @@ The layer publishes each curve to Core, so hit-testing, `Delete` and the link co
 
 ⚙ **A per-link view is still possible, but opt-in.** `WorkflowLinkAttachment.Attach(control)` owns endpoints, window-region carving, curve publishing and pointer events; your `OnPaint` draws. A carved link window must use the surface background as `BackColor`, has no stroke to widen at zero length, and needs `Invalidate()+Update()` to avoid drag trails. For a graph with more than a handful of links, use the single layer.
 
+## Input
+
+⚙ **All input goes through Core's route**, `WorkflowInput.For(tree)`. Do not subscribe per-control mouse events for workflow gestures; subscribe `((IInputEvents)vm.GetHelper()).Input.*` instead.
+
+- **Move:** the surface's `IMessageFilter` translates `WM_MOUSEMOVE` and routes it. This is the only way a move over a **node or slot child window** reaches Core; the surface root never receives those `MouseMove` messages.
+- **Press / release:** the node and slot behaviours route every button (left, right, middle) on components; the surface routes presses/releases on empty canvas and links. A right-press on a node/slot therefore reaches that component's `PointerPressed`, not the surface's link menu.
+- **Wheel:** the same message filter routes `PointerWheelChanged` first; a subscriber's `PreventDefault` hands the scroll to `WorkflowInput.Scroller`, otherwise the adapter applies its own step. Ctrl+wheel is zoom.
+- **Target resolution prefers `Tag`:** the attachments write the node/slot model to `Tag`; an inherited `DataContext` may be the tree, so it must not mask the Tag.
+- **Enter/leave are synthesized by Core** from target changes. Leaving the surface from a node is covered by a 50 ms pointer watch, and the explicit `PointerExited` carries the previous `PointerTarget`.
+- **Keys** are routed with `PointerTarget` as their target; focus moves to the canvas on the press (unless the press landed in an editable control).
+
 ## Adding your own content to a node
 
 ⚙ **No `Viewbox`.** `WorkflowNodeViewBehavior` attaches `WorkflowNodeAttachment`, points drag and slot layout at the canvas, and keeps the card backdrop composited. `WorkflowNodeTitleBehavior` binds the title and scales the header with the collapse factor; `WorkflowNodeRowsBehavior` rebuilds the input/output rows from `node.Slots`.
