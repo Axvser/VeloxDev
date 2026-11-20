@@ -58,6 +58,7 @@ An adapter package brings `VeloxDev.Core` in transitively. Versions are delibera
 | Paint a red/green connection preview while a drag is in progress | [references/practices/model.md](references/practices/model.md#the-connection-preview) |
 | Take over the wheel, or scroll the surface from your own handler | [references/practices/view-layer.md](references/practices/view-layer.md#wheel-and-scrolling) |
 | Hear pointer/key input, or resolve the component under the pointer | [references/practices/input.md](references/practices/input.md), [references/practices/view-layer.md](references/practices/view-layer.md#how-the-surface-picks-a-link) |
+| Write or debug the WinForms XAML runtime itself (styles, triggers, animations, custom controls) | [references/practices/gui/winforms-xaml.md](references/practices/gui/winforms-xaml.md) |
 | Support a GUI that has no adapter | [references/practices/new-adapter.md](references/practices/new-adapter.md) |
 | Drive the graph from an LLM | [../veloxdev-drive-workflow-with-ai/SKILL.md](../veloxdev-drive-workflow-with-ai/SKILL.md) |
 
@@ -69,7 +70,7 @@ Open your GUI's reference alongside whichever of the above you are reading — i
 | Avalonia | [references/practices/gui/avalonia.md](references/practices/gui/avalonia.md) |
 | WinUI 3 / Windows App SDK | [references/practices/gui/winui.md](references/practices/gui/winui.md) |
 | .NET MAUI | [references/practices/gui/maui.md](references/practices/gui/maui.md) |
-| Windows Forms | [references/practices/gui/winforms.md](references/practices/gui/winforms.md) |
+| Windows Forms | [references/practices/gui/winforms.md](references/practices/gui/winforms.md) · [XAML runtime](references/practices/gui/winforms-xaml.md) |
 | Blazor / Razor | [references/practices/gui/razor.md](references/practices/gui/razor.md) |
 | Jalium | [references/practices/gui/jalium.md](references/practices/gui/jalium.md) |
 

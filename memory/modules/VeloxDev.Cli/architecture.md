@@ -12,6 +12,8 @@ Core / Generator 版本还不在 NuGet 上，就要 `-p:VeloxDevLocalCore=true`�
 （`Examples/Directory.Build.targets` 对示例做同一件事）。这一轮发完、依赖版本上了 NuGet 之后，本地构建
 就不需要它，但下一次 Core / Generator 提版后又会需要。
 
+**`TargetFramework` 必须留在 `net8.0`**，不是随手能提的版本号：`.NET 8 or newer` 靠 `RollForward=LatestMajor` 兑现（README 与 csproj 注释都这么写），而 `VeloxDev.Cli.Test` 的 `McpProtocolTests.CliLocation()` 直接拼 `Src/Cli/VeloxDev.Cli/bin/<Configuration>/net8.0/veloxdev.dll` 启动进程。把 CLI 提到更高 TFM，测试不会报「框架不匹配」——旧的 `net8.0` 产物还在 `bin/` 里，测试会安静地跑那份陈旧二进制；全新 clone 上则直接 `File.Exists` 断言失败。
+
 **Agent 使用指南**：`skills/veloxdev-use-workflow-cli/`（`SKILL.md` + `references/practices/{launch,tools}.md`
 + `references/pitfalls/runtime.md`）。安装/启动、工具循环、执行与 job 语义、路径/重定向/日志规则都在这份里；
 CLI 的行为改了要同步它，否则 agent 会按旧工具名或旧语义操作。

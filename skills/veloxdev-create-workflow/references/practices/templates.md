@@ -16,7 +16,7 @@ Each adapter ships a `dotnet new` item-template pack that generates the seven vi
 | slot | `SlotView` | one port's visual |
 | link | `LinkView` | one connection's visual — on MAUI and WinForms the default surface draws links in one layer, so the item is the opt-in per-link view |
 | tree | `TreeView` | the surface: scroll viewer, canvas, items host, decorators |
-| selector | `TemplateSelector` | picks the node / link template |
+| selector | `TemplateSelector` (`CustomTemplateSelector` on WinForms) | picks the node / link template; WinForms derives from the generic `VeloxDev.WinForms.Xaml.TemplateSelector` |
 | decorator | `GridDecorator` | the grid and the ruler |
 | minimap | `MinimapOverlay` | thumbnail plus a draggable viewport indicator |
 
@@ -51,7 +51,7 @@ dotnet build
 
 ⚙ **Generate the whole suite.** The tree names its selector, decorator and minimap siblings through the namespace alias. Leaving one out means editing the tree by hand, and leaving out the decorator or minimap ships a canvas with no floating rulers or thumbnail. `preferNameDirectory` is `false` on every item, so `-o Views` puts the files directly in `Views/` with no per-name subfolder.
 
-⚙ **`-n` is load-bearing.** The tree view references its siblings by the default class names through a namespace alias, so renaming one means editing the tree by hand. Generate with the defaults unless you are prepared to do that.
+⚙ **`-n` is load-bearing.** The tree view references its siblings by the default class names through a namespace alias, so renaming one means editing the tree by hand. Generate with the defaults unless you are prepared to do that. On WinForms the selector's default name is **`CustomTemplateSelector`**, because `TemplateSelector` is the generic base it derives from; the tree template already references `local:CustomTemplateSelector`.
 
 ⚙ **All seven items go into one namespace.** That is how the tree resolves its siblings. Splitting them across two namespaces gives you a tree that cannot find its node view.
 

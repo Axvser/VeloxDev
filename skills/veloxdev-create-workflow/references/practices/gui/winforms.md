@@ -1,6 +1,6 @@
 # Windows Forms
 
-`VeloxDev.WinForms` · targets `net10.0-windows` · version 11.2.0
+`VeloxDev.WinForms` · targets `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` · version 11.2.0
 
 There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md`. This is the summary a consumer needs.
 
@@ -9,6 +9,11 @@ There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md
 ⚙ **The "Trimmed" in that path means *minimal demo*.** It is a demo-size choice, not a publish setting — see [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
 
 ## The adapter is XAML-first
+
+⚙ **The complete runtime reference is [winforms-xaml.md](winforms-xaml.md).** Read it before writing
+styles, triggers, animations, custom controls, or a non-trivial `DataTemplate`; this page only
+summarizes the workflow surface.
+
 
 WinForms has no platform XAML, so this adapter ships its own small runtime (`Src/Adapters/VeloxDev.WinForms/Xaml/`) and a Roslyn generator (`Src/Generators/VeloxDev.WinForms.Generator/`). The generated `InitializeComponent()` builds ordinary WinForms controls:
 
@@ -79,6 +84,57 @@ Attached coordinates follow the same `v:Owner.Property` spelling:
 - `Canvas.Left/Top/Right/Bottom`, `Grid.Row/Column/RowSpan/ColumnSpan` and `DockPanel.Dock` are attached dependency properties.
 - Native children are still laid out by the `v:` panels; attach `v:` coordinates when a native control needs a cell.
 - `ItemsControl` is the template host: `ItemsSource` + `ItemTemplate` creates one control per item. `ListBox` and `ComboBox` wrap the native selectors for selection and scrolling, so they render the native item text and `DisplayMemberPath`, not an arbitrary `ItemTemplate`.
+
+## Animations
+
+Animations are dependency-property transitions: one action animates one DP to one value with one effect.
+From markup, put a `TransitionAction` under a trigger's `EnterAction` / `ExitAction`:
+
+```xml
+<v:Button Content="Save">
+  <v:Button.Triggers>
+    <v:Trigger Property="IsPointerOver" Value="True">
+      <v:Trigger.EnterAction>
+        <v:TransitionAction Property="Background" To="#FF2B6CFF"
+                            Duration="0:0:0.18" Ease="CubicOut" />
+      </v:Trigger.EnterAction>
+      <v:Trigger.ExitAction>
+        <v:TransitionAction Property="Background" To="#FF20242C"
+                            Duration="0:0:0.24" Ease="CubicOut" />
+      </v:Trigger.ExitAction>
+    </v:Trigger>
+  </v:Button.Triggers>
+</v:Button>
+```
+
+For more than two stops, use a `KeyFrameAnimation`; it is the same transition chain, one segment per
+adjacent pair of frames:
+
+```xml
+<v:Trigger.EnterAction>
+  <v:KeyFrameAnimation Property="Background" Duration="0:0:0.6" Ease="CubicInOut">
+    <v:KeyFrame Offset="0" Value="#FF20242C" />
+    <v:KeyFrame Offset="0.5" Value="#FF2B6CFF" />
+    <v:KeyFrame Offset="1" Value="#FF20242C" />
+  </v:KeyFrameAnimation>
+</v:Trigger.EnterAction>
+```
+
+From code-behind, call `XamlTransition.Animate(control, property, to, effect)` for one segment or
+`XamlTransition.AnimateKeyFrames(control, property, frames, duration, ease)` for a keyed chain;
+`Stop` ends the run where it stands. A new animation supersedes the previous one on the same target.
+
+- The default effect (240 ms `Cubic.Out`) applies only when **both** `Duration` and `Ease` are omitted.
+  If you set one, set the other: an `Ease` without `Duration` is a zero-length effect.
+- Only XAML `Control` DPs can be animated; native controls cannot. Supported value types include
+  `double`, `float`, `int`, `long`, `Color`, `Point`, `PointF`, `Size`, `SizeF`, `Rectangle`,
+  `RectangleF`, `Vector2/3/4`, `Quaternion`, `Padding` and `Thickness`.
+- `Property` can be an attached DP (`Canvas.Left`, `Grid.Row`) using `Owner.Property`.
+- For reversible hover/checked effects, write both `EnterAction` and `ExitAction`; the action writes a
+  local value and does not restore the previous one by itself.
+
+The full attribute table, custom `TriggerAction` shape and failure cases are in
+[winforms-xaml.md § Animations](winforms-xaml.md#7-animations).
 
 ## Writing the surface
 
@@ -188,9 +244,9 @@ The surface opens the strip on a right-press on a link, positions it, and suspen
 | link | `v:UserControl` + `WorkflowLinkAttachment` — **per-link opt-in**; the default surface draws links in `WorkflowLinkLayer` | the resting curve and palette |
 | minimap | `WorkflowMinimapOverlay` | the four palette colours |
 | grid decorator | `Panel, IWorkflowGridDecorator` plus `SurfaceCanvas` | grid/ruler palette, spacing, major-line frequency |
-| template selector | `TemplateSelector` | the `DataTemplate` each pooled item kind gets (node; link only for the opt-in path) |
+| template selector | `CustomTemplateSelector` | the `DataTemplate` each pooled item kind gets (node; link only for the opt-in path) |
 
-⚙ **The tree references siblings by type name**, so generate all seven items into one namespace. The tree needs `GridDecorator` / `SurfaceCanvas` and `TemplateSelector`; the selector needs `NodeView` / `LinkView`. Missing one is a compile error, not a runtime fallback.
+⚙ **The tree references siblings by type name**, so generate all seven items into one namespace. The tree needs `GridDecorator` / `SurfaceCanvas` and `CustomTemplateSelector`; the selector needs `NodeView` / `LinkView`. Missing one is a compile error, not a runtime fallback.
 
 ⚙ **The tree's selector is a resource, not a type-name property.** Derive from `VeloxDev.WinForms.Xaml.TemplateSelector`, expose `DataTemplate` properties, and point `behaviors:WorkflowSurfaceBehavior.TemplateSelector` at the instance. `NodeViewType` / `LinkViewType` are only the built-in reflection fallback.
 

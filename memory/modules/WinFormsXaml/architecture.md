@@ -3,6 +3,7 @@
 > 包结构：`VeloxDev.WinForms`（适配器 + XAML 运行时）与 `VeloxDev.WinForms.Generator`（专属生成器），都是 **11.2.0**。
 > 代码：`Src/Adapters/VeloxDev.WinForms/Xaml/`（运行时）、`Src/Generators/VeloxDev.WinForms.Generator/`（Roslyn 增量生成器）、`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`（Surface 行为基类）；Demo 在 `Examples/Workflow/WinForms Trimmed` 与 `Examples/Workflow/WinForms`；测试在 `Src/Test/Unit/WinFormsXaml/VeloxDev.WinForms.Xaml.Test/`。
 > 定位：WinForms 原生控件 + XAML 子集 + 依赖属性/绑定/Trigger/TransitionSystem 动画；不是 WPF 兼容层。
+> 面向消费者的完整运行时手册在 `skills/veloxdev-create-workflow/references/practices/gui/winforms-xaml.md`；动画专用在 `skills/veloxdev-create-animation/references/practices/winforms-xaml.md`。
 
 ## 一、运行时
 
@@ -34,7 +35,8 @@
 | `Trigger.cs` | `Trigger` / `Setter` / `TriggerCollection` / `DataTrigger` / `MultiTrigger` / `Condition` | 单属性、数据路径、多条件 Trigger；进入应用 setter、离开按逆序恢复；移除/替换活动 trigger 会先走 exit |
 | `Style.cs` | `Style` | `TargetType` / `Setters` / `Triggers` / `BasedOn` / `Template`；显式/隐式、原生 Control 样式；本地 > style trigger > style setter > 默认；集合变更自动重应用 |
 | `ControlTemplate.cs` | `ControlTemplate` | 单 Control 根的内容模板；Style.Template 应用时加入目标 Controls，移除时清理 |
-| `XamlTransition.cs` | `XamlTransition` / `DependencyTransitionProperty` | 用 `Transition<Control>` 把 DP 包装成 `ITransitionProperty`；走既有 WinForms TransitionSystem，run 会被登记，`Stop`/互斥 supersede 生效 |
+| `XamlTransition.cs` | `XamlTransition` / `DependencyTransitionProperty` | 用 `Transition<Control>` 把 DP 包装成 `ITransitionProperty`；走既有 WinForms TransitionSystem，run 会被登记，`Stop`/互斥 supersede 生效；`AnimateKeyFrames` 把关键帧展开成 `Then` 链 |
+| `KeyFrameAnimation.cs` | `KeyFrameAnimation` / `KeyFrame` | `TriggerAction` 的关键帧形态：`Property` + `Duration` + `Ease` + `IList<KeyFrame>`；按 `Offset` 排序后每对相邻帧一段 `Transition`，首帧大于 0 时从当前值过去 |
 | `InputEvents.cs` / `XamlInput.cs` | `PointerEventArgs` / `Pointer*EventArgs` / `KeyInputEventArgs` / `XamlInput` | 原生事件优先；显式指针/`KeyInputDown`/`KeyInputUp` 抽象仅用于跨平台输入；`XamlControl` 冒泡，原生控件经 `XamlInput.Add*` 桥接 |
 | `XamlRuntime.cs` | 解析/转换 helpers | 颜色、枚举、Padding/Size/Point 等字面量 |
 | `DataTemplate.cs` | `DataTemplate` | `Func<Control>` 工厂；由生成器填充 |
@@ -106,7 +108,7 @@ dotnet build "Examples/Workflow/WinForms Trimmed/Demo/Demo.csproj"
 dotnet build "Examples/Workflow/WinForms/Demo/Demo.csproj"
 ```
 
-当前测试 262 个（XAML）+ 41 个（WinForms headless）；覆盖 DP/附加属性、XAML 附加属性、绑定、原生优先事件与显式指针抽象、`IInputElement` 焦点/悬停/捕获、严格前缀（含 `VELOX_XAML019`）、内联/代码 Trigger、DataTrigger/MultiTrigger（含索引器与集合通知）、自定义 TriggerAction、显式/隐式 Style、BasedOn、Template、原生样式、样式变更刷新、显式资源跟踪、`Ease`、surface 行为/节点行行为、生成器与诊断；新增控件库测试覆盖 Stack/Dock/Wrap/Grid/Canvas 布局、原生子控件、Button/Toggle/Radio、TextBox/PasswordBox、Selector、Slider 与 Style/Trigger 管线。模板 harness WinForms `-Strict`：7/7 生成、构建通过、0 drift。
+当前测试 265 个（XAML）+ 41 个（WinForms headless）；覆盖 DP/附加属性、XAML 附加属性、绑定、原生优先事件与显式指针抽象、`IInputElement` 焦点/悬停/捕获、严格前缀（含 `VELOX_XAML019`）、内联/代码 Trigger、DataTrigger/MultiTrigger（含索引器与集合通知）、自定义 TriggerAction、显式/隐式 Style、BasedOn、Template、原生样式、样式变更刷新、显式资源跟踪、`Ease`、`KeyFrameAnimation`/`AnimateKeyFrames`、surface 行为/节点行行为、生成器与诊断；新增控件库测试覆盖 Stack/Dock/Wrap/Grid/Canvas 布局、原生子控件、Button/Toggle/Radio、TextBox/PasswordBox、Selector、Slider 与 Style/Trigger 管线。模板 harness WinForms `-Strict`：7/7 生成、构建通过、0 drift。
 
 ### 有头视图池基准（2000 节点 / 3000 连线 / 1200×800）
 
