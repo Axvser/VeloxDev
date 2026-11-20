@@ -236,7 +236,9 @@ jobs:
       needs.version.outputs.publish == 'true' &&
       (needs.cli_test.result == 'success' || needs.cli_test.result == 'skipped')
     runs-on: windows-latest
-    timeout-minutes: 90
+    # The NuGet waits are unbounded by design; this is the only backstop left. Core ingestion and
+    # the tool check can each take tens of minutes, so 90 would cut a slow release short.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v7
 
@@ -246,8 +248,8 @@ jobs:
 
       - name: Ensure the .NET Framework 4.6.1 targeting pack
         # Core and the WPF / WinForms adapters target netframework4.6.1; skip the install when
-        # none of them is being packed.
-        if: needs.version.outputs.core_missing == 'true' || contains(needs.version.outputs.rest_missing, 'VeloxDev.WPF') || contains(needs.version.outputs.rest_missing, 'VeloxDev.WinForms')
+        # none of them is being packed. The quoted ids keep the Templates packages from matching.
+        if: needs.version.outputs.core_missing == 'true' || contains(needs.version.outputs.rest_missing, '"VeloxDev.WPF"') || contains(needs.version.outputs.rest_missing, '"VeloxDev.WinForms"')
         shell: pwsh
         run: |
           $pack = "${env:ProgramFiles(x86)}\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.6.1"
@@ -256,7 +258,8 @@ jobs:
           }
 
       - name: Install the MAUI workload
-        if: contains(needs.version.outputs.rest_missing, 'VeloxDev.MAUI')
+        # The quoted id keeps VeloxDev.MAUI.Templates from matching.
+        if: contains(needs.version.outputs.rest_missing, '"VeloxDev.MAUI"')
         shell: pwsh
         run: dotnet workload install maui
 
@@ -277,6 +280,24 @@ jobs:
             -c Release -o artifacts --no-build
           if ($LASTEXITCODE -ne 0) { throw "pack failed: generator" }
 
+      - name: Build and pack the WinForms generator
+        # Same build-then-pack contract as the Core generator: the analyzer DLL is packed through a
+        # custom None item, so pack must run after the DLL exists. Both generators are packed here so
+        # their NuGet waits happen together instead of one after Core.
+        if: needs.version.outputs.wingen_missing == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.wingen_version }}
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          dotnet build "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" `
+            -c Release `
+            -p:GeneratePackageOnBuild=false
+          if ($LASTEXITCODE -ne 0) { throw "build failed: WinForms generator" }
+          dotnet pack "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" `
+            -c Release -o artifacts --no-build
+          if ($LASTEXITCODE -ne 0) { throw "pack failed: WinForms generator" }
+
       - name: NuGet login (OIDC -> temporary key)
         id: login
         if: needs.version.outputs.generator_missing == 'true' || needs.version.outputs.core_missing == 'true' || needs.version.outputs.wingen_missing == 'true'
@@ -284,55 +305,74 @@ jobs:
         with:
           user: Axvser
 
-      - name: Push the generator and wait until NuGet can serve it
-        if: needs.version.outputs.generator_missing == 'true'
+      - name: Push the generators and wait until NuGet can serve them
+        # Core restores the Core generator and the WinForms adapter restores its generator, both as
+        # packages. Nothing that depends on a generator is packed until that generator is downloadable.
+        if: needs.version.outputs.generator_missing == 'true' || needs.version.outputs.wingen_missing == 'true'
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.generator_version }}
+          PUSH_CORE_GENERATOR: ${{ needs.version.outputs.generator_missing }}
+          PUSH_WINGEN: ${{ needs.version.outputs.wingen_missing }}
+          GENERATOR_VERSION: ${{ needs.version.outputs.generator_version }}
+          WINGEN_VERSION: ${{ needs.version.outputs.wingen_version }}
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
-          function Push-One([string]$id) {
-            $file = Join-Path "artifacts" "$id.${env:VERSION}.nupkg"
+          function Push-One([string]$id, [string]$version) {
+            $file = Join-Path "artifacts" "$id.$version.nupkg"
             if (-not (Test-Path $file)) { throw "missing $file" }
             dotnet nuget push $file --api-key $env:NUGET_API_KEY `
               --source https://api.nuget.org/v3/index.json --skip-duplicate
             if ($LASTEXITCODE -ne 0) { throw "push failed: $id" }
           }
-          function Wait-One([string]$id) {
-            $lower = $id.ToLowerInvariant()
-            $url = "https://api.nuget.org/v3-flatcontainer/$lower/${env:VERSION}/$lower.${env:VERSION}.nupkg"
-            $deadline = (Get-Date).AddMinutes(15)
-            while ($true) {
+
+          $pending = @()
+          if ($env:PUSH_CORE_GENERATOR -eq 'true') {
+            Push-One "VeloxDev.Core.Generator" $env:GENERATOR_VERSION
+            $pending += [pscustomobject]@{ Id = "VeloxDev.Core.Generator"; Version = $env:GENERATOR_VERSION }
+          }
+          if ($env:PUSH_WINGEN -eq 'true') {
+            Push-One "VeloxDev.WinForms.Generator" $env:WINGEN_VERSION
+            $pending += [pscustomobject]@{ Id = "VeloxDev.WinForms.Generator"; Version = $env:WINGEN_VERSION }
+          }
+
+          # Poll both in one loop: waiting for them one after the other pays the slower one twice.
+          # Ingestion time varies too much to cap the wait: sleep 5 minutes, then poll every minute.
+          $delay = 300
+          while ($pending.Count -gt 0) {
+            $still = @()
+            foreach ($item in $pending) {
+              $lower = $item.Id.ToLowerInvariant()
+              $url = "https://api.nuget.org/v3-flatcontainer/$lower/$($item.Version)/$lower.$($item.Version).nupkg"
               try {
                 Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
-                return
               } catch {
-                if ((Get-Date) -gt $deadline) { throw "$id did not appear within 15 minutes" }
-                Start-Sleep -Seconds 10
+                $still += $item
               }
             }
+            $pending = $still
+            if ($pending.Count -eq 0) { break }
+            Start-Sleep -Seconds $delay
+            $delay = 60
           }
-          Push-One "VeloxDev.Core.Generator"
-          Wait-One "VeloxDev.Core.Generator"
 
       - name: Wait for the generator on NuGet before Core
-        # Core's Release build resolves the generator from NuGet. Even when the generator was not "missing"
-        # at the start (already present) or the push step above was skipped, make the dependency explicit:
-        # Core never packs until the exact generator version is downloadable.
-        if: needs.version.outputs.core_missing == 'true'
+        # Core's Release build resolves the generator from NuGet. A generator pushed by this run was
+        # already waited for above; this covers one that was already on NuGet.
+        if: needs.version.outputs.core_missing == 'true' && needs.version.outputs.generator_missing != 'true'
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.generator_version }}
         run: |
           $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.core.generator/${env:VERSION}/veloxdev.core.generator.${env:VERSION}.nupkg"
-          $deadline = (Get-Date).AddMinutes(15)
+          # Ingestion time varies too much to cap the wait: sleep 5 minutes, then poll every minute.
+          $delay = 300
           while ($true) {
             try {
               Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
               return
             } catch {
-              if ((Get-Date) -gt $deadline) { throw "VeloxDev.Core.Generator $env:VERSION did not appear within 15 minutes" }
-              Start-Sleep -Seconds 10
+              Start-Sleep -Seconds $delay
+              $delay = 60
             }
           }
 
@@ -381,83 +421,69 @@ jobs:
           function Wait-One([string]$id) {
             $lower = $id.ToLowerInvariant()
             $url = "https://api.nuget.org/v3-flatcontainer/$lower/${env:VERSION}/$lower.${env:VERSION}.nupkg"
-            $deadline = (Get-Date).AddMinutes(15)
+            # Ingestion time varies too much to cap the wait: sleep 5 minutes, then poll every minute.
+            $delay = 300
             while ($true) {
               try {
                 Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
                 return
               } catch {
-                if ((Get-Date) -gt $deadline) { throw "$id did not appear within 15 minutes" }
-                Start-Sleep -Seconds 10
+                Start-Sleep -Seconds $delay
+                $delay = 60
               }
             }
           }
           Push-One "VeloxDev.Core"
           Wait-One "VeloxDev.Core"
 
-      - name: Build and pack the WinForms generator
-        # Same build-then-pack contract as the Core generator: the analyzer DLL is packed through a
-        # custom None item, so pack must run after the DLL exists.
-        if: needs.version.outputs.wingen_missing == 'true'
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.version.outputs.wingen_version }}
-        run: |
-          New-Item -ItemType Directory -Force artifacts | Out-Null
-          dotnet build "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" `
-            -c Release `
-            -p:GeneratePackageOnBuild=false
-          if ($LASTEXITCODE -ne 0) { throw "build failed: WinForms generator" }
-          dotnet pack "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" `
-            -c Release -o artifacts --no-build
-          if ($LASTEXITCODE -ne 0) { throw "pack failed: WinForms generator" }
+      - name: NuGet login (fresh key for the remaining pushes)
+        id: login2
+        uses: NuGet/login@v1
+        with:
+          user: Axvser
 
-      - name: Push the WinForms generator and wait until NuGet can serve it
-        if: needs.version.outputs.wingen_missing == 'true'
+      - name: Pack and push the CLI
+        # The CLI is a self-contained tool package: it bundles Core and Core.Extension, so no other
+        # package in this run depends on it. Pushing it before the remaining packs lets NuGet ingest
+        # it while the adapters and templates are packed and pushed.
+        if: needs.version.outputs.cli_missing == 'true'
         shell: pwsh
         env:
-          VERSION: ${{ needs.version.outputs.wingen_version }}
-          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+          VERSION: ${{ needs.version.outputs.cli_version }}
+          NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
         run: |
-          $file = Join-Path "artifacts" "VeloxDev.WinForms.Generator.${env:VERSION}.nupkg"
+          dotnet pack "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj" `
+            -c Release -o artifacts -p:GeneratePackageOnBuild=false
+          if ($LASTEXITCODE -ne 0) { throw "pack failed: VeloxDev.Cli" }
+          $file = Join-Path "artifacts" "VeloxDev.Cli.${env:VERSION}.nupkg"
           if (-not (Test-Path $file)) { throw "missing $file" }
           dotnet nuget push $file --api-key $env:NUGET_API_KEY `
             --source https://api.nuget.org/v3/index.json --skip-duplicate
-          if ($LASTEXITCODE -ne 0) { throw "push failed: VeloxDev.WinForms.Generator" }
-          $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.winforms.generator/${env:VERSION}/veloxdev.winforms.generator.${env:VERSION}.nupkg"
-          $deadline = (Get-Date).AddMinutes(15)
-          while ($true) {
-            try {
-              Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
-              return
-            } catch {
-              if ((Get-Date) -gt $deadline) { throw "VeloxDev.WinForms.Generator did not appear within 15 minutes" }
-              Start-Sleep -Seconds 10
-            }
-          }
+          if ($LASTEXITCODE -ne 0) { throw "push failed: VeloxDev.Cli" }
 
       - name: Wait for the WinForms generator on NuGet before the adapter
         # The Release build of the adapter takes the generator as a PackageReference, so the exact
-        # generator version must be downloadable before the adapter is packed. This also covers the
-        # case where the generator was already published and its push step above was skipped.
-        if: contains(needs.version.outputs.rest_missing, 'VeloxDev.WinForms')
+        # generator version must be downloadable before the adapter is packed. A generator pushed by
+        # this run was already waited for above; this covers one that was already on NuGet.
+        if: contains(needs.version.outputs.rest_missing, '"VeloxDev.WinForms"') && needs.version.outputs.wingen_missing != 'true'
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.wingen_version }}
         run: |
           $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.winforms.generator/${env:VERSION}/veloxdev.winforms.generator.${env:VERSION}.nupkg"
-          $deadline = (Get-Date).AddMinutes(15)
+          # Ingestion time varies too much to cap the wait: sleep 5 minutes, then poll every minute.
+          $delay = 300
           while ($true) {
             try {
               Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
               return
             } catch {
-              if ((Get-Date) -gt $deadline) { throw "VeloxDev.WinForms.Generator $env:VERSION did not appear within 15 minutes" }
-              Start-Sleep -Seconds 10
+              Start-Sleep -Seconds $delay
+              $delay = 60
             }
           }
 
-      - name: Pack the dependents, templates and CLI against NuGet
+      - name: Pack the dependents and templates against NuGet
         if: needs.version.outputs.rest_missing != '[]'
         shell: pwsh
         env:
@@ -488,6 +514,8 @@ jobs:
 
           $missing = @("$env:MISSING" | ConvertFrom-Json)
           foreach ($entry in $missing) {
+            # The CLI was packed and pushed before this loop; leaving it here would only repack it.
+            if ($entry.id -eq 'VeloxDev.Cli') { continue }
             $project = $paths[$entry.id]
             if (-not $project) { throw "no project path for $($entry.id)" }
             # GeneratePackageOnBuild=true strips Build out of GenerateNuspecDependsOn, so a plain
@@ -519,12 +547,8 @@ jobs:
         with:
           name: VeloxDev-${{ github.run_number }}
           path: artifacts/*.nupkg
-
-      - name: NuGet login (fresh key for the remaining pushes)
-        id: login2
-        uses: NuGet/login@v1
-        with:
-          user: Axvser
+          # A re-run keeps the previous attempt's artifact; without this the upload fails on the name.
+          overwrite: true
 
       - name: Push the rest
         if: needs.version.outputs.rest_missing != '[]'
@@ -533,12 +557,14 @@ jobs:
           GENERATOR_VERSION: ${{ needs.version.outputs.generator_version }}
           WINGEN_VERSION: ${{ needs.version.outputs.wingen_version }}
           CORE_VERSION: ${{ needs.version.outputs.core_version }}
+          CLI_VERSION: ${{ needs.version.outputs.cli_version }}
           NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
         run: |
           $skip = @(
             "VeloxDev.Core.Generator.${env:GENERATOR_VERSION}.nupkg",
             "VeloxDev.WinForms.Generator.${env:WINGEN_VERSION}.nupkg",
-            "VeloxDev.Core.${env:CORE_VERSION}.nupkg"
+            "VeloxDev.Core.${env:CORE_VERSION}.nupkg",
+            "VeloxDev.Cli.${env:CLI_VERSION}.nupkg"
           )
           Get-ChildItem artifacts -Filter "*.nupkg" |
             Where-Object { $skip -notcontains $_.Name } |
@@ -580,27 +606,28 @@ jobs:
           VERSION: ${{ needs.version.outputs.cli_version }}
         run: |
           $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.cli/${env:VERSION}/veloxdev.cli.${env:VERSION}.nupkg"
-          $deadline = (Get-Date).AddMinutes(15)
+          # Ingestion time varies too much to cap the wait: sleep 5 minutes, then poll every minute.
+          $delay = 300
           while ($true) {
             try {
               Invoke-WebRequest $url -Method Head -UseBasicParsing -TimeoutSec 30 | Out-Null
               break
             } catch {
-              if ((Get-Date) -gt $deadline) { throw "VeloxDev.Cli did not appear within 15 minutes" }
-              Start-Sleep -Seconds 10
+              Start-Sleep -Seconds $delay
+              $delay = 60
             }
           }
           # The flatcontainer endpoint can serve the nupkg before the feed's package index does,
           # so `dotnet tool install` may still report "version not found" for a few minutes.
           # Retry instead of failing a release that is already complete.
           $tool = Join-Path $env:RUNNER_TEMP "veloxdev-tool"
-          $deadline = (Get-Date).AddMinutes(15)
+          $deadline = (Get-Date).AddMinutes(30)
           while ($true) {
             if (Test-Path $tool) { Remove-Item $tool -Recurse -Force }
             dotnet tool install --tool-path $tool VeloxDev.Cli --version $env:VERSION
             if ($LASTEXITCODE -eq 0) { break }
-            if ((Get-Date) -gt $deadline) { throw "VeloxDev.Cli $env:VERSION is not installable" }
-            Start-Sleep -Seconds 15
+            if ((Get-Date) -gt $deadline) { throw "VeloxDev.Cli $env:VERSION is not installable within 30 minutes" }
+            Start-Sleep -Seconds 60
           }
           & (Join-Path $tool "veloxdev.exe") --help
           if ($LASTEXITCODE -ne 0) { throw "veloxdev --help failed" }
