@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using VeloxDev.Benchmarks;
 
 namespace VeloxDev.Adapters.Benchmarks.Headed;
 
@@ -25,14 +26,14 @@ public sealed record HeadedRunResult(string Markdown, string MarkdownPath, strin
 /// <summary>Writes the headed benchmark's Markdown and JSON artifacts.</summary>
 public static class HeadedReport
 {
-    /// <summary>Renders the report and writes both artifacts next to the entry project.</summary>
+    /// <summary>Renders the report and writes both artifacts under the OS temp area.</summary>
     /// <param name="options">The scenario that produced <paramref name="iterations"/>.</param>
     /// <param name="iterations">The measured iterations, excluding warmup.</param>
     /// <returns>The report text and the written paths.</returns>
     public static HeadedRunResult Write(HeadedOptions options, IReadOnlyList<HeadedIteration> iterations)
     {
         var markdown = BuildMarkdown(options, iterations);
-        var directory = options.OutputPath ?? Path.Combine(FindEntryProjectDirectory(), "BenchmarkDotNet.Artifacts", "view-pipeline");
+        var directory = options.OutputPath ?? BenchmarkArtifacts.For("view-pipeline");
         Directory.CreateDirectory(directory);
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
         var stem = $"headed-{options.Adapter}-{stamp}";
@@ -189,24 +190,4 @@ public static class HeadedReport
     private static string Escape(string value)
         => value.Replace("|", "\\|", StringComparison.Ordinal);
 
-    // 产物默认落在入口工程目录，与从哪个目录启动无关；未来 WinUI/MAUI 宿主沿用同一条规则。
-    private static string FindEntryProjectDirectory()
-    {
-        var projectName = Assembly.GetEntryAssembly()?.GetName().Name;
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        if (!string.IsNullOrEmpty(projectName))
-        {
-            while (current is not null)
-            {
-                if (File.Exists(Path.Combine(current.FullName, projectName + ".csproj")))
-                {
-                    return current.FullName;
-                }
-
-                current = current.Parent;
-            }
-        }
-
-        return Environment.CurrentDirectory;
-    }
 }

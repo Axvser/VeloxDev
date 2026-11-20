@@ -147,7 +147,7 @@
 
 基准在 `Src/Test/Benchmarks/VeloxDev.Serialization.Benchmarks/`（跑法见 `Src/Test/README.md`）。
 
-**工具的形状**：两个基准类共享 `Scales.cs` 里的四档当量 —— 小 100 / 中 1 000 / 大 10 000 / 超大 30 000 个节点。**默认四档全跑**，`--scale N` 收窄到一档；档位走 `[ParamsSource]` 而不是 `[Params]`，因为后者是编译期常量，会让每次改动都为最慢的一档付钱。`SerializationBenchmarks` 只量归档自己（回归用），`ComparisonBenchmarks` 让**同一个对象图**过归档 / System.Text.Json / Newtonsoft（三家都开引用保留）。**一条命令跑完并留一份 Markdown 报告**到本工程目录下的 `BenchmarkDotNet.Artifacts/serialization-performance.md`。**报告 = 每个当量一张表 + 一处自校 + 一章行为说明**：环境一张；每个当量的表**一行一个序列化器**，**耗时与存储同表**（写/读各自的耗时与分配，加文档字符数），**本仓库那行加粗**，括号里是相对本仓库同方向的倍数；表后是**自校**（同一个归档写被两个类各量一次，两者之差就是这一档的噪声，结论见 §四·二）。
+**工具的形状**：两个基准类共享 `Scales.cs` 里的四档当量 —— 小 100 / 中 1 000 / 大 10 000 / 超大 30 000 个节点。**默认四档全跑**，`--scale N` 收窄到一档；档位走 `[ParamsSource]` 而不是 `[Params]`，因为后者是编译期常量，会让每次改动都为最慢的一档付钱。`SerializationBenchmarks` 只量归档自己（回归用），`ComparisonBenchmarks` 让**同一个对象图**过归档 / System.Text.Json / Newtonsoft（三家都开引用保留）。**一条命令跑完并留一份 Markdown 报告**到 OS 临时目录 `%TEMP%/VeloxDev.Benchmarks/serialization/serialization-performance.md`。**报告 = 每个当量一张表 + 一处自校 + 一章行为说明**：环境一张；每个当量的表**一行一个序列化器**，**耗时与存储同表**（写/读各自的耗时与分配，加文档字符数），**本仓库那行加粗**，括号里是相对本仓库同方向的倍数；表后是**自校**（同一个归档写被两个类各量一次，两者之差就是这一档的噪声，结论见 §四·二）。
 
 **尾章是《归档序列化 · 行为与支持》**：分节讲这套序列化本身 —— 收录条件（含 §一·一 那三条扩展）、写读 API、选项、成员规则、`[Archive]` 五个选项、`[JsonIgnore]` / 必填、生命周期钩子、容器与键、泛型、拼写契约、失败形态、诊断、领域封装，**以用例代码为主、每节只讲关键结论**。它写在 `PerformanceReport.cs` 的常量 `Surface` 里，与某一次测量的数字无关；换行要做归一化（raw string 带的是源文件的换行符，其余行走 `AppendLine`）。
 
@@ -169,10 +169,8 @@
 报告由 `PerformanceReport.cs` 从 BenchmarkDotNet 的**结构化结果**生成，不解析控制台输出 —— 分配那一项
 尤其要注意：指标键是 `Allocated Memory`，取错不会报错、只会让整列变成「—」。
 
-> ⚠ **产物必须落在工程目录，不是工作目录。** BenchmarkDotNet 默认 `BenchmarkDotNet.Artifacts` 相对**当前
-> 工作目录**，从仓库根启动就会把输出散到根上；`Artifacts.cs` 从程序集位置（`bin/Debug/net10.0` 往上三层）
-> 解析绝对路径，`BenchmarkConfig` 用 `WithArtifactsPath` 钉住它 —— 报告也写同一处。`.gitignore` 里那条是
-> 任意深度匹配，所以不计入仓库。
+> ⚠ **产物必须落在 OS 临时目录，不是工作目录或工程目录。** BenchmarkDotNet 默认 `BenchmarkDotNet.Artifacts` 相对**当前
+> 工作目录**；`BenchmarkArtifacts` 统一解析到 `%TEMP%/VeloxDev.Benchmarks/<工程>/`，`BenchmarkConfig` 用 `WithArtifactsPath` 钉住它 —— 报告也写同一处。
 > ⚠ **`超大` 停在 30 000 是有意的**：Newtonsoft 在 1 000 节点上单次操作就分配约 50 MB，再上一个数量级
 > 量到的会是 GC 而不是序列化器。
 > ⚠ **入口不能把空参数交给 `BenchmarkSwitcher`**：它会进交互式选择，无人应答就什么也不跑、**还不报错**
@@ -299,7 +297,7 @@
 
 - 生成器包缺席时，本仓库**只有 Debug 可构建**。
 - 基准以 `-c Debug -p:Optimize=true` 构建、用 `InProcessEmitToolchain` 运行（`BenchmarkConfig.cs`）。**`-t:Rebuild` 是必需的**：增量构建会认为 Core 已最新而跳过它，留下 `dotnet test` 构出的未优化 DLL，BenchmarkDotNet 会直接拒绝。
-  **拒绝是安静的**：它只在 `BenchmarkDotNet.Artifacts/BenchmarkRun-*.log` 里写两行 `Validating benchmarks`，命令行不报错，**报告照样生成、只是「结果」那一节是「本次运行没有产出可用的数据。」** 同理 `dotnet run` 会再构建一次、把优化冲掉，要跑就直接执行 `bin/Debug/net10.0/` 下的产物。
+  **拒绝是安静的**：它只在 `%TEMP%/VeloxDev.Benchmarks/<工程>/BenchmarkRun-*.log` 里写两行 `Validating benchmarks`，命令行不报错，**报告照样生成、只是「结果」那一节是「本次运行没有产出可用的数据。」** 同理 `dotnet run` 会再构建一次、把优化冲掉，要跑就直接执行 `bin/Debug/net10.0/` 下的产物。
 
 ---
 

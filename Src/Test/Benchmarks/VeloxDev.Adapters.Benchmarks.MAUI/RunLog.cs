@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using VeloxDev.Adapters.Benchmarks.Headed;
+using VeloxDev.Benchmarks;
 
 namespace VeloxDev.Adapters.Benchmarks.MAUI;
 
@@ -21,7 +22,7 @@ internal sealed class RunLog : IDisposable
     internal static RunLog Create(HeadedOptions? options, string stem)
     {
         var directory = options?.OutputPath
-            ?? System.IO.Path.Combine(FindEntryProjectDirectory(), "BenchmarkDotNet.Artifacts", "view-pipeline");
+            ?? BenchmarkArtifacts.For("view-pipeline");
         Directory.CreateDirectory(directory);
 
         var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
@@ -39,24 +40,4 @@ internal sealed class RunLog : IDisposable
 
     public void Dispose() => _writer.Dispose();
 
-    // 与 HeadedReport 同一条规则：产物跟着入口工程走，与从哪个目录启动无关。
-    private static string FindEntryProjectDirectory()
-    {
-        var projectName = Assembly.GetEntryAssembly()?.GetName().Name;
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        if (!string.IsNullOrEmpty(projectName))
-        {
-            while (current is not null)
-            {
-                if (File.Exists(System.IO.Path.Combine(current.FullName, projectName + ".csproj")))
-                {
-                    return current.FullName;
-                }
-
-                current = current.Parent;
-            }
-        }
-
-        return Environment.CurrentDirectory;
-    }
 }

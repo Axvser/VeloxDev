@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using VeloxDev.Adapters.Benchmarks.Headed;
+using VeloxDev.Benchmarks;
 
 namespace VeloxDev.Adapters.Benchmarks.WinUI;
 
@@ -7,7 +8,7 @@ namespace VeloxDev.Adapters.Benchmarks.WinUI;
 /// <remarks>
 /// The command line is read from <see cref="Environment.GetCommandLineArgs"/>; the parsed options are the
 /// same ones the console hosted adapters accept. The report is written through the shared
-/// <see cref="HeadedReport"/> rules, so it lands next to this project's <c>.csproj</c>.
+/// <see cref="HeadedReport"/> rules, so it lands under the OS temp area.
 /// </remarks>
 public partial class App : Application
 {
@@ -96,7 +97,7 @@ public partial class App : Application
 // WinExe 崩溃时控制台可能已经关闭；除了 stderr 与 Debug 输出，再留一份文件给事后排查。
 internal static class CrashLog
 {
-    private static readonly string Path = System.IO.Path.Combine(AppContext.BaseDirectory, "winui-host.log");
+    private static readonly string Path = System.IO.Path.Combine(BenchmarkArtifacts.For("winui"), "winui-host.log");
 
     internal static void Report(Exception? exception) => ReportText(exception?.ToString() ?? "Unknown failure.");
 
@@ -116,6 +117,7 @@ internal static class CrashLog
         System.Diagnostics.Debug.WriteLine(message);
         try
         {
+            System.IO.Directory.CreateDirectory(BenchmarkArtifacts.For("winui"));
             File.AppendAllText(Path, $"{DateTime.Now:O} {message}{Environment.NewLine}");
         }
         catch (IOException)

@@ -5,6 +5,7 @@ using BenchmarkDotNet.Running;
 using Microsoft.Maui.Graphics;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using VeloxDev.Benchmarks;
 
 namespace VeloxDev.Maui.Benchmarks;
 
@@ -27,7 +28,7 @@ internal static class Program
             return;
         }
 
-        BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+        BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, BenchmarkArtifactConfig.Create("maui"));
     }
 }
 

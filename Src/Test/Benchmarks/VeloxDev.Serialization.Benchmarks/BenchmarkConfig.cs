@@ -50,8 +50,7 @@ public sealed class BenchmarkConfig : ManualConfig
             .WithLaunchCount(1));
         AddDiagnoser(MemoryDiagnoser.Default);
 
-        // 默认是「工作目录下的 BenchmarkDotNet.Artifacts」—— 从仓库根启动就会落到根上。
-        // 改成本工程目录下，与从哪里启动无关。
+        // BenchmarkDotNet 默认相对工作目录写；改为 OS 临时目录，与从哪里启动无关。
         WithArtifactsPath(Artifacts.Path);
     }
 }

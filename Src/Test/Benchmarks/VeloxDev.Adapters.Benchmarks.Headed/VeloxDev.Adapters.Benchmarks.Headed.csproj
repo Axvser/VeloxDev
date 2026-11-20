@@ -15,4 +15,7 @@
 		<ProjectReference Include="..\..\..\Core\VeloxDev.Core\VeloxDev.Core.csproj" />
 	</ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\BenchmarkArtifacts.cs" Link="BenchmarkArtifacts.cs" />
+  </ItemGroup>
 </Project>

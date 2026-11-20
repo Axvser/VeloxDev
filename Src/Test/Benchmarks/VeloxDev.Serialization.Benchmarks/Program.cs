@@ -7,7 +7,7 @@ namespace VeloxDev.Serialization.Benchmarks;
 /// </summary>
 /// <remarks>
 /// No arguments runs all four magnitudes of both classes and writes
-/// <c>BenchmarkDotNet.Artifacts/serialization-performance.md</c>. BenchmarkDotNet's own arguments still work
+/// the report under the OS temp area. BenchmarkDotNet's own arguments still work
 /// (<c>--filter</c>, <c>--list</c>, …), and the report then covers whatever ran.
 /// </remarks>
 public static class Program

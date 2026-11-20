@@ -159,7 +159,7 @@ dotnet build Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.Razor/VeloxDev.Ada
 - 每轮先 warmup（默认 1 轮，不计），再测 `--iterations` 轮；表里是**中位数 / P95**，不是均值。
 - `Created / Reused / Destroyed` 是池的累计计数；`Active / Pending / Recycled / Visible` 是当前状态。
 - 分配量是最稳的一维；耗时是同机同会话的前后对比，不要当跨机器绝对基准。
-- 输出写在 `BenchmarkDotNet.Artifacts/view-pipeline/`（工程目录下，已被 `.gitignore` 的任意深度规则覆盖），同时有 `.md` 与原始 `.json`。
+输出写在 OS 临时目录 `%TEMP%/VeloxDev.Benchmarks/view-pipeline/`（`BenchmarkArtifacts.For("view-pipeline")`），同时有 `.md` 与原始 `.json`。
 
 **适配器范围**：`avalonia` / `wpf` / `winforms` / `jalium` / `winui` / `maui` 都测真实窗口里的新 Core 管线；`razor` 测的是框架 renderer 构造 `ViewPool` 渲染树（无头），不测窗口布局。**一次只跑一家**，别并行驱动多个 UI 进程。
 
@@ -200,10 +200,7 @@ dotnet build Src/Test/Benchmarks/VeloxDev.Serialization.Benchmarks/VeloxDev.Seri
 绕过的开销。**它是一次测量，不是一次测试 —— 不要挂在每次改动上跑。** 单元测试是另一回事（约 45 秒）。
 语料按档缓存（`Corpus.Shared`），否则每个用例都会重建一遍同样大的树。
 
-**报告**：跑完写本工程目录下的 `BenchmarkDotNet.Artifacts/serialization-performance.md`（该目录被 `.gitignore`
-按任意深度匹配，不计入仓库）。**产物落在工程目录而不是工作目录** —— BenchmarkDotNet 的默认是后者，从仓库根
-启动就会把输出散到根上；`BenchmarkConfig` 因此用 `WithArtifactsPath`，路径从程序集位置（`bin/Debug/net10.0`
-往上三层）解析，与从哪里启动无关。
+**报告**：跑完写 OS 临时目录下的 `VeloxDev.Benchmarks/serialization/serialization-performance.md`（`BenchmarkArtifacts` 统一解析，不落在仓库）。**产物落在 OS 临时目录而不是工作目录** —— BenchmarkDotNet 的默认是后者，从仓库根或工程目录启动都会把输出散进树里；`BenchmarkConfig` 因此用 `WithArtifactsPath(Artifacts.Path)`，与从哪里启动无关。
 **报告 = 五张表 + 一处自校 + 一章行为说明**：环境一张，四个当量各一张。每个当量的表里**一行一个序列化器**，
 共四行 —— 本仓库、System.Text.Json（反射）、System.Text.Json（源生成）、Newtonsoft.Json。
 **耗时与存储同表**（写/读各自的耗时与分配，加文档字符数），**本仓库那行加粗**，括号里是相对本仓库同方向的倍数。

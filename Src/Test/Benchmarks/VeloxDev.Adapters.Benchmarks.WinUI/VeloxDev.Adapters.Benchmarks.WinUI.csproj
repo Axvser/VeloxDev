@@ -32,4 +32,7 @@
 		<ProjectReference Include="..\VeloxDev.Adapters.Benchmarks.Headed\VeloxDev.Adapters.Benchmarks.Headed.csproj" />
 	</ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\BenchmarkArtifacts.cs" Link="BenchmarkArtifacts.cs" />
+  </ItemGroup>
 </Project>

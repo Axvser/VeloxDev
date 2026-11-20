@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Running;
 using VeloxDev.Adapters.Benchmarks.Headed;
+using VeloxDev.Benchmarks;
 
 namespace VeloxDev.Adapters.Benchmarks;
 
@@ -14,6 +15,6 @@ internal static class Program
             return;
         }
 
-        BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+        BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, BenchmarkArtifactConfig.Create("adapters"));
     }
 }

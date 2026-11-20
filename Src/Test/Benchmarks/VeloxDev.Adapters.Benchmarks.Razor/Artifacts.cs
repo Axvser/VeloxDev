@@ -1,9 +1,10 @@
+using VeloxDev.Benchmarks;
+
 namespace VeloxDev.Adapters.Benchmarks.Razor;
 
-// 产物落在工程目录而不是启动目录：BenchmarkDotNet 默认相对工作目录写，
-// 从仓库根启动就会散到根上。.gitignore 的 BenchmarkDotNet.Artifacts/ 任意深度都匹配。
+// 产物落在 OS 临时目录，不落在仓库：BenchmarkDotNet 默认相对工作目录写，
+// 从根启动会散到根上，从工程启动会散到源码里。
 internal static class Artifacts
 {
-    internal static string Path { get; } = System.IO.Path.GetFullPath(
-        System.IO.Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "BenchmarkDotNet.Artifacts"));
+    internal static string Path { get; } = BenchmarkArtifacts.For("adapters-razor");
 }

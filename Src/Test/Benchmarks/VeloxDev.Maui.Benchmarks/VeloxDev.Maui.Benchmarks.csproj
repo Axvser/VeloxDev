@@ -24,4 +24,11 @@
 		<ProjectReference Include="..\..\..\Adapters\VeloxDev.MAUI\VeloxDev.MAUI.csproj" />
 	</ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\BenchmarkArtifacts.cs" Link="BenchmarkArtifacts.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\BenchmarkArtifactConfig.cs" Link="BenchmarkArtifactConfig.cs" />
+  </ItemGroup>
 </Project>

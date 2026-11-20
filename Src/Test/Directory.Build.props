@@ -1,0 +1,13 @@
+<Project>
+
+  <!--
+    VSTest writes its results under <project>/TestResults by default and creates the directory even when no
+    logger is attached, so every `dotnet test` run leaves an empty ignored folder in the source tree. Point it
+    at the OS temp area instead; the path is resolved by MSBuild, so it does not depend on the working directory
+    or the shell's environment variables.
+  -->
+  <PropertyGroup>
+    <VSTestResultsDirectory>$([System.IO.Path]::Combine($([System.IO.Path]::GetTempPath()), 'VeloxDev.TestResults', '$(MSBuildProjectName)'))</VSTestResultsDirectory>
+  </PropertyGroup>
+
+</Project>
