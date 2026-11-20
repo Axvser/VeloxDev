@@ -283,10 +283,14 @@ public class Path : Shape
 
         var offsetX = bounds.X + ((bounds.Width - (source.Width * scaleX)) / 2f);
         var offsetY = bounds.Y + ((bounds.Height - (source.Height * scaleY)) / 2f);
-        using var transform = new Matrix();
-        transform.Scale(scaleX, scaleY);
-        transform.Translate(offsetX, offsetY);
-        transform.Translate(-source.X, -source.Y, MatrixOrder.Append);
+
+        // 直接用矩阵元素写 x' = (x - source.X) * scaleX + offsetX。用 Scale/Translate 叠加时
+        // GDI+ 的行向量顺序会让 -source 不被缩放，整条路径平移出控件（小尺寸 SlotView 完全不可见）。
+        using var transform = new Matrix(
+            scaleX, 0f,
+            0f, scaleY,
+            offsetX - (source.X * scaleX),
+            offsetY - (source.Y * scaleY));
         path.Transform(transform);
         return path;
     }

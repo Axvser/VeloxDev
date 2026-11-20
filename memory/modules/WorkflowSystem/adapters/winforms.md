@@ -244,6 +244,18 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 `WorkflowNodeCard.BuildLayout` 先 `ResetRefs()` 把 `_scriptBox` 等字段置空，再 `_bodyPanel.Controls.Clear()`；被摘掉的旧视口仍可能收到一次 `VisibleChanged` → `Layout`。因此卡片内的布局/绘制回调捕获创建时的局部控件并检查 `IsDisposed`，不读会被 `ResetRefs` 清空的字段；`BuildScriptEditor` 的 `viewport.Layout` 按此写。
 
+### 4.14 `SlotRowsPanel.ApplyScale` 不能按自己记住的 collapse 早退
+
+缩放后 `WorkflowNodeRowsBehavior.Rebuild` 会新建输入视图与行；如果面板因为自身 `collapse`/`baseSlotSize` 已经是当前值就 `return`，这些新控件从未收到缩放，停在 18×18，表现为同一卡片里部分端口大、部分端口小。每次 `ApplyScale` 都要把因子传播给所有行并 `PerformLayout`；行自己的 `appliedScale` 去重，不会重复建字体。
+
+### 4.15 缩放换字体时不能立即 Dispose 旧 Font
+
+`SlotRowPanel.ApplyScale` / `WorkflowNodeTitleBehavior.ApplyCollapse` 给 Label 换字体后，旧 Font 若当场 `Dispose`，而 Label 正在用这份字体 `MeasureString`，GDI+ 抛 `ArgumentException: Parameter is not valid.`（`Label.GetPreferredSizeCore` → `Graphics.MeasureStringInternal`），这次绘制会留下红框和红色乱线。旧字体只放进 `retiredFonts`，等行/标题销毁（`Detach`）后统一释放。
+
+### 4.16 悬停高亮需要宿主推帧
+
+`WorkflowLinkLayer.OnPaint` 只在被绘制时读 `WorkflowInput.HoveredLink`；指针换目标本身不会让画布 `Invalidate`。宿主订 `IInputEvents` 的 `PointerMoved` / `PointerEntered` / `PointerExited` 并调用 `surfaceCanvas.Invalidate()`，`HoveredLineColor` / `HoveredThickness` 才会在悬停时生效（两个 demo 的 `TreeView` / `WorkflowCanvas` 都这么做）。
+
 ---
 
 ## 四点五、画布滚动与表面级按键

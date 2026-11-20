@@ -91,6 +91,7 @@ public sealed class WorkflowNodeTitleBehavior
         private Label? label;
         private Control? header;
         private Font? titleFont;
+        private readonly List<Font> retiredFonts = [];
         private int baseHeaderHeight = 36;
         private int basePaddingX = 12;
         private float baseFontSize = 9f;
@@ -186,6 +187,13 @@ public sealed class WorkflowNodeTitleBehavior
             {
                 previous?.Dispose();
             }
+
+            foreach (var font in retiredFonts)
+            {
+                font.Dispose();
+            }
+
+            retiredFonts.Clear();
         }
 
         private void ResolveParts()
@@ -241,9 +249,12 @@ public sealed class WorkflowNodeTitleBehavior
                 var previous = titleFont;
                 titleFont = next;
                 label.Font = next;
+
+                // 旧字体可能正被 Label 的测量/绘制使用；销毁会让 GDI+ 抛 "Parameter is not valid."。
+                // 退化字体先记账，等 Detach/卡片销毁时再释放。
                 if (previous is not null && !ReferenceEquals(previous, next))
                 {
-                    previous.Dispose();
+                    retiredFonts.Add(previous);
                 }
             }
 

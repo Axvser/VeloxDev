@@ -52,6 +52,10 @@ public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserContr
                 _events = events;
                 events.Input.KeyDown += OnKeyDown;
                 events.Input.PointerWheelChanged += OnWheel;
+                // 连线层在 OnPaint 里读 WorkflowInput.HoveredLink；指针换目标时由宿主重画一次。
+                events.Input.PointerMoved += OnPointerMoved;
+                events.Input.PointerEntered += OnPointerMoved;
+                events.Input.PointerExited += OnPointerExited;
             }
 
             WorkflowSurfaceBehavior.Refresh(this);
@@ -64,6 +68,9 @@ public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserContr
         {
             _events.Input.KeyDown -= OnKeyDown;
             _events.Input.PointerWheelChanged -= OnWheel;
+            _events.Input.PointerMoved -= OnPointerMoved;
+            _events.Input.PointerEntered -= OnPointerMoved;
+            _events.Input.PointerExited -= OnPointerExited;
             _events = null;
         }
 
@@ -97,6 +104,11 @@ public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserContr
 
         e.Handle.PreventDefault = true;
     }
+
+    // 悬停高亮是宿主的：连线层只按 HoveredLink 换颜色/线宽，指针换目标时不重画，由这里推一帧。
+    private void OnPointerMoved(object? sender, PointerEventArgs e) => surfaceCanvas.Invalidate();
+
+    private void OnPointerExited(object? sender, PointerExitedEventArgs e) => surfaceCanvas.Invalidate();
 
     // VeloxDev customization: 画布滚轮由适配器整笔接管，所以这里是唯一能改写它去哪的机会。
     // 不按 Shift 就什么都不做 —— 适配器按平台的步长执行默认竖滚；按住了就拦下这一笔，改从轴上横着滚。

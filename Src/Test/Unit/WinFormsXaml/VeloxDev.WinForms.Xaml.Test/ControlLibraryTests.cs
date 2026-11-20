@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using VeloxDev.WinForms.Xaml;
 using V = VeloxDev.WinForms.Xaml.Controls;
 
@@ -260,6 +261,67 @@ public sealed class ControlLibraryTests
 
         Assert.HasCount(2, control.Controls);
         Assert.IsTrue(control.Controls.Cast<System.Windows.Forms.Control>().All(child => child is V.TextBlock));
+    }
+
+    [TestMethod]
+    public void Path_UniformStretch_FitsTheGeometryIntoTheContentBounds()
+    {
+        using var path = new V.Shapes.Path
+        {
+            Data = "M100,100 L200,100 L200,200 Z",
+            Stretch = V.Stretch.Uniform,
+        };
+
+        var createPath = typeof(V.Shapes.Path).GetMethod(
+            "CreatePath",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Path.CreatePath moved; update this test.");
+
+        using var geometry = (GraphicsPath)createPath.Invoke(path, [new RectangleF(0f, 0f, 20f, 20f)])!;
+        var bounds = geometry.GetBounds();
+
+        Assert.IsTrue(bounds.Left >= -0.5f && bounds.Top >= -0.5f, $"geometry starts outside the control: {bounds}");
+        Assert.IsTrue(bounds.Right <= 20.5f && bounds.Bottom <= 20.5f, $"geometry ends outside the control: {bounds}");
+    }
+
+    [TestMethod]
+    public void Path_MultipleMoveCommands_StartSeparateFigures()
+    {
+        using var path = new V.Shapes.Path { Data = "M0,0 L10,0 M20,20 L30,20" };
+
+        var createPath = typeof(V.Shapes.Path).GetMethod(
+            "CreatePath",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Path.CreatePath moved; update this test.");
+
+        using var geometry = (GraphicsPath)createPath.Invoke(path, [new RectangleF(0f, 0f, 100f, 100f)])!;
+
+        // PathPointType.Start 是 0；第二个 M 必须开启新图，不能被当成 L 连过去。
+        var figureStarts = geometry.PathTypes.Count(type => (type & 0x07) == 0);
+        Assert.AreEqual(2, figureStarts, "the second M must start a new figure");
+    }
+
+    [TestMethod]
+    public void ATransparentControl_PaintsItsParentBackgroundUnderItself()
+    {
+        using var parent = new V.Border { Background = Color.Red, Size = new Size(40, 40) };
+        using var child = new V.TextBlock { Size = new Size(20, 20), Location = new Point(5, 5) };
+        parent.Controls.Add(child);
+
+        using var bitmap = new Bitmap(20, 20);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            var paintBackground = typeof(V.Control).GetMethod(
+                "OnPaintBackground",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("Control.OnPaintBackground moved; update this test.");
+
+            paintBackground.Invoke(
+                child,
+                [new System.Windows.Forms.PaintEventArgs(graphics, new Rectangle(0, 0, 20, 20))]);
+        }
+
+        Assert.AreEqual(Color.Red.ToArgb(), bitmap.GetPixel(10, 10).ToArgb());
     }
 
     private sealed class ProbeButton : V.Button

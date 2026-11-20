@@ -1173,22 +1173,48 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     /// <inheritdoc />
     protected override void OnPaintBackground(PaintEventArgs e)
     {
+        var background = Background;
+
         // 没有作者设置背景时保持透明：WPF/Avalonia 的默认背景是透明，尤其不能让自绘文本/图形
         // 在暗色表面上盖出一块系统灰。
-        if (!HasXamlValue(BackColorProperty) && base.BackColor == DefaultBackColor)
+        if ((!HasXamlValue(BackColorProperty) && base.BackColor == DefaultBackColor) || background.A == 0)
+        {
+            PaintParentBackground(e);
+            return;
+        }
+
+        // 半透明背景要先画父容器的底色：WinForms 的子窗口 DC 不含父窗口像素，直接填半透明色
+        // 会与上一次窗口表面的残留内容混合（缩放放大后就是花屏）。
+        if (background.A < 255)
+        {
+            PaintParentBackground(e);
+        }
+
+        using var brush = new SolidBrush(background);
+        e.Graphics.FillRectangle(brush, ClientRectangle);
+    }
+
+    // WinForms 没有真正的透明子窗口；把父控件的背景/自绘内容按父坐标画进自己的 DC。
+    // 与 Control.OnPaintBackground 对 α < 255 的 BackColor 所做的是同一条伪透明路径。
+    private void PaintParentBackground(PaintEventArgs e)
+    {
+        if (Parent is not { } parent || Width <= 0 || Height <= 0)
         {
             return;
         }
 
-        var background = Background;
-        if (background.A > 0)
+        var state = e.Graphics.Save();
+        try
         {
-            using var brush = new SolidBrush(background);
-            e.Graphics.FillRectangle(brush, ClientRectangle);
-            return;
+            e.Graphics.TranslateTransform(-Left, -Top);
+            var args = new PaintEventArgs(e.Graphics, ClientRectangle);
+            InvokePaintBackground(parent, args);
+            InvokePaint(parent, args);
         }
-
-        base.OnPaintBackground(e);
+        finally
+        {
+            e.Graphics.Restore(state);
+        }
     }
 
     /// <inheritdoc />

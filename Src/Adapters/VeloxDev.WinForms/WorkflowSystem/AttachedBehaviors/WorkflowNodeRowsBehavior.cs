@@ -529,11 +529,9 @@ public sealed class WorkflowNodeRowsBehavior
         {
             var next = value <= 0d ? 1d : value;
             var nextSlot = Math.Max(1, slotSize);
-            if (next == collapse && nextSlot == baseSlotSize)
-            {
-                return;
-            }
 
+            // 不能因为本面板已经记住同一因子就早退：缩放之后新建的输入视图/行还没有应用过它。
+            // 行自己的 ApplyScale 仍按 appliedScale 早退，重复调用不会重复建字体。
             collapse = next;
             baseSlotSize = nextSlot;
 
@@ -547,6 +545,7 @@ public sealed class WorkflowNodeRowsBehavior
             }
 
             ResumeLayout(true);
+            PerformLayout();
             Invalidate();
         }
 
@@ -613,6 +612,7 @@ public sealed class WorkflowNodeRowsBehavior
         private readonly int baseRowHeight;
         private readonly int baseSlotSize;
         private readonly float baseFontSize;
+        private readonly List<Font> retiredFonts = [];
         private double appliedScale = double.NaN;
 
         public SlotRowPanel(
@@ -667,22 +667,36 @@ public sealed class WorkflowNodeRowsBehavior
             var previous = label.Font;
             var next = new Font("Segoe UI", Math.Max(1f, baseFontSize * (float)scale), FontStyle.Regular);
             label.Font = next;
+
+            // 不能在这里 Dispose 旧字体：Label 可能正在用它测量/绘制，销毁后 GDI+ 抛
+            // "Parameter is not valid."，这次绘制会留下花屏。等整行销毁后再统一释放。
             if (!ReferenceEquals(previous, next) && previous is not null)
             {
-                previous.Dispose();
+                retiredFonts.Add(previous);
             }
+
             PerformLayout();
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing)
+            // 这一行的字体由本类创建；Label 销毁不会释放它。等 label 也退出绘制后再统一交还。
+            var fonts = new List<Font>(retiredFonts);
+            retiredFonts.Clear();
+            if (label?.Font is { } current)
             {
-                // 这一行的字体由本类创建；Label 销毁不会释放它，缩放后留下的最后一份在这里交还。
-                label?.Font?.Dispose();
+                fonts.Add(current);
             }
 
             base.Dispose(disposing);
+
+            if (disposing)
+            {
+                foreach (var font in fonts)
+                {
+                    font.Dispose();
+                }
+            }
         }
 
         protected override void OnLayout(LayoutEventArgs e)

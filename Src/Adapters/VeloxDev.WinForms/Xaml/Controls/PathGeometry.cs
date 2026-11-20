@@ -64,16 +64,20 @@ internal static class PathGeometry
                     case 'M':
                     {
                         var point = ReadPoint(tokens, ref index, relative, current);
-                        if (!started)
+
+                        // SVG 的每个 M 都开始一个**新子路径**，不能把上一个子路径的当前点连过来：
+                        // 那样每个子路径之间会多出一条直线，白色描边就变成横穿字形的割线。
+                        if (started)
                         {
                             path.StartFigure();
-                            started = true;
                         }
                         else
                         {
-                            path.AddLine(current, point);
+                            started = true;
                         }
 
+                        // StartFigure 以路径当前点为新图起点；补一个零长度段把起点挪到 M 的坐标。
+                        path.AddLine(point, point);
                         current = point;
                         start = point;
                         // Moveto 之后的隐式坐标对是 lineto。

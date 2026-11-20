@@ -71,7 +71,9 @@
                              Dock="Fill"
                              behaviors:WorkflowLinkLayer.IsEnabled="True"
                              behaviors:WorkflowLinkLayer.LineColor="#DDFFFFFF"
-                             behaviors:WorkflowLinkLayer.Thickness="2" />
+                             behaviors:WorkflowLinkLayer.Thickness="2"
+                             behaviors:WorkflowLinkLayer.HoveredLineColor="#FFFFFFFF"
+                             behaviors:WorkflowLinkLayer.HoveredThickness="3.5" />
       </v:ScrollViewer>
     </local:GridDecorator>
 
