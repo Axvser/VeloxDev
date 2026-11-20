@@ -157,7 +157,7 @@ public partial class WorkflowView : UserControl
         WorkbenchGrid.ColumnDefinitions[5].Width = new GridLength(visible ? 348 : 0);
     }
 
-    private void OnOpenCommandCenter(object sender, RoutedEventArgs e)
+    private void OnOpenCommandCenter(object? sender, RoutedEventArgs e)
     {
         if (CommandCenterButton.ContextMenu is not { } menu) return;
         menu.PlacementTarget = CommandCenterButton;
@@ -308,7 +308,7 @@ public partial class WorkflowView : UserControl
             await helper.LoadMcpServersAsync();
     }
 
-    private async void SelectWorkflow(object sender, RoutedEventArgs e)
+    private async void SelectWorkflow(object? sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
@@ -354,7 +354,7 @@ public partial class WorkflowView : UserControl
         }
     }
 
-    private void SaveWorkflow(object sender, RoutedEventArgs e)
+    private void SaveWorkflow(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not TreeViewModel tree) return;
 

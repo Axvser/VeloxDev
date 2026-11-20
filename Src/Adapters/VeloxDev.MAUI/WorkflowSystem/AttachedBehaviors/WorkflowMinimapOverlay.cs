@@ -94,8 +94,9 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private bool _isDragging;
     // Windows 上平移手势与原生指针探针会同时活着。只让其中一个驱动 NavigateToWorld；
     // 两个都写时，绝对指针坐标与手势累计增量交替成为目标，X/Y 会以各自的节奏抖。
-    private bool _panActive;
-    private bool _nativePointerActive;
+    // 非 Windows 目标没有手势/原生探针路径，两个标记保持 false；Windows 在 #if 分支内改写。
+    private bool _panActive = false;
+    private bool _nativePointerActive = false;
     private ContentView? _parentView;
 #if WINDOWS
     // 原生平移手势借用 GraphicsView 已捕获的 manipulation 管线（ManipulationMode=All），指针移出缩略图后增量照常到达；
