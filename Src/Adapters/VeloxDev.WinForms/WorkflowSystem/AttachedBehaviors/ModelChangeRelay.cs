@@ -52,7 +52,21 @@ internal sealed class ModelChangeRelay
         // 直接回调 —— 与搬过来的原逻辑一致。
         if (_host.InvokeRequired)
         {
-            _host.BeginInvoke(new PropertyChangedEventHandler(Handle), sender, e);
+            // 模型可能在工作线程变化，而控件此时正在销毁：BeginInvoke 会抛 InvalidOperationException。
+            if (_host.IsDisposed || _host.Disposing || !_host.IsHandleCreated)
+            {
+                return;
+            }
+
+            try
+            {
+                _host.BeginInvoke(new PropertyChangedEventHandler(Handle), sender, e);
+            }
+            catch (InvalidOperationException)
+            {
+                // 检查与投递之间句柄消失 / 控件被释放。
+            }
+
             return;
         }
 

@@ -1355,7 +1355,26 @@ namespace Demo
                     using var stream = System.IO.File.OpenRead(dialog.FileName);
                     using var reader = new System.IO.StreamReader(stream);
                     var json = await reader.ReadToEndAsync();
+                    if (IsDisposed) return;
+
                     var result = json.Deserialize<TreeViewModel>();
+
+                    // 反序列化器对缺失字段写 null（生成器读值后跟 !），而 LoadDemo 与表面会立即解引用。
+                    // 先整体验形，坏文件只弹一次错误，不留下半挂载的 session。
+                    if (result is null
+                        || result.Layout is null
+                        || result.Nodes is null
+                        || result.Links is null
+                        || result.VirtualLink is null
+                        || result.ExecutionLog is null
+                        || result.AgentLog is null
+                        || result.CompiledStructure is null)
+                    {
+                        MessageBox.Show(this, "Invalid workflow file: required fields are missing or null.",
+                            "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
                     result.Layout = result.Layout.AdaptTo(
                         new VeloxDev.WorkflowSystem.Size(1920, 1080));
                     LoadDemo(WorkflowDemoSession.FromTree(result));
@@ -1521,8 +1540,16 @@ namespace Demo
         private void OnMcpStatusChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (_demo?.Tree.GetHelper() is not AgentHelper helper) return;
-            if (InvokeRequired) { BeginInvoke(() => OnMcpStatusChanged(sender, e)); return; }
+            if (InvokeRequired) { TryBeginInvoke(() => OnMcpStatusChanged(sender, e)); return; }
             RefreshMcpStatusPanel(helper);
+        }
+
+        // 模型/代理线程的回调可能落在窗体销毁之后；BeginInvoke 在已释放的控件上会抛。
+        private bool TryBeginInvoke(Action action)
+        {
+            if (IsDisposed || Disposing || !IsHandleCreated) return false;
+            try { BeginInvoke(action); return true; }
+            catch (InvalidOperationException) { return false; }
         }
 
         private void RefreshMcpStatusPanel(AgentHelper helper)
@@ -1603,7 +1630,11 @@ namespace Demo
         private Task ShowSelectionDialogAsync(AgentSelectionEventArgs args)
         {
             if (InvokeRequired)
-                return (Task)Invoke(() => ShowSelectionDialogAsync(args));
+            {
+                if (IsDisposed || Disposing || !IsHandleCreated) return Task.CompletedTask;
+                try { return (Task)Invoke(() => ShowSelectionDialogAsync(args)); }
+                catch (InvalidOperationException) { return Task.CompletedTask; }
+            }
 
             using var dlg = new AgentSelectionDialog(
                 args.Prompt,
@@ -1620,7 +1651,11 @@ namespace Demo
         private Task ShowConfirmationDialogAsync(AgentConfirmationEventArgs args)
         {
             if (InvokeRequired)
-                return (Task)Invoke(() => ShowConfirmationDialogAsync(args));
+            {
+                if (IsDisposed || Disposing || !IsHandleCreated) return Task.CompletedTask;
+                try { return (Task)Invoke(() => ShowConfirmationDialogAsync(args)); }
+                catch (InvalidOperationException) { return Task.CompletedTask; }
+            }
 
             using var dlg = new AgentConfirmationDialog(args.OperationKey, args.Description);
             dlg.ShowDialog(this);
@@ -1634,7 +1669,7 @@ namespace Demo
             {
                 if (InvokeRequired)
                 {
-                    BeginInvoke(UpdateWorkbenchStatus);
+                    TryBeginInvoke(UpdateWorkbenchStatus);
                     return;
                 }
 
@@ -1644,26 +1679,26 @@ namespace Demo
 
         private void OnNodesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            if (InvokeRequired) { BeginInvoke(UpdateWorkbenchStatus); return; }
+            if (InvokeRequired) { TryBeginInvoke(UpdateWorkbenchStatus); return; }
             UpdateWorkbenchStatus();
         }
 
         // 可见集随缩放/平移/滚动在变，而 Nodes 不动 —— 少了这一条，状态栏那个计数会一直停在启动时的值
         private void OnVisibleItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            if (InvokeRequired) { BeginInvoke(UpdateWorkbenchStatus); return; }
+            if (InvokeRequired) { TryBeginInvoke(UpdateWorkbenchStatus); return; }
             UpdateWorkbenchStatus();
         }
 
         private void OnCompiledStructureChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            if (InvokeRequired) { BeginInvoke(UpdateWorkbenchStatus); return; }
+            if (InvokeRequired) { TryBeginInvoke(UpdateWorkbenchStatus); return; }
             UpdateWorkbenchStatus();
         }
 
         private void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (InvokeRequired) { BeginInvoke(UpdateWorkbenchStatus); return; }
+            if (InvokeRequired) { TryBeginInvoke(UpdateWorkbenchStatus); return; }
 
             UpdateWorkbenchStatus();
 
@@ -1675,7 +1710,7 @@ namespace Demo
         {
             if (InvokeRequired)
             {
-                BeginInvoke(ReloadExecutionLog);
+                TryBeginInvoke(ReloadExecutionLog);
                 return;
             }
 
@@ -1709,14 +1744,14 @@ namespace Demo
 
         private void OnRunsPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (InvokeRequired) { BeginInvoke(RefreshOutputHeader); return; }
+            if (InvokeRequired) { TryBeginInvoke(RefreshOutputHeader); return; }
             RefreshOutputHeader();
             UpdateWorkbenchStatus();
         }
 
         private void OnOutputTaskPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (InvokeRequired) { BeginInvoke(RefreshOutputHeader); return; }
+            if (InvokeRequired) { TryBeginInvoke(RefreshOutputHeader); return; }
             RefreshOutputHeader();
         }
 
@@ -1759,7 +1794,7 @@ namespace Demo
 
         private void UpdateZoom()
         {
-            var scale = _demo?.Tree.Layout.Scale.Horizontal ?? 1d;
+            var scale = _demo?.Tree.Layout?.Scale.Horizontal ?? 1d;
             if (scale <= 0d) scale = 1d;
             _statusBar.Zoom.Text = $"{scale * 100d:0}%";
         }
@@ -1804,7 +1839,7 @@ namespace Demo
         {
             if (InvokeRequired)
             {
-                BeginInvoke(ReloadAgentLog);
+                TryBeginInvoke(ReloadAgentLog);
                 return;
             }
 

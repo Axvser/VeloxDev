@@ -28,3 +28,4 @@ VELOX_XAMLP001 | VeloxDev.Xaml | Error | XamlProperty must be partial
 VELOX_XAMLP002 | VeloxDev.Xaml | Error | XamlProperty owner unsupported
 VELOX_XAMLP003 | VeloxDev.Xaml | Error | Invalid attached property accessors
 VELOX_XAMLP004 | VeloxDev.Xaml | Error | Dependency property name conflict
+VELOX_XAMLP005 | VeloxDev.Xaml | Error | Dependency property default value required

@@ -39,10 +39,11 @@ internal sealed class DarkPopupMenu : Form
         };
         Controls.Add(_rows);
 
-        Deactivate += (_, _) => Close();
+        // 菜单实例由标题栏复用；Close() 会把它释放，第二次点击就是 Show on disposed Form。
+        Deactivate += (_, _) => Hide();
         KeyDown += (_, e) =>
         {
-            if (e.KeyCode == Keys.Escape) Close();
+            if (e.KeyCode == Keys.Escape) Hide();
         };
     }
 
@@ -92,7 +93,7 @@ internal sealed class DarkPopupMenu : Form
         void Leave(object? _, EventArgs __) => SetRowBack(row, label, gesture, WorkbenchPalette.Panel);
         void Pick(object? _, EventArgs __)
         {
-            Close();
+            Hide();
             action();
         }
 

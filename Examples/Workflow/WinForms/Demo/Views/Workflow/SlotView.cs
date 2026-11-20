@@ -232,7 +232,8 @@ public sealed class SlotView : Control
     {
         if (InvokeRequired)
         {
-            BeginInvoke(new EventHandler(OnSlotChanged), sender, e);
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            try { BeginInvoke(new EventHandler(OnSlotChanged), sender, e); } catch (InvalidOperationException) { }
             return;
         }
 

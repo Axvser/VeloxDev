@@ -128,7 +128,8 @@ internal sealed class WorkflowElementPanel : UserControl
         // 目录自己会把重建排回创建它的线程，但这条防线很便宜：代理线程上的 Changed 也不会碰控件。
         if (InvokeRequired)
         {
-            BeginInvoke(RefreshLists);
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            try { BeginInvoke(RefreshLists); } catch (InvalidOperationException) { }
             return;
         }
 

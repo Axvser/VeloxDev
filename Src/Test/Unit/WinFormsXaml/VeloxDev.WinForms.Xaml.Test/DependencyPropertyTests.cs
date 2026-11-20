@@ -226,4 +226,28 @@ public sealed class DependencyPropertyTests
         Assert.AreEqual("xaml host", AttachedProbe.GetNote(control));
         Assert.IsTrue(control.HasLocalValue(AttachedProbe.NoteProperty));
     }
+
+    [TestMethod]
+    public void Register_RejectsANullDefaultForANonNullableValueType()
+    {
+        Assert.ThrowsExactly<ArgumentException>(() => DependencyProperty.Register(
+            $"NullDefault_{Guid.NewGuid():N}",
+            typeof(int),
+            typeof(RegistrationOwner),
+            new PropertyMetadata(null)));
+    }
+
+    [TestMethod]
+    public void Register_AcceptsABoxedDefaultForANullableValueType()
+    {
+        var property = DependencyProperty.Register(
+            $"NullableDefault_{Guid.NewGuid():N}",
+            typeof(int?),
+            typeof(RegistrationOwner),
+            new PropertyMetadata(5));
+
+        using var control = new ProbeControl();
+
+        Assert.AreEqual(5, property.GetValue(control));
+    }
 }

@@ -215,7 +215,12 @@ public sealed class InfoOverlay : Panel
             return new[] { "VeloxDev Workflow — 未绑定画布" };
         }
 
-        var layout = _tree.Layout;
+        // Layout 是可写的模型属性；清空它（换文档）时 HUD 不能跟着空引用。
+        if (_tree.Layout is not { } layout)
+        {
+            return new[] { "VeloxDev Workflow — 画布布局不可用" };
+        }
+
         var actual = layout.ActualSize;
         var vp = _tree.GetHelper().Viewport;
         double ox = layout.ActualOffset.Horizontal, oy = layout.ActualOffset.Vertical;

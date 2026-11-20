@@ -88,20 +88,29 @@ public static class XamlTransition
             return;
         }
 
-        var ordered = new KeyFrame[frames.Count];
-        for (var index = 0; index < frames.Count; index++)
+        // 跳过 null 帧：它们是公开 IList 上的空元素，排序与求值都没法处理。
+        var ordered = new List<KeyFrame>(frames.Count);
+        foreach (var frame in frames)
         {
-            ordered[index] = frames[index];
+            if (frame is not null)
+            {
+                ordered.Add(frame);
+            }
         }
 
-        Array.Sort(ordered, static (left, right) => left.Offset.CompareTo(right.Offset));
+        if (ordered.Count == 0)
+        {
+            return;
+        }
+
+        ordered.Sort(static (left, right) => left.Offset.CompareTo(right.Offset));
 
         var ticks = Math.Max(0L, duration.Ticks);
         var root = Transition<VeloxDev.WinForms.Xaml.Controls.Control>.Create();
         var segment = root;
         var previousOffset = 0d;
 
-        for (var index = 0; index < ordered.Length; index++)
+        for (var index = 0; index < ordered.Count; index++)
         {
             var frame = ordered[index];
             var offset = Clamp(frame.Offset, 0d, 1d);
@@ -121,7 +130,7 @@ public static class XamlTransition
             });
 
             previousOffset = offset;
-            if (index < ordered.Length - 1)
+            if (index < ordered.Count - 1)
             {
                 segment = segment.Then<Transition<VeloxDev.WinForms.Xaml.Controls.Control>>();
             }

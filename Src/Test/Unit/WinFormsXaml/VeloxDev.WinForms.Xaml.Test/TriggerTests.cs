@@ -176,4 +176,15 @@ public sealed class TriggerTests
         control.IsHot = false;
         Assert.AreEqual(0, control.BorderWidth, "the removed trigger is no longer evaluated at all");
     }
+
+    [TestMethod]
+    public void SetterCollection_RejectsANullSetter()
+    {
+        var trigger = new Trigger(ProbeControl.IsHotProperty, true);
+
+        Assert.ThrowsExactly<ArgumentNullException>(() => trigger.Setters.Add(null!));
+
+        trigger.Setters.Add(new Setter(ProbeControl.BorderWidthProperty, 4));
+        Assert.ThrowsExactly<ArgumentNullException>(() => trigger.Setters[0] = null!);
+    }
 }

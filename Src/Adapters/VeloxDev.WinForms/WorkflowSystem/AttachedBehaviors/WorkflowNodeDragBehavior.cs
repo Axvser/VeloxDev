@@ -184,7 +184,7 @@ public sealed class WorkflowNodeDragBehavior
         // 每个按钮都过表面路由 —— 右键/中键的组件级动作与左键拖动共用同一套 Core 输入事件。
         var press = WorkflowSurfaceBehavior.RouteComponentPress(control, node, e.Button, e.Clicks);
 
-        if (e.Button != MouseButtons.Left || node.Parent?.VirtualLink.IsVisible == true)
+        if (e.Button != MouseButtons.Left || node.Parent?.VirtualLink is { IsVisible: true })
         {
             return;
         }

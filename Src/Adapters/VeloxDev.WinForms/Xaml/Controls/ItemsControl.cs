@@ -145,6 +145,12 @@ public class ItemsControl : Control
         foreach (var item in source)
         {
             var visual = CreateItemVisual(item);
+            // 派生类可以返回 null；把它留在 _generated 里，下一次布局量到它就会空引用。
+            if (visual is null)
+            {
+                continue;
+            }
+
             _generated.Add(visual);
             Controls.Add(visual);
         }
@@ -160,6 +166,12 @@ public class ItemsControl : Control
         if (ItemTemplate is { } template)
         {
             var content = template.CreateContent();
+            // 工厂返回 null 时退回文本行，而不是把 null 当成视图交给布局。
+            if (content is null)
+            {
+                return CreateTextVisual(item);
+            }
+
             if (content is Control xaml)
             {
                 xaml.DataContext = item;
@@ -176,6 +188,11 @@ public class ItemsControl : Control
             return content;
         }
 
+        return CreateTextVisual(item);
+    }
+
+    private static TextBlock CreateTextVisual(object? item)
+    {
         return new TextBlock
         {
             Text = item?.ToString() ?? string.Empty,

@@ -211,6 +211,15 @@ public class ContentControl : Control
         if (Content is System.Windows.Forms.Control control)
         {
             RemoveTemplateContent();
+
+            // 从「内容 A」换到「内容 B」时先把 A 摘掉：单内容集合会拒绝第二个子控件。
+            if (!ReferenceEquals(_contentChild, control)
+                && _contentChild is not null
+                && Controls.Contains(_contentChild))
+            {
+                Controls.Remove(_contentChild);
+            }
+
             if (!Controls.Contains(control))
             {
                 Controls.Add(control);
@@ -242,6 +251,13 @@ public class ContentControl : Control
         }
 
         _templateContent = template.CreateContent();
+
+        // DataTemplate 的工厂是消费者提供的；返回 null 时不能落进下面的分支再解引用。
+        if (_templateContent is null)
+        {
+            return;
+        }
+
         if (_templateContent is Control xaml)
         {
             xaml.DataContext = Content;

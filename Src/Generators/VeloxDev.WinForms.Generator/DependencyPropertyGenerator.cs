@@ -88,6 +88,21 @@ public sealed class DependencyPropertyGenerator : IIncrementalGenerator
         }
 
         var defaultValue = SyntaxHelpers.GetNamedString(attribute, "DefaultValue");
+
+        // 没有 DefaultValue 时 default(string) 是 null，而生成的 getter 会把 null 断言成非空返回值 ——
+        // 调用方在 setter 之前读一次就是 NRE。非可空引用类型必须显式给默认值（或把属性声明成可空）。
+        if (defaultValue is null
+            && property.Type.IsReferenceType
+            && property.Type.NullableAnnotation == NullableAnnotation.NotAnnotated)
+        {
+            model.Diagnostic = Diagnostic.Create(
+                Diagnostics.PropertyDefaultValueRequired,
+                location,
+                dpName,
+                property.Type.ToDisplayString());
+            return model;
+        }
+
         if (!LiteralFactory.TryCreate(property.Type, defaultValue, out var expression, out _))
         {
             model.Warning = Diagnostic.Create(
@@ -323,6 +338,19 @@ public sealed class DependencyPropertyGenerator : IIncrementalGenerator
                 var dpName = getter?.PropertyName ?? setter!.PropertyName;
                 var defaultValue = getter?.DefaultValue ?? setter!.DefaultValue;
                 var location = getter?.Location ?? setter!.Location;
+
+                // 同 [XamlProperty]：没有默认值时的 null 会被 getter 的 ! 伪装成非空返回值。
+                if (defaultValue is null
+                    && propertyType.IsReferenceType
+                    && propertyType.NullableAnnotation == NullableAnnotation.NotAnnotated)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        Diagnostics.PropertyDefaultValueRequired,
+                        location,
+                        dpName,
+                        propertyType.ToDisplayString()));
+                    continue;
+                }
 
                 if (!LiteralFactory.TryCreate(propertyType, defaultValue, out var defaultExpression, out _))
                 {

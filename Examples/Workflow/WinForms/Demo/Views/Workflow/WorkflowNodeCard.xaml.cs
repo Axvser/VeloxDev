@@ -587,7 +587,8 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
         // 所以端口的每一帧与每次状态变化都要让画布跟着重绘
         btn.ExternalInvalidate = () =>
         {
-            if (IsDisposed) return;
+            // 端口可能先于卡片被 ClearSlotButtons 释放；PointToScreen 在已释放的控件上会抛。
+            if (IsDisposed || btn.IsDisposed || !btn.IsHandleCreated) return;
             for (Control? current = Parent; current is not null; current = current.Parent)
             {
                 if (current is SurfaceCanvas canvas)
@@ -1002,7 +1003,7 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
         header.Controls.Add(meta);
         header.Resize += (_, _) => meta.Location = new Point(Math.Max(S(8), header.Width - meta.Width - S(8)), S(4));
 
-        _scriptBox = new TextBox
+        var scriptBox = new TextBox
         {
             Multiline = true,
             AcceptsReturn = true,
@@ -1014,7 +1015,8 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
             ForeColor = CardTheme.Value,
             Margin = new Padding(0),
         };
-        _scriptBox.TextChanged += OnScriptTextChanged;
+        _scriptBox = scriptBox;
+        scriptBox.TextChanged += OnScriptTextChanged;
 
         // A text box's scrollbars are non-client and follow the system theme: on a dark card they are the one
         // opaque white L in the whole design. Sizing the box past its viewport puts them outside the clip
@@ -1027,11 +1029,18 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
             Padding = System.Windows.Forms.Padding.Empty,
             BackColor = CardTheme.EditorSurface,
         };
-        viewport.Controls.Add(_scriptBox);
+        viewport.Controls.Add(scriptBox);
+        // 布局回调持有局部控件，不读 _scriptBox：卡片换绑时 ResetRefs 会把字段清空，而已经被摘掉的旧视口
+        // 仍可能收到一次 VisibleChanged/Layout —— 那一次读字段就是空引用。
         viewport.Layout += (_, _) =>
         {
+            if (scriptBox.IsDisposed || viewport.IsDisposed)
+            {
+                return;
+            }
+
             var scrollbar = SystemInformation.VerticalScrollBarWidth;
-            _scriptBox.Bounds = new Rectangle(
+            scriptBox.Bounds = new Rectangle(
                 0, 0,
                 viewport.ClientSize.Width + scrollbar,
                 viewport.ClientSize.Height + scrollbar);
@@ -1339,7 +1348,12 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
     // ── User input events ──────────────────────────────────────────────────────────
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (InvokeRequired) { BeginInvoke(new PropertyChangedEventHandler(OnNodePropertyChanged), sender, e); return; }
+        if (InvokeRequired)
+        {
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            try { BeginInvoke(new PropertyChangedEventHandler(OnNodePropertyChanged), sender, e); } catch (InvalidOperationException) { }
+            return;
+        }
         if (_node is not null) Refresh(_node);
     }
 

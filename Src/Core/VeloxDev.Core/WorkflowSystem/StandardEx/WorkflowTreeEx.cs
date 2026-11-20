@@ -46,8 +46,14 @@ public static class WorkflowTreeEx
         // 指针只带得动位置：这一端落在哪一层，由这条虚拟连线**起点那一端**决定 —— 起点是
         // `StandardSendConnection` 从真实插槽整个拷过来的（含图层）。这样各家适配器交给这里的锚
         // 带不带图层都不影响结果：两端同层，橡皮筋不会一半在源节点的层、一半在第 0 层。
-        var start = component.VirtualLink.Sender.Anchor;
-        component.VirtualLink.Receiver.Anchor = new Anchor(anchor.Horizontal, anchor.Vertical, start.Layer);
+        // VirtualLink 是可写的模型属性；宿主清空它时指针移动只是无目标，不能空引用。
+        if (component.VirtualLink is not { Sender: { } sender, Receiver: { } receiver })
+        {
+            return;
+        }
+
+        var start = sender.Anchor;
+        receiver.Anchor = new Anchor(anchor.Horizontal, anchor.Vertical, start.Layer);
         component.VirtualLink.OnPropertyChanged(nameof(component.VirtualLink.Receiver));
         component.OnPropertyChanged(nameof(component.VirtualLink));
     }
@@ -106,6 +112,11 @@ public static class WorkflowTreeEx
     {
         var cache = GetCache(component);
 
+        if (component.VirtualLink is not { Sender: { } sender, Receiver: { } receiver })
+        {
+            return;
+        }
+
         if (slot.Parent?.Parent is null)
         {
             WorkflowGuard.Fail("The slot is not attached to a tree; it cannot send a connection.");
@@ -125,8 +136,8 @@ public static class WorkflowTreeEx
         component.StandardSmartCleanupSenderConnections(slot);
 
         // 3. Set up the virtual link
-        component.VirtualLink.Sender.Anchor = slot.Anchor;
-        component.VirtualLink.Receiver.Anchor = slot.Anchor;
+        sender.Anchor = slot.Anchor;
+        receiver.Anchor = slot.Anchor;
         component.VirtualLink.IsVisible = true;
 
         // 4. Update state
@@ -312,9 +323,12 @@ public static class WorkflowTreeEx
         var cache = GetCache(component);
 
         // Reset to "no value" (NaN) rather than the origin (0,0,0): the virtual-link endpoints have no valid coordinates before a drag.
-        component.VirtualLink.Sender.Anchor = new Anchor(double.NaN, double.NaN, 0);
-        component.VirtualLink.Receiver.Anchor = new Anchor(double.NaN, double.NaN, 0);
-        component.VirtualLink.IsVisible = false;
+        if (component.VirtualLink is { } virtualLink)
+        {
+            if (virtualLink.Sender is { } sender) sender.Anchor = new Anchor(double.NaN, double.NaN, 0);
+            if (virtualLink.Receiver is { } receiver) receiver.Anchor = new Anchor(double.NaN, double.NaN, 0);
+            virtualLink.IsVisible = false;
+        }
 
         if (cache.CurrentSender != null)
         {

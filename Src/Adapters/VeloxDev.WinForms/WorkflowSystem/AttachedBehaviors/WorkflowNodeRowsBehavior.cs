@@ -326,7 +326,9 @@ public sealed class WorkflowNodeRowsBehavior
                 WorkflowNodeAttachment.DisposeChildren(panel);
                 panel.SetInputView(null);
 
-                if (attachment?.Node is not { } node)
+                // Slots 是可写属性，反序列化/选择器换型期间可能是 null，集合里也可能有空元素；
+                // ResolveInputSlot 已经按这两点防守，这里必须同样处理。
+                if (attachment?.Node is not { } node || node.Slots is not { } slots)
                 {
                     return;
                 }
@@ -337,8 +339,13 @@ public sealed class WorkflowNodeRowsBehavior
                 var rows = new List<SlotRowPanel>();
                 var outputIndex = 0;
 
-                foreach (var slot in node.Slots)
+                foreach (var slot in slots)
                 {
+                    if (slot is null)
+                    {
+                        continue;
+                    }
+
                     if (inputSlot is not null && ReferenceEquals(slot, inputSlot))
                     {
                         continue;

@@ -266,7 +266,14 @@ public sealed class WorkflowNodeTitleBehavior
                 return;
             }
 
-            card.BeginInvoke(new Action(UpdateTitle));
+            try
+            {
+                card.BeginInvoke(new Action(UpdateTitle));
+            }
+            catch (InvalidOperationException)
+            {
+                // 检查与投递之间句柄消失 / 控件被释放。
+            }
         }
 
         private void ApplyVisuals()

@@ -46,7 +46,11 @@ public sealed class KeyFrameAnimation : TriggerAction
             throw new InvalidOperationException("A KeyFrameAnimation needs a Property.");
         }
 
-        var frames = KeyFrames.OrderBy(static frame => frame.Offset).ToArray();
+        // 集合是公开可写的；null 元素排到 sort 比较器里会先炸成 NRE，而它本来就没有可用的 Offset。
+        var frames = KeyFrames
+            .Where(static frame => frame is not null)
+            .OrderBy(static frame => frame.Offset)
+            .ToArray();
         if (frames.Length == 0)
         {
             return;

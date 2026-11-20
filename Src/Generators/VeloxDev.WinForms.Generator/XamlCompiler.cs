@@ -63,6 +63,7 @@ internal sealed class XamlCompiler
     private readonly HashSet<string> _declaredNames = new(StringComparer.Ordinal);
     private readonly HashSet<string> _templateNames = new(StringComparer.Ordinal);
     private readonly HashSet<XObject> _ambiguousSources = [];
+    private readonly List<string> _deferredEvents = [];
 
     private CodeBuilder _current;
     private INamedTypeSymbol _owner = null!;
@@ -195,6 +196,12 @@ internal sealed class XamlCompiler
         ApplyAttributes(root, _owner, "this", host);
         ProcessChildren(root, _owner, "this", host);
 
+        foreach (var line in _deferredEvents)
+        {
+            _current.Line(line);
+        }
+
+        _deferredEvents.Clear();
         _current.Line("this.ResumeLayout(false);");
     }
 
@@ -1745,7 +1752,18 @@ internal sealed class XamlCompiler
             return;
         }
 
-        _current.Line($"{targetExpression}.{eventSymbol.Name} += this.{handler};");
+        var line = $"{targetExpression}.{eventSymbol.Name} += this.{handler};";
+
+        // 初始化期间的事件可能在后面的 x:Name 字段赋值之前触发；根方法里的订阅统一放到
+        // 所有子元素建好之后。模板工厂里的局部变量不跨方法，保持原位。
+        if (_templateDepth == 0)
+        {
+            _deferredEvents.Add(line);
+        }
+        else
+        {
+            _current.Line(line);
+        }
     }
 
     private bool ValidateEventHandlerSignature(

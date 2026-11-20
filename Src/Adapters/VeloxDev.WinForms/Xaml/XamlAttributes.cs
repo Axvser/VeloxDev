@@ -10,9 +10,11 @@ namespace VeloxDev.WinForms.Xaml;
 /// </para>
 /// <code>
 /// [XamlProperty]
-/// public partial string Title { get; set; }
+/// public partial string? Title { get; set; }
 /// </code>
 /// <para>
+/// A non-nullable reference property must supply <c>DefaultValue</c>; otherwise the generator reports
+/// <c>VELOX_XAMLP005</c>, because the default would be <see langword="null"/> behind a non-null annotation.
 /// C# 13 partial properties are used because they let the declaration stay normal C#: the generator fills in the
 /// accessor bodies and no source rewriting is involved.
 /// </para>

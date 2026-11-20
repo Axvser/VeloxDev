@@ -1570,8 +1570,13 @@ public sealed class WorkflowSurfaceBehavior
 
         try
         {
-            var next = Math.Max(0.1, Math.Min(10, tree.Layout.Scale.Horizontal * factor));
-            var layout = tree.Layout;
+            // Layout 是可写的模型属性；宿主在加载文档前把它清空时，这里不能直接解引用。
+            if (tree.Layout is not { } layout)
+            {
+                return;
+            }
+
+            var next = Math.Max(0.1, Math.Min(10, layout.Scale.Horizontal * factor));
             var size = ResolveClientSize(state);
 
             if (layout.ZoomCenter == ZoomCenter.ViewportCenter)
@@ -1680,6 +1685,18 @@ public sealed class WorkflowSurfaceBehavior
     {
         var host = FindSurfaceHost(control);
         return host is not null && States.TryGetValue(host, out var state) ? state.Canvas : null;
+    }
+
+    // 表面可能从 DataContext/Tag 解析出树，而没有写 WorkflowTree DP；连线层要读同一份解析结果，
+    // 否则 DataContext 型宿主只有节点、没有连线。
+    internal static IWorkflowTreeViewModel? GetSurfaceTree(Control control)
+    {
+        var host = FindSurfaceHost(control);
+        return host is not null
+               && States.TryGetValue(host, out var state)
+               && state.Attached
+            ? state.Tree
+            : null;
     }
 
     private static IWorkflowTreeViewModel? ResolveTree(Control host)

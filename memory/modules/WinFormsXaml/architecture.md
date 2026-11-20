@@ -45,7 +45,9 @@
 
 - `[XamlProperty]`：partial 属性 → 静态 `DependencyProperty` + CLR 包装。
 - `[XamlAttachedProperty]`：静态 partial `GetX`/`SetX` → `RegisterAttached` + 实现。
+- 没有 `DefaultValue` 时生成器写 `default(T)`；非可空引用类型再被 getter 的 `!` 包成非空返回值，实际是 null。`[XamlProperty]` / `[XamlAttachedProperty]` 的非可空引用类型必须给 `DefaultValue` 或声明成可空，否则报 `VELOX_XAMLP005`。
 - `*.xaml`（`AdditionalFiles`）→ `private void InitializeComponent()`（普通方法，不要求/不生成 partial 声明）：原生控件、派生控件、嵌套 `Controls`、`x:Name` 字段、属性/事件、`{Binding}`、`{StaticResource}`、`DataTemplate`。已有同名成员报 `VELOX_XAML015` 并跳过生成。
+- 根方法里的事件订阅统一写在 `ResumeLayout(false)` 之前、所有子元素建好之后；否则初始化中途触发的事件会读到尚未赋值的 `x:Name` 字段。`DataTemplate` / `ControlTemplate` 工厂内的订阅仍原位。
 - 附加属性属性值：`prefix:Owner.Property="..."`，支持字面量、`{Binding}`、`{StaticResource}`；`XamlControl.SetAttachedBinding` 为原生控件驱动 OneWay/OneTime；TwoWay 在原生附加值上不支持。
 - 内联 Trigger：`<Owner.Triggers><Trigger Property="IsHot" Value="True"><Trigger.Setters><Setter Property="BorderWidth" Value="4"/></Trigger.Setters><Trigger.EnterAction><TransitionAction Property="Glow" To="1" Duration="0:0:0.3"/></Trigger.EnterAction></Trigger></Owner.Triggers>`；`Property` 相对控件类型解析，也支持 `Owner.Property`。
 - 样式：`<Style x:Key="NodeStyle" TargetType="local:NodeCard">` + `Style.Setters` / `Style.Triggers` / `Style.Template` / `BasedOn`；显式 `Style="{StaticResource ...}"`，无 `x:Key` 的 `TargetType` 隐式样式；`TargetType` 支持 `{x:Type local:NodeCard}` 和原生 `Control`。
@@ -99,6 +101,10 @@
 - `WorkflowNodeRowsBehavior.RowsHostName` 必须同步到 `WorkflowSlotLayoutBehavior.SlotEnumeratorNames`；XAML 属性顺序可能先 `IsEnabled` 后 `RowsHostName`，只在 Attach 时设一次会把名字固化成 `PART_DynamicOutputs`，slot anchor 全 NaN、link 被隐藏。`SetRowsHostName` / `EnsureSlotLayout` 每次都要重设。
 - 拖动画布闪烁：`ApplyPan` 的原子 `WM_SETREDRAW` scope 只用于非手势（小地图/布局/定位）；`state.IsPanning || host.Capture` 时走原 ApplyPanCore，靠 `canvas.Update` 跟手。`EndRedraw` 用 `RDW_NOERASE`，不要 `RDW_ERASE`。
 - 首次物化：`EnsurePool` 换源前调用 `BeginInitialReveal`，冻结 host/canvas/grid/已存在视图并继续冻结新加入的池化视图；`ViewPool.GetPendingViewCount == 0` 连续两帧后（或 2s 超时）统一恢复重绘。池分批物化不再逐批露出半成品。
+- 可写模型属性可以变 null：`IWorkflowNodeViewModel.Slots`、`IWorkflowTreeViewModel.VirtualLink`、`IWorkflowTreeViewModel.Layout` 都是公开 setter。`WorkflowNodeRowsBehavior.Rebuild` 要 `node.Slots is not { }` 并跳过 null 元素；`WorkflowSlotConnectionBehavior` / `WorkflowNodeDragBehavior` 用 `VirtualLink is { IsVisible: true }`；`WorkflowSurfaceBehavior.ApplyZoomFactor` 用 `tree.Layout is not { } layout`。换文档/反序列化把树清空时，消息泵与缩放计时器里的 NRE 会持续复现。
+- 模型线程回到 UI 线程：`ModelChangeRelay.Handle`、`WorkflowBindingExtensions` 的 `CollectionSubscription.OnCollectionChanged`、`WorkflowNodeAttachment.OnSlotsCollectionChanged`、`WorkflowNodeTitleBehavior.QueueTitleUpdate` 在 `BeginInvoke` 前查 `IsDisposed` / `Disposing` / `IsHandleCreated`，并吞掉 `InvalidOperationException`；销毁与模型写入可以同时发生。
+- DataContext 型宿主的连线：`WorkflowLinkLayer.ResolveTree` 除 `WorkflowTree` DP 外还要读 `WorkflowSurfaceBehavior.GetSurfaceTree`（表面已解析的 `SurfaceState.Tree`）。只读 DP 时，模板按注释把树放进 DataContext 会只有节点、没有连线。
+- 运行时的 null 契约：`DependencyProperty.RegisterCore` 拒绝「非可空值类型 + null 默认值」，可空值类型的盒装默认值放行；`XamlRuntime.GetResource` 的转换结果为 null 时抛 `InvalidOperationException`；`SetterCollection` 拒收 null；`KeyFrameAnimation` 与 `AnimateKeyFrames` 跳过 null 帧；`ContentControl.RebuildTemplate` / `ItemsControl.CreateItemVisual` 对模板工厂返回 null 分别保持空与退回文本行，`ContentControl.ApplyContent` 在内容控件之间切换时先摘掉旧的 `_contentChild`。
 
 ## 四、验证
 

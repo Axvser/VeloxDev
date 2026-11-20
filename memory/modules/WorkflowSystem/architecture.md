@@ -311,6 +311,7 @@ WorkflowLayoutProblemBuilder.Build(tree, options)      ← 唯一读模型的一
 11. **`Channel` 的自动清理只发生在 `One*` 通道上**。`ShouldCleanupConnections` 只看 `OneTarget`/`OneSource`/`OneBoth` 位（`StandardEx/WorkflowTreeEx.cs` 的 `ShouldCleanupConnections`），`Multiple*` 从不删任何东西；「顺带清理反方向」那一条门控在 `HasFlag(OneBoth)`（两个 one 位同时存在），所以 `MultipleBoth` 不触发。
 12. **两种 Slot 实现的默认 Channel 不一致**：生成器造的 slot 体默认 `MultipleBoth`（`Writers/WorkflowWriter.cs` 的 `GenerateSlotBody`），而 `SlotDefaultViewModel` 默认 `OneBoth`（`Templates/ViewModels/SlotDefaultViewModel.cs` 的 `channel` 字段）。行为对不上 demo 时先查这里。
 13. **自动布局只在 applier 里写模型，一次 `Apply` 只入栈一次。** 阶段只读快照、写 `WorkflowLayoutState`；`WorkflowLayoutApplier.Apply` 把全部移动包成一个 `IWorkflowActionPair` 交给 `tree.GetHelper().Submit(...)`，结束后只 `MarkDirty()` 一次。pinned 节点既不写也不入栈；没有移动时不提交（不造空 undo 项）。模型在 Solve 之后被改过、或节点已离开树的，跳过不覆盖，计入 `WorkflowLayoutResult.SkippedCount`。详见 [layout.md](layout.md) §五。
+14. **`VirtualLink` 是可写属性，可能为 null，端点也可能为空。** `StandardEx/WorkflowTreeEx.cs` 的 `StandardSendConnection`、`StandardSetPointer`、`StandardResetVirtualLink` 在解引用前验形（`VirtualLink` 与 `Sender`/`Receiver` 都非空）；反序列化出的树可以把它写成 null。适配器侧同样用 `VirtualLink is { IsVisible: true }` 防守。
 
 ---
 

@@ -367,7 +367,8 @@ internal sealed class WorkflowInspectorPanel : UserControl
     {
         if (InvokeRequired)
         {
-            BeginInvoke(RefreshSelection);
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            try { BeginInvoke(RefreshSelection); } catch (InvalidOperationException) { }
             return;
         }
 
@@ -397,7 +398,8 @@ internal sealed class WorkflowInspectorPanel : UserControl
     {
         if (InvokeRequired)
         {
-            BeginInvoke(RefreshCompiled);
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            try { BeginInvoke(RefreshCompiled); } catch (InvalidOperationException) { }
             return;
         }
 

@@ -226,7 +226,21 @@ public static class WorkflowBindingExtensions
         {
             if (Control.InvokeRequired)
             {
-                Control.BeginInvoke(new NotifyCollectionChangedEventHandler(OnCollectionChanged), sender, e);
+                // 集合可能在工作线程变化，而控件此时正在销毁：BeginInvoke 会抛 InvalidOperationException。
+                if (Control.IsDisposed || Control.Disposing || !Control.IsHandleCreated)
+                {
+                    return;
+                }
+
+                try
+                {
+                    Control.BeginInvoke(new NotifyCollectionChangedEventHandler(OnCollectionChanged), sender, e);
+                }
+                catch (InvalidOperationException)
+                {
+                    // 检查与投递之间句柄消失 / 控件被释放。
+                }
+
                 return;
             }
 

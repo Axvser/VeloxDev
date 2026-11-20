@@ -40,6 +40,46 @@ public sealed class SourceGeneratorTests
     }
 
     [TestMethod]
+    public void XamlProperty_ANonNullableReferenceWithoutADefault_IsRefused()
+    {
+        var result = GeneratorProbe.Run(new DependencyPropertyGenerator(), """
+            #nullable enable
+            using VeloxDev.WinForms.Xaml;
+
+            namespace Probe;
+
+            public partial class Card : VeloxDev.WinForms.Xaml.Controls.Control
+            {
+                [XamlProperty]
+                public partial string Title { get; set; }
+            }
+            """, "XamlPropertyNullDefaultProbe");
+
+        var diagnostic = AssertSingle(result, "VELOX_XAMLP005");
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
+        StringAssert.Contains(diagnostic.GetMessage(), "Title");
+    }
+
+    [TestMethod]
+    public void XamlProperty_ANullableReferenceWithoutADefault_IsAccepted()
+    {
+        var result = GeneratorProbe.Run(new DependencyPropertyGenerator(), """
+            #nullable enable
+            using VeloxDev.WinForms.Xaml;
+
+            namespace Probe;
+
+            public partial class Card : VeloxDev.WinForms.Xaml.Controls.Control
+            {
+                [XamlProperty]
+                public partial string? Title { get; set; }
+            }
+            """, "XamlPropertyNullableProbe");
+
+        Assert.IsEmpty(result.Diagnostics, GeneratorProbe.Describe(result.Diagnostics));
+    }
+
+    [TestMethod]
     public void XamlProperty_ExplicitNameAndDefaultValue_ReachTheField()
     {
         var result = GeneratorProbe.Run(new DependencyPropertyGenerator(), """

@@ -268,10 +268,25 @@ public sealed class DependencyProperty
         metadata ??= new PropertyMetadata(
             propertyType.IsValueType ? Activator.CreateInstance(propertyType) : null);
 
-        if (metadata.DefaultValue is not null && !propertyType.IsInstanceOfType(metadata.DefaultValue))
+        // 可空值类型以盒装基础值给出默认值是合法的（typeof(int?) 的默认 5 就是盒装 int）；
+        // IsInstanceOfType 对这条路径返回 false，所以单独放行。
+        if (metadata.DefaultValue is not null
+            && !propertyType.IsInstanceOfType(metadata.DefaultValue)
+            && Nullable.GetUnderlyingType(propertyType)?.IsInstanceOfType(metadata.DefaultValue) != true)
         {
             throw new ArgumentException(
                 $"The default value of '{ownerType.Name}.{name}' is not assignable to '{propertyType}'.",
+                nameof(metadata));
+        }
+
+        // 非可空值类型的默认值不能是 null：写入端由 CoerceAndValidate 拦截，注册端若不拦，
+        // 每个 get => (T)GetValue(...)! 都会把 null 拆箱成 NullReferenceException。
+        if (metadata.DefaultValue is null
+            && propertyType.IsValueType
+            && Nullable.GetUnderlyingType(propertyType) is null)
+        {
+            throw new ArgumentException(
+                $"The default value of '{ownerType.Name}.{name}' cannot be null for '{propertyType}'.",
                 nameof(metadata));
         }
 

@@ -530,12 +530,16 @@ public static class WorkflowLinkLayer
                 return explicitTree;
             }
 
-            for (var current = canvas.Parent; current is not null; current = current.Parent)
+            for (var current = canvas; current is not null; current = current.Parent)
             {
-                if (WorkflowSurfaceBehavior.GetIsEnabled(current))
+                if (!WorkflowSurfaceBehavior.GetIsEnabled(current))
                 {
-                    return WorkflowSurfaceBehavior.GetWorkflowTree(current);
+                    continue;
                 }
+
+                // DP 是显式绑定；没有它时读表面已经解析出的那一份（DataContext/Tag 型宿主）。
+                return WorkflowSurfaceBehavior.GetWorkflowTree(current)
+                    ?? WorkflowSurfaceBehavior.GetSurfaceTree(current);
             }
 
             return null;

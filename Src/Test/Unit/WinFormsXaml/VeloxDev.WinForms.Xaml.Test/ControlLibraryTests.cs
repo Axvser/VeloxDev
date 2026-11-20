@@ -235,6 +235,33 @@ public sealed class ControlLibraryTests
         Assert.AreEqual(42d, V.GridLength.Parse("42").Value);
     }
 
+    [TestMethod]
+    public void ContentControl_ATemplateFactoryReturningNull_DoesNotThrow()
+    {
+        using var control = new V.ContentControl();
+
+        control.Content = "text";
+        control.ContentTemplate = new DataTemplate(() => null!);
+        control.PerformLayout();
+
+        Assert.AreEqual(0, control.Controls.Count);
+    }
+
+    [TestMethod]
+    public void ItemsControl_ATemplateFactoryReturningNull_FallsBackToATextLine()
+    {
+        using var control = new V.ItemsControl
+        {
+            ItemTemplate = new DataTemplate(() => null!),
+            ItemsSource = new[] { "a", "b" },
+        };
+
+        control.PerformLayout();
+
+        Assert.HasCount(2, control.Controls);
+        Assert.IsTrue(control.Controls.Cast<System.Windows.Forms.Control>().All(child => child is V.TextBlock));
+    }
+
     private sealed class ProbeButton : V.Button
     {
         public void Press()

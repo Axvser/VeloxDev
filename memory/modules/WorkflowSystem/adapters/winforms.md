@@ -240,6 +240,10 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 **单层绘制不走这条**：`WorkflowLinkLayer.ResolveModel` 优先用 `WorkflowSlotLayoutBehavior.TryGetLocalAnchor` 的节点内局部锚点，再用 `node.Anchor + 局部偏移`，天然与模型同系；取不到局部锚点才退回 `slot.Anchor - (node.Anchor + ox)`。判据（不依赖截图）：在 `BuildCurve` 里临时把两套坐标算出的法线都写进文件，对比 `canvasNormals` / `modelNormals` —— 修前 `(1,0)(0,1)`、修后 `(1,0)(-1,0)`。
 
+### 4.13 池换绑时，卡片里的事件回调必须捕获自己的局部控件
+
+`WorkflowNodeCard.BuildLayout` 先 `ResetRefs()` 把 `_scriptBox` 等字段置空，再 `_bodyPanel.Controls.Clear()`；被摘掉的旧视口仍可能收到一次 `VisibleChanged` → `Layout`。因此卡片内的布局/绘制回调捕获创建时的局部控件并检查 `IsDisposed`，不读会被 `ResetRefs` 清空的字段；`BuildScriptEditor` 的 `viewport.Layout` 按此写。
+
 ---
 
 ## 四点五、画布滚动与表面级按键

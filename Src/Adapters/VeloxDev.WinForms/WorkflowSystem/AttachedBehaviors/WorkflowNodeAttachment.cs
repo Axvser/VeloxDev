@@ -320,7 +320,21 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     {
         if (target.InvokeRequired)
         {
-            target.BeginInvoke(new NotifyCollectionChangedEventHandler(OnSlotsCollectionChanged), sender, e);
+            // 集合可能在工作线程变化，而卡片此时正在销毁：BeginInvoke 会抛 InvalidOperationException。
+            if (target.IsDisposed || target.Disposing || !target.IsHandleCreated)
+            {
+                return;
+            }
+
+            try
+            {
+                target.BeginInvoke(new NotifyCollectionChangedEventHandler(OnSlotsCollectionChanged), sender, e);
+            }
+            catch (InvalidOperationException)
+            {
+                // 检查与投递之间句柄消失 / 控件被释放。
+            }
+
             return;
         }
 

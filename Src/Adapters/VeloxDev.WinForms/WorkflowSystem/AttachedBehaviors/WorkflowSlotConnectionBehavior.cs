@@ -235,7 +235,8 @@ public sealed class WorkflowSlotConnectionBehavior
             return;
         }
 
-        if (!activeConnection.Tree.VirtualLink.IsVisible)
+        // VirtualLink 是可写的模型属性；宿主可能在拖拽途中清空它（换文档/卸载会话）。
+        if (activeConnection.Tree.VirtualLink is not { IsVisible: true })
         {
             ClearActiveConnection();
             return;
@@ -268,7 +269,7 @@ public sealed class WorkflowSlotConnectionBehavior
             return;
         }
 
-        if (!activeConnection.Tree.VirtualLink.IsVisible)
+        if (activeConnection.Tree.VirtualLink is not { IsVisible: true })
         {
             ClearActiveConnection();
             return;
@@ -415,7 +416,8 @@ public sealed class WorkflowSlotConnectionBehavior
     }
 
     private static bool HasInactiveConnection()
-        => _activeConnection is not null && !_activeConnection.Tree.VirtualLink.IsVisible;
+        => _activeConnection is not null
+           && _activeConnection.Tree.VirtualLink is not { IsVisible: true };
 
     private static void ClearActiveConnection()
     {

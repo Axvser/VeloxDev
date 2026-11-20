@@ -77,6 +77,7 @@ public sealed class SetterCollection : Collection<Setter>
     /// <inheritdoc />
     protected override void InsertItem(int index, Setter item)
     {
+        if (item is null) throw new ArgumentNullException(nameof(item));
         base.InsertItem(index, item);
         item.Changed += OnItemChanged;
         Changed?.Invoke(this, EventArgs.Empty);
@@ -85,6 +86,7 @@ public sealed class SetterCollection : Collection<Setter>
     /// <inheritdoc />
     protected override void SetItem(int index, Setter item)
     {
+        if (item is null) throw new ArgumentNullException(nameof(item));
         this[index].Changed -= OnItemChanged;
         base.SetItem(index, item);
         item.Changed += OnItemChanged;

@@ -328,6 +328,8 @@ public sealed class WorkflowSlotLayoutBehavior
             state.PropertyChangedHandler = null;
         }
 
+        // Disposed 也走这里；不置位的话，销毁前排队的同步仍会通过 IsEnabled 闸门。
+        state.IsEnabled = false;
         state.CachedSlotControls = null;
         state.SlotControlsDirty = true;
         CancelSync(control);

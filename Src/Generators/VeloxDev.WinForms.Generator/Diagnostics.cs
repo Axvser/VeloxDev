@@ -122,4 +122,9 @@ internal static class Diagnostics
         "VELOX_XAMLP004", "Dependency property name conflict",
         "'{0}' already declares a member named '{1}Property'",
         PropertyCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor PropertyDefaultValueRequired = new(
+        "VELOX_XAMLP005", "Dependency property default value required",
+        "The dependency property '{0}' is typed '{1}' (non-nullable reference); set DefaultValue or declare it nullable",
+        PropertyCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
 }

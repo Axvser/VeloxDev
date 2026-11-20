@@ -195,7 +195,8 @@ internal sealed class RunManagerPanel : UserControl
     {
         if (InvokeRequired)
         {
-            BeginInvoke(RefreshFromCatalog);
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            try { BeginInvoke(RefreshFromCatalog); } catch (InvalidOperationException) { }
             return;
         }
 
@@ -221,7 +222,8 @@ internal sealed class RunManagerPanel : UserControl
     {
         if (InvokeRequired)
         {
-            BeginInvoke(RebuildRows);
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            try { BeginInvoke(RebuildRows); } catch (InvalidOperationException) { }
             return;
         }
 
@@ -475,7 +477,8 @@ internal sealed class RunManagerPanel : UserControl
             if (IsDisposed) return;
             if (InvokeRequired)
             {
-                BeginInvoke(UpdateContent);
+                if (Disposing || !IsHandleCreated) return;
+                try { BeginInvoke(UpdateContent); } catch (InvalidOperationException) { }
                 return;
             }
 

@@ -171,6 +171,7 @@ public static class XamlRuntime
     public static object ParseEnum(Type enumType, string text)
     {
         if (enumType is null) throw new ArgumentNullException(nameof(enumType));
+        if (text is null) throw new ArgumentNullException(nameof(text));
         text = text.Trim();
 
         if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
@@ -258,7 +259,11 @@ public static class XamlRuntime
             ?? throw new InvalidOperationException($"No resource named '{key}' was found in the XAML control tree.");
 
         var converted = ConvertValue(value, typeof(T));
-        return converted is null ? default! : (T)converted;
+        // FindResource 已经排除了「键不存在」；走到这里还是 null 只可能是转换器返回了 null。
+        // 把它当成 default! 返回，调用方会在很远的地方拆箱成 NRE，不如在这里说清楚。
+        return converted is null
+            ? throw new InvalidOperationException($"Resource '{key}' cannot be converted to '{typeof(T)}'.")
+            : (T)converted;
     }
 
     /// <summary>
@@ -578,6 +583,7 @@ public static class XamlRuntime
 
     private static int[] SplitNumbers(string text)
     {
+        if (text is null) throw new ArgumentNullException(nameof(text));
         var pieces = text.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
         var values = new int[pieces.Length];
         for (var index = 0; index < pieces.Length; index++)
@@ -590,6 +596,7 @@ public static class XamlRuntime
 
     private static float[] SplitFloats(string text)
     {
+        if (text is null) throw new ArgumentNullException(nameof(text));
         var pieces = text.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
         var values = new float[pieces.Length];
         for (var index = 0; index < pieces.Length; index++)
