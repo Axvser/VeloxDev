@@ -1,10 +1,8 @@
 ﻿# TimeLine 架构
 
 > 代码：`Src/Core/VeloxDev.Core/TimeLine/` + 契约 `Src/Core/VeloxDev.Core/Interfaces/Tickable/`。
-> 依赖：`Timing/`（总线与采样器）。反向：`TransitionSystem/` 的 `TransitionEventArgs : TimeLineEventArgs` 继承本模块的基类（该类型 2026-10-04 已移出本模块，见 §二）。
+> 依赖：`Timing/`（总线与采样器）。反向：`TransitionSystem/` 的 `TransitionEventArgs : TimeLineEventArgs` 继承本模块的基类（见 §二）。
 > 采样循环与帧节奏归 `TransitionSystem`（`FramePacerCore`）；本文写的是**时间轴与事件参数本身**。
-
-本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
 
@@ -33,17 +31,16 @@
 
 | 类型 | 谁产生 | 谁读 | 状态 |
 |---|---|---|---|
-| `TimeLineEventArgs`（`TimeLineEventArgs.cs`） | 抽象基类 | — | `virtual bool Handled`（**全仓库零 `override`**；唯一那个用 `new` 遮蔽它的类型已于 2026-10-04 删除，见 §八·5）+ `DeltaTime`/`TotalTime`（`TimeSpan`，`internal set`）—— 基类给两条链路一份共享的时钟读数 |
-| `FrameEventArgs`（`FrameEventArgs.cs`） | `TickManager.CreateFrameEventArgs` | 一组 `partial void` 钩子 | 只剩 `CurrentFPS`/`TargetFPS` 两个自有属性（全 `internal set`）；两个时钟读数已上移到基类 |
-| `TransitionEventArgs`（**已移出本模块**：`TransitionSystem/Events/TransitionEventArgs.cs` 的 `TransitionEventArgs : TimeLineEventArgs`） | `TransitionInterpreter` 的 `Args`、`TransitionDiagnostics` 的 `Error`/`Warn`（各自 `new` 一份带载荷 args）、`Effects/Transition.cs` 的 `CoreExecute` catch | 用户挂在 effect 上的无载荷事件处理器 | `TransitionEventArgs : TimeLineEventArgs`；自有 `Loop`（int，本段第几趟，0 起）/ `Cycle`（long，这个 target 累计走了几趟），都 `internal set`。带载荷的 `Warn`/`Error` 改用派生泛型，见本节末 |
+| `TimeLineEventArgs`（`TimeLineEventArgs.cs`） | 抽象基类 | — | `virtual bool Handled`（**全仓库零 `override`**）+ `DeltaTime`/`TotalTime`（`TimeSpan`，`internal set`）—— 基类给两条链路一份共享的时钟读数 |
+| `FrameEventArgs`（`FrameEventArgs.cs`） | `TickManager.CreateFrameEventArgs` | 一组 `partial void` 钩子 | 自有属性只有 `CurrentFPS`/`TargetFPS`（全 `internal set`）；两个时钟读数在基类 |
+| `TransitionEventArgs`（`TransitionSystem/Events/TransitionEventArgs.cs` 的 `TransitionEventArgs : TimeLineEventArgs`） | `TransitionInterpreter` 的 `Args`、`TransitionDiagnostics` 的 `Error`/`Warn`（各自 `new` 一份带载荷 args）、`Effects/Transition.cs` 的 `CoreExecute` catch | 用户挂在 effect 上的无载荷事件处理器 | `TransitionEventArgs : TimeLineEventArgs`；自有 `Loop`（int，本段第几趟，0 起）/ `Cycle`（long，这个 target 累计走了几趟），都 `internal set`。带载荷的 `Warn`/`Error` 改用派生泛型，见本节末 |
 
 **四个读数（`FrameEventArgs` 的两个自有属性 + 基类的两个时钟）各有来源，都不是随手填的：**
 
 - `DeltaTime` / `TotalTime` 都来自一个 `TimeSample`（`TickManager` 的 `UpdateLoop` 里 `_updateSampler.Sample()`）。注释写死了这条（`CreateFrameEventArgs` 的 XML 注释）：速率是**时钟**施加的，不是这里事后缩放的；所以 `TotalTime` 不含停摆期。
 - `TargetFPS` 是**配置值**（`CreateFrameEventArgs` 读 `_targetFPS`），`CurrentFPS` 是**实测值**（同方法读 `_currentFPS`，由 `UpdatePerformanceStats` 用墙钟每秒更新一次）。
-- 所以「TargetFPS 和 CurrentFPS 不一样」是正常的，不是 bug。
 
-**stage 现在是一个枚举，不再是自由文本**（2026-10-04 起，定义在 `Interfaces/TransitionSystem/Enums/`）。诊断走两条带载荷的通道，各配一个枚举，值只能取成员 —— 写一个不存在的 stage 名不再编译得过：
+**stage 是枚举**（定义在 `Interfaces/TransitionSystem/Enums/`）。诊断走两条带载荷的通道，各配一个枚举，值只能取成员 —— 不存在的 stage 名编译不过：
 
 | 枚举 | 成员 | 从哪里发出 |
 |---|---|---|
@@ -60,7 +57,7 @@
 
 ## 三、`Handled`：一个属性名，两条互不相干的链路
 
-这是本模块**最承重**的一点：`Handled` 是一个跨模块 ABI，同一个属性名在两个子系统里含义不同，且两边的读写者完全不同。
+`Handled` 是一个跨模块 ABI，同一个属性名在两个子系统里含义不同，且两边的读写者完全不同。
 
 ### 链路 A —— TickManager：终止本帧这个阶段剩下的行为
 
@@ -120,7 +117,7 @@ LoopChannel
 | 参数对象 | 一个 `frameArgs`，Update 与 LateUpdate 共用，用完还池 | 每步一个，`ExecuteBehaviorsFixedUpdateSync` 后**立刻**还池 |
 | 尾睡 | `FrameRateControlSync`（墙钟量） | `_fixedSampler.TimeToNextStep` |
 
-**为什么「停摆时 park 而不是轮询」是一条被写死的设计决定**：专用线程不能 `await`，所以同步版直接 `GetAwaiter().GetResult()` 阻塞一条自有线程，换零唤醒；取消能穿透这个等待是因为总线会观察令牌（`FixedUpdateLoop` 里 `if (!_bus.IsAdvancing)` 上方的注释原文）。`Sleep` 之所以按 `MAX_SLEEP_CHUNK_MS = 50` 分块睡（`TickManager.Sleep` 的分块循环），是为了「一次停止在 50ms 内被察觉，而不是等完整个间隔」——最低目标帧率下一帧预算有一秒长。
+**停摆时 park 而不是轮询**：专用线程不能 `await`，同步版直接 `GetAwaiter().GetResult()` 阻塞一条自有线程，换零唤醒；取消能穿透这个等待，因为总线会观察令牌（`FixedUpdateLoop` 里 `if (!_bus.IsAdvancing)` 上方的注释原文）。`Sleep` 按 `MAX_SLEEP_CHUNK_MS = 50` 分块睡（`TickManager.Sleep` 的分块循环）：一次停止在 50ms 内被察觉，而不是等完整个间隔 —— 最低目标帧率下一帧预算有一秒长。
 
 **注册与生命周期全走队列，在更新循环的帧体里结算**（顺序即 `ProcessMainThreadOperations` 的四步）：
 
@@ -142,7 +139,7 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 - **`Awake`/`Start` 各自的异常被 `SafeExecute` 捕获后上报**（`LoopChannel.SafeExecute` → `TickManager.ReportBehaviorError`）：写 `Debug.WriteLine` 并触发静态事件 `TickManager.OnBehaviorError`，循环继续跑。**没人订阅时仍是静默半死**（Release 下 `Debug.WriteLine` 不存在）。
 - **配置队列由更新泵排空**，而固定泵的步长**不走配置队列**（`_pendingFixedIntervalMs`：`SetFixedUpdateInterval` 写入，`FixedUpdateLoop` 在自己的线程上取走）。理由是写死的：配置队列归更新泵，采样器归固定泵，从更新线程写 `Step` 会与 `Advance` 争它要重置的累加器。
 
-**数字（保留实测到的常量）：**
+**常量：**
 
 | 常量 | 值 |
 |---|---|
@@ -170,11 +167,11 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 
 它给的是 **Unity 式宿主** —— 游戏循环、Unity 的 MonoBehaviour 集成、或任何想跑一条**独立于 UI 的帧循环**的非 UI 代码。判据很简单：你要的是「一条与渲染无关、能自己调速、暂停时不占 CPU 的帧泵」，就用它；你要的是「让动画在 UI 线程上出帧」，那是 `TransitionSystem` + 适配器的事。
 
-**但 Core 内部有一个真实消费者**，容易被忽略：
+**Core 内部有一个消费者：**
 
 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/TreeHelper.cs` 的 `[Tickable(channel: nameof(TreeHelper), fps: 10)]`，channel 在带 `cellSize` 的构造里 `TickManager.Start`，`Install` 里 `InitializeTickable()`，`Uninstall` 里 `CloseTickable()`，`partial void Update` 判脏后执行 `Virtualize` + `BroadcastVisibleItemLayout`。
 
-**这条链的后果值得单独记住：tick 线程只判脏，不碰可见集。** 装了虚拟化的 helper 在 `Install` 时记下 `SynchronizationContext.Current`，`Update` 把 `Virtualize` + `BroadcastVisibleItemLayout` 整趟 post 回该上下文（`TreeHelper.cs` 的 `partial void Update`）；没有上下文时退回老的同线程执行。编组是消费方自己的责任，本模块不提供（对照：`TransitionSystem` 有一条完整的 `IThreadDispatcher` 通路）。下游曾因这一趟在 `VeloxDev.Update[TreeHelper]` 上改 UI 绑定集合而随机丢连线。也注意 `[Tickable]` 只装在泛型类 `TreeHelper<T>` 上（`TreeHelper.cs` 的 `[Tickable(channel: nameof(TreeHelper), fps: 10)]`），而 `nameof(TreeHelper)` 在泛型内解析为不带参数个数的 `"TreeHelper"`。
+**tick 线程只判脏，不碰可见集。** 装了虚拟化的 helper 在 `Install` 时记下 `SynchronizationContext.Current`，`Update` 把 `Virtualize` + `BroadcastVisibleItemLayout` 整趟 post 回该上下文（`TreeHelper.cs` 的 `partial void Update`）；没有上下文时退回同线程执行。编组是消费方自己的责任，本模块不提供（对照：`TransitionSystem` 有一条完整的 `IThreadDispatcher` 通路）。在 `VeloxDev.Update[TreeHelper]` 上改 UI 绑定集合会随机丢连线。`[Tickable]` 只装在泛型类 `TreeHelper<T>` 上（`TreeHelper.cs` 的 `[Tickable(channel: nameof(TreeHelper), fps: 10)]`），`nameof(TreeHelper)` 在泛型内解析为不带参数个数的 `"TreeHelper"`。
 
 ---
 
@@ -229,16 +226,14 @@ ExecuteBehaviorsUpdateSync / LateUpdateSync
 
 ## 八、陷阱（带依据）
 
-1. **改 `ITickable` 这类名字时当心不可见字符** —— 它曾带着一个零宽空格 U+200B（2026-10-01 已清除，当时它还叫 `IMonoBehaviour`）。它为什么编译得过却仍然有害，见 `memory/modules/Interfaces/architecture.md` §六·9 —— 一句话：C# 忽略 Cf 类字符，所以带与不带是同一个标识符，坑全在人这一侧（裸路径打不开、`grep -l` 漏、`git ls-files` 会把路径转义）。现在按字符串找这个名字用普通拼写就行。
+1. **改 `ITickable` 这类名字时当心不可见字符** —— 成因与后果见 `memory/modules/Interfaces/architecture.md` §六·9。
 2. **只贴 `[Tickable]` 什么都不会发生。** 特性只被**生成器**读（`TickWriter.ReadTickableConfig`），运行时的 `TickManager` **从不反射**这个特性。要真正跑起来，必须调生成的 `InitializeTickable()`。仓库内唯一的运行期读法是**没有**——对照组：`Analizer.cs` 的 `TriggerAttributes` 里 `"VeloxDev.TimeLine.TickableAttribute"` 那一项只决定生成器是否介入。
 3. **`[Tickable]` 上的 `fps` 只在第一次注册时入队一次。** 生成器把它展开成 `TickManager.SetTargetFPS({fps}, "{Channel}")` **放在 `RegisterBehaviour` 之前**（`TickWriter` 的 `GenerateBody` 里 `setFpsLine`），`fps >= 1` 时才发这句。而 `fps = -1`（默认）时**整句不生成**。所以「特性里写了 fps 却没生效」先看这个值是不是 `-1`；`TreeHelper` 用的是 `fps: 10`（`TreeHelper.cs` 的 `[Tickable(channel: nameof(TreeHelper), fps: 10)]`）。
 4. **对一条从未被创建（或从未被启动）的 channel 调 `SetTargetFPS` 是静默无效的**：它会**创建** channel（`GetOrCreateChannel`）并把请求**入队**，但队列只有更新泵会排空，没启动就没有读者。（例子见 `Examples/Tickable/WPF/Demo/SimState.cs` 里那段注释：三个组件注册在 default channel，却调 `SetTargetFPS(30, "game")`。）
-5. **`ThreadSafeFrameEventArgs` 已于 2026-10-04 删除 —— 它是一份「带锁的摆设」，而且那个锁永远走不到。** 它 `public new bool Handled` **遮蔽**基类的 `virtual bool Handled`，而泵的读写都在 `FrameEventArgs` 静态类型上（`ExecuteBehaviorsUpdateSync(FrameEventArgs frameArgs, …)` 的读、`CreateFrameEventArgs` 的写），所以即便把实例塞进池子，走上来的也是基类那个**没锁**的属性。何况它连池子都进不了：池的声明就是 `ObjectPool<FrameEventArgs>`（`_frameEventArgsPool`），全仓除定义与测试外零引用，生成器也不产出它。
-   ⇒ **记住这个形状**：`virtual` 留着是给 `override` 的，用 `new` 遮蔽等于让虚分派失效 —— 症状是「看起来有线程安全，实际读写的是另一个字段」，而且类型自己的单测**通过派生类型**访问，绿得毫无意义。要线程安全，这家的既有写法是 `Volatile.Read`（同一文件 `CreateFrameEventArgs` 里读 `_targetFPS` 就是），比对每次读写进出 `lock` 更贴。
-6. **`Handled` 在 Update 里置上 = 本帧没有 LateUpdate。** 见 §三·1。这不是推断，是 `ExecuteBehaviorsLateUpdateSync` 的循环体第一句 + 同一个 `frameArgs` 对象造成的确定结果。
-7. **钩子异常只报给 `TickManager.OnBehaviorError`**（`TickManager.ReportBehaviorError`；覆盖 `Awake`/`Start`/`Update`/`LateUpdate`/`FixedUpdate` 与 `ExecuteOnMainThread` 队列，`TickBehaviorErrorEventArgs.Stage` 是这六个字符串之一）。事件在**循环线程**上触发，处理器自己抛的异常会被再捕一次并只写 `Debug`。不订阅它，在钩子里做 `Dispatcher.Invoke` 之类的跨线程动作一旦抛，症状仍是「循环还在跑但界面停止更新，且哪儿都没有日志」。WPF demo 的钩子侧头部注释把这条写成了它的整体设计理由（`Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs` 的头部注释）。
-8. **`GetCachedWrappers` 有最长 1000ms 的陈旧窗口。** `_wrappersNeedSort` 为假且距上次检查不到 `MAX_CONFIG_CACHE_DURATION_MS` 时直接用旧数组（`GetCachedWrappers`）。注册与注销都会置脏（`ProcessAddedBehaviors` / `ProcessRemovedBehaviors`），所以正常路径上是即时的；但如果有人在别处直接改了 `_behaviors`，最坏要等 1 秒。
-9. **池是有上限的。** `ObjectPool.Return` 在 `Interlocked.Increment(ref _count) > maxSize` 时不入栈（`TickManager` 里 `ObjectPool<T>` 的 `Return`）。上限 `DEFAULT_OBJECT_POOL_SIZE = 50`。所以「池」不是无限缓存 —— 超出就丢给 GC。
-10. **`StopAsync` 的关闭预算只有 1000ms，超时后不报错。** 线程用 `Join(1000)`，异步路径用 `Task.WhenAny(..., Task.Delay(1000))`，两条都在 `catch (Exception) { }` 里（`LoopChannel.StopAsync`）——**放弃等待后照常置空线程字段、清统计、清队列，并发 `Stopped` 事件**。所以 `Stopped` 的意思是「我停止等了」，不是「它们都停了」。
-11. **`RestartAsync` 里有两级超时，且第一级失败会 `ForceCleanup`。** 等关闭确认 1000ms，失败就 `ForceCleanup()` —— 它会 `Dispose` 掉 `_cts` 并**新建一个**（`LoopChannel.ForceCleanup`）。第二级等队列排空 500ms，失败**不**报错，直接 `Start()`（`LoopChannel.RestartAsync`）。
-12. **`_channels` 是进程级静态字典，从不移除条目。** `GetOrCreateChannel` 只有 `GetOrAdd`，没有任何移除路径；`ChannelNames` 直接把键暴露出去（`TickManager.ChannelNames`）。所以「这个 channel 曾经存在过」是永真的，`UnregisterBehaviour` 之后 channel 仍在。
+5. **`Handled` 在 Update 里置上 = 本帧没有 LateUpdate。** 见 §三·1。这不是推断，是 `ExecuteBehaviorsLateUpdateSync` 的循环体第一句 + 同一个 `frameArgs` 对象造成的确定结果。
+6. **钩子异常只报给 `TickManager.OnBehaviorError`**（`TickManager.ReportBehaviorError`；覆盖 `Awake`/`Start`/`Update`/`LateUpdate`/`FixedUpdate` 与 `ExecuteOnMainThread` 队列，`TickBehaviorErrorEventArgs.Stage` 是这六个字符串之一）。事件在**循环线程**上触发，处理器自己抛的异常会被再捕一次并只写 `Debug`。不订阅它，在钩子里做 `Dispatcher.Invoke` 之类的跨线程动作一旦抛，症状仍是「循环还在跑但界面停止更新，且哪儿都没有日志」。WPF demo 的钩子侧头部注释把这条写成了它的整体设计理由（`Examples/Tickable/WPF/Demo/MainWindow.Hooks.cs` 的头部注释）。
+7. **`GetCachedWrappers` 有最长 1000ms 的陈旧窗口。** `_wrappersNeedSort` 为假且距上次检查不到 `MAX_CONFIG_CACHE_DURATION_MS` 时直接用旧数组（`GetCachedWrappers`）。注册与注销都会置脏（`ProcessAddedBehaviors` / `ProcessRemovedBehaviors`），所以正常路径上是即时的；但如果有人在别处直接改了 `_behaviors`，最坏要等 1 秒。
+8. **池是有上限的。** `ObjectPool.Return` 在 `Interlocked.Increment(ref _count) > maxSize` 时不入栈（`TickManager` 里 `ObjectPool<T>` 的 `Return`）。上限 `DEFAULT_OBJECT_POOL_SIZE = 50`。所以「池」不是无限缓存 —— 超出就丢给 GC。
+9. **`StopAsync` 的关闭预算只有 1000ms，超时后不报错。** 线程用 `Join(1000)`，异步路径用 `Task.WhenAny(..., Task.Delay(1000))`，两条都在 `catch (Exception) { }` 里（`LoopChannel.StopAsync`）——**放弃等待后照常置空线程字段、清统计、清队列，并发 `Stopped` 事件**。所以 `Stopped` 的意思是「我停止等了」，不是「它们都停了」。
+10. **`RestartAsync` 里有两级超时，且第一级失败会 `ForceCleanup`。** 等关闭确认 1000ms，失败就 `ForceCleanup()` —— 它会 `Dispose` 掉 `_cts` 并**新建一个**（`LoopChannel.ForceCleanup`）。第二级等队列排空 500ms，失败**不**报错，直接 `Start()`（`LoopChannel.RestartAsync`）。
+11. **`_channels` 是进程级静态字典，从不移除条目。** `GetOrCreateChannel` 只有 `GetOrAdd`，没有任何移除路径；`ChannelNames` 直接把键暴露出去（`TickManager.ChannelNames`）。所以「这个 channel 曾经存在过」是永真的，`UnregisterBehaviour` 之后 channel 仍在。

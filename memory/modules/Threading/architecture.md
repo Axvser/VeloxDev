@@ -4,8 +4,6 @@
 > 注意 **`IThreadDispatcher.cs` 里装着 `IThreadAffinity` 与 `IThreadDispatcher<TPriorityCore>`** —— 文件名只对了后一半。
 > 唯一的消费者是 TransitionSystem 的宿主接缝：`Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ITransitionHost.cs` 的 `ITransitionHost<TPriorityCore>` 把 `IThreadDispatcher<TPriorityCore>` 与 `Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs` 合成一个接口；各家实现见 `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/UIThreadInspector.cs`。
 
-本文只写「读完这些文件 + 找到全部调用点才知道的东西」。成员表、继承树请看 IDE。
-
 ---
 
 ## 一、这个模块是什么，不解决什么
@@ -23,7 +21,7 @@
 | 排队、去重、取消、代际 | `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` |
 | 「把异常安全地送回去」 | **不成立**。只有 `PostAsync`/`Run` 把动作的异常装进完成源；`Post` 是 fire-and-forget，动作的异常落在泵它的那条线程上 |
 | 线程池 / 自建线程 | 没有。这里的每条路径最终都落到宿主已有的一条线程上 |
-| 「全局的 UI 线程」 | 刻意没有这个概念（`IThreadDispatcher.cs` 的接口注释：每个成员都是 **target 相对**的）。理由写在注释里 —— 「全局问一次 + 按 target 问一次」在单 UI 线程的宿主上恒一致，而**不一致恰恰发生在多 UI 线程的宿主上**（Razor 的每个 circuit） |
+| 「全局的 UI 线程」 | 刻意没有这个概念（`IThreadDispatcher.cs` 的接口注释：每个成员都是 **target 相对**的）；它在多 UI 线程的宿主上会失效（Razor 的每个 circuit） |
 
 ---
 
@@ -35,7 +33,7 @@
 | `IThreadDispatcher<TPriorityCore>` | 同文件 `IThreadDispatcher<TPriorityCore>` | 写路径（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply`）与调度器（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `PostAsync`） | 加投递、加阻塞读 |
 | `ITransitionHost<TPriorityCore>` | `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ITransitionHost.cs` 的 `ITransitionHost<TPriorityCore>` | 采样帧集、调度器 | = dispatcher + `IApplicationState`，**零新增成员**（注释明说它只是合成） |
 
-派生面只写一次：`ThreadDispatcherBase<TPriorityCore>` 是全树唯一实现，类注释写明「implemented once so no host can derive it differently from another」（`ThreadDispatcherBase.cs`）。宿主提供 `ThreadFor` / `IsCurrentThread` / `PostCore`，可选再给 `IsCurrentFor` / `InternalPriority`，其余全在基类。
+`ThreadDispatcherBase<TPriorityCore>` 是全树唯一实现，类注释写明「implemented once so no host can derive it differently from another」（`ThreadDispatcherBase.cs`）。宿主提供 `ThreadFor` / `IsCurrentThread` / `PostCore`，可选再给 `IsCurrentFor` / `InternalPriority`，其余全在基类。
 
 **`ThreadRef` 是句柄，不是线程身份。** 它没有任何「当前线程」的入口，相等即句柄引用相等（`ThreadRef.cs` 的 `Equals`），只能 `TryGet<T>` 出宿主自己的类型（同文件 `TryGet`）。所以**「调用线程是不是这条线程」这个谓词基类给不出**，只能由宿主实现 `IsCurrentThread(ThreadRef)`（`ThreadDispatcherBase.cs` 中 `IsCurrentFor` 的注释把这条说死了）。`None` 是「没有线程拥有它」这个**答案**，不是失败（`ThreadRef.cs` 的 `None`）。
 
@@ -43,7 +41,7 @@
 
 ## 三、谁调用了什么（调用点普查）
 
-这是本模块最值得先看的一张表：**每个成员在树内的消费者少得惊人**，这决定了改它的代价。
+**每个成员在树内的消费者很少**，这决定了改它的代价。
 
 | 成员 | 树内唯一/全部调用点 | 用途 |
 |---|---|---|
@@ -55,8 +53,6 @@
 | `IsCurrent(object)` | `Src/Adapters/VeloxDev.WinForms/TransitionSystem/TransitionInterpreter.cs` 的 `CreateFramePacer` | 全树唯一消费者：决定这家要不要 pacer |
 | `IsCurrentFor(target, thread)` | 基类内部 `Post` / `PostAsync` / `Run<T>` 等处 | **inline 还是 queue 的唯一判定** |
 | `InternalPriority` | `ThreadDispatcherBase.cs` 的 `Run<T>` | 只服务于 `Run<T>` 的跨线程跳 |
-
-两个推论：① 两个成员的 `IThreadAffinity` 里那个 `IsCurrent` 全树只有一个消费者 —— 它是给 pacer 用的谓词，不是给「我在不在 UI 线程」用的通用工具；② 三参 `Post` 是**没人用的便利面**，别以为写路径走它。
 
 ---
 
@@ -76,7 +72,7 @@ Post(target, thread, action, priority)
 
 ---
 
-## 五、不对称：读阻塞、写即弃（本模块最重的一条）
+## 五、不对称：读阻塞、写即弃
 
 | | 成员 | 行为 | 失败怎么表示 |
 |---|---|---|---|
@@ -85,13 +81,13 @@ Post(target, thread, action, priority)
 | 半等 | `PostAsync` | **只在动作真的被接受时才等**（`ThreadDispatcherBase.PostAsync` 的中文注释：「宿主静默丢掉的动作永远不会完成它的 TCS，等下去就是等一辈子」）；没入队就 `return false` | `false` |
 | 读（inline） | `PostAsync`/`Run` 的 inline 分支 | 直接跑，不投递 | —— |
 
-**为什么读必须阻塞。** 唯一读者是 `Interpolator.Prepare`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `host.Run<object?>`），它要在**发起动画的那条线程上、`Prepare` 的同一个栈帧里**拿到 target 的当前值。改成异步就要把 `Prepare` 改 async，并放松调度器写死的既有顺序：`Awake` 跑完（`await`）之前不得读 target（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 中 `PostAsync` 前的注释「Prepare must not read the target until it has run」）。
+**读：阻塞。** 唯一读者是 `Interpolator.Prepare`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `host.Run<object?>`），要在**发起动画的那条线程上、`Prepare` 的同一个栈帧里**拿到 target 的当前值；顺序约束是 `Awake` 跑完（`await`）之前不得读 target（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 中 `PostAsync` 前的注释「Prepare must not read the target until it has run」）。
 
-**为什么写不能等。** 写是每帧每属性的（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply`），采样循环一旦等 UI 线程就变成每帧一次 dispatch —— 正是采样路径要避免的事。
+**写：不等。** 写是每帧每属性的（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply`）；等 UI 线程就变成每帧一次 dispatch。
 
-**为什么 `Awake` 走 `PostAsync`。** 它既要能靠 `Args.Handled` 否决，又必须让 `Prepare` 在它之后；`await` 完还要看 `awoken == false` = 宿主队列没了 ⇒ 放弃整趟（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `if (!awoken)` 分支）。写路径不需要这个保证，所以是 `Post`。
+**`Awake`：`PostAsync`。** 它要能靠 `Args.Handled` 否决、要让 `Prepare` 在它之后，`await` 完还要看 `awoken == false` = 宿主队列没了 ⇒ 放弃整趟（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `if (!awoken)` 分支）。
 
-**读的失败是零值，这条有实际后果（值得单独记）。** `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `host.Run<object?>` 拿到的是被拒时为 `null` 的结果；而紧随其后的 `ReferenceEquals(currentValue, TransitionProperty.UnreadablePath)` 只把 `UnreadablePath` 当哨兵，`null` 会被当成「当前值就是 null」继续流到 `sampler.NormalizeStart`，`DoubleSampler.InsertFrame` 又把它当 0（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/DoubleSampler.cs` 的 `(double)(start ?? 0d)`）。⇒ **「宿主拒绝了这次读」静默变成「从 0 开始动画」**。要往读路径加东西，先决定失败长什么样；本仓库现成的答案是哨兵对象（`UnreadablePath`），不是 `null`。
+**读的失败是零值，这条有实际后果。** `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `host.Run<object?>` 拿到的是被拒时为 `null` 的结果；而紧随其后的 `ReferenceEquals(currentValue, TransitionProperty.UnreadablePath)` 只把 `UnreadablePath` 当哨兵，`null` 会被当成「当前值就是 null」继续流到 `sampler.NormalizeStart`，`DoubleSampler.InsertFrame` 又把它当 0（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/DoubleSampler.cs` 的 `(double)(start ?? 0d)`）。⇒ **「宿主拒绝了这次读」静默变成「从 0 开始动画」**。要往读路径加东西，先决定失败长什么样；本仓库现成的答案是哨兵对象（`UnreadablePath`），不是 `null`。
 
 ---
 
@@ -100,7 +96,7 @@ Post(target, thread, action, priority)
 违反下面任何一条通常**不报错**，只是静默行为错。
 
 1. **`ThreadFor` 不得为调用方造句柄**（`IThreadDispatcher.cs` 中 `ThreadFor` 的注释「Never mint one for the caller」：`Dispatcher.CurrentDispatcher` 之流会给调用线程造一个没人泵的 dispatcher，消费者从此被钉死在上面，且无处上报）。
-2. **`PostCore` 必须诚实报告入队。** 乐观 `true` 会让 `PostAsync` 的消费者挂到进程结束；而它唯一的消费者 `Awake` 是在**持有 scheduler 的 `_gate` 时** await 的（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `_gate.WaitAsync` → `host.PostAsync` → `finally` 里的 `_gate.Release`），于是那条 `_gate` 永不释放：同一个 target 之后每一次动画都会排在它后面，永远不开始。这就是「一个乐观的 true 换一次永久挂死」的完整链条。
+2. **`PostCore` 必须诚实报告入队。** 乐观 `true` 会让 `PostAsync` 的消费者挂到进程结束；而它唯一的消费者 `Awake` 是在**持有 scheduler 的 `_gate` 时** await 的（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `_gate.WaitAsync` → `host.PostAsync` → `finally` 里的 `_gate.Release`），于是那条 `_gate` 永不释放：同一个 target 之后每一次动画都会排在它后面，永远不开始。
 3. **`IsCurrentThread(ThreadRef)` 必须由宿主实现**，基类给不出（见 §二末）。
 4. **有优先级的宿主必须覆写 `InternalPriority`**（`ThreadDispatcherBase.cs` 的 `InternalPriority`）。它只影响 `Run<T>` 的跨线程跳，也就是**动画启动前的那一次读**。默认 `default!`；WPF/Jalium/Avalonia 给 `Send`、WinUI 给 `Normal`（`Src/Adapters/VeloxDev.WinUI/TransitionSystem/UIThreadInspector.cs` 的 `InternalPriority`）。
 5. **`IsCurrentFor` 是 inline/queue 的唯一判据**（§四）。谎报 true = 写落在错的线程上，静默通过。
@@ -124,12 +120,12 @@ Post(target, thread, action, priority)
 
 ---
 
-## 八、`NonPriority` 不是占位符 —— 它是「无优先级全体」的型参
+## 八、`NonPriority` 是「无优先级全体」的型参
 
-容易被读成「给没有优先级的平台当占位」的一个空 struct，实际是**一整族的类型参数**：
+`NonPriority` 是**一整族的类型参数**：
 
 - `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs`：非泛型基类 `TransitionEffectCore` **显式**实现 `ITransitionEffect<NonPriority>`（同文件 `TransitionEffectCore` 的 `NonPriority ITransitionEffect<NonPriority>.Priority`）。也就是说「无优先级」在 Core 里是一条**一等公民**的路径，不是缺省兜底。
 - `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionInterpreter.cs`：`TransitionInterpreterCore<TTransitionEffectCore>`（单型参版）就是 `ITransitionInterpreter<NonPriority>` 那一支，其注释写明它走 `frameSet.Apply(target, easedT)`，「`NonPriority` 每帧不花任何代价」。
 - MAUI / WinForms / Razor 适配器的第七型参、`SamplerSet<NonPriority>`、以及 `Src/Test/Unit/Core/VeloxDev.Core.Test/` 里几乎所有宿主都是它。
 - 它是 `readonly struct` 且**从不被实例化**（全树搜不到 `new NonPriority`），实际流动的值是 `default(NonPriority)`（如 `Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs` 的 `Apply` 默认参 `priority = default!`）。空 struct 正是为此选的：`default` 是**真值**，所以 `is TPriorityCore` 这类检查（`Src/Adapters/VeloxDev.MAUI/TransitionSystem/Interpolator.cs` 的 `is ITransitionEffect<NonPriority>`）不用为它开特例（`NonPriority.cs` 的类注释）。
-- 型参**无约束**（全树无 `where TPriorityCore`），所以 `default!` 与「传一个装箱的类」都能编译；这是刻意留下的自由度，不是遗漏。
+- 型参**无约束**（全树无 `where TPriorityCore`），所以 `default!` 与「传一个装箱的类」都能编译。

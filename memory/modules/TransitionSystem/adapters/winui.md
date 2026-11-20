@@ -1,8 +1,7 @@
 ﻿# TransitionSystem — WinUI 适配器
 
 > 契约与官方做法在 [`../extension.md`](../extension.md)；怎么用这一家见
-> `skills/veloxdev-create-animation/references/adapter.md`。本文只写这一家的**形状**：
-> 被哪些平台事实逼成现在这样、哪里和另外六家不一样、改哪里会踩什么。
+> `skills/veloxdev-create-animation/references/adapter.md`。
 
 代码：`Src/Adapters/VeloxDev.WinUI/TransitionSystem/`（含 `Samplers/`）。
 
@@ -11,13 +10,13 @@
 ## 一、这一家实现契约的方式（只说与契约有关的取舍）
 
 骨架与 WPF 一一对照（`DispatcherQueue` 换 `Dispatcher`，`DispatcherQueuePriority` 换 `DispatcherPriority`），
-契约里的类都是薄壳；真正有内容的只有 `UIThreadInspector`、`Interpolator.CreateScheduler` 与采样器面。
+契约里的类都是薄壳；有内容的是 `UIThreadInspector`、`Interpolator.CreateScheduler` 与采样器面。
 
 契约之外，这一家**多了一个公开成员**：`UIThreadInspector.CaptureUIThread()`（`Src/Adapters/VeloxDev.WinUI/TransitionSystem/UIThreadInspector.cs`）。
 理由见 §二·L5 —— 它是 WinUI 拿不到全局 UI 队列时唯一的补救入口，别家（有 `Application.Current.Dispatcher` / `Dispatcher.UIThread`）不需要。
 
-`CreateFramePacer` 是**必须覆写**而不是可选：不覆写就退回线程池定时器，采样写路径与等待线程不一致，
-正是 `extension.md` §二·5 要避免的每帧一次 dispatch；本家用 `DispatcherQueue` 建一个 `DispatcherQueueTimer` 当 pacer
+`CreateFramePacer` 是**必须覆写**：不覆写就退回线程池定时器，采样写路径与等待线程不一致，
+即 `extension.md` §二·5 说的每帧一次 dispatch；本家用 `DispatcherQueue` 建 `DispatcherQueueTimer` 当 pacer
 （`TransitionSystem/TransitionInterpreter.cs` 的 `CreateFramePacer`）。
 
 采样器（`TransitionSystem/Interpolator.cs` 的静态构造）：Brush / Thickness / Point / CornerRadius / Transform /
@@ -59,7 +58,7 @@ layout pass、永远 post-arrange（同注释）。WinUI 是七家里唯一挂�
 **L4 · WinRT 的 `DependencyObject` 需要进程里有真正的 XAML 运行时才能类激活。**
 纯数据进程里 `new SolidColorBrush()` 直接 `REGDB_E_CLASSNOTREG`（`UnreachableSamplers.cs` 顶部注释记着实测到的
 `RPC_E_WRONG_THREAD` / `REGDB_E_CLASSNOTREG` 两层底）。后果是这几个采样器的正确性**不可能**在纯数据套件里验。
-这不是懒，是硬限制；但它意味着改这几个采样器时，闭式解套件不会拦你。
+改这几个采样器时，闭式解套件不会拦。
 
 **L5 · WinUI 没有「应用的 DispatcherQueue」这个全局句柄。** `DispatcherQueue.GetForCurrentThread()` 是唯一的入口，
 没有 `Application.Current.DispatcherQueue` 可兜底（`UIThreadInspector.cs` 全文无 `Application.Current`）。
@@ -71,8 +70,7 @@ layout pass、永远 post-arrange（同注释）。WinUI 是七家里唯一挂�
 
 **L6 · `DispatcherQueuePriority` 没有 `Render` 这一档。** 别家的 `TransitionEffect.Priority` 默认
 `DispatcherPriority.Render`（`Src/Adapters/VeloxDev.WPF/TransitionSystem/TransitionEffect.cs` 的 `Priority`、Avalonia/Jalium 同），
-WinUI 取 `High`，并用注释解释为什么（`TransitionSystem/TransitionEffect.cs` 里 `// 以 High 优先级排队动画帧写入…`——
-正因为没有 Render 这个语义档位，才需要一句话解释）。
+WinUI 取 `High`（`TransitionSystem/TransitionEffect.cs` 里 `// 以 High 优先级排队动画帧写入…`）。
 同族的第二处：`InternalPriority` 覆写成 `Normal`（`UIThreadInspector.cs` 的 `InternalPriority`），而 WPF/Avalonia/Jalium 都取各自最高的
 `Send`（`Src/Adapters/VeloxDev.WPF/TransitionSystem/UIThreadInspector.cs` 的 `InternalPriority`）。
 `Normal` 恰好等于 `default(DispatcherQueuePriority)`，所以 `extension.md` §二·6 警告的「不覆写 → Inactive → 启动前停顿」
@@ -84,7 +82,7 @@ WinUI 取 `High`，并用注释解释为什么（`TransitionSystem/TransitionEff
 `GridLength` 同（`Samplers/GridLengthSampler.cs` 里「连构造函数都会 Validate —— 越界是抛异常，不是截断」）。
 所以 `CornerRadius` 与 `GridLength` 的采样器**必须钳**，不能照 `ThicknessSampler`/`PointSampler` 那样裸 lerp。
 
-**L8 · `Projection` 家族里真正被支持的只有 `PlaneProjection`。** 注册的是**抽象基类** `Projection`
+**L8 · `Projection` 家族里被支持的只有 `PlaneProjection`。** 注册的是**抽象基类** `Projection`
 （`TransitionSystem/Interpolator.cs` 的静态构造），而 `Normalize` 把任何非 `PlaneProjection` 的值换成默认 `PlaneProjection`
 （`Samplers/ProjectionSampler.cs` 的 `Normalize`）。即：这个采样器对**整个 `Projection` 家族**作了承诺，实际只支持一个成员，
 其余子类会被静默替换成「无旋转无偏移的平面投影」—— 与 `extension.md` §二·1「注册基类型就承诺整个家族」同形的静默降级。
@@ -94,7 +92,7 @@ WinUI 取 `High`，并用注释解释为什么（`TransitionSystem/TransitionEff
 
 ## 三、刻意背离（与另外六家不一样，以及为什么）
 
-**D1 · 只有这一家在**混合两端不可比的画刷时**没有真正的交叉淡出**。**
+**D1 · 只有这一家在混合两端不可比的画刷时没有交叉淡出。**
 `Samplers/BrushSampler.cs` 的异型分支退化成「取一个代表色写进 scratch 纯色刷」，代表色取**最后一个** gradient stop
 （`ExtractRepresentativeColor`）；WPF 是唯一有真交叉淡出的（`Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/BrushSampler.cs` 的 `BlendScratch`
 用 `RenderTargetBitmap` 逐帧重画两端并按 opacity 混）。
@@ -106,7 +104,7 @@ WinUI 取 `High`，并用注释解释为什么（`TransitionSystem/TransitionEff
 `Samplers/BrushSampler.cs` 的 `LerpColorPremultiplied`：先乘 alpha、在预乘空间插值、最后除回来；
 进度取自**肉眼所见的颜色**而不是预乘后的通道，因为每个预乘通道里都裹着 alpha、在那里钳不住色相
 （理由注释就在 `LerpColorPremultiplied` 里）。其余六家都在非预乘空间插值，同一份 `ColorSampler` 的独立实现也是非预乘的
-（`Samplers/ColorSampler.cs` 的 `InsertFrame`），**`ColorSampler` 与 `BrushSampler` 对同一件事用两套算法**是刻意的，不是疏漏。
+（`Samplers/ColorSampler.cs` 的 `InsertFrame`），**`ColorSampler` 与 `BrushSampler` 对同一件事用两套算法**是刻意的。
 
 **D3 · 只有这一家把圆角的各分量各自钳制、不共享进度。**
 `Samplers/CornerRadiusSampler.cs` 的 `InsertFrame` 及上方注释：各圆角互不相干，逼它们同进同退会让还能缩的角无谓停住。
@@ -148,7 +146,7 @@ Avalonia 有同一道门禁（`Src/Adapters/VeloxDev.Avalonia/TransitionSystem/S
 ## 四、坑（改这里时最容易踩的，附依据）
 
 **P1 · `InternalPriority = Normal` 是唯一没有理由注释的优先级决定**（`UIThreadInspector.cs` 的 `InternalPriority`），
-别家是 `Send`。它不是错，但它让 `Prepare` 的阻塞读排在有优先级宿主里较低的档位上；改成 `High` 之前请先想清楚
+别家是 `Send`。它让 `Prepare` 的阻塞读排在有优先级宿主里较低的档位上；改成 `High` 要顾及
 `extension.md` §二·6 那条（读阻塞的是发起动画的那个线程）。
 
 **P2 · pacer 的定时器刻意是 `IsRepeating = false`，但每次 `Arm` 都会重新 `Start()`。**
@@ -167,8 +165,8 @@ WinUI 的 `DispatcherQueueTimer` 每次 `Start` 都会重新计时，所以「�
 得先注册**它自己的确切类型**（查找先精确后基类），再在采样器里加分支，否则新子类永远走不到。
 
 **P6 · `ColorSampler` 与 `BrushSampler` 的混色算法不同（预乘 vs 非预乘，见 §三·D2）。**
-改动任一处时不要「顺手统一」—— 统一哪一边都会改变另一边的正确性（`ColorSampler.cs` 的 `InsertFrame` 注释与
-`BrushSampler.cs` 的 `LerpColorPremultiplied` 注释各自写下了各自的理由）。
+统一哪一边都会改变另一边的正确性（`ColorSampler.cs` 的 `InsertFrame` 注释与
+`BrushSampler.cs` 的 `LerpColorPremultiplied` 注释各自写下了理由）。
 
 **P7 · `ThemeValueConverters.ThemeResourceLookup` 自己走 `Application.Current.Resources`，
 包含 `ThemeDictionaries` 与 `MergedDictionaries` 两层递归**（`DynamicTheme/ThemeValueConverters.cs` 的 `ThemeResourceLookup.TryFindInDictionary`）。
@@ -177,13 +175,9 @@ WinUI 的 `DispatcherQueueTimer` 每次 `Start` 都会重新计时，所以「�
 
 ---
 
-## 五、核不到的东西（写下来免得下一个人重找）
+## 五、池化视图不离开视觉树
 
-- 历史记录里的「WinUI **brush 没有绝对映射模式**」这句话，在 `Src/`、`Examples/`、`memory/`、`skills/` 里
-  **都搜不到出处**。能确证的是它最近邻的那条事实：这一家混色时没有真正的交叉淡出、退化为单一代表色（§三·D1），
-  以及它走预乘空间（§三·D2）。**照这句原话去改代码会误导。**
-- 历史记录里的「**池化视图可能在离树状态下收到属性变更**」同样搜不到出处，且 WinUI 的池化视图
-  **从不离开视觉树**（`WorkflowSystem/ViewHosting/ViewContainer.cs` 的 `Deactivate` 只 `Visibility = Collapsed` + `DataContext = null`，
-  从池里取回时也不再 `Children.Add` —— `Attach` 只在首次 `_attached.Add(view)` + `host.Children.Add(view)`，`Detach` 是空实现），
-  并且 `PropertyChanged` 在入池前就退订了（`Deactivate` 里的 `ViewLayoutTracker.Release`）。
-  离它最近的机制是 `ViewLayoutTracker.Track` 里 `TryEnqueue(Low, …)` 那个落地前重校验的延迟闭包，见 `memory/modules/WorkflowSystem/adapters/winui.md` §四·P2。
+WinUI 的池化视图**从不离开视觉树**：`WorkflowSystem/ViewHosting/ViewContainer.cs` 的 `Deactivate` 只 `Visibility = Collapsed` + `DataContext = null`，
+从池里取回时也不再 `Children.Add` —— `Attach` 只在首次 `_attached.Add(view)` + `host.Children.Add(view)`，`Detach` 是空实现；
+`PropertyChanged` 在入池前就退订了（`Deactivate` 里的 `ViewLayoutTracker.Release`）。
+`ViewLayoutTracker.Track` 里 `TryEnqueue(Low, …)` 的延迟闭包会做落地前重校验，见 `memory/modules/WorkflowSystem/adapters/winui.md` §四·P2。

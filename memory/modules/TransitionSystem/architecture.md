@@ -1,18 +1,14 @@
 ﻿# TransitionSystem — 架构
 
-> 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`（2026-10-04 起按角色分子目录：`Events/`、`Effects/`、`Binding/`、`Sampling/`、`State/`、`Runtime/`、`NativeSamplers/`；命名空间不变）、契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`，枚举在 `Interfaces/TransitionSystem/Enums/`；
+> 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`（按角色分子目录：`Events/`、`Effects/`、`Binding/`、`Sampling/`、`State/`、`Runtime/`、`NativeSamplers/`；命名空间不变）、契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`，枚举在 `Interfaces/TransitionSystem/Enums/`；
 > 七家平台实现在 `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/`。
 > 依赖的子系统：`Timing/`（时钟）、`Threading/`（线程归属与编组）、`TimeLine/`（事件参数）、`WeakTypes/`、`Lifetime/`。
-
-本文只写「读完整个模块的代码才知道的东西」。类型清单、成员表、继承树请看 IDE。
 
 ---
 
 ## 一、这个模块是什么，不解决什么
 
 **是什么。** 把「某个 target 对象上的若干属性路径」从声明时的当前值插值到声明的新值，沿一条**绝对时间轴**推进，并把该 target 的控制面（暂停 / 调速 / 快进 / 退出 / 查询）暴露成按 target 寻址的静态 API。
-
-一句更短的：**路径 + 端点 → 帧**，外加**一个 target 一份控制面**。
 
 **不解决什么（这些边界常常被误以为在模块内）：**
 
@@ -48,7 +44,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 **方向不可逆的理由（代码里写明的）：**
 
 - `Runtime/TransitionInterpreter.cs` 的 `ExecuteSamplingLoopAsync` remarks 注明：**等待的精度不是正确性的一部分**——每趟都锚在时间轴的绝对位置上，唤醒早了晚了都画对帧。所以「把 loop 钉在 UI 线程上」属于拥有 loop 的子系统（`FramePacerCore`），不属于 `Timing`（`TimerCore` 的类 remarks 明说「Holding a loop on a UI thread … solved by `FramePacerCore` … not here」）。
-- `InterpolatorCore.CreateScheduler`（`Sampling/Interpolator.cs`）返回 `null` 是**合法答案**，含义是「这个平台没接入」或「这个 effect 不属于我」。Core 无法从 `object target` 推出用哪家的 host/priority —— 这正是这条缝存在的唯一理由。
+- `InterpolatorCore.CreateScheduler`（`Sampling/Interpolator.cs`）返回 `null` 是**合法答案**，含义是「这个平台没接入」或「这个 effect 不属于我」。Core 无法从 `object target` 推出用哪家的 host/priority —— 这是这条缝的理由。
 
 **用户可见面与内部面。** `VeloxDev.TransitionSystem` 命名空间（`Transition<T>`、`TransitionEffect`、`State`、`Interpolator`、`TransitionScheduler`、`Eases`、`PathIndex`、`RotationDirection`、`ISampler`、`ISampleable`、`IEaseCalculator`、`ITransitionProperty`、`IFrameState`、`TransitionCoreEx` 等）是给用户的；`VeloxDev.TransitionSystem.Abstractions`（`TransitionCore`、`InterpolatorCore`、`StateCore`、`TransitionSchedulerCore`、`TransitionInterpreterCore`、`TransitionHostBase`、`SamplerSet`、`TransitionRun`、`TransitionDiagnostics`）是给适配器的。
 
@@ -86,7 +82,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 
 `DynamicTheme/ThemeManager.RunSwitch`（`ThemeManager.cs`）不经过 `Transition<T>`：它自己 `interpolator.CreateScheduler(target, effect)` → `scheduler.Track(run)` → `scheduler.Execute(interpolator, state, effect, run.Cts)`，然后 `Task.WhenAll` 等所有目标。
 
-它存在的意义是反面证据：**scheduler 的公开面足够驱动一次动画**，`Transition<T>` 只是它的语法糖 + 链编排。也说明「整场共用一条时间轴」是靠给所有 run 传同一个 `ITimeSourceControl` 实现的（`RunSwitch` 里「整场共用一条时间轴」那段注释）。
+**scheduler 的公开面足够驱动一次动画**，`Transition<T>` 只是它的语法糖 + 链编排。也说明「整场共用一条时间轴」是靠给所有 run 传同一个 `ITimeSourceControl` 实现的（`RunSwitch` 里「整场共用一条时间轴」那段注释）。
 
 ### 调度器内部（每个段一次）
 
@@ -106,7 +102,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 `ExecuteSamplingLoopAsync`（`Runtime/TransitionInterpreter.cs`）：
 
 - `frameSet.SetCancellation(cts)`；`startCycle = run.Cycle`（**每段按自己的起点计**，否则链里第二段一上来计数就越过 `LoopTime`，报 Start/Completed 却一帧不写，见 `ExecuteSamplingLoopAsync` 里 `startCycle` 的注释）。
-- `_pacer ??= CreateFramePacer(target, frameSet.Host)` —— 解析发生在**第一个 await 之前**，必须仍在启动线程上（Avalonia 的 `DispatcherTimer` 只能在创建线程上 tick；WinForms 那家要在目标控件的线程上才认得出「往哪个窗口投帧」，见 `adapters/winforms.md` §2.2）。`_pacerResolved` 是必要的，因为 `null` 是有意义的答案（「问过，答案是不」）。
+- `_pacer ??= CreateFramePacer(target, frameSet.Host)` —— 解析发生在**第一个 await 之前**，必须仍在启动线程上（Avalonia 的 `DispatcherTimer` 只能在创建线程上 tick；WinForms 那家要在目标控件的线程上才认得出「往哪个窗口投帧」，见 `adapters/winforms.md` §2.2）。`_pacerResolved` 区分「没问过」与「问过，答案是不」。
 - `Start` → `while(true)`：`run.Cycle - startCycle > effect.LoopTime` 则 break → `RunPassAsync(forward: true)`，`IsAutoReverse` 再来一趟 `forward: false` → `run.NextCycle()`。
 - `Completed`；`OperationCanceledException` → `Canceled`；其它异常 → `Error(ErrorStage.Run, …)` + `Canceled`；`finally` → `Finally` + `ReleaseLoopResources()`（**嵌套 try**，回调抛异常不能带走 loop 自己的资源）。
 
@@ -135,7 +131,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 5. 真正落地的 `ApplyCore` **再检查一次**取消（消息在 UI 线程被泵出时，动画可能已经被取消），然后逐条 `entry.Sampler.InsertFrame(target, property, ref entry.Working, Start, End, Options, t)`。
 6. 任一 sampler 抛异常 → `diagnostics.Error(ErrorStage.Sampling, …)` + `CancelQuietly()` + 结束这一趟。
 
-读路径是另一条：`InterpolatorCore.Prepare` 用 `host.Run<object?>(target, () => bound.GetValue(target))`（`Sampling/Interpolator.cs`）——**同步阻塞的编组读**；写路径是 fire-and-forget 的 `Post`。这个不对称是全模块最重要的一个设计点。
+读路径是另一条：`InterpolatorCore.Prepare` 用 `host.Run<object?>(target, () => bound.GetValue(target))`（`Sampling/Interpolator.cs`）——**同步阻塞的编组读**；写路径是 fire-and-forget 的 `Post`。
 
 ---
 
@@ -154,9 +150,9 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 | `TransitionRun`（`Runtime/TransitionRun.cs`，internal） | `Cts` + `Timeline` + `PassAnchor` + `Cycle` + `Thread` | anchor/cycle 由 loop 与 Seek 改；Thread 由调度器钉一次 | `IDisposable` 只释放 Cts，**由 `TransitionCore` 在链尾做** |
 | `FramePacerCore`（`Runtime/FramePacerCore.cs`） | `_pending` 一个续体 | `Schedule`/`Fire` | 基类用 `IDisposable` 而非接口，就是为了把「恰好回调一次」的簿记收在一处 |
 | `TimeSourceCore`（Timing） | 时钟状态（anchor/speed/rate/paused/parkGate/epoch） | `Pause`/`Resume`/`SetRate`/`Seek`/`Wake` + 宿主的 `SetHostFeeding` | 写者由 `_writeGate` 串行；读者无锁（sequence counter） |
-| `TransitionHostBase`/`ThreadDispatcherBase` | 线程归属 + 编组 + 存活 | 平台 | `Post` 是 inline 还是 queue 由 `IsCurrentFor` 决定，Core 不再问 |
+| `TransitionHostBase`/`ThreadDispatcherBase` | 线程归属 + 编组 + 存活 | 平台 | `Post` 是 inline 还是 queue 由 `IsCurrentFor` 决定，Core 不问 |
 
-**「唯一写者」清单（值得单独记住的）：**
+**「唯一写者」清单：**
 
 - 属性值的唯一写者：`ISampler.InsertFrame`，且只经由 `SamplerSet.ApplyCore`。
 - `SamplerSet.Run` 的唯一写者：调度器（`SetRun`）。
@@ -235,7 +231,7 @@ TimeLine (TimeLineEventArgs) · WeakTypes (WeakDelegate) · Lifetime (Applicatio
 
 ## 七、陷阱（带依据）
 
-1. **`effect.Clone()` 落到基类型。** `TransitionEffectCore<TPriorityCore>.Clone()` 里 `new TransitionEffectCore<TPriorityCore>()`（`Effects/TransitionEffect.cs`），不是适配器的 `TransitionEffect`。它**不是 virtual**（是 `new`），所以平台**无法**把子类新增的状态带进运行——因为运行的是克隆体。结论：给 `TransitionEffect` 子类加字段是无效的。目前七家的 `TransitionEffect` 都只覆写 `Priority`，所以没暴露问题。
+1. **`effect.Clone()` 落到基类型。** `TransitionEffectCore<TPriorityCore>.Clone()` 里 `new TransitionEffectCore<TPriorityCore>()`（`Effects/TransitionEffect.cs`），不是适配器的 `TransitionEffect`。它**不是 virtual**（是 `new`），所以平台**无法**把子类新增的状态带进运行：给 `TransitionEffect` 子类加字段是无效的。目前七家的 `TransitionEffect` 都只覆写 `Priority`，所以没暴露问题。
 2. **共享静态 effect 会被直接赋值。** `.Effect(TransitionEffects.Theme)`（各家 `TransitionSystem/TransitionEffects.cs` 提供的现成实例，`skills/veloxdev-switch-themes/SKILL.md` 的「Switching」一节）走的是 `TransitionCore.CoreEffect<T1,T2>(T2 effect)` 那个**直接赋值**分支（`this.effect = convertedEffect`），而运行体是每段克隆 —— 往共享 effect 上加 handler 会作用于它的**所有**使用者，且每帧每目标都触发。想挂平台帧钩子要用 `.Effect(e => {...})` 那个 setter 重载：它在 `CoreEffect(Action<T2>)` 里 `new` 一个实例。
 3. **`state` 跨段与跨迭代共享**（`ExecuteCoreAsync` 里 `segments.Add(...)` 只克隆 effect），所以「一段的首趟备下的帧集被后续迭代复用」才成立；也意味着运行期改 `state` 是竞态。
 4. **`Execute` 返回时什么都没跑完**，且 `Transition<T>.Execute` 是 `async void` —— 想等它，只能读 target 的真实值或用 `AwaitThen` 串接。

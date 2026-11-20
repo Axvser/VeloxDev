@@ -1,7 +1,7 @@
 # Headless — 扩展
 
 > 加一家可直接无头测试的平台，或给已有平台补一条契约时读这一份。
-> 架构与今天的覆盖见 [`architecture.md`](architecture.md)。
+> 架构见 [`architecture.md`](architecture.md)。
 
 ---
 

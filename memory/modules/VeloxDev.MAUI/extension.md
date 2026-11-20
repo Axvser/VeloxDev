@@ -1,6 +1,6 @@
 # VeloxDev.MAUI — 扩展
 
-> 代码：`Src/Adapters/VeloxDev.MAUI/`。本文只讲**怎么在这家正确地加东西**。
+> 代码：`Src/Adapters/VeloxDev.MAUI/`。
 > 契约本身的扩展点（要实现的接口、注册方式、生命周期钩子）在 `memory/modules/TransitionSystem/extension.md` 与
 > `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；本家的平台差异在 `memory/modules/{TransitionSystem,WorkflowSystem}/adapters/maui.md`。
 > 结构与本家的文件见 `architecture.md`。
@@ -46,7 +46,7 @@
 
 **为什么不能反过来改键**：`RegisterInterpolator` 是 `AddOrUpdate`、**last-writer-wins**（Core `InterpolatorCore.RegisterInterpolator`），把键写成 `typeof(System.Drawing.RectangleF)` 会**顶掉 Core 的 `RectangleFSampler`** —— 一个适配器版本静默替换 Core 的实现，之后两家各自演化。**同名不冲突**（注册键就是 `Type`），**同一个 `Type`** 才冲突。
 
-**下次遇到同形状的错**（注册键的 `Type` 与采样器解箱的类型不是同一个）：`dotnet build` **不会报错** —— 但**采样器套件现在会红**（2026-09-20 补的网）：`Src/Test/AutoTest/Samplers/SamplerKeyTests.cs` 把本家 `Interpolator` 的静态构造真跑起来，再拿**真实注册表**问「条目声明的类型解析到谁」，与条目写的采样器逐字比（`EveryEntry_ValueTypeResolvesToTheSamplerItNames`）。依据是条目里的 `ValueType` 字段（= 属性的**声明类型**，也就是注册键）。**新加采样器时不用额外写什么** —— 那个字段由 `EntryFactory.Create` / 各家 `Entry(...)` 从 `property.PropertyType` 自动填。
+**下次遇到同形状的错**（注册键的 `Type` 与采样器解箱的类型不是同一个）：`dotnet build` **不会报错** —— 但**采样器套件会红**：`Src/Test/AutoTest/Samplers/SamplerKeyTests.cs` 把本家 `Interpolator` 的静态构造真跑起来，再拿**真实注册表**问「条目声明的类型解析到谁」，与条目写的采样器逐字比（`EveryEntry_ValueTypeResolvesToTheSamplerItNames`）。依据是条目里的 `ValueType` 字段（= 属性的**声明类型**，也就是注册键）。**新加采样器时不用额外写什么** —— 那个字段由 `EntryFactory.Create` / 各家 `Entry(...)` 从 `property.PropertyType` 自动填。
 
 完整的后果链在 `architecture.md` §五·1。
 
@@ -60,11 +60,11 @@
 
 ### 2.4 「把 `DataTemplate` 放进 `Resources`，让视图池按资源键找」
 
-**看着**：`ViewFactory.FindTemplate` 曾有第三条路 `TryFindTemplateByResourceKey`（看起来会遍历 `_layout` 祖先与 `Application.Current.Resources`），所以「按 key 放模板」应该能用。
+**看着**：`ViewFactory.FindTemplate` 看起来支持按资源键找模板（会遍历 `_layout` 祖先与 `Application.Current.Resources`），所以「按 key 放模板」应该能用。
 
-**错在哪**：那段是**死代码**（已于 2026-10-18 删除 —— 原 `resourceKey` 写死为 `null`，后面永远不可达）。视图池的模板**只能**来自 `TemplateSelector`（这与 `ViewPool.EnsureManager` 要求 `GetTemplateSelector(layout) is not null` 正好互证）。
+**错在哪**：那条路**不存在**。视图池的模板**只能**来自 `TemplateSelector`（这与 `ViewPool.EnsureManager` 要求 `GetTemplateSelector(layout) is not null` 正好互证）。
 
-**官方做法**：写一个 `DataTemplateSelector` 子类并赋给 `ViewPool.TemplateSelector`（`Src/Templates/VeloxDev.MAUI.Templates/working/content/workflow-template-selector/` 就是这件事的模板）。**别把「按资源键找模板」当成一个待接的能力** —— 要接它得先把死代码救活，而 `resourceKey` 从哪来本身就是个没答案的问题。
+**官方做法**：写一个 `DataTemplateSelector` 子类并赋给 `ViewPool.TemplateSelector`（`Src/Templates/VeloxDev.MAUI.Templates/working/content/workflow-template-selector/` 就是这件事的模板）。按资源键找模板没有这条路：`resourceKey` 从哪来本身没有答案。
 
 ### 2.5 「给 `ViewPool` 补个 `IsEnabled` 开关，和其它行为统一」
 
@@ -130,7 +130,7 @@
 
 ### 3.4 新增一个主题转换器
 
-在 `DynamicTheme/ThemeValueConverters.cs` 里实现 `IThemeValueConverter`（照 `DoubleConverter` 的形状），并记住：**本仓库没有任何消费者**（`architecture.md` §八）—— 加它、改它都跑不出症状，也没有 MAUI 主题 demo 可以验。别顺手把它当成「DynamicTheme 的 MAUI 适配器已就绪」的证据。
+在 `DynamicTheme/ThemeValueConverters.cs` 里实现 `IThemeValueConverter`（照 `DoubleConverter` 的形状），并记住：**本仓库没有任何消费者**（`architecture.md` §八）—— 加它、改它都跑不出症状，也没有 MAUI 主题 demo 可以验。
 
 ---
 
@@ -148,9 +148,9 @@
 ## 五、几个「以为能改、其实不该改」
 
 1. **`WorkflowNodeDragBehavior.IsDraggingNode` 与 `WorkflowSlotConnectionBehavior._activeConnection` / `IsDraggingConnection` 是刻意的进程级静态**。前者被**平移逻辑**读（`WorkflowSurfaceBehavior` 的多处平移锚点计算），删它会连累平移的锚点策略；后者保证「同一时刻只有一次连线拖拽」，`TryBeginConnection` 的第一件事就是取消活跃连接。
-   顺带一条：`WorkflowSlotConnectionBehavior.SetIsDraggingConnection`（`public`）在**全仓库没有外部调用点** —— 它由内部置真/置假，别以为外部有人在用它。
-2. **两个 overlay 的不对称是有意的**：小地图**被推**（实现 `IWorkflowMinimapOverlay`，由 `UpdateMinimapOverlay` 写一组值），链接层**自己拉**（不实现任何 Core 接口，偏移从装饰器实例上绑）。给链接层加 Core 接口实现会牵动宿主 XAML 的绑定形态；把装饰器的值改成推给链接层则要新增一条写路径。**改之前先读 `architecture.md` §三·3。**
+   `WorkflowSlotConnectionBehavior.SetIsDraggingConnection`（`public`）在**全仓库没有外部调用点**，由内部置真/置假。
+2. **两个 overlay 的不对称是有意的**：小地图**被推**（实现 `IWorkflowMinimapOverlay`，由 `UpdateMinimapOverlay` 写一组值），链接层**自己拉**（不实现任何 Core 接口，偏移从装饰器实例上绑）。给链接层加 Core 接口实现会牵动宿主 XAML 的绑定形态；把装饰器的值改成推给链接层则要新增一条写路径（`architecture.md` §三·3）。
 3. **`WorkflowLinkOverlay.InputTransparent = true` 与它在 XAML 里的位置都是承重的**：这一层满屏盖在节点上，去掉 `InputTransparent` 会吞掉全部节点交互；z 序靠 XAML 位置。挪位置等于改层序。
 4. **`ViewContainer` 把隐藏视图留在 `_layout.Children` 里**（只 `IsVisible=false` + `ZIndex=-100`，理由：移除会触发昂贵的 MAUI 重排）。想「清理一下」把它们 `Remove` 掉是在改性能特征，不是在整理。
 5. **`Refresh` 的两道闸不能为了「让它一定生效」拆掉**：`IsEnabled` 那道保证没开开关时静默；`IsRefreshing` 那道记着「每次画布扩张级联多次 Refresh，正反馈减速螺旋」。
-6. **`ApplyVisibleRegion` 的 NaN 提前返回**不是防御性编程，是必需 —— 放进去会让整批 `VisibleItems` 被清空。任何一处 NaN 守卫都不要删。
+6. **`ApplyVisibleRegion` 的 NaN 提前返回**是必需的 —— 放进去会让整批 `VisibleItems` 被清空。任何一处 NaN 守卫都不要删。

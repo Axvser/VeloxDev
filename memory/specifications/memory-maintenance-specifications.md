@@ -5,6 +5,8 @@
 
 **与 [`memory/specifications/`](.) 的分工**：`specifications/` 下的规范手册由用户口述、agent 落笔，效力来自用户认可 —— agent **不自行新增或改动**它们。模块记忆相反：agent 是它的唯一作者与责任人。自己定的规范没有约束力，自己写的记忆才有。
 
+**写作密度（宁缺毋滥、赘叙类型）见 [memory-density-specifications.md](memory-density-specifications.md)。**
+
 ---
 
 ## 一、目录

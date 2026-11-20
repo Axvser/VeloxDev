@@ -20,11 +20,9 @@
 
 ## 二、为什么「阶段抛异常不能让 run 失败」是硬约束
 
-`AgentPipeline.PublishAsync` 的文档注释写明了理由，且理由本身依赖另一处实现细节：
-
 **工具调用的 publish 发生在 `TrackedAIFunction` 的 `try` 里面**（`TrackedAIFunction.InvokeCoreInnerAsync`）。那个 `catch` 把任何异常变成**工具的 error 结果**（`TrackedAIFunction.Error` 的信封 `{"status":"error","message":…}`）。于是：一个**只是在画界面**的 stage 抛异常，会让模型收到「你的工具失败了」，而工具其实成功了。
 
-所以每个 stage 被 `try/catch` 单独包住（`AgentPipeline.InvokeAsync` 的 try/catch），失败**跳过链的剩余部分**并走 `StageFailed` 上报。「上报而不是吞掉」也是有意的：一条静默停止上报的管线比从来没有这个 stage 更糟。
+所以每个 stage 被 `try/catch` 单独包住（`AgentPipeline.InvokeAsync` 的 try/catch），失败**跳过链的剩余部分**并走 `StageFailed` 上报。
 
 **推论**：写 stage 时不要指望异常能传出去；也不要指望「我不调 `next` 就等于 run 失败」——那只对下游 stage 生效。
 
@@ -38,28 +36,28 @@
 
 ---
 
-## 四、`AgentTranscript` 的两条规则（这是这个类型存在的全部理由）
+## 四、`AgentTranscript` 的两条规则
 
-`AgentTranscript` 的类注释说得很直白：**这两条规则属于库，不属于 demo 宿主的视图模型** —— 放在宿主里会实现错，而且因为就是宿主代码所以测不到、反复回归；所以它被移进库里。
+`AgentTranscript` 的类注释：**这两条规则属于库，不属于 demo 宿主的视图模型**。
 
 | 规则 | 会出错的形态（同一段注释记载） |
 |---|---|
-| **片段只在「开着的、同角色的」条目上继续**（`Append`）。中间出现任何别的 —— 工具调用、推理块、用户 —— 就关掉它，答案在**新条目**里续写 | 旧宿主只在「最后一条仍是 assistant 消息」时追加，所以一旦落了工具调用，这次回复之后的所有片段都进了侧边日志、**从不渲染** |
-| **工具调用是条目，不是分隔符**（`AgentTranscript` 类注释的第 2 条）。它是一行带名字与结果的记录 | 旧 markdown 路径会追加工具调用行的（空）文本，于是产生**一列空白分隔线** |
+| **片段只在「开着的、同角色的」条目上继续**（`Append`）。中间出现任何别的 —— 工具调用、推理块、用户 —— 就关掉它，答案在**新条目**里续写 | 只在「最后一条仍是 assistant 消息」时追加 ⇒ 一旦落了工具调用，这次回复之后的所有片段都进侧边日志、**从不渲染** |
+| **工具调用是条目，不是分隔符**（`AgentTranscript` 类注释的第 2 条）。它是一行带名字与结果的记录 | 把工具调用当分隔符追加（空）文本 ⇒ **一列空白分隔线** |
 
-**唯一实现处**：`Append(role, fragment)`。`IsStreaming` 是 `Assistant or Reasoning`（`AgentTranscriptEntry.IsStreaming`），所以这两种角色才可能被续写。**它每次调用都复制整条答案**（`Text += fragment`），所以调用频率决定了代价 —— 由 `TextPipeline` 按千字节批量喂（见 §五），逐片段直接喂它是 O(答案) × 片段数。
+**实现处**：`Append(role, fragment)`。`IsStreaming` 是 `Assistant or Reasoning`（`AgentTranscriptEntry.IsStreaming`），所以这两种角色才可能被续写。**它每次调用都复制整条答案**（`Text += fragment`），所以调用频率决定了代价 —— 由 `TextPipeline` 按千字节批量喂（见 §五），逐片段直接喂它是 O(答案) × 片段数。
 
 **不是线程安全的，且刻意如此**（`AgentTranscript` 类注释）：一个 stage 喂它，在那一个被编组到的线程上。
 
 **宿主侧的消费契约**（`Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs`，七家共用）：内容增长走 120 ms 节流（`QueueConversationRender`），而**新开一个条目会立刻整篇重渲**（`OnTranscriptEntriesChanged`）——`AgentTranscriptTests.ConversationMarkdown_WrapsReasoningInAChatPanel` 钉的就是后者，把新条目也并进节流会打破它（实测过）。`AgentLog` 由尾巴对齐同步（只动与前缀不同的那几条），不再是 `Clear` + 逐条 `Add`。
 
-**`AgentLog` 只有一个写者：那条投影。** 曾经 `AppendAgentLog` 也直接往它追加一行，而重渲会把整个 log 对齐到转录 —— 转录里没有那行，于是**追加的会被下一次重渲抹掉**。现在那条路改走转录：`TreeViewModel.AppendAgentError(message)` → `AgentTranscript.AddError`，两条渲染路径各自加自己的前缀（行内 `[Error] …`、markdown `**错误：**`），所以**传裸消息**。于是同一条错误在七家都出现（原来只有 MAUI 的 ListBox 有，且会消失）。`AppendAgentLog` 因此不再碰 `AgentLog`，只喂 `AgentMessages` —— 它现在没有生产调用者，但 `AgentMessages` 是**有意留着的第三种形状**（按角色渲染的宿主可以绑它，见 `Src/.../Test/Examples/AgentTranscriptTests.cs` 的类注释），所以别顺手删。唯一的生产调用者是 MAUI 的发送失败提示，已改调 `AppendAgentError`。
+**`AgentLog` 只有一个写者：那条投影。** 错误走转录：`TreeViewModel.AppendAgentError(message)` → `AgentTranscript.AddError`，两条渲染路径各自加自己的前缀（行内 `[Error] …`、markdown `**错误：**`），所以**传裸消息**；同一条错误因此在七家都出现。`AppendAgentLog` 不碰 `AgentLog`，只喂 `AgentMessages` —— 它没有生产调用者，但 `AgentMessages` 是**有意留着的第三种形状**（按角色渲染的宿主可以绑它，见 `Src/.../Test/Examples/AgentTranscriptTests.cs` 的类注释）。MAUI 的发送失败提示调 `AppendAgentError`。
 
-**别把它当会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它做三件事 —— `ToMarkdown(AgentMarkdownOptions?)`、`ToPlainTextLines()`，以及从 `Entries` 拿结构化条目；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs` 的 `ToMarkdown` / `ToPlainTextLines` 调用点。`ToJson()` / `Restore()` 持久化的也只是这份**显示记录**（角色 / 文本 / 时间戳 / 工具名 / 详情 / 结局），恢复它不会恢复模型的记忆 —— 要续对话仍需持久化 `AgentSession`。`ToMarkdown` 默认把**连续的**工具调用攒成一个块，理由同样是为了让每个 markdown 宿主不必自己写渲染器；`ChatFences` 打开时改为每个工具一格折叠面板。
+**它不是会话状态**：它只是「有序的角色 + 文本」记录。会话是 MAF 的 `AgentSession`。宿主样例读它做三件事 —— `ToMarkdown(AgentMarkdownOptions?)`、`ToPlainTextLines()`，以及从 `Entries` 拿结构化条目；见 `Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs` 的 `ToMarkdown` / `ToPlainTextLines` 调用点。`ToJson()` / `Restore()` 持久化的也只是这份**显示记录**（角色 / 文本 / 时间戳 / 工具名 / 详情 / 结局），恢复它不会恢复模型的记忆 —— 要续对话仍需持久化 `AgentSession`。`ToMarkdown` 默认把**连续的**工具调用攒成一个块；`ChatFences` 打开时改为每个工具一格折叠面板。
 
 ### 推理的渲染形状（`ToMarkdown` 的文档注释 + `AgentMarkdownOptions`）
 
-推理默认走**围栏代码块**，不是加粗段落 —— 段落的形状与 `Assistant` **完全同形**，只差标签，消费端拿到扁平字符串后无法把它独立包裹成一块。`ChatFences` 打开时改走 `chat` 折叠面板，推理与工具载荷因此都不占阅读路径。形状由 `AgentMarkdownOptions`（与 `AgentTranscript` 同文件）决定，所有成员都有出厂默认值，**传 `null` 就是出厂形状**：
+推理默认走**围栏代码块**，不是加粗段落（段落与 `Assistant` 同形，消费端无法独立包裹）。`ChatFences` 打开时改走 `chat` 折叠面板，推理与工具载荷因此都不占阅读路径。形状由 `AgentMarkdownOptions`（与 `AgentTranscript` 同文件）决定，所有成员都有出厂默认值，**传 `null` 就是出厂形状**：
 
 | 成员 | 默认 | 语义 |
 |---|---|---|
@@ -74,8 +72,7 @@
 - **info string 里的反引号被剔除**（`FenceInfo` 用于普通围栏，`ChatLabel` 用于面板标签）。它由宿主提供，一个反引号会并进开围栏、把开围栏拉得比闭围栏长，于是**永远闭合不了**。面板标签还不能含 `]` —— `chat` 围栏按 `]` 切分组，早闭合会让后面整段变成「组间有文本」的错误。
 - **工具的「结局」徽标取 `AgentToolOutcome`，不靠标签里的字推断**：`Succeeded` → `done`，`Failed` / `Refused` → `error`。标签写成 `工具 {ToolName} · {Outcome}`，类别、人名与结局各归各的。
 
-**`ToPlainTextLines()` 一行不动，也不给它对称的 options**：它的「一个条目一行」是一份**契约**而非形状（`ToPlainTextLines` 的文档注释），宿主靠 `Count ==` + `SequenceEqual` 同步、再按前缀解析回角色；推理在那儿早就是 `[Thinking] …` 行。纯文本宿主没有歧义要解，加 options 只会多一个面。
-
+**`ToPlainTextLines()` 一行不动，也不给它对称的 options**：它的「一个条目一行」是一份**契约**而非形状（`ToPlainTextLines` 的文档注释），宿主靠 `Count ==` + `SequenceEqual` 同步、再按前缀解析回角色；推理在那儿早就是 `[Thinking] …` 行。
 ---
 
 ## 五、编组：`Post` + await，不是 fire-and-forget
@@ -85,7 +82,7 @@
 1. 片段按顺序落地（fire-and-forget 会乱序）；
 2. 测试不需要真的调度器。
 
-**片段是攒够了才 post 的，不是逐片段 post**（2026-10-11）：`TextPipeline` 持有开着的那条条目的尾巴，每满 `FlushThreshold`（1024 字符）或遇到边界（新回合、工具调用、回合结束）才写一次。所以 dispatcher 往返从「每 token 一次」降到「每千字节一次」——实测 5,000 个 8 字节片段：post 5,000 → 39 次，该段分配 45 KB/片段 → 1.5 KB/片段。边界处**必须先落地再处理**：工具调用会在下游把开着的条目关掉，攒着的尾巴晚一步就会落进工具调用之后新开的那条。**这正是 `WorkflowAgentScope.Pipeline` 里 TextPipeline 必须排第一的原因**，不再是「两者事件不相交，顺序无所谓」。
+**片段是攒够了才 post 的，不是逐片段 post**：`TextPipeline` 持有开着的那条条目的尾巴，每满 `FlushThreshold`（1024 字符）或遇到边界（新回合、工具调用、回合结束）才写一次。所以 dispatcher 往返从「每 token 一次」降到「每千字节一次」——实测 5,000 个 8 字节片段：post 5,000 → 39 次，该段分配 45 KB/片段 → 1.5 KB/片段。边界处**必须先落地再处理**：工具调用会在下游把开着的条目关掉，攒着的尾巴晚一步就会落进工具调用之后新开的那条。**这正是 `WorkflowAgentScope.Pipeline` 里 TextPipeline 必须排第一的原因**。
 
 同一个模式在 `TrackedAIFunction.RunOnContextAsync` 里复现，注释说明了为什么**不能**用阻塞式 `Send`：工具体自己可能在 UI 线程上，阻塞式投递会**死锁**。（对比：`Agent/Skills/SkillScope.cs` 的 `RunOnUI` 用的就是阻塞 `Send`，因为技能刷新是纯 UI 侧操作、不在工具体内。）
 
@@ -115,7 +112,7 @@
 
 ## 七、死面
 
-- `Agent/Pipelines/` 下的文件**全部**在仓库内有真实调用者（`TextPipeline`、`ToolPipeline`、`AgentPipelineAgent` 由 `WorkflowAgentScope.Pipeline` 组装；`AgentTranscript` 由 demo 的 `TreeViewModel` 消费）。这个目录没有死面。
-- `AgentMarkdownOptions` 与 `AgentTranscript` **同文件**，没有新增文件（同一文件承载多个公开类型是本目录既有做法，`AgentEvent.cs`、`AgentPipeline.cs` 都是）。
+- `Agent/Pipelines/` 下的文件在仓库内都有真实调用者，没有死面（`TextPipeline`、`ToolPipeline`、`AgentPipelineAgent` 由 `WorkflowAgentScope.Pipeline` 组装；`AgentTranscript` 由 demo 的 `TreeViewModel` 消费）。
+- `AgentMarkdownOptions` 与 `AgentTranscript` **同文件**（同一文件承载多个公开类型是本目录既有做法，`AgentEvent.cs`、`AgentPipeline.cs` 都是）。
 - **`AgentMarkdownOptions` 的生产消费者只有一个**：`Examples/Workflow/Common/Lib/ViewModels/Workflow/TreeViewModel.cs` 的 `ConversationMarkdownOptions`（`ChatFences = true`，只对绑 `ConversationMarkdown` 的 Avalonia 生效）。其余成员仍走默认值；测试里 `AgentTranscriptTests.cs` 也显式构造它。**形状回归没有编译期信号** —— 守卫在 `VeloxDev.Core.Extension.Test/Agent/Pipelines/AgentTranscriptTests.cs` 的测试里。
-- 唯一值得留意的是**事件种类里没有「交互」类**：`RequestSelection` / `RequestConfirmation` 走的是工具返回 + 宿主 handler，不走事件管线。想在 UI 上看到它们，订阅 `WorkflowAgentScope.ToolCalled` 或让工具自己回调。
+- **事件种类里没有「交互」类**：`RequestSelection` / `RequestConfirmation` 走的是工具返回 + 宿主 handler，不走事件管线。想在 UI 上看到它们，订阅 `WorkflowAgentScope.ToolCalled` 或让工具自己回调。

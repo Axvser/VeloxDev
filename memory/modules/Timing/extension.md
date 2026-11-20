@@ -73,8 +73,6 @@
 | ✅ 官方 | 你（调用方）保证非负 | — |
 | ❌ 捷径 | 在消费者侧 `rate = Math.Max(0, rate)` | 调用方的错误被吞掉：`SetRate(-1)` 变成暂停，动画静默不动，而调用方以为设了倒放。要回退用 `Seek`（`SetRate` 的 remarks） |
 
-同理**不要**因为「反正只拒绝负数」就把小 rate 当安全：`1e-5` 合法但会被 `Scale` 截断成 0（`SetRate` 的 `scaled = (long)(rate * Scale)`）。
-
 ### 6. 换采样模式 —— 实现契约并在 `TimerCore` 注册
 
 | | 做法 | 结果 |
@@ -85,7 +83,7 @@
 
 ### 7. 采样器的状态 —— 别往基类塞
 
-`TimeSamplerCore` 只有 `Source` 和换算助手（`TimeSamplerCore` 的 `Source`/`ToTimeSpan`/`ToTicks`）。新的采样模式**全部状态放自己身上**：epoch 基准、累计量、上次读数都各是各的（对比 `CompensatingTimeSampler` 与 `UncompensatedTimeSampler` 各自的状态字段）。不要为了「共用」把 epoch 判断搬进基类 —— 不记账的采样器根本不需要它。
+`TimeSamplerCore` 只有 `Source` 和换算助手（`TimeSamplerCore` 的 `Source`/`ToTimeSpan`/`ToTicks`）。新的采样模式**全部状态放自己身上**：epoch 基准、累计量、上次读数都各是各的（对比 `CompensatingTimeSampler` 与 `UncompensatedTimeSampler` 各自的状态字段）。epoch 判断不要搬进基类：不记账的采样器不需要它。
 
 ---
 
@@ -97,7 +95,7 @@
 2. **确认 `TicksPerSecond` 就是 stamp 的单位**，不是 `Stopwatch.Frequency`。写错了消费者每次换算都差一个比值且无人报错（`ticksPerSecond` 参数文档）。
 3. 确认宿主时钟**单调**。`Advance` 只在单次调用内防倒走（`Advance` 的 `elapsedTicks <= 0L`），跨调用倒走的钟会把位置往回拉。
 4. 注册：`TimerCore.RegisterTimeSource<ITimeSourceControl>(static () => new <Host>TimeSource());`。
-5. 若该钟只在某一帧跑（渲染循环），**停下来**——那正是 `TimerCore` 的类 remarks 说不该做的事。
+5. 若该钟只在某一帧跑（渲染循环），停下来——`TimerCore` 的类 remarks 说不该这么做。
 
 ### B. 接一个「推模式」宿主（位置在回调里到达）
 
@@ -144,4 +142,4 @@
 | `TimeSamplerCore.ToTicks` | 只有 `CompensatingTimeSampler.Step` 用（`CompensatingTimeSampler.Step` setter 的 `_stepTicks = ToTicks(value)`） | — |
 | 「定时器」能力（延迟触发、超时） | **不存在**，也不该在这里加 | `TimeSample` 刻意不带绝对位置；`TimerCore` 类注释把时间与循环分开（`TimerCore` 的类 remarks） |
 
-**这意味着**：本模块的扩展缝是「已经建好、但仓库内没人走」的形态。写新代码时别把「没人用」当成「可以删」——`TimerCore` 的类 remarks 与 `TimeSourceCore` 的 protected 构造 XML 注释都把这条缝写成了对外承诺，GUI 适配器现在是间接消费者（经 `Transition<T>`），加第八家或加一个非 GUI 宿主时它就会有人走。
+**这意味着**：本模块的扩展缝是「已经建好、但仓库内没人走」的形态。`TimerCore` 的类 remarks 与 `TimeSourceCore` 的 protected 构造 XML 注释都把它写成对外承诺；GUI 适配器经 `Transition<T>` 间接消费。

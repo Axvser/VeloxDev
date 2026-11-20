@@ -7,8 +7,6 @@
 > 宿主样例：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`。
 > 测试：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/`（条数与耗时以 `dotnet test` 现跑为准）。
 
-本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
-
 ---
 
 ## 一、这个模块是什么，不解决什么
@@ -68,7 +66,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
                                                                    └─► TextPipeline / ToolPipeline ──► AgentTranscript
 ```
 
-**方向不可逆的理由（代码里写明的）：**
+**方向不可逆（代码里写明的）：**
 
 - `WorkflowAgentContextProvider` 的类注释（「This provider is the sole source of tools」）：**provider 是工具的唯一来源**。Agent Framework 会把 provider 贡献的工具与 `ChatOptions.Tools` **并集**，且**不按名去重** —— 两条通道给同一个工具，模型就收到两份。所以 `Agent/AgentClientExtensions.cs` 的 `AsAIAgent(providers, instructions)` **刻意没有 tools 参数**。
 - `WorkflowAgentToolkit.cs` 的 `Tools` 属性：它是**每 scope 一个实例**，并且**同一个引用**交给各子系统 provider —— 这是「MCP 或技能贡献的工具与内置工具受同一套预算约束」的实现方式。钩子读 scope 的**实时**值，所以子系统挂上之后再调 `With*` 也能到达它们的工具。
@@ -93,7 +91,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 ---
 
-### 三之末、每一次工具调用，宿主都要付一次账（2026-09-27 实测）
+### 三之末、每一次工具调用，宿主都要付一次账
 
 `WorkflowAgentScope.RaiseToolCalledAsync`**每完成一次工具调用**就发一次 `ToolCalled`。宿主侧通常拿它刷新画布 ——
 而**全量刷新**（重解析命名控件 + 跑布局 + 重算可见集）是幂等的重活：一轮 Agent 回合几十次调用 ⇒ 几十次全量刷新 ⇒
@@ -101,7 +99,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 请求合并**：demo 侧的统一件是 `Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/CoalescedRefresh.cs`（首次请求排队、
 其余落在同一趟里；旗标**在刷新执行之前**清，所以刷新期间来的请求会再排一次 —— 那一轮才代表刷新后的最新状态）。
 
-**七家的现状是三种，不是一种**（2026-09-27 逐家核过）：Avalonia / WPF / WinUI / WinForms / Jalium **每调用一次就全量刷新**
+**七家分三种**：Avalonia / WPF / WinUI / WinForms / Jalium **每调用一次就全量刷新**
 （本次接上合并器）；**MAUI 早就自己做了同一件事** —— `ScheduleRefresh()`（`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs`）用一个
 `bool _layoutRefreshPending` 门控 + `MainThread.BeginInvokeOnMainThread`，而且同样是**先清旗标再刷新**，与 `CoalescedRefresh`
 的契约逐条一致（差别只在门是普通 `bool`、非原子；眼下都从主线程来，所以行为正确）⇒ **不要再叠第二套**；**Blazor 压根不
@@ -110,7 +108,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 **顺带一条零调用者**：`AgentHelper.VisualRefreshRequested`（demo 的 Lib，`Helper/AgentHelper.cs`）**声明了、六家订阅了（Blazor 不订阅）、
 从来没有人 raise**。所以那六家那份订阅一直是空的 —— 真正的触发只有 `ToolCalled`。（这类"声明了没人发"的面，本模块 §六 有专节。）
 
-## 三点五、编译运行的控制面（2026-09-27 起）
+## 三点五、编译运行的控制面
 
 `RunCompiledWorkflow` 是**跑到完才返回**的，所以模型说什么都到不了"还在跑的那一轮"。新增一条后台入口 + 一组控制工具后，一组编译执行能力里"需要有人按一下"的那两件（暂停门、检查点）才真的能被 Agent 用：
 
@@ -125,7 +123,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 所有节点级执行与等待式运行都接受 `timeoutMs`（`ExecuteNode` / `ExecuteNodes` / `BroadcastNode` / `ReverseBroadcastNode` / `RunCompiledWorkflow` / `GetNodeResult`）；超时返回错误，图保持原样。
 
-**超时不能只靠 `catch (OperationCanceledException)`**：`RuntimeEngine` 把取消当作正常结果返回（`outcome = Cancelled`，不抛 OCE），命令层也可能把取消包成异常。等待式入口必须在 `await` 之后检查超时令牌，否则超时被答成 `ok`/`Cancelled`，调用方无法区分用户停止与超时（2026-10-31 实测，两条路径都已修）。
+**超时不能只靠 `catch (OperationCanceledException)`**：`RuntimeEngine` 把取消当作正常结果返回（`outcome = Cancelled`，不抛 OCE），命令层也可能把取消包成异常。等待式入口必须在 `await` 之后检查超时令牌，否则超时被答成 `ok`/`Cancelled`，调用方无法区分用户停止与超时。
 
 两条 `With*` 是宿主的口子：`WithCheckpointStore`（默认给每个 scope 一个内存 store，所以 Continue 开箱可用）与 `WithSessionConfiguration(Action<RuntimeContext>)`（重试策略 / 观察者 / sink / 补偿 / 门 / 检查点，一次配齐）。**填充顺序是契约**：scope 自己的设置 → 宿主钩子 → 工具需要的（门与 store 只在仍是 `null` 时补 ✗ 不覆盖宿主）✓（`WorkflowAgentToolkit.NewSession`）；失败记录与宿主的 sink **并存**（`RecordingErrorSink` 转发 ✓）。
 
@@ -133,11 +131,11 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 **日志读取取决于宿主的配置，而结果会把答案带出来**：配了文件 `ILogWriter` ⇒ 结果里有 `logFile`（**绝对路径**）⇒ 模型用它自己的文件工具打开即可；默认的内存日志 ⇒ 结果里的 `logs` 就是记录，不需要任何文件工具。`TextWriterLogWriter.Path`（`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Model/LogWriters.cs`，`For(path)` 时填、包装外部 `TextWriter` 时为 null）就是为这一条加的。
 
-### 三点六、结果的规模、并发与持久化（2026-10-31）
+### 三点六、结果的规模、并发与持久化
 
 **结果封顶分三层，越靠内越好用**：工具自己带 `max*` 参数（`GetFullTopology.maxNodes`、`ListNodes.maxNodes`、`FindNodes.maxMatches`、`GetExecutionLog.maxEntries`、`GetCompiledRunStatus.maxDataChars`、`GetTypeSchema.maxChars`、`GetComponentContext.maxChars`、`ReadMcpResource.maxChars`、`GetSubAgentResult.maxChars`），被裁的回复带 `truncated` 与总数；`ListNodes`/`FindNodes` 只在给了上限时改成对象信封，不给仍是裸数组（既有解析不破）；最后一道是 `ToolPipeline.MaxResultChars`（scope 的 `WithMaxToolResultChars`，默认 64 KiB），它把**整个结果**换成截断信封 —— 所以能分页的工具要自己分页。
 
-**全局这一道看到的 `result` 往往是 `JsonElement`，不是 `string`**：`AIFunctionFactory` 把字符串返回值包成 `JsonElement`，`TrackedAIFunction.CapResult` 必须同时量两种形态的长度。只认 `string` 时这道闸对全部内置工具静默失效（2026-10-31 实测：200 字符上限下 `ListNodes` 仍返回 10251 字符）。
+**全局这一道看到的 `result` 往往是 `JsonElement`，不是 `string`**：`AIFunctionFactory` 把字符串返回值包成 `JsonElement`，`TrackedAIFunction.CapResult` 必须同时量两种形态的长度。只认 `string` 时这道闸对全部内置工具静默失效（实测：200 字符上限下 `ListNodes` 仍返回 10251 字符）。
 
 **一树一个写者**：`WorkflowAgentScope.MutationGate` 是 `ConditionalWeakTable<IWorkflowTreeViewModel, SemaphoreSlim>` 里的每树一把锁，`TrackedAIFunction` 只对 `Edit` / `Execute` 类别取它（`Read` 不取）。同一棵树上两个 scope 的编辑因此串行，父子 scope 也一样。它防的是交错写，不是 lost update（没有版本检查）。
 
@@ -170,15 +168,15 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 **图状态刻意不进包络**：渐进披露，模型自己 `ListNodes`。
 
-4. **一片提示文本只有一个主人，第二个到场的人让位。** 静态骨架与技能子系统都能渲染嵌入语料：`ProvideProgressiveContextPrompt()` 在 `Skills == null` 时把语料拼进骨架，而 `SkillAgentContextProvider` 本也读 `BuildEmbeddedBlock`。同一个 scope 两样都做 ⇒ 每篇技能文档进两次。解法是让**后接的一方**知情：`WorkflowAgentScope` 用 `_embeddedSkillsFrozenIntoPrompt`（sticky，一旦有骨架带着语料出门就置位）把事实传给 `SkillScope.CreateContextProvider(..., embeddedCorpusDelivered:)`，provider 于是改贡献 `SkillScope.BuildWithdrawnBlock`（**当前停用的嵌入技能名单**）而不是正文。**为什么不让它闭嘴**：骨架冻住的是当时的启用状态，`SetEnabled(name, false)` 若不发声就成了静默空操作。**正确的宿主顺序是先 `WithSkills` 再取骨架**（`AgentHelper.cs` 即是），语料归子系统，差量机制闲置。
+4. **一片提示文本只有一个主人，第二个到场的人让位。** 静态骨架与技能子系统都能渲染嵌入语料：`ProvideProgressiveContextPrompt()` 在 `Skills == null` 时把语料拼进骨架，而 `SkillAgentContextProvider` 本也读 `BuildEmbeddedBlock`。同一个 scope 两样都做 ⇒ 每篇技能文档进两次。解法是让**后接的一方**知情：`WorkflowAgentScope` 用 `_embeddedSkillsFrozenIntoPrompt`（sticky，一旦有骨架带着语料出门就置位）把事实传给 `SkillScope.CreateContextProvider(..., embeddedCorpusDelivered:)`，provider 于是改贡献 `SkillScope.BuildWithdrawnBlock`（**当前停用的嵌入技能名单**）而不是正文。骨架冻住的是当时的启用状态，`SetEnabled(name, false)` 若不发声就成了静默空操作。**正确的宿主顺序是先 `WithSkills` 再取骨架**（`AgentHelper.cs` 即是），语料归子系统，差量机制闲置。
 
   这条是 §三 表格的必然推论：骨架住在宿主的 `ChatOptions.Instructions` 里，构造后**撤不回**。同一推理也适用于「技能/MCP 清单不进包络」（§三 表末段）—— 那两片各有 provider，第三个说话的人就是重复。
 
 ---
 
-### 四之五、权限模式：**唯一一道能够着 MCP 与技能工具的门**（2026-10-11）
+### 四之五、权限模式：**唯一一道能够着 MCP 与技能工具的门**
 
-原因是结构性的：只有 `ToolPipeline` 的两个钩子跑在**调用包装器**里，而它被每个切片共享 ——
+只有 `ToolPipeline` 的两个钩子跑在**调用包装器**里，而它被每个切片共享 ——
 `AllowNodeExecution` / `IsGenericCommandAllowed` 是**工具体内的 if**，MCP 与技能来源的工具根本穿不过去。
 新的权限判定故意落在这两个钩子上（`Refuse` 判 Deny、`Confirm` 判 Ask），并且**两道各自都正确** —— 只拆一道，行为仍然对（实测过）。
 
@@ -232,36 +230,27 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 
 ## 六、代码与注释不一致 / 零调用者的面
 
-**`Agent/AgentEmbeddedResources.cs` 的 Scripts / 单文件读取 API 已于 2026-10-18 删除**（它们零调用者，且 `Resources/{system}/Scripts/` 目录不存在）。活着的入口是 `ReadAllReferences` / `ReadAllSkills` / `ReadSkill` / `ListSkills` 与 `ReadSafety`。
+**`Agent/AgentEmbeddedResources.cs` 的 Scripts / 单文件读取 API 不存在**（`Resources/{system}/Scripts/` 目录也不存在）。活着的入口是 `ReadAllReferences` / `ReadAllSkills` / `ReadSkill` / `ListSkills` 与 `ReadSafety`。
 
 | 成员 | 位置 | 状态 |
 |---|---|---|
 | `ProvideAllContexts` | `WorkflowAgentScope.ProvideAllContexts` 的两个重载 | **仓库内零外部调用者**（无参重载只转发给有参重载）。是给宿主的另一档提示模式，宿主样例走的是渐进模式（`AgentHelper.cs` 调 `ProvideProgressiveContextPrompt`）。**它和渐进模式一样会写骨架收据**，所以两档都算「骨架已交付」 |
-| `BuildDynamicInstructions()` | `WorkflowAgentScope.BuildDynamicInstructions` | **2b 起不再是预留坑位**：渲染**能力包络**（闸门 / 被关掉的工具 / 调用预算的分档用量 / 相对骨架的漂移段）。按 `ContextKey` 缓存，空闲轮零分配；**绝不调用** `ProvideProgressiveContextPrompt`（骨架一次 870 KB、是框架每轮基线的 19 倍，见 `RenderEnvelope` 上方那段注释；旧文说的「1,100 倍」不可复核） |
+| `BuildDynamicInstructions()` | `WorkflowAgentScope.BuildDynamicInstructions` | 渲染**能力包络**（闸门 / 被关掉的工具 / 调用预算的分档用量 / 相对骨架的漂移段）。按 `ContextKey` 缓存，空闲轮零分配；**绝不调用** `ProvideProgressiveContextPrompt`（骨架一次 870 KB、是框架每轮基线的 19 倍，见 `RenderEnvelope` 上方那段注释） |
 | `WorkflowToolCategory.Layout`（`1<<5`） | `Agent/Workflow/Functions/WorkflowToolCategory.cs` | 下挂 `GetLayoutInfo` / `PreviewLayout` / `ArrangeLayout`；三者都走 `Tree.Arrange`，因此使用树 helper 上注册的 `IWorkflowLayoutSolver`（自定义 solver 也覆盖）。`PreviewLayout` 用 `DryRun`，`ArrangeLayout` 由 applier 一次性写入 |
 | `WorkflowToolCategory.Composite`（`1<<8`） | 同上 | 保留位，**没有工具注册**（与 `CreateAllTools` 的「No composite/bundled tools」注释一致） |
-| `GetComponentContext` | `WorkflowAgentToolkit.GetComponentContext` | **2026-10-08 前只按 `Type` 的形状三分流，从不看目录条目的 `Kind`** —— 于是值对象（目录里 Data 那一档）被渲染成 Class 形状，而同一条目在 `ProvideFrameworkDataContext` 与 `WithData` 里走的是 `GetDataContext`：一个条目两种渲染，parity 只验过 Data 那份。**Class 表还比 Data 表少一档**：它只列 `IsPromotedField` / `HasVeloxProperty` / `IsSlotEnumerator` / `IsSingleSlot` 四种成员，`Fields` 目录一个都不读，所以一个声明成**字段**的成员在它下面根本不出现。已修（`Kind == DataType` ⇒ `GetDataContext`），守卫 `Agent/Workflow/Functions/ComponentContextDiscoveryTests.cs` |
-| `AgentContextTreeRenderer.Class` | `Agent/Workflow/AgentContextTreeRenderer.cs` 的 `Class` | **提升出来的属性被列两次**：目录给提升条目同时打了 `IsPromotedField` 与 `HasVeloxProperty`（生成器 `AIContextModel.cs` 的 `BuildPromotedProperty`），而这张表的两趟（先提升字段、再带标注的属性）都认它。反射那条只列一次 —— 生成出来的那个属性不带 `[VeloxProperty]`。`[AgentContext] + [VeloxProperty]` 正是每个 demo 节点写设置项的写法，所以模型每轮都在为此付双份。已修（第二趟加 `!IsPromotedField`），parity 仍绿（Framework 里没有这种形状的组件，这正是它一直没被抓到的原因） |
+| `GetComponentContext` | `WorkflowAgentToolkit.GetComponentContext` | 按目录条目的 `Kind` 分流：`Kind == DataType` ⇒ `GetDataContext`，否则 Class 形状，与 `ProvideFrameworkDataContext` / `WithData` 的渲染一致。**Class 表比 Data 表少一档**：只列 `IsPromotedField` / `HasVeloxProperty` / `IsSlotEnumerator` / `IsSingleSlot` 四种成员，`Fields` 目录不读，声明成**字段**的成员不出现。守卫 `Agent/Workflow/Functions/ComponentContextDiscoveryTests.cs` |
+| `AgentContextTreeRenderer.Class` | `Agent/Workflow/AgentContextTreeRenderer.cs` 的 `Class` | 提升出来的属性只列一次：目录给提升条目同时打了 `IsPromotedField` 与 `HasVeloxProperty`（生成器 `AIContextModel.cs` 的 `BuildPromotedProperty`），所以第二趟（带标注的属性）排除 `IsPromotedField`。反射那条本来就只列一次 —— 生成出来的属性不带 `[VeloxProperty]`。`[AgentContext] + [VeloxProperty]` 是每个 demo 节点写设置项的写法 |
 
-**语料按模式切，「挡位」这个概念已经没有了**（2026-10-11 重写）：
+**语料按模式切，没有「挡位」这个概念**：
 `Resources/Workflow/{en,zh}/Safety/` 下是 `Shared.md` 加一组**同名于模式**的文件（`Plan`/`Manual`/`AutoEdit`/`Auto`/`Bypass`）。
 `BuildInteractionSafetyPrompt` 先读 `Shared.md`（跨模式不变的那一半：宿主边界、选择器约束），再读 `{mode}.md`，
 最后**追加**宿主用 `WithModePrompt(mode, text)` 加的规则（`WorkflowAgentScope.BuildInteractionSafetyPrompt`；它不替换随包的 Shared/mode 语料），然后**自己再画一张真值表**（模式 × 五个动作类别）与宿主规则清单。
 
 **新增一个模式要同时改几处**：`AgentPermissionMode` 枚举、`AgentPermissionPolicy.ModeDefault` 的矩阵、
 两份语料同名文件、`AgentPermissionPolicyTests.TheMatrix_...` 里那张写死的表。
-`Shared.md` 里那条**宿主边界**仍在那里，而它的措辞在 2026-10-11 被**收窄过一次**，值得记住为什么：
-它第一版写的是「永远不要自己把可达范围扩大，也不要借一个恰好做得到的工具去绕过去」，括号里还举了
-「a server that reaches outside the directories it was given」—— 那**恰好就是 `SetMcpServerArguments` 的设计用途**。
-于是模型看到「给文件服务器加一个目录」时会照着这条规矩**拒绝**，而那是宿主专门造了工具、由模式问用户、可由规则拒绝的正规路径。
-现在的分界是：**被禁的是绕过那条路**（能执行命令的节点、另一个恰好做得到的工具、磨用户直到同意），
-**不是「问」本身**。教训是：写安全规则时要分清「受管制的能力」与「绕开管制」，两者混在一句里，
-模型只会执行更严的那一读。守卫是 `CapabilityEnvelopeTests.TheSharedPolicy_CarriesTheHostBoundaries`，
-它现在同时钉「点名了正规路径（`SetMcpServerArguments`）」与「点明了被禁的是 going around」。仍在那里，
-守卫是 `CapabilityEnvelopeTests.TheSharedPolicy_CarriesTheHostBoundaries`（现在断言 **Plan 也带它** —— 模式只限制能跑什么，从不放宽边界）。
+`Shared.md` 里那条**宿主边界**：**被禁的是绕过那条路**（能执行命令的节点、另一个恰好做得到的工具、磨用户直到同意），**不是「问」本身**；`SetMcpServerArguments` 是正规路径。守卫 `CapabilityEnvelopeTests.TheSharedPolicy_CarriesTheHostBoundaries` 同时钉「点名了正规路径（`SetMcpServerArguments`）」「被禁的是 going around」，并断言 **Plan 也带它** —— 模式只限制能跑什么，从不放宽边界。
 
-**推论**：改 `Resources/` 时不要以为加一个 `Scripts/` 目录就会被自动加载 —— 读取它的 API 已整体删除，加载只剩 `Skills/`、`References/` 与 `Safety/`。
-同理，`Safety/` 下加一份名字不对应枚举值的文件不会有任何效果 —— 文件名按 `mode.ToString()` 拼。
+`Resources/` 的加载只剩 `Skills/`、`References/` 与 `Safety/`；加一个 `Scripts/` 目录不会被加载（读取它的 API 不存在）。`Safety/` 下的文件名按 `mode.ToString()` 拼，名字不对应枚举值的文件不会有任何效果。
 
 ---
 
@@ -275,24 +264,22 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 
 ## 八、附：序列化（引擎与通用面都在 Core，本项目只剩两个领域封装）
 
-**2026-10-04 起本项目里**没有**序列化 facade 了**：`ComponentModelEx.cs` 已下沉到
+**本项目里没有序列化 facade**：`ComponentModelEx.cs` 在
 `Src/Core/VeloxDev.Core/Serialization/ViewModelSerializer.cs`，命名空间 `VeloxDev.MVVM.Serialization`
-并入 **`VeloxDev.Serialization`**，类型改名 `ViewModelSerializer`。扩展方法名一个没动，所以调用点只改了
-`using`。理由：Core 现在有序列化器了，所以它归 `VeloxDev.Serialization`。
+并入 **`VeloxDev.Serialization`**，类型名 `ViewModelSerializer`。扩展方法名不变，调用点只需改
+`using`。
 详见 [`Serialization/architecture.md`](../Serialization/architecture.md)。
 
 **留在这里的是 `CheckpointEx.cs` 与 `CompiledGraphEx.cs`**（同命名空间），它们是**工作流领域**对通用面的
-预设，不是通用 API 的一部分。本项目**已经没有 Newtonsoft 依赖**（包引用也删了）。
+预设，不是通用 API 的一部分。本项目**没有 Newtonsoft 依赖**。
 
-**通用面的公开形状没变**：`Serialize<T>` / `TryDeserialize<T>` / `Deserialize<T>` 一族（同步 / 异步 / 流 /
+**通用面的公开形状**：`Serialize<T>` / `TryDeserialize<T>` / `Deserialize<T>` 一族（同步 / 异步 / 流 /
 字节 / `TextWriter`），全部 `where T : INotifyPropertyChanged`。它是所有 demo 存/读工作流走的那条路
-（`TreeViewModel.cs` 的 `this.Serialize()`）。**2026-10-04 起流式入口变成真流式**（内存有界），并新增了
+（`TreeViewModel.cs` 的 `this.Serialize()`）。**流式入口是真流式**（内存有界），另有
 同步的 `SerializeToStream` / `DeserializeFromStream` 一族。
 
-**`SerializationOptions` 只剩两个开关**：`WithIndented` / `WithCompact`（`VeloxJsonFormat`），以及
-`WithExcludedPropertyTypes`（`CompiledGraphEx` 用它把节点引用挡在快照外）。三个 Newtonsoft 时代的开关
-（`WithTypeNameHandling` / `WithNullValueHandling` / `WithDefaultValueHandling`）随引擎一起删了 ——
-它们配的是一个已经不在的库。
+**`SerializationOptions` 只剩 `WithIndented` / `WithCompact`（`VeloxJsonFormat`）与
+`WithExcludedPropertyTypes`**（`CompiledGraphEx` 用它把节点引用挡在快照外）。
 
 **同一命名空间下还有两个「物理在本项目、语义属于别的模块」的文件**：`CompiledGraphEx.cs`
 （编译图存/读，见 [`WorkflowSystem/compiler-execution.md`](../WorkflowSystem/compiler-execution.md) §八）
@@ -303,7 +290,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 **一个类型能进文档，当且仅当生成器为它编出了读写器**。收录条件是：它是四个组件接口之一的实现、
 或带 `[WorkflowBuilder.*]`、或带 `[VeloxProperty]` 字段、或带 `[Archivable]`（**非 ViewModel 的普通
 文档类型用它自报家门**，`ExecutionCheckpoint` 就是），或者能从这些类型出发沿**成员的声明类型**走到。
-2026-10-04 起「能走到」比声明本身宽：派生类向下展开、字典的键、根形状开放泛型上的类型参数约束
+「能走到」比声明本身宽：派生类向下展开、字典的键、根形状开放泛型上的类型参数约束
 （详见 `memory/modules/Serialization/architecture.md` §一）。
 `[Archivable(typeof(T))]` 还能把走不到的类型点名收进来；进了闭世界之后，哪些成员进文档由
 `[Archive(ArchiveOptions)]` 按成员放行/改名/排除 —— 两者都见 `memory/modules/Serialization/`。
@@ -342,10 +329,10 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 
 **⚠ 一个可写属性会被写出去，包括委托。** 新引擎同样只看「能不能写」：一个
 `public Action<T>? Hook { get; set; }` 写出去没问题，**读回来时构造委托会抛**。运行期状态用
-`{ get; private set; }`，需要外部可设就用**方法**而不是属性。2026-09-27 实测过一次（`ControllerViewModel`
-加了这样的钩子，编译图快照测试当场红），那条结论不受引擎更换影响。
+`{ get; private set; }`，需要外部可设就用**方法**而不是属性（实测：`ControllerViewModel`
+加了这样的钩子，编译图快照测试当场红）。
 
-### 八·四、嵌在容器里的容器：写得出、读不回（2026-10-03 修）
+### 八·四、嵌在容器里的容器：写得出、读不回
 
 **写侧对容器是按形状递归的**（`VeloxJsonSerializer.WriteValue` 的 `IDictionary` / `IEnumerable` 两条
 分支），所以任何嵌套都写得出去。**读侧没有这条分支**：一个成员自己那层容器由该成员的生成 reader 就地填
@@ -364,7 +351,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 再按声明类型推形状递归读（`ReadValue` 里那一段 + 私有 `ReadContainer`）。形状规则因此只有一处，
 和写侧同源。
 
-**为什么不能顺手用反射造**：`Activator.CreateInstance(Type)` / `MakeGenericType` 正是这套东西要躲开的 ——
+**不能用反射造**：`Activator.CreateInstance(Type)` / `MakeGenericType` 正是这套东西要躲开的 ——
 同一条理由让 `ReadValue` 连顶层数组入口都不给（`Array.CreateInstance` 是 `RequiresDynamicCode`）。
 生成器侧落点：`VeloxJsonModelBuilder.CollectNestedContainers`（起点是成员的 `ElementType`，**不是**
 `DeclaredType` —— 外面那层由成员自己读）、`IsContainerReadable`（序列只在 `List<T>` 顶得住时才登记，
@@ -380,7 +367,6 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 **先于**这张 map 被登记 —— 文档里 `Nodes` 排在 `LinksMap` 前面才成立；成员顺序反过来会静默丢条目
 （`ReadMap` 里 `key is null → SkipValue`）。
 
-**⚠ 修的是生成器，所以 Release 不受益。** `VeloxJsonRegistry` / `ReadValue` 那半边在源码里、两种配置都生效；
-但**工厂是生成代码**，而 Release 走的是 NuGet 包（`VeloxDev.Core.csproj` 的 `<Version>`（当前 `11.2.0`）、
-`VeloxDev.Core.Extension.Test.csproj` 的生成器 `PackageReference`（当前 `11.0.0`））—— 不升包，Release 下带连接的树仍然读不回来。
+**`VeloxJsonRegistry` / `ReadValue` 那半边在源码里、两种配置都生效；但工厂是生成代码**，而 Release 走的是 NuGet 包（`VeloxDev.Core.csproj` 的 `<Version>` 与
+`VeloxDev.Core.Extension.Test.csproj` 的生成器 `PackageReference` 必须同版）—— 不升包，Release 下带连接的树仍然读不回来。
 哪几处要一起升见 [`VeloxDev.Core.Generator/extension.md`](../VeloxDev.Core.Generator/extension.md) §四。

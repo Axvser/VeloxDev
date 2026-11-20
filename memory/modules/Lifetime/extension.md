@@ -1,7 +1,6 @@
 # Lifetime — 扩展
 
 > 代码：一个文件 `Src/Core/VeloxDev.Core/Lifetime/IApplicationState.cs`。
-> 本文只写三件事：**新接一家平台该不该实现它**、**`CanSetValue()` 恒 true 的后果**、**「不接线」会让什么静默失效**。
 > 七家现状的差异在 `memory/modules/TransitionSystem/adapters/<平台>.md`（总表 `memory/modules/TransitionSystem/adapters/avalonia.md` §三.1）。
 
 ---
@@ -41,13 +40,13 @@
 | 只有**外部**知道（框架不给钩子） | 覆写 `IsAlive` 读自己的标志 + 对外开一个 `NotifyShutdown()` 形状的方法 | Razor `Src/Adapters/VeloxDev.Razor/TransitionSystem/UIThreadInspector.cs` 的 `NotifyShutdown` / `IsAlive` |
 | **什么都没有**（例：`Dispatcher` 只有 `ShutdownStarted` 事件且没接） | 不接线 —— 编译过、像好的，代价见 §四 | Avalonia |
 
-**新接一家时这是可以推迟的一项**，但「推迟」必须是有意识的：它不会报错，只会少一个能力。
+**这是可以推迟的一项**：它不会报错，只会少一个能力。
 
 ---
 
 ## 四、不接线（或接线后仍恒 true）会让什么静默失效
 
-1. **`CanSetValue()` 恒 `true`** ⇒ 关停之后帧照旧入队。真正的后果由**另一条轴**决定（Threading）：
+1. **`CanSetValue()` 恒 `true`** ⇒ 关停之后帧照旧入队。后果由**另一条轴**决定（Threading）：
    - `PostCore` **乐观恒 true**（Avalonia 形状）：`PostAsync` 的消费者永远等一个不完成的 TCS。它唯一消费者是 `Awake`，而 `Awake` 是在**持有 scheduler `_gate` 时** `await` 的 ⇒ 那条 `_gate` 永不释放 ⇒ **该 target 之后每一次动画都永久排队**。依据：`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs` 的 `PostAsync`、`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionScheduler.cs` 的 `Awake`（`_gate.WaitAsync` → `host.PostAsync` → `finally _gate.Release`）。这是「不接线」最贵的一种组合；该家现状与「要不要修」的评估见 `memory/modules/TransitionSystem/adapters/avalonia.md` §三.1。
    - `PostCore` **诚实拒绝**（WPF/Jalium 形状）：帧被丢，`SamplerSet.Apply` 报一次 `Warn(WarnStage.Dropped, …)` —— 有迹象，不成灾。
 2. **没有任何检查会变红**：没有测试、没有断言、没有日志会因为「声明了 `IApplicationState` 却从不写」而失败。树内唯一的存活相关用例是反向的 —— `Src/Test/Unit/Core/VeloxDev.Core.Test/TransitionSystem/SamplerSetTests.cs` 的 `Apply_WhenAppDead_SkipsWrites`（把宿主的 `Alive` 设成 `false`，断言 `InvokeCount == 0` 且 target 没被写）。

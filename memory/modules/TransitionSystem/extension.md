@@ -3,9 +3,6 @@
 > 代码：`Src/Core/VeloxDev.Core/TransitionSystem/`，契约在 `Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/`，
 > 时钟在 `Src/Core/VeloxDev.Core/Timing/`，编组在 `Src/Core/VeloxDev.Core/Threading/`。
 > 七家平台实现在 `Src/Adapters/VeloxDev.<GUI>/TransitionSystem/`。
->
-> **本文只写共性契约**：扩展点在哪、官方做法、联动清单。
-> **一家的平台硬限制、刻意背离、该家特有的坑一律不写在这里** —— 那些在 `memory/modules/TransitionSystem/adapters/<平台>.md`。
 
 ---
 
@@ -27,7 +24,7 @@
 | 索引实参的求值时机 | `PathIndex.Frozen<T>` | `TransitionSystem/Binding/PathIndex.cs` 的 `Frozen<T>`；身份在 `Binding/PathSegment.cs` 的 `identity`（`frozen|{key}` / `live|{key}`） |
 | 新平台适配器 | 见 §三·C | 要写的类 + 联动清单 §四 |
 
-**本模块的枚举**：`RotationDirection`（唯一跨 Core 与适配器都被消费的，详见 §4.6）、`WarnStage` 与 `ErrorStage`（效果 `Warn`/`Error` 事件的 stage，定义在 `Interfaces/TransitionSystem/Enums/`）。stage **不再是自由字符串**：诊断只能取枚举成员，写一个不存在的 stage 名**编译不过**；新增一个 stage = 给对应枚举加一个成员（`Interfaces/TransitionSystem/Enums/WarnStage.cs` / `Interfaces/TransitionSystem/Enums/ErrorStage.cs`）并在某个 `diagnostics.Warn/Error` 调用点用它（调用点逐个列在 `memory/modules/TimeLine/architecture.md` §二）。消费方 `switch` 该枚举时，新增成员会在未覆盖处被编译器指出（`switch` 表达式无 `default` 时 CS8509）。所以要盯的不再是「漏了哪处 `switch`」，而是**新成员有没有调用点** —— 引擎侧没有覆盖全部 stage 的中央 `switch`，编译器不会替你提醒这一条。
+**本模块的枚举**：`RotationDirection`（唯一跨 Core 与适配器都被消费的，详见 §4.6）、`WarnStage` 与 `ErrorStage`（效果 `Warn`/`Error` 事件的 stage，定义在 `Interfaces/TransitionSystem/Enums/`）。stage 只能取枚举成员，写一个不存在的 stage 名**编译不过**；新增一个 stage = 给对应枚举加一个成员（`Interfaces/TransitionSystem/Enums/WarnStage.cs` / `Interfaces/TransitionSystem/Enums/ErrorStage.cs`）并在某个 `diagnostics.Warn/Error` 调用点用它（调用点逐个列在 `memory/modules/TimeLine/architecture.md` §二）。联动见 §4.7。
 
 ---
 
@@ -42,7 +39,7 @@
 | 把「本次动画」的状态放进采样器字段 | 注册表是**进程级**的（`ConcurrentDictionary<Type, ISampler>`，`Sampling/Interpolator.cs` 的 `Interpolators`），同一个实例服务所有 target、所有动画，直接串台 | `ISampler.cs` 的 `InsertFrame` 文档明写「per-animation reusable scratch」 |
 | `InsertFrame` 里就地改 `start`/`end`（例如拿 start 当 scratch） | 它们与快照**共享**，改了污染快照，下一次迭代/另一个目标读到被改过的端点 | `ISampler.cs` 的 `ISampler` 类型注释明写（「never mutate the `start` / `end`」） |
 | `t <= 0` / `t >= 1` 返回 scratch，而不是调用方给的 start/end 本身 | 嵌套路径（`((TranslateTransform)x.RenderTransform).X`）依赖端点声明时的**运行时类型**，scratch 会把类型换掉 | `skills/veloxdev-create-animation/references/adapter.md` §2 的「When the product feeds a nested path…」一条 |
-| 只注册具体类型，却希望基类型属性也走它 | 查找**只向上走**：精确 → 基类由近及远 → 接口按名字序。注册 `SolidColorBrush` 不会命中 `LinearGradientBrush`；而**声明类型本身就是抽象基类**时更彻底 —— 一条键都没有，`Prepare` 报一次 `Unsampled` 把该属性整个跳过。WPF 走过这个形状（注册 `DropShadowEffect`，而它自己的 `UIElement.Effect` DP 声明成 `Effect`），2026-09-20 改成注册基类型（见 `adapters/wpf.md` 坑 7） | `Sampling/Interpolator.cs` 的 `TryGetInterpolator`、`Sampling/Interpolator.cs` 的 `Prepare` 里 `sampler == null` 分支 |
+| 只注册具体类型，却希望基类型属性也走它 | 查找**只向上走**：精确 → 基类由近及远 → 接口按名字序。注册 `SolidColorBrush` 不会命中 `LinearGradientBrush`；而**声明类型本身就是抽象基类**时更彻底 —— 一条键都没有，`Prepare` 报一次 `Unsampled` 把该属性整个跳过。WPF 走过这个形状（注册 `DropShadowEffect`，而它自己的 `UIElement.Effect` DP 声明成 `Effect`），现在注册基类型（见 `adapters/wpf.md` 坑 7） | `Sampling/Interpolator.cs` 的 `TryGetInterpolator`、`Sampling/Interpolator.cs` 的 `Prepare` 里 `sampler == null` 分支 |
 | 注册了基类型却只处理具体类型 | 反过来同样成立：注册 `Brush` 就承诺处理整个家族，梯度也会进来。**改注成基类型是这条义务的开始，不是结束** —— 注册 `Effect` 后，兜底分支必须如实交出端点（凭空造一个 `DropShadowEffect` 顶替就会让 `BlurEffect` 被静默画成阴影） | `adapter.md` §3 的「A more general registration must handle the whole family」一条、`Src/Adapters/VeloxDev.WPF/TransitionSystem/Samplers/DropShadowEffectSampler.cs` 的 `InsertFrame`（非 `DropShadowEffect` 端点走 `t >= 0.5d ? end : start`） |
 | 用 `UnregisterInterpolator` 做「临时替换，用完恢复」 | 安装是 **last-writer-wins 的原子 AddOrUpdate**（`Sampling/Interpolator.cs` 的 `RegisterInterpolator`），并发下先后顺序不由你定，恢复可能盖掉别人的注册 | `Sampling/Interpolator.cs` 的 `RegisterInterpolator` |
 | 在 `Prepare` 之后才注册，以为能生效 | 采样器**每个 property 每趟动画只解析一次**，且在首趟的 `Prepare` 里 | `Sampling/Interpolator.cs` 的 `InterpolatorCore.Prepare` |
@@ -74,7 +71,7 @@
 
 **样本的判据是「这条路径动了没有」，不是「有没有报错」** —— 排查「某条路径不生效」时，先确认它的类型在不在该家 `Interpolator` 静态构造的注册表里。
 
-**顺带校准「采样器条数」这个数**（`adapters/` 下多份文件都引它）：它**度量的是「这家框架自带的、Core 未覆盖的可动画值类型有多少个」，不是实现完整度**。Core 已把无 GUI 依赖的一整族注册完（基元类型 + `System.Drawing` 的几何/颜色类型 + `System.Numerics` 的向量与四元数，`Sampling/Interpolator.cs` 的静态构造），所以 WinForms（值类型面就是 `System.Drawing`）只剩 `Padding`、Razor（动画面是内联 CSS 字符串，无带类型值）只有 `string`，而 Avalonia/WPF/MAUI 各自带一整族平台类型，数量自然更多。**类数与注册条数只在 Jalium 上不同**（它的 `BrushSampler` 同时注册 `Brush` 与 `SolidColorBrush`）。
+**「采样器条数」度量的是「这家框架自带的、Core 未覆盖的可动画值类型有多少个」，不是实现完整度**。Core 已把无 GUI 依赖的一整族注册完（基元类型 + `System.Drawing` 的几何/颜色类型 + `System.Numerics` 的向量与四元数，`Sampling/Interpolator.cs` 的静态构造）。
 
 ### 3. `CreateScheduler`（平台接缝）
 
@@ -214,7 +211,7 @@
 
 **`TPriorityCore` 选型**：框架有 dispatcher 优先级就用它，没有就用 `NonPriority`（`Threading/NonPriority.cs`）。当前七家：WPF/Avalonia/Jalium = `DispatcherPriority`，WinUI = `DispatcherQueuePriority`，MAUI/WinForms/Razor = `NonPriority`（`Src/Adapters/VeloxDev.<GUI>/TransitionSystem/TransitionScheduler.cs` 等各家声明；`adapter.md` §4「Priority」的表）。优先级出现在**两处**：`Transition<T>` 的第七个型参，与 `CreateScheduler` 里测试 effect 的那个 cast —— 第二处写错会让主题切换静默降级为瞬切。
 
-**注册位置**：只在自己家注册采样器（`Interpolator` 静态构造）、只在自己家返回 scheduler（`CreateScheduler`）。**Core 里没有任何一处需要改** —— 这正是这套适配器模式的目的。Core 侧要改的只有测试与 demo 的清单，见 §四。
+**注册位置**：只在自己家注册采样器（`Interpolator` 静态构造）、只在自己家返回 scheduler（`CreateScheduler`）。**Core 里没有任何一处需要改**。
 
 **本文件不写**这家的硬限制、与别家的刻意背离、该家特有的坑 —— 写 `adapters/<平台>.md`（判据与四件事的清单见 `memory/specifications/memory-maintenance-specifications.md` 第四节）。
 
@@ -316,4 +313,4 @@
 ## 五、死扩展点与已失效的钩子
 
 - **`StateSnapshotCore.CoreRecordState()`（`State/StateSnapshot.cs` 的 `StateSnapshotCore.CoreRecordState`，实现于 `Effects/Transition.cs` 的 `CoreRecordState`）没有任何调用者**：`Src/`、`Examples/` 里搜不到。覆写它不会产生任何效果。
-- **`TransitionSchedulerCore` 没有 `RemoveMutualScheduler`。** 判断「还在跑」要读**数组长度**，不要读 `TryGetMutualScheduler` 的 bool：互斥 scheduler 每 target 缓存一生，`true` 只说明「这个 target 跑过互斥动画」（`Effects/Transition.cs` 的 `AddNoMutual`/`RemoveNoMutual`、`Examples/Transition/Avalonia/Demo/Views/MainWindow.axaml.cs` 的 `NoMutualCount()`）。并发那一侧的可移除入口是 `RemoveNoMutualScheduler`（`Runtime/TransitionScheduler.cs` 的 `RemoveNoMutualScheduler`）。
+- **`TransitionSchedulerCore` 没有 `RemoveMutualScheduler`。** 判断「还在跑」要读**数组长度**，不要读 `TryGetMutualScheduler` 的 bool（互斥 scheduler 每 target 缓存一生；`Examples/Transition/Avalonia/Demo/Views/MainWindow.axaml.cs` 的 `NoMutualCount()`）。并发那一侧的可移除入口是 `RemoveNoMutualScheduler`（`Runtime/TransitionScheduler.cs` 的 `RemoveNoMutualScheduler`）。

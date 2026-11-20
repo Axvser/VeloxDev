@@ -1,23 +1,19 @@
 ﻿# VeloxDev.Core.Extension — MCP 子系统
 
-> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/MCP/`（2026-10-08 起含 `HostedMcpServer.cs` 与 `McpToolProxy.cs`）。
+> 代码：`Src/Core/VeloxDev.Core.Extension/Agent/MCP/`（含 `HostedMcpServer.cs` 与 `McpToolProxy.cs`）。
 > 宿主样例：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`（预注册服务器在 `DemoMcpServers`，注册点是 `helper.Mcp.WithServers([.. helper.McpServers])`）。
 
 ---
 
 ## 一、最承重的一条：裁决权在**权限模式与规则表**，不在 MCP 自己
 
-**没有阶梯了**（2026-10-11 删）。原来有一套 `McpSelfServiceLevel`（`Closed`/`RemoteConfirmed`/`AllConfirmed`/`Unrestricted`），
-默认 `Closed` 下两个写工具**根本不注册**。它的问题不是不严，而是**装错了层**：一个模型看得见却永远用不了的工具只浪费提示预算，
-而工具不存在时模型只能回答「我没有这个工具」—— 用户手上没有任何可按的东西。
-
-现在：`AddMcpServer` 与 `SetMcpServerArguments` **永远注册**，能不能跑由
+`AddMcpServer` 与 `SetMcpServerArguments` **永远注册**，能不能跑由
 [`AgentPermissionMode`](architecture.md) 的 `Curate` 那一格（`Auto`/`AutoEdit`/`Manual` 下先问，`Bypass` 下不问）加宿主的规则决定，
 **拒绝文案点名模式或规则**。`McpAgentToolkit.CategoryOf` 把两个读工具归 `Read`、其余归 `Curate`。
 
 **提问只发生一次。** 组合进工作流 scope 时由包装器问（`WorkflowAgentScope.WithMcps` 把策略接到 `McpScope.PermissionCheck`）；
 **独立使用 `McpScope` 时没有包装器**，所以两个写工具自己问（`McpScope.IsComposed == false` 时）——
-少了这一条，阶梯一删它们就变成无人过问了。
+没有这一段，独立使用时两个写工具无人过问。
 
 ### 一·一、工具名答不了的那一问：**种类**
 
@@ -58,9 +54,9 @@ AddAsync(config, ct)                            ← 中途加一个，不清空
 **每个连接过的服务器由一个 `HostedMcpServer`（`HostedMcpServer.cs`）托管** —— 它持有 client、当前提供的
 工具、以及**每个服务器一把 `SemaphoreSlim(1,1)`**。`McpScope._hosts` 存的是这个托管对象，**不是 client**：
 client 由它独占，因为「工具引用着 client、client 在 stdio 下持有子进程」这条不变量（`McpScope._hosts` 的注释）
-只有单一所有者才守得住。`_loadedClients` / `_loadedConfigs` 两张表已经删掉，就是被它取代的。
+只有单一所有者才守得住。
 
-**失败也自增 `Version`** —— 这是个容易漏的点：失败的服务器不贡献工具，但它在状态列表里**多了一行 Error**，
+**失败也自增 `Version`**：失败的服务器不贡献工具，但它在状态列表里**多了一行 Error**，
 按 `Version` 缓存的渲染必须失效。
 
 ### 二·一、工具的**身份是稳定的**：`McpToolProxy`
@@ -76,7 +72,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 **代理挂在 `TrackedAIFunction` 里面**，所以 `McpAgentContextProvider.BuildTools` 一行都不用改：
 它只问 `LoadedTools` 里是不是 `AIFunction` 再包一层。顺序是 `TrackedAIFunction(McpToolProxy)`。
 
-### 二·二、改参数：惰性 + 先建后换（2026-10-08）
+### 二·二、改参数：惰性 + 先建后换
 
 `McpScope.WithServers` 同名覆盖注册时，**只**把新配置交给已有的托管对象
 （`SetConfiguration`，只标脏）；`AddMcpServer` 传同一个名字走的是同一条路。真正的重建发生在
@@ -134,7 +130,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 - `McpScope.BuildInventoryBlock()` 读 **`Status.Snapshot`** 而不是绑定的 `ObservableCollection` —— 注释写明理由：提示是在 **agent 调用线程**上渲染的，不是 UI 线程。
 - **这个 provider 只贡献 MCP 这一片，不含工作流内置工具**（`McpAgentContextProvider.BuildTools`：「内置工具是工作流层的，两者都要的宿主就把两个 provider 都挂上」）。所以 `CreateContextProviders()` 返回的那个数组是「每一片各出一个 provider」的组合，不是「谁都带全套」。
 - `LoadedTools` 交给它的**是 `McpToolProxy`**（不是 `McpClientTool`），`AIFunction` 所以**与内置工具同样被 `TrackedAIFunction` 包**（`McpAgentContextProvider.BuildTools`）；不是 `AIFunction` 的工具**原样放行**而不是被丢掉 —— 也就是说这类工具**不受预算与编组约束**，这是唯一一处「包装会漏」的地方。**`SeedLoadedTools` 塞进去的是裸 `AIFunction`**，没有托管对象、也就没有重建。
-- **参数是能读能写的**（2026-10-08 起）：`ListMcpServers` 每个服务器多返回 `description` / `package` / `version` / `arguments` / `endpoint`；
+- **参数是能读能写的**：`ListMcpServers` 每个服务器多返回 `description` / `package` / `version` / `arguments` / `endpoint`；
   `McpAgentToolkit.SetServerArguments` 只换 `Arguments`，**保留 runMode / package / Options**，
   并立刻生效（`McpScope.ReconfigureAsync` —— `WithServers` 只标脏，它额外调一次 `ReloadAsync`）。
   所以模型改一个目录不必重述 package，写错也改不动别的字段。
@@ -143,10 +139,10 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
   守卫是 `McpParameterSwitchTests.ListMcpServers_NeverCarriesTheHostsOptionBag`（按**原始 JSON 串**断言，
   所以对将来新加的字段也成立）。
 - **只读分类按 `McpAgentToolkit.ReadToolNames` 走**：`ListMcpServers` / `DescribeMcpServer` / `ListMcpResources` / `ReadMcpResource` / `ListMcpPrompts` / `GetMcpPrompt` 在这一组里，`WorkflowAgentToolkit.BuildQueryToolNames` 会并入它。因此它们花的是只读预算、不花写入预算、也不在 `AutoMarkDirty = true` 时标脏；`Load` / `Unload` / `Add` / `SetArguments` 仍然是写调用。新增读工具必须加进 `ReadToolNames`，否则会被当成变更。
-- **resources / prompts 也有工具面**（2026-10-31）：`ListMcpResources` / `ReadMcpResource` / `ListMcpPrompts` / `GetMcpPrompt` 调 `McpScope.ListResourcesAsync` / `ReadResourceAsync` / `ListPromptsAsync` / `GetPromptAsync`，后者经 `HostedMcpServer.WithClientAsync` 在**重建门**内读当前 client。资源正文按 `maxChars` 截断；二进制内容只报 `byteLength`，不把 base64 塞进上下文。提示词用 `GetPromptResult.ToChatMessages()` 展开，`maxChars` 是**整段消息文本**的预算。四个读工具在授权视图里也注册（它们是读），写工具不在。
-**sampling 仍不支持**：服务器不能反过来借宿主的模型。这是能力边界，不是遗漏 —— 它需要宿主提供采样回调，而不是一组工具。
+- **resources / prompts 也有工具面**：`ListMcpResources` / `ReadMcpResource` / `ListMcpPrompts` / `GetMcpPrompt` 调 `McpScope.ListResourcesAsync` / `ReadResourceAsync` / `ListPromptsAsync` / `GetPromptAsync`，后者经 `HostedMcpServer.WithClientAsync` 在**重建门**内读当前 client。资源正文按 `maxChars` 截断；二进制内容只报 `byteLength`，不把 base64 塞进上下文。提示词用 `GetPromptResult.ToChatMessages()` 展开，`maxChars` 是**整段消息文本**的预算。四个读工具在授权视图里也注册（它们是读），写工具不在。
+**sampling 不支持**：服务器不能反过来借宿主的模型；它需要宿主提供采样回调，而不是一组工具。
 
-**`McpScope.InstanceId`** 是每 scope 一个 `Guid`，给 provider 做 state key。注释里有一条刻意设计：同一个 scope 造两个 provider 会**在 agent 构造时响亮地失败**，这是想要的；如果改成按 provider 生成 id，两个 provider 就会都通过，然后在同一轮里**把每个 MCP 工具和 inventory 块各塞两遍**。
+**`McpScope.InstanceId`** 是每 scope 一个 `Guid`，给 provider 做 state key。注释里有一条刻意设计：同一个 scope 造两个 provider 会**在 agent 构造时响亮地失败**；改成按 provider 生成 id 会让两个 provider 都通过，然后在同一轮里把每个 MCP 工具和 inventory 块各塞两遍。
 
 ---
 
@@ -186,7 +182,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
 
 **静态 `[Description]` 与动态档位**
 
-模式可以在运行期任意时刻改（`WithPermissionMode` 推 `Version`，而 `BuildPromptContext()` 在渲染时读它），**提示词与工具集永远同步**。但 `[Description]` 是**静态字符串**，跟不上 —— 凡是「哪一模式允许什么」这类事实，说明里只能**让位给提示词**（`AddServer` 现在写的是「which run modes the CURRENT level allows is stated in your prompt」），不要在说明里枚举被允许的模式：写死了就会在某几档上撒谎。它原来把六种运行模式平铺直叙，就是这样一处。
+模式可以在运行期任意时刻改（`WithPermissionMode` 推 `Version`，而 `BuildPromptContext()` 在渲染时读它），**提示词与工具集永远同步**。但 `[Description]` 是**静态字符串**，跟不上 —— 凡是「哪一模式允许什么」这类事实，说明里只能**让位给提示词**（`AddServer` 现在写的是「which run modes the CURRENT level allows is stated in your prompt」），不要在说明里枚举被允许的模式：写死了就会在某几档上撒谎。
 
 **给重建/动态切换加测试**
 

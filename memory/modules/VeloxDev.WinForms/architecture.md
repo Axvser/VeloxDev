@@ -1,11 +1,9 @@
 # VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/AttachedBehaviors/` 最大的几个是 `WorkflowSurfaceBehavior.cs`、`WorkflowNodeRowsBehavior.cs`、`WorkflowRulerOverlayForm.cs`、`WorkflowSlotLayoutBehavior.cs`、`WorkflowNodeDragBehavior.cs`、`WorkflowLinkAttachment.cs`、`WorkflowNodeAttachment.cs`；`Xaml/` 是 XAML 运行时；`TransitionSystem/` 最大的是 `Transition.cs`、`TransitionInterpreter.cs`、`UIThreadInspector.cs`，其下另有一个采样器；`DynamicTheme/ThemeValueConverters.cs`；顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。**`WorkflowTreeView` 与 `WorkflowGridDecorator` 已删除**：表面由 XAML 根 + `WorkflowSurfaceBehavior` 接管，网格装饰器归模板。
+> 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/AttachedBehaviors/`、`Xaml/` 是 XAML 运行时、`TransitionSystem/` 含一个采样器、`DynamicTheme/ThemeValueConverters.cs`、顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。表面由 XAML 根 + `WorkflowSurfaceBehavior` 接管，网格装饰器归模板。
 > **当前是 XAML-first 架构**：适配器包含 XAML 运行时；生成器独立在 `Src/Generators/VeloxDev.WinForms.Generator/`；Surface、节点/插槽/连线模板与两个 Demo 的视觉壳由 XAML 定义，低层 attachment/behavior 仍留在 code-behind。包版本 11.2.0。
-> **XAML 基础控件库在 `Xaml/Controls/`**：布局（`StackPanel`/`DockPanel`/`WrapPanel`/`Grid`/`Canvas`）、内容（`ContentControl`/`ItemsControl`/`Border`）、文本（`TextBlock`/`Label`/`TextBox`/`PasswordBox`）、选择（`Button`/`ToggleButton`/`CheckBox`/`RadioButton`/`ListBox`/`ComboBox`）、范围/媒体（`ProgressBar`/`Slider`/`Image`/`Separator`）与形状（`Xaml/Controls/Shapes/` 下的 `Rectangle`/`Ellipse`/`Line`/`Path`）。它们全部派生 XAML `Control`，属性走 DP，因而 Style/Trigger/Binding/Transition 都可用；原生 WinForms 元素只能接收附加值。**XAML 前缀严格**：`v:` = VeloxDev，`local:` = 模板/Demo，无前缀 = 原生；根元素也要带前缀。XAML 视图 code-behind 的基类写完整命名空间（`VeloxDev.WinForms.Xaml.Controls.UserControl`）。
+> **XAML 基础控件库在 `Xaml/Controls/`**（形状在 `Xaml/Controls/Shapes/`）：全部派生 XAML `Control`，属性走 DP，因而 Style/Trigger/Binding/Transition 都可用；原生 WinForms 元素只能接收附加值。**XAML 前缀严格**：`v:` = VeloxDev，`local:` = 模板/Demo，无前缀 = 原生；根元素也要带前缀。XAML 视图 code-behind 的基类写完整命名空间（`VeloxDev.WinForms.Xaml.Controls.UserControl`）。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这处）。
->
-> 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台，不存在平台轴。它在三条轴上的平台差异分别落在
 > `memory/modules/WorkflowSystem/adapters/winforms.md`、`memory/modules/TransitionSystem/adapters/winforms.md`、`memory/modules/Templates/adapters/winforms.md`，本文**指路不抄**。
@@ -22,7 +20,7 @@
 
 三个只在读这个目录时才会发现的结构事实：
 
-1. **三条轴互不引用，但没有任何编译期阻挡。** 实测 `AttachedBehaviors/` 下零 `Transition`/`Interpolator`/`ThemeManager` 符号、`TransitionSystem/` 下零 `Workflow` 符号 —— 靠的是纪律：`GlobalUsings.cs` 已经把 `VeloxDev.TransitionSystem` 灌进了**每一个**文件（含 `AttachedBehaviors/`）。⇒ 「在这家写了一条跨轴的调用」不会被拦下，七家都维持着零引用，改的人得自己守。
+1. **三条轴互不引用，但没有任何编译期阻挡。** 实测 `AttachedBehaviors/` 下零 `Transition`/`Interpolator`/`ThemeManager` 符号、`TransitionSystem/` 下零 `Workflow` 符号 —— 靠的是纪律：`GlobalUsings.cs` 已经把 `VeloxDev.TransitionSystem` 灌进了**每一个**文件（含 `AttachedBehaviors/`）。⇒ 「在这家写了一条跨轴的调用」不会被拦下，七家都维持着零引用。
 2. **命名空间全部寄生在 Core 上，唯一例外的命名空间还和 Core 撞了名。** 唯一的采样器在 `VeloxDev.Adapters.NativeSamplers`（`TransitionSystem/Samplers/PaddingSampler.cs` 的命名空间），而 **Core 自己的采样器在 `VeloxDev.TransitionSystem.NativeSamplers`**（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/ColorSampler.cs` 的命名空间）—— 两个不同命名空间。⇒ 写 Core 那一支的 `using` 引不到这家唯一自带的采样器（AUTO TEST 用的是前者：`Src/Test/AutoTest/Samplers/WinFormsEntries.cs`）。
 3. **`VeloxDev.WorkflowSystem.AttachedBehaviors` 在 Core 里不存在**：七家各声明一份同名命名空间。XAML 平台靠 `assembly=` 消歧，C# 宿主只能写全名或别名。
 
@@ -32,7 +30,7 @@
 
 ## 二、这套适配器现在「给」什么：整套表面
 
-表面引擎是 `WorkflowSurfaceBehavior`，**没有树基类**。模板/Demo 的 tree 是普通 `v:UserControl`，在根上挂 `behaviors:WorkflowSurfaceBehavior.*` 附着属性；行为按 `PART_*` 名称解析部件，接管 pan/zoom、输入路由、ViewPool、ruler/minimap、布局调度与 teardown。网格装饰器与小地图是**模板角色**（适配器只留 `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` 契约），`WorkflowGridDecorator` 类已删除。
+表面引擎是 `WorkflowSurfaceBehavior`，**没有树基类**。模板/Demo 的 tree 是普通 `v:UserControl`，在根上挂 `behaviors:WorkflowSurfaceBehavior.*` 附着属性；行为按 `PART_*` 名称解析部件，接管 pan/zoom、输入路由、ViewPool、ruler/minimap、布局调度与 teardown。网格装饰器与小地图是**模板角色**，适配器只留 `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` 契约（没有 `WorkflowGridDecorator` 类）。
 
 | 类型 | 形态 | 宿主/模板做什么 | 关键成员 |
 |---|---|---|---|
@@ -100,15 +98,7 @@
 
 ## 五、陷阱（带依据）
 
-1. **几个「有 Get/Set、没读者」的公共面。** README 把它们都写成可用，但树里核不到读者：
-
-   | 成员 | 写出处 | 读取处 |
-   |---|---|---|
-   | `WorkflowCanvasTransformBehavior.GetTransform` | 公开 getter（值存在 `ConditionalWeakTable<Control, TransformBox>`）；写值走 `Apply` | 全仓零命中 —— 卡片靠 `IWorkflowSurfaceNodeView.ApplySurfacePosition` 拿投影，不读它 |
-   | `WorkflowSlotLayoutBehavior.Get/SetLayoutPropertyName`、`Get/SetActualOffsetPropertyName` 与私有 `GetActualOffset` | — | 已于 2026-10-18 删除：整条链零调用者（README 里的描述也一并过期） |
-   | `WorkflowSurfaceBehavior` 的对象式 `Set/GetScrollViewer`、`Canvas`、`GridDecorator`、`MinimapOverlay` | — | 已随 `WorkflowTreeView` 一起删除；现在只有 `*Name` 附加属性 |
-
-   ⇒ 这类「加完没人用」的成员是这家的历史包袱；改之前先 grep 调用点。
+1. **`WorkflowCanvasTransformBehavior.GetTransform` 有 Get/Set、没读者。** README 写成可用，但全仓零命中：公开 getter 的值存在 `ConditionalWeakTable<Control, TransformBox>`，写值走 `Apply`；卡片靠 `IWorkflowSurfaceNodeView.ApplySurfacePosition` 拿投影，不读它。⇒ 改之前先 grep 调用点。
 
 2. **`ScheduleSync` 在句柄未建时把请求「丢掉」而不是「推迟」。** `ScheduleSync` 先置 `SyncPending = true`，但若 `!control.IsHandleCreated` 就把它复位成 `false` 后返回 —— 请求消失，不是排队。⇒ 在节点卡 ctor（句柄未建）里调 `Refresh`/`SetIsEnabled` 不会立刻量锚点；要同步量必须走 `SyncNow`（模板与 demo 都在用）。
 
@@ -116,11 +106,11 @@
 
 4. **`SyncSlot` 的 `SlotAnchorFromNode` 兜底不可达。** 那一段只在 `coordinateHost` 为 `null` 时执行，而所有调用点传进来的都是 `ResolveCoordinateHost` 的返回值 —— 那个方法**永不返回 null**。⇒ 这家事实上只有 `SlotAnchorFromCanvasLocal` 一条路（这也是唯一正确的路）。
 
-5. **`ThemeValueConverters.cs` 的类名与 `System.Drawing` 撞名，写短名解析到自己。** 文件里凡要用 GDI+ 那个必须全限定：`new System.Drawing.ColorConverter()`（三处）、`new System.Drawing.FontConverter()`；`ObjectConverter` 那条通用路径刻意**不用** `TypeDescriptor.GetConverter`（注释写明），改走显式转换表。⇒ 在这个命名空间下新写转换器时写短名**不报错**，只是转换结果悄悄不对。转换器类：`DoubleConverter`、`IntConverter`、`FloatConverter`、`PointConverter`、`PointFConverter`、`SizeConverter`、`SizeFConverter`、`RectangleConverter`、`RectangleFConverter`、`PaddingConverter`、`ColorConverter`、`FontConverter`、`ObjectConverter`。
+5. **`ThemeValueConverters.cs` 的类名与 `System.Drawing` 撞名，写短名解析到自己。** 文件里凡要用 GDI+ 那个必须全限定：`new System.Drawing.ColorConverter()`（三处）、`new System.Drawing.FontConverter()`；`ObjectConverter` 那条通用路径刻意**不用** `TypeDescriptor.GetConverter`（注释写明），改走显式转换表。⇒ 在这个命名空间下新写转换器时写短名**不报错**，只是转换结果悄悄不对。
 
 6. **`NativeWindowStyleHelper` 里 `WS_CLIPCHILDREN` 与 `WS_EX_COMPOSITED` 是同一个数值 `0x02000000`**，却被喂给 `SetWindowLong` 的两个**不同 index**（普通样式 vs 扩展样式）。⇒ 改这两个常量时把两者当成「可互换的字面量」会静默改错样式位；`ApplyStyle` 只在对应位缺失时才调 `SetWindowPos(SWP_FRAMECHANGED)`，所以症状是「有时生效」。`CompositedMaxControlCount = 100`（判据 `CountDescendants`）不是防御性代码 —— 超了就不合成，坑的机制见 `WorkflowSystem/adapters/winforms.md`。
 
-7. **表面的平移与 AutoScroll 是互斥的两种模型。** `WorkflowSurfaceBehavior` 把 `PART_ScrollViewer.AutoScroll` 关掉并维护 `state.PanOffset`；任何「把 AutoScroll 打开」或另起一套 pan 的改动都会让两套平移打架（见 §三）。
+7. **表面的平移与 AutoScroll 互斥。** `WorkflowSurfaceBehavior` 把 `PART_ScrollViewer.AutoScroll` 关掉并维护 `state.PanOffset`；打开 AutoScroll 或另起一套 pan 会和它打架（见 §三）。
 
 ---
 
@@ -151,7 +141,7 @@
 ## 七、这份文件没写的东西
 
 - 七个角色各自要暴露什么成员、附着属性名、`PART_*` 命名约定 —— `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3。
-- 这家的平台硬限制（无透明分层、两套平移模型、同步重画、反射接缝…）与逐条坑 —— `memory/modules/WorkflowSystem/adapters/winforms.md`。
+- 这家的平台硬限制（无透明分层、平移与 AutoScroll 互斥、同步重画、反射接缝…）与逐条坑 —— `memory/modules/WorkflowSystem/adapters/winforms.md`。
 - TransitionSystem 侧：`NonPriority`、手写 `Property` 重载、`CreateFramePacer` 条件、`"WindowsFormsSynchronizationContext"` 字符串比较、`PaddingSampler` 的截断 —— `memory/modules/TransitionSystem/adapters/winforms.md`。
 - 模板侧：各条目产出什么形状、七个条目的编译期依赖、`x:Name` 与 `Name` 的分工、SvgPathParser、连线雕窗 —— `memory/modules/Templates/adapters/winforms.md`。
 - 「怎么用这套模板搭一个 WinForms 工作流视图」（人面向）—— `skills/veloxdev-create-workflow/references/gui/winforms.md`。
@@ -160,12 +150,12 @@
 
 `Examples/Workflow/WinForms/Demo/Form1.cs` 的 `BuildWorkbenchFrame` 在 Designer 的 `splitContainer` 外面套 32px 标题条 + 24px 状态条，`BuildSidebar` 再把 `Panel1` 换成 48px 活动栏 + 侧栏；`Panel1/2.Padding=Empty`、`SplitterWidth=4`、`SplitterDistance=320` 是工作台版式。**全部工作流视图在 `Views/Workflow/`、命名空间 `Demo.Views.Workflow`**：表面是 `WorkflowCanvas.xaml` + `.xaml.cs`，节点卡 `WorkflowNodeCard.xaml` + `.xaml.cs`，网格/`SurfaceCanvas` 在 `GridDecorator.cs`，连线和端口在 `LinkView.cs` / `SlotView.cs`，HUD/小地图在 `InfoOverlay.cs` / `MinimapOverlay.cs`，色板与自绘原语在 `CardTheme.cs` / `FramePanel.cs` / `GhostButton.cs`；`Views/Workbench/` 只放外壳件。WinForms 没有 `BorderThickness`/圆角属性，分隔线用 1px `Panel`/自绘。
 
-- **Designer 只保留仍在用的控件**：`splitContainer`、五个动作按钮（reload/undo/redo/save/select）、权限模式标签与选择器、Agent 日志与输入、执行日志、`workflowSurfaceControl`。工作台在 `BuildExplorerPage` / `BuildAgentPage` / `BuildOutputPanel` / `BuildMainArea` 里重新挂载它们；旧 `toolbarPanel` / `logTabControl` 与 20 多个不可达控件已删除，相应事件处理器也一并删除。
+- **Designer 只保留仍在用的控件**：`splitContainer`、五个动作按钮（reload/undo/redo/save/select）、权限模式标签与选择器、Agent 日志与输入、执行日志、`workflowSurfaceControl`。工作台在 `BuildExplorerPage` / `BuildAgentPage` / `BuildOutputPanel` / `BuildMainArea` 里重新挂载它们。
 - **两个 demo 的视图选择器同形**：tree/canvas 的 `Resources` 声明 `NodeTemplate`/`LinkTemplate` 两个 `v:DataTemplate` 与 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" … />`，根上 `TemplateSelector="{StaticResource WorkflowTemplateSelector}"`；派生类继承通用 `VeloxDev.WinForms.Xaml.TemplateSelector` 并按 item 类型返回模板。键/滚轮策略（Delete、Ctrl+Z/Y、Shift+滚轮横滚）订在树的 `IInputEvents` 上，两边一致。
 
-- **四区外壳现在是完整的**（2026-11-18）：主区（`流程图`/`输出`）+ 348px 检查器（`属性`/`AI 助手`）；运行侧栏由 `Views/Workflow/RunManagerPanel.cs` 绑 `TreeViewModel.Runs`，检查器由 `Views/Workflow/WorkflowInspectorPanel.cs` 绑 `SelectedElement`/`CompiledStructure`，子代理面板是 `SubAgentPanel.cs`；`Views/Workbench/` 放共享外壳件（`WorkbenchPalette` / `StatusBarStrip` / `WorkbenchTabButton`）。
-- **标题条现在也有菜单与命令中心**：`BuildTitleStrip` 用 `GhostButton` 做“文件/编辑/视图/帮助”和居中的“搜索命令 Ctrl+Shift+P”；下拉是 `Views/Workbench/DarkPopupMenu`（无边框 `Form`，自己画 panel/hover/快捷键列），不是 `ContextMenuStrip`。**实测 2026-11-18**：`ContextMenuStrip` 即使设了自定义 `ToolStripRenderer`、`ToolStripManager.Renderer` 和 `Application.SetColorMode(SystemColorMode.Dark)`，弹层仍是浅色面板 + 浅色字；换自己的 Form 才稳定。原生窗口边框继续负责最小化/最大化/关闭，不画假按钮。
-- **两个旧控件已被移除**：Explorer 页顶部的 `titleLabel`（“VeloxDev Workflow Demo”大字）会和工作台标题条重复；运行页底部的 `seedTextBox`（`本次运行`）会和控制器卡上的 SEED 重复。两者都不再进入布局；Explorer 的动作改成 `Segoe Fluent Icons` 的 24px 图标按钮（保存/加载/撤销/重做/重载示例），与 Avalonia 面板头同节奏。
-- **元素表是自建的 `Views/Workflow/ElementRowList.cs`**：每行是 Label + 定位/删除两个 `Segoe Fluent Icons` 图标按钮（24px 行高），不再用 `ListBox` + 页底那组 Locate/Delete；选中行的背景切到 `CardTheme.Hover` 并写 `TreeViewModel.SelectedElement`。`Dock=Top` 的控件是后加的在上，所以 `SetEntries` 要 **反向添加** 才保持 `#0` 在顶部。
+- **四区外壳**：主区（`流程图`/`输出`）+ 348px 检查器（`属性`/`AI 助手`）；运行侧栏由 `Views/Workflow/RunManagerPanel.cs` 绑 `TreeViewModel.Runs`，检查器由 `Views/Workflow/WorkflowInspectorPanel.cs` 绑 `SelectedElement`/`CompiledStructure`，子代理面板是 `SubAgentPanel.cs`；`Views/Workbench/` 放共享外壳件（`WorkbenchPalette` / `StatusBarStrip` / `WorkbenchTabButton`）。
+- **标题条有菜单与命令中心**：`BuildTitleStrip` 用 `GhostButton` 做“文件/编辑/视图/帮助”和居中的“搜索命令 Ctrl+Shift+P”；下拉是 `Views/Workbench/DarkPopupMenu`（无边框 `Form`，自己画 panel/hover/快捷键列），不是 `ContextMenuStrip`。**实测 2026-11-18**：`ContextMenuStrip` 即使设了自定义 `ToolStripRenderer`、`ToolStripManager.Renderer` 和 `Application.SetColorMode(SystemColorMode.Dark)`，弹层仍是浅色面板 + 浅色字；换自己的 Form 才稳定。原生窗口边框继续负责最小化/最大化/关闭，不画假按钮。
+- **Explorer 的动作是 `Segoe Fluent Icons` 的 24px 图标按钮**（保存/加载/撤销/重做/重载示例），与 Avalonia 面板头同节奏。
+- **元素表是自建的 `Views/Workflow/ElementRowList.cs`**：每行是 Label + 定位/删除两个 `Segoe Fluent Icons` 图标按钮（24px 行高）；选中行的背景切到 `CardTheme.Hover` 并写 `TreeViewModel.SelectedElement`。`Dock=Top` 的控件是后加的在上，所以 `SetEntries` 要 **反向添加** 才保持 `#0` 在顶部。
 - **没有 XAML 双向选择绑定**：元素列表与运行行都用点击事件写 `TreeViewModel.SelectedElement` / `Runs.Selected`，列表行本身只读；这与 Avalonia 的 `SelectedItem` 绑定是同一状态的两种平台写法。
-- **验证**：最终构建 0 错误；Compile → Run → 打开运行侧栏与输出页通过（18 段、任务行 `✓ 已完成`，输出页有 17:45:19 起的完整轨迹）。WinForms 的坐标点击在 150% DPI 环境下不可靠，脚本化验证用 UI Automation 按 `Name=Compile/Run` 的 `InvokePattern`，比 `mouse_event` 稳。
+- **脚本化验证**：WinForms 的坐标点击在 150% DPI 环境下不可靠，用 UI Automation 按 `Name=Compile/Run` 的 `InvokePattern`，比 `mouse_event` 稳。

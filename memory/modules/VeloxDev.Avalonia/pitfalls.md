@@ -1,7 +1,6 @@
 # VeloxDev.Avalonia — 坑
 
 > 与 [architecture.md](architecture.md) / [extension.md](extension.md) 配套。
-> 依据一律是树里的**路径 + 能唯一定位的符号或原文引文**（行号可选、不作为依据），读记忆的 agent 能当场核。
 
 ---
 

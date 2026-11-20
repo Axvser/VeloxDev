@@ -5,13 +5,7 @@
 
 ## 一、它解决的问题
 
-插槽锚点的写回触发点分散在多个平台事件里（整树布局 pass、尺寸变化、模型属性变化、绑定上下文变化）。原实现每个节点各自订整树 `LayoutUpdated` 并直接 `Sync`，于是：
-
-- 宿主每帧布局（播放、时间轴、动画）都会让画布上**每个**节点重跑一次测量，哪怕它没动；
-- 同一帧里布局 + 尺寸 + 属性三条路各跑一次，同一个节点被同步多次；
-- 合并状态（`SyncPending`）是每个适配器自己一份，七家行为不一致。
-
-2026-11-06 起这些统一进 Core。同一棵树的节点共用一个批次，适配器只提供「把 `Flush` 投递到本平台 UI 线程」这一个委托。
+插槽锚点的写回触发点分散在多个平台事件里（整树布局 pass、尺寸变化、模型属性变化、绑定上下文变化）。Core 按树合并这些请求：同一棵树的节点共用一个批次，适配器只提供「把 `Flush` 投递到本平台 UI 线程」这一个委托。
 
 ## 二、API 与不变量
 
@@ -27,9 +21,9 @@
 | `Flush()` | **先清空队列再执行** —— 执行期间新来的请求属于下一轮；单条失败不取消其余，第一条异常在队列跑完后重抛 |
 | `Cancel(key)` | 移除排队项与指纹记录；适配器在 Detach/Unloaded 时调用 |
 
-**批次不记录任何可见性状态**（2026-11-06 定）：R2 的「隐藏时暂停」没有实现，也不由 Core 维护可见性标志。需要时先确定事实源——节点的虚拟化可见性来自 `TreeHelper.VisibleItems`（Core 已有），表面/页面是否显示只有宿主知道，不是 Core 能识别的事实。
+**批次不记录任何可见性状态**：R2 的「隐藏时暂停」没有实现，也不由 Core 维护可见性标志。需要时先确定事实源——节点的虚拟化可见性来自 `TreeHelper.VisibleItems`（Core 已有），表面/页面是否显示只有宿主知道，不是 Core 能识别的事实。
 
-`WorkflowLayoutStamp.Capture(node, width, height, slotCount)` 只看模型几何（`Anchor`/`Size`）、视图实测尺寸与插槽控件数。**它看不见「外框没变、内部重排」的情况**（例如固定尺寸卡片的文字回流）——这类变化必须走强制请求；`LayoutUpdated` 这条整树信号是唯一可能漏掉它的路径，这是刻意的取舍：用一次漏同步换掉「宿主每帧 × 全部节点」的测量。
+`WorkflowLayoutStamp.Capture(node, width, height, slotCount)` 只看模型几何（`Anchor`/`Size`）、视图实测尺寸与插槽控件数。**它看不见「外框没变、内部重排」的情况**（例如固定尺寸卡片的文字回流）——这类变化必须走强制请求；`LayoutUpdated` 这条整树信号是唯一可能漏掉它的路径 —— 用一次漏同步换掉「宿主每帧 × 全部节点」的测量。
 
 ## 三、七家怎么接的
 
@@ -38,12 +32,12 @@
 | Avalonia | `LayoutUpdated` → 指纹 + `Flush`（同帧） | `BoundsProperty` / DataContext / 模型属性 → 强制 + `Schedule`，`DispatcherPriority.Render` | 三条路都进同一批次；`Bounds` 触发的强制请求会被同帧 `Flush` 吸收 |
 | WPF | `LayoutUpdated` + `SizeChanged` → 指纹 + `Flush` | 其余触发 → 强制 + `Schedule`，`DispatcherPriority.Render` | `IsVisibleChanged==true` 仍补一次强制请求 |
 | WinUI | 节点与坐标宿的 `LayoutUpdated` + `SizeChanged` → 指纹 + `Flush` | 其余 → 强制 + `Schedule`，`DispatcherQueuePriority.Normal` | `TryEnqueue` 被拒返回 `false`，队列留到下一次 |
-| MAUI | Windows 原生 `LayoutUpdated`、非 Windows 托管 `SizeChanged` → 指纹 + `Flush` | 其余 → 强制 + `Schedule`，16ms 一次性 `IDispatcherTimer` | 定时器从「每控件一个」变成「每批次一个」 |
+| MAUI | Windows 原生 `LayoutUpdated`、非 Windows 托管 `SizeChanged` → 指纹 + `Flush` | 其余 → 强制 + `Schedule`，16ms 一次性 `IDispatcherTimer` | 定时器每批次一个 |
 | Jalium | 无 `LayoutUpdated`，全部走异步 | 强制 + `Schedule`，`DispatcherPriority.Render` | 只有合并，没有指纹门 |
 | WinForms | 无布局 pass 可挂，全部走异步 | 强制 + `Schedule`，`Form.BeginInvoke`（无 Form 时退回控件） | `BeginInvoke` 抛 `InvalidOperationException` 时返回 `false` |
 | Razor | JS 侧 `initSlotLayout` 已经按 `requestAnimationFrame` + `lastKey` 合并 | 不适用 | 没有走 Core 批次；它的合并点是 `veloxdev.workflow.js` 的 `measure()` |
 
-**`Flush` 放在 `LayoutUpdated` 里同步执行**，是为了保住原来那条同帧保证：布局 pass 在渲染循环上，投递到 `Render`/`Low` 的 `Flush` 不保证赶在本帧渲染前（见 [avalonia.md](adapters/avalonia.md) §二.6）。`Schedule` 只服务那些没有布局 pass 的触发。
+**`Flush` 放在 `LayoutUpdated` 里同步执行**，保住同帧保证：布局 pass 在渲染循环上，投递到 `Render`/`Low` 的 `Flush` 不保证赶在本帧渲染前（见 [avalonia.md](adapters/avalonia.md) §二.6）。`Schedule` 只服务没有布局 pass 的触发。
 
 ## 四、坑
 

@@ -34,7 +34,7 @@
 | | 做法 | 结果 |
 |---|---|---|
 | ✅ 官方 | `[Tickable("我的通道", fps: 30)] public partial class Foo { partial void Update(FrameEventArgs e) { ... } }`，然后在合适的时机调 `InitializeTickable()` | 生成器补一个 partial 部分，实现 `ITickable` 的成员，把 `Invoke*` 转成你那些 `partial void` |
-| ❌ 捷径 | 手写 `class Foo : ITickable { public void InvokeUpdate(FrameEventArgs e) ... }` | 你要自己实现全部成员（`InitializeTickable` / `CloseTickable` / 各 `Invoke*`，模板见 `TickWriter.cs` 的 `GenerateBody`），并且放弃生成器的 `SetTargetFPS` 展开与钩子转发 —— 抄漏一个成员就是 `CS0535`。**按普通拼写写 `ITickable` 即可**（这个名字曾带过零宽空格，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1） |
+| ❌ 捷径 | 手写 `class Foo : ITickable { public void InvokeUpdate(FrameEventArgs e) ... }` | 你要自己实现全部成员（`InitializeTickable` / `CloseTickable` / 各 `Invoke*`，模板见 `TickWriter.cs` 的 `GenerateBody`），并且放弃生成器的 `SetTargetFPS` 展开与钩子转发 —— 抄漏一个成员就是 `CS0535` |
 | ❌ 捷径 | 贴了 `[Tickable]` 就以为生效 | 特性**只有生成器读**（`TickWriter.ReadTickableConfig`），运行时的 `TickManager` 从不反射它。而不调 `InitializeTickable()` 就永远不注册（生成器也不会替你调） |
 | ❌ 捷径 | `[Tickable]` 贴在**非 partial** 类上 | 生成器**静默跳过**：`Analizer.cs` 的 `IsCandidateClass` 要求 `IsPartialClass(declaration)`。编译通过、什么都不生成 |
 | ⚠️ 注意 | `fps` 参数传 `-1`（默认） | `TickWriter.GenerateBody` 里 `TargetFPS >= 1` 不成立，**整句 `SetTargetFPS` 不生成**。想要帧率就得写正数 |
@@ -102,7 +102,7 @@
 
 | 改动 | 联动 |
 |---|---|
-| 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs`（这个名字曾带 ZWSP，2026-10-01 已清除 —— 改名字时当心不可见字符，见 `architecture.md` §八·1）② `TickWriter` 的 `GenerateBody` 模板与 `GenerateBaseInterfaces` ③ 各个 `partial void` 声明 ④ `Src/Test/Unit/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
+| 加/改 `ITickable` 的成员 | ① 契约文件 `Interfaces/Tickable/ITickable.cs` ② `TickWriter` 的 `GenerateBody` 模板与 `GenerateBaseInterfaces` ③ 各个 `partial void` 声明 ④ `Src/Test/Unit/Core/VeloxDev.Core.Test/TimeLine/` ⑤ `Examples/Tickable/WPF/Demo/` |
 | 加/改 `[Tickable]` 的参数 | ① `TickableAttribute.cs` ② `TickWriter.ReadTickableConfig`（位置参数 + 命名参数两条读取路径，**命名参数覆盖位置参数**）③ `TickableAttributeTests.cs` |
 | 改 `TriggerAttributes` 的组合方式 | `Src/Generators/VeloxDev.Core.Generator/Base/Analizer.cs` 的 `TriggerAttributes`；`"VeloxDev.TimeLine.TickableAttribute"` 是其中一项。**它同时决定了「哪些类会进入生成器」**，删掉它等于整个特性失效 |
 | 改事件参数族的形状 | `TransitionSystem`（`Runtime/TransitionDiagnostics.cs` 的 `Raise`、`Runtime/TransitionInterpreter.cs` 三处 `Args.Handled` 检查、`Effects/Transition.cs` 的 `InvokeError`）+ `Events/TransitionEventArgs{TStage,TValue}.cs`、`Interfaces/TransitionSystem/Enums/{Warn,Error}Stage.cs` + `TimeLineEventArgsTests.cs` |
@@ -111,9 +111,9 @@
 | 改暂停/倍速语义 | 实现全在 `Src/Core/VeloxDev.Core/Timing/TimeSourceCore.cs`；本模块只转发（`LoopChannel.SetTimeScale` / `Pause` / `Resume`） |
 | 改固定步长 | `Timing/CompensatingTimeSampler.cs`（`Step` 的 setter 会清 `_acc`） |
 
-> **注意**：本模块在 `Docs/` 那套文档站点里另有一套公开文档，**不在本仓库里**（`.gitignore` 里的 `/Docs/` 条目排除，`git ls-files Docs/` 为空）。它与本仓库各自独立、不随本仓库的改动一起记账 —— **本文的一切依据都只取本仓库**。
+> `Docs/` 站点里的公开文档不在本仓库（`.gitignore` 排除，`git ls-files Docs/` 为空）；本文依据只取本仓库。
 
-**唯一的示例工程**：`Examples/Tickable/WPF/Demo/`（TFM `net10.0-windows`）。它不是「顺手写的 demo」，而是本模块的**可执行规格**：两球同权重力学、`Drift = Σdt²`、`EffectiveDt = Σdt²/Σdt`，把两条泵的节奏做成可测量的量（`MainWindow.Hooks.cs` 的头部注释是全部设计意图）。改本模块前先跑它。
+**示例工程**：`Examples/Tickable/WPF/Demo/`（TFM `net10.0-windows`），本模块的**可执行规格**：两球同权重力学、`Drift = Σdt²`、`EffectiveDt = Σdt²/Σdt`，把两条泵的节奏做成可测量的量（`MainWindow.Hooks.cs` 的头部注释是全部设计意图）。
 
 ---
 
@@ -122,8 +122,8 @@
 | 扩展点 | 状态 | 依据 |
 |---|---|---|
 | `ExecuteOnMainThread` | **零调用者**。`Src/` + `Examples/` 下只有 `LoopChannel.ExecuteOnMainThread` 的定义与 `TickManager.ExecuteOnMainThread` 的静态转发。且它的「Main」是 channel 的**更新线程**，不是 UI 线程 | grep `ExecuteOnMainThread` |
-| `TimeLineEventArgs.Handled` 是 `virtual` | **全仓库零 `override`，而且现在没有候选者了**：唯一想重写它的 `ThreadSafeFrameEventArgs` 用了 `new` 遮蔽，已于 2026-10-04 删除。这个 `virtual` 今天纯属多余 —— 但删它是 API 变更，另说 | grep `override bool Handled` 无命中 |
+| `TimeLineEventArgs.Handled` 是 `virtual` | **全仓库零 `override`**；删它是 API 变更 | grep `override bool Handled` 无命中 |
 | `ITickable.Invoke*` 系列 | **只能由泵调**，手写实现在仓库内不存在。不要把它们当公开 API 用 | `ExecuteBehaviors*Sync` 是唯一的调用点 |
 | 通道级 `_useAsyncLoopOverride` | 活的，但**只在 channel 未运行时能设**（`SetUseAsyncLoop` / `ClearUseAsyncLoopOverride` 的 `if (_isRunning) throw`） | — |
 
-**这意味着**：本模块真正活的扩展面只有「生成器 + 五个 `partial void` + `InitializeTickable`」这一条。`ExecuteOnMainThread` 是唯一一条**建好了但没接上**的路——遇到「我需要从钩子回到 UI 线程」时，先看它是不是能接上，再接；不要因为「看起来有现成的」就假定它在工作。（另一条同类的 `ThreadSafeFrameEventArgs` 不存在，理由见 `architecture.md` §八·5。）
+本模块活的扩展面只有「生成器 + 五个 `partial void` + `InitializeTickable`」这一条。`ExecuteOnMainThread` 是建好了但没接上的路——遇到「从钩子回到 UI 线程」时，先看它能不能接上。

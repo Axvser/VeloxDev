@@ -5,23 +5,21 @@
 > 测试：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/Agent/SubAgents/`。
 > 不依赖 MAF 的 `BackgroundAgentsProvider`：那个类型构造时吃死的 `IEnumerable<AIAgent>`，**没有「按次配置子能力」这个概念**，且整体标着 `[Experimental("MAAI001")]`。
 
-本文只写「读完这些文件才知道的东西」。
-
 ---
 
-## 一、执行模型是**派发 + 轮询**，而这是结构决定的，不是风格
+## 一、执行模型：**派发 + 轮询**
 
 `SpawnSubAgent` 的工体返回 `Task.FromResult(...)`（`SubAgentAgentToolkit.SpawnSubAgent`）—— 它**立刻返回**，孩子的运行由 `Task.Run(() => RunAsync(...))` 承接（`SubAgentScope.TrySpawn`）。所以「异步」这个词指的是**孩子**在后台跑，不是工体在等什么。五个工具全是 `Task<string>`（含 `SpawnSubAgent`），这个形状是**给模型看的契约**：schema 里读出来的是「派发后轮询」，不是「调用即阻塞」。
 
-**为什么不能是同步的**：一次 spawn 发生在一次工具调用内部，而工具被 `TrackedAIFunction` 编组到**宿主的 UI 线程**上（`Agent/TrackedAIFunction.cs` 的 post + await）。同步等孩子 = 按住宿主 UI 线程走完孩子整段对话。推论：工体里**不许** `.Result` / `.Wait()`，也不许写 `ConfigureAwait(false)`。
+一次 spawn 发生在一次工具调用内部，而工具被 `TrackedAIFunction` 编组到**宿主的 UI 线程**上（`Agent/TrackedAIFunction.cs` 的 post + await）。同步等孩子 = 按住宿主 UI 线程走完孩子整段对话。推论：工体里**不许** `.Result` / `.Wait()`，也不许写 `ConfigureAwait(false)`。
 
 **`WaitSubAgents` 是 WhenAll-or-timeout，不是「任一完成即返回」**（`SubAgentScope.WaitAsync`）。超时判定靠**引用比较** `!ReferenceEquals(finished, all)`（`WaitAsync` 里的引用比较）：`Task.WhenAll` 与 `Task.Delay` 都成功完成，只有引用能区分谁赢了。点名的 id 一个都不存在时返回空名册且 `timedOut: false`（`WaitAsync` 里的空名册分支），不是报错 —— 理由见 §五的隔离。
 
 ---
 
-## 二、一口锅：为什么「任意深度」是**终止**的
+## 二、一口锅：任意深度是**终止**的
 
-任意深度把两个无界性放进来了：深度无界、分身数无界。子代理若各拿一份**独立**预算，「父是超集」就只在 spawn 那一刻成立，整棵树的实际开销完全无界。所以预算是一棵**树一口锅**（`ToolCallLedger`），而额度沿路径**严格递减**：
+深度与分身数都无界，预算因此是**一棵树一口锅**（`ToolCallLedger`），额度沿路径**严格递减**：
 
 ```
 有效上限 = (根 scope 且 Bypass) ? SpawnBudget : MaxToolCalls ?? SpawnBudget   // 恒为有限值
@@ -36,13 +34,13 @@
 - `RemainingAllowance` 还额外夹一次**根锅**（方法内的根锅夹取）：否则授权会许诺一个孩子超出整棵树能交付的量，而真正的拒绝发生在调用期，离这次撒谎的 spawn 很远。
 - 推论：**深度 ≤ 根额度**，不是魔法常数，是算术。`TheRootsCap_BitesThroughASibling_NotThroughTheChildsOwnShare` 把这条写成算术断言。
 - **终止 ≠ 可用**：根设 200 且没花过，就允许一条 199 层深的链。`WithSubAgentDepth` 才是让它有用的东西，宿主该两个都设 —— 这句在 `SubAgentScope` 的类注释与 `WithSubAgentDepth` 的注释里各写了一遍。
-- **这一行的 `− 1` 就是深度终止的全部来源，与那口锅的余额无关**：`ResetChain` 能把计数清零，却动不了 spawn 时已经定下的 `granted`。所以「孩子拿了重置工具」不会让树变得可以无限深（代价见 §四）。
+- `ResetChain` 能把计数清零，却动不了 spawn 时已经定下的 `granted`：孩子拿了重置工具，树也不会变得可以无限深（代价见 §四）。
 
 **账本的行为**（`ToolCallLedger.cs`）：`Spend` **向上**走（自增本层，再 `Outer?.Spend`），所以本层 `Usage` 是「本层 + 整个子树」；`Root` 就是 `Outer?.Root ?? this`；**根 scope 的账本 `Outer == null`，此时每个成员逐字退化成它替换掉的那三个计数器** —— 这条由 `WithoutAnySubAgents_TheAccountingIsTheScopesOwn` 钉住，是既有预算测试仍然有意义的前提。
 
 **`ResetChain` 只向上，所以重置有刻意的不对称**（`ToolCallLedger.ResetChain`）：用户同意重开会话后，**已经发出的授权不会被改写**。一个把自己那份花完的孩子仍然被拒 —— 它被拒的墙是它**自己那一层**的计数，而父的重置从根出发只清得掉根及以上。`TheParentsReset_ReopensTheTree_WithoutRewritingAGrantAlreadyMade` 与 `ASpentChild_ReportsUpward_RatherThanWaitingToBeUnstuck` 一起把这条钉成设计而不是遗漏。
 
-**但这个不对称现在有了第二条出路：孩子自己握着 `ResetToolCallLimit`**（§四）。2026-09-22 之前它两侧都被钉死，所以「重新 spawn 一个」是唯一答案；现在孩子可以自己发起重置，而 `ResetChain` 从**它**那一层往上清 —— 等于把孩子自己和它全部祖先一起清零。`AChildsReset_ReachesTheUser_AndReopensTheWholeTree` 钉的是这条（孩子调一次，整棵树 `Spent == 0`；用户对话框由一个后台子代理弹出）。**重置仍然是用户闸**（要有宿主的确认处理器且用户同意；`ResolveConfirmationAsync` 无处理器即拒绝），所以这不是一个免费的续命，是「孩子能把问题递到用户面前」。
+**孩子自己握着 `ResetToolCallLimit`**（§四），`ResetChain` 从**它**那一层往上清 —— 等于把孩子自己和它全部祖先一起清零。`AChildsReset_ReachesTheUser_AndReopensTheWholeTree` 钉的是这条（孩子调一次，整棵树 `Spent == 0`；用户对话框由一个后台子代理弹出）。**重置仍然是用户闸**（要有宿主的确认处理器且用户同意；`ResolveConfirmationAsync` 无处理器即拒绝），所以这不是一个免费的续命，是「孩子能把问题递到用户面前」。
 
 ---
 
@@ -66,13 +64,13 @@
 | `SubAgentAgentToolkit.ToolNames` | **无**（`TrySpawn` 里并入 `SubAgentAgentToolkit.ToolNames`） | 与上面恰好相反：`child.WithSubAgents(grand)`（`TrySpawn` 里）是**无条件**的，所以每个孩子都够得着这五个，**哪怕父自己没挂子系统**。守卫照抄技能那条是错的 |
 | `parent.Mcp.LoadedTools` 的**工具名** | 无（父没挂 MCP 时取空集（`TrySpawn` 里并入 `parent.Mcp.LoadedTools` 的工具名）） | 这一源的守卫又不同：MCP 工具由**孩子自己的** MCP provider 贡献（视图），与父挂没挂无关，而 `LoadedTools` 自身已经过滤掉被关掉的服务器与被关掉的单个工具 |
 
-**这五个名字漏在 `everyName` 之外时，整条轴是反的**（2026-09-22 修，`SubAgentScope.TrySpawn` 里并入五个工具名那一行）：
+**这五个名字漏在 `everyName` 之外时，整条轴是反的**（`SubAgentScope.TrySpawn` 里并入五个工具名那一行）：
 ① 省略 `allowedTools` ⇒ 关停循环看不见它们 ⇒ 全部留开，孩子**能**派发；
 ② 点名 `allowedTools` ⇒ 那段 `foreach (SubAgentAgentToolkit.ToolNames)` 把它们全关掉，孩子**不能**派发；
 ③ 模型点名 `SpawnSubAgent` ⇒ 不在 `available` 里 ⇒ 被当成「本代理没有这个工具」丢进 `dropped`。
 合起来就是：**模型只有在「没想过自己授予了什么」时才派得动，而它一旦认真考虑并点名，就派不动了**，而且它问也问不出所以然 —— 这是「agent 不积极创建子代理 / 子代理不再创建子代理」的结构性成因，不是提示词写坏了。修法是把这五个并进 `everyName`（`TrySpawn` 里并入五个工具名那段），于是 `TrySpawn` 末尾那个循环成为**唯一**的关停点 —— 再加一段专用循环就是冗余。五个工具在 `BuildQueryToolNames` 里已归只读，因此走继承分支 ⇒ **孩子的默认面就含这五个**，孙代理默认成立。
 
-**MCP 名字漏在 `everyName` 之外时，症状就是「MCP 子工具被判定为失败」**（2026-09-22 修，`TrySpawn` 里并入 MCP 工具名那段）。原子句是「MCP 服务器默认不继承 ⇒ 孩子手上一个 MCP 工具都没有」，所以模型点名一个 MCP 工具时，它不在 `available` 里，回报的是 `{name}: not available to this agent, or switched off by the host`（`TrySpawn` 的 `dropped` 文案）—— **而它明明是父开着、孩子也够得着的**。这条与上面那五个名字是同一个病的两个分支：**`everyName` 少收一个来源，那个来源就只能在「省略时留着、点名时被判不存在」之间二选一**。修完的两条断言是 `NamingAnMcpTool_IsNotARefusal`（点名不进 `dropped`、确实在孩子的 `McpSurfaceOf` 里、`IsToolEnabled` 为真）与 `AWhitelistThatOmitsAnMcpTool_TakesItOffTheChildsSurface`。
+**MCP 名字漏在 `everyName` 之外时，症状就是「MCP 子工具被判定为失败」**（`TrySpawn` 里并入 MCP 工具名那段）：模型点名一个父开着、孩子也够得着的 MCP 工具时，它不在 `available` 里，回报的是 `{name}: not available to this agent, or switched off by the host`（`TrySpawn` 的 `dropped` 文案）。这与上面五个名字是同一个病：**`everyName` 少收一个来源，那个来源就只能在「省略时留着、点名时被判不存在」之间二选一**。守卫是 `NamingAnMcpTool_IsNotARefusal`（点名不进 `dropped`、确实在孩子的 `McpSurfaceOf` 里、`IsToolEnabled` 为真）与 `AWhitelistThatOmitsAnMcpTool_TakesItOffTheChildsSurface`。
 
 `everyName` 里那句 `AddRange(SkillAgentToolkit.ToolNames)`（`TrySpawn` 里并入技能工具名）是必需的而不是补充：技能工具**不在 `CreateAllTools()` 里**（它们由技能子系统自己的 provider 贡献），不加进来，每一次授权都会把 `load_skill` 当成「本代理没有这个工具」丢掉。
 
@@ -80,9 +78,9 @@
 
 省略 `allowedTools` = 继承父**当前启用的全部**（`TrySpawn` 的继承分支），**含变更类**：`CreateNode` / `DeleteNode` / `ExecuteNode` / `ExecuteCommandOnNode` 都在里面。传 `[]` = **一个工具都不给**，与省略不是一回事（`SubAgentRequest.AllowedTools` 的注释 `SubAgentRequest.AllowedTools` 与 `SubAgentNarrowingTests` 里那条断言）。
 
-**2026-09-22 之前，省略的默认是「父的只读半面」**（`IsQueryOnlyTool` 过滤 + `NoChildMayHold` 减法 + 无 UI 上下文闸门，三样现在都没了）。口径改成「省略即与父同权」是用户定的（「Mcp、Skill、Tools 原样提供给子代理」，且明确选择了连结构闸一起取消）：**白名单从此是主动收窄的唯一手段**。`IsQueryOnlyTool`（`WorkflowAgentToolkit.cs`）随之删除 —— 底层的只读集合仍在：`BuildQueryToolNames()` 建出 `QueryToolNames`，`IsQueryTool` 读它，两者都保留。
+`IsQueryOnlyTool` 不存在；底层的只读集合仍在：`BuildQueryToolNames()` 建出 `QueryToolNames`，`IsQueryTool` 读它。
 
-**这一口径把「名单」变成了一份承诺，而承诺必须与孩子真的能做什么一致**：孩子拿到的每一个名字，都必须在**它自己的** scope 上存在且可调用。两条推论：
+孩子拿到的每一个名字，都必须在**它自己的** scope 上存在且可调用。两条推论：
 ① 五个管理工具、技能工具、MCP 工具的名字都要进 `everyName`（上表），否则关停循环与授权清单对不上；
 ② **交互工具（`RequestSelection` / `RequestConfirmation`）需要宿主在孩子的 scope 上也有处理器才存在** —— 见 §4.1，这是本次最容易漏的一步。
 
@@ -101,12 +99,7 @@
 | 技能 | `SkillScope.CreateNarrowed(allowed)` `SkillScope.CreateNarrowed` | 新 `SkillScope`，`_narrow` 在 `Apply` **最顶部**过滤 | 过滤在入口，所以**后续 `Refresh()` 仍保持窄化**，不会某次刷新后自己长回来 |
 | MCP | `McpScope.CreateGrantedView(parent, granted, grantedTools)` `McpScope.CreateGrantedView` | 新 `McpScope`，`IsGrantedView = true` | `_hosts` **故意留空**（视图不托管任何服务器，只共享父的 `McpToolProxy`），所以销毁视图不可能拆掉父的连接 |
 
-**三条轴的默认值现在是同一个：省略参数 = 父当前启用的全部**。工具、技能、MCP 都不例外，白名单是这三条轴上唯一的收窄手段。
-
-**2026-09-22 之前三条刻意不同（只读面 / 全部 / 空集），各自有一条当时的理由**，写在这里以免下一次有人照抄旧结论：
-- 工具当时默认「父的只读半面」——理由是「默认权限必须是最小的那一份」。
-- 技能当时默认「父已开启的全部」——理由是技能是**知识**不是权力。这条至今仍对，只是它不再是例外。
-- MCP 当时默认「**一个都不给**」——理由是框架**无法**把 MCP 工具归为只读（`McpScope` 里那句原话），所以这一源的「只读的一半」是空集，省略就必须等于不给。**这条理由是这次要修的对象**：用户要的是原样，所以「框架分不出 MCP 工具的读/写」这件事在新口径下**不再需要被解决** —— 新口径不要求按读写分类，它只要求把父的开着的东西原样交下去。
+**三条轴的默认值相同：省略参数 = 父当前启用的全部**。工具、技能、MCP 都不例外，白名单是这三条轴上唯一的收窄手段。
 
 **视图的边界是可执行的，不是被声明的**：孩子的 `ListSkills` 只会列出被授予的那几个（`SubAgentCapabilityGrantTests` 断言的是这个输出，不是视图自己的账），`load_skill` 点一个没被授予的名字会在**孩子内部**返回错误。
 
@@ -126,13 +119,11 @@
 
 ## 四、孩子拿到的东西与父**同权**，以及为此付掉的代价
 
-**2026-09-22 用户定：孩子与父同权。** 没有「三条无条件约束」（`child.WithInteractionSafety(0)`（该 API 已删除）、`child.WithToolEnabled("ResetToolCallLimit", false)`、无 UI 上下文时只给查询工具，以及 `NoChildMayHold` 那份 `{ ResetToolCallLimit, RequestConfirmation, RequestSelection }` 减法）—— 用户的口径是「Mcp、Skill、Tools 原样提供给子代理」，连结构闸一起取消。不变式是：**省略 `allowedTools` ⇒ 孩子与父同权**，白名单是唯一收窄手段。
+**省略 `allowedTools` ⇒ 孩子与父同权**，白名单是唯一收窄手段。
 
-反转后**孩子确实持有 `ResetToolCallLimit`，并且调得动**（`AChild_HoldsTheResetTool` 断言开关为真、在 `SurfaceOf` 里、点名它不是一次拒绝）。
+**孩子持有 `ResetToolCallLimit`，并且调得动**（`AChild_HoldsTheResetTool` 断言开关为真、在 `SurfaceOf` 里、点名它不是一次拒绝）。
 
 ### 4.1 交互配置**必须**随授权一起转交，否则授权清单会列出不存在的工具
-
-**这是本次唯一一个「只做减法就会造出要求明令禁止的东西」的地方，也是最容易被下一个人踩掉的坑。**
 
 `RequestSelection` / `RequestConfirmation` **只在对应处理器非 null 时才会被提供**（`WorkflowAgentToolkit.CreateAllTools` 里按 handler 非空注册）。而孩子是**新 scope**（`parent.Tree.AsAgentScope()`，`TrySpawn` 里），一个全新的对象 —— 两个处理器是 null，权限策略也是它自己的默认模式。
 
@@ -144,11 +135,11 @@
 
 三条钉子：`AChild_InheritsTheHostsInteractionConfiguration`（等级与处理器都真的到了；等级 0 时 `RequestConfirmation` 不在孩子面上）、`AChildsReset_ReachesTheUser_AndReopensTheWholeTree`（孩子的重置走宿主的对话框，同意后整条链清零）、`NamingAnMcpTool_IsNotARefusal`（同一形状的另一条轴）。
 
-**同一个坑还有文字那一半，而且它躲得更久。** 标准文本里一直有一句 `It cannot ask you questions`（`SpawnSubAgent` 的 `task` 参数描述、`BuildPromptContext` 的骨架句）—— 在 `GrantInteractionTo` 落地之前它是**真的**，落地之后它就成了 §4.1 那个病的散文版：工具已经挂在孩子面上，而提示词还在说它没有。这类句子的危险在于**没有测试会红**（`TheStandingText_MakesDelegationARule_NotAPermission` 钉的是强制句与例外句，不是这一句），而模型会据此写出一条更短的指令。改后的说法保留了唯一仍然成立、且对模型有行动意义的那一半：**它问不到「你」**（除了最终回复，它什么都不送到父那里），所以指令必须自足；顺带说明它**可以**直接问用户。⇒ **往标准文本里加一句关于孩子能力的话之前，先看 `GrantInteractionTo` 转交了哪些东西。**
+**文字那一半**：标准文本里有一句 `It cannot ask you questions`（`SpawnSubAgent` 的 `task` 参数描述、`BuildPromptContext` 的骨架句），而工具已经挂在孩子面上 —— 这是 §4.1 那个病的散文版。这类句子的危险在于**没有测试会红**（`TheStandingText_MakesDelegationARule_NotAPermission` 钉的是强制句与例外句，不是这一句），而模型会据此写出一条更短的指令。文本保留仍然成立、且对模型有行动意义的那一半：**它问不到「你」**（除了最终回复，它什么都不送到父那里），所以指令必须自足；顺带说明它**可以**直接问用户。
 
 ### 4.2 孩子握着重置工具的代价：重置是**用户的**闸，不是孩子的免费续命
 
-`ResetToolCallLimit` 的语义没变（`WorkflowAgentToolkit.CheckInvocation` 里，逃生舱 → 禁用 → 权限模式拒绝 → **非 Bypass 时才走：根锅 → 本层额度 → 读/写分档** → token 上限）：没有耗尽时回 `ok` + 一句「当前没有触顶的限制」；没有确认处理器时 `denied`；用户同意时 `ok` + `ResetChain()`。
+`ResetToolCallLimit` 的语义（`WorkflowAgentToolkit.CheckInvocation` 里，逃生舱 → 禁用 → 权限模式拒绝 → **非 Bypass 时才走：根锅 → 本层额度 → 读/写分档** → token 上限）：没有耗尽时回 `ok` + 一句「当前没有触顶的限制」；没有确认处理器时 `denied`；用户同意时 `ok` + `ResetChain()`。
 
 **它在任何授权清单里都在**：`CreateTools` 对它有豁免，所以 `TrySpawn` 在算完 `grantedTools` 后会把它补进去（包括空白名单的孩子）。于是「空白名单 = 零个工具」的准确说法是「只剩预算的逃生舱」—— 报告与实际因此仍然一致。
 
@@ -157,7 +148,7 @@
 1. **孩子可以把问题递到用户面前**。`ResetChain` 从**它**那一层往上清（`ToolCallLedger.ResetChain`），所以孩子的一次重置 = 孩子自己 + 它全部祖先一起归零（`AChildsReset_ReachesTheUser_AndReopensTheWholeTree` 断言整棵树 `Spent == 0`）。但它**仍然要用户同意**，所以这不是免费的续命，是「孩子有了一个通向用户的出口」—— 与根自己走的是同一个出口，只是发起人不同。
 2. **一个后台孩子能把一个模态弹窗放到用户面前，而那个弹窗在 UI 上没有归属的上下文**（见 §4.1 末）。这是「原样」的直接代价，不是缺陷。
 
-另外两条**没有**被这次反转改掉，容易误读成改了：
+两条不受影响：
 
 - **深度终止完全不受影响**。终止来自 spawn 时的 `Math.Min(requested ?? remaining, remaining - 1)`（`TrySpawn` 里的 `min`），是「沿路径严格递减」，与那口锅的余额无关；`ResetChain` 清的是计数，动不了已经发出的 `granted`（`TheParentsReset_ReopensTheTree_WithoutRewritingAGrantAlreadyMade` 里那条「重置靠下次 spawn 重新授予、不回头改写既成授权」的设计仍然成立）。
 - **父子两侧的重置方向仍然不对称**：父的重置清不到孩子那一层（`ASpentChild_ReportsUpward_RatherThanWaitingToBeUnstuck` 仍然成立），而孩子自己的重置清得掉包括父在内的全部祖先。两个方向合起来才是完整的图景。
@@ -178,19 +169,19 @@
 
 代码：`SubAgentAgentToolkit.BuildPromptContext()`（宿主与孩子都读）与 `AppendBriefing`（只给孩子）。
 
-**「你可能派发」是个坏句子，因为它回答的是模型没在问的问题。** 它只说明了没有东西禁止派发 —— 而模型本来就这么假设。它没给的是**什么时候派发更好**，缺了这个，自己做永远是最优解：多花一轮、从不出错、也不需要被推理。
+**「你可能派发」只说明没有东西禁止派发，没给「什么时候派发更好」**；缺了这个，自己做永远是最优解（多花一轮、从不出错、也不需要被推理）。
 
-**2026-09-22 改成强制式，而且这次改的是**判据**不是语气**（`BuildPromptContext` 里的强制句）。要求是「耗时长但结论短的任务（如 web 搜索）**必须**发起子代理」。**判据若写成「难度」**——「只有一次你已经知道怎么发的调用才自己做」——**那个例外会把规则整个吃掉**：每一次读都是模型已经知道怎么发的调用。实测（`deepseek-v4-flash`、六章语料）的结果是它在**自己的上下文里发了六次调用、一个孩子都没派**（`SubAgentLiveTests.ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo` 就是为此而写）。
+**判据是工作的目的，不是难度**（`BuildPromptContext` 里的强制句）：「耗时长但结论短的任务（如 web 搜索）**必须**发起子代理」。难度判据的例外会吞掉规则 —— 每一次读都是模型已经知道怎么发的调用；实测（`deepseek-v4-flash`、六章语料）它在自己的上下文里发了六次调用、一个孩子都没派（守卫 `SubAgentLiveTests.ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo`）。
 
-改后的判据是**工作的目的**：`Work whose purpose is to gather material rather than to act — a web search, reading a document, surveying several files, working through a library — … must be dispatched to a sub-agent rather than done by you`，例外收窄成 `only when the entire answer is one value read off a single call and quoted as it stands`。**改完之后那条实测通过。** 所以这段话的措辞是有实测支撑的，不要凭语感把它改回去 —— `TheStandingText_MakesDelegationARule_NotAPermission` 离线钉住「must be dispatched」「web search」两处锚点，并**反向**断言 `one call you already know how to make` 不再出现。
+强制句正文：`Work whose purpose is to gather material rather than to act — a web search, reading a document, surveying several files, working through a library — … must be dispatched to a sub-agent rather than done by you`，例外收窄成 `only when the entire answer is one value read off a single call and quoted as it stands`。这条措辞有实测支撑：`TheStandingText_MakesDelegationARule_NotAPermission` 离线钉住「must be dispatched」「web search」两处锚点，并**反向**断言 `one call you already know how to make` 不再出现。
 
 （同一段还留着「派发之后不要自己再做一遍」，抄的是 Claude Code 自己的 `Agent` 工具描述：那里写着 "Once you've delegated a search, don't also run it yourself"。）
 
-**`name` 这个参数的读者是**人**，这类参数得单独对待。** 2026-09-22 起它的语义是**任务标题**（不再是标识符），因为面板那一行只印它（§八）。它的特殊性在于**反馈回路断了**：模型观察到的任何东西都不会告诉它「`node-counter` 读起来不对」或「这是个句子」，而一个可省略参数被跳过是**静默**的、不是报错 —— 与上一段 `allowedMcpServers` 被静默省略是同一类失败。所以它按两处写：参数描述（`SpawnSubAgent` 的 `name` 参数描述）+ 标准文本里的一句（`BuildPromptContext` 的 `Title each one with \`name\`…` 那句）。**离线能证的只有两半**：回退是「按父编号」（`AChildWithNoTitle_FallsBackToANumberUnderItsOwnParent`）与那句话在场（`TheStandingText_AsksForATitle_BecauseThePanelShowsOne`）；「模型读了会不会真填」只有实测能答 —— `ARealModel_TitlesTheTaskItDelegates` **已通过**（`deepseek-v4-flash`，断言 `Name` 不以 `子代理 ` 开头且长度 ≤ 60）。⇒ **加载荷给一个人看的字符串，别指望模型自己学会它的语域；但没有实测就别声称它学会了。**
+**`name` 的读者是**人**。** 它的语义是**任务标题**（不是标识符），面板那一行只印它（§八）。它的特殊性在于**反馈回路断了**：模型观察到的任何东西都不会告诉它「`node-counter` 读起来不对」或「这是个句子」，而一个可省略参数被跳过是**静默**的、不是报错 —— 与上一段 `allowedMcpServers` 被静默省略是同一类失败。所以它按两处写：参数描述（`SpawnSubAgent` 的 `name` 参数描述）+ 标准文本里的一句（`BuildPromptContext` 的 `Title each one with \`name\`…` 那句）。**离线能证的只有两半**：回退是「按父编号」（`AChildWithNoTitle_FallsBackToANumberUnderItsOwnParent`）与那句话在场（`TheStandingText_AsksForATitle_BecauseThePanelShowsOne`）；「模型读了会不会真填」只有实测能答 —— `ARealModel_TitlesTheTaskItDelegates` **已通过**（`deepseek-v4-flash`，断言 `Name` 不以 `子代理 ` 开头且长度 ≤ 60）。
 
-**孩子那一半缺的是肯定句。** `AppendBriefing` 只写了否定的一半（到深度上限时说「你不能派发，自己做」，`AppendBriefing` 的否定句），从没有一句说「你可以派发」。于是模型**从没被告知它可以**，而工具在不在与模型会不会去够它是两件事。现在补成对称的两句（`AppendBriefing`）：上限 ⇒ 不能；否则若真握着 `SpawnSubAgent` ⇒ 可以，并同时说明「你派出去的从你上面那句额度里扣」。第二句的守卫是 `MayDispatch` = `_host.IsToolEnabled(ToolNames[0])`，与 `CreateTools()` 的过滤同一个开关，所以「不能派发的两种原因」（到顶 / 白名单没给它）不会读成同一件事 —— `AChildThatCannotDispatch_IsNotToldItCan` 与 `AChildDispatchedWithoutAWhitelist_IsToldItMayDispatchToo` 各钉一半。
+**孩子那一半缺的是肯定句。** `AppendBriefing` 只写了否定的一半（到深度上限时说「你不能派发，自己做」，`AppendBriefing` 的否定句），从没有一句说「你可以派发」。于是模型**从没被告知它可以**，而工具在不在与模型会不会去够它是两件事。对称的两句（`AppendBriefing`）：上限 ⇒ 不能；否则若真握着 `SpawnSubAgent` ⇒ 可以，并同时说明「你派出去的从你上面那句额度里扣」。第二句的守卫是 `MayDispatch` = `_host.IsToolEnabled(ToolNames[0])`，与 `CreateTools()` 的过滤同一个开关，所以「不能派发的两种原因」（到顶 / 白名单没给它）不会读成同一件事 —— `AChildThatCannotDispatch_IsNotToldItCan` 与 `AChildDispatchedWithoutAWhitelist_IsToldItMayDispatchToo` 各钉一半。
 
-**「孩子会不会在没被点名的情况下真的派发」现在是**已证**的一件事。** 离线替身仍然证明不了（`SubAgentHierarchyTests.AChildMayDispatchAChildOfItsOwn` 是被测试**直接调**孩子作用域上的 `SpawnSubAgent`，不是孩子自己想起来的），用 `DispatchInstruction` 的那几条门控实测也确实全是**被明确要求**才派的 —— `DispatchInstruction`（`SubAgentLiveTests.DispatchInstruction`）里写着 "by dispatching a background sub-agent to do the counting — do not count them yourself"，所以那几条证明的是「叫它派它就派」（新一轮的 `ARealModel_TitlesTheTaskItDelegates` 也走这条指令，它顺带证明的是同一趟派发里 `name` 被填了，不是「它想起来要派」）。补上的是 `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo` **通篇没有「派发」两个字**，只给了六章「答案埋在中间」的合成语料和一个「只要六个词」的请求，断言模型**自发**派了孩子。语料是自造的而不是借技能库的，因为**技能列表本身就带每个文档的描述**，「总结这个库」因此是一次调用就能答的题，测不出任何东西 —— 这个坑先前踩过一次。
+**「孩子会不会在没被点名的情况下真的派发」已证。** 离线替身仍然证明不了（`SubAgentHierarchyTests.AChildMayDispatchAChildOfItsOwn` 是被测试**直接调**孩子作用域上的 `SpawnSubAgent`，不是孩子自己想起来的），用 `DispatchInstruction` 的那几条门控实测也确实全是**被明确要求**才派的 —— `DispatchInstruction`（`SubAgentLiveTests.DispatchInstruction`）里写着 "by dispatching a background sub-agent to do the counting — do not count them yourself"，所以那几条证明的是「叫它派它就派」（新一轮的 `ARealModel_TitlesTheTaskItDelegates` 也走这条指令，它顺带证明的是同一趟派发里 `name` 被填了，不是「它想起来要派」）。补上的是 `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo` **通篇没有「派发」两个字**，只给了六章「答案埋在中间」的合成语料和一个「只要六个词」的请求，断言模型**自发**派了孩子。语料是自造的而不是借技能库的，因为**技能列表本身就带每个文档的描述**，「总结这个库」因此是一次调用就能答的题，测不出任何东西 —— 这个坑先前踩过一次。
 
 ---
 
@@ -244,7 +235,7 @@
 
 **一条测试写法上的硬约束**：断言若放在 `ui.Send(...)` 的 lambda 里，**里面不能阻塞**（泵是单线程的）。先在测试线程 `WaitFor`，再 `Send` 进去只做读。
 
-### 度量：时长、token、作用域根节点（2026-09-25 加）
+### 度量：时长、token、作用域根节点
 
 | 事实 | 为什么 |
 |---|---|
@@ -270,8 +261,8 @@
 | 树绑的是 `{Binding Tree}`（单个节点），`MaxHeight="340"` 在外层 `ScrollViewer` 上而不是 `TreeView` 上（`.axaml` 的 `TreeView` 与外层 `ScrollViewer`） | `Tree` 只有一个元素 —— 作用域节点，`Roots` 是它的 `Children`。高度上限移到外层，是因为 `TreeView` 自己也有滚动条，两个嵌套的滚动区域会在同一处滚轮事件上打架 |
 | 时长要有人推：`StartSubAgentTick` / `OnSubAgentTick` / `StopSubAgentTick` 挂在 `AttachSubAgents` / `DetachSubAgents` 上（`.axaml.cs`） | 与面板同生共死 —— 卸载后还留着一个 `DispatcherTimer` 就是往一个没人看的树上写属性。**库不提供计时器**（见上一节），demo 用 1 秒的 `DispatcherTimer` |
 | 灯只在 `Running/Queued` 时呼吸，`Failed` 红、其余灰（含 `Cancelled`） | 呼吸动画由 `Transition<T>.Create().Property(l => l.Opacity, 1d).Effect(new TransitionEffect { Duration = 800ms, IsAutoReverse = true, LoopTime = int.MaxValue, Ease = Eases.Sine.InOut })` 一个静态声明驱动，`LoopTime = int.MaxValue` 是这套系统唯一的「永久」。**必须在 `OnDetachedFromVisualTree` 里 `Transition.Exit`**（照 `PolylineCurveView.StopFlow` 里 `Transition.Exit` 那条先例）：永久循环不会因为控件离开可视树而停，滚走的节点会留着一条对无人可见的控件写 `Opacity` 的采样循环。`Duration` 不能为 0 —— 零长的一趟不消耗时间，永久循环会变成空转且 `Exit` 再也打断不了它 |
-| 节点是**两行**：「灯 + 标题」/「时长 · tokens (· 子树 N) (+ 被拒数) (状态)」。作用域根节点的第二行整块不显示（`IsVisible="{Binding !IsScopeRoot}"`），因为它的合计已经印在表头上了 | **面板是状态视图，不是内容视图。** 上一轮它印的是四行：`Task` / `Result` / `Error` / 被拒数。而一个孩子的任务常常是一段、结果更长，于是扇出的那一刻整棵树变成每行四个折行块 —— 恰好在它开始有意思的时候不可读。2026-09-25 把第二行给了**度量**（时长、token、子树合计），因为它回答的仍是「这一行现在怎么样」而不是「它说了什么」。用者 2026-09-22 的口径是「代理树中的任何成员都不应该显示具体内容」，**失败节点也不例外**：红灯 + 「失败」就这一行，原因不显示。**`Task` / `Result` / `Error` 仍留在 `SubAgentSummary` 上**，它们从五个工具出去，要看的人去那里看 —— 从面板上拿掉的只是那个界面，不是那些数据 |
-| 2026-09-25 又砍掉两样，用者的口径是「更精简美观」：**调用数**不再上屏，**状态文字只在灯说不清时才印**（`ShowStateText` = 非 `Completed`） | 调用数与 token 争同一个「代价」位置，而 token 是更好的那个；它仍在 `SubAgentSummary` / 五个工具上。状态文字同理：灰灯已经说了「完成了」，而那是最常见的状态 —— 每行再印一遍「已完成」等于把同一件事说 N 次。灯分不清的是其余几档：排队与运行都在呼吸、取消与失败都是灰的，那才是文字该出现的地方。表头的「共 N」也一并改成「N 个」，因为它和「N 次调用」用了同一个数字形状，读起来会串 |
+| 节点是**两行**：「灯 + 标题」/「时长 · tokens (· 子树 N) (+ 被拒数) (状态)」。作用域根节点的第二行整块不显示（`IsVisible="{Binding !IsScopeRoot}"`），因为它的合计已经印在表头上了 | **面板是状态视图，不是内容视图。** `Task` / `Result` / `Error` / 被拒数不上屏：一个孩子的任务常常是一段、结果更长，四行会把整棵树变成折行块。第二行给**度量**（时长、token、子树合计），回答「这一行现在怎么样」而不是「它说了什么」。用者口径是「代理树中的任何成员都不应该显示具体内容」，**失败节点也不例外**：红灯 + 「失败」就这一行，原因不显示。**`Task` / `Result` / `Error` 仍留在 `SubAgentSummary` 上**，它们从五个工具出去，要看的人去那里看 —— 从面板上拿掉的只是那个界面，不是那些数据 |
+| **调用数**不上屏，**状态文字只在灯说不清时才印**（`ShowStateText` = 非 `Completed`） | 调用数与 token 争同一个「代价」位置，而 token 是更好的那个；它仍在 `SubAgentSummary` / 五个工具上。状态文字同理：灰灯已经说了「完成了」，而那是最常见的状态。灯分不清的是其余几档：排队与运行都在呼吸、取消与失败都是灰的，那才是文字该出现的地方。表头写「N 个」而不是「共 N」，避免和「N 次调用」串 |
 | 选中与悬停的**强调色块要在两处同时盖**：`UserControl.Resources` 里四个 `TreeViewItemBackground*` 画刷设为 `Transparent`，再加 `Style Selector="TreeViewItem:selected"` / `:pointerover` / `:selected:pointerover` 的 `Background` | 这块面板只读，选中什么都不改变，而 Fluent 默认会画一个蓝色块 —— 深色侧栏里非常刺眼。**`SelectionMode` 没有 `None` 这一档**（只有 `Single` / `Multiple` / `Toggle` / `AlwaysSelected`），关不掉。两处都写是因为 Fluent 12 把主题编译进了二进制资源，既取不到键名也取不到模板部件名；键名不存在时只是一个没人用的资源，无害。**这两处是本模块唯一「防不住也不会报错」的改动** —— 见 §八之末的复核记录 |
 | 模板只绑**节点自己的成员**（`Title` / `DurationText` / `TokensText` / `SubtreeTokensText` / `CallCount` / `StateText` / `HasDroppedRequests`），一个 `Row.*` 路径都没有 | 顶节点代表作用域、**没有行**（`Row` 是 `SubAgentStatusViewModel?`），所以任何以 `Row` 起头的路径恰好会在面板围着建的那个节点上指向空。节点把这些成员全部转发一遍（`NotifyRow`），就是为了让模板有一个不依赖 `Row` 的面。**编译绑定抓不出这种错** —— `{Binding Row.Name}` 在类型上仍然合法，只是永远取不到值 |
 | 标题那一格是节点的 `Title`（= `Row?.Name ?? ScopeTitle`），而 `Name` 现在是**任务标题**不是标识符（`SubAgentScope.Describe`） | **不印 id**：位置已经由树本身说清楚了，标识符在这里花掉了一格标题的宽度却什么也没告诉看的人。省略 `name` 时回退成 `子代理 N`，**N 按父各自编号**（`Describe` 收的是 `Children.Count + 1`），不是全树的序号 —— 孙代理是它自己父的第一个孩子。标题**裁剪而不折行**：它是模型填的，行必须扛得住一个填成了句子的标题 |
@@ -283,19 +274,14 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 'RunningCountTypo' on type 'VeloxDev.AI.SubAgents.SubAgentTreeViewModel'
 ```
 
-所以「Avalonia demo 构建绿了」对绑定路径的**存在性**是真证据，可以拿着当地基用。**但它只覆盖路径存在性这一件事，别的什么都不证明** —— 2026-09-22 实测：「构建 0 错误」与「产出的程序集压根没有编译后的 XAML、启动即抛」可以同时成立（见 [`VeloxDev.Avalonia/architecture.md`](../VeloxDev.Avalonia/architecture.md) §八.5）。改完 XAML 必须真启动一次，构建绿不是复核。
+所以「Avalonia demo 构建绿了」对绑定路径的**存在性**是真证据。**但它只覆盖路径存在性** —— 「构建 0 错误」与「产出的程序集压根没有编译后的 XAML、启动即抛」可以同时成立（见 [`VeloxDev.Avalonia/architecture.md`](../VeloxDev.Avalonia/architecture.md) §八.5）。改完 XAML 必须真启动一次，构建绿不是复核。
 
 它也证明不了**渲染**：`TreeViewItem.IsExpanded` 那条样式绑定、`TreeView` + `TreeDataTemplate` 的实际排版、呼吸灯的观感（9px 的 `Ellipse`、`#6BFFB8` 上 `Opacity` 0.3↔1.0 的 800ms 正弦往返）、以及外层 `ScrollViewer`（`MaxHeight="340"`）与 `TreeView` 自身滚动条的嵌套滚动，都**只经过编译校验，没有视觉复核**（跑它需要 key + 真窗口）。失效时的退路是优雅的：节点渲染成收起状态、灯不动，而不是崩。
-**2026-09-22 实测到的那一步**：改完这份 XAML 后 `-t:Rebuild` 0 错误，并**真的启动过一次** demo（随后连它自己的 `msedgewebview2.exe` 子进程一起收掉，见 [`VeloxDev.Avalonia/architecture.md`](../VeloxDev.Avalonia/architecture.md) §八.5、§八.6）。这一层证明的是「程序集可用」，不是「画面对」。
-**同日第二次改动这份 XAML，同一步又跑了一遍**：`Demo.csproj` 先是无论增量还是 `-t:Rebuild` 都报 `AVLN9999`（文件被占），而**查不到任何 `avalonia.buildservices` 进程** —— 占着它的是上一步整解并行构建留下的 MSBuild node-reuse 节点，`dotnet build-server shutdown` 一条即解；随后 `-t:Rebuild` **0 错误**。**所以「Rebuild 绿 + 真启动」这个复核动作本身要连着「先关构建服务」一起做**，否则会误把一次 `AVLN9999` 当成「改坏了」。
-**但紧接着这一步就被使用者当场证伪了，这是这一节最该记住的一笔。** 上面两次我都拿「**跑满 N 秒、日志为空**」当通过 —— 那**不是**证据：它区分不了「窗口在」和「进程刚好还没崩」，而这一轮我正是拿它把一版**启动即抛 `No precompiled XAML found for Demo.App`** 的 demo 报成「可用」，使用者一句「demo 起不来」才把它翻出来。判据换成**窗口句柄**：`Get-Process Demo | Select MainWindowHandle` 非 0 且 `Responding=True`（`MainWindowTitle` 应当读到 `Demo`；读早了会拿到 0，隔几秒再读）。⇒ **凡是「起来了吗」这类断言，判据必须是那个东西本身，不能是它的一个代理量 —— 代理量恰好也能被「坏得安静」满足。**
-**同日第三次改这份 XAML，改后的复核第一次就用了新判据并一次通过**：`dotnet build-server shutdown`（这一步仍不能省，见上一段）→ `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **0 错误**（`WorkflowAgentToolkit` 的 CS8602 当时仍是既有警告）→ 启动后读到 `MainWindowHandle=6819388` / `Responding=True` / `MainWindowTitle=Demo`，进程持续存活且日志为空。**注意这一轮没有任何一处验证是「构建绿」** —— 单行节点到底长什么样、`CharacterEllipsis` 截在哪个字上、9px 的灯在深色底上够不够醒目，仍然**只经过编译校验**。
 
-**2026-09-25 第四次改（度量那一批，节点从一行变两行、树顶多了一个根节点），构建与启动复核一次通过**：`dotnet build-server shutdown` → `Demo.csproj -c Debug -t:Rebuild -nodeReuse:false` **0 错误**（`WorkflowAgentToolkit` 的 CS8602 当时仍是既有警告）→ 启动后读到 `MainWindowHandle=1246990` / `Responding=True` / `MainWindowTitle=Demo`。
+`AVLN9999`（文件被占）而查不到 `avalonia.buildservices` 进程时，占着它的是上次构建留下的 MSBuild node-reuse 节点；先 `dotnet build-server shutdown`。
+**「起来了吗」的判据必须是窗口句柄**，不是「跑满 N 秒、日志为空」—— 后者区分不了「窗口在」与「进程刚好还没崩」。用 `Get-Process Demo | Select MainWindowHandle` 非 0 且 `Responding=True`（`MainWindowTitle` 读早了会拿到 0，隔几秒再读）。单行节点到底长什么样、`CharacterEllipsis` 截在哪个字上、9px 的灯在深色底上够不够醒目，仍然**只经过编译校验**。
 
-**2026-09-26 起基线是 0 警告**：`WorkflowAgentToolkit` 的 CS8602 由 `TryGetNode` 加 `[NotNullWhen(true)]` 消掉（`netstandard2.0` 没有这个特性，靠本程序集内 `Compat/NotNullWhenAttribute.cs` 的 internal 补丁提供），同批退掉一批 `node!` 与 `slot!`。`VeloxDev.Core.Extension` 与其测试项目都是 **0 警告 0 错误** —— 此后读到本文任何「N 个既有警告」都是**历史观测**，不是当下基线。
-
-**截图是可以读回来的（「视觉复核做不了」不成立）。** 用 PowerShell 的 `System.Drawing` 抓窗口（`GetWindowRect` + `Graphics.CopyFromScreen`）存 PNG，再用 `Read` 读它，**能看清内容**（`PrintWindow` 不行：对这块 GPU 合成的窗口会返回缺元素的残帧，实测两次得到的画面都是不完整的，别用它）。这条能力的**边界**同样实测过：
+**截图可以读回来**：用 PowerShell 的 `System.Drawing` 抓窗口（`GetWindowRect` + `Graphics.CopyFromScreen`）存 PNG，再用 `Read` 读它，能看清内容。`PrintWindow` 不行：对这块 GPU 合成的窗口返回缺元素的残帧，实测两次画面都不完整。边界：
 
 | 能做 | 不能做 |
 |---|---|
@@ -303,13 +289,13 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 | 验证某一个样式到底有没有生效（这是它最大的价值） | **输入进不去**：`SendKeys` 与剪贴板粘贴都到不了 demo 的 `TextBox`（窗口确实是前台，`GetForegroundWindow` 已核对），所以**没法从空状态驱动出一次真实的派发** |
 | 窗口可以 `SetWindowPos` 拉高，但**超过 1067（屏幕高）会被系统钳住** | 因此「面板里有子代理」那种状态只能由**人**跑出来，agent 自己复现不了 |
 
-⇒ 结论：**样式类改动可以自己验，交互类改动不能。** 「那个蓝色选中块到底盖掉了没有」属于前者，本可以验；这一轮改完没来得及做（同一天晚些时候补做）。
+⇒ 结论：**样式类改动可以自己验，交互类改动不能。** 「那个蓝色选中块到底盖掉了没有」属于前者。
 
-**2026-09-25 第五次改（精简那一批：砍掉调用数与冗余的状态文字、把选中/悬停的强调色块盖掉），验证到什么程度**：`Demo.csproj` 构建 0 错误、`Extension.Test` **全部通过**（含新增的那条实时测试，真跑了 `deepseek-v4-flash`）。**没有做视觉复核**，所以下面这些**没有**被证明：那个蓝块是否真的被 `TreeViewItem` 的 `Background` 样式 / 主题资源键盖掉了（Fluent 12 的主题编译在二进制资源里，取不到键名也取不到模板部件名，**两处都写是在赌其中一个命中**，而且不命中时**不会报错**，只是继续蓝）、两行节点在侧栏宽度下会不会把第二行挤到换行、表头三个数字并排会不会溢出。⇒ 这一节里凡是形容观感的句子（「读起来像」「够不够醒目」）都是**未经复核的判断**，不是记录下来的事实。
+**Fluent 12 把主题编译进二进制资源，取不到键名也取不到模板部件名**，所以蓝色选中块的两处覆盖是在赌其中一个命中；不命中时**不会报错**，只是继续蓝。两行节点在侧栏宽度下会不会把第二行挤到换行、表头三个数字并排会不会溢出，**没有视觉复核**。这一节里形容观感的句子都是未经复核的判断。
 
 ### 一个已知缺口：新启动时面板不显示，且之后没有东西会重新挂它
 
-**2026-09-25 实测发现**：冷启动 demo（key 已设）后把侧栏滚到底，**面板不在侧栏里** —— 不是被滚过头了，是它压根没渲染。
+冷启动 demo（key 已设）后把侧栏滚到底，**面板不在侧栏里**：它压根没渲染，不是被滚过头了。
 
 原因是时序，不是滚动：
 
@@ -317,7 +303,7 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 - `InitializeNetworkDemo` 会**新建一棵树**（经 `WorkflowDemoSession.Create()`），于是 helper 是新的、`helper.SubAgents` 在那一刻是 null —— `AgentHelper.Install` 是 `async void`，它要等读 key、建 client、`ProvideAgent` 返回之后才把 `SubAgents` 立起来。
 - 所以那一次 `AttachSubAgents` 走的是 `SubAgentPanel.IsVisible = false` 那条分支（`AttachSubAgents` 的提前返回分支），**而此后没有任何东西会再调它一次** —— `ToolCalled` / `VisualRefreshRequested` 都不重挂面板。
 
-⇒ **用户要再点一次「Load Workflow Demo」（或从文件载入工作流）面板才会出现**，尽管那时子代理子系统早就准备好了。使用者那张截图里的面板是这么来的。
+⇒ **用户要再点一次「Load Workflow Demo」（或从文件载入工作流）面板才会出现**，尽管那时子代理子系统早就准备好了。
 
 **这是 demo 的接线缺口，不是库的缺陷** —— 但修它需要 `AgentHelper` 在 install 完成时给出一个信号（新增事件，或在 `VisualRefreshRequested` 之外补一个），而 `AgentHelper` 活在 `Examples/Workflow/Common/Lib`，是**七个平台 demo 共享**的，所以那是一次跨平台面的改动，还没做。
 
@@ -381,10 +367,10 @@ WorkflowView.axaml(253,22): Avalonia error AVLN2000: Unable to resolve property 
 3. `ARealModel_PassesTheNarrowingOnRatherThanIgnoringIt`—— 模型会不会**真的去填 `allowedSkills` / `allowedMcpServers`**。这是这两条轴唯一买不到离线答案的地方：描述在人看来通顺、模型却省略参数，而省略现在意味着**拿到父的全量**（旧口径下 MCP 那半是「拿到空集」），两种错法都静默且离线全绿。**已实测通过** —— 被明确要求「只让它读这一个技能」时，模型确实传了。
 4. `ARealModel_TitlesTheTaskItDelegates`—— 模型会不会**真的去填 `name`**。与上一条同一类静默失败，但它的读者是**人**（§八的面板那一行），所以连「填得对不对」都没有反馈回路可依。断言是 `Name` 不以 `子代理 ` 开头（即回退没被触发）且长度 ≤ 60。**已实测通过**（`deepseek-v4-flash`）。
 5. `ARealModel_DelegatesAReadHeavyTask_WithoutBeingToldTo`—— **要求 1 的唯一判据**：给一个「读一大堆、只要六个词」的任务，**通篇不提「派发」**，模型会不会自发地把材料读进一个孩子的上下文而不是自己的。语料是自造的六章（每章 300 行填充、中间埋一个核心词），因为技能库的列表自带描述、用它造不出这种任务。**这条是先失败后通过的**：第一版判据写成「难度」时它连跑三次都是六次调用 + 零孩子；把判据换成「工作的目的」后才过（§五之末，`BuildPromptContext` 的强制句）。失败时它会把「花了多少次调用、其中多少次是读、以及模型答了什么」一起打进消息里，这样下一个人不必重跑一遍才知道是哪种失败。
-6. `ARealChild_ReportsWhatItSpent`（2026-09-25 加）—— **token 计量的另一半**。`UsageChatClient` 证明的是本仓库自己那半：response 上的 `UsageDetails` 会变成行上的数字。**它证明不了另外半**：真实 provider 到底报不报用量、MAF 到底聚不聚合到 `AgentResponse.Usage`。这条红了就说明面板的 token 那一格会**静默变空**，而换 MAF 版本正是最可能的成因。**已实测通过**（`deepseek-v4-flash`，4 秒），断言 `TokensUsed > 0` / `InputTokens > 0` / `Duration > 0`，并顺带断言同一组数字走到了树上（`node.TokensUsed == row.TokensUsed`、单孩子时 `tree.SubtreeTokens` 等于它、`ShowSubtreeTokens` 为假）。
+6. `ARealChild_ReportsWhatItSpent` —— **token 计量的另一半**。`UsageChatClient` 证明的是本仓库自己那半：response 上的 `UsageDetails` 会变成行上的数字。**它证明不了另外半**：真实 provider 到底报不报用量、MAF 到底聚不聚合到 `AgentResponse.Usage`。这条红了就说明面板的 token 那一格会**静默变空**，而换 MAF 版本正是最可能的成因。**已实测通过**（`deepseek-v4-flash`），断言 `TokensUsed > 0` / `InputTokens > 0` / `Duration > 0`，并顺带断言同一组数字走到了树上（`node.TokensUsed == row.TokensUsed`、单孩子时 `tree.SubtreeTokens` 等于它、`ShowSubtreeTokens` 为假）。
 
 **仍然没被证明的一件事**：宿主 UI 线程在一棵树跑着的时候到底自不自由。整个轮询模型倚赖这一个假设（`TrackedAIFunction.RunOnContextAsync` 是 post + await TCS，理论上会让出），但离线替身**证明不了** —— `SingleThreadContext` 按构造是阻塞式 `Send` 的假货。要拿真 `DispatcherSynchronizationContext` 加真消息泵去验，本仓库目前没有这个环境。
 
 **同样没被证明的还有第 5 条的「泛化」**：它证明的是**一个**读重任务上模型自发派了，不证明它在这类任务上稳定如此。判据是三句话、语料是合成的一个形状，换一个模型或换一种「重」都会重新变成未知。这条测试的价值在于它是**唯一**能证伪那段措辞的东西，不在于它给出了措辞正确的一般证明。
 
-**门控跳过这件事本身有一个坑，已实测**：`SubAgentLiveTests` 单跑或只跑 `Agent.SubAgents` 时，缺 key = 全绿；但**缺 key 跑全量**时整轮会中止 —— 那**不是**这几条测试的错，是 `Examples/` 的 `AgentHelper.Install` 是 `async void`、缺 key 时抛出的异常崩掉测试宿主，本模块变长之后才把它暴露出来。复现与隔离实验写在 `memory/modules/VeloxDev.Core.Extension.Test/architecture.md` §四。
+**门控跳过这件事本身有一个坑，已实测**：`SubAgentLiveTests` 单跑或只跑 `Agent.SubAgents` 时，缺 key = 全绿；但**缺 key 跑全量**时整轮会中止 —— 那**不是**这几条测试的错，是 `Examples/` 的 `AgentHelper.Install` 是 `async void`、缺 key 时抛出的异常崩掉测试宿主。复现与隔离实验写在 `memory/modules/VeloxDev.Core.Extension.Test/architecture.md` §四。

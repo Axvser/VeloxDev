@@ -50,21 +50,21 @@
 - 内联 Trigger：`<Owner.Triggers><Trigger Property="IsHot" Value="True"><Trigger.Setters><Setter Property="BorderWidth" Value="4"/></Trigger.Setters><Trigger.EnterAction><TransitionAction Property="Glow" To="1" Duration="0:0:0.3"/></Trigger.EnterAction></Trigger></Owner.Triggers>`；`Property` 相对控件类型解析，也支持 `Owner.Property`。
 - 样式：`<Style x:Key="NodeStyle" TargetType="local:NodeCard">` + `Style.Setters` / `Style.Triggers` / `Style.Template` / `BasedOn`；显式 `Style="{StaticResource ...}"`，无 `x:Key` 的 `TargetType` 隐式样式；`TargetType` 支持 `{x:Type local:NodeCard}` 和原生 `Control`。
 - 资源除了标量、`Style` / `DataTemplate` / `ControlTemplate`，还接受**空元素对象资源**：`<local:CustomTemplateSelector x:Key="..." />` 会 `new` 一个实例、按属性赋值后放进 `Resources`。非空元素的资源仍会报错。
-- **自动脏标记**：`PropertyMetadata.AffectsRender` 默认 `true`。任何依赖属性在 XAML `Control` 上变化（本地值、绑定、Style、Trigger、Transition 都一样）都会在回调之后 `Invalidate()`；非视觉配置属性用 `new PropertyMetadata(...) { AffectsRender = false }` 退出。原生 WinForms 目标不受此影响（它们的重绘由原生属性自己负责）。回归：`DependencyPropertyTests` 的两条 invalidations 用例。
-- 带 XAML 的条目一律 `TemplateClass.xaml` + `TemplateClass.xaml.cs`（与其余六家同名形）；纯代码条目仍是 `.cs`。
+- **自动脏标记**：`PropertyMetadata.AffectsRender` 默认 `true`。任何依赖属性在 XAML `Control` 上变化（本地值、绑定、Style、Trigger、Transition 都一样）都会在回调之后 `Invalidate()`；非视觉配置属性用 `new PropertyMetadata(...) { AffectsRender = false }` 退出。原生 WinForms 目标不受此影响（它们的重绘由原生属性自己负责）。回归：`DependencyPropertyTests` 的 invalidations 用例。
+- 带 XAML 的条目一律 `TemplateClass.xaml` + `TemplateClass.xaml.cs`（与其余各家同形）；纯代码条目仍是 `.cs`。
 - `DataTrigger`（`Binding`/`Path` + `Value`，支持 `Items[0].Name` / `Map["key"]` 简单索引器，并订阅路径上集合的 `INotifyCollectionChanged`；Add/Remove/Replace/Reset/Move 会重解析）、`MultiTrigger`（`Conditions` 全满足）、`ControlTemplate`（单根内容模板）均可用；原生样式只支持 Setter。
 - 自定义 `TriggerAction`：XAML 中 `clr-namespace:` 的 action 类型，要求公共无参构造和公共可写实例属性；支持字面量、`{StaticResource}`、`{x:Null}`。
 - `TransitionAction` 支持可选 `Ease`（Sine/Quad/Cubic/Quart/Quint/Expo/Circ/Back/Elastic/Bounce + In/Out/InOut；未知值报 `003` 并保留 action）。
 - 显式 `Style="{StaticResource Key}"` 走 `ApplyStyleResource`：资源替换/移除/重新添加会重应用或回退；隐式样式走类型键。
 - 样式内部集合（Trigger.Setter/Condition/Trigger 集合）变更会通知 Style 并重应用活动控件。
-- 前缀是**严格**的：`v:` 是适配器类型（生成器按 `Controls` → `Controls.Shapes` → 运行时 `.Xaml` 的顺序找），`local:` 是模板/Demo 自己的类型，**不带前缀只解析原生 WinForms 表**。VeloxDev 类型漏写 `v:` 报 `VELOX_XAML019`，不会因为「`v` 与原生重名」而悄悄改选适配器；根元素也一样（`<local:TreeView>` 或 `<v:UserControl>`，不再把 `<TreeView>` 当本地类型）。示例：`v:Style` / `v:Grid` / `v:StackPanel` / `v:Button` / `v:TextBlock` / `v:Rectangle` / `v:Path` / `v:Panel` / `v:UserControl` / `v:Border` / `v:Thickness`。
+- 前缀是**严格**的：`v:` 是适配器类型（生成器按 `Controls` → `Controls.Shapes` → 运行时 `.Xaml` 的顺序找），`local:` 是模板/Demo 自己的类型，**不带前缀只解析原生 WinForms 表**。VeloxDev 类型漏写 `v:` 报 `VELOX_XAML019`，不会因为「`v` 与原生重名」而悄悄改选适配器；根元素也一样（`<local:TreeView>` 或 `<v:UserControl>`，不把 `<TreeView>` 当本地类型）。
 - XAML 事件：WinForms 原生事件优先（`MouseDown` / `Click` / `KeyDown` 等）；显式指针抽象是 `PointerPressed` / `PointerMoved` / `PointerReleased` / `PointerEntered` / `PointerExited` / `PointerWheelChanged`，显式键盘抽象是 `KeyInputDown` / `KeyInputUp`；原生控件通过 `XamlInput.Add*` 桥接。
 - Surface：**没有 `WorkflowTreeView` 基类，也没有 `InitializeSurface`**。Tree 模板是 `v:UserControl`，XAML 自己声明 `PART_Surface` / `PART_GridDecorator` / `PART_ScrollViewer` / `PART_Canvas` / `PART_MinimapOverlay`，根上挂 `behaviors:WorkflowSurfaceBehavior.*`；行为按名称解析部件。pan/zoom、输入、池、ruler/minimap 全在行为里。
 - 模板选择器与 WPF/Avalonia/Jalium 同形：通用基类是 `VeloxDev.WinForms.Xaml.TemplateSelector`（只认 `object?` → `DataTemplate?`，无工作流类型）；tree 的 `Resources` 里声明 `<v:DataTemplate x:Key="NodeTemplate">…</v:DataTemplate>` 与 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" />`，根上 `behaviors:WorkflowSurfaceBehavior.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`。`TemplateSelector` 优先于 `NodeViewType` / `LinkViewType`；后两者是内置按类型名反射的兜底。
 - 连线右键菜单没有声明式条目：宿主在 code-behind 调 `WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, (menu, link) => ...)`；条目与策略都留在宿主。
 - 装饰器归模板：`GridDecorator : Panel, IWorkflowGridDecorator`、`MinimapOverlay`、`SurfaceScrollableControl`/`SurfaceCanvas` 都由模板/Demo 定义；适配器只保留 `IWorkflowGridDecorator` 契约。
 - 视图归模板：Node 模板由 `v:Border` + `Label` + 行宿主组装，行为由 `WorkflowNodeViewBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeRowsBehavior` 提供；Slot/Link 由 `v:UserControl` + attachment + 模板级绘制组装。没有 `NodeCard` / `SlotGlyph` / `LinkCurve` 基类。
-- 模板 code-behind：Tree ~18、Node ~14、Slot ~54、Link ~49、Grid ~363、Minimap ~19、Selector ~18。Tree/Node 只剩构造 + `InitializeComponent()`；Grid/Slot/Link 保留各自绘制（WPF 对应模板同样有代码）。全量 Demo 的自绘变体保留更多宿主专用代码。
+- 模板 code-behind：Tree/Node 只剩构造 + `InitializeComponent()`；Grid/Slot/Link 保留各自绘制（WPF 对应模板同样有代码）。全量 Demo 的自绘变体保留更多宿主专用代码。
 - 诊断 `VELOX_XAML001–017` / `VELOX_XAMLP001–004`；未知类型/属性/坏值/缺 `x:Class`/重复名/缺 handler/非 partial/已有 `InitializeComponent`/未知附加属性/坏 TargetType/坏 Trigger/事件重载或签名不符等。
 
 ## 三、边界
@@ -108,8 +108,6 @@ dotnet build "Examples/Workflow/WinForms Trimmed/Demo/Demo.csproj"
 dotnet build "Examples/Workflow/WinForms/Demo/Demo.csproj"
 ```
 
-当前测试 265 个（XAML）+ 41 个（WinForms headless）；覆盖 DP/附加属性、XAML 附加属性、绑定、原生优先事件与显式指针抽象、`IInputElement` 焦点/悬停/捕获、严格前缀（含 `VELOX_XAML019`）、内联/代码 Trigger、DataTrigger/MultiTrigger（含索引器与集合通知）、自定义 TriggerAction、显式/隐式 Style、BasedOn、Template、原生样式、样式变更刷新、显式资源跟踪、`Ease`、`KeyFrameAnimation`/`AnimateKeyFrames`、surface 行为/节点行行为、生成器与诊断；新增控件库测试覆盖 Stack/Dock/Wrap/Grid/Canvas 布局、原生子控件、Button/Toggle/Radio、TextBox/PasswordBox、Selector、Slider 与 Style/Trigger 管线。模板 harness WinForms `-Strict`：7/7 生成、构建通过、0 drift。
-
 ### 有头视图池基准（2000 节点 / 3000 连线 / 1200×800）
 
 `dotnet run -c Debug -p:Optimize=true --project Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks -- headed --adapter winforms …`
@@ -120,8 +118,7 @@ dotnet build "Examples/Workflow/WinForms/Demo/Demo.csproj"
 | Scroll step（活跃 121 / 可见 284） | 23.0 ms / 2.07 MB | 49.9 ms / 0.23 MB | 3.1 ms / 0.56 MB | 11.9 ms / 0.26 MB |
 | Full visibility（可见 5001） | 4.14 s / 438 MB | 13.9 s / 364 MB | 0.21 s / 44 MB | 0.32 s / 62 MB |
 
-**连线不再池化**：`ViewLinkLayer.IsActive=true` 把 `IWorkflowLinkViewModel` 挡在主池外，`WorkflowLinkLayer` 在画布 `Paint` 里一趟画完并发布曲线。于是 WinForms 的 `Active/Created` 只数节点（2000），`Visible` 仍是树的全量可见项（5001）。旧实现里 3000 条连线各是一个 HWND；这也是 13.9 s 的主要来源。实测 2000 个含子控件的视图 `Controls.Add` ≈ 2.3 s，随后 3000 个连线视图再 ≈ 8.2 s（Add 随现有控件数增长），3000 次 `SendToBack` ≈ 6.7 s，5000 个 `AddRange` 与逐个 Add 同价（≈ 8.6 s）。⇒ **full-visibility 在 WinForms 仍由节点 HWND 主导**；连线侧已去掉数量级差。
-已 A/B 并回滚的两条窄层尝试：去掉每批 `PerformLayout`、去掉新连线的 `SendToBack`；benchmark 噪声内没有收益（后者甚至更慢）。**不要再按这两条重试**。
+**连线不池化**：`ViewLinkLayer.IsActive=true` 把 `IWorkflowLinkViewModel` 挡在主池外，`WorkflowLinkLayer` 在画布 `Paint` 里一趟画完并发布曲线。于是 WinForms 的 `Active/Created` 只数节点（2000），`Visible` 仍是树的全量可见项（5001）。旧实现里 3000 条连线各是一个 HWND；这也是 13.9 s 的主要来源。实测 2000 个含子控件的视图 `Controls.Add` ≈ 2.3 s，随后 3000 个连线视图再 ≈ 8.2 s（Add 随现有控件数增长），3000 次 `SendToBack` ≈ 6.7 s，5000 个 `AddRange` 与逐个 Add 同价（≈ 8.6 s）。⇒ **full-visibility 在 WinForms 仍由节点 HWND 主导**；连线侧没有数量级差。
 单层连线的分配比旧版高（scroll 2.07 MB vs 0.23 MB，full 438 MB vs 364 MB）：每次几何变脏会为所有可见线重发采样曲线（命中判定与绘制共用同一份）。正确性优先；若以后要压分配，按 link 缓存曲线、只重建锚点变了的那些。
 
-基准工程的当前形状：`WinFormsTreeBandsBenchmarks` 反射 `WorkflowRulerOverlayForm.DrawBands`（旧的嵌套 `WorkflowTreeView.RulerOverlayForm` 已不存在）；旧的 `WinFormsGridRenderBenchmarks` 已删除 —— 网格渲染归 item template，适配器不再有可测的 `WorkflowGridDecorator` 类型。
+基准工程：`WinFormsTreeBandsBenchmarks` 反射 `WorkflowRulerOverlayForm.DrawBands`；网格渲染归 item template，适配器没有可测的 `WorkflowGridDecorator` 类型。

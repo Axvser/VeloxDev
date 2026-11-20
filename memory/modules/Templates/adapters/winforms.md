@@ -1,8 +1,7 @@
 # Templates — WinForms
 
-> **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
-> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/winforms.md`，本文只指路不抄；
+> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/winforms.md`；
 > 包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
 > **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.WinForms.Templates/working/content/`；引用别处一律写全路径。
 
@@ -24,7 +23,7 @@
 | minimap-overlay | **纯 `.cs`**：`TemplateClass : WorkflowMinimapOverlay`，只给调色板 | 定位与拖拽映射在适配器 |
 | template-selector | **纯 `.cs`**：`TemplateClass : VeloxDev.WinForms.Xaml.TemplateSelector`，用 `DataTemplate` 属性按 item 类型返回模板 | tree 的资源按 `WorkflowTemplateSelector` 键引用它 |
 
-**四个 XAML 条目的 code-behind 基类写全名**：`TemplateClass : VeloxDev.WinForms.Xaml.Controls.UserControl`。WinForms 原生 `UserControl` 与 XAML 的同名基类在同一引用图里，短名会让读者（和下一个改模板的人）分不清继承的是哪一层。纯 `.cs` 条目不受此约束，它们本来就继承原生类型。
+**四个 XAML 条目的 code-behind 基类写全名**：`TemplateClass : VeloxDev.WinForms.Xaml.Controls.UserControl`。WinForms 原生 `UserControl` 与 XAML 的同名基类在同一引用图里，短名分不清继承的是哪一层。纯 `.cs` 条目继承原生类型。
 
 ---
 
@@ -43,7 +42,7 @@
 
 ### P1 · 七个条目有编译期兄弟依赖，必须一起生成
 
-tree 的 XAML 直接引用 `local:GridDecorator` / `local:SurfaceCanvas`（`grid-decorator` 条目）与 `local:CustomTemplateSelector`（`selector` 条目）；selector 又引用 `NodeView` / `LinkView`。**只生成 tree 会编译失败**。`verify-workflow-item-templates-all.ps1` 一次生成七个并编译，正是为了抓这类漏依赖；tree 的头部注释也写了「先生成兄弟条目」。
+tree 的 XAML 直接引用 `local:GridDecorator` / `local:SurfaceCanvas`（`grid-decorator` 条目）与 `local:CustomTemplateSelector`（`selector` 条目）；selector 又引用 `NodeView` / `LinkView`。**只生成 tree 会编译失败**。`verify-workflow-item-templates-all.ps1` 一次生成七个并编译；tree 的头部注释也写了「先生成兄弟条目」。
 
 ### P2 · `WorkflowSurfaceColors.Parse` 会静默吃掉写错的颜色
 
@@ -79,7 +78,7 @@ tree 的 XAML 直接引用 `local:GridDecorator` / `local:SurfaceCanvas`（`grid
 
 | 结论 | 在哪 |
 |---|---|
-| 适配器侧的硬限制、两套平移模型、`AutoScroll`、同步重画 | `memory/modules/WorkflowSystem/adapters/winforms.md` |
+| 适配器侧的硬限制、平移与 `AutoScroll` 互斥、同步重画 | `memory/modules/WorkflowSystem/adapters/winforms.md` |
 | XAML 运行时、生成器、对象资源、`.xaml.cs` | `memory/modules/WinFormsXaml/architecture.md` |
 | 适配器项目结构与三条轴 | `memory/modules/VeloxDev.WinForms/architecture.md` |
 | 「怎么用这套模板搭一个 WinForms 工作流视图」 | `skills/veloxdev-create-workflow/references/gui/winforms.md` 的 `## Item templates` |

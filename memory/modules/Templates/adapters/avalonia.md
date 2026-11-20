@@ -1,8 +1,7 @@
 # Templates — Avalonia
 
-> **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
-> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/avalonia.md`，本文只指路不抄；
+> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/avalonia.md`；
 > 包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
 > **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.Avalonia.Templates/working/content/`；引用别处一律写全路径。
 
@@ -40,8 +39,7 @@
    `{Binding $parent[local:TemplateClass].(behaviors:WorkflowCanvasTransformBehavior.Transform)}`。
    与 WPF 的 `RelativeSource AncestorType` 是同一件事的两种语法。
 3. **连线视图的盒子由 tree-view 给**：`Width/Height` 绑 `$parent[Canvas].Bounds.Width/Height`，`ZIndex="-1"`
-   （`workflow-tree-view/TemplateClass.axaml` 的 `LinkTemplate`）。⇒ link-view 自己的 AXAML 是空的（§一），
-   别去找它的 XAML。
+   （`workflow-tree-view/TemplateClass.axaml` 的 `LinkTemplate`）。⇒ link-view 自己的 AXAML 是空的（§一）。
 4. **`Canvas` 的两条几何/虚拟化接线**：`Width/Height` 绑 `Layout.ActualSize`
    （`workflow-tree-view/TemplateClass.axaml` 的 `PART_Canvas`）、`behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`（同一个 `PART_Canvas`）。
 5. **标尺避让由模板自己做**：`Canvas.RenderTransform` 里的 `TranslateTransform` 绑
@@ -56,7 +54,7 @@
 
 ## 三、这一家模板特有的坑
 
-### P1 · 插槽**永远不会变色** —— 七家里唯一
+### P1 · 插槽**永远不会变色**
 
 `SlotState`（连线手势下变紫/番茄红/青柠）在这一家的模板里**一处都没有**（`grep SlotState
 VeloxDev.Avalonia.Templates/working/content/` 零命中）。slot-view 只把描边颜色绑到
@@ -68,9 +66,7 @@ VeloxDev.Avalonia.Templates/working/content/` 零命中）。slot-view 只把描
 
 `workflow-slot-view/TemplateClass.axaml` 里 `Path` 的 `Fill` 绑定 —— 而 `workflow-slot-view/TemplateClass.axaml.cs`
 是一个**只有 `InitializeComponent()` 的空 partial 类**，没有任何地方会写 `Foreground`。
-⇒ 插槽在 Avalonia 上不会随连线状态变色，**且不报错**。对照：WPF/WinUI/MAUI 在 slot-view 里注册了
-`SlotState` DP/BindableProperty 并在 node-view 里绑上；Jalium/Razor/WinForms 在 C# 里算。
-全表在 `../architecture.md` §7.4。
+⇒ 插槽在 Avalonia 上不会随连线状态变色，**且不报错**。对照全表见 `../architecture.md` §7.4。
 
 ### P2 · `x:CompileBindings="False"` 只在 node-view 里，而且带一句 TODO
 
@@ -79,13 +75,12 @@ VeloxDev.Avalonia.Templates/working/content/` 零命中）。slot-view 只把描
 **tree-view 没有这一句**（它靠项目级默认 + `x:DataType`）。⇒ 两个条目的编译绑定策略是**故意不同**的：
 tree-view 用编译器帮你查错，node-view 先关掉让你填 `x:DataType`。改其中一个之前先看另一个，别对齐。
 
-### P3 · 模板注册：**keyed 资源 + 声明选择器**（2026-09-25 起）
+### P3 · 模板注册：**keyed 资源 + 声明选择器**
 
 tree-view 用两个 **keyed** `<DataTemplate x:Key="NodeTemplate" …>`（`workflow-tree-view/TemplateClass.axaml` 的 `NodeTemplate`）
 与 `LinkTemplate`，在同一个 `UserControl.Resources` 里声明 `local:TemplateSelector`，并在 `Canvas` 上设
 `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`。
-⇒ 生成出来的 `workflow-template-selector` 条目现在是**真的被接上**的
-（不是「生成但不接线」的 selector）。selector 的 XML 注释仍告诉你要 assign 四个模板
+⇒ `workflow-template-selector` 条目被 tree-view 接上。selector 的 XML 注释仍告诉你要 assign 四个模板
 （`workflow-template-selector/TemplateClass.cs` 的类注释），tree-view 这一份只给了 Node/Link 两个。
 
 ⚠ 模板查找找不到时 `Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/ViewHosting/ViewFactory.cs` 的
@@ -96,11 +91,11 @@ tree-view 用两个 **keyed** `<DataTemplate x:Key="NodeTemplate" …>`（`workf
 
 `workflow-tree-view/TemplateClass.axaml` 的 `PART_ScrollViewer` 上的 `IsScrollInertiaEnabled="False"`。触控/惯性滚动会与适配器的缩放枢轴补偿打架
 （数学在 `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Math/WorkflowSurfaceMath.cs`，七家共用）。
-⇒ 从别家抄 tree-view 时别把这一条丢掉 —— 别家没有同名属性，容易一起漏。
+⇒ 别家没有同名属性，跨平台抄 tree-view 时容易一起漏。
 
 ---
 
-## 四、指路（这些结论已经在别处写好，本文不抄）
+## 四、指路
 
 | 结论 | 在哪 |
 |---|---|

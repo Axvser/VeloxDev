@@ -1,15 +1,11 @@
 # Templates — Jalium
 
-> ⚠ **2026-10-05：Jalium 适配器已整体转成标记驱动（`.jalxaml`），与 WPF 逐行同形。**
-> `WorkflowTreeView` / 三个 `*Attachment` / `WorkflowPortGeometry` / `WorkflowPortLayout` /
-> `IWorkflowTemplateSelector` / `WorkflowTemplateSelector` / `WorkflowNodeView` / `WorkflowSlotView` /
-> `WorkflowLinkView` 这些类型都不存在；本文下面凡提这些名字的段落，落点以
+> **Jalium 适配器是标记驱动的（`.jalxaml`），与 WPF 同形。** 契约落点以
 > [WorkflowSystem/adapters/jalium.md](../../WorkflowSystem/adapters/jalium.md) §一 与 §〇 为准。
 
-> **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
 > **表面侧**（`Visual.ShouldRenderChild` 自盒化、`CanvasTransform` 通道、`ZoomPin`）现在都在**适配器的附着行为**里，
-> 见 `memory/modules/WorkflowSystem/adapters/jalium.md`，本文只指路不抄；
+> 见 `memory/modules/WorkflowSystem/adapters/jalium.md`；
 > 包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
 > **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.Jalium.Templates/working/content/`；
 > 提到 demo 时相对仓库根的 `Examples/Workflow/Jalium Trimmed/`；引用别处一律写全路径。
@@ -21,7 +17,7 @@
 
 ## 一、这一家的条目产出什么形状
 
-**七个条目里，四个产出 `.jalxaml` + `.jalxaml.cs` 一对**（tree / node / slot / link），**三个只产出一个 `.cs`**（grid-decorator / minimap-overlay / template-selector）。标记那四个 `primaryOutputs` 对应两个文件，`.cs` 那三个各一个文件。四个标记产物的 code-behind 都是极薄的 `partial class : UserControl` —— 只有 `InitializeComponent()`（tree-view 多一个 `CanvasTransform` 再暴露），真正的行为在适配器的附着行为里。
+**四个条目产出 `.jalxaml` + `.jalxaml.cs` 一对**（tree / node / slot / link），**三个只产出一个 `.cs`**（grid-decorator / minimap-overlay / template-selector）。四个标记产物的 code-behind 只有 `InitializeComponent()`（tree-view 多一个 `CanvasTransform` 再暴露），行为在适配器的附着行为里。
 
 | 条目 | 产物 | 扮演什么 | 关键锚点 |
 |---|---|---|---|
@@ -33,11 +29,11 @@
 | minimap-overlay | `class TemplateClass : WorkflowMinimapOverlay` | 薄派生：构造器设 `MinimapBackground`／`MinimapBorderBrush`／`NodeBrush`／`ViewportStroke` 四色（**不是空构造器**） | 类声明、构造器里的四色 |
 | template-selector | `sealed class TemplateClass : DataTemplateSelector` | 分派：四个 `DataTemplate?` 属性（`NodeTemplate`／`SlotTemplate`／`LinkTemplate`／`TreeTemplate`），`SelectTemplate` 逐个查、缺了抛 | 类声明、四个属性、`SelectTemplate` |
 
-⇒ 三条"读完文件才知道"的推论：
+⇒ 三条推论：
 
-1. **`workflow-slot-view` 现在是标记 + 薄 code-behind**：`UserControl` 里一个 `Viewbox` 包 `Path`（`Data="TemplateSlotPath"`，`Fill` 绑 `Foreground`），code-behind 只按 `SlotState` 写 `Foreground` 四色（`TemplateClass.jalxaml.cs` 的 `UpdateForeground`），连接手势由标记里的 `WorkflowSlotConnectionBehavior` 承担。**端口位置不再是模板里的一个 `Layout` 值** —— 由 `WorkflowSlotLayoutBehavior` 量测写回 `slot.Anchor`（见 `WorkflowSystem/adapters/jalium.md` §2.3）。**没有「表面/卡片/连线三处共读同一个 `WorkflowPortLayout` 实例」这套** —— `WorkflowPortLayout` / `WorkflowPortGeometry` 都不存在。
-2. **`grid-decorator` 仍是 `.cs`，但形态变了**：`sealed class TemplateClass : Grid, IWorkflowGridDecorator`（**不再是派生适配器基类** —— 没有那个基类了）。两面自绘子层在构造器里装配，`RulerThickness` DP 默认值就是 `DefaultRulerThickness = 36`。整个渲染器都在这一个文件里 —— 改网格外观/间距/刻度就改它。
-3. **`selector` 条目现在是 `DataTemplateSelector` 的派生类**（不是工厂方法）：tree-view 模板在 `Resources` 里 `new` 它（把 `NodeTemplate`／`LinkTemplate` 两个 `StaticResource` 赋进去），交给 `ViewPool.TemplateSelector`。`SlotTemplate`／`TreeTemplate` 未设 ⇒ 槽/树 item 一旦进池就抛 `InvalidOperationException`（`workflow-template-selector/TemplateClass.cs` 的 `SelectTemplate`）—— 这两类 item 从不进本仓库的池。
+1. **`workflow-slot-view` 是标记 + 薄 code-behind**：`UserControl` 里一个 `Viewbox` 包 `Path`（`Data="TemplateSlotPath"`，`Fill` 绑 `Foreground`），code-behind 只按 `SlotState` 写 `Foreground` 四色（`TemplateClass.jalxaml.cs` 的 `UpdateForeground`），连接手势由标记里的 `WorkflowSlotConnectionBehavior` 承担。端口位置由 `WorkflowSlotLayoutBehavior` 量测写回 `slot.Anchor`（见 `WorkflowSystem/adapters/jalium.md` §2.3）。
+2. **`grid-decorator` 是 `.cs`**：`sealed class TemplateClass : Grid, IWorkflowGridDecorator`（不派生适配器基类）。两面自绘子层在构造器里装配，`RulerThickness` DP 默认值就是 `DefaultRulerThickness = 36`。整个渲染器都在这一个文件里 —— 改网格外观/间距/刻度就改它。
+3. **`selector` 条目是 `DataTemplateSelector` 的派生类**：tree-view 模板在 `Resources` 里 `new` 它（把 `NodeTemplate`／`LinkTemplate` 两个 `StaticResource` 赋进去），交给 `ViewPool.TemplateSelector`。`SlotTemplate`／`TreeTemplate` 未设 ⇒ 槽/树 item 一旦进池就抛 `InvalidOperationException`（`workflow-template-selector/TemplateClass.cs` 的 `SelectTemplate`）—— 这两类 item 从不进本仓库的池。
 
 ---
 
@@ -45,11 +41,11 @@
 
 ### 2.1 表面 = 标记（根上挂行为）+ 薄 code-behind
 
-七个条目里只有 tree-view 的产物含**任意**装配，而且它现在是标记：`UserControl` 根上写五个 `behaviors:WorkflowSurfaceBehavior.*` 具名部件（`ScrollViewerName`/`CanvasName`/`GridDecoratorName`/`PointerPressSourceName`/`MinimapOverlayName`）+ `IsEnabled`/`ZoomEnabled`/`LinkMenuKey`（`workflow-tree-view/TemplateClass.jalxaml` 的根元素），`Resources` 里放两个 `DataTemplate` 与 `TemplateSelector`。画布手势、命中、视口虚拟化、菜单、`ZoomPin` 守卫都在适配器行为 `WorkflowSurfaceBehavior` 里 —— **模板里没有第二份**。改这些机制要改 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`，不是在模板里补代码。code-behind 只把 `CanvasTransform` 附着属性用一个同名 CLR 属性再暴露一次（`workflow-tree-view/TemplateClass.jalxaml.cs` 的 `CanvasTransform`，因为本家绑定读不到括号路径）。
+七个条目里只有 tree-view 的产物含**任意**装配，而且它现在是标记：`UserControl` 根上写五个 `behaviors:WorkflowSurfaceBehavior.*` 具名部件（`ScrollViewerName`/`CanvasName`/`GridDecoratorName`/`PointerPressSourceName`/`MinimapOverlayName`）+ `IsEnabled`/`ZoomEnabled`/`LinkMenuKey`（`workflow-tree-view/TemplateClass.jalxaml` 的根元素），`Resources` 里放两个 `DataTemplate` 与 `TemplateSelector`。画布手势、命中、视口虚拟化、菜单、`ZoomPin` 守卫都在适配器行为 `WorkflowSurfaceBehavior` 里 —— **模板里没有第二份**；改这些机制改 `Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`。code-behind 只把 `CanvasTransform` 附着属性用一个同名 CLR 属性再暴露一次（`workflow-tree-view/TemplateClass.jalxaml.cs` 的 `CanvasTransform`，因为本家绑定读不到括号路径）。
 
 ### 2.2 七份产物合起来还缺一个宿主窗口 —— 但宿主现在也是标记
 
-模板不含窗口/入口（与 `../architecture.md` §一"不是 demo"一致）。**2026-10-05 起宿主层也是标记**：Trimmed demo 的 `MainWindow.jalxaml` + `MainWindow.jalxaml.cs`（只有 `InitializeComponent`）、`Views/MainView.jalxaml` + `MainView.jalxaml.cs`（只造样例数据并 `DataContext = tree`）。所以**装配不再是"七步手写代码"**，而是「把 tree-view 条目的 `UserControl` 放进窗口 + 给它一个树 DataContext」：
+模板不含窗口/入口（与 `../architecture.md` §一"不是 demo"一致）。宿主层也是标记：Trimmed demo 的 `MainWindow.jalxaml` + `MainWindow.jalxaml.cs`（只有 `InitializeComponent`）、`Views/MainView.jalxaml` + `MainView.jalxaml.cs`（只造样例数据并 `DataContext = tree`）。装配是「把 tree-view 条目的 `UserControl` 放进窗口 + 给它一个树 DataContext」：
 
 | # | 宿主必须做 | 依据 |
 |---|---|---|
@@ -57,7 +53,7 @@
 | 2 | 备一个 `IWorkflowTreeViewModel` 并设成 `DataContext`（表面从 `DataContext` 取树，`WorkflowSurfaceBehavior.BindTree`） | `MainView.jalxaml.cs` 的 `DataContext = tree`、`WorkflowSurfaceBehavior.cs` 的 `BindTree` |
 | 3 | **其余全部在标记里**：具名部件、`ViewPool.ItemsSource`/`TemplateSelector`、`MinimapOverlay` 的 `ScrollViewerName`、`LinkMenuKey` —— 都不用宿主写代码 | `Demo/Views/Workflow/TreeView.jalxaml` 根上的 `WorkflowSurfaceBehavior.*`、`PART_Canvas` 的 `ViewPool.*`、`MinimapOverlay` |
 
-⇒ 宿主只做上面三条，其余全在标记里；`AttachScrollViewer` / `SetTree` / 订阅 `ScrollChanged` 这些 API 都不存在。漏了 DataContext 只会让 `BindTree` 空转（什么都不显示）。
+⇒ 宿主只做上面三条，其余全在标记里。漏了 DataContext 只会让 `BindTree` 空转（什么都不显示）。
 
 ### 2.3 跨条目的**编译期**耦合：tree 少生成一条兄弟就编译不过
 
@@ -83,19 +79,17 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 ## 三、这一家模板特有的坑
 
-### P1 · 本家没有「没有 `replaces`」的空转 symbol（旧的都已补上）
+### P1 · 没有空转 symbol
 
-`../architecture.md` §7.1 的判据是「`type: parameter` 而**没有 `replaces`**」——`dotnet new --help` 收得下、命令行能传、不报错、也不替换文本。逐文件核当前七个 `template.json`：**每个 symbol 都带了 `replaces`** ⇒ Jalium 侧现在没有空转符号。
+`../architecture.md` §7.1 的判据是「`type: parameter` 而**没有 `replaces`**」——`dotnet new --help` 收得下、命令行能传、不报错、也不替换文本。七个 `template.json` 里**每个 symbol 都带了 `replaces`** ⇒ Jalium 侧没有空转符号。
 
-旧的那批（`gridBackground`、slot-view、minimap-overlay、tree-view 的若干 symbol）**全部被接上了绘制面**：grid-decorator 现在真读 `TemplateGridBackground`（`workflow-grid-decorator/TemplateClass.cs` 的 `SurfaceBackground` 赋值）、slot-view 真读 `TemplateSlotBackground`/`TemplateSlotColor`/`TemplateSlotPath`（`workflow-slot-view/TemplateClass.jalxaml` 的 `Background` / `Path`、`…jalxaml.cs` 的 `UpdateForeground`）、minimap-overlay 真读那四色（`workflow-minimap-overlay/TemplateClass.cs` 的构造器）、tree-view 真读 `TemplateSurfaceBackground`/`TemplateSurfaceBorderBrush`/`…Thickness`/`…CornerRadius`（`workflow-tree-view/TemplateClass.jalxaml` 的 `PART_SurfaceBorder`）。**所以别再去补 `replaces` —— 已经补完了。**
+`gridBackground`、slot-view、minimap-overlay、tree-view 的 symbol 都有绘制面：grid-decorator 读 `TemplateGridBackground`（`workflow-grid-decorator/TemplateClass.cs` 的 `SurfaceBackground` 赋值）、slot-view 读 `TemplateSlotBackground`/`TemplateSlotColor`/`TemplateSlotPath`（`workflow-slot-view/TemplateClass.jalxaml` 的 `Background` / `Path`、`…jalxaml.cs` 的 `UpdateForeground`）、minimap-overlay 读那四色（`workflow-minimap-overlay/TemplateClass.cs` 的构造器）、tree-view 读 `TemplateSurfaceBackground`/`TemplateSurfaceBorderBrush`/`…Thickness`/`…CornerRadius`（`workflow-tree-view/TemplateClass.jalxaml` 的 `PART_SurfaceBorder`）。
 
-⚠ 一处残留：**`slotBorderColor` 的 token（`TemplateSlotBorderColor`）在 Jalium 的 slot-view 产物里一处都不出现**（`git grep TemplateSlotBorderColor -- Src/Templates/VeloxDev.Jalium.Templates` 只命中它自己的 `template.json`）。它按 §7.1 的定义不算「空转」（有 `replaces`），但传 `--slotBorderColor` 实际仍什么都不改变 —— 新的 slot-view 是一条 `Path`，没有独立的边框面。
-
-（`../architecture.md` §7.1 的跨平台表可能仍记着 Jalium 那批；那份不在本文维护范围，以本节为准。）
+⚠ 一处残留：**`slotBorderColor` 的 token（`TemplateSlotBorderColor`）在 Jalium 的 slot-view 产物里一处都不出现**（`git grep TemplateSlotBorderColor -- Src/Templates/VeloxDev.Jalium.Templates` 只命中它自己的 `template.json`）。它按 §7.1 的定义不算「空转」（有 `replaces`），但传 `--slotBorderColor` 实际仍什么都不改变 —— slot-view 是一条 `Path`，没有独立的边框面。
 
 ### P2 · 标尺厚度 `36` 的单一来源在**模板的 grid-decorator**
 
-旧的 P2 说厚度被复制到多处、后来说收进适配器 —— 现在权威常量在**模板**里：`workflow-grid-decorator/TemplateClass.cs` 的
+权威常量在**模板**里：`workflow-grid-decorator/TemplateClass.cs` 的
 `public const double DefaultRulerThickness = 36;`（它同时是 `RulerThickness` DP 的默认值）。
 
 | 位置 | 依据 |
@@ -109,7 +103,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 （WPF/Avalonia/WinUI/MAUI 是把 `TranslateTransform` 绑到 `PART_GridDecorator.RulerThickness`）。
 跨平台对照见 `../architecture.md` §六·轴 1。
 
-### P3 · 状态色现在在**模板**的 slot-view 里（读 `SlotState`）
+### P3 · 状态色在**模板**的 slot-view 里（读 `SlotState`）
 
 - 四个插槽状态色由 `workflow-slot-view/TemplateClass.jalxaml.cs` 的 `UpdateForeground()` 算 —— 读的是 `SlotState`（一个 DP，由模板绑定送 `Slot.State`），写 `Foreground`，标记里的 `Path` 再 `Fill` 绑它。**不是每帧解析**：`SlotState` 变才重算一次。
 - 对照 `../architecture.md` §7.4：这一家**不绑颜色属性、在 code-behind 里算** —— 状态色在模板的 slot-view 里算，没有适配器基类 `WorkflowSlotView`，也没有 `DrawCard`。
@@ -122,15 +116,15 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 `ZoomPin`（250 ms）+ `NotifyZoomCommitted` 这套 committed-target 守卫在 `WorkflowSurfaceBehavior`
 （`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` 的 `ZoomPin` 字段、
-`NotifyZoomCommitted`、`UpdateViewport`）—— **不在模板产物里，也不由宿主调**：缩放手势本身归表面（`ZoomEnabled`），
-`OnZoomPreviewMouseWheel` 算出提交目标后**自己**调 `NotifyZoomCommitted` —— 缩放手势归表面，demo 宿主是标记、不调它。少了它，缩放后要等 helper 的 ~10 fps 脏计时器才重算可见集。
+`NotifyZoomCommitted`、`UpdateViewport`）—— **不在模板产物里，也不由宿主调**：缩放手势归表面（`ZoomEnabled`），
+`OnZoomPreviewMouseWheel` 算出提交目标后**自己**调 `NotifyZoomCommitted`。少了它，缩放后要等 helper 的 ~10 fps 脏计时器才重算可见集。
 
 ### P6 · 与 Jalium 自带类型的撞名（生成后通常要加别名）
 
 | 撞什么 | 依据 |
 |---|---|
 | `Size` / `Offset` / `Anchor` 这些 Core 类型与 `Jalium.UI` 自带的重名 | demo 里显式 `using Size = VeloxDev.WorkflowSystem.Size;`（`Demo/Views/MainView.jalxaml.cs` 文件头）；模板的 grid-decorator 内部也把 `Jalium.UI.Size` 全限定（`workflow-grid-decorator/TemplateClass.cs` 的两个 `MeasureOverride`，注释写明理由） |
-| 生成的 `TreeView` 与框架自带的 `Jalium.UI.Controls.TreeView` | demo 现在把 `TreeView` 放在 `Demo.Views.Workflow` 命名空间、只用 `local:TreeView` 引用（`MainView.jalxaml`），**不再需要 `using WorkflowTreeView = …` 别名**（旧的 `MainWindow.cs` 那行已随宿主机标记化消失） |
+| 生成的 `TreeView` 与框架自带的 `Jalium.UI.Controls.TreeView` | demo 把 `TreeView` 放在 `Demo.Views.Workflow` 命名空间、只用 `local:TreeView` 引用（`MainView.jalxaml`） |
 
 ### P7 · 两处"初始尺寸/兜底"都在**适配器表面行为**里，是刻意的
 
@@ -139,7 +133,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 ---
 
-## 四、指路（这些结论已经在别处写好，本文不抄）
+## 四、指路
 
 | 结论 | 在哪 |
 |---|---|

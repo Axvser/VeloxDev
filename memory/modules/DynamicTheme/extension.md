@@ -1,7 +1,6 @@
 ﻿# DynamicTheme — 扩展
 
 > 面向「我要加一个主题 / 一个转换器 / 一个平台」和「我要让这个属性跟着主题动」。架构见 [architecture.md](architecture.md)。
-> 依据只写树里的**路径 + 能唯一定位的符号或原文引文**（行号可选、不作为依据）。
 > **下文不带路径的 `Theme.cs` 指 `Src/Generators/VeloxDev.Core.Generator/Theme.cs`**（生成的 `Theme` / `InitializeTheme`），不在本模块目录下。
 
 ---
@@ -77,7 +76,7 @@
 
 ### 1. 加一个转换器（平台侧）
 
-> **本模块没有 `adapters/` 子目录，这是有意的。** 转换器这条平台轴只影响「哪些属性类型能被声明」，覆盖面窄且各家高度同形（同名的 `DoubleConverter` / `PointConverter` / …），不值得一家一篇。真正需要逐家展开的是**动画侧**的平台差异（`Interpolator.CreateScheduler`、sampler 覆盖），那些已在 `memory/modules/TransitionSystem/adapters/<平台>.md` 里，本模块**指路而不重复**。若将来转换器的差异真的分化到需要逐家说明，再建 `adapters/`。
+> **本模块没有 `adapters/` 子目录**：转换器这条平台轴只影响「哪些属性类型能被声明」，各家高度同形（同名的 `DoubleConverter` / `PointConverter` / …）；动画侧的平台差异（`Interpolator.CreateScheduler`、sampler 覆盖）在 `memory/modules/TransitionSystem/adapters/<平台>.md`，本模块指路而不重复。
 
 | # | 做什么 | 依据 |
 |---|---|---|
@@ -87,18 +86,16 @@
 
 **Jalium 没有 `ThemeValueConverters.cs`** —— 这家要么不用主题、要么把转换器写在别处。核对时以 `Src/Adapters/VeloxDev.Jalium/` 为准。
 
-**主题能声明的类型是**——**有界的**（2026-10-03 起，见架构 §二 那条的注）：
+**主题能声明的类型是有界的**：
 
 > **平台原生类型的构造**（各家 `ThemeValueConverters.cs` 里具名的那些 + 资源查找 + Brush 特例）
 > **＋ 可插值的自定义类型**（作者用 `[ThemeConfig<MyConverter, …>]` 指定自己的转换器，就是上面的扩展点）。
 > **其它不支持。**
 
-原来 `ObjectConverter` 用 `TypeDescriptor.GetConverter(targetType)` 兜底，「任何带 TypeConverter 的 .NET 类型」
-都算数 —— 无界，裁剪器跟不了。**现在无一家再用它**：`TypeDescriptor.GetConverter(Type)` 带
-`RequiresUnreferencedCode`（转换器要靠反射发现），一用整条主题转换在裁剪/AOT 下就被标成不可用，
-所以各家的 `ThemeValueConverters.cs` 统一改成**显式转换表**，并在注释里写明「刻意不用」
-（WPF `ThemeValueConverters.cs` 的 `ObjectConverter` 注释、WinForms 同名文件的 `ObjectConverter` 注释）。表外的类型返回 `null`（与转换失败同一条路）—— 需要更多类型的宿主
-自己写一个 `IThemeValueConverter`。**所以这不是判过之后留的分歧，是全仓统一后的结果，各家一致。**
+各家 `ThemeValueConverters.cs` 都用**显式转换表**，不用 `TypeDescriptor.GetConverter(Type)`
+（它带 `RequiresUnreferencedCode`，一用整条主题转换在裁剪/AOT 下就被标成不可用；WPF 与 WinForms 的
+`ObjectConverter` 注释写明「刻意不用」）。表外的类型返回 `null`，需要更多类型的宿主自己写一个
+`IThemeValueConverter`。
 
 ### 2. 加一个主题类型（例如 `Solarized`）
 
@@ -128,7 +125,7 @@
 | 1 | `Src/Core/VeloxDev.Core/DynamicTheme/ThemeConfigAttribute.cs` | 已存在，无需改 |
 | 2 | `Src/Generators/VeloxDev.Core.Generator/Theme.cs` 的 `Initialize` | 加一个 `ForAttributeWithMetadataName("...ThemeConfigAttribute\`8", ...)` |
 | 3 | `Theme.cs` 的 `Combine` 链 | **必须跟着改**：那一串是**定长元组**（`var ((((classes3, classes4), classes5), classes6), classes7) = combined;`），加一个 provider 就要加一层 `.Combine(...)` 并改解构，同时把新集合加进 `allItems` |
-| 4 | `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs` 的注释 | 改掉「at most one Converter plus seven Themes」—— 代码支持之后它才成立；在那之前它是**错的** |
+| 4 | `Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs` 的注释 | 改掉「at most one Converter plus seven Themes」（代码当前只支持 1 个转换器 + 6 个主题） |
 
 漏第 3 步的后果是**编译错误**（元数不匹配），不是静默 —— 这一处比其它联动安全。
 
@@ -140,8 +137,7 @@
 
 - **动画语义、时间轴、scheduler 契约**：全部在 TransitionSystem。本模块只是它的「入口 B」，见 `memory/modules/TransitionSystem/architecture.md` §三·入口 B 与 `extension.md` 的手工驱动范本。
 - **平台能不能动、各家的 sampler 覆盖**：见 `memory/modules/TransitionSystem/adapters/<平台>.md`。**不要在这里重复那七份差异。**
-- **`ThemeCache` 里的死成员**（`RegisterConverter` / `GetConverter` / `RemoveActiveEntry`）与死字段 `ThemeManager._def_cache` **已于 2026-10-18 删除**；生成器一直内联 `Activator.CreateInstance`（`Theme.cs` 的 `convertExpr`），所以不要再按「有共享转换器缓存」去设计。
-- **`Theme.cs` 的 `converterKey` 是算了不用的局部变量**：注释自己写着 "only placeholder—converter created inline"。加转换器缓存要从这里重新设计，不是复用。
+- **没有共享转换器缓存**：生成器内联 `Activator.CreateInstance`（`Theme.cs` 的 `convertExpr`）；`converterKey` 是算了不用的局部变量（注释 "only placeholder—converter created inline"）。加转换器缓存要从这里设计。
 
 ---
 

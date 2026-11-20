@@ -1,10 +1,9 @@
 # Templates — Razor (Blazor)
 
-> **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
 > **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/razor.md`（尤其 §一 组件对应表、
 > §二·1 服务端没有元素/几何往返、§二·2 尺寸/网格/坐标轴/小地图视口归 JS 独占、§三 刻意背离、§四 坑），
-> 本文只指路不抄；包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
+> 包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
 > **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.Razor.Templates/working/content/`；引用别处一律写全路径。
 
 代码目录：`Src/Templates/VeloxDev.Razor.Templates/working/content/workflow-<角色>/`。
@@ -28,7 +27,7 @@
 | template-selector | `<ViewPool ItemsSource KeySelector>` + 一个 `<ItemTemplate>` | `.razor`：`<ViewPool>` / `<ItemTemplate>`；`.razor.cs`：`Select` |
 
 ⇒ 三个"薄壳"条目（decorator / minimap / selector）**自己不画任何东西**，
-它们存在的唯一目的是把 `Template*` 符号解析成 CSS 值/组件参数后交给适配器组件。
+只把 `Template*` 符号解析成 CSS 值/组件参数后交给适配器组件。
 ⇒ **C# 侧的"形状"全在 `.razor.cs`**：这家的 `.razor` 几乎只有 `@if` + 元素树，
 凡是数值（缩放因子、点串、rgba 串）都在 code-behind 算。
 
@@ -45,10 +44,10 @@
    ⇒ 两者同名是必需的、不是笔误：若外层按类型解析，内层就成了它的 `ChildContent`，
    而生成的 `GridDecorator` 没有这个参数 —— 标记直接编译不过。**不要把这个嵌套"简化"成一层。**
    `Minimap` / `ChildContent` 是同一套写法，只是**没有重名**，所以只有 decorator 这一处会看错。
-   ⚠ 第三个名字相近的类型是 **`WorkflowGridDecorator`**（适配器里真正画标尺的那个），
+   ⚠ 第三个名字相近的类型是 **`WorkflowGridDecorator`**（适配器里画标尺的那个），
    由生成的 `GridDecorator.razor` 里的 `<WorkflowGridDecorator>` 渲染。改模板时不要把 `<WorkflowGridDecorator>` 当成重命名对象。
 
-2. **tree-view 的"订阅与重渲染"已搬进适配器**（2026-10-03 后）：模板的 `.razor.cs` 现在很薄，
+2. **tree-view 的"订阅与重渲染"在适配器里**：模板的 `.razor.cs` 很薄，
    仅声明四个参数（`Tree` / `ScrollViewerId` / `CanvasId` / `NodeTemplate`）与 `GridSpacing`，
    基类是 `ComponentBase` 而**不是** `IDisposable`。重渲染、槽枚举、默认调色板都由适配器的
    `WorkflowSurfaceBehavior` 与 `WorkflowPresentation` 提供（类上的 `<summary>` 已这么写）。
@@ -91,15 +90,13 @@
    `VisibleItems` 由 `TreeHelper.Install` 里的 `EnableMap` 建出来
    （`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/Helpers/TreeHelper.cs` 的 `OnItemAddedToVisibleItems` / `OnItemRemovedFromVisibleItems`），
    **首元素恒为 `tree.VirtualLink`**（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Virtualization/WorkflowSpatialEx.cs` 的 `observable.Add(tree.VirtualLink)`），
-   其余按视口增删 ⇒ **虚拟连线天然被池覆盖**，不要再给模板加 `@if (Tree.VirtualLink.IsVisible)` 分支；
+   其余按视口增删 ⇒ **虚拟连线天然被池覆盖**，模板不需要 `@if (Tree.VirtualLink.IsVisible)` 分支；
    画不画由生成的 `<LinkView>` 自己的 `CanRender` 门决定。
    ⚠ "选择器"在这一家是**组件**，不是选择器实例：适配器的对应物是 `ViewPool.ItemTemplate` + 消费方自己派发
    （`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/ViewPool.razor.cs` 的 `ItemTemplate`；这家 `ViewPool.razor.cs` 没有 `TemplateSelector` 参数，
    整个适配器也没有 `ViewManager`）⇒ 判定"这家接没接选择器"看 `<TemplateSelector>` 那一行即可，
    **搜 `ViewPool.TemplateSelector` 在本家恒空**。
-   同族对照：WPF / WinUI / Avalonia / MAUI 在标记里喂 `Helper.VisibleItems`；**WinForms 现在也由适配器喂它**
-   （`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowTreeView.cs` 的 `AttachTree`，模板不再发散虚拟化）；
-   Jalium 现在也在标记里绑（`behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`）。MAUI 的连线由适配器的 `ViewLinkLayer` 在入队前挡在主池外，交给共享 overlay 画。
+   同族对照见 `../architecture.md` §五（WinForms 由 `WorkflowSurfaceBehavior.EnsurePool` 把 `VisibleItems` 交给 `ViewPool`）。
 
 7. **输入/输出插槽按通道拆的逻辑现在在适配器 `WorkflowPresentation`**：`InputSlotsOf`（只带 source 标志、
    排除任何 target 标志）与 `OutputSlotsOf`（带 target 标志）
@@ -131,7 +128,7 @@
 |---|---|
 | `surfaceBorderBrush`、`surfaceBorderThickness`、`surfaceCornerRadius`（tree-view） | 生成的 tree-view **没有任何外层容器元素**（`.razor` 的根就是 `<WorkflowSurfaceBehavior>`），而适配器的外壳 `<div class="veloxdev-wf-surface">` 是适配器渲染的、没有内联边框样式（`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.razor` 的外壳 `div`）⇒ 没地方画这个边框 |
 | `gridBackground`、`minorGridColor`、`majorGridColor`（grid-decorator） | 在 Razor 里网格背景/细线/粗线/坐标轴**不由 decorator 画**，而由 surface 画布元素的 CSS 变量承载：`--veloxdev-gs/-gc/-mgc/-ac`（`WorkflowSurfaceBehavior.razor.cs` 的 `CanvasBackgroundStyle`，参数 `Background` / `GridColor` / `MajorGridColor` / `AxisColor`）⇒ decorator 上放这三个颜色没有绘制面 |
-| `slotBackground`（slot-view） | slot-view 只画一个 `<path>`（fill + stroke，`workflow-slot-view/TemplateClass.razor`），适配器的连接行为也不提供背景层；这一条在 `template.json` 的 `description` 里自陈（`workflow-slot-view/.template.config/template.json` 的 `slotBackground.description`：`Accepted for cross-GUI CLI parity; this GUI's slot has no separate background surface.`）—— 2026-10-04 起全仓那批空转参数都这么自陈了，它不再是唯一一个 |
+| `slotBackground`（slot-view） | slot-view 只画一个 `<path>`（fill + stroke，`workflow-slot-view/TemplateClass.razor`），适配器的连接行为也不提供背景层；这一条在 `template.json` 的 `description` 里自陈（`workflow-slot-view/.template.config/template.json` 的 `slotBackground.description`：`Accepted for cross-GUI CLI parity; this GUI's slot has no separate background surface.`） |
 
 ⇒ **不要在 Razor 上给这三个补 `replaces`**（理由与 `../extension.md` §4.3 同）。
 
@@ -184,15 +181,13 @@ tree-view 实例化生成组件时**显式传了**哪些参数（`workflow-tree-
 `OnParametersSet` 只在有 override 参数时重渲染；而 `BuildCurve()` 与 `@if` 门用的是
 `CanRender` / `IsVirtual` 两个**状态字段**（由 `Sync` 写）。
 ⇒ 这里成立的前提是「一个 link 实例始终配同一个 `LinkView` 实例」。
-tree-view 现在把连线交给池（本文 §二·3 / §二·6），池对每个 item 下 `@key`（`KeySelector="i => i"`，
+tree-view 把连线交给池（本文 §二·3 / §二·6），池对每个 item 下 `@key`（`KeySelector="i => i"`，
 `Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/ViewPool.razor` 的 `@key`）⇒ 配对按**对象身份**稳定。
-**历史**：连线还是手写 `@foreach (var link in Tree.Links)`（无 `@key`）时，集合重排/换对象会让组件实例按
-**位置**复用、`CanRender`/`IsVirtual` 留在旧值上（该显示时不显示，且不报错）—— 那条结论是从代码与 Blazor
-差分语义推得的**未实测**判断，对应的代码路径已经不存在。**以后若有人把连线拿出池自己 `foreach`，要补 `@key`。**
+**若有人把连线拿出池自己 `foreach`，要补 `@key`。**
 
 ### P7 · 同一份小工具在多个文件里各抄一遍
 
-`ToCss`（`#AARRGGBB` → `rgba(...)`）与 `HexByte` 在**多处**逐字重复（tree-view 的那份已随重构搬进适配器）：
+`ToCss`（`#AARRGGBB` → `rgba(...)`）与 `HexByte` 在**多处**逐字重复：
 `link-view` / `node-view` / `slot-view` / `grid-decorator` / `minimap-overlay` 各自的 `TemplateClass.razor.cs`
 （`template-selector` 没有；tree-view 用适配器的
 `WorkflowPresentation.ToCss`，`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowPresentation.cs` 的 `ToCss` + `HexByte`）。
@@ -206,7 +201,7 @@ tree-view 现在把连线交给池（本文 §二·3 / §二·6），池对每�
 
 ---
 
-## 四、指路（这些结论已经在别处写好，本文不抄）
+## 四、指路
 
 | 结论 | 在哪 |
 |---|---|

@@ -1,8 +1,7 @@
 # Templates — WPF
 
-> **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
-> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/wpf.md`，本文只指路不抄；
+> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/wpf.md`；
 > 包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
 > **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.WPF.Templates/working/content/`；引用别处一律写全路径。
 
@@ -34,7 +33,7 @@
 
 ## 二、模板里必须手写、委派不掉的接线
 
-这几条不在适配器里，也不是任何生成器补的：
+这些不在适配器里，也没有生成器补：
 
 1. **两个 `xmlns` 前缀指向同一个命名空间** —— `xmlns:local` 与 `xmlns:workflowViews` **都是**
    `clr-namespace:TemplateNamespace`（`workflow-tree-view/TemplateClass.xaml` 的 `xmlns:local` 与 `xmlns:workflowViews`）。
@@ -76,11 +75,9 @@
 （`Src/Adapters/VeloxDev.WPF/WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.cs` 的 `OnIsEnabledChanged` / `OnPointerPressed`，同位置见
 `memory/modules/WorkflowSystem/adapters/wpf.md` §二·L1 的对照）。
 
-⇒ **同一对命令挂了两条路**。按 WPF 路由语义，Preview（隧道）那条置 `Handled` 之后，
-冒泡的 `MouseLeftButtonDown/Up` 不会到达 XAML 注册的处理器（**此推断未实测**；
-代码与注释里没有记录哪条是主路径）。改这里时先确认哪条真的在跑，
-**不要以为这是两套需要同时维护的机制**，也不要顺手删掉看起来"没生效"的那条 ——
-`IsEnabled="True"` 一旦被用户关掉，冒泡那条就是唯一的路。
+⇒ **同一对命令挂了两条路**：按 WPF 路由语义，Preview（隧道）置 `Handled` 后，
+冒泡的 `MouseLeftButtonDown/Up` 不会到达 XAML 注册的处理器（**此推断未实测**）。
+`IsEnabled="True"` 被关掉时，冒泡那条是唯一的路 —— 两条都要留。
 
 ### P2 · node-view 的三个 `ClipToBounds="False"` 不是装饰
 
@@ -96,12 +93,12 @@
 ### P4 · `d:DesignWidth/DesignHeight="20"` 只是设计时提示
 
 `workflow-slot-view/TemplateClass.xaml` 的 `d:DesignHeight="20" d:DesignWidth="20"` 与
-`mc:Ignorable="d"` 配套 —— 它不影响运行时布局。真正决定插槽大小的是插槽宿主那一层的布局，
+`mc:Ignorable="d"` 配套 —— 它不影响运行时布局。插槽大小由插槽宿主那一层的布局决定，
 所以**不要**照着这两个数去调插槽尺寸。
 
 ---
 
-## 四、指路（这些结论已经在别处写好，本文不抄）
+## 四、指路
 
 | 结论 | 在哪 |
 |---|---|

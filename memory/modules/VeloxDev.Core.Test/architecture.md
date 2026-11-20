@@ -1,11 +1,9 @@
 # VeloxDev.Core.Test — 架构
 
-> 代码：`Src/Test/Unit/Core/VeloxDev.Core.Test/`（不含 `bin/`、`obj/`、`TestResults/`）。具体条数与耗时以 `dotnet test` 现跑为准，不在这里维护。
+> 代码：`Src/Test/Unit/Core/VeloxDev.Core.Test/`（不含 `bin/`、`obj/`、`TestResults/`）。
 > `WorkflowSystem/Layout` 下有独立的布局测试与 `LayoutTestKit`；布局的规范与坑见 [WorkflowSystem/layout.md](../WorkflowSystem/layout.md)。
 > 被测：`Src/Core/VeloxDev.Core/`（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 是五目标 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`）
 > 姊妹模块：`memory/modules/VeloxDev.Core.Extension.Test/`（那个引 `Lib`、测 AI 工具面）。两者的共享面只有「同样一行并行设置」。
-
-本文只写「读完这些文件才知道的东西」。测试方法名不在此列 —— IDE 里按类名跳过去就有。
 
 ---
 
@@ -29,14 +27,14 @@
 
 Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Core.Test.csproj` 的 `TargetFramework`），所以 ProjectReference 从 Core 的五份资产里挑出**最近兼容的那一份 = `net8.0`**。
 
-实测（`Src/Core/VeloxDev.Core/bin/Debug/net8.0/VeloxDev.Core.dll` 与 `Src/Test/Unit/Core/VeloxDev.Core.Test/bin/Debug/net10.0/VeloxDev.Core.dll` 的 md5 相同，故这是硬结论而非推断；该读数随每次重建变化，不可复核）。
+实测：`Src/Core/VeloxDev.Core/bin/Debug/net8.0/VeloxDev.Core.dll` 与 `Src/Test/Unit/Core/VeloxDev.Core.Test/bin/Debug/net10.0/VeloxDev.Core.dll` 的 md5 相同（读数随每次重建变化，不可复核）。
 
 旁证：`Src/Test/Unit/Core/VeloxDev.Core.Test/obj/project.assets.json` 里 `VeloxDev.Core` 资产的 `"framework": ".NETCoreApp,Version=v8.0"`。
 
 | TFM | 被测试执行? | 后果 |
 |---|---|---|
 | `net8.0` | ✅ 唯一被跑的 | `#if !NETSTANDARD2_0` 的采样器真的被测（`Src/Core/VeloxDev.Core/TransitionSystem/NativeSamplers/Vector2Sampler.cs` 里 `#if !NETSTANDARD2_0` 一类）；`#if NET` 的 `AspectOriented/` 被编译进来**且有测试**（`AspectOriented/` 目录） |
-| `net5.0` | ❌ | 只有 Debug 构建产物存在，测试不再加载它 |
+| `net5.0` | ❌ | 只有 Debug 构建产物存在，测试不加载它 |
 | `netstandard2.0` | ❌ | 该分支的 `#if` 代码路径永远不被执行 |
 | `netcoreapp3.0` | ❌ | 同上 |
 | `netframework4.6.1` | ❌ | 同上；polyfill 分支（如 `#if !NET5_0_OR_GREATER` 的 `IsExternalInit`）在此永不进入 |
@@ -50,12 +48,10 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | 项 | 值 | 依据 |
 |---|---|---|
 | 测试框架 | **MSTest 4.0.2**（单包 = 框架 + 断言 + 适配器） | `VeloxDev.Core.Test.csproj` 的 `PackageReference Include="MSTest"` |
-| 覆盖率 | `coverlet.collector` 6.0.4，`PrivateAssets=all` | 同文件的 `PackageReference Include="coverlet.collector"` |
-| mock 库 | **没有**。没有 Moq / NSubstitute / FakeItEasy | 全 csproj 的 `PackageReference` 只有 MSTest、coverlet.collector 与一个 `Microsoft.CodeAnalysis.CSharp`（供直驱生成器），无一 mock 库 |
+| mock 库 | **没有** → 手写替身是替代品（下表） | csproj 无一 mock 包 |
 | 断言命名空间 | 全局注入 `Microsoft.VisualStudio.TestTools.UnitTesting` | `VeloxDev.Core.Test.csproj` 的 `<Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />` |
-| 全局 using | 只有两条：`VeloxDev.Threading`、`VeloxDev.TimeLine` | `GlobalUsings.cs` |
-| 源生成器 | **已引用**（2026-10-02 起）→ 可以 `new VeloxDev.Generators.MVVM()` / `new Command()` 直驱生成器；csproj 把生成器项目同时以 `OutputItemType="Analyzer"` 与普通 `Reference` 引入，并钉 `Microsoft.CodeAnalysis.CSharp` 4.8.0 | `VeloxDev.Core.Test.csproj` 的生成器 `ProjectReference` 与 `Microsoft.CodeAnalysis.CSharp` 引用 |
-| `NoWarn` | `MSTEST0032`、`MSTEST0037`、`CS0067` | `VeloxDev.Core.Test.csproj` 的 `NoWarn` |
+| 全局 using | 只有 `VeloxDev.Threading`、`VeloxDev.TimeLine` 两条 | `GlobalUsings.cs` |
+| 源生成器 | **已引用** → 可以 `new VeloxDev.Generators.MVVM()` / `new Command()` 直驱生成器；项目同时以 `OutputItemType="Analyzer"` 与普通 `Reference` 引入，并钉 `Microsoft.CodeAnalysis.CSharp` 4.8.0 | `VeloxDev.Core.Test.csproj` 的生成器 `ProjectReference` 与 `Microsoft.CodeAnalysis.CSharp` 引用 |
 
 **手写替身才是本模块的基础设施**（没有 mock 库的替代品）：
 
@@ -79,7 +75,7 @@ Core 是五目标项目；**测试项目是单目标 `net10.0`**（`VeloxDev.Cor
 | `dotnet test Src/Test/Unit/Core/VeloxDev.Core.Test/VeloxDev.Core.Test.csproj` | 单项目 |
 | `dotnet test Src/Test/Unit/Core/VeloxDev.Core.Test --filter "FullyQualifiedName~CompilerEx"` | 按命名空间定位一个目录 |
 
-条数与耗时以 `dotnet test` 现跑为准，不在这里维护；测试方法的分布见 §五。`TestResults/` 被 `.gitignore` 的 `[Tt]est[Rr]esult*/` 排除 —— 里面 `.trx` 是本地产物，**不可作为依据**。连跑偶发失败的结构性原因见 §六。
+测试方法的分布见 §五。`TestResults/` 被 `.gitignore` 的 `[Tt]est[Rr]esult*/` 排除 —— 里面 `.trx` 是本地产物，**不可作为依据**。连跑偶发失败的结构性原因见 §六。
 
 ---
 
@@ -131,7 +127,7 @@ Src/Test/Unit/Core/VeloxDev.Core.Test/MSTestSettings.cs
 [assembly: Parallelize(Scope = ExecutionScope.MethodLevel)]
 ```
 
-方法级 = **同一个类的两个方法可以同时在跑**。已全仓搜过，没有任何 `.runsettings` 文件，所以这一行就是并行的唯一事实源。
+方法级 = **同一个类的两个方法可以同时在跑**。全仓没有 `.runsettings`，这一行就是并行设置的事实源。
 
 **若干类用 `[DoNotParallelize]` 把自己摘出去**，理由分几档（档内按文件）：
 
@@ -143,7 +139,7 @@ Src/Test/Unit/Core/VeloxDev.Core.Test/MSTestSettings.cs
 | 纵深防御 | `TransitionSystem/InterpolatorCoreTests.cs` | 注释自己写明：这些断言与并行无关，保留 `[DoNotParallelize]` 纯粹是防御 |
 | 未注明理由 | `MVVM/CommandArityTests.cs` | 只有裸 `[DoNotParallelize]`，类注释里没写为什么串行 |
 
-**「用真实时钟但没摘出去」的类 —— 这就是偶发失败的全部来源**：
+**「用真实时钟但没摘出去」的类（偶发失败的来源）**：
 
 | 类 | 真实时钟用法 | `[DoNotParallelize]` |
 |---|---|---|
@@ -153,15 +149,7 @@ Src/Test/Unit/Core/VeloxDev.Core.Test/MSTestSettings.cs
 
 （`TransitionSystem/EaseOvershootTests.SampleAsync` 用了真实 120ms 时长，但断言走 `FixedEase`，与帧时序无关 —— 不是风险源。）
 
-**失败样本（trx 不可复核）**：`TestResults/step4.trx` 是 gitignored 本地产物、不在树里；它记录的失败是 `AgainstTheDefaultSourceTheStepsTrackItsOwnClock`，栈顶落在 `CompensatingTimeSamplerTests` 的同一个方法里，消息给的实测值是 `position 00:00:00.0875088, pushed 00:00:00.0700000` —— 最后一次内部读时钟与断言再读时钟之间过去了约 17.5ms。**持久的锚点是那个测试方法**，不是那个 trx。
-
-**代码与注释不一致（以代码为准）**：
-
-> `CompensatingTimeSamplerTests` 的类备注写：「Every assertion here is an exact integer comparison against a hand-driven clock. … a test that measured it against real time could only ever assert a ratio.」
-
-但同一个类里 `AgainstTheDefaultSourceTheStepsTrackItsOwnClock` **正是**那条「measure against real time」的测试（`Thread.Sleep(60)` + 11ms 容差），而且它**没有** `[DoNotParallelize]`。所以「这个类的断言全是精确整数比较」是错的；注释想说的只是「除了一条以外」。
-
-（`UncompensatedTimeSamplerTests` 的类备注**没有**这个问题 —— 它讲的是「暂停后不出现尖峰」，与代码一致。别把这两个类的备注当成同一回事。）
+**代码与注释不一致（以代码为准）**：`CompensatingTimeSamplerTests` 的类备注声称每个断言都是对手驱时钟的精确整数比较，但 `AgainstTheDefaultSourceTheStepsTrackItsOwnClock` 用 `Thread.Sleep(60)` 与 11ms 容差测量真实时间，且没有 `[DoNotParallelize]`。`UncompensatedTimeSamplerTests` 的类备注与代码一致（讲的是暂停后不出现尖峰）。
 
 ---
 

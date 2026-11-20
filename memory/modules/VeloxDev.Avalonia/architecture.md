@@ -2,8 +2,7 @@
 
 > 代码：`Src/Adapters/VeloxDev.Avalonia/`，按 Core 的模块分：`WorkflowSystem/`（`AttachedBehaviors/` + `ViewHosting/`）、`TransitionSystem/`（根 + `Samplers/`）、`DynamicTheme/`、`GlobalUsings.cs`。
 > 数法：`git ls-files 'Src/Adapters/VeloxDev.Avalonia/*.cs'` 能数到全部 `.cs`（git 的 pathspec 通配符**跨 `/` 匹配**，与 shell 不同）；而 `git ls-files 'Src/Adapters/VeloxDev.Avalonia/**/*.cs'` 会少 —— `**/` **不匹配顶层文件**，七家每家都正好漏掉顶层那个 `GlobalUsings.cs`。核验用 `git ls-files Src/Adapters/VeloxDev.Avalonia | grep -c '\.cs$'`。
-> 最大几个文件：`WorkflowSurfaceBehavior.cs`、`WorkflowMinimapOverlay.cs`、`WorkflowSlotLayoutBehavior.cs`、`Samplers/TransformSampler.cs`、`ThemeValueConverters.cs`、`Transition.cs`。
-> **三条 GUI 轴的平台差异不在这里**：`memory/modules/{TransitionSystem,WorkflowSystem,Templates}/adapters/avalonia.md`；七角色契约与附着属性注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；「怎么用这套 API」在 `skills/`。本文只写这个项目独有的：四块怎么分、注册与工厂在哪、三条轴各自怎么被宿主接上、程序集级约束、csproj 与 TFM。
+> **三条 GUI 轴的平台差异不在这里**：`memory/modules/{TransitionSystem,WorkflowSystem,Templates}/adapters/avalonia.md`；七角色契约与附着属性注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；「怎么用这套 API」在 `skills/`。本文写这个项目独有的：四块怎么分、注册与工厂在哪、三条轴各自怎么被宿主接上、程序集级约束、csproj 与 TFM。
 
 ---
 
@@ -53,7 +52,7 @@
 
 ## 四、`WorkflowSystem/AttachedBehaviors/` 的挂载模型（入口清单）
 
-（`PlatformDetection` 已于 2026-10-18 删除；其余九个）按「挂在哪 + 谁来开」分档：
+按「挂在哪 + 谁来开」分档：
 
 | 挂载点（`RegisterAttached<Owner, THost, T>` 的 `THost`） | 开关 | 入口/要点 |
 |---|---|---|
@@ -79,9 +78,9 @@
 
 ---
 
-## 六、采样器为什么这家最多（**机制**，不是「这家写得全」）
+## 六、采样器为什么这么多（**机制**，不是「这家写得全」）
 
-数一遍（`git ls-files 'Src/Adapters/<家>/TransitionSystem/Samplers/*.cs' | wc -l`）：各家数量不等，Avalonia 在四家 XAML 平台里最多。「别的家不用写这么多」是错的 —— 四个 XAML 家都在同一量级。真实机制：
+「别的家不用写这么多」是错的 —— 四个 XAML 家都在同一量级。真实机制：
 
 - **Core 只覆盖「不属于任何 toolkit」的取值类型**：它的静态注册表用的是 `System.Drawing` 与 `System.Numerics` 下的 `Point`/`PointF`/`Size`/`SizeF`/`Color`/`Rectangle`/`RectangleF`/`Vector2-4`/`Quaternion`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `using` + 静态构造函数里的 `RegisterInterpolator`）。
 - **工具包自己的同名类型是另一个类型**，必须各自注册：这家注册 `Avalonia.Point` / `Avalonia.Size` / `Avalonia.Color`（`Interpolator.cs` 里三条对应的 `RegisterInterpolator`），WPF / WinUI / MAUI / Jalium 同理各注册一份自己的。
@@ -96,7 +95,7 @@
 - `GlobalUsings.cs` 只三条：`VeloxDev.TransitionSystem`、`VeloxDev.TransitionSystem.Abstractions`、`VeloxDev.Threading`。**七家逐字相同**（`git ls-files 'Src/Adapters/*/GlobalUsings.cs'` 全部核过）。所以这家的文件里看不到这三个 using 是正常的（`Interpolator.cs` 的 `InterpolatorCore`、`TransitionInterpreter.cs` 的 `TransitionInterpreterCore<>` 都靠它）。它**不含** `DynamicTheme` 与 `WorkflowSystem`；后者靠 §三.3 的命名空间嵌套，前者各文件自己写。
 - TFM：`netstandard2.0;net6.0;net8.0`（`VeloxDev.Avalonia.csproj` 的 `TargetFrameworks`）。**七家里只有这一家声明 `netstandard2.0`**（`grep -l netstandard2.0 Src/Adapters/*/*.csproj` 只命中它）。代价是**全模块只有少量条件编译**：`Transition.cs` 的 `#if !NETSTANDARD2_0` 块（`System.Numerics` 那组重载）与 `BoxShadowsSampler.cs` 的零调用者死代码，细节见 `TransitionSystem/adapters/avalonia.md` §二.6。
 - 平台版本锚点 `AvaloniaVersion=11.1.0`（csproj 的 `AvaloniaVersion`），三处 `PackageReference` 共用：升版本改这一处。
-- 另外三条：`AvaloniaUseCompiledBindingsByDefault=true`（csproj 的 `AvaloniaUseCompiledBindingsByDefault`，所以 `{Binding $parent[local:TreeView].(behaviors:…)}` 这类写法按编译期绑定解析）、`GeneratePackageOnBuild=True`（csproj 的 `GeneratePackageOnBuild`）、`AvaloniaResource Include="Assets\**"`（csproj 的 `AvaloniaResource`）—— 最后一条指向的目录**在仓库里不存在**（`git ls-files` 与磁盘都没有 `Assets/`），空 glob，别按它去找资源。
+- 另外三条：`AvaloniaUseCompiledBindingsByDefault=true`（csproj 的 `AvaloniaUseCompiledBindingsByDefault`，所以 `{Binding $parent[local:TreeView].(behaviors:…)}` 这类写法按编译期绑定解析）、`GeneratePackageOnBuild=True`（csproj 的 `GeneratePackageOnBuild`）、`AvaloniaResource Include="Assets\**"`（csproj 的 `AvaloniaResource`）—— 最后一条指向的目录**在仓库里不存在**（`git ls-files` 与磁盘都没有 `Assets/`），空 glob。
 - `Debug` 走 `ProjectReference`、非 Debug 走 `PackageReference`（csproj 里 `Configuration` 条件的那一对）是**七家统一形状**（版本 11.0.0），规则与原因见 `VeloxDev.Core.Generator/architecture.md` §五。
 - `obj/` 下另有 **csproj 未声明**的 TFM 产物（如 `net8.0` / `net10.0`）；当前裁剪元数据只落在 `net8.0` 上（`obj/Debug/net8.0/VeloxDev.Avalonia.AssemblyInfo.cs` 的 `[assembly: AssemblyMetadata("IsTrimmable", "True")]`，`net10.0` 那份没有）。机制与 Core 那边同：外部 MSBuild 属性覆盖 ⇒ **不能反推「这个包本身可裁剪」**。这家是七家里唯一有裁剪 demo 的（`Examples/Workflow/Avalonia Trimmed/`，其 `Directory.Build.props` 不再显式 root `VeloxDev.Core.Extension`，理由写在注释里）。
 
@@ -107,7 +106,7 @@
 1. **模板解析失败是静默的。** `ViewFactory.CreateView` 找不到模板时返回 `null`，Core pool 按 ViewModel 类型缓存该类型并跳过 —— 不抛、不报；换模板必须重建 system（`ViewPool` 的属性变化会重建）。模板按「面板 → 沿 `Parent` 链 → `Application.Current.DataTemplates`」三级找（`ViewFactory.FindTemplate`）。
 2. **全模块唯一的反射点读的是私有框架字段，而且是「做一次就自摘」的。** `WorkflowSurfaceBehavior.OnScrollViewerLayoutUpdated` 取 `GestureRecognizerCollection` 的私有 `_recognizers` 列表，把 `ScrollGestureRecognizer` 全删掉（理由写在同一方法的注释里：它会在拖拽中抢走指针捕获，触屏平台尤甚），删完立刻 `viewer.LayoutUpdated -= OnScrollViewerLayoutUpdated` —— 所以这段逻辑只在第一次布局后跑一次，之后不再走。前提是 `GestureRecognizerCollection` 只公开 `Add`（`WorkflowSystem/adapters/avalonia.md` §二.4）。这家**没有任何裁剪注解**（grep `IsTrimmable|DynamicDependency|RequiresUnreferencedCode` 只命中 `obj/` 产物），而这家恰好有裁剪 demo（§七）。**裁剪会把这里影响到什么程度、是抛还是静默失效，我没有验证 —— 存疑**；要动这里先在裁剪 demo 上实测。
 3. **`WorkflowSurfaceBehavior.Refresh` 是 public 静态入口**，每次都会重解析名字、重写滚动偏移并写 `viewModel.Layout.ViewportOffset`（`Refresh` 与 `UpdateVisibleRegion`）。别在别处再写一次 `Viewport` / `ScrollViewer.Offset` —— `Viewport` 只有适配器写这条契约（`WorkflowSystem/extension.md` §3.9-3）在这家由这一处落地。
-   2026-10-03 起 `Refresh` **也读** `ViewportOffset`：`CaptureViewportRestore` 在 `UpdateVisibleRegion` 之前取值、换树才算，末尾 `QueueViewportRestore` 排 `DispatcherPriority.Loaded` 滚过去。⇒ 宿主的加载路径**不要**再自己滚，也不要在绑定前手动捕获 —— 适配器已经做在那一层（`WorkflowSystem/extension.md` §3.9-10）。
+   2026-10-03 起 `Refresh` **也读** `ViewportOffset`：`CaptureViewportRestore` 在 `UpdateVisibleRegion` 之前取值、换树才算，末尾 `QueueViewportRestore` 排 `DispatcherPriority.Loaded` 滚过去。⇒ 宿主的加载路径不需要自己滚或手动捕获 —— 适配器已经做在那一层（`WorkflowSystem/extension.md` §3.9-10）。
 4. **`ViewPool` 的两个属性谁后写谁重建 system**（`OnItemsSourceChanged`/`OnTemplateSelectorChanged`）；源必须实现 `IEnumerable`，运行期换 `TemplateSelector` 会 `Cleanup` 旧 system 并按新模板重建。
 5. **故意让一次 XAML 编译失败，会把 Avalonia 的构建服务卡住；此后每一笔「成功」的构建都在产出一个没有编译 XAML 的程序集。** 症状是**启动即抛**
    `Avalonia.Markup.Xaml.XamlLoadException: No precompiled XAML found for <App>`（栈顶在 `App.axaml.cs` 的 `Initialize()`）。
@@ -125,7 +124,7 @@
 
 ---
 
-## 九、核过、是七家通则、别再查的几处
+## 九、核过、是七家通则的几处
 
 - `TransitionEffects` 三档预设 + 可变静态：七家同形（Avalonia `TransitionEffects.cs` 与 WPF 同名文件逐字相同）。
 - `GlobalUsings.cs` 三条：七家逐字相同。

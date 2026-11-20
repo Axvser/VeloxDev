@@ -7,13 +7,9 @@
 
 ## 一、第一件该知道的事：这一层在仓库里没有 UI 消费者
 
-`AgentDashboardViewModel` 的全部引用都在**它自己的测试**里。三个 demo 都不用它 —— Avalonia / Blazor / Jalium 是**各自**绑 `McpScope.Status`（`McpStatusViewModel`）建自己的 MCP 面板：
+`AgentDashboardViewModel` 的全部引用都在**它自己的测试**里。三个 demo 都不用它，各自绑 `McpScope.Status`（`McpStatusViewModel`）建 MCP 面板：Avalonia `Examples/Workflow/Avalonia/Demo/Views/Workflow/WorkflowView.axaml.cs` 的 `InitializeMcp`、Blazor `Examples/Workflow/Blazor/Demo/Demo/Components/Pages/Workflow.razor.cs` 的 `McpStatus`、Jalium `Examples/Workflow/Jalium/Demo/MainWindow.cs` 的 `InitializeMcp`。
 
-- `Examples/Workflow/Avalonia/Demo/Views/Workflow/WorkflowView.axaml.cs` 的 `InitializeMcp`：`McpStatusPanel.DataContext = helper.Mcp.Status;`
-- `Examples/Workflow/Blazor/Demo/Demo/Components/Pages/Workflow.razor.cs` 的 `McpStatus` 属性：`=> (_session?.Tree.GetHelper() as AgentHelper)?.Mcp.Status;`
-- `Examples/Workflow/Jalium/Demo/MainWindow.cs` 的 `InitializeMcp`：`_mcpStatus = helper.Mcp.Status;`
-
-**推论**：`Agent/Dashboard/` 是**有测试、无宿主**的一片。它想做的是「把系统工具 / 技能工具 / MCP 服务器 / MCP 工具 / 技能统一成同一种可开关的行」，但各家 demo 现在各自拼面板、也没有统一开关 UI。动它之前先确认你要解决的是哪个问题 —— 改这里不会影响任何一个 demo 的显示。
+**推论**：`Agent/Dashboard/` 是**有测试、无宿主**的一片，其设计是把系统工具 / 技能工具 / MCP 服务器 / MCP 工具 / 技能统一成同一种可开关的行；改这里不影响任何一个 demo 的显示。
 
 ---
 
@@ -22,7 +18,7 @@
 `AgentMemberViewModel` 的类注释把这一层的核心约束写死了：
 
 - `IsEnabled` 的写入**穿透到拥有它的 scope**（`ApplyToScope`）；scope 起源的变化**回灌**进来（`SetFromScope`），回灌时**不回响**。
-- **为什么不能直写 scope 自己已经发布的绑定标志**（技能的 `SkillStatusViewModel.IsEnabled`、MCP 的 `McpStatusViewModel.IsEnabled`）：那样会**绕过 scope 的 `Version` 自增**，于是按 `Version` 缓存的 prompt provider 会继续送出宿主以为已经关掉的文本。这就是 `SkillMemberViewModel` 与同类行不直写那个属性的原因。
+- **为什么不能直写 scope 自己已经发布的绑定标志**（技能的 `SkillStatusViewModel.IsEnabled`、MCP 的 `McpStatusViewModel.IsEnabled`）：那样会**绕过 scope 的 `Version` 自增**，于是按 `Version` 缓存的 prompt provider 会继续送出宿主以为已经关掉的文本。
 - `_applying` 标志只需要一个：写入是同步的，且 scope 会吞掉同值写，所以不存在第二次跳跃的窗口。
 
 派生属性：`IsOff`、**`IsReachable = IsEnabled && Note.Length == 0`**（「开着但被宿主策略挡住」是存在的状态，`Note` 就是 `GateNote`）、`HasBeenCalled`、`ActivityText`（未调用 / N 次）。
@@ -90,5 +86,5 @@
 
 ## 六、死面
 
-- 本目录**全部文件都有调用者**（在模块内部）+ 测试覆盖，**不存在零调用者成员**。
-- 但**整个目录在仓库里没有 UI 消费者**（见第一节）。这是本模块最容易被误判的一处：看见 demo 里有 MCP 状态面板就以为它在用 Dashboard，其实 demo 绑的是 `McpScope.Status` 那个更薄的对象。
+- 本目录所有文件在模块内部都有调用者，并有测试覆盖。
+- 但**整个目录在仓库里没有 UI 消费者**（见第一节）：demo 的 MCP 状态面板绑的是 `McpScope.Status`。

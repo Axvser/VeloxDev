@@ -1,7 +1,6 @@
 # AspectOriented — 扩展
 
 > 面向「我要加一个新东西」和「我要挂一个切面」。架构见 [architecture.md](architecture.md)。
-> 依据只写树里的**路径 + 唯一符号或引文**。
 > **下文不带路径的文件名都指 `Src/Generators/VeloxDev.Core.Generator/`**（`AopSurface.cs`、`AopProxy.cs`、`Writers/AopWriter.cs`、`Base/AopNames.cs`、`Base/AnalizeHelper.cs`、`Base/Analizer.cs`），不在本模块目录下。
 > **本模块没有 `adapters/`，因为不存在平台轴**：运行期 .cs 全在 `#if NET` 内、零 GUI 引用，`Src/Adapters/` 下也无人引用它（见 architecture.md §一末）。
 
@@ -20,7 +19,7 @@
 | 拦截语义（三阶段的顺序与返回值） | `AopSurface.WriteProxy` | 改这里等于改全仓库的切面语义 |
 | 代理的安装面（键 → 槽位） | 生成的 `IAopHookTarget.SetHooks`（`AopSurface.WriteProxy`） | 生成器作者 |
 
-用户侧**唯一**真正需要记的形状：`ProxyHandler` 是 `object? (object?[]? parameters, object? previous)`（`AspectHooks.cs` 的 `ProxyHandler`）。
+用户侧需要记的形状：`ProxyHandler` 是 `object? (object?[]? parameters, object? previous)`（`AspectHooks.cs` 的 `ProxyHandler`）。
 
 ---
 
@@ -39,7 +38,7 @@
 
 ### 2. 「切面装上了，但调用绕过去了」
 
-这是本模块**唯一**的核心规则，也是官方专门用一节讲的（`skills/veloxdev-add-aspects/SKILL.md` §Worked examples）：
+核心规则（`skills/veloxdev-add-aspects/SKILL.md` §Worked examples）：
 
 | 写法 | 结果 |
 |---|---|
@@ -56,7 +55,7 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 （`Examples/AOP/WPF/Demo/TeamViewModel.cs`、`Examples/AOP/Avalonia/Demo/`。）
 
-**错的捷径 —— 但这条捷径现在被编译期堵住了**：在真身上装 `SetProxy` 过不去 `where T : IAspectOriented`（`ProxyEx.SetProxy`），因为用户类不再实现生成接口（`AopWriter.GenerateBaseInterfaces()` 返回 `[]`）。这一条从「静默无操作」变成了**编译错误**，是本模块最值得记住的一处改善。
+**错的捷径被编译期堵住**：在真身上装 `SetProxy` 过不去 `where T : IAspectOriented`（`ProxyEx.SetProxy`），因为用户类不实现生成接口（`AopWriter.GenerateBaseInterfaces()` 返回 `[]`）。
 
 剩下那半是运行期守卫：`target is not IAopHookTarget` ⇒ 抛 `InvalidOperationException`（`ProxyEx.SetProxy` 的守卫），针对的是**手写的** `IAspectOriented`（空标记接口谁都能实现）。
 
@@ -88,7 +87,7 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 ## 四、联动清单（改这里 = 必须同步改那几处）
 
-**这是本模块最容易漏的地方。** 生成器与运行期各有自己的一份「成员种类」概念，只在编译产物层面相遇 —— 漏一处不会报错，而是**静默少一个能力**。
+生成器与运行期各有自己的一份「成员种类」概念，只在编译产物层面相遇 —— 漏一处不会报错，而是**静默少一个能力**。
 
 ### 1. 加一种「可拦截的成员种类」（例如索引器、事件）
 
@@ -110,16 +109,6 @@ private void OnMemberAdded(object? sender, NotifyCollectionChangedEventArgs e)
 
 ### 3. 改「接口 / 代理 / 命名空间段」的拼接方式
 
-**只有一个地方**：`Base/AopNames.cs`。接口名与代理名由 `InterfaceFor` / `ProxyFor` 派生（`ProxyFor` = `InterfaceFor + "Proxy"`），扩展类名用的是同一个 `Segment`（`AopWriter.WriteExtension`）。这三者必须对同一个类给出一致的名字 —— 三处各算一遍会在全局命名空间下产出非法的 `<global namespace>`（宿主只报 CS8785）。**不要在任何一处重新手写拼接**；要改就改 `AopNames`。
+**只有一个地方**：`Base/AopNames.cs`。接口名与代理名由 `InterfaceFor` / `ProxyFor` 派生（`ProxyFor` = `InterfaceFor + "Proxy"`），扩展类名用的是同一个 `Segment`（`AopWriter.WriteExtension`）。三者必须对同一个类给出一致的名字；**不要在任何一处重新手写拼接**，要改就改 `AopNames`。
 
 本仓库的 `Src/Adapters/` **没有任何** AOP 使用者（`Src/` 里只有契约、生成器与测试提到这个命名空间），所以这类回归**跑不出来** —— 但 `Src/Test/Unit/Core/VeloxDev.Core.Test/AspectOriented/` 与 `Examples/AOP/*` 会先红。
-
----
-
-## 五、边界的实测数字与可复核性
-
-- **重载 = 生成代码编译失败**：两个同名方法撞同一个 `_hooks_{名}` 字段（`AopSurface.Slot`）⇒ CS0102；`SetHooks` 的 switch 也会撞重复 `case`。实测复现。`SKILL.md` §Pitfalls 把它写成「不要标记重载方法」。
-- **表达式体属性 = 生成代码编译失败**：`AccessorList` 为 null 时 `hasGetter` / `hasSetter` 都是 false（`AopSurface.GenerateSource` 的属性分支）⇒ 生成 `{ }` ⇒ CS0548，接口与代理各报一次。实测复现（`public string X => "x";`）。
-- **代理会回收**：两张静态强引用表（`ProxyInstances` / `ProxyIDs`）随旧实现删除，现在只剩两个 `ConditionalWeakTable`。实测钉在 `Src/Test/Unit/Core/VeloxDev.Core.Test/AspectOriented/AopProxyTests.AProxyIsCollectableOnceItsTargetIs`（弱引用 + 强制 GC，稳定通过）。**这条是为重构回归写的** —— 重新引入静态注册表只会让这一条红。
-- **AOT 可用**：NativeAOT 发布 + 运行实测通过，零 IL 警告。做法、环境坑（`vswhere.exe` 不在 PATH）与 IL2091 的成因写在 architecture.md §八。
-- **`#if NET`**：运行期 .cs 全在 `#if NET` 内，`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 含 `netstandard2.0`/`netframework4.6.1` ⇒ 那两个 TFM 上命名空间不存在。`SKILL.md` §Which package 也这么写（「.NET 5 及以后」）。

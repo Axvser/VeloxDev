@@ -9,15 +9,13 @@
 
 ## 一、先确认一件事：模板内容没有生成器，也没有脚本
 
-上一版容易犯的错是"以为模板是生成的、改一处就同步了"。**不是。**
-
 | 探针 | 结果 |
 |---|---|
 | `Src/Generators/VeloxDev.Core.Generator` 里搜 `Templates` | **零命中** |
-| 本仓库搜脚本（`.ps1` / `.sh` / `.yml` / `.py`）里的 `Templates` | 2026-10-04 起 `Src/Test/Harness/verify-workflow-item-templates-all.ps1` 会引用 `Src/Templates/`（旧的 `verify-workflow-item-templates.ps1` / `verify-jalium-item-templates.ps1` 现在是它的薄转发）；其余脚本零命中 |
+| 本仓库搜脚本（`.ps1` / `.sh` / `.yml` / `.py`）里的 `Templates` | `Src/Test/Harness/verify-workflow-item-templates-all.ps1` 会引用 `Src/Templates/`；其余脚本零命中 |
 | `Src/Templates/` 下的 `.md` / `.sln` / 测试 | `find -name "*.md"` 零命中 |
 
-⇒ **全部条目都靠手写维护。下面所有清单都是"你必须亲手去改的地方"，不是"某个脚本会替你跟上的地方"。**
+⇒ **全部条目都靠手写维护；下面所有清单都要亲手改。**
 
 唯一会自动跟上的是 `template.json` 的**文本替换**（`replaces`），而它只在**生成那一刻**生效：
 把 `TemplateClass` / `TemplateNamespace` / `TemplateSlotColor` 这类 token 换成用户传的值。
@@ -25,35 +23,27 @@
 **并且**在模板文件里把对应字面量写成那个 token。只加 `symbols` 不写 token 就是
 `architecture.md` §7.1 那批空转参数之一。
 
-**改动怎么验证**：模板项目虽然进了 `VeloxDev.slnx` 的 `/Templates/` 文件夹，但
-`EnableDefaultCompileItems=false` + `IncludeBuildOutput=false`（`VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj`）
-⇒ 构建它等于什么都不做，**生成的代码编译不过不会被任何构建发现**。
+**改动怎么验证**：模板项目不编译 C#（`EnableDefaultCompileItems=false` + `IncludeBuildOutput=false`，`VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj`），**生成的代码编译不过不会被任何构建发现**。
 
-**2026-10-04 起七家共用一条自动化**：入口 `Src/Test/Harness/verify-workflow-item-templates-all.ps1`
-（`-Platform <name…>` 默认七家全跑，另有 `-Strict`、`-KeepProbe`）。旧的两条现在是薄转发：
-`verify-workflow-item-templates.ps1` → `-Platform WinForms`、`verify-jalium-item-templates.ps1` → `-Platform Jalium`，
-已有调用照旧。对每家它证明：七个 CLI 短名能解析、**没有任何 `replaces` 占位符漏进生成文件**（脚本读该平台所有
+**七家共用一条自动化**：入口 `Src/Test/Harness/verify-workflow-item-templates-all.ps1`
+（`-Platform <name…>` 默认七家全跑，另有 `-Strict`、`-KeepProbe`）；
+`verify-workflow-item-templates.ps1` / `verify-jalium-item-templates.ps1` 分别转发到 `-Platform WinForms` / `-Platform Jalium`。
+对每家它证明：七个 CLI 短名能解析、**没有任何 `replaces` 占位符漏进生成文件**（脚本读该平台所有
 item template 的 `replaces` token，逐个在生成文件里搜，残留即“模板引用了自己没声明的 symbol”）、
 `primaryOutputs` 完整、七个生成文件能对着适配器一起编译、模板文本 == `Examples/Workflow/<GUI> Trimmed` 的镜像
-（机械改动除外）；证明不了任何运行期行为，也分不出颜色对不对（错的颜色照样编译）。
+（机械改动除外）；证明不了运行期行为，也分不出颜色对不对（错的颜色照样编译）。
 
-⚠ **占位符守卫能抓到 pack 的真缺陷**（第一次跑就抓到 Jalium 的）：**`workflow-link-view`** 模板引用了 `TemplateLinkColor`，
+⚠ **占位符守卫能抓到 pack 的真缺陷**：**`workflow-link-view`** 模板引用了 `TemplateLinkColor`，
 而该条 `template.json` 必须声明这个 symbol —— `workflow-link-view/.template.config/template.json` 的 `linkColor`
 声明了 `"replaces": "TemplateLinkColor"`（默认值 `#DDFFFFFF`），源码侧因此**保持占位符 token、不写死颜色**
 （`workflow-link-view/TemplateClass.jalxaml.cs` 的 `LineColorProperty` 把它交给 `ParseColor`）。
-这一轮全平台化同时补了一批镜像同步：WinUI `LinkView`、MAUI `LinkView` / `TreeView` / `SlotView`、WPF `SlotView`。
 
-⚠ **它第一次跑就照出一批既有漂移**，其中 decorator 那处是**真的值差异**（模板 `#C8252526` vs 镜像
-`#70252526`）而不是措辞 —— 也就是说规格 §一「模板是源、镜像跟随」这条规则一直没有人执行过：
-从那以后没有任何东西检查过它们。**2026-10-03 已全部清掉**（decorator 按镜像的注释把**模板**的 symbol 默认值
-降到 0x70 并补上理由，其余是把镜像从模板机械派生一次）。现在这些镜像里只有 tree-view 逐字不同 ——
-那是 `Examples` 侧的 HUD，属五类机械改动之一，脚本把它标成 expected 而不计入失败。⇒ **可以开 `-Strict` 了。**
+⚠ 镜像里只有 tree-view 逐字不同 —— 那是 `Examples` 侧的 HUD，属五类机械改动之一，脚本把它标成 expected 而不计入失败。⇒ **可以开 `-Strict` 了。**
 
 ### 1.1 那它们是从哪来的：**`Examples/Workflow/<GUI> Trimmed/` 的逐文件衍生**
 
-"没有生成器"不等于"凭空手写"。实测：**每个条目文件都是该平台 `Trimmed` demo 里同名文件的一份改名副本**，
-差异只有下面五类机械改动。这不是推理，按下面的方法可以逐行量出来；具体行数与差异行数会随两边改动漂移，
-不在这里抄录（旧版那张表已过期）。
+**每个条目文件都是该平台 `Trimmed` demo 里同名文件的一份改名副本**，差异只有下面五类机械改动。
+按下面的方法可以逐行量出来。
 
 已知的一处实质差异：`workflow-template-selector` 与 demo 只差模板类名与 DataTemplate 资源名
 「连线视图由适配器那份『附加』收绑…」，其余是命名空间与类名的机械改名。
@@ -73,7 +63,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 | WinForms | `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` |
 | Jalium | `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/` |
 
-五类机械改动（**改模板前先看这几条，能省掉一半的"重新设计"**）：
+五类机械改动：
 
 | # | 改什么 | 例 |
 |---|---|---|
@@ -81,18 +71,16 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 | 2 | 字面量换成 `Template*` 占位符，并在 `template.json` 里配 `replaces` | WinForms demo 的 `TreeView.xaml` 写 `BackColor="#FF1E1E1E"`、`GridDecorator` 写 `GridSpacing="40"`，模板写 `BackColor="TemplateSurfaceBackground"` / `ParseGridValue("TemplateGridSpacing")`；WPF demo 的 `<Border … Background="#1E1E1E" BorderBrush="#33FFFFFF" BorderThickness="1">` 在模板里是四个 `Template*`（`workflow-tree-view/TemplateClass.xaml` 的 `PART_SurfaceBorder`） |
 | 3 | **删掉 demo 的 `InfoOverlay` HUD 及其绑定** | 模板里没有任何 InfoOverlay；demo 每个平台都有（如 `Examples/Workflow/Blazor Trimmed/Demo/Components/Workflow/InfoOverlay.razor`，模板 tree-view 只把它连同 `<InfoOverlay …>` 那一行一起拿掉） |
 | 4 | **兄弟类型改名**：demo 用 `WorkflowGridDecorator` / `CustomTemplateSelector`，模板条目必须叫 `GridDecorator` / `TemplateSelector`（WinForms 的选择器默认叫 `CustomTemplateSelector`，避免与通用基类同名） | WPF demo `TreeView.xaml` 里是 `<workflowViews:WorkflowGridDecorator>`，模板里是 `<workflowViews:GridDecorator>`；因为 tree-view 是按 `defaultName` 引用兄弟的（`architecture.md` §五） |
-| 5 | 头注释换成 `… VeloxDev customization: …` 那一句 | 每个条目文件的第一行 |
-| 6 | **把注释翻成英文**：demo 的注释是简体中文，模板产物一律英文、一行说清、只标扩展点 | [code-comment-specifications.md](../../specifications/code-comment-specifications.md) §五；七家 `workflow-tree-view` 2026-10-03 已清到零中文 |
+| 5 | **注释**：头注释换成 `… VeloxDev customization: …`，其余注释翻成英文、一行说清、只标扩展点 | 每个条目文件的第一行；[code-comment-specifications.md](../../specifications/code-comment-specifications.md) §五；七家 `workflow-tree-view` 已是零中文 |
 
-⇒ **要改一个条目的内容，第一步是打开 demo 的对应文件，不是打开模板文件**；
+⇒ **要改一个条目的内容，第一步是打开 demo 的对应文件，不是模板文件**；
 两边不一致时，先判断是"模板落后于 demo"还是"模板刻意偏离"（第 3、4 类就是刻意的）。
-⚠ 仍然**没有脚本**做或检查这个同步，也没有任何东西保证某天它们还对应得上。
 
 ---
 
 ## 二、改一个条目：必须同时动的地方
 
-看"模板长什么样"像是一个文件的事，实际有四层。**漏第 2、3 层是静默的**：
+改一个条目实际有四层；**漏第 2、3 层是静默的**：
 
 | 层 | 改哪 | 漏了会怎样 |
 |---|---|---|
@@ -128,7 +116,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 5. **tree-view 里按 `defaultName` 引用另外六个**。引用语法看该平台的适配器形状 ——
    七家的写法对照表在 `architecture.md` §五，照着同族的抄。
 6. **对照该平台已有的 demo 逐文件搬**（`Examples/Workflow/<GUI> Trimmed/`）：七个角色一对一，删掉 `InfoOverlay`，
-   再按 §1.1 那五类机械改动处理。**这是最快的路** —— 从零设计一遍几乎必然与 demo 分叉，而 demo 是唯一跑过的版本。
+   再按 §1.1 那五类机械改动处理。这是最快的路；从零设计会与 demo 分叉。
 
 ---
 
@@ -145,14 +133,13 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 而且早就在用：生成文件引用适配器程序集（`TemplateClass.xaml` 里 `xmlns:behaviors` 的 `assembly=VeloxDev.WPF`）本来就要
 用户自己装包，minimap 这个角色在六家就是「包里发控件 + 模板薄派生」（WPF / Avalonia / WinUI / MAUI / Jalium / Razor 各家都只剩薄薄一层）。
 
-**2026-10-03 起 WinForms 的七项全部走这条**（Jalium 在 2026-10-05 转标记驱动后不再派生基类，见下面第二条）。
+**WinForms 的七项全部走这条**：适配器给行为与附件，模板只声明 XAML 根与部件。
 
 - WinForms（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`）：
-`WorkflowTreeView`（装配、网格、分层窗口标尺、平移引擎、视图池）、`WorkflowNodeView`（绑定、定位、缩放折叠、
-反射读标题/输入口/插槽标签）、`WorkflowSlotAttachment`（含那个 SVG 路径解析器，`SvgPathParser.cs` 的 `BuildPath`）、`WorkflowLinkAttachment`
-（雕窗口区域、端点订阅、几何）、`WorkflowMinimapOverlay`、`WorkflowGridDecorator`（网格与标尺的绘制）、
-通用 `TemplateSelector`（`DataTemplate` 按类型选择）。模板因此只剩薄壳。
-- Jalium（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/`）：**2026-10-05 起不再走这条** ——
+`WorkflowSurfaceBehavior`（装配、平移、输入路由、视图池、标尺浮层）、`WorkflowNodeAttachment`（绑定、定位、缩放折叠）、
+`WorkflowSlotAttachment`（含 `SvgPathParser`）、`WorkflowLinkAttachment` / `WorkflowLinkLayer`（端点订阅与几何）、
+`WorkflowMinimapOverlay`；网格与标尺是模板条目的职责，选择器基类是 `VeloxDev.WinForms.Xaml.TemplateSelector`。模板因此只剩薄壳。
+- Jalium（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/`）**不走这条**：
 角色落成附着行为（`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` /
 `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds`）+ 小地图 `WorkflowMinimapOverlay` +
 池 `ViewPool` + `ViewHosting/`（Core 驱动的 `ViewSourcePipeline`）；网格装饰器归**模板**。模板侧是四个 `.jalxaml` 条目 + 三个 `.cs`。
@@ -164,7 +151,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 那个角色照样含平台机制。机制与策略的分层见
 [`layer-ownership-specifications.md`](../../specifications/layer-ownership-specifications.md)。
 
-⇒ 已经"抽"过的公共物只有一件：`TemplateSlotPath` 那段 SVG。它是**每个条目的 `template.json` 里各存一份字面量**
+⇒ 被抽出的公共物只有一件：`TemplateSlotPath` 那段 SVG。它是**每个条目的 `template.json` 里各存一份字面量**
 （七个平台的 `defaultValue` 逐字节相同，viewBox 1024×1024），**改图标要改每一处**，
 而且其中一处（MAUI）根本没有 `replaces`。
 
@@ -199,8 +186,6 @@ Razor 的 `slotBackground` 就是这一类的正面样本：它的 `description`
 | 节点设计尺寸 `260×180` | WPF / WinUI `workflow-node-view/TemplateClass.xaml` 的 `Grid Width="260" Height="180"`、MAUI `workflow-node-view/TemplateClass.xaml.cs` 的 `DesignWidth`、Razor `workflow-node-view/TemplateClass.razor.cs` 的 `DesignWidth`、Jalium `workflow-node-view/TemplateClass.jalxaml` 的 `Grid Width="260"/Height="180"` |
 | 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `workflow-link-view/TemplateClass.axaml.cs` 的 `PullMinimum`、WPF `workflow-link-view/TemplateClass.xaml.cs` 的 `MinimumPull`、WinUI `workflow-link-view/TemplateClass.xaml.cs` 的 `BuildCurve` 里字面量 `40`、Razor `workflow-link-view/TemplateClass.razor.cs` 的 `PullMinimum`；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js`）；WinForms 默认单层绘制的 `pullMinimum` 在 `WorkflowLinkLayer.cs`，per-link 路径另有 `WorkflowLinkAttachment.cs` 的一份；MAUI 在 `WorkflowLinkOverlay.cs` 的 `PullMinimum`，Jalium 在模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `MinimumPull = 40`。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
 
-绑定式的那几家（WPF/Avalonia/WinUI/MAUI 的 tree-view 把 `TranslateTransform` 绑到
-`PART_GridDecorator.RulerThickness`）会自动跟随，**复制式的那几处不会**。
 
 ---
 

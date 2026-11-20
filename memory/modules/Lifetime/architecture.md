@@ -2,9 +2,7 @@
 
 > 代码：`Src/Core/VeloxDev.Core/Lifetime/`，**一个文件**：`IApplicationState.cs`（命名空间 `VeloxDev.Lifetime`）。
 > 唯一的消费者是 TransitionSystem 的宿主接缝：`Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ITransitionHost.cs` 把它与 `Src/Core/VeloxDev.Core/Threading/IThreadDispatcher.cs` 合成一个接口；实现通过 `Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs` 拿到它。
-> 七家平台在这条轴上的差异**已经写全**在 `memory/modules/TransitionSystem/adapters/<平台>.md`（总表在 `memory/modules/TransitionSystem/adapters/avalonia.md` 的 §三.1），本文只给代码锚点与指路，不重复七遍。
-
-本文只写「读完这一个文件 + 追完它的读者写者才知道的东西」。
+> 七家平台在这条轴上的差异在 `memory/modules/TransitionSystem/adapters/<平台>.md`（总表在 `memory/modules/TransitionSystem/adapters/avalonia.md` 的 §三.1）。
 
 ---
 
@@ -32,9 +30,9 @@
 | 谁**读**（消费者） | `SamplerSet.CanSetValue() => _host.IsAlive`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/SamplerSet.cs`） |
 | 读到之后 | `SamplerSet.Apply` 排队**之前**与 `SamplerSet.ApplyCore` **逐条属性写之前**各拦一次 |
 | 谁**写** | `ApplicationState.SetAlive(bool)` —— 树内唯一调用点是 `Src/Adapters/VeloxDev.WinUI/TransitionSystem/UIThreadInspector.cs` 的 `PostCore` |
-| 还有谁引用 `IApplicationState` | 没有。全树只有四处：定义（`IApplicationState.cs`）、合成（`Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ITransitionHost.cs`）、默认实现（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs` 的 `Lifetime` / `IsAlive`）、读（`SamplerSet.CanSetValue`） |
+| 还有谁引用 `IApplicationState` | 没有别处：定义（`IApplicationState.cs`）、合成（`Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ITransitionHost.cs`）、默认实现（`Src/Core/VeloxDev.Core/TransitionSystem/Runtime/TransitionHostBase.cs` 的 `Lifetime` / `IsAlive`）、读（`SamplerSet.CanSetValue`） |
 
-⇒ **整个模块的消费者集合 = 一个 bool 喂给一处 `CanSetValue()`**。它是最小的 Core 模块，但这一条边决定「帧还写不写得进去」。
+⇒ **整个模块的消费者集合 = 一个 bool 喂给一处 `CanSetValue()`** —— 这一条边决定「帧还写不写得进去」。
 
 ---
 
@@ -49,7 +47,7 @@
 
 ---
 
-## 四、七家怎么满足这条轴（代码复核过；细节请读那七份）
+## 四、七家怎么满足这条轴
 
 | 满足方式 | 家 | 代码锚点 |
 |---|---|---|
@@ -58,4 +56,4 @@
 | **不覆写，在 `PostCore` 里问平台并丢弃** | WPF / Jalium | `Src/Adapters/VeloxDev.WPF/TransitionSystem/UIThreadInspector.cs`、`Src/Adapters/VeloxDev.Jalium/TransitionSystem/UIThreadInspector.cs` 的 `dispatcher.HasShutdownStarted` ⇒ 返 `false` |
 | **一个存活信号都没有** | Avalonia | `Src/Adapters/VeloxDev.Avalonia/TransitionSystem/UIThreadInspector.cs` 既无 `HasShutdownStarted` 也无 `IsAlive` 覆写 ⇒ 基类默认恒 `true`（理由是这家 `Dispatcher` 只有 `ShutdownStarted`/`ShutdownFinished` **事件**、没有可查询属性，见 `memory/modules/TransitionSystem/adapters/avalonia.md` §三.1） |
 
-**这张表里最容易被漏读的一列是「能不能让 `CanSetValue()` 变 false」**：只有上表前两行（4 家）能。WPF/Jalium 的 `IsAlive` **永远是 true**，它们的存活只走 Threading 那条轴（`Post` 返 false → `SamplerSet.Apply` 报一次 `Warn(WarnStage.Dropped, …)`）。所以「七家都有存活机制」是错的，「四家的写路径会因为宿主死而停、两家只丢帧、一家什么都不报」才对。各家理由与代价见 `memory/modules/TransitionSystem/adapters/<平台>.md`。
+**只有上表前两行能让 `CanSetValue()` 变 false**。WPF/Jalium 的 `IsAlive` **永远是 true**，它们的存活只走 Threading 那条轴（`Post` 返 false → `SamplerSet.Apply` 报一次 `Warn(WarnStage.Dropped, …)`）。各家理由与代价见 `memory/modules/TransitionSystem/adapters/<平台>.md`。

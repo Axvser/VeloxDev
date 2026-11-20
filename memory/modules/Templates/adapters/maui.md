@@ -1,8 +1,7 @@
 # Templates — MAUI
 
-> **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
-> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/maui.md`，本文只指路不抄；
+> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/maui.md`；
 > 包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
 > **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.MAUI.Templates/working/content/`；引用别处一律写全路径。
 
@@ -51,8 +50,7 @@
 拿不到模板的类型（这一家的选择器只声明 `NodeTemplate`、遇到插槽/树节点会抛）由 `ViewFactory` 记进 `_unsupportedTypes` 直接跳过 —— 机制见 `memory/modules/WorkflowSystem/adapters/maui.md` §二·1。
 ⇒ 这一家的 `TemplateSelector` 因此**只需要 `NodeTemplate`**（`workflow-tree-view/TemplateClass.xaml` 的 `TemplateSelector`
 实例化只有这一个实参，上方注释说明原因），模板 code-behind 也只剩构造器。
-**别的平台把 `Helper.VisibleItems` 直接喂给池**，连线在各家自己的 `LinkTemplate` 里物化；
-这一家的共享 overlay 画连线，照抄别家会在深缩放时撞 Win2D 纹理上限并静默消失。
+**别的平台把 `Helper.VisibleItems` 直接喂给池**，连线在各家自己的 `LinkTemplate` 里物化。
 
 ### 2.3 `PART_RulerOffsetHost` 是夹在 `ScrollView` 与 `PART_Canvas` 之间的第二个 `AbsoluteLayout`
 
@@ -107,7 +105,7 @@
 ### P3 · 池的重订靠 `BindingContext` 变化
 
 `ViewPool.ItemsSource` 绑的是 `{Binding BindingContext.Helper.VisibleItems, Source={x:Reference Root}}`
-（`workflow-tree-view/TemplateClass.xaml` 的 `PART_Canvas`），所以换树就得换 `BindingContext`。⇒ **直接改底层树的 `VisibleItems` 内容不会重建池订阅**（这是对的），
+（`workflow-tree-view/TemplateClass.xaml` 的 `PART_Canvas`），所以换树就得换 `BindingContext`。⇒ **直接改底层树的 `VisibleItems` 内容不会重建池订阅**，
 但若宿主换了树对象却没触发 `BindingContextChanged`，绑定不会重求值、池继续订阅旧的集合 —— 表面显示旧数据。
 
 ### P4 · grid-decorator 的两个 `GraphicsView` 都必须 `InputTransparent = true`
@@ -120,12 +118,11 @@
 ### P5 · `RulerThickness` 在这一家是 `28d`
 
 `workflow-grid-decorator/TemplateClass.cs` 的 `RulerThicknessProperty`（`BindableProperty.Create(..., 28d, …)`）。
-WPF 的 DP 元数据、WinUI 的 `PropertyMetadata`、Avalonia 的 `Register(...)` 也都写 `28d`；
-Razor 写 `28`。与 WinForms/Jalium 的 `36` 对照表在 `../architecture.md` §六·轴 1。
+与 WinForms/Jalium 的 `36` 对照表在 `../architecture.md` §六·轴 1。
 
 ---
 
-## 四、指路（这些结论已经在别处写好，本文不抄）
+## 四、指路
 
 | 结论 | 在哪 |
 |---|---|

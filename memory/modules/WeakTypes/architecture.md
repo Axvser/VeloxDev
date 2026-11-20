@@ -5,8 +5,6 @@
 > **无平台轴** —— 这些文件只 `using System.*`（`WeakReference<T>`、`ConditionalWeakTable`、`Queue`/`Stack`、`System.Collections`），不引用任何 GUI，所以本模块没有 `adapters/`。
 > 公开文档**不在本仓库里**（`Docs/` 那套文档站点，`.gitignore` 的 `/Docs/` 规则排除，`git ls-files Docs/` 为空），它与本仓库各自独立、不随本模块的改动一起记账。
 
-本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
-
 ---
 
 ## 一、这些容器弱化了什么（以及没弱化什么）
@@ -16,17 +14,17 @@
 | 容器 | 弱的是 | 强引用/被谁钉住 | 谁清扫、什么时候 | 生产消费者 |
 |---|---|---|---|---|
 | `WeakDelegate<TDelegate>` | 只有账本 `List<WeakReference<Delegate>>`（`WeakDelegate._handlers`） | **`_combinedDelegate`（`volatile`）把组合出来的每个 handler 都钉住**；它由 `Delegate.Combine` 拼成（`WeakDelegate.RebuildCache`） | 只在 `RebuildCache()` 里，即 `AddHandler`/`RemoveHandler` 且 `CanUpdateCache:true`、缓存为 null 时的 `GetInvocationList()`、`Clone()` | `Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的一组 `WeakDelegate` 事件字段 —— **全仓唯一** |
-| `WeakCache<TTargetKey,TCacheKey>` | 键：`ConditionalWeakTable<TTargetKey,Entry>`（`WeakCache._caches`） | **值**装在私有 `Entry` 里由 CWT 保活至键死；`Entry.Target` 是登记进 `_targets`（`HashSet<WeakReference<TTargetKey>>`）的同一个弱引用，`_targets` 才是 `ForeachCache` 真正遍历的东西 | 两处：`ForeachCache` 每次调用都全清；`AddOrUpdate` 插入**新键**时按计数器阈值定期清 | **零**（只有测试，见 §二） |
+| `WeakCache<TTargetKey,TCacheKey>` | 键：`ConditionalWeakTable<TTargetKey,Entry>`（`WeakCache._caches`） | **值**装在私有 `Entry` 里由 CWT 保活至键死；`Entry.Target` 是登记进 `_targets`（`HashSet<WeakReference<TTargetKey>>`）的同一个弱引用，`_targets` 才是 `ForeachCache` 实际遍历的东西 | 两处：`ForeachCache` 每次调用都全清；`AddOrUpdate` 插入**新键**时按计数器阈值定期清 | **零**（只有测试，见 §二） |
 | `WeakQueue<T>` | 值：`Queue<WeakReference<T>>`（`WeakQueue._references`） | 无强引用侧 | 访问即清扫（`Count`/`TryDequeue`/`TryPeek`/`TrimExcess`/`GetEnumerator`） | **零** |
 | `WeakStack<T>` | 值：`Stack<WeakReference<T>>`（`WeakStack._references`） | 无强引用侧 | 同上（`TryPop` 代替 `TryDequeue`） | **零** |
 
-**共同前提：清扫永远是"事后清尸"。** 弱引用只在 GC 之后才可能变 null，所以四种容器都不可能"提前"知道某个条目已经没用了；每一条清扫路径都是「读的时候顺便把已经死的删掉」。
+**清扫永远是"事后清尸"**：每一条清扫路径都是「读的时候顺便把已经死的删掉」。
 
-**`WeakCache` 为什么需要第二个索引**：`ForeachCache` 遍历的是 `_targets` 而不是 CWT。`ConditionalWeakTable` 在 `netstandard2.0` 上不可枚举，而 `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 把 `netstandard2.0` 列在第一位目标里，所以索引不是冗余，是必需 —— **代码里没有一行注释解释这件事**，只能从 TFM 推。
+**`WeakCache` 的第二个索引**：`ForeachCache` 遍历的是 `_targets` 而不是 CWT —— `ConditionalWeakTable` 在 `netstandard2.0` 上不可枚举，而 `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `TargetFrameworks` 含 `netstandard2.0`。
 
 ---
 
-## 二、谁在用它（本模块最承重的一条）
+## 二、谁在用它
 
 | 容器 | 生产调用点 | 结论 |
 |---|---|---|
@@ -35,18 +33,14 @@
 
 `WeakCache`/`WeakQueue`/`WeakStack` 在全仓（`Src`、`Examples`、`Templates`、根目录，含 `.cs`/`.razor`/`.xaml`/`.md`）**没有任何生产构造点**；`VeloxDev.WeakTypes` 这个 `using` 只出现在 `TransitionSystem/Effects/TransitionEffect.cs` 与测试文件里。
 
-**但它们不是死代码**，读的时候不要按死代码处理：
-
-- 它们在 `VeloxDev.Core` 包里以 public API 发布（`<Version>11.0.0</Version>`，`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj`），删改是破坏性变更；
-- 反面：**改动 `WeakDelegate` 的真实爆炸半径只有 `TransitionSystem/Effects/TransitionEffect.cs`**，而改动另外三个的爆炸半径是「所有包使用者」。
+它们以 public API 随 `VeloxDev.Core` 包发布（`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj`），删改是破坏性变更；**改动 `WeakDelegate` 的爆炸半径只有 `TransitionSystem/Effects/TransitionEffect.cs`**，另外三个是「所有包使用者」。
 
 ### 测试实际覆盖到哪
 
 | 事实 | 依据 |
 |---|---|
-| 测试**从未**断言"目标已死 → 条目被清掉" | 测试文件里 `GC.` 只出现在少数几处（`WeakCacheTests.AddOrUpdate_ManyItems_TriggersCleanup` 是 `GC.KeepAlive`；`WeakDelegateTests.ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent` 是 `Collect`×2 + `WaitForPendingFinalizers`；`WeakDelegateTests.InvokingNoneOrOneDoesNotAllocate` 里是 `GetAllocatedBytesForCurrentThread`×2 + `KeepAlive`） |
-| Queue/Stack/Cache 测试全用 `string` 字面量或显式保活的 `object` | Queue/Stack 一律 `Enqueue("hello")` 之类；`WeakCacheTests.AddOrUpdate_ManyItems_TriggersCleanup` 用一批 `new object()` 并 `GC.KeepAlive(keys)` 收尾 |
-| 字符串字面量被驻留 → 永不回收 | 上面那条的后果 —— 测试喂进容器的全是字面量（`Enqueue("hello")` 之类），字面量被驻留，等于永远有一条强引用 |
+| 测试**从未**断言"目标已死 → 条目被清掉" | 测试文件里 `GC.` 只出现在 `GC.KeepAlive`（`WeakCacheTests.AddOrUpdate_ManyItems_TriggersCleanup`）、`Collect` + `WaitForPendingFinalizers`（`WeakDelegateTests.ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent`）与 `GetAllocatedBytesForCurrentThread`（`InvokingNoneOrOneDoesNotAllocate`） |
+| Queue/Stack/Cache 测试喂的全是 `string` 字面量或显式保活的 `object`；字面量被驻留，等于永远有一条强引用 | Queue/Stack 一律 `Enqueue("hello")` 之类；`WeakCacheTests.AddOrUpdate_ManyItems_TriggersCleanup` 用一批 `new object()` 并 `GC.KeepAlive(keys)` 收尾 |
 | 唯一断言回收方向的测试断言的是**相反**方向 | `Src/Test/Unit/Core/VeloxDev.Core.Test/WeakTypes/WeakDelegateTests.cs` 的 `ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent`：`GC.Collect()` 后 `Assert.IsTrue(weak.IsAlive)` |
 | 唯一的性能断言 | `WeakDelegateTests.InvokingNoneOrOneDoesNotAllocate`：一批 `GetInvocationList()?.Invoke()` 前后 `GC.GetAllocatedBytesForCurrentThread()` 必须相等（走 `DynamicInvoke` 的 `Invoke(object?[])` 会自己分配，掩盖测量） |
 
@@ -89,7 +83,7 @@ GetNextCleanupThreshold: (count == 0 ? 4 : count * 2) * 0.9 取整   // GetNextC
 | `TrimExcess` | `Prune()` + `_references.TrimExcess()` |
 | `GetEnumerator` | `Prune()` 后在**锁内** `yield return`（`WeakQueue.GetEnumerator`，Stack 同构 `WeakStack.GetEnumerator`） |
 
-两处 `Reverse()` 的理由**不同**，改的时候别合并：`WeakStack.PushRange` 先反转入参（`items.Reverse()`）是为了让「后传进来的在栈顶」，而 `Prune` 里反转存活列表（`activeReferences.Reverse()`）是为了重建后栈序不变。
+两处 `Reverse()` 不合并：`WeakStack.PushRange` 先反转入参（`items.Reverse()`）让「后传进来的在栈顶」；`Prune` 里反转存活列表（`activeReferences.Reverse()`）让重建后栈序不变。
 
 ---
 
@@ -114,7 +108,7 @@ GetNextCleanupThreshold: (count == 0 ? 4 : count * 2) * 0.9 取整   // GetNextC
 
 ## 五、反直觉（带依据）
 
-1. **`WeakDelegate` 的名字只描述账本，不描述行为。** 类型自己的 remarks 写得很清楚：`Handlers are kept alive`（`WeakDelegate` 的类文档），并解释为什么必须如此（`effect.Update += (_,_) => …` 这种写法造出的委托没有别的引用，真弱存会静默失效）。**类名比行为更容易误导** —— `WeakDelegate` 这个叫法只对账本成立。
+1. **`WeakDelegate` 的名字只描述账本，不描述行为。** 类型自己的 remarks 写得很清楚：`Handlers are kept alive`（`WeakDelegate` 的类文档），并解释为什么必须如此（`effect.Update += (_,_) => …` 这种写法造出的委托没有别的引用，真弱存会静默失效）。
 2. **`CanUpdateCache` 的参数名首字母大写**（`WeakDelegate.AddHandler` / `RemoveHandler` 的形参），是全模块唯一破坏 .NET 参数命名惯例的地方（仓内其它公开 API 用 `canMutualTask` 这类小驼峰）。
 3. **`RemoveHandler` 会删掉所有匹配项**，不是第一个：倒序扫描且**不在删除后 break**（`WeakDelegate.RemoveHandler` 的循环），所以同一个 handler 加两次、删一次就都没了。
 4. **`AddHandler(null)` 静默返回**（`WeakDelegate.AddHandler` 的 null 检查），但 `WeakQueue.Enqueue(null)` / `WeakStack.Push(null)` 抛 `ArgumentNullException`（`WeakQueue.Enqueue`、`WeakStack.Push`）。
@@ -122,7 +116,7 @@ GetNextCleanupThreshold: (count == 0 ? 4 : count * 2) * 0.9 取整   // GetNextC
 6. **`WeakCache.AddOrUpdate` 对已存在的键只原地替换值**（`Volatile.Write(ref existing.Value, cache)` 后直接 `return`），不重建条目。`_targets` 是 `HashSet`，**本身无序** —— `ForeachCache` 的遍历顺序不保证等于插入顺序，别依赖它。更新与删除是 O(1)：靠 `Entry.Target` 反查 `_targets` 里的那一项。行为依据：n=32000 时，旧的 `List.RemoveAll` 实现更新约 6 s、删除约 2.2 s，现实现均在 2 ms 内（单次测量，Release，net10.0；基准程序不在仓内，**不可复核**）。
 7. **`Invoke(object?[])` 走 `DynamicInvoke` → 自身会分配**（`WeakDelegate.Invoke`）。签名已知时必须用 `GetInvocationList()?.Invoke(sender, e)`，这是 `TransitionSystem/Effects/TransitionEffect.cs` 里 `InvokeAwake`…`InvokeError` 的写法，也是 §二那条零分配测试测量的路径。
 8. **它们都是 `sealed`**，且都直接 `new()` 内部字段而非注入 —— 没有可替换的锁、比较器或 GC 钩子。
-9. **`TCacheKey` 上的 `DynamicallyAccessedMembers` 标注不是对调用方的真实要求**（`WeakCache` 的类型参数声明，包在 `#if NET` 里）。`ConditionalWeakTable<TKey,TValue>` 的 `TValue` 带 `PublicParameterlessConstructor` 标注 —— 那是服务于 `GetOrCreateValue()` 的，而这个类型只走 `TryGetValue` / `Add`，从不碰它；但类型实参是**未标注的泛型形参**时，裁剪分析器照样报 IL2091，所以把标注传下去消警告。**具体类型不查构造器**，调用点不会因此多出约束。`#if NET` 是必需的：`DynamicallyAccessedMembersAttribute` 在 `netstandard2.0` / `net461` 上不存在，而本文件是全档编译的（对比 `AspectOriented/AopCache.cs` —— 那一份整个都在 `#if NET` 内，所以不需要这层判断）。
+9. **`TCacheKey` 上的 `DynamicallyAccessedMembers` 标注不是对调用方的真实要求**（`WeakCache` 的类型参数声明，包在 `#if NET` 里）：`ConditionalWeakTable<TKey,TValue>` 的 `TValue` 带 `PublicParameterlessConstructor` 标注（服务于 `GetOrCreateValue()`），这个类型只走 `TryGetValue` / `Add`；未标注的泛型形参会让裁剪分析器报 IL2091，所以把标注传下去消警告。**具体类型不查构造器**，调用点不会因此多出约束。`#if NET` 必需：`DynamicallyAccessedMembersAttribute` 在 `netstandard2.0` / `net461` 上不存在，而本文件是全档编译的（对比 `AspectOriented/AopCache.cs`，那一份整个都在 `#if NET` 内）。
 
 ---
 

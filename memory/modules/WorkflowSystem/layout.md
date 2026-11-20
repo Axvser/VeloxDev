@@ -1,7 +1,7 @@
-# WorkflowSystem 自动布局（扇出规范化 + 分离投影，第一版）
+# WorkflowSystem 自动布局（扇出规范化 + 分离投影）
 
 > 负责「节点自动布局」的管道：契约在 `Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Layout/`，实现在 `Src/Core/VeloxDev.Core/WorkflowSystem/Layout/`，测试在 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/Layout/`。
-> 这一版实现两件事：**层级对齐**（`HierarchyAlignmentStage`：扇出组、扇入合流点、单子边）与**坐标后的分离约束投影**（`TileSeparationStage`）。没有 Sugiyama 分层、没有层内排序、没有正交走线。管道与数据模型已经按可替换阶段立起来，上面三种是后面往里插的阶段。
+> 实现两件事：**层级对齐**（`HierarchyAlignmentStage`：扇出组、扇入合流点、单子边）与**坐标后的分离约束投影**（`TileSeparationStage`）。没有 Sugiyama 分层、没有层内排序、没有正交走线；管道与数据模型按可替换阶段立起来。
 
 ## 一、命名空间必须是 `VeloxDev.WorkflowSystem`，不能是 `.Layout`
 
@@ -13,7 +13,7 @@ Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewLinkLayer.cs
   error CS0118: “Layout”是 命名空间，但此处被当做 类型 来使用
 ```
 
-MAUI 这些文件的命名空间是 `VeloxDev.WorkflowSystem.AttachedBehaviors` / `VeloxDev.WorkflowSystem.ViewHosting`（Core 命名空间的子命名空间），里面裸用 `Layout`（`Microsoft.Maui.Controls.Layout`）。C# 先看外层命名空间里**声明**的成员/命名空间，找到 `VeloxDev.WorkflowSystem.Layout` 就不再去看 `using` 带来的类型。同一课在 [输入别名规范](../../specifications/input-alias-specifications.md) 里已经写过一次（裸名会静默盖住平台同名类型），这里是「命名空间段」版本的复发。
+MAUI 这些文件的命名空间是 `VeloxDev.WorkflowSystem.AttachedBehaviors` / `VeloxDev.WorkflowSystem.ViewHosting`（Core 命名空间的子命名空间），里面裸用 `Layout`（`Microsoft.Maui.Controls.Layout`）。C# 先看外层命名空间里**声明**的成员/命名空间，找到 `VeloxDev.WorkflowSystem.Layout` 就不再去看 `using` 带来的类型。同类问题见 [输入别名规范](../../specifications/input-alias-specifications.md)（裸名会静默盖住平台同名类型）。
 
 ⇒ 契约与实现**都用** `namespace VeloxDev.WorkflowSystem`；`Interfaces/WorkflowSystem/Layout/` 只是目录分层，不影响命名空间（同 `Interfaces/architecture.md` §一）。以后要在 `Src/Adapters/` 的祖命名空间下新建子命名空间，先搜一遍七家适配器里有没有同名裸类型。
 
@@ -55,7 +55,7 @@ WorkflowLayoutEx.Arrange(node, options)                 ← 从 Parent 找 tree 
 
 规则细节：
 
-- **扇出优先**：属于「父节点有 2 个以上子节点」的节点不再按自己的父节点重新居中；否则扇出组会被逐个拉回父中心、堆成一坨。
+- **扇出优先**：属于「父节点有 2 个以上子节点」的节点不再按自己的父节点重新居中。
 - **容差**：`PositionTolerance = 0` 时总是写目标；大于 `0` 时，扇出组全员在容差内且保持最小间距就整组不动，单子/扇入节点的中心偏差不超过容差就不动。
 - **pinned**：扇出组里任一子节点 pinned，整组跳过（固定成员凑不出规范中心），交给分离段；单子/扇入节点自身 pinned 则不写。
 - **X 也走规范列**：扇入与单子规则同时写左边缘，目标分别是「最右父右边缘 + `ColumnGap`」与「父右边缘 + `ColumnGap`」。X/Y 的容差**按轴独立**判断：一轴在容差内只保留那一轴，另一轴仍可对齐。
@@ -74,9 +74,9 @@ WorkflowLayoutEx.Arrange(node, options)                 ← 从 Parent 找 tree 
 6. **不夹取**：两个方向都允许越出原内容包围盒；`DefaultWorkflowLayoutCost` 的 `Bounds` 是解后矩形的并集，可能比 `problem.ContentBounds` 更大或更负。
 7. **全局硬重叠补救**：两次扫描都是 band 局部的 —— 中心既不在同一列带、也不在同一行带的两个重叠矩形会被两边一起漏掉。sweeps 结束后 `ResolveGlobalOverlaps` 用 tile 索引收集正面积重叠对，选确定性 mover（一方 pinned 就动另一方；两枚都 pinned 则保留并报诊断），沿右/左/下/上四个候选里**绝对位移最小**的轴推到满足 `Row/ColumnGap`。硬违规不看 `PositionTolerance`，pinned 永不为 mover；迭代上限 `max(4, MaxSweeps)`，修复对数与轮数写进 diagnostics（"Global overlap repair …"）。
 
-数字都在 `WorkflowLayoutOptions` 的默认值里（`TileSize=256`、`ColumnGap=64`、`RowGap=32`、`MaxSweeps=8`、`ParallelThreshold=64`、`PositionTolerance=8`），改数字前先看测试里的显式值。
+数字都在 `WorkflowLayoutOptions` 的默认值里（`TileSize=256`、`ColumnGap=64`、`RowGap=32`、`MaxSweeps=8`、`ParallelThreshold=64`、`PositionTolerance=8`）。
 
-**从指定节点开始（2026-10-30）**：`Options.StartNode` 非空时，快照只把从它沿 `Traversal`（Downstream/Upstream/Both）可达、`MaxDepth` 内（0 = 无限）的节点当作**可动集**；其余有限节点仍进 problem，但一律 `IsPinned = true`，只当障碍、绝不写。起点默认 `PinStartNode = true`，所以布局是从这个点向外长，而不是把整簇平移。只有两端都在可动集内的边才进 problem；指向集外的边不进，所以对齐段也看不到它们。`StartNode` 必须属于树且几何有限，否则 builder 抛 `ArgumentException`。Demo 的节点右键菜单「自动布局 → 从该节点整理（下游/上游/双向）」就是这个入口。
+**从指定节点开始**：`Options.StartNode` 非空时，快照只把从它沿 `Traversal`（Downstream/Upstream/Both）可达、`MaxDepth` 内（0 = 无限）的节点当作**可动集**；其余有限节点仍进 problem，但一律 `IsPinned = true`，只当障碍、绝不写。起点默认 `PinStartNode = true`，所以布局是从这个点向外长，而不是把整簇平移。只有两端都在可动集内的边才进 problem；指向集外的边不进，所以对齐段也看不到它们。`StartNode` 必须属于树且几何有限，否则 builder 抛 `ArgumentException`。Demo 的节点右键菜单「自动布局 → 从该节点整理（下游/上游/双向）」就是这个入口。
 
 ## 四、尊重原位置 = 策略对象，不是阶段里的 if
 
@@ -87,7 +87,7 @@ WorkflowLayoutEx.Arrange(node, options)                 ← 从 Parent 找 tree 
   - `Tolerance <= 0` ⇒ 分离段只修硬违规，不因分离链的推动移动合规节点；
   - 否则 `AxisDistance > Tolerance` 才移动。
 - 语义：`PositionTolerance = 0` 是**严格规范位置** —— 扇出组总写到计算位置（扇出段自己判定），分离段只修硬违规；值越大越尊重用户原位置（扇出组全员在容差内就不动，分离链的推动超过容差才执行）。**不要**把 `0` 理解成「哪都不动」：扇出段仍会写。
-- 分离段里的软位移只来自**分离链的推动**；没有远距离软目标，因此不存在「被几千单位外的建议拖走」的问题。硬违规永远不过策略。
+- 分离段里的软位移只来自**分离链的推动**，没有远距离软目标。硬违规永远不过策略。
 
 ## 五、应用与撤销
 
@@ -102,11 +102,11 @@ WorkflowLayoutEx.Arrange(node, options)                 ← 从 Parent 找 tree 
 
 ## 六、代价：只读 solved 几何，网格粗筛
 
-- `DefaultWorkflowLayoutCost` **不读任何已发布曲线**。每条边用解后的节点矩形中心连成一条线段（`CentreLine`），交叉数就是这些 solved 线段之间的真交叉；节点被布局移动后计数随之变化。`CrossingsApproximate` 因此为 `true`（它描述的是「中心线近似」，不是「视图曲线」）——这是本版的明确口径，不是 bug。
+- `DefaultWorkflowLayoutCost` **不读任何已发布曲线**。每条边用解后的节点矩形中心连成一条线段（`CentreLine`），交叉数就是这些 solved 线段之间的真交叉；节点被布局移动后计数随之变化。`CrossingsApproximate` 因此为 `true`（它描述「中心线近似」，不是「视图曲线」）。
 - 重叠与交叉都用临时 `LayoutTileIndex` 粗筛：重叠查节点矩形所在的格（正面积重叠必共享至少一格）；交叉把每条 solved 线段的 AABB 入格、查询同格 + 1 格邻格，只对候选对做精确判交。**没有 O(n²) 全对，也没有曲线段两两比较。**
 - `WorkflowLayoutOptions.MeasureCost`（默认 `true`）可整体关掉重叠/交叉计数；位移与内容包围盒仍线性计算并始终返回，`WorkflowLayoutCostBreakdown.CostMeasured` 区分「没有量」与「量了是 0」。
 - 共享端点的边对不算交叉；只认**真交叉**（端点相接、共线重叠都不算）。
-- 交叉数**不参与任何位置决策**；这一版的两个阶段都不读 cost。
+- 交叉数**不参与任何位置决策**；两个阶段都不读 cost。
 
 ## 七、扩展路径
 
@@ -125,24 +125,24 @@ WorkflowLayoutEx.Arrange(node, options)                 ← 从 Parent 找 tree 
 
 ## 八、坑
 
-- **并行确定性靠「本轮内不读别的 band」**：分离段每次扫描只读本带已放置的节点，不再有跨带的软目标；把某个跨 band 的值读进循环（例如父节点的当前位置）会让串行/并行分叉。`HierarchyAlignmentStage` 整场单线程、按拓扑序，和 band 并行无关。
-- **对齐段不经过策略**：`HierarchyAlignmentStage` 自己判断容差并直接写位置；`TolerancePositionPolicy` 只约束分离段。期望「策略拦住对齐」是错的 —— 自定义策略无法阻止规范位置。
+- **并行确定性靠「本轮内不读别的 band」**：分离段每次扫描只读本带已放置的节点，没有跨带的软目标；把某个跨 band 的值读进循环（例如父节点的当前位置）会让串行/并行分叉。`HierarchyAlignmentStage` 整场单线程、按拓扑序，和 band 并行无关。
+- **对齐段不经过策略**：`HierarchyAlignmentStage` 自己判断容差并直接写位置；`TolerancePositionPolicy` 只约束分离段，自定义策略无法阻止规范位置。
 - **组里有 pinned 子就整组跳过**：不要只排除那个 pinned 子、再按规范中心排其余子节点；那样组心会偏移，且下次运行结果不一致。
-- **单子/扇入也写 X**：目标分别是最右父右边缘 + `ColumnGap`、父右边缘 + `ColumnGap`。不要把它改回「只读父节点当前 X」或「只改 Y」—— 那会让合流点叠在父列里，随后被分离段往下推开，视觉上又回到不居中。
+- **单子/扇入也写 X**：目标分别是最右父右边缘 + `ColumnGap`、父右边缘 + `ColumnGap`。改回「只读父节点当前 X」或「只改 Y」会让合流点叠在父列里，被分离段往下推开，视觉上不居中。
 - **扇出优先于扇入/单子**：一个节点若同时是扇出组的孩子和多个父节点的合流点，按扇出组的位置走，不再按父组包围盒重新居中。改这个优先级会同时改掉多个已有用例。
 - **硬违规判定是 band 局部的**：垂向只把同列带、水平区间相交的邻居算作违规；跨列的冲突由水平扫的一轮处理。把邻域放宽到所有 halo 邻居会让节点为了「本轴修不好」的冲突而移动，违反「无硬违规不许动」。
 - **钉住节点在下方的处理**：`SweepVertical` 把下方的 pinned 节点当 ceiling，能上移就上移；如果 `floor > ceiling`（两枚钉住节点之间塞不下），保留重叠是**有意**的 —— 钉住节点永不移动，不要用「修 bug」的方式去动它。`SweepHorizontal` 同理。
 - **`WorkflowBounds.IsEmpty` 是「宽或高 ≤ 0」**：`WorkflowLayoutProblem.ContentBounds` 用 min/max 计算，零面积内容也会得到 `IsEmpty=true`；`TileSeparationStage` 的 tile 原点因此回退到 `(0,0)`。不要拿 `IsEmpty` 当「没有节点」的判断，那用 `problem.IsEmpty`。
 - **tile 索引每次扫都重建**：位置在扫内会变，索引不能跨轮复用；`LayoutTileIndex` 只服务一次 build-then-query。
-- **band 局部硬判定有盲区，靠全局修复补**：垂向只认同列带、水平只认同行带；中心同时跨列、跨行的两个矩形两边都看不到。`ResolveGlobalOverlaps` 是这条不变量的唯一兜底，不要因为「两次扫描都做了硬违规」就删掉它。
+- **band 局部硬判定有盲区，靠全局修复补**：垂向只认同列带、水平只认同行带；中心同时跨列、跨行的两个矩形两边都看不到。`ResolveGlobalOverlaps` 是这条不变量的唯一兜底。
 - **全局修复必须单线程且确定性**：mover 固定「有 pin 动另一边，否则下标大的」；轴向固定 右→左→下→上 的平局顺序。把它并行化会让同一次 Solve 在不同调度下得到不同位置。
-- **两枚 pinned 的重叠是无解的**：全局修复保留它并在诊断里写出 "two pinned nodes"，不要为了消重叠去动 pin。密集重叠可能要多轮；迭代上限是 `max(4, MaxSweeps)`，别把 1 轮当够用。
+- **两枚 pinned 的重叠是无解的**：全局修复保留它并在诊断里写出 "two pinned nodes"，不要为了消重叠去动 pin。密集重叠可能要多轮；迭代上限是 `max(4, MaxSweeps)`。
 - **applier 的快照核对是保护，不是兜底**：`WorkflowLayoutResult.SkippedCount` 非 0 意味着 Solve 与 Apply 之间有人改了模型；宿主应把这当成「这次结果没完全落地」，而不是静默当成成功。
 - **非有限几何必须在 builder 里过滤，不能在阶段里修**：`NaN` 坐标进了 tile 索引或 band 会把整组结果污染成 `NaN`，`WorkflowBounds` 的比较也随之失真。过滤在 `WorkflowLayoutProblemBuilder.Build`；被跳过节点的原始下标在 `SkippedIndices`，`Sources` 是过滤后的列表 —— applier 只能用过滤后的下标，别拿原始 `tree.Nodes` 下标去索引。边只要端点在跳过集合里就一并丢弃。
 - **`MeasureCost = false` 不是「零代价」**：此时 `CostMeasured = false` 且 `Crossings = 0` 是刻意的，不能把 0 当成「零交叉」。默认开启的代价走网格；`LargeGraph_CostStaysLocalAndOverlapIsZero`（500 节点 / 200 边）是量级守卫。
 - **不要为了「更准」把 `ILinkHitTestable.Curve` 读回 cost**：曲线是布局前视图发布的旧几何，读它等于拿旧答案冒充 solved；`WorkflowLayoutPipeline.Solve` 承诺只读快照。若以后确实需要输入基线，在 builder 的调用线程一次性快照并单独命名，不能复用 `Crossings`。
-- **`LayoutTileIndex` 也被 cost 复用**：它按矩形入格，零宽/零高的线段 AABB 也能入格（`max(min + 1, ceil(...))`），所以中心线近似不需要第二套线段网格；但索引只服务一趟 build-then-query，位置变了就重建。
-- **tolerance 与硬违规的次序**：阶段先算 `hard`，再问策略；即使自定义策略返回 `false`，`hard` 仍会强制移动。策略只决定「软对齐要不要做」，不能决定「硬违规要不要修」。
+- **`LayoutTileIndex` 也被 cost 复用**：它按矩形入格，零宽/零高的线段 AABB 也能入格（`max(min + 1, ceil(...))`），所以中心线近似不需要第二套线段网格。
+- **tolerance 与硬违规的次序**：阶段先算 `hard`，再问策略；策略只决定「软对齐要不要做」，不能决定「硬违规要不要修」。
 - **applier 的世界帧**：`StandardSetAnchor` 收世界坐标，快照 `problem.Nodes[i].X/Y` 也是世界坐标；不要在 applier 里再乘 `Layout.Scale`（那是 `StandardMove` 的语义，不是这里）。
 
 ## 九、测试锚点

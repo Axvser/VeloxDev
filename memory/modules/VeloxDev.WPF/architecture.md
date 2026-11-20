@@ -1,9 +1,7 @@
 # VeloxDev.WPF — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WPF/`（`WorkflowSystem/AttachedBehaviors/` 最大的几个是 `WorkflowSurfaceBehavior.cs`、`WorkflowMinimapOverlay.cs`、`WorkflowSlotLayoutBehavior.cs`；`TransitionSystem/` 本级最大的是 `Samplers/TransformSampler.cs`、`Transition.cs`；`DynamicTheme/ThemeValueConverters.cs`；顶层 `GlobalUsings.cs`）。
+> 代码：`Src/Adapters/VeloxDev.WPF/`（`WorkflowSystem/AttachedBehaviors/`、`TransitionSystem/` 含 `Samplers/`、`DynamicTheme/ThemeValueConverters.cs`、顶层 `GlobalUsings.cs`）。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WPF/*.cs' 'Src/Adapters/VeloxDev.WPF/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 只匹配**子目录里**的 `.cs`，该目录**本级**的文件一个都不算（漏掉 `GlobalUsings.cs`；同理 `TransitionSystem/**/*.cs` 只数到采样器，`TransitionSystem/` 本级文件要另写 `TransitionSystem/*.cs`）。
->
-> 本文只写「读完这些文件才知道的东西」。类型清单、成员表、继承树请看 IDE。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台，不存在平台轴。它在三条轴上的平台差异分别落在
 > `memory/modules/WorkflowSystem/adapters/wpf.md`、`memory/modules/TransitionSystem/adapters/wpf.md`、`memory/modules/DynamicTheme/architecture.md`，本文**指路不抄**。
@@ -20,7 +18,7 @@
 | TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `TransitionSystem/`（平台类型 + 一组采样器） | `memory/modules/TransitionSystem/adapters/wpf.md` |
 | DynamicTheme | `IThemeValueConverter` | `DynamicTheme/ThemeValueConverters.cs` | `memory/modules/DynamicTheme/architecture.md` |
 
-**目录名与轴不对齐，别按目录推契约**：`AttachedBehaviors/` 只有 WorkflowSystem 一条轴（名字起得像「所有附着行为」，实际不是）；TransitionSystem 与 DynamicTheme 两条轴混在 `TransitionSystem/` 里。
+**目录名与轴不对齐**：`AttachedBehaviors/` 只有 WorkflowSystem 一条轴（名字起得像「所有附着行为」，实际不是）；TransitionSystem 与 DynamicTheme 两条轴混在 `TransitionSystem/` 里。
 
 **三条轴的命名空间全部寄生在 Core 上**，各自占用 Core 那一条（`VeloxDev.TransitionSystem`、`VeloxDev.WorkflowSystem.AttachedBehaviors`、`VeloxDev.DynamicTheme`）。唯一例外是采样器，它们在 `VeloxDev.Adapters.NativeSamplers`（理由：`System.Windows.Point/Size/Color` 与 Core 用 `System.Drawing` 注册的三个同名不同型，见 `TransitionSystem/adapters/wpf.md` §一）。
 
@@ -60,9 +58,9 @@
 
 `UIThreadInspector.ThreadFor` 整块包在 `try` 里（`TransitionSystem/UIThreadInspector.cs` 的 `ThreadFor`）：target 是 `DispatcherObject` 就取**它自己的** `Dispatcher`，否则 `Application.Current?.Dispatcher ?? Dispatcher.FromThread(CurrentThread)`；两条都落空就是 `ThreadRef.None`（`ThreadRef.From(null)` 的定义在 `Src/Core/VeloxDev.Core/Threading/ThreadRef.cs`），后果只是这个目标**没有 pacer**，动画照跑。
 
-**别把它抄成 Avalonia 的形状** —— 那边是一行 `ThreadRef.From(Dispatcher.UIThread)`（`Src/Adapters/VeloxDev.Avalonia/TransitionSystem/UIThreadInspector.cs` 的 `ThreadFor`），恒取 UI 线程。这家取 target 的 dispatcher，意味着对一个属于别的 dispatcher 的对象做动画会真切到**那条**队列上；`IsCurrentThread` 的 `thread.TryGet<Dispatcher>(out var d) && d.CheckAccess()` 也是同一件事的验算。唯一与 Jalium 同形。
+Avalonia 那边是一行 `ThreadRef.From(Dispatcher.UIThread)`（`Src/Adapters/VeloxDev.Avalonia/TransitionSystem/UIThreadInspector.cs` 的 `ThreadFor`），恒取 UI 线程。这家取 target 的 dispatcher，意味着对一个属于别的 dispatcher 的对象做动画会真切到**那条**队列上；`IsCurrentThread` 的 `thread.TryGet<Dispatcher>(out var d) && d.CheckAccess()` 也是同一件事的验算。唯一与 Jalium 同形。
 
-其余是空壳，**别以为漏写了**：`State : StateCore`（`TransitionSystem/State.cs` 的 `State`）、`TransitionScheduler : TransitionSchedulerCore<…>`（`TransitionScheduler.cs` 的类声明）、`Transition : TransitionCore`（`Transition.cs` 的 `Transition` 与 `Transition<T>`）。`TransitionEffects` 的三个预设（`TransitionEffects.cs` 的 `Empty` 0s、`Theme` 0.46s、`Hover` 0.32s）**七家各有一份，除 WinUI 是 `class` 而非 `static class` 外逐字相同**，不是这家特有的。
+其余是空壳：`State : StateCore`（`TransitionSystem/State.cs` 的 `State`）、`TransitionScheduler : TransitionSchedulerCore<…>`（`TransitionScheduler.cs` 的类声明）、`Transition : TransitionCore`（`Transition.cs` 的 `Transition` 与 `Transition<T>`）。`TransitionEffects` 的三个预设（`TransitionEffects.cs` 的 `Empty` 0s、`Theme` 0.46s、`Hover` 0.32s）**七家各有一份，除 WinUI 是 `class` 而非 `static class` 外逐字相同**，不是这家特有的。
 
 ---
 
@@ -93,7 +91,7 @@
 
 ### 3.3 连线交互（右键菜单 / 悬停焦点 / Delete）全在表面上
 
-这是 2026-10-04 起这家最重的一段新增，模板只留资源、不留交互代码：
+模板只留资源、不留交互代码：
 
 - **`LinkMenuKey` 是资源键，不是菜单本身**（`LinkMenuKeyProperty` 的注册，其上方注释解释了为什么不能用 `{StaticResource}`：属性挂在根元素上，静态资源会在定义它的字典解析之前求值）。表面在每次 `Refresh` 里重查一次资源（`WireLinkMenu`），开合时自己置/放 `WorkflowInput.IsSuspended`；`UnwireLinkMenu` 在 `Detach` 时把菜单与输入路由两边的订阅都摘掉。菜单的 `DataContext` 就是被点的那条连线（`ShowLinkMenu`，画布坐标 → 屏幕坐标含 DPI 折算，netframework 走呈现源、其余走 `VisualTreeHelper.GetDpi`）。
 - **悬停 / 按下 / 离开归 Core 判**：`OnPreviewMouseMove`、`OnLinkPointerEntered`、`OnLinkPointerExited`、`OnLinkPointerPressed`、`OnLinkPointerReleased`、`OnLinkPointerWheel` 把指针事件翻成标准输入（`Pointer*EventArgs`，前缀无 `Workflow`）交给 `WorkflowInput.For(viewModel).Route(...)`，命中由 `HitTestVisibleLinks` 判。拉线时（`VirtualLink.IsVisible`）不转发，免得沿途实连线一路亮起。
@@ -122,14 +120,14 @@
 
 - 这就是为什么本模块的 TransitionSystem 文件都不写 `using VeloxDev.TransitionSystem;` 却能用 `InterpolatorCore`、`ISampler`（`InterpolatorCore` 定义在 `...Abstractions`、`ISampler` 在 `VeloxDev.TransitionSystem`：`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `InterpolatorCore`、`Src/Core/VeloxDev.Core/Interfaces/TransitionSystem/ISampler.cs` 的 `ISampler`）。
 - **它不含 `VeloxDev.WorkflowSystem`** ⇒ `AttachedBehaviors/` 里有若干文件各自写 `using VeloxDev.WorkflowSystem;`（`WorkflowEvents`/`WorkflowMinimapOverlay`/`WorkflowNodeDragBehavior`/`WorkflowSlotConnectionBehavior`/`WorkflowSlotLayoutBehavior`/`WorkflowSurfaceBehavior`，以及 `WorkflowSystem/ViewHosting/` 下的各层；`ViewPool.cs` 只写 `using VeloxDev.WorkflowSystem.ViewHosting;`，`WorkflowCanvasTransformBehavior.cs` 不需要）。
-- **`global using` 是编译期的，不随包/`ProjectReference` 传给消费者**：宿主要用 `Transition<T>` 仍得自己写 `using VeloxDev.TransitionSystem;`（`Examples/Theme/WPF/Demo/App.xaml.cs`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs` 都写了）。⇒ 别指望引用 `VeloxDev.WPF` 之后自己项目里能少写一行 using。
+- **`global using` 是编译期的，不随包/`ProjectReference` 传给消费者**：宿主要用 `Transition<T>` 仍得自己写 `using VeloxDev.TransitionSystem;`（`Examples/Theme/WPF/Demo/App.xaml.cs`、`Examples/Theme/WPF Trimmed/Demo/MainWindow.xaml.cs` 都写了）。
 
 **csproj 里影响代码本身的条件**（`VeloxDev.WPF.csproj`）：
 
 | 事实 | 锚点 | 后果 |
 |---|---|---|
 | `<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` | `TargetFrameworks` | 七家里只有这家与 WinForms 是这个四元组；`netcoreapp3.0` 是四元组里唯一不带 `-windows` 的，`UseWPF` 由此成立，配 `SuppressTfmSupportBuildWarnings` 压告警 |
-| 四元组里**没有 netstandard2.0** | — | `TransitionSystem/Transition.cs` 的 `#if !NETSTANDARD2_0`（`System.Numerics` 那组重载）在这家**恒为真**。六家写了这个守卫，只有 Avalonia（`netstandard2.0;net6.0;net8.0`）那条是真的 |
+| 四元组里**没有 netstandard2.0** | — | `TransitionSystem/Transition.cs` 的 `#if !NETSTANDARD2_0`（`System.Numerics` 那组重载）在这家**恒为真**。其余各家写了这个守卫，只有 Avalonia（`netstandard2.0;net6.0;net8.0`）那条是真的 |
 | Debug → `ProjectReference`／非 Debug → `PackageReference` | — | 与生成器那套双轨同形；包里唯一的依赖是 `VeloxDev.Core` 11.0.0 |
 | `GeneratePackageOnBuild` + `GenerateDocumentationFile` | — | 全仓只有 Core、Jalium、WPF 三个项目生成 XML 文档 |
 | `NoWarn` 写成**一条** `1573;1591`（其上方的注释） | — | 正确形 —— 拆成两条属性时 MSBuild 按序求值、只有后者生效（见 §五·2） |

@@ -1,9 +1,8 @@
 # 几何工具：移动/定位/缩放与绘图不一致的那些坑
 
-> 起因（2026-09-27）：使用者报「Agent 自己调布局很拉跨，而且截图里连线会错位，人类手动操作没这问题」。
-> 本文记的是那次追查得到的、下次还会踩的东西。锚点/缩放/槽位测量的**机制**在
+> 锚点/缩放/槽位测量的**机制**在
 > [`WorkflowSystem/architecture.md`](../WorkflowSystem/architecture.md) §关于 Anchor 与
-> [`WorkflowSystem/extension.md`](../WorkflowSystem/extension.md)（第 5/7 条）—— 本文只写 agent 工具侧的后果。
+> [`WorkflowSystem/extension.md`](../WorkflowSystem/extension.md)（第 5/7 条）。
 
 ---
 
@@ -26,8 +25,8 @@
 回归测试是 `NodeGeometryToolTests.MoveNode_LandsWhereADragWould_AtANonUnitScale`（两个节点、`Scale = 0.5`、
 一个用工具移、一个直接 `MoveCommand`，断言**世界位移相等**）。
 
-> ⚠ **核工具的 `[Description]` 与事实是否相符** —— 若写着「Mirrors GUI node-drag: dispatches `SetAnchorCommand`」就与事实不符
->（拖拽从不派发 `SetAnchorCommand`）。模型是照着描述做决策的。
+> ⚠ 工具的 `[Description]` 若写「Mirrors GUI node-drag: dispatches `SetAnchorCommand`」就与事实不符
+>（拖拽从不派发 `SetAnchorCommand`）；模型是照着描述做决策的。
 
 ## 二、`SetNodePosition` 的层：省略 ≠ 置零
 
@@ -54,20 +53,16 @@
   **程序化写入结构上到不了那条路**。Razor 另有 `MutationObserver` 兜底。
 - 「被虚拟化掉的节点重新实体化时会不会重测」**没有找到证据**（WPF 侧有 `Loaded`/`DataContextChanged` 触发，
   看上去覆盖，但未实测）。
-- 那次报障**没有确认使用者用的是哪一家适配器** —— 不同家结论不同，这是下次复现时要先问的第一个问题。
+- 复现时先确认使用者用的是哪一家适配器 —— 不同家结论不同。
 
-## 四、布局：没有布局工具是**设计如此**，知识才是补强点
+## 四、布局工具与布局引擎
 
-`WorkflowAgentToolkit.CreateAllTools` 里 Layout 那段的注释明写不做 bundled layout 工具（理由是每一步都落到单个组件命令，undo 栈不被绕过）。
-`WorkflowToolCategory.Layout` 是保留位、无工具注册。Core 里也**没有布局引擎**（`CanvasLayout` 是视口偏移/缩放，不是节点排布）。
+`WorkflowAgentToolkit` 在 `WorkflowToolCategory.Layout` 下注册三件：`GetLayoutInfo`（读：树上的 solver 与默认 options）、
+`PreviewLayout`（读：`DryRun`，返回每个落点、cost、诊断）、`ArrangeLayout`（写：走 `Tree.Arrange`，一次 undoable action 写回全部锚点）。
+宿主没注册 solver 时 `GetLayoutInfo` 报 `DefaultWorkflowLayoutSolver (fallback)`。
 
-于是「排得好看」全靠提示词语料：`Resources/Workflow/{en,zh}/Skills/SmartLayout.md`（最长路径分层、barycenter 交叉最小化、
-按 `Size` 算坐标、80/40 px 间隙、重叠判定公式、象限换算）。**两版必须逐条对称** —— `AgentEmbeddedResources` 按语言取文档。
+布局引擎在 `Src/Core/VeloxDev.Core/WorkflowSystem/Layout/`：`HierarchyAlignmentStage` + `TileSeparationStage`，
+经 `IWorkflowLayoutSolver` 注入；数据流与扩展点见 `memory/modules/WorkflowSystem/layout.md`。
 
-2026-09-27 补的一节「宽层必须折行」（一个扇出源 → N 个处理器 → 一个汇聚，原规则会排成一列 30 个、
-层高线性增长、连线横跨整段，实测见过 3197×2631 的画布（历史实测，不可复核））：一层超 8 个节点或超 ~1600 px 折成子列；共享同层的
-N 个节点摆成 `ceil(sqrt(N))` 子列网格并在 Y 上对齐那个扇出源；包围盒尽量接近 3:2。
-**使用者要的是「Agent 自己理解坐标系并设计低碰撞、美观的布局」，所以补的是判据与量化门槛，不是塞一个固定算法。**
-
-**仍缺的两件**（未做）：① 缺一个**度量**工具让模型自检（包围盒/重叠对/最小间隙，现在它只能自己扒 `ListNodes` 的 JSON 算）；
-② 缺**批量定位**原语（30 个节点要 30 次 `SetNodePosition`，模型得跨多轮记住 30 组坐标，设计自由度被工具粒度卡死）。
+`Resources/Workflow/{en,zh}/Skills/SmartLayout.md` 保留手工兜底（最长路径分层、barycenter、80/40 px 间隙等），
+但已要求先走 `PreviewLayout` / `ArrangeLayout`；两版必须逐条对称（`AgentEmbeddedResources` 按语言取）。

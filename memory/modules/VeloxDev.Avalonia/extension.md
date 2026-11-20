@@ -1,7 +1,7 @@
 # VeloxDev.Avalonia — 扩展
 
 > 契约在哪：`memory/modules/TransitionSystem/extension.md`（过渡/主题/采样器）、`memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3（七角色与附着属性注册位置）；平台形态与硬限制在两篇 `adapters/avalonia.md`。
-> **本文只写在这家动手时改哪几个文件、按什么顺序、以及哪些路能编译但是错的。**
+> 在这家动手时改哪几个文件、按什么顺序，以及哪些路能编译但是错的。
 
 ---
 
@@ -17,7 +17,7 @@
 4. **测试联动（硬闸）**：`Src/Test/AutoTest/Samplers/AvaloniaEntries.cs` 加一条 `Entry(...)`（`All` 成员）。**与别家撞名的用 `CrossAdapter("XxxSampler")` 反射取，独有类型直接 `typeof(XxxSampler)`**（判别法：`architecture.md` §五）。
 5. 不做第 4 步**测试必红**（是测试期硬闸，不是编译错）：`SamplerCoverageTests.EveryShippedSampler_IsAccountedFor`（`Src/Test/AutoTest/Samplers/SamplerCoverageTests.cs`）反射产品程序集里每个 `ISampler`，与注册表 + `UnreachableSamplers` 对账。注册表本身在那里（`SamplerRegistry.Entries`）。
 6. 只有在**纯数据进程里造不出端点值**时才进 `UnreachableSamplers`：`SamplerCoverageTests.cs` 会真的去构造那个值来证伪理由，且条目必须以类型名出现在 `Src/Test/AutoTest/Conformance/*Conformance.cs` 表里。**这家的采样器全部可在纯数据进程构造，名单里没有 Avalonia 条目。**
-7. 接一家新平台时的额外联动：新 `<家>Entries.cs` → 挂进 `AdapterSamplerEntries.All` → 程序集名加进 `SamplerCoverageTests` 的 `ExpectedAdapterAssemblies`。**最后这一处的机制要说清，很容易反过来理解**：采样器是「反射所有**已加载**的 `VeloxDev.*` 程序集」数出来的（`SamplerCoverageTests.ProductAssemblies`），所以只要引用在，忘了加表**照样数得到、套件照样绿**；`ExpectedAdapterAssemblies` 唯一的作用是在**引用被摘掉**（程序集根本没加载）时把「安静变瞎」变成红。⇒ 漏了它不会当场暴露，是等到有人摘引用时才发现这个家从来没被验过。
+7. 接一家新平台时的额外联动：新 `<家>Entries.cs` → 挂进 `AdapterSamplerEntries.All` → 程序集名加进 `SamplerCoverageTests` 的 `ExpectedAdapterAssemblies`。**这一处的机制容易反过来理解**：采样器是「反射所有**已加载**的 `VeloxDev.*` 程序集」数出来的（`SamplerCoverageTests.ProductAssemblies`），所以只要引用在，忘了加表**照样数得到、套件照样绿**；`ExpectedAdapterAssemblies` 唯一的作用是在**引用被摘掉**（程序集根本没加载）时把「安静变瞎」变成红。⇒ 漏了它不会当场暴露，是等到有人摘引用时才发现这个家从来没被验过。
 8. **不要动 Core 的注册表**去补缺口。反过来说：`Avalonia.Rect` / `Avalonia.Vector` 的缺口只能在**本家**补（Core 不可能注册 Avalonia 的类型），补不补是个决定，见 `TransitionSystem/adapters/avalonia.md` §二.7。
 
 ---
@@ -29,7 +29,7 @@
 3. 接入方式是**特性的第一个类型参数**，没有名字约定也没有注册表：`[ThemeConfig<ObjectConverter, Dark, Light>(nameof(Background), ["#1e1e1e"], ["#ffffff"])]`（`Examples/Theme/Avalonia/Demo/ThemeTile.cs` 的两个 `[ThemeConfig<...>]`）。
 4. **不要用 `ThemeCache.RegisterConverter` / `GetConverter`**（`Src/Core/VeloxDev.Core/DynamicTheme/ThemeCache.cs`）。这两个 API 在当前源码里都不存在：`grep -rn "RegisterConverter\|GetConverter(" Src Examples --include=*.cs`（排除 `obj/`）**只命中无关的 `TypeDescriptor.GetConverter`** —— 生成器不走它们，七家适配器也不调。看着像「官方的注册入口」，实际是没有这个入口。
 5. 内部实现照现有几个的样子：**没有一条统一优先级链**，三条既有路是 —— 工具自己的解析 API（`PointConverter` 的 `Point.Parse`、`ThicknessConverter` 的 `Thickness.Parse`、`CornerRadiusConverter` 的 `CornerRadius.Parse`、`ColorConverter`/`BrushConverter` 的 `Color.TryParse`）、资源查找（`BrushConverter`/`ObjectConverter` 走 `Application.Current.TryFindResource`），以及纯字符串的兜底（`DoubleConverter` 的 `double.TryParse`、`ColorConverter` 的 `Color.TryParse`；`ObjectConverter` 另有一张 `targetType` 显式转换表）。**本文件既不调 `TypeUtilities.TryConvert` 也不调 `TypeDescriptor.GetConverter`**（两者 `grep` 零命中 —— `ObjectConverter` 里的注释解释了前者的 `RequiresUnreferencedCode` 代价），别按别家的记忆去找。挑哪条取决于「这个值在 XAML 里写成什么」，抄相邻那条最省事。
-6. **存疑（别按本文推断）**：生成器把 `converterType.ToDisplayString()` 写进 `typeof(global::{…})`（`Theme.cs` 的 `Activator.CreateInstance`），但仓库里**没有任何生成产物**（未开 `EmitCompilerGeneratedFiles`，`find` 全仓无 `*_ThemeConfig.g.cs`）⇒ 这个名字最终限定到什么形式、为什么能编译，我核不到。要改这一块，先真跑一次 Theme demo 并打开 `EmitCompilerGeneratedFiles` 看产物。
+6. **存疑**：生成器把 `converterType.ToDisplayString()` 写进 `typeof(global::{…})`（`Theme.cs` 的 `Activator.CreateInstance`），但仓库里**没有任何生成产物**（未开 `EmitCompilerGeneratedFiles`，`find` 全仓无 `*_ThemeConfig.g.cs`）⇒ 这个名字最终限定到什么形式、为什么能编译，我核不到。要改这一块，先真跑一次 Theme demo 并打开 `EmitCompilerGeneratedFiles` 看产物。
 
 ---
 

@@ -9,10 +9,9 @@
 Core.Extension 当前 `<Version>` 的包依赖。Debug 直接构建；Release 下如果 Extension 的 Release 档引用的
 Core / Generator 版本还不在 NuGet 上，就要 `-p:VeloxDevLocalCore=true`，否则还原失败、CLI 编译失败。
 `Src/Directory.Build.targets` 在该属性下同时把 Core 和 Generator 换成工作区工程
-（`Examples/Directory.Build.targets` 对示例做同一件事）。这一轮发完、依赖版本上了 NuGet 之后，本地构建
-就不需要它，但下一次 Core / Generator 提版后又会需要。
+（`Examples/Directory.Build.targets` 对示例做同一件事）。
 
-**`TargetFramework` 必须留在 `net8.0`**，不是随手能提的版本号：`.NET 8 or newer` 靠 `RollForward=LatestMajor` 兑现（README 与 csproj 注释都这么写），而 `VeloxDev.Cli.Test` 的 `McpProtocolTests.CliLocation()` 直接拼 `Src/Cli/VeloxDev.Cli/bin/<Configuration>/net8.0/veloxdev.dll` 启动进程。把 CLI 提到更高 TFM，测试不会报「框架不匹配」——旧的 `net8.0` 产物还在 `bin/` 里，测试会安静地跑那份陈旧二进制；全新 clone 上则直接 `File.Exists` 断言失败。
+**`TargetFramework` 必须留在 `net8.0`**：`RollForward=LatestMajor` 是「.NET 8 or newer」的兑现方式，而 `McpProtocolTests.CliLocation()` 直接拼 `bin/<Configuration>/net8.0/veloxdev.dll` 启动进程。提到更高 TFM 时，测试会静默启动 `bin/` 里旧的 net8.0 产物，或在全新 clone 上 `File.Exists` 失败。
 
 **Agent 使用指南**：`skills/veloxdev-use-workflow-cli/`（`SKILL.md` + `references/practices/{launch,tools}.md`
 + `references/pitfalls/runtime.md`）。安装/启动、工具循环、执行与 job 语义、路径/重定向/日志规则都在这份里；
@@ -29,8 +28,6 @@ graph.json + lib/*.dll
         └─ veloxdev run   →  一次性执行，给人和 CI 用
 ```
 
-没有 GUI，没有手写 JSON，也不需要宿主自己接 chat client、确认处理器或 UI 线程。
-
 ## 二、分层与数据流
 
 | 层 | 类型 | 职责 |
@@ -41,7 +38,7 @@ graph.json + lib/*.dll
 | 会话 | `WorkflowSession` | 反序列化树、建 `WorkflowAgentScope` / `WorkflowAgentToolkit`、生成工具面、保存归档 |
 | 会话宿主 | `WorkflowSessionHost` / `SessionBoundAIFunction` / `SessionLease` | 持有当前会话；工具是稳定代理，`LoadArchive` 换会话时不重注册工具；旧会话等最后一个 lease 释放再销毁 |
 | 宿主 | `McpHost` | 建 Host、把日志改去 stderr、`AddMcpServer().WithStdioServerTransport()` |
-| 归档工具 | `ArchiveTools` | `ArchiveInfo` / `LoadArchive` / `SaveArchive` / `LoadAssemblies` / `GetCapabilities` / `GetAuditLog` / `ApplyBatch` 七个非图命令 |
+| 归档工具 | `ArchiveTools` | `ArchiveInfo` / `LoadArchive` / `SaveArchive` / `LoadAssemblies` / `GetCapabilities` / `GetAuditLog` / `ApplyBatch` 这些非图命令 |
 | 执行隔离 | `WorkerRunner` / `ExecutionTools` / `WorkerJobRegistry` | 默认把节点代码放到 `veloxdev run` 子进程里跑；子进程拿的是当前内存图的临时快照，跑完写回 post-run 树（`stateFile`）。后台任务用 `StartWorkflow` 起，`GetWorkflowJob`/`CancelWorkflowJob` 管理 |
 | 重定向 | `RedirectPolicy` / `RedirectTools` | 会话级的 `RuntimeContext.HostRedirect`，只对没有 `IRedirectable` 的失败节点生效；MCP 面是 `SetRedirectOnError` / `ClearRedirectOnError`，仅在执行开启时注册 |
 | 上下文 | `SessionResources` / `SessionPrompts` | 只读 resources（`veloxdev://archive/info`、`.../manifest`）与 `workflow-operator` prompt；都走 `host.Acquire()`，换档后读新会话 |
@@ -60,8 +57,8 @@ graph.json + lib/*.dll
    与 `--root-type`；缺省才是 `TreeDefaultViewModel`。`WorkflowSession.ResolveRootType` 先查注册表、
    再查 `Type.GetType`、最后扫已加载程序集，所以插件类型只要已载入就能被指名。
 2. **保存会补上根 `$type`。** `SaveArchive` 通过 `Scope.Tree.Serialize()`（静态类型是
-   `IWorkflowTreeViewModel`）写盘，运行时类型与声明类型不同，所以保存的文件自带根类型标记；下次加载不再
-   依赖清单的 `rootType`。这不是 bug，是「写回时把文档补完整」。
+   `IWorkflowTreeViewModel`）写盘，运行时类型与声明类型不同，所以保存的文件自带根类型标记；下次加载无需
+   清单的 `rootType`。
 3. **换归档是换会话，不是换树。** 工具包的 `LoadWorkflow` 仍被排除（`WorkflowStateTracker` 持有构造时的树）。
    `LoadArchive` 新建整个 `WorkflowSession`，由 `WorkflowSessionHost` 原子换引用；原生工具是
    `SessionBoundAIFunction` 代理，schema 来自启动会话、调用落到当前会话，所以工具列表不用变。旧会话在最后
@@ -107,7 +104,7 @@ graph.json + lib/*.dll
     `LoadArchive` / `SaveArchive` / `LoadAssemblies` / `ApplyBatch` 显式调用 `RecordToolCall`；`GetAuditLog`
     读最近 500 条。`GetCapabilities` 列出实际暴露的工具名（含 `McpHost` 直接注册的执行/归档/**重定向**工具）、
     执行模式与结果上限。重定向工具在两种执行模式下都注册，所以 `ExecutionEnabled` 时两份名单都要加；
-    漏掉时 `toolCount` 会小于 `ListTools` 的实际数量（2026-11-06 修复，`WorkflowSession.DescribeCapabilities`）。`ApplyBatch` 只接受 `Mutation` / `Layout` 工具，最多 100 条；`stopOnError` 时先把当前树写成
+    漏掉时 `toolCount` 会小于 `ListTools` 的实际数量（`WorkflowSession.DescribeCapabilities`）。`ApplyBatch` 只接受 `Mutation` / `Layout` 工具，最多 100 条；`stopOnError` 时先把当前树写成
     归档目录下的临时快照，首个失败后用 `ReloadAsync` 以快照换会话（`stateFile` 保留，原归档不动），
     `--in-process-execution` 下拒绝这种回滚。`--single-archive` 在 `WorkflowSessionHost.ReloadAsync` 入口直接拒绝
     换档：一个进程只服务一份文档，运行时 ID 因此在整个进程生命周期内稳定；`ArchiveInfo` 的
@@ -118,8 +115,8 @@ graph.json + lib/*.dll
 14. **只读上下文也走 MCP。** `SessionResources` 提供 archive info/manifest 两个资源，`SessionPrompts`
     提供 `workflow-operator`；两者都用 lease 取当前会话，换档后自然读新归档。
 15. **工具包是本地包。** `PackAsTool` + `ToolCommandName=veloxdev`，`dotnet pack -c Release
-    -p:VeloxDevLocalCore=true` 会生成 `VeloxDev.Cli.<version>.nupkg`；包内已带 Core/Extension/MCP 依赖
-    （实测 tool install + run 通过）。发布仍走仓库的 release skill。
+    -p:VeloxDevLocalCore=true` 会生成 `VeloxDev.Cli.<version>.nupkg`；包内已带 Core/Extension/MCP 依赖。
+    发布仍走仓库的 release skill。
 16. **依赖先复制再加载。** `PluginLoader.Load` / `OnResolving` 把解析到的 DLL 复制到 CLI 目录下的
     `tasks/{pid-rand}_{timestamp}/`（目录不可写时回退 `LocalAppData/VeloxDev/tasks` 或 `%TEMP%`），
     每个进程一个目录；`tasks/.lock` 只包住建目录这一步，冲突时用带 `-independent` 的唯一目录继续。
@@ -137,7 +134,7 @@ graph.json + lib/*.dll
 排除（`WorkflowSession.Excluded`）：`LoadWorkflow`、`MarkDirty`、`ResetToolCallLimit`、`Locate*`、
 交互 / Plan 工具（无 handler 也不注册）。`Command` 类别（任意命令）不暴露；专用编辑工具已覆盖正常路径。
 
-`ArchiveTools` 是唯一始终注册的手写 MCP 工具组，因为归档级操作不属于图命令：报告状态、写回文件、动态补依赖。
+`ArchiveTools` 是唯一始终注册的手写 MCP 工具组：报告状态、写回文件、动态补依赖。
 `RedirectTools` 只在执行开启时注册（没有 run 就没有可配置的 fallback）；`ExecutionTools` 只在**隔离**执行时
 注册，in-process 模式用工具包自己的 `Execution` 类别。
 

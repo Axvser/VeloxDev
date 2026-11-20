@@ -1,8 +1,7 @@
 ﻿# MAUI — WorkflowSystem 适配器
 
-> **另（2026-10-05）：悬停高亮与 Delete 都搬出适配层了** —— overlay 不再有 `SelectedLink`/`SelectedLinkColor`，
-> 删除也不再由库执行；两者都在 demo 里（订 `IInputEvents` 自己画 / 自己执行 `DeleteCommand`）。
-> 下文凡提这两个名字的行，按「宿主自己写」读。
+> 悬停高亮与 Delete 归 demo（订 `IInputEvents` 自己画 / 自己执行 `DeleteCommand`）；overlay 没有
+> `SelectedLink`/`SelectedLinkColor`。
 >
 > 连线交互规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)：输入是标准输入
 > （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），命中归 Core 的共享曲线判定，外观、删除与菜单的接线归宿主/适配器。
@@ -10,30 +9,21 @@
 > 代码：`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/AttachedBehaviors/`。
 > 七个视图角色的职责、附着属性命名约定、绑定挂哪儿，在 `../extension.md` §3.9 与
 > `skills/veloxdev-create-workflow/references/view-layer.md`（七角色表见 §The seven roles）；给使用者的平台说明在
-> `skills/veloxdev-create-workflow/references/gui/maui.md`。本文不重抄那两份，只写**这一家的硬限制、刻意背离、改动时的坑**。
+> `skills/veloxdev-create-workflow/references/gui/maui.md`。
 > 参考实现是 `Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/`（注意在 `Controls/` 下）。
 
 ---
 
 ## 一、这家必须实现哪些契约成员，为什么是这些
 
-七角色在本家的落点（角色定义见 `view-layer.md` §The seven roles）：
+七角色的落点（定义见 `view-layer.md` §The seven roles）：画布宿主（解析命名控件、喂装饰器）、平移、缩放、可见区、右键菜单接线、组件输入转发的入口与「已路由」登记都在 `WorkflowSurfaceBehavior.cs`（§三·9）；视图池是 `ViewPool.cs`（附着属性）+ `WorkflowSystem/ViewHosting/`（`ViewSourcePipeline` 组合 Core 的池与各层，§二·1）；节点拖拽、插槽连接、插槽布局分别是 `WorkflowNodeDragBehavior.cs`（§三·5）、`WorkflowSlotConnectionBehavior.cs`（§三·6）、`WorkflowSlotLayoutBehavior.cs`（§二·5）。
+**没有 `WorkflowCanvasTransformBehavior`**（§三·1），职责由宿主 + `ViewHosting/ViewArranger` 分担。小地图有 `WorkflowMinimapOverlay.cs`；**装饰器适配器不提供**，由模板/demo 写（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/WorkflowGridDecorator.cs`），与 WPF/Avalonia/WinUI/Jalium 同；只有 Razor 与 WinForms 在适配器里自带一份。
 
-| 角色 | 本家的实现 | 说明 |
-|---|---|---|
-| 画布宿主 | `WorkflowSurfaceBehavior.cs` | 唯一的「知晓一切」的类：解析命名控件、喂装饰器、平移、缩放、可见区、连线右键菜单接线、以及组件自己那次输入转发的入口与「已路由」登记（§三·9） |
-| 画布变换 | —— **本家没有这个类** | 见 §三·1；职责由宿主 + `ViewHosting/ViewArranger` 分担 |
-| 视图池 | `ViewPool.cs`（附着属性）+ `WorkflowSystem/ViewHosting/`（`ViewSourcePipeline` 组合 Core 的池与各层） | 见 §二·1 |
-| 节点拖拽 | `WorkflowNodeDragBehavior.cs` | 见 §三·5 |
-| 插槽连接 | `WorkflowSlotConnectionBehavior.cs` | 见 §三·6 |
-| 插槽布局 | `WorkflowSlotLayoutBehavior.cs` | 见 §二·5 |
-| 网格装饰器 / 小地图 | 小地图有 `WorkflowMinimapOverlay.cs`；**装饰器适配器不提供**，由模板/demo 写（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/WorkflowGridDecorator.cs`） | 与 WPF/Avalonia/WinUI/Jalium 同为「适配器不带装饰器」；只有 Razor 与 WinForms 在适配器里自带一份 |
+**契约外的类**：`WorkflowLinkOverlay.cs` —— 链接层（画 Core 的可见集），见 §三·2。
 
-**另有一个契约外的类，它不是七角色里的任何一个，但删不掉**：`WorkflowLinkOverlay.cs` —— 链接层（画 Core 的可见集），见 §三·2。
-
-本家必须自己写、且别家写法不能照搬的成员就三处：`WorkflowSurfaceBehavior` 里的平移/滚动提交顺序（§二·6/§二·7）、
+本家不能照搬别家写法的成员有三处：`WorkflowSurfaceBehavior` 的平移/滚动提交顺序（§二·6/§二·7）、
 `WorkflowSlotLayoutBehavior` 的重同步信号源（§二·5）、`WorkflowLinkOverlay` 的整层绘制与裁剪（§二·9/§二·8）。
-其余都是与别家同形（附着属性 + `FindByName` 解析 `PART_*`、`UseVirtualization` 走 Core 的 `Viewport`）。
+其余与别家同形（附着属性 + `FindByName` 解析 `PART_*`、`UseVirtualization` 走 Core 的 `Viewport`）。
 
 ---
 
@@ -46,7 +36,7 @@
   `Start()` 装填，所以每批都新建一个；池在一批跑完仍有待建项时自己再排下一批（`ViewPoolCore` 的
   `ProcessNextBatch`），`ViewScheduler.OnTick` 只负责当前这一批。
 - 默认池策略是 Core 的 `AdaptiveViewPoolPolicy`，初始 `32` 个视图 / `8ms` 预算，之后按实测吞吐与待建数
-  在 8/12/16ms 之间收敛。手机视口一次露出的节点通常只有几十个，首批小一点能避免冷滚动卡住一帧。
+  在 8/12/16ms 之间收敛。
 - **选择器物化不了的类型按运行时类型缓存跳过**：`ViewFactory.CreateView` 问一次
   `DataTemplateSelector.SelectTemplate`；选择器抛异常（典型：只声明 `NodeTemplate` 的选择器遇到插槽/树节点）
   或返回 null 时，该类型记进 `_unsupportedTypes` 并返回 null，异常不越过工厂。于是**只有节点模板的 demo/模板
@@ -60,7 +50,7 @@
   非 Windows `SizeChanged`）仍同步 `Flush`，见 [../scheduling.md](../scheduling.md)。
 - **这两个 `IsRepeating = false` 与 Transition 侧 pacer 的 `IsRepeating = true` 不矛盾**：pacer 的定时器每拍由
   `FramePacerCore.Fire()` 先 `Disarm()`，重复正是为了让下一拍还在；视图池是「建完这一批就停、有待建项再排下一批」。
-  照抄 `IsRepeating` 的取值前先确认你要的是哪一种（对位：`Src/Adapters/VeloxDev.MAUI/TransitionSystem/TransitionInterpreter.cs` 的 `IsRepeating` 设置）。
+  对位：`Src/Adapters/VeloxDev.MAUI/TransitionSystem/TransitionInterpreter.cs` 的 `IsRepeating` 设置。
 - 两个定时器的 `Tick` 都必须自带 try：`IDispatcherTimer.Tick` 抛出的异常 MAUI 不接，直接冒到 WinUI 的
   `UnhandledException`（dotnet/maui #12245，`ViewScheduler.OnTick`、`WorkflowSlotLayoutBehavior.cs` 的 `PostToUiThread`）。
 
@@ -80,8 +70,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
 `WorkflowLinkOverlay.cs` 的类文档：**画布尺寸**的 `GraphicsView` 在深缩放下超过 Win2D 纹理上限，整层**静默消失**。
 于是链接层取**视口尺寸**、住在装饰器坐标系里（网格/标尺用的同一身份：
 `px = RulerThickness + c + ContentOffset − ScrollOffset`），并因此**必须自己做包围盒裁剪**
-（`CullMargin = 24`，裁剪判定在 `IDrawable.Draw` 里用 `IntersectsViewport`）。别家可以照抄「一个视口尺寸的 overlay」，但**不能省掉裁剪**：
-这一层永远是满屏尺寸 —— 满屏的是**视口**，不是内容。
+（`CullMargin = 24`，裁剪判定在 `IDrawable.Draw` 里用 `IntersectsViewport`）。这一层永远是满屏**视口**尺寸，不是内容尺寸，裁剪不能省。
 **每帧画哪些线由枚举源决定**：`EnumerateVisibleLinks` 取 Core 的虚拟化可见集（`tree.GetHelper().VisibleItems`
 里过滤出 `IWorkflowLinkViewModel`），因此是 O(可见) 而不是 O(全部) —— 与其余六家同源。包围盒裁剪留作第二道筛子：
 可见集用的是「两端节点包围盒的并集」，比曲线本身粗，并集擦过视口时曲线仍可能落在外面。
@@ -93,7 +82,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
 
 ### 5. 托管的 `SizeChanged` 是 **arrange 途中**，不是 arrange 之后
 
-这是本家历史结论，今天仍然成立，依据是三处注释与它们的实现：
+依据是三处注释与它们的实现：
 `WorkflowSlotLayoutBehavior.cs` 的 `Attach`（里面 Windows 装原生信号）、`TryInstallResizeSignal` 的文档、
 `OnNodeResized` 的注释（「MAUI 的托管 SizeChanged 在 arrange 途中触发，节点内部槽位还没定型，
 测出来的锚点会比最终几何过冲 ~10ms（见 git 历史里的逐格端点弹跳）」）。
@@ -101,7 +90,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
 - Windows：经 `control.Handler?.PlatformView` 拿 `Microsoft.UI.Xaml.FrameworkElement`，挂**原生** `LayoutUpdated`
   （`TryInstallResizeSignal`）—— 那是「整个子树已 arrange 完」的信号；装上原生信号后**立刻摘掉**托管兜底（同方法）。
 - 非 Windows：没有框架级 `LayoutUpdated`，只能留托管 `SizeChanged`（`Attach` 的非 Windows 分支）。
-- 别家（WinUI/WPF 家族）本来就在 `LayoutUpdated` 系信号上同步，没有这一步；**这条不是「MAUI 的坑」而已，是「照抄别家的信号源会错」**。
+- 别家（WinUI/WPF 家族）本来就在 `LayoutUpdated` 系信号上同步，没有这一步。
 
 ### 6. `ScrollToAsync` 是 fire-and-forget 的 `ChangeView`，不保证落在请求值上
 
@@ -115,7 +104,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
 ### 7. 原生 extent **异步**重测，模型是**同步**长大的
 
 滚到边缘时画布扩张：模型侧（`Layout.ActualSize` 与 `ApplyLayout` 写的 `WidthRequest/HeightRequest`）**同一帧**就变了，
-而原生内容重测是异步的，快拖时原生 extent 能落后模型几千像素。这造成两条**方向相反**的写法则，都不是笔误：
+而原生内容重测是异步的，快拖时原生 extent 能落后模型几千像素。这造成两条**方向相反**的写法则：
 
 - **平移**：apply 之前用原生 extent 夹取（`GetNativeScrollMaximum`；Windows 专用读
   `ExtentWidth/ViewportWidth`，非 Windows 回退模型）。落地后再把锚点回写到**夹取后**的值（`ApplyPanTargetAsync` 的 `appliedOffset*` 重锚），
@@ -139,8 +128,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
 彗星因此是**按弧长切出来的几何**：曲线先按 `LinkCurve.DefaultSampleCount = 128` 采样成弧长表（采样与弧长表归 Core
 `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Interaction/LinkCurve.cs` 的 `DefaultSampleCount`、`BuildLinkCubic`；
 本层调用在 `WorkflowLinkOverlay.cs` 的 `IDrawable.Draw` 里），再在表上取头与尾，用 `TailSegments = 16` 段、每段一个透明度的 `DrawLine` 画出来
-（`TailSegments`、`DrawComet`；两遍：先光晕后本体）。**这条限制带来的好处仍在**：按弧长走的光会跟着弯走，
-而渐变刷的轴是两端的连线（弦），光在弯链上会离开绳子跑到弦上。
+（`TailSegments`、`DrawComet`；两遍：先光晕后本体）。按弧长走的光会跟着弯走；渐变刷的轴是两端的连线（弦），光在弯链上会离开绳子跑到弦上。
 
 ### 10. 非 Windows 上拿不到原生指针捕获
 
@@ -183,10 +171,9 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
   线程键态（对应 WinUI 的 `KeyModifiersNow`）；其余平台（Android/iOS/MacCatalyst）**返回 `None`**。
   指针悬停/按下/滚轮、以及组件自己那次转发（`RouteComponentPress`）都不携带修饰键，在非 Windows 上
   因此**永远看到 `None`** —— 这是平台缺口、不是待修的 bug。`WorkflowLinkOverlay.OnLongPressTick`（仅非 Windows
-  的长按菜单手势）保持字面 `None`，注释已写同一原因，别顺手「补」它。
+  的长按菜单手势）保持字面 `None`，注释已写同一原因。
 
 ⇒ demo 层「空白画布 Shift+拖拽」那种按修饰键分流的定制，在非 Windows 上拿不到 Shift；Windows 头（与 WinUI 同平台）正常。
-把 `None` 改回去、或给非 Windows 编一个恒返回 `None` 的伪助手，都是倒退。
 
 ---
 
@@ -199,9 +186,9 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 - 滚动走**原生** `ScrollViewer.ChangeView`，不用 `ScrollToAsync`；
 - 键钩子要挂在**窗口根**，而 `XamlRoot` 在 attach 那一刻是 **null** ⇒ 先挂在交互源上，再由 `TryUpgradeKeyHook` 在 dispatcher 上重挂到根出现为止（上限 30 tick），并在 attach / 按下 / 滚轮三处各叫它一次 —— 只靠「悬停时升级」永远等不到。
 
-⇒ 「滚轮能滚」与「键还到得了」在这家是**两个耦合的问题**：别只看滚轮动了就以为改完了。
+⇒ 「滚轮能滚」与「键还到得了」在这家是**两个耦合的问题**。
 
-### 13. 滚轮「内外一起滚」的 A/B，与两条未决异常（2026-10-11 探针）
+### 13. 滚轮「内外一起滚」的 A/B 与未决异常（2026-10-11 探针）
 
 指针压在卡片内层可滚区上滚一格，两组对照（完整版 demo，内层是 `PythonNodeView` 的输入口条）：
 
@@ -212,32 +199,32 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 
 入口 `handledEnter=True` 是硬证据：内层 `ScrollViewer` 早已滚过并置了 `Handled`。⇒ 与 WinUI 同形 —— **外层那 61.8/格是适配器额外加上去的一滚**，根因是那条无条件 `ScrollBy`；bypass 组外层不动，反证了「滚轮按惯性操纵、链式不生效」。
 
-同批的三条附带结论：
+同批的附带结论：
 
-- ⚠ **默认数据下每张卡 `scrollableH=0`**（第三家独立实测）⇒ 缺陷 ① 默认不可见。
-- **「两轴齐写」未复现副作用**：先把 H 平移到 266.67 再竖滚一格，H 精确保持 266.67（第三家一致）。
-- **「滚一格把键盘焦点带走」未复现**：滚完之后 `Ctrl+Z` 仍到达宿主的 KeyDown 订阅并执行。⚠ 但**判据本身要先验** —— Trimmed 初始树没有可撤销项，`UNDO-EXEC nodes=4` 前后都是 `4/4`，「看节点数变没变」这条判据在这家**判定不了**。
+- ⚠ **默认数据下每张卡 `scrollableH=0`** ⇒ 缺陷 ① 默认不可见。
+- **「两轴齐写」未复现副作用**：先把 H 平移到 266.67 再竖滚一格，H 精确保持 266.67。
+- **「滚一格把键盘焦点带走」未复现**：滚完之后 `Ctrl+Z` 仍到达宿主的 KeyDown 订阅并执行。⚠ 但 Trimmed 初始树没有可撤销项，「看节点数变没变」这条判据在这家**判定不了**。
 
-### 14. 滚轮重构：挂点、闸门、两条根因（2026-10-11 实测，两条都是跨家的）
+### 14. 滚轮：挂点、闸门、两条根因（实测，两条都是跨家的）
 
-**N6-a 的根因：处理器挂的那个平台视图是 `LayoutPanel(0x0)`** —— 一个 **0×0 的面板**，所以空白处的命中根本落不到它身上。证据：在窗口根挂 `handledEventsToo` 探针逐点记录 12 个空画布点，**12/12 都进了 App**，但其中 **7 个**的链从 `OriginalSource` 到窗口根都**没有 `[CANVAS]`**（典型链 `LayoutPanel(2240x1340) < ContentPanel < ScrollContentPresenter < Grid < Border < ScrollViewer < …WindowRootView`）；只有落在节点卡上的点链里才有 `[CANVAS]`。那些点上的 HUD 数字照样 +61.8 —— 是**原生 `ScrollViewer` 自己滚的**，既没进路由、也不是适配器的步长。
+**N6-a 的根因：处理器挂的平台视图是 0×0 的 `LayoutPanel`**，空白处的命中落不到它身上。证据：在窗口根挂 `handledEventsToo` 探针逐点记录 12 个空画布点，都进了 App，但多数链从 `OriginalSource` 到窗口根**没有 `[CANVAS]`**（典型链 `LayoutPanel(2240x1340) < ContentPanel < ScrollContentPresenter < Grid < Border < ScrollViewer < …WindowRootView`）；只有落在节点卡上的点链里才有 `[CANVAS]`。那些点上的 HUD 数字照样 +61.8 —— 是**原生 `ScrollViewer` 自己滚的**，既没进路由、也不是适配器的步长。
 **修**：挂点改到画布平台元素**往上最近的 `ScrollContentPresenter`**（覆盖整个滚动视口，且在做滚动那一层**之前**冒泡），取不到才退回画布元素。改后同一个空画布点 20 格 ⇒ 画布 `2240×1340 → 2240×1772`。
 
 **N6-b 的根因在适配器，不在 demo**：`ToKey` 只点名了 `LeftShift(160)/RightShift(161)`，**无侧的 `VirtualKey.Shift(16)` 落 `Unknown`** —— 真实键盘左右 Shift 的 `WM_KEYDOWN` 报的都是 `0x10`（左右之分在扫描码里），SendInput 合成的更是**只有**这个码。于是 demo 里 `IsShiftKey(e.Key)` 永远为假：**按下那半还有 `e.Modifiers` 兜着，抬起那半永远不触发** ⇒ 松开 Shift 之后一直按横滚走（实测 `keyup:Shift` 后两格仍是 `124,247`）。demo 的写法**与 WPF 那家逐字相同**，所以修在适配器：补 `Shift/Control/Menu → LeftShift/LeftCtrl/LeftAlt`（与 WPF 的 `KeyInterop` 同一条）。改后 `keyup:Shift` 一格 ⇒ `124,371`（回到竖滚 +61.8）。
-⚠ **这是跨家缺陷，不是这家独有**：WinUI 用的是**同一套 `VirtualKey` 词汇**、`ToKey` 里同样只有八个侧别键 —— 2026-10-11 已一并补上（WinUI 的 demo 也是逐字相同的形状）。**2026-10-18 起 demo 不再用 KeyUp 跟踪 Shift**：滚轮事件自带修饰位，按下/抬起都由每一格自己带着；上面这条映射仍对 KeyDown 有用（Ctrl+Z 等）。
+⚠ **这是跨家缺陷**：WinUI 用的是**同一套 `VirtualKey` 词汇**、`ToKey` 里同样只有八个侧别键，已一并补上（WinUI 的 demo 也是逐字相同的形状）。
 
-**闸门**：与 WinUI 同形 —— 实测**内层到边那一格照样置 `Handled`**（`inner=128/128` 时 `handled=True`），`if (e.Handled) return;` 单独不够，判据要叠加「沿方向绝对余量」。三支 A/B：内层有余量 11 格 ⇒ 画布 `视口(画布) 0,0`；第 13 格起画布接；空白点 ⇒ 61.8/格。
+**闸门**：与 WinUI 同形 —— 实测**内层到边那一格照样置 `Handled`**（`inner=128/128` 时 `handled=True`），`if (e.Handled) return;` 单独不够，判据要叠加「沿方向绝对余量」。A/B：内层有余量 11 格 ⇒ 画布 `视口(画布) 0,0`；第 13 格起画布接；空白点 ⇒ 61.8/格。
 
 **边缘**：撑大后与**平移逐位一致**（24 格 ⇒ `2240×2038 / 0,1360`，平移拖到并越过边也是同一组数）；向上回滚 `1360→1236`，画布保持撑大不缩。
 
-**横滚**：`hwheel:` 实测 `x 62→124`（+61.8）、`y` 不变，通过。
+**横滚**：`hwheel:` 实测 `x 62→124`（+61.8）、`y` 不变。
 
 **回归**：中部 1 格 `0,62`、5 格 `0,309`（=61.8/格，**不是 123.6**）；Ctrl+滚轮缩放 `121% / Scale 0.83`。
 
-**未决异常（已记录，未定性，勿当结论）：**
+**未决异常（未定性）：**
 
-1. **Trimmed 上有若干空画布点滚轮没进 `OnSurfaceWheel`**（原生 `ScrollViewer` 自己滚了 61.8），而同 demo 另外几个点进了（`hit=LayoutPanel`）；卡片区稳定进。这动摇「挂在画布上就拦得住」这个前提，得单独查清。
-**`keyup:Shift` 之后仍按横滚执行 —— 已消解（2026-10-18）。** 旧写法用 `_shiftHeld` + `KeyUp` 跟踪修饰键；七个 Trimmed demo 已改为读滚轮事件自带的 `Modifiers`，每个事件各带当时的修饰位，不存在陈旧态。适配器把无侧 `VirtualKey.Shift` 映射到 `LeftShift` 仍保留 —— KeyDown（Ctrl+Z 等）还要用。
+1. **Trimmed 上有若干空画布点滚轮没进 `OnSurfaceWheel`**（原生 `ScrollViewer` 自己滚了 61.8），而同 demo 另外几个点进了（`hit=LayoutPanel`）；卡片区稳定进。这动摇「挂在画布上就拦得住」这个前提。
+**`keyup:Shift` 之后仍按横滚执行 —— 已消解。** 现在 demo 读滚轮事件自带的 `Modifiers`，每个事件各带当时的修饰位；适配器把无侧 `VirtualKey.Shift` 映射到 `LeftShift` 仍保留 —— KeyDown（Ctrl+Z 等）还要用。
 
 ### 15. 链接层的指针钩子挂在整页根上，必须按 overlay 边界过滤（2026-10-30）
 
@@ -247,16 +234,15 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 
 ## 三、与其它家的刻意背离
 
-1. **七家里唯一没有 `WorkflowCanvasTransformBehavior` 的一家。** 这里的做法和其他家不一样，因为 MAUI 没有 `Viewbox`，
-   而且本家**刻意不使用 RenderTransform**（变换会污染槽位布局读到的 layout 位置，见 demo 的 `NodeView.xaml.cs` 里 `Uses layout-only changes (no render transforms)` 那段注释
-   「Uses layout-only changes (no render transforms) so the slot-layout behavior's layout-position measurement keeps producing
-   correct link anchors」）。于是平移改由两处**代码写几何**承担：整块画布 `TranslationX/Y = Layout.ActualOffset`
+1. **没有 `WorkflowCanvasTransformBehavior`。** 这里的做法和其他家不一样，因为 MAUI 没有 `Viewbox`，
+   而且本家**刻意不使用 RenderTransform**：变换会污染槽位布局读到的 layout 位置（见 demo 的 `NodeView.xaml.cs` 里那段
+   「Uses layout-only changes (no render transforms) so the slot-layout behavior's layout-position measurement keeps producing correct link anchors」）。于是平移改由两处**代码写几何**承担：整块画布 `TranslationX/Y = Layout.ActualOffset`
    （`WorkflowSurfaceBehavior.cs` 的 `ApplyLayout`，注释说明为什么是画布级而不是逐子元素：同级平移才能让节点/连线/网格同帧一致），
    每一项的落位由 `ViewHosting/ViewArranger` 写 `AbsoluteLayout.SetLayoutBounds`；Core 池只在物化时 arrange 一次，
    所以 `ViewArranger` 还订阅节点的 `Anchor`/`Size`，每帧合并一次重写。
-   **照抄点**：`view-layer.md` §The binding rule that bites 那条「变换绑定必须挂在 `DataTemplate` 根上」的坑在 MAUI 上**不适用** ——
-   这里根本没有那个附着属性可绑。
-2. **两个 demo（与模板产物）现在都是「一层」：共享的 `LinkView` 包一个 `WorkflowLinkOverlay`（2026-10-04 复核；「每线一视图」那条路当前无消费者）。**
+   `view-layer.md` §The binding rule that bites 那条「变换绑定必须挂在 `DataTemplate` 根上」在 MAUI 上**不适用** ——
+   这里没有那个附着属性可绑。
+2. **两个 demo（与模板产物）都是「一层」：共享的 `LinkView` 包一个 `WorkflowLinkOverlay`（「每线一视图」当前无消费者）。**
    `WorkflowLinkOverlay` 是唯一边线宿主：画全部可见连线 + 唯一的光带动画宿主 + 收指针。它仍保留一条跳过判据：
    **一条连线的曲线如果带着 `Visual` 被发布（视图调了 `PublishCurve(curve, this)`），这一层就跳过它** ——
    `WorkflowLinkOverlay.cs` 的 `LinkOverlayDrawable` 的 `Draw` 里那句 `if (link.HitTarget()?.Visual is not null) continue;`
@@ -269,7 +255,7 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
    两条路线共用同一个输入路由（`WorkflowInput.For(tree)`）与同一份命中几何（`HitTestVisibleLinks`），所以交互行为一致。
    **光带仍然只有 overlay 有**（`BandCentre`/`BandMix` 两个标量 + `Transition<WorkflowLinkOverlay>`，
    三段 450/700/450ms 结尾 `Repeat(int.MaxValue)`）；当前没有每线视图，所以「每线视图自己画彗星」**还没做**。
-   ⇒ 改这块前先看 `LinkView.xaml` 顶部那段注释：改回每线视图要重付 §二·4 的 Win2D 纹理上限代价。
+   改回每线视图要重付 §二·4 的 Win2D 纹理上限代价（`LinkView.xaml` 顶部那段注释）。
 3. **流光的颜色规则是「本色往白里提」，不是换色**：线体本身是静息的暗线（本色 alpha 降到 55%，见 `WorkflowLinkOverlay.cs` 里静息描边的 `stroke-opacity`），
    彗星的每段由本色与白按它在尾上的位置插值、透明度按位置平方衰减、再叠一层更宽更淡的光晕
    （`WorkflowLinkOverlay.cs` 的 `DrawComet`）。与 `view-layer.md` §Painting the connection preview 的通则一致，但本家的实现落点在 overlay 的两个标量上。
@@ -282,14 +268,14 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
    `TryGetCenterRelativeTo` 走父链求和，且 `GetLeftInParent/GetTopInParent` 优先取 `AbsoluteLayout.GetLayoutBounds`
    （`Translation` 不在其中）。**用 `SlotAnchorFromVisualCenter` 会把 `ActualOffset` 减两次**，每条线整体偏移
    （`skills/veloxdev-create-workflow/references/gui/maui.md` §Links — one overlay for the whole graph 同结论）。
-7. **Windows 上原生 `ScrollViewer` 是彻底被动的，且平移不再走 manipulation（2026-10-01 重做，见 §五）。**
+7. **Windows 上原生 `ScrollViewer` 是彻底被动的，且平移不走 manipulation（见 §五）。**
    `IsScrollInertiaEnabled = false` 且 **`ManipulationMode = None`**（`WorkflowSurfaceBehavior.cs` 的
    `OnScrollViewerHandlerChanged`）—— 两半都必要：`TranslateX|TranslateY` 正是 ScrollViewer 用来做**操纵滚动**的那两个轴，
    留着它们它就还是第二个滚动驱动者，并会在松手那一刻把自己累积的偏移补上（实测：松手后 60ms 从 423 跳到 186）；
    而平移现在改走原生指针事件，全树不再需要任何 manipulation，所以 `None` 是它该有的取值。详见 §五。
 8. **平移用绝对锚点，不用每帧增量累积**：`SurfaceState` 里那组 `PanAccumulated*` / `PanAnchorTotal*`（字段上的注释）
    在 `Started` 记一次锚，每次 `Running` 用 `anchor − (Total − anchorTotal)` 算绝对目标（`OnPanUpdated`），
-   并让**在飞的上一笔 `ScrollToAsync` 被取消**（`PanCts`，`SurfaceState` 字段与 `ApplyPanTargetAsync`）。注释给的教训：读每帧实际 `ScrollX` 会闪回，
+   并让**在飞的上一笔 `ScrollToAsync` 被取消**（`PanCts`，`SurfaceState` 字段与 `ApplyPanTargetAsync`）。读每帧实际 `ScrollX` 会闪回，
    累积逐帧增量会在被夹取的滚动下漂移（卡住再跳）。
 9. **输入转发是「组件各自转发 + 已路由标记」，不是「表面在隧道相转发一次」。** 本家**没有隧道路由相**，
    而节点/插槽的处理器比链接层挂在 `InteractionSource` 上的钩子更早跑（平台事件从命中元素往上冒泡，越深越早），
@@ -306,18 +292,18 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
    「一笔只转发一次」由 `WorkflowSurfaceBehavior` 的两组静态登记保证：
    **按下**按**树**认（`RoutedPressTree`/`RoutedPressHandle`，`WorkflowSurfaceBehavior.cs` 的静态字段），由链接层转发**松手**时清（`ClearRoutedPress`）；
    **滚轮**按**物理事件对象**认（`RoutedWheelEvent`/`RoutedWheelHandle`）—— 先到者转发并登记、后到者读现成的（`RouteWheelOnce`）。
-   ⚠ 滚轮的登记**必须**按事件认：按树时登记要由**后到者消费**才清，而普通滚轮只有链接层一条来者 ⇒ 登记没人消费、留到**下一笔**上把那一笔判成「已经路由过」而静默丢掉（实测改前计数不稳：5 格 8 行；改后每格恰好一行）。一次物理滚轮必然是新实例，所以按事件认没有收尾问题。
-   ⇒ **不要再给任何一条路加第二次 `Route`**：宿主会一笔听见两次，还会多收一对 `Entered`/`Exited`。
+   ⚠ 滚轮的登记**必须**按事件认：按树时登记要由**后到者消费**才清，而普通滚轮只有链接层一条来者 ⇒ 登记没人消费、留到**下一笔**上把那一笔判成「已经路由过」而静默丢掉。一次物理滚轮必然是新实例，所以按事件认没有收尾问题。
+   加第二次 `Route` 会让宿主一笔听见两次，还会多收一对 `Entered`/`Exited`。
 
 ---
 
 ## 四、改这里时最容易踩的坑
 
-1. **在平移期间抑制 `OnScrolled`** → 装饰器冻在请求值、松手跳（`WorkflowSurfaceBehavior.cs` 的 `OnScrolled`）。这条是调查结论，不是猜测。
+1. **在平移期间抑制 `OnScrolled`** → 装饰器冻在请求值、松手跳（`WorkflowSurfaceBehavior.cs` 的 `OnScrolled`）。
 2. **把 §二·6 与 §二·7 的写法则互相「统一」** → 一边自锁（boundary 不再长大）、一边松手跳。两处方向相反是刻意的。
 3. **在 Windows 上把重同步信号换回托管 `SizeChanged`**（或让兜底与原生信号并存）→ 逐格端点弹跳：`~10ms` 的 arrange 途中过冲
    （`WorkflowSlotLayoutBehavior.cs` 的 `Attach`、`TryInstallResizeSignal`、`OnNodeResized`）。
-4. **删掉任何一处 NaN 守卫** → 最小后果是连线永久消失。NaN = 未测量是**跨平台统一机制**，不是本家发明的时序
+4. **删掉任何一处 NaN 守卫** → 最小后果是连线永久消失。NaN = 未测量是**跨平台统一机制**
    （`../extension.md` §3.9-4）：`Viewport`/`Virtualize` 那条路上 NaN 会让**整批 VisibleItems 被清空**
    （`WorkflowSurfaceBehavior.cs` 的 `ApplyVisibleRegion` 注释：`NaN <= 0` 是 false，所以 Core 的守卫抓不到）；
    小地图是成组的（`WorkflowMinimapOverlay.cs` 的 `ComputeDrawing` / `GetClampedViewportRect` 里各段 NaN 守卫），
@@ -337,30 +323,25 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 10. **删掉 `Refresh` 的 `IsRefreshing` 重入守卫** → 画布扩张 → `Refresh` → 再扩张的级联（`Refresh` 的注释记了
     「每次扩张级联 2-3 次 Refresh，正反馈减速螺旋」）。
 11. **给链接层加「可见集之外也要补画」的兜底**（最典型的是把全量 `tree.Links` 再拉回来做差分）→ 又和其余六家分叉，
-    而且不需要：新连线进可见集的时机就是 Core 的「量完才画」，与 WinUI 那条修好的行为一致。这条窗口真出问题时
-    要报出来，不是在绘制侧绕过。
+    而且不需要：新连线进可见集的时机就是 Core 的「量完才画」，与 WinUI 那条的行为一致。
 12. **每线视图（`LinkView`）的盒子：`Path` 只画在自己的布局槽里，落在槽外的几何被整段裁掉 —— 而且不报错。**
-    2026-10-03 实测，踩了一路，四条一起记住：
+    2026-10-03 实测的四条：
     - 几何必须按**视图盒子自己的原点**换算。画布局部坐标常常是负的（demo 的端口就在 `(101,−53)`），
       所以「视图铺满画布 `(0,0,W,H)` + 几何直接用画布坐标」等于把每条 y 为负的连线画到盒子外 —— **一条都看不见**。
-    - `Aspect="None"` 是**生效**的（几何不会被拉伸去填盒子）。别信「MAUI 一定 stretch」的猜测，实测是不拉。
+    - `Aspect="None"` 是**生效**的（几何不会被拉伸去填盒子）。
     - **盒子不能每帧跟着曲线包围盒走**。写 `AbsoluteLayout.SetLayoutBounds` 是能生效的，但一帧一变时
       视图会停在一两个状态之前的盒子上（实测），正在拖动的橡皮筋因此整条消失。
       现在做法是 `LinkView.EnsureBox`：盒子 = 画布 + 一圈余量，**建一次就不动**，只有连线真的跑出这个区域才长大一次（长大之后又稳定）。
     - **`ViewArranger` 对连线的分支必须保持「不写 bounds」**（`ViewHosting/ViewArranger.cs` 里那段），
       否则池子会把盒子刷回画布尺寸，把上面两条一起作废。
-13. **橡皮筋（虚拟连线）在新旧两版都画得出来 —— 别读成「从来没画过」（2026-10-03 核实）。**
-    上一版（overlay 画全部连线的时代）与这一版（每线视图）都能画出橡皮筋；我先前那次「回到改动前也看不到」
-    是因为用 `SetCursorPos` 驱动拖拽，**连线手势根本没起来**（见下面第 14 条），于是把「没驱动起来」当成了
-    「没画出来」，还写进了这条记忆里。教训：截图里「没有某个东西」之前，先确认那次操作**真的发生过**。
+13. **橡皮筋（虚拟连线）画得出来。** 看不到的已知原因是 `SetCursorPos` 驱动不起连线手势（见第 14 条）。
 14. **合成输入：本家的**节点拖拽**与**连线手势**只认 `SendInput` 的移动，`SetCursorPos` 驱动的**一个都不生效**。**
     2026-10-03 实测：同一串动作换成 `SendInput`（harness 的 `moveto:`）之后，节点拖拽与橡皮筋立刻都出来了；
     用 `move:`（`SetCursorPos`）则两者都「看着像没反应」—— 而这家的悬停（`PointerMoved` 钩子）又**时而**能收到，
     所以症状是「有时好有时坏」，很容易被误判成坐标不对或功能坏。**验证拖拽类行为一律用 `moveto:`。**
-    **不要假设 `SetCursorPos` 也能驱动拖拽**（这条假设是错的）。
-15. **手势的 `PreventDefault` 只做到「读得到句柄」这一步，别顺手把语义补齐。** 平移与节点/插槽的否决已经生效
-    （不捕获指针、不起拖拽/连线）；**非 Windows 的捏合缩放**根本没有可对应的滚轮事件，转发不出来，当前否决不了；
-    Windows 的 Ctrl+滚轮**否决后要不要退回平台自己的滚动**，全仓七家还没拉平 —— 要在别处定，不在这里单独定。
+15. **手势的 `PreventDefault` 只到「读得到句柄」。** 平移与节点/插槽的否决已生效
+    （不捕获指针、不起拖拽/连线）；**非 Windows 的捏合缩放**没有可对应的滚轮事件，转发不出来，当前否决不了；
+    Windows 的 Ctrl+滚轮**否决后要不要退回平台自己的滚动**，全仓七家还没拉平。
     另一条：Windows 的 `RouteSurfacePress` 必须在 `element.CapturePointer` **之前**读句柄（`WorkflowSurfaceBehavior.cs`
     的 `OnPlatformPanPressed`）—— 否决了还去捕获，那一笔要走的宿主定制就拿不到指针。
 
@@ -381,20 +362,20 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
 | 命中 | 本层在绘制时把曲线按 **canvas-local** 发布（`PublishCurve`，不带 visual）；指针经 `ToCanvasLocal`（`ToViewport` 的逆）转成同一坐标系，本层调 `input.Tree.HitTestVisibleLinks` 逐条判距，半径用 `input.HitRadius`（默认 6，七家同一个 `DefaultHitRadius`） | `WorkflowLinkOverlay.cs` 的 `IDrawable.Draw`（`LinkCurve.BuildLinkCubic` + `PublishCurve`）、`ToCanvasLocal`、`OnHoverMoved`；Core `LinkHitTestEx` 的 `DefaultHitRadius` |
 | 高亮 | 本层没有「每线的可视对象」，连线高亮归 **demo 的 `LinkHighlightLayer`**：它订树 helper 的 `Input.PointerEntered` / `PointerExited` 自己画光带，并在 `LinkRemoved` 上清掉旧像素（线被删时指针不动、收不到 `Exited`） | `Examples/Workflow/MAUI/Demo/Controls/Workflow/LinkHighlightLayer.cs` 里订 `PointerEntered` / `PointerExited` / `LinkRemoved` 的那段（Trimmed 同文件同形） |
 | 删除 | 本层只把 Delete 键翻成 `KeyEvent` 路由进输入面（`OnSourceKeyDown`，仅当 `input.HoveredLink` 非空）；**执行归 demo** —— 订树 helper 的 `Input.KeyDown` 执行 `link.DeleteCommand`。`KeyUp` 现在也路由（`OnSourceKeyUp`，无悬停筛选，见 §五·7） | `WorkflowLinkOverlay.cs` 的 `OnSourceKeyDown`、`OnSourceKeyUp`；`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs` 与 `Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml.cs` 里订 `Input.KeyDown` 的处理器 |
-| 菜单 | 本层不懂菜单：右键（或非 Windows 的长按）翻成 `PointerPressed(Right, …)` 发进输入路由，**表面（适配器）订它、自己弹**（2026-10-03 用户改定）。表面 `WorkflowSurfaceBehavior` 按附着属性 `LinkMenuKey` 从模板声明的 `LinkContextMenu` 资源取菜单、按 `RulerBand + 锚点 + 内容偏移 − 滚动偏移` 定位、弹出，`Opened`/`Closed` 由表面自己置/放 `input.IsSuspended`。菜单指着的那条线离开 `tree.Links`（Agent / Undo / 别处删都算）时树报 `LinkRemoved`，**表面只负责收起自己那份弹窗**（弹窗是平台的，输入路由收不了）。模板/demo 的 code-behind 因此没有一行菜单代码 | `WorkflowSurfaceBehavior.cs` 的 `LinkMenuKeyProperty`、`WireLinkMenu`、两条 `ShowLinkMenu`（Windows / 非 Windows）、`DismissLinkMenu`、`LinkRemoved` 处理、以及置/放 `IsSuspended` 的路径；`WorkflowView.xaml` 的 `LinkMenuKey`、`WorkflowLinkOverlay.cs` 的 `OnPressed` / `OnLongPressTick`（本层转发） |
+| 菜单 | 本层不懂菜单：右键（或非 Windows 的长按）翻成 `PointerPressed(Right, …)` 发进输入路由，**表面（适配器）订它、自己弹**。表面 `WorkflowSurfaceBehavior` 按附着属性 `LinkMenuKey` 从模板声明的 `LinkContextMenu` 资源取菜单、按 `RulerBand + 锚点 + 内容偏移 − 滚动偏移` 定位、弹出，`Opened`/`Closed` 由表面自己置/放 `input.IsSuspended`。菜单指着的那条线离开 `tree.Links` 时树报 `LinkRemoved`，**表面只负责收起自己那份弹窗** | `WorkflowSurfaceBehavior.cs` 的 `LinkMenuKeyProperty`、`WireLinkMenu`、两条 `ShowLinkMenu`（Windows / 非 Windows）、`DismissLinkMenu`、`LinkRemoved` 处理、以及置/放 `IsSuspended` 的路径；`WorkflowView.xaml` 的 `LinkMenuKey`、`WorkflowLinkOverlay.cs` 的 `OnPressed` / `OnLongPressTick`（本层转发） |
 | 取焦点会不会带滚画布 | **不会** —— `Focus()` 打在 `InteractionSource`（页面根）上，而它是画布 `ScrollView` 的**祖先**；WinUI 的 bring-into-view 只从**焦点元素往上冒**，画布那个 `ScrollViewer` 根本不在那条路上 | `WorkflowLinkOverlay.cs` 的 `FocusHoveredLink`、`OnPressed`；`WorkflowView.xaml`（`Root` 是 ContentView 根，`PART_ScrollViewer` 在它里面） |
 
-七条结论（凡标「实测」的都是这台机器上跑出来的，不是推导）：
+结论：
 
 1. **Windows 上不能用 `PointerGestureRecognizer` 收悬停**：挂上去之后 `PointerMoved` 一次都不来（同一次会话里改成
    `AddHandler(UIElement.PointerMovedEvent, …, handledEventsToo: true)` 挂到**同一个** `ContentPanel` 上立刻就有）。
    所以 `AttachPlatformHooks` 走原生路由事件（`PointerMovedEvent` 也挂在 `AttachPlatformHooks` 里），`PointerGestureRecognizer`
    只留在 `#if !WINDOWS`（`AttachInteractionSource` 的非 Windows 分支，moved 回调 `OnGesturePointerMoved`）。方向与 `WorkflowNodeDragBehavior.cs` 的 `Attach` 注释一致 ——
-   那边也是嫌它不可靠才不用。别照抄「用 PointerGestureRecognizer 做 hover」的通用建议。
+   那边也是嫌它不可靠才不用。
 2. **`SelectLink` / `OnPressed` 里仍 `Focus()`，但它已降级为第二道保险**（`FocusHoveredLink`、`OnPressed`）：主修法是结论 7
    把键盘钩子挂到窗口根，键路由不再依赖焦点。保留 Focus 是因为「选中要能立刻接住 Delete」这条观感仍靠它，
    而 `Focus()` 打在**页面根**上（画布的祖先，见上表最后一行），代价只是一次不可见的焦点移动。
-3. **非 Windows 的菜单手势是长按，不是右键（2026-10-03 新增）**：`#if !WINDOWS` 下左键按下起一个非重复定时器，
+3. **非 Windows 的菜单手势是长按，不是右键**：`#if !WINDOWS` 下左键按下起一个非重复定时器，
    `LongPressDelay = 500` ms；位移超过 `LongPressMoveSlop = 8` 设备无关单位或松开就取消计时
    （`OnGesturePointerMoved`、`OnGesturePointerReleased`）。到点 `OnLongPressTick` 发一个**合成右键** `PointerEvent(Pressed, canvasLocal, Right)`
    （`OnLongPressTick`）—— 与 Windows 的真右键同义，输入路由照常判命中，**表面订到这次 `PointerPressed(Right, …)` 后弹菜单**。
@@ -405,18 +386,17 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
    **「菜单不得比它作用的连线活得久」这条守卫由树的 `LinkRemoved` 实现**：那条线离开 `tree.Links` 时树报 `LinkRemoved`
    （`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Components/IWorkflowTreeViewModel.cs` 的 `LinkRemoved`、`Templates/Helpers/TreeHelper.cs` 的 `LinkRemoved`），表面按 `ReferenceEquals(state.MenuLink, link)` 判定后收自己那份弹窗 —— Windows 调原生
    flyout 的 `Hide()`，非 Windows 走 `DismissLinkMenu(state)`（`WorkflowSurfaceBehavior.cs` 的两条 `LinkRemoved` 处理）。收起照常复位 `IsSuspended`，单一责任人不变。
-5. **菜单条目来自声明的资源，接线与呈现都在适配层（2026-10-03 改定）**：模板/demo 在 XAML 里声明 `LinkContextMenu`
+5. **菜单条目来自声明的资源，接线与呈现都在适配层**：模板/demo 在 XAML 里声明 `LinkContextMenu`
    （`WorkflowView.xaml` 的 `LinkMenuKey="LinkContextMenu"` 属性 + 资源里那条
    `MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"`），表面按这个键取菜单。
-   **模板/demo 的 code-behind 因此没有一行菜单代码**：那整套菜单代码（`UpdateInteraction` / `ShowLinkMenu` / `BuildPlatformMenu` / `RunItem` /
-   `SelectMenuItem` / `DismissLinkMenu` / `OnLinkMenuScrimTapped`）都不在，落点在 `WorkflowSurfaceBehavior.cs` 的
+   **模板/demo 的 code-behind 没有菜单代码**：落点在 `WorkflowSurfaceBehavior.cs` 的
    `WireLinkMenu` / `ShowLinkMenu` / `RunItem`。弹出分两路：
    - **Windows**：把声明的条目翻成原生 `Microsoft.UI.Xaml.Controls.MenuFlyout`（`BuildPlatformMenu`）
      再 `ShowAt` —— 只有原生 flyout 能在指定点弹。这份 flyout 记在 `state.OpenFlyout` 里（`Hide()` 得用它，
      在它的 `Closed` 里清掉），`state.MenuLink` 也在 Windows 上置上，供 `LinkRemoved` 的同一判据用。
    - **非 Windows**：没有跨平台的点弹出物，于是把同一声明物化进**适配器自建**的浮层（`EnsureLinkMenuLayer`：
      建 `Grid`（scrim + `Border`）挂到装饰器最近的一层 `Layout` 上，条目填进 `state.LinkMenuItems`，用算出来的 `Margin` 定位）。
-     **`PART_LinkMenuLayer` 那层标记已从模板与两个 demo 的 XAML 里删除** —— 它本来就是呈现，归适配器。
+     模板与两个 demo 的 XAML 里没有 `PART_LinkMenuLayer` —— 那层呈现归适配器。
      收起只有 `DismissLinkMenu(state)` 一条路：用户选择、点 scrim、以及树的 `LinkRemoved` 都走它。
    **这份浮层的局限都是设计取舍、不是待修的缺陷**：它是宿主 Layout 的子元素、不是窗口级弹出物（没有平台样式与键盘语义）；
    `Margin` 只在负值时夹到 0、不做贴边翻转；`MenuFlyoutSubItem` 会被 `case MenuFlyoutItem` 吃掉、当成一个
@@ -426,60 +406,56 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
    （HUD 读作 `视口(画布) 320, 195`）后：`SelectLink` → `Focus()` 走 5 轮、外加 3 秒连打，滚动在
    **同一回合 / +250ms / +750ms** 三处都一位没动，HUD 那行逐字相同；真指针 hover（`SendInput` 走完，
    先确认应用收到了指针：`_lastPointer` 从 nil 变成那个点）同样一次没动，而选中确实生效 —— 截图里同一条线
-   从静息蓝 `#CC38BDF8` 变成选中白 `#FFFFFFFF`。**原因是结构而非运气**：见上表最后一行，焦点元素是画布的祖先而不是后代。
+   从静息蓝 `#CC38BDF8` 变成选中白 `#FFFFFFFF`。原因是结构：见上表最后一行，焦点元素是画布的祖先而不是后代。
    反例（说明这套检测看得出「焦点带来的滚」）：往 `PART_Canvas` 里塞一个 `Entry` 放在画布 (2400,120) 再 `Focus()`，
    画布**同一回合**就从 `320,194.667` 跳到 `1292.667,148` ⇒ 这条 `ScrollView` 的「焦点就滚」是**开着**的
    （MAUI 没碰 `BringIntoViewOnFocusChange`，MAUI 的程序集里根本没引用过这个名字）。
-   **所以别为了「保险」去关掉自动滚进视口**：节点卡里的输入框仍该滚进来，本家不需要任何修补。
-   同一轮也验了 Delete 没退化：按 hover 那条路选中之后真按一次 Delete，`Links` 12 → 11。
-7. **键盘必须挂在「窗口根」上，不能挂在交互源上（2026-10-03 修，用户报「点一下再 Delete 删不掉」）**。
+   节点卡里的输入框仍该滚进来，不需要关掉自动滚进视口。
+   同一轮验了 Delete 没退化：按 hover 那条路选中之后按 Delete 能删。
+7. **键盘必须挂在「窗口根」上，不能挂在交互源上**。
    - **症状**：悬停 → Delete 能删；**点一下连线再按 Delete，无声无息**。
-   - **根因**：键事件只从**焦点所在的那个元素**往上冒，而平台在处理按下时会把焦点挪到被点的元素上
-     （临时探针实测：点击前后焦点都是某个 `MauiButton`）。键钩子原来挂在交互源的元素上，焦点离开那棵
-     子树之后 Delete 就不再经过它 —— 而且**不报错**。`SelectLink` 里那次 `Focus()` 也救不回来：
-     它返回 `true`，焦点却没动。
-   - **顺带补的第二处**：本家原来只转发**右键**（`OnSecondaryPressed`），而六家（WPF/Avalonia/WinUI/WinForms）
-     左右键都转发 —— 契约是「按下的那条就是选中的那条」，左键才是「点一下连线」产生的事件。现在 `OnPressed`
-     用同一个 `MouseButton` 左右都发（`OnPressed`；Windows 分支 `OnGesturePointerPressed`、非 Windows `OnGesturePointerPressed` 的另一段）。
+   - **根因**：键事件只从**焦点所在的那个元素**往上冒，而平台在处理按下时会把焦点挪到被点的元素上。
+     钩子挂在交互源上时，焦点离开那棵子树之后 Delete 不再经过它，且**不报错**。
+   - **顺带补的第二处**：`OnPressed` 用同一个 `MouseButton` 左右都发（Windows 分支 `OnGesturePointerPressed`、非 Windows `OnGesturePointerPressed` 的另一段）—— 契约是「按下的那条就是选中的那条」，左键才是「点一下连线」产生的事件。
    - **修法**（`WorkflowLinkOverlay.cs` 的 `AttachKeyHook` / `TryUpgradeKeyHook`）：把 `KeyDownEvent` 挂到
      `element.XamlRoot.Content`（窗口根，`AttachKeyHook`），键路由因此不再依赖焦点落在哪；`XamlRoot` 在 Attach 那一刻**还是
      `null`**（实测），所以升级交给第一次指针移动（`TryUpgradeKeyHook`，由 `OnHoverMoved` 调），
      拿不到窗口根就回退到交互源（`AttachKeyHook` 的 `sourceElement`）。`handledEventsToo: false` 保持不变 —— 聚焦的输入框吃掉 Delete
      改自己光标时必须让它赢（`AttachKeyHook` 的注册参数）。
-   - **`KeyUp` 与 `KeyDown` 同址同策略（2026-10-06 补）**：`AttachKeyHook` 在同一台窗口根上再挂一个
+   - **`KeyUp` 与 `KeyDown` 同址同策略**：`AttachKeyHook` 在同一台窗口根上再挂一个
      `KeyUpEvent`（`AttachKeyHook`；`DetachPlatformHooks` 同摘），`OnSourceKeyUp` 与 `OnSourceKeyDown` 同形，
      但**不置 `Handled`、也不筛悬停** —— 另外六家都无条件上报，键抬起本身没有可删的东西，筛掉只会让订阅者
-     在不悬停时收不到配对的 `KeyUp`。这家此前**一封 `KeyUp` 都不上报**；实测补上后按 Delete / Escape 各得一行。
-   - **验证**：点击 → Delete（HUD `连线 1/1 → 0/0`）、悬停 → Delete、右键/长按弹菜单。
-   - **demo 侧的订阅要按「树实例」去重，而且要用一张集合**（`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs` 的 `HashSet<TreeViewModel> ProbedTrees`）：demo 的会话会被换上好几轮（A → B → A），只比「上一棵」的话回到 A 时会再订一遍 ⇒ 同一棵树上挂两个订阅，每笔输入送达两次（实测：一格滚轮两行、args 是同一个实例）。这是 demo 的写法，不是适配器契约。
+     在不悬停时收不到配对的 `KeyUp`。实测按 Delete / Escape 各上报一次。
+   - **验证**：点击 → Delete、悬停 → Delete、右键/长按弹菜单。
+   - **demo 侧的订阅要按「树实例」去重，而且要用一张集合**（`Examples/Workflow/MAUI/Demo/Controls/Workflow/WorkflowView.xaml.cs` 的 `HashSet<TreeViewModel> ProbedTrees`）：demo 的会话会被换上好几轮（A → B → A），只比「上一棵」的话回到 A 时会再订一遍 ⇒ 同一棵树上挂两个订阅，每笔输入送达两次。这是 demo 的写法，不是适配器契约。
 
-改这块时的两条禁令：**别去掉 `InputTransparent = true`**（`WorkflowLinkOverlay` 的构造函数，同 §四·6）；**别把命中半径放大**
-（Core `LinkHitTestEx.DefaultHitRadius = 6d`，`LinkHitTestEx.cs`）—— 那会让画布空白处每一次移动都命中某条线。
+**`InputTransparent = true` 不能去掉**（`WorkflowLinkOverlay` 的构造函数，同 §四·6）；**命中半径放大会让画布空白处每一次移动都命中某条线**
+（Core `LinkHitTestEx.DefaultHitRadius = 6d`，`LinkHitTestEx.cs`）。
 
 ---
 
 ## 六、demo 的界面控件放在哪：`MainPage` 是裸宿主
 
-2026-09-27 把「运行控制」（Pause / Resume / 从检查点继续）接进七家时的一条：**MAUI 的 `MainPage.xaml` 只是一个满屏宿主**（`<controls:WorkflowView x:Name="WorkflowSurface" Session="{Binding DemoSession}" />`，全文件只有寥寥几行），demo 自己的命令（Save / Select / Load Workflow Demo）与整条侧栏都在**被它托管的 `Controls/Workflow/WorkflowView.xaml`** 里。
+**MAUI 的 `MainPage.xaml` 只是一个满屏宿主**（`<controls:WorkflowView x:Name="WorkflowSurface" Session="{Binding DemoSession}" />`），demo 自己的命令（Save / Select / Load Workflow Demo）与整条侧栏都在**被它托管的 `Controls/Workflow/WorkflowView.xaml`** 里。
 
 ⇒ 新控件放 `WorkflowView.xaml`，处理器也只能放**它自己的** code-behind：XAML 的 `Clicked` 处理器必须声明在写出这个名字的那个 XAML 文件的 code-behind 中，所以「标记一处、处理器另一处」是编译不过的。会话经 `WorkflowView.Session` 传进来（`MainPage` 把它设成 `_demo`），与 `MainPage` 手里那个是同一个对象。
 
-（对比：`Avalonia` / `WPF` / `WinUI` / `Blazor` / `Jalium` 的控件放各自宿主外壳的侧栏，`WinForms` 放 `Form1` 的工具栏。**不要放节点卡上** —— 卡（`Controls/WorkflowNodeCard.cs`）的上下文只有节点 VM，而门与检查点是会话级的。）
+（对比：`Avalonia` / `WPF` / `WinUI` / `Blazor` / `Jalium` 的控件在各自宿主外壳的侧栏，`WinForms` 在 `Form1` 的工具栏。节点卡（`Controls/WorkflowNodeCard.cs`）的上下文只有节点 VM，而门与检查点是会话级的。）
 
-## 七、松手回弹：原生 `ScrollViewer` 是第二个滚动驱动者（2026-10-01 实测确诊并修复）
+## 七、松手回弹：原生 `ScrollViewer` 是第二个滚动驱动者（2026-10-01 实测）
 
 **症状**：非 Trimmed demo 拖动画布，**松开鼠标后画布弹回一段**（用户报告；Trimmed 无此问题）。
 
-**复现**（可重复，4/4）：窗口先最大化（`SetWindowPos` TOPMOST + `ShowWindow(SW_MAXIMIZE)` —— 不这么做别的窗口会压在截图区域上，
+**复现**：窗口先最大化（`SetWindowPos` TOPMOST + `ShowWindow(SW_MAXIMIZE)` —— 不这么做别的窗口会压在截图区域上，
 测出假的「位移」）；脚本用小步鼠标拖拽（`SendInput` 绝对坐标；一步瞬移不派发 pointer 移动）；在按下前 / 保持时 / 松开后各截一帧，
 用采样均差比较（每 6px 取一点，累加两帧的 L1 距离）。结果：
 
 | demo | drag（按下→保持） | 松手后（保持→松开） |
 |---|---|---|
-| 非 Trimmed | 6.4–8.1 | **6.7–8.3 —— 又动了一次，4/4** |
-| Trimmed | 16–60 | **0 —— 不动，4/4** |
+| 非 Trimmed | 6.4–8.1 | **6.7–8.3 —— 又动了一次** |
+| Trimmed | 16–60 | **0 —— 不动** |
 
-**机制**（临时探针写 `%TEMP%` 日志，做法同 §四）：松手 60ms 后原生 ScrollViewer 自己滚了一次 ——
+**机制**（探针写 `%TEMP%` 日志）：松手 60ms 后原生 ScrollViewer 自己滚了一次 ——
 
 ```
 PAN released now=(423,171)
@@ -489,7 +465,7 @@ SCROLLED (186,153)      ← X 423 → 186
 
 适配器自己的三处 `ScrollToAsync`（平移 / 视口恢复 / 缩放回中）一处都没跑。是**原生 ScrollViewer 在手势结束时把它自己累积的操纵偏移补上**。
 
-**六种改法全部实测证伪，别再试**：
+**六种改法实测证伪**：
 
 1. 去掉 demo 的 `ScrollView` 上的 `BackgroundColor="Transparent"` —— 无效（MAUI 自己会补画刷）。
 2. 关掉 demo 载入后的居中 `ScrollToAsync` —— 无效。
@@ -506,7 +482,7 @@ ScrollViewer 这才可以设成 `ManipulationMode = None`。非 Windows 仍走 `
 效果：非 Trimmed 松手后 6.7–8.3 → **0.4–0.5**（彗星动画的噪声地板），Trimmed 不变（0，且平移照常）。
 `ApplyPanTargetAsync` 是从原 `ApplyPanAsync` 里抽出来的核心，两条路径共用夹取 / 扩张 / 应用那段。
 
-**实现时踩到的两个坑（都不是 MAUI 的锅，是写错了）**：
+**实现时的两个坑**：
 
 - **`StateProperty` 挂在宿主 `ContentView` 上，不在 press source 上。** 照 `WorkflowNodeDragBehavior` 的样子在处理器里读
   `view.GetValue(StateProperty)`，对那个 Border 恒为 `null` ⇒ 钩子静默不装、平移全死、而且**不报错**。
@@ -518,7 +494,7 @@ ScrollViewer 这才可以设成 `ManipulationMode = None`。非 Windows 仍走 `
 **顺带一条测量陷阱**：探针里「值变了吗」的守卫若写成 `Math.Abs(x - NaN) > 1`，**第一次调用就永远不记录**
 （NaN 参与的比较恒为 false，哨兵永远是 NaN）—— 与 §四 那条 NaN 守卫同源，哨兵要用 `double.MinValue`。
 
-## 附：写这份档案时**没能验证 / 不确定**的
+## 附：未验证 / 不确定的
 
 - §二·4 的「~16k 设备像素」是代码注释里的数字（`WorkflowLinkOverlay.cs` 的类文档），没有在本仓库实测复现；
   它是**原生 Windows 侧**的限制，Android/iOS 上这一层的必要性未被单独验证。
@@ -527,7 +503,7 @@ ScrollViewer 这才可以设成 `ManipulationMode = None`。非 Windows 仍走 `
 - 本家没有 `WorkflowGridDecorator`（见 §一），所以「装饰器的 `RulerBand` 必须转发给虚拟化 inset」这条
   （`WorkflowSurfaceBehavior.cs` 的 `UpdateGridDecorator`）在本仓库里只由 demo 的实现验证过。
 
-### 验证这块时用到的两个事实（下次还要跑真 demo 的话）
+### 跑真 demo 时的两个事实
 
 - **合成指针输入必须走 `SendInput`**：`SetCursorPos` 能把光标挪过去，但 WinUI 不为它派发 `PointerMoved` ——
   按钮不亮、hover 不触发，看起来像功能的锅。同一段测试改用 `SendInput`（`MOUSEEVENTF_MOVE|ABSOLUTE`）后立刻正常。
@@ -536,4 +512,4 @@ ScrollViewer 这才可以设成 `ManipulationMode = None`。非 Windows 仍走 `
   另外 `WindowFromPoint` 给的是**最深的子窗口**，WinUI 会在顶层窗口下挂子 HWND —— 比「这块是不是我的」要用 `GetAncestor(hwnd, GA_ROOT)`。
 - **别家的注入式测试也在驱动同一个物理指针**：光标会被抢走（写进去的位置，下次读回来已经不是它），所以「悬停选中」这类断言
   **必须先断言应用收到了指针**（读 overlay 的 `_lastPointer`），否则会把「输入没到」误判成「功能坏了」。本家这条结论
-  （§五·5）是三路互证：`SelectLink` 直调 5 轮 + 3 秒连打、真指针 hover 成功那一轮、以及焦点反例 —— 不依赖任何单次 hover。
+  （§五·5）有三路互证，不依赖任何单次 hover。

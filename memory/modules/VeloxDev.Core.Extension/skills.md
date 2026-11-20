@@ -5,7 +5,7 @@
 
 ---
 
-## 一、最承重的一条：提示形状由**来源种类**决定，不是由配置决定
+## 一、提示形状由**来源种类**决定，不是由配置决定
 
 | 来源 | `Kind` | 怎么进提示 |
 |---|---|---|
@@ -14,7 +14,7 @@
 
 两者**可以同时存在**，`SkillAgentContextProvider.BuildInstructions` 把两个块依次拼起来；**两个都空时返回 `null`**，贡献一个「空标题」不如什么都不贡献（`BuildInstructions` 末尾）。
 
-`BuildEmbeddedBlock` 的注释给了一个可以直接拿来验的等价关系：**全部技能都启用时，它逐字节等于技能可开关之前提示里带的内容**。所以「技能开关坏了」的判据是这句话，不是回忆。
+`BuildEmbeddedBlock` 的注释给了一个可以直接拿来验的等价关系：**全部技能都启用时，它逐字节等于技能可开关之前提示里带的内容**。「技能开关坏了」的判据是这句话。
 
 ### 语料有三个可能的主人，但一时刻只有一个
 
@@ -22,7 +22,7 @@
 
 - `WorkflowAgentScope` 用 `_embeddedSkillsFrozenIntoPrompt` 记住「有骨架已经带着语料出门了」（sticky —— 字符串已经交到宿主手里，撤不回）。
 - `WithSkills(...)` 之后建的 provider 拿到这个事实（`SkillScope.CreateContextProvider(..., embeddedCorpusDelivered: true)`），于是**不再贡献 `BuildEmbeddedBlock`**，改为贡献 `SkillScope.BuildWithdrawnBlock`：**当前处于停用状态的嵌入技能名单**。
-- 为什么不是干脆闭嘴：骨架冻住的是「当时的启用状态」，之后 `SetEnabled(name, false)` 若不发声就成了静默空操作。报一份「上面那几篇请忽略」既不说两遍正文，也不丢掉这次关闭。
+- 骨架冻住的是「当时的启用状态」，之后 `SetEnabled(name, false)` 必须发声，否则是静默空操作；报「上面那几篇请忽略」既不说两遍正文，也不丢掉这次关闭。
 
 **两种宿主顺序都能跑**，但语义不同：先 `WithSkills` 再取骨架 ⇒ 语料归子系统（默认推荐，`AgentHelper.cs` 就是这个顺序）；先取骨架再 `WithSkills` ⇒ 语料冻在骨架里，子系统此后只报差量。文件技能永远不进 `BuildWithdrawnBlock`（它们本就只做广告，不在提示里）。测试：`ComposedProvidersTests.cs` 的 `SkeletonBuiltBeforeSkills_*` / `SkeletonBuiltAfterSkills_*` 那组，以及 `SkillScopeTests.cs` 的 `WithdrawnBlock_*` 那组。
 
@@ -31,11 +31,11 @@
 ## 二、缓存与版本
 
 - `SkillScope.Version` 在**发现集合**或**任一启用标志**变化时自增。
-- `PromptLanguage` 是**独立维度**：注释明说「语言不是别的地方可观察的」（`PromptLanguage` 的注释），虽然 `WithPromptLanguage` 也自增 `Version`（`WithPromptLanguage`），provider 仍然按 **`(Version, Language)` 元组**缓存。这是双保险，不是冗余。
+- `PromptLanguage` 是**独立维度**：注释明说「语言不是别的地方可观察的」（`PromptLanguage` 的注释），虽然 `WithPromptLanguage` 也自增 `Version`（`WithPromptLanguage`），provider 仍然按 **`(Version, Language)` 元组**缓存。
 - `SkillAgentContextProvider` 的 `_stateKeys` 用 **`scope.InstanceId`**（每个 scope 一个 `Guid`，`SkillScope.InstanceId`）而不是像工作流那样用 `StateDiscriminator`。理由：一个 agent 上挂两个 scope 是正常布置，框架在**两个 provider 共用 state key** 时会抛。
 - `Refresh()` **是宿主动作，不是每轮动作** —— `SkillScope.Refresh` 的注释明说：它总是自增 `Version`，在 prompt provider 里每轮调它会直接废掉缓存。
 
-**provider 每次渲染做的一件事容易被漏掉**：它把 `_toolkit.Language` 重新赋成 `scope.PromptLanguage`（`SkillAgentContextProvider.BuildContext` 里给 `_toolkit.Language` 赋值那一行）。技能正文按提示语言读，所以 toolkit 必须跟着 scope 走，而不是跟着它被构造时的语言。改技能工具、忘了这一行，工具返回的正文就会和提示语言不一致。
+**provider 每次渲染会把 `_toolkit.Language` 重新赋成 `scope.PromptLanguage`**（`SkillAgentContextProvider.BuildContext` 里给 `_toolkit.Language` 赋值那一行）。技能正文按提示语言读，toolkit 必须跟着 scope 走而不是构造时的语言；漏掉这一行，工具返回的正文就和提示语言不一致。
 
 ---
 
@@ -61,7 +61,7 @@
 **`EmbeddedSkillSource`**（`EmbeddedSkillSource.cs`）
 
 - 名字与描述**以 frontmatter 为准**；缺失时才从文件名派生 kebab-case 名字、从第一个标题派生描述（`DeriveDescription`，会剥掉 🧭🛡️💡⚠ 与 `"Skill:"` 前缀）。
-- **`ReadResource` 恒返回 `null`** —— 嵌入技能**没有** bundled resource。这是刻意的：资源是文件布局才有的概念。
+- **`ReadResource` 恒返回 `null`** —— 嵌入技能**没有** bundled resource。
 - 文件路径由 `Agent/AgentEmbeddedResources.cs` 拼（`EmbeddedSkillSource.Discover` 里的字符串 `Resources/{system}/{lang}/Skills/{name}.md` 只是**展示给宿主看的 Path**，真正的读走 `AgentEmbeddedResources`）。
 
 **`FileSkillSource`**（`FileSkillSource.cs`）
@@ -80,7 +80,7 @@
 `SkillAgentToolkit.ToolNames` = `["ListSkills","load_skill","UnloadSkill","read_skill_resource"]`。
 
 - 工具名故意用 Agent Skills 约定的 `load_skill` / `read_skill_resource`（下划线而非 Pascal），其余是 Pascal。
-- **这组名字必须被工作流工具包读到**：`WorkflowAgentToolkit.BuildQueryToolNames` 把它们整体并进「只读」集合，于是技能工具**无论从哪来**（宿主注册的 or provider 贡献的）都**计入读预算、且永不标脏**（`BuildQueryToolNames` 的字面量集合）。**所以在这里加一个新工具名，只读分类会自动跟上 —— 但只有名字进了 `ToolNames` 才行。**
+- **这组名字必须被工作流工具包读到**：`WorkflowAgentToolkit.BuildQueryToolNames` 把它们整体并进「只读」集合，于是技能工具**无论从哪来**（宿主注册的 or provider 贡献的）都**计入读预算、且永不标脏**（`BuildQueryToolNames` 的字面量集合）。**所以在这里加一个新工具名，只读分类会自动跟上。**
 - `CreateTools()` 不包装，`CreateTools(ToolPipeline, AgentPipeline?)` 包装。provider 用的是**后者**（`SkillAgentContextProvider.BuildContext`），所以从 provider 走出来的技能工具同样受预算闸门管。
 
 ---
@@ -117,4 +117,4 @@
 
 ## 七、死面
 
-本目录**没有零调用者的成员**。唯一需要留意的是 `Agent/Skills/` 与 `Agent/Workflow/Functions/` 共享的一个约定：`WorkflowAgentToolkit.BuildQueryToolNames` 是**唯一**把 `SkillAgentToolkit.ToolNames` 接进来的地方（`WorkflowAgentToolkit.BuildQueryToolNames` 里并入技能工具名的那段），它排在字面量集合之后 —— 重名时字面量赢，但两边目前无重名。
+本目录**没有零调用者的成员**。需要留意的是 `Agent/Skills/` 与 `Agent/Workflow/Functions/` 共享的一个约定：`WorkflowAgentToolkit.BuildQueryToolNames` 是**唯一**把 `SkillAgentToolkit.ToolNames` 接进来的地方（`WorkflowAgentToolkit.BuildQueryToolNames` 里并入技能工具名的那段），它排在字面量集合之后 —— 重名时字面量赢，但两边目前无重名。

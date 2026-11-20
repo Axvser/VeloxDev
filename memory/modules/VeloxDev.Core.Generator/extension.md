@@ -44,7 +44,7 @@
 
 **引用点不用改**：`VeloxDev.Core.Generator.csproj` 里把 `bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).dll` 整包进 `analyzers/dotnet/cs` 的那个 `None` 项，新增的生成器类自然进包。
 
-**同一个 `None` 项也决定了打包顺序。** 它指的是 `bin/` 下的成品，而不是构建产物项，所以干净的工作区里直接 `dotnet pack` 会在该 DLL 生成之前解析文件列表，NuGet 报 `NU5019: File not found: '…/bin/Release/netstandard2.0/VeloxDev.Core.Generator.dll'`（发布 run 113051011632 就停在这一步）。出包必须先 `dotnet build -p:GeneratePackageOnBuild=false`，再 `dotnet pack --no-build`；`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 同样带 `GeneratePackageOnBuild=true`，有同样的先后问题，发布脚本里也按这个顺序走（`.github/workflows/publish.yml` 的 `Build and pack the generator` 与 `Pack Core against the published generator` 两步）。本地验证时可以照抄这两条命令。
+**同一个 `None` 项也决定了打包顺序。** 它指的是 `bin/` 下的成品，而不是构建产物项，所以干净的工作区里直接 `dotnet pack` 会在该 DLL 生成之前解析文件列表，NuGet 报 `NU5019: File not found: '…/bin/Release/netstandard2.0/VeloxDev.Core.Generator.dll'`。出包必须先 `dotnet build -p:GeneratePackageOnBuild=false`，再 `dotnet pack --no-build`；`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 同样带 `GeneratePackageOnBuild=true`，有同样的先后问题，发布脚本里也按这个顺序走（`.github/workflows/publish.yml` 的 `Build and pack the generator` 与 `Pack Core against the published generator` 两步）。本地验证时可以照抄这两条命令。
 
 ### D. 加一个特性元数（以 Theme 为例）
 
@@ -52,10 +52,7 @@
 
 ### E. 改「谁算 AOP 类」这类判定
 
-`Base/AnalizeHelper.cs` 里只剩一个 `IsAopClass(INamedTypeSymbol)`：
-
-- `IsAopClass(INamedTypeSymbol)` —— **实际被用的**（`AopSurface.cs`、`Writers/AopWriter.cs` 都调它），走 `Members(symbol)` 扫**所有 partial 声明**。
-- `IsAopClass(ClassDeclarationSyntax)` 重载**已删除**，没有调用者。见 §七。
+`Base/AnalizeHelper.cs` 里只有 `IsAopClass(INamedTypeSymbol)`（`AopSurface.cs`、`Writers/AopWriter.cs` 都调它），走 `Members(symbol)` 扫**所有 partial 声明**。
 
 判定用的名字是**裸字符串**比较：`HasAspectOriented` 判 `attribute.Name.ToString() == NAME_ASPECTORIENTED`（`NAME_ASPECTORIENTED = "AspectOriented"`）—— **不是全限定名**。所以任何**恰好叫 `AspectOriented`** 的成员特性（哪怕来自别的命名空间、别的库）都会把类判成 AOP 类。**改用全限定名比较会收紧行为，属于会改变现有输出的改动。**
 
@@ -71,23 +68,14 @@
 | 从 writer 里读 `partial` 的其它声明 | `Base/AnalizeHelper.cs` 的 `Declarations`/`Members` | 只看 `Initialize` 拿到的那一份 `ClassDeclarationSyntax` | 拆成多个 partial 文件时**静默少生成**；`Writers/AopWriter.cs` 的注释就是为这条写的 |
 | 命名产物 | `GetFileName()` 返回 `{类}_{命名空间}_X.g.cs`，命名空间段走 `WriterBase.NamespaceFileSegment()` | 用 `ToDisplayString().Replace('.','_')` 拼完事 | 全局命名空间会生成出 `{类}_<global namespace>_Aop`；`Writers/WriterBase.cs` 的 `AppendNamespace` 若回退更会写出非法的 `namespace <global namespace>;`。**统一样板是 `Writers/WriterBase.cs` 的 `NamespaceFileSegment()`** |
 | 加基础接口 | 返回 `GenerateBaseInterfaces()` 数组 | 在 `GenerateBody()` 或模板串里手写 `: IFoo` | 类型声明由 `Writers/WriterBase.cs` 一处拼出，模板串里写的会出现在类体里 ⇒ 语法错误 |
-| 让生成器报错 | 在 `Diagnostics.cs` 加一条 `DiagnosticDescriptor`，照 `CommandWriter.cs` 的 `List<Diagnostic> Diagnostics` + `Command.cs` 那一对（writer 收集，生成器类在 `CanWrite()` **之前**逐条 `ReportDiagnostic`） | 随手 `context.ReportDiagnostic(...)` | 诊断号要按模块+种类命名（`VELOX_MVVM_CMD…` / `VELOX_MVVM_PROP…`，2026-10-02 起；Agent 树那条是 `VELOX_AI_TREE001`）。`EnforceExtendedAnalyzerRules`（`VeloxDev.Core.Generator.csproj` 的 `EnforceExtendedAnalyzerRules`）已开但当前**零告警** —— 因为分析器是 `IIncrementalGenerator`，不需要 `SupportedDiagnostics`；**而 RS2008（分析器发布跟踪）要的两份文件是齐的** —— `AnalyzerReleases.Shipped.md` / `Unshipped.md` 由 csproj 的 `AdditionalFiles` 纳入，文件本身也在树里。**零告警正是它们齐了的结果，不是「没被要求」** |
+| 让生成器报错 | 在 `Diagnostics.cs` 加一条 `DiagnosticDescriptor`，照 `CommandWriter.cs` 的 `List<Diagnostic> Diagnostics` + `Command.cs` 那一对（writer 收集，生成器类在 `CanWrite()` **之前**逐条 `ReportDiagnostic`） | 随手 `context.ReportDiagnostic(...)` | 诊断号要按模块+种类命名（`VELOX_MVVM_CMD…` / `VELOX_MVVM_PROP…`；Agent 树那条是 `VELOX_AI_TREE001`）。`EnforceExtendedAnalyzerRules` 已开；分析器是 `IIncrementalGenerator`，不需要 `SupportedDiagnostics`；RS2008（分析器发布跟踪）要的 `AnalyzerReleases.Shipped.md` / `Unshipped.md` 由 csproj 的 `AdditionalFiles` 纳入，文件在树里 |
 | 发版 | 改 `VeloxDev.Core.Generator.csproj` 的 `<Version>` **并且**改 §四那张表的各处引用 | 只改 csproj | Debug 走源码仍是对的，Release **静默**还原旧包 —— 本地怎么调都复现不出来 |
 
 ---
 
 ## 四、改这里的代价（版本锁：引用与包版本）
 
-**当前状态：包版本 `11.0.0`（`VeloxDev.Core.Generator.csproj` 的 `Version`）。** 各处 `PackageReference` 的 `Version=` 需逐一核对 —— 当前已全部对齐 `11.0.0`（含两个 `Examples/*/Directory.Build.props`）。Debug 走 `ProjectReference`，包版本号根本不参与；Release 才会解析到 NuGet 上已发布的生成器，即**不含这条线上后续本地改动的那一版**。看到源码版本与某处引用不相同时，第一反应不该是补齐，而是先确认「这一轮是不是仍然只要 Debug」。
-
-**版本历史**（提版说明只存在于提交信息里 —— **不可复核**；能复核的只有当前 csproj 里的 `11.0.0`）：
-- 2026-09-26：Core 与其余库统一停在 `9.0.x`，只保证 Debug。
-- 2026-10-01：`9.0.228` → `9.1.0`（`ValueTask` / `ValueTask<T>` 命令体支持）。
-- 2026-10-02：`9.1.0` → `9.2.0`（`[VeloxProperty]` 字段与 partial 属性可同时声明）。
-- 2026-10-02：`9.2.0` → `9.3.0`（`[VeloxCommand]` 强类型命令）。
-- 2026-10-02：`9.3.0` → `9.4.0`（命令结果通道 + 校验器形参名跟随源方法；**含两处破坏性变更**：校验器改名报 CS8826，`Task<T>` 命令属性类型变成 `IVeloxCommand<T, R>`、参数类型不可见时报 CS0053）。
-- 2026-10-02：arity 族一版（命令支持最多 15 个形参，按前导形参个数选元数族）。
-- 2026-11-04：`10.0.0` → `11.0.0`（与 Core、Extension、适配器、模板、CLI 统一到同一条版本线）。
+**包版本以 `VeloxDev.Core.Generator.csproj` 的 `Version` 与各处 `PackageReference` 现值为准。** Debug 走 `ProjectReference`，包版本号不参与；Release 才会解析到 NuGet 上已发布的生成器，即**不含这条线上后续本地改动的那一版**。看到源码版本与某处引用不相同时，先确认「这一轮是不是仍然只要 Debug」，再决定要不要补齐。
 
 下面各处 `PackageReference`（`Version=` 以工作区各 csproj 为准）：
 
@@ -142,13 +130,13 @@ rm -rf ~/.nuget/packages/veloxdev.core.generator/<版本>
 | 5 | `memory/modules/<消费模块>/extension.md` | 该特性属于哪个消费模块、生成形状 | 下一个 agent 找不到生成逻辑在 `Src/Generators/` 而不是模块目录里 |
 | 6 | 裁剪验证 | 跑一次裁剪/AOT 验证（§六） | 新生成的成员可能在裁剪后消失，而本地 Debug 跑不出来 |
 
-**第 1 条与第 5 条是本仓库最容易漏的两处**：第 1 条静默失效，第 5 条要等下一个 agent 在模块目录里白找一遍。
+第 1 条漏了静默失效；第 5 条漏了，下一个 agent 会在模块目录里白找一遍。
 
 ---
 
 ## 六、改生成器或裁剪相关代码后，必须跑裁剪验证
 
-**先记事实：探针本体不在本仓库。** 仓库里没有它的源码或工程文件（`git ls-files` 零命中，`VeloxDev.slnx` 里没有 `TrimProbe`）。**所以这里给不出可复核的探针路径 —— 它在仓库外，本记忆只能记「有这么一条验证线，动生成器后必须走一遍」这件事本身。**
+**探针本体不在本仓库**（`git ls-files` 零命中，`VeloxDev.slnx` 里没有 `TrimProbe`）—— 它在仓库外，这里给不出可复核的探针路径。
 
 仓库内可复核的**输入侧**锚点：
 
@@ -156,20 +144,17 @@ rm -rf ~/.nuget/packages/veloxdev.core.generator/<版本>
 |---|---|
 | `VeloxDev.Core` 把 `net8.0` 那一档声明为 AOT 兼容 | `Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `IsAotCompatible`（其上方注释：net8.0 那一档是裁剪/AOT 契约的载体） |
 | `VeloxDev.Core.Extension` 同上 | `Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj` 的 `IsAotCompatible` |
-| 裁剪 demo **不再**显式 root `VeloxDev.Core.Extension` —— 反射面已改走编译期的 Agent 上下文树与归档序列化器，没有 trim 警告了 | `Examples/Workflow/Avalonia Trimmed/Directory.Build.props` 的注释 |
+| 裁剪 demo 不显式 root `VeloxDev.Core.Extension` —— 反射面已改走编译期的 Agent 上下文树与归档序列化器，没有 trim 警告 | `Examples/Workflow/Avalonia Trimmed/Directory.Build.props` 的注释 |
 
-**为什么改生成器必须跑它**：生成器改的是「哪些类型/成员存在」，而裁剪删的是「没人引用的类型/成员」—— 两条轴正好作用在同一个集合上（`architecture.md` §六·8 已确认生成器**不产出任何裁剪提示**，所以没有任何自动保护）。**本地 Debug 构建看不出任何问题。**
+**为什么改生成器必须跑它**：生成器改的是「哪些类型/成员存在」，而裁剪删的是「没人引用的类型/成员」—— 两条轴正好作用在同一个集合上（`architecture.md` §六·7 已确认生成器**不产出任何裁剪提示**，所以没有任何自动保护）。**本地 Debug 构建看不出任何问题。**
 
 ---
 
-## 七、死扩展点 / 已失效的钩子
+## 七、容易误判的钩子
 
 | 东西 | 位置 | 现状 |
 |---|---|---|
-| `AnalizeHelper.IsAopClass(ClassDeclarationSyntax)` | 已删除 | 它没有调用者；实际用的是同名的符号重载（调用点 `AopSurface.cs`、`Writers/AopWriter.cs`） |
-| `Generators.AgentCatalog` | 无（源码里无此类；`Src/Core/VeloxDev.Core/obj/Debug/net10.0/generated/VeloxDev.Core.Generator/VeloxDev.Generators.AgentCatalog/VeloxAgentCatalog.g.cs` 也不在树里） | **不存在**。别去找它 |
 | `GenerateBaseTypes()` | `Writers/AopWriter.cs`、`Writers/CommandWriter.cs`、`Writers/TickWriter.cs`、`Writers/MVVMWriter.cs` 返回 `[]` | **不是死点** —— 返回空是合法答案，只有 `Writers/WorkflowWriter.cs` 真正用到了它 |
-| MVVM 的 View 生成路径 | 原 `Base/Analizer.cs` 的 `IsView` / `GenerateProxy()`（属性、分派、实现三段） | **已整体删除（2026-09-26）**：全源 grep 已无 `IsView` / `isView`；`MVVMPropertyFactory` 现在只有两个构造 —— 从字段与从 partial 属性，`Generate()`（原 `GenerateViewModel` 改名）是唯一出口。**要恢复 View 支持，必须同时改构造、`Generate()` 与调用点** —— 别再只加参数不加分支 |
 | `VeloxDev.Core.Generator.targets` 的版本门槛 | `VeloxDev.Core.Generator.targets` 的 `VeloxDevCheckRoslynVersion` | **活着，但条件刻意放宽**：`RoslynVersion` 为空时**跳过检查**（注释：现代宿主上的 netframework TFM 拿不到该属性，跳过以免误报）。所以这条诊断**不会**在每个项目上都出现 |
 
 ---
@@ -183,7 +168,7 @@ netstandard2.0 —— 与消费方的 TFM 无关。实测：一个 **net40** 工
 | # | 判据 | 取决于 | 不满足时 |
 | --- | --- | --- | --- |
 | ① | 生成器 API 的世代 | 消费方编译器的 Roslyn：`IIncrementalGenerator` ≥ **4.0** | 🔇 **静默**：什么都不生成 |
-| ② | 分析器程序集版本 ≤ 编译器 | 生成器编译时引用的 `Microsoft.CodeAnalysis.CSharp`（本仓库已抬到 **4.8**） | `CS1705`「引用的程序集版本高于…」（撞过一次：测试工程还停在 4.3 时） |
+| ② | 分析器程序集版本 ≤ 编译器 | 生成器编译时引用的 `Microsoft.CodeAnalysis.CSharp`（本仓库是 **4.8**） | `CS1705`「引用的程序集版本高于…」 |
 | ③ | **产物**编不编得过 | 消费方的 `LangVersion` 与 BCL 面 | 报错落在**生成文件**里，看起来像生成器的锅 |
 | ④ | **产物**调不调得到库 | 被生成的那个库有没有该 TFM 的资产 | 类型找不到，且 **NuGet 不报兼容性错误** |
 | ⑤ | 该生成器启不启用 | 它的触发条件（特性能否解析、MSBuild 开关） | 🔇 **静默**不生成 |
@@ -199,6 +184,3 @@ netstandard2.0 —— 与消费方的 TFM 无关。实测：一个 **net40** 工
 `net5.0`。挂到 net40 上时 NuGet **还原成功、不报兼容性错误**，只是不给编译资产 —— `CS0246` 最后出现在
 消费方**自己那行 `using`** 上：错误指向受害者。**序列化生成器的产物直接调用引擎**
 （`VeloxJsonSerializer` / `VeloxJsonRegistry`），所以它不可能脱离 Core 单独支持某个 TFM。
-
-> ①②⑤ 全是**静默**的（不报错、只是没产物），只有 ②③ 响亮 —— 所以外部报「生成器没生效」时，
-> 先问 ①（编译器版本）与 ⑤（触发条件），再看产物报的错。

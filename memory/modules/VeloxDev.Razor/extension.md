@@ -2,8 +2,7 @@
 
 > 读法：七角色契约与注册位置在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
 > 三条轴上「这家和别家不一样」的地方在 `memory/modules/{WorkflowSystem,TransitionSystem,Templates}/adapters/razor.md`。
-> 本文**只回答一件事**：在这个项目里加一个 X，动哪几处、按什么顺序、哪条看着能编译的捷径是错的。
-> 目录与轴的对照、`wwwroot/` 的角色划分、C#↔JS 契约的四张表、csproj 的取值见 `architecture.md`，本文不抄。
+> 目录与轴的对照、`wwwroot/` 的角色划分、C#↔JS 契约的四张表、csproj 的取值见 `architecture.md`。
 
 ---
 
@@ -28,7 +27,7 @@
 - **没有附着属性、没有 `IsEnabled` 回调、没有程序集级入口，也没有 `Initialize()`。** 唯一的静态构造是 `Interpolator` 的静态构造；
   「启停一个行为」在这家不是回调，而是**组件的挂载与卸载**（见 §二·3）。
 - **没有 `ViewManager` / 模板缓存**（`git grep -ln "class ViewManager" -- Src/Adapters/VeloxDev.Razor` 零命中）——
-  这是与 WPF/WinUI/Avalonia/MAUI/Jalium 五家最直接的结构差异。
+  与 WPF/WinUI/Avalonia/MAUI/Jalium 五家的结构差异。
 - **没有「注册一个 ViewModel 类型」的地方**：适配器不 `new` Tree/Node，只消费宿主给的模型
   （`memory/modules/WorkflowSystem/extension.md` 二·20）。
 
@@ -36,7 +35,7 @@
 
 ## 二、官方做法 vs 看着能编译、但错的捷径
 
-**这一节是全文最重要的部分。** 下面每一条走捷径都能编译通过，其中几条跑起来还像是好的。
+下面每一条捷径都能编译通过，其中几条跑起来还像是好的。
 
 | # | 错的捷径 | 为什么错 | 官方做法 | 依据 |
 |---|---|---|---|---|
@@ -74,7 +73,7 @@
    （`Samplers/SamplerCoverageTests.cs` 的 `EveryShippedSampler_IsAccountedFor`），而 `VeloxDev.Razor` 必须在
    `ExpectedAdapterAssemblies` 名单里、且被真正加载（`EveryAdapterAssembly_IsLoadedSoItsSamplersAreCounted`）。
 5. **同步** `memory/modules/TransitionSystem/adapters/razor.md` 的条数与清单。
-6. **别按这家的条数去猜别家**：各家注册数本来就不等（清单在 `memory/modules/TransitionSystem/adapters/razor.md`）。
+6. 各家注册数本来就不等（清单在 `memory/modules/TransitionSystem/adapters/razor.md`）。
 
 > 判断「我登记对了没」：`RegisterInterpolator` 什么也不告诉你，`TryGetInterpolator` 才告诉你。**没有「列出全部登记项」的公开 API**。
 
@@ -92,7 +91,7 @@
 5. **每元素状态**：放**组件实例字段**。**不要**写 `static Dictionary<...>` 存状态 —— Blazor Server 一个进程多个 circuit，
    static 是跨用户共享的。跨组件共享请用 `CascadingValue`（本家的范式是 `SurfaceViewportFeed`）。
 6. **释放**：`DisposeAsync` 里逐项 `try/catch` + `await _handle.InvokeVoidAsync("dispose")` → `_handle.DisposeAsync()` →
-   `_module.DisposeAsync()`（`WorkflowSurfaceBehavior.DisposeAsync` 是现成形状）—— JS 侧句柄的 `dispose` 会摘掉监听器并清该 surface 的注册项，别省。
+   `_module.DisposeAsync()`（`WorkflowSurfaceBehavior.DisposeAsync` 是现成形状）—— JS 侧句柄的 `dispose` 会摘掉监听器并清该 surface 的注册项。
    模型/`SurfaceViewportFeed` 的**订阅与延时回调**另有两种既有收尾形状（退订 / `CancellationTokenSource` 取消），
    见 `architecture.md` §六·7；全模块没有 `_disposed` 标记，别去引一个不存在的惯例。
 7. **JS 侧**：新的注册表/状态一律**以滚动器 id 为键**，别用常量键；`init*` 要返回一个带 `dispose` 的句柄对象。
@@ -171,9 +170,9 @@
 
 ## 五、几个「以为能改、其实不该改」的地方
 
-1. **`SETTLE_TAIL_MS = 250`** 不是调参旋钮：它是「一轮 SignalR 往返 + 渲染」的量级估计，
+1. **`SETTLE_TAIL_MS = 250`** 是「一轮 SignalR 往返 + 渲染」的量级估计：
    改小会漏掉迟到的 .NET 渲染（闪烁回来），改大会与用户的真实平移/拖拽抢。配套的 `pointerdown` 删戳（`initSurface` 的 `onUserPointerDown`）
-   是它「不跟手势打架」的另一半，也不能删。
+   保证它不跟手势打架。
 2. **设计宽 `260`**（`applyNodeGeometry` 与 `applyZoomGeometrySettle` 里的 `/ 260`）是「消费方卡片的设计宽」：改它要同时改模板 node-view 的定尺寸卡片，
    否则缩放因子按错误的分母算（模板侧的另一份 260 见 `memory/modules/Templates/adapters/razor.md` P7）。
 3. **CSS 里那几处承重声明**（`architecture.md` §2.5）：宿主尺寸归 JS、内容层靠 `left/top` 平移、插槽盒贴字形。
@@ -181,10 +180,10 @@
 4. **`GlobalUsings.cs` 三行与七家逐字相同** —— 它不是这家的差异点，改它等于改七家（且 `global using` 不随包传）。
 5. **那几个零调用导出**（`getCanvasTranslate` / `getViewportSize` / `scrollToRatio` / `scrollByDelta` / `ensureCanvasSize`）：
    它们在 C# 侧没有调用点，但都是 `window.veloxdevWorkflow` 的**公开面**（`scrollToPosition` 定义在 IIFE 里、挂进返回的导出对象、再具名导出）——**仓库内没有任何调用者**（`Examples/` 下零命中），是留给宿主 JS 互操作的口子。
-   删之前先确认没有宿主在用；其中 `ensureCanvasSize` 的注释还是过期的。
+   其中 `ensureCanvasSize` 的注释是过期的。
 6. **`WorkflowMinimapOverlay.ViewportFill` 的适配器默认值改了不影响生成的项目**：
    模板写死 `transparent`（见 `Templates/adapters/razor.md` P4），要改观感得改模板那一行。
-7. **`Interpolator` 静态构造里那一行不要随手加类型当试验**：加错了不会报错，只会让某个类型静默走到「无采样器」路径
+7. **`Interpolator` 静态构造里加错类型不会报错**，只会让某个类型静默走到「无采样器」路径
    （`decimal` 就是六家共有的这一格：声明得出、没有采样器）。
 8. **JS 与 .NET 的连线几何不是同一份**：`wwwroot/veloxdev.workflow.js` 的 `linkCurveFromSlotElements` 仍按水平控制点重算曲线
    （注释还写着 `LinkView.BuildCurve`），而 .NET 的 link view 已改用 `LinkCurve.LinkCurvePoints`（沿端口外法线）。

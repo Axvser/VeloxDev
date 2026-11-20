@@ -1,11 +1,10 @@
 # WeakTypes — 扩展
 
-> 契约/行为的代码事实在 `architecture.md`，本文只写「要动手时走哪条路、哪条路看着能编译但是错的」。
-> 代码：`Src/Core/VeloxDev.Core/WeakTypes/`，测试 `Src/Test/Unit/Core/VeloxDev.Core.Test/WeakTypes/`。
+> 契约/行为的代码事实在 `architecture.md`。代码：`Src/Core/VeloxDev.Core/WeakTypes/`，测试 `Src/Test/Unit/Core/VeloxDev.Core.Test/WeakTypes/`。
 
 ---
 
-## 一、先选容器：四条判据（选错的代价是静默的）
+## 一、先选容器：四条判据
 
 | 你的问题 | 用 | 别用 |
 |---|---|---|
@@ -28,7 +27,7 @@
 
 ### 2. 事件挂在**哪个实例**上，决定订阅者会不会被钉住
 
-`static readonly` 的 owner + 长活订阅者 = 泄漏照旧（强缓存钉住 handler，owner 又永不释放）。官方是**每个视图/每次调用一个 owner 实例**：`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的 `WeakDelegate` 事件全是实例字段，`skills/veloxdev-create-animation/SKILL.md` 里 "An instance handler is safe exactly because the declaration is per view…" 那段把这条写成了规则。反例就在测试里：`WeakDelegateTests` 的 `Holder` 是 `static readonly`，正是为了让 `ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent` 那条"保活"断言成立。
+`static readonly` 的 owner + 长活订阅者 = 泄漏照旧（强缓存钉住 handler，owner 又永不释放）。官方是**每个视图/每次调用一个 owner 实例**：`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的 `WeakDelegate` 事件全是实例字段，`skills/veloxdev-create-animation/SKILL.md` 里 "An instance handler is safe exactly because the declaration is per view…" 那段把这条写成了规则。测试里的反例：`WeakDelegateTests` 的 `Holder` 是 `static readonly`，`ASubscriptionKeepsItsHandlerAliveLikeAnOrdinaryEvent` 的"保活"断言靠它成立。
 
 ### 3. 迭代期间不要在回调/循环体里改容器 —— 锁救不了你
 
@@ -46,7 +45,7 @@
 
 ### 5. 别指望"确定性地回收"
 
-任何容器都没有"已死"通知、没有回调、没有事件（容器源码里 `event` 关键字不出现，除了 `WeakDelegate` 的 `Delegate` 泛型约束）。要在确定时刻腾空间，只能显式 `Remove`（`WeakCache.Remove`）/`Clear`（`WeakQueue.Clear`）/`TrimExcess`。**所以别把正确性建立在 GC 时序上**（清扫永远是"事后清尸"，见 `architecture.md` §一末）。
+任何容器都没有"已死"通知、没有回调、没有事件（容器源码里 `event` 关键字不出现，除了 `WeakDelegate` 的 `Delegate` 泛型约束）。要在确定时刻腾空间，只能显式 `Remove`（`WeakCache.Remove`）/`Clear`（`WeakQueue.Clear`）/`TrimExcess`；清扫永远是"事后清尸"（见 `architecture.md` §一末）。
 
 ---
 
@@ -67,7 +66,7 @@
 
 1. `Src/Test/Unit/Core/VeloxDev.Core.Test/WeakTypes/` 加 `WeakXTests.cs` —— **别在测试里断言回收**（字符串会被驻留），要断言就自己在 helper 方法里造对象 + `Release` 且不挂调试器（仓内没有现成先例，见 `architecture.md` §二末）。
 2. 本模块记忆：`architecture.md` §一/§二的表。
-3. **不必**动：各适配器、`Src/Generators/`、`Src/Templates/` —— 本模块是纯 `System.*` 的，没有任何平台或生成器联动（这也是它与仓内其它模块最大的不同）。
+3. **不必**动：各适配器、`Src/Generators/`、`Src/Templates/` —— 本模块是纯 `System.*` 的，没有任何平台或生成器联动。
 
 ---
 
@@ -82,4 +81,4 @@
 | `InvokeAwake`…`InvokeError` | 各 `InvokeXxx`，走 `_x.GetInvocationList()?.Invoke(sender, e)` |
 | `Clone()` | `Clone()` 里各 `_x.Clone()` |
 
-`TransitionEffectCore<TPriorityCore>.Clone()` 是 `new`（非 virtual）且返回**基类型**，所以别顺手把它改成 virtual —— 那是另一个模块（`TransitionSystem`）的事，见 `memory/modules/TransitionSystem/`。
+`TransitionEffectCore<TPriorityCore>.Clone()` 是 `new`（非 virtual）且返回**基类型**；改它属于 `memory/modules/TransitionSystem/`。

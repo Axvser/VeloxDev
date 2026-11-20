@@ -11,24 +11,24 @@
 
 | 文件 | 类型 | 职责 |
 |---|---|---|
-| `IViewFactory.cs` | `IViewFactory<TItem,TView>` | `WantsItem` / `CreateView`：item → view，模板解析归这一层 |
-| `IViewContainer.cs` | `IViewContainer<THost,TView,TItem>` | `Attach` / `Detach` / `Activate` / `Deactivate` / `SetZOrder` / `Destroy`：视觉树成员、绑定态、层级与丢弃 |
-| `IViewArranger.cs` | `IViewArranger<TItem,TView>` | `Arrange`：几何写入；绑定驱动的平台为 no-op |
-| `IViewScheduler.cs` | `IViewScheduler<TPriorityCore>` | `BatchPriority` / `Schedule`：把一批视图物化送到宿主线程 |
-| `IViewDiagnostics.cs` | `IViewDiagnostics<TItem>` | `Failed(item, stage, exception)`：单项失败上报 |
-| `IViewPoolPolicy.cs` | `IViewPoolPolicy` | `BatchSize` / `FrameBudgetMilliseconds` / `MaxRecycledViewsPerType`：批上限、每批时间预算与回收上限 |
-| `IViewBatchFeedback.cs` | `IViewBatchFeedback` | 每批结束回报 `processed / elapsedTicks / pending`，供自适应策略闭环调参 |
-| `IViewLayerPolicy.cs` | `IViewLayerPolicy<TItem>` | `GetZOrder`：z 序策略 |
-| `IViewLinkLayer.cs` | `IViewLinkLayer<THost,TItem>` | `IsActive` / `Handles` / `Render`：平台自己画连线（overlay/画布）时接管 |
-| `IViewMeasureHost.cs` | `IViewMeasureHost<THost,TView,TItem>` | `Measure`：arrange 之后的可选测量钩子 |
-| `IViewHost.cs` | `IViewHost<THost,TView,TItem,TPriorityCore>` | 组合以上九项，给池一个对象可问 |
-| `../Enums/ViewStage.cs` | `ViewStage` | `Schedule` / `Link` / `Create` / `Activate` / `Attach` / `Arrange` / `Layer` / `Measure` / `Deactivate` / `Detach` / `Destroy` |
+| `IViewFactory.cs` | `IViewFactory<TItem,TView>` | item → view，模板解析归这一层 |
+| `IViewContainer.cs` | `IViewContainer<THost,TView,TItem>` | 视觉树成员、绑定态、层级与丢弃 |
+| `IViewArranger.cs` | `IViewArranger<TItem,TView>` | 几何写入；绑定驱动的平台为 no-op |
+| `IViewScheduler.cs` | `IViewScheduler<TPriorityCore>` | 把一批视图物化送到宿主线程 |
+| `IViewDiagnostics.cs` | `IViewDiagnostics<TItem>` | 单项失败上报 |
+| `IViewPoolPolicy.cs` | `IViewPoolPolicy` | 批上限、每批时间预算与回收上限 |
+| `IViewBatchFeedback.cs` | `IViewBatchFeedback` | 每批结束回报吞吐与 pending，供自适应策略闭环调参 |
+| `IViewLayerPolicy.cs` | `IViewLayerPolicy<TItem>` | z 序策略 |
+| `IViewLinkLayer.cs` | `IViewLinkLayer<THost,TItem>` | 平台自己画连线（overlay/画布）时接管 |
+| `IViewMeasureHost.cs` | `IViewMeasureHost<THost,TView,TItem>` | arrange 之后的可选测量钩子 |
+| `IViewHost.cs` | `IViewHost<THost,TView,TItem,TPriorityCore>` | 组合以上契约，给池一个对象可问 |
+| `../Enums/ViewStage.cs` | `ViewStage` | 执行阶段枚举，供失败上报定位 |
 
 ### 通用流程（`Src/Core/VeloxDev.Core/WorkflowSystem/ViewHosting/`）
 
 | 文件 | 类型 | 职责 |
 |---|---|---|
-| `ViewHostCore.cs` | `ViewHostCore<THost,TView,TItem,TPriorityCore>`（abstract） | 只组合九项、提供默认策略（3/批、不限回收、z=0、无测量、主池管连线、无诊断）；平台差异全在层里 |
+| `ViewHostCore.cs` | `ViewHostCore<THost,TView,TItem,TPriorityCore>`（abstract） | 只组合全部契约、提供默认策略（3/批、不限回收、z=0、无测量、主池管连线、无诊断）；平台差异全在层里 |
 | `ViewPool.cs` | `ViewPoolCore<...>`（abstract）+ `ViewPool<...>`（sealed） | 池、active、pending、批循环、Reset/Replace、unsupported 类型缓存、失败隔离 |
 | `ViewSourcePipelineCore.cs` | `ViewSourcePipelineCore<THost,TView,TItem,TPriorityCore,TFactory,TContainer,TArranger,TScheduler,TDiagnostics>` | **泛型组合根**：闭合全部层与策略实例，创建 pool；适配器继承它给出自己的 `ViewSourcePipeline` |
 | `AdaptiveViewPoolPolicy.cs` | `AdaptiveViewPoolPolicy`（实现 `IViewPoolPolicy` + `IViewBatchFeedback`） | 用平滑吞吐估算每批能物化多少；pending>1024/256 时目标预算 16/12ms，否则 8ms；批大小有 1.25× / 0.8× 迟滞；参数来自 `Options`，`FromOptions` 可替换整套策略 |
@@ -51,7 +51,7 @@
 
 入口仍是 `WorkflowSystem/AttachedBehaviors/ViewPool.cs` 的附着属性 `ViewPool.ItemsSource` / `ViewPool.TemplateSelector`；它只创建/销毁 `ViewSourcePipeline`。
 
-**其余五家**（路径均为 `Src/Adapters/VeloxDev.<GUI>/WorkflowSystem/ViewHosting/`，同样是 `ViewFactory` / `ViewContainer` / `ViewArranger` / `ViewScheduler` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` / `ViewMeasureHost` / `ViewSourcePipeline`，默认 `AdaptiveViewPoolPolicy`）：
+**其余五家**（路径均为 `Src/Adapters/VeloxDev.<GUI>/WorkflowSystem/ViewHosting/`，同样是那组层与 `ViewSourcePipeline`，默认 `AdaptiveViewPoolPolicy`）：
 
 | 平台 | `THost` / `TView` | 优先级 | 几何 | 连线 | 备注 |
 |---|---|---|---|---|---|
@@ -101,31 +101,28 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 6. **集合通知与池的公开成员必须跑在宿主线程**。Core 不做编组；`Scheduler` 是唯一线程边界。
 7. **`TItem` 必须是引用类型**。active 表按引用身份比较（`ViewReferenceComparer<object>`），不按 `Equals`。
 8. **`ViewSourcePipeline` 是组合根，不是第二个引擎**。它只把全部层与策略实例交给 `ViewHostCore`，再创建 `ViewPool`；不要在这里加平台分支。
-9. **被 `LinkLayer.Handles` 接管的条目永不进主池**。只有 `LinkLayer.IsActive=true` 时才会在每次可见集变化调用 `Render`（包括空集合）；实现不得修改可见集。`IsActive=false` 的平台完全不进这条路径，避免无谓的整集枚举。
-10. **`PoolPolicy.BatchSize` 小于 1 当 1；`FrameBudgetMilliseconds` 小于等于 0 表示不限时；`MaxRecycledViewsPerType` 小于等于 0 表示不限**。一批在“数量到顶”或“16ms 到期”时停下，剩余项排下一批。超过回收上限的视图走 `Container.Destroy` 真正移除（Avalonia 是 `Children.Remove`），不能只丢引用 —— 隐藏的子元素仍被宿主根住。
+9. **被 `LinkLayer.Handles` 接管的条目永不进主池**。只有 `LinkLayer.IsActive=true` 时才会在每次可见集变化调用 `Render`（包括空集合）；实现不得修改可见集。`IsActive=false` 的平台完全不进这条路径。
+10. **`PoolPolicy.BatchSize` 小于 1 当 1；`FrameBudgetMilliseconds` 小于等于 0 表示不限时；`MaxRecycledViewsPerType` 小于等于 0 表示不限**。一批在“数量到顶”或“16ms 到期”时停下，剩余项排下一批。超过回收上限的视图走 `Container.Destroy` 移除（Avalonia 是 `Children.Remove`），不能只丢引用 —— 隐藏的子元素仍被宿主根住。
 11. **`LayerPolicy` 与 `MeasureHost` 都是可选钩子**。绑定驱动的平台让 `Container.SetZOrder` 与 `Measure` 空实现即可；需要时再在适配器里补。
 
 ---
 
 ## 四、Avalonia 平台面的现状
 
-- 默认策略是 Core 的 `AdaptiveViewPoolPolicy`（初始 64/8ms，按平滑吞吐与 pending 大小收敛到 8/12/16ms 预算）；`ViewPoolPolicy` 是固定参数的对照实现。两者都回收不限量，`BatchPriority = DispatcherPriority.Background`。
-- 几何仍是模板绑定：`ViewArranger.Arrange` 为空。
+- 默认策略是 Core 的 `AdaptiveViewPoolPolicy`（初始 64/8ms，按平滑吞吐与 pending 大小收敛到 8/12/16ms 预算；回收不限量）；`BatchPriority = DispatcherPriority.Background`。
 - 容器回收不摘树：`Deactivate` 清 `DataContext` 并 `IsVisible=false`；`Detach` 为空。
-- 引擎处理 `Replace`；模板缺失时 `ViewFactory.CreateView` 返回 `null`，Core 按 ViewModel 类型缓存该类型。换模板必须重建 `ViewSourcePipeline` —— `ViewPool` 的两个附着属性任一变化都会重建。
+- 引擎处理 `Replace`。
 - `ViewPool` 在 `DetachedFromVisualTree` 时 `Dispose` system；换源/换模板时先摘旧处理器再重建。
 
 ---
 
 ## 五、接一家新平台
 
-1. 在 `Interfaces/WorkflowSystem/ViewHosting/` 的九个层/策略里，按平台能力实现窄层（不是重新实现池）：五个必选层 + 四个策略/服务层；需要闭环调参时让策略额外实现可选的 `IViewBatchFeedback`。
+1. 在 `Interfaces/WorkflowSystem/ViewHosting/` 的各层/策略里，按平台能力实现窄层（不是重新实现池）；需要闭环调参时让策略额外实现可选的 `IViewBatchFeedback`。
 2. 在 `Src/Adapters/VeloxDev.<平台>/WorkflowSystem/ViewHosting/` 建对应内部类；模板/几何/线程/优先级/z 序/连线绘制/测量只在各自层里。
-3. 写一个 `ViewSourcePipeline : ViewSourcePipelineCore<THost,TView,TItem,TPriorityCore,ViewFactory,ViewContainer,ViewArranger,ViewScheduler,ViewDiagnostics>` 闭合系统；池策略、层级策略、连线层、测量层从构造参数传入。适配器类名不带平台前缀 —— 七家不能同时安装，同名才有价值。
+3. 写一个 `ViewSourcePipeline : ViewSourcePipelineCore<THost,TView,TItem,TPriorityCore,ViewFactory,ViewContainer,ViewArranger,ViewScheduler,ViewDiagnostics>` 闭合系统；池策略、层级策略、连线层、测量层从构造参数传入。
 4. 附着属性（或静态挂点）只负责在源/模板变化时重建、卸载时 `Dispose`。
 5. 用无头测试钉：可见项变成子视图；移除后视图仍保留但隐藏/可复用；无选择器走模板 fallback；换模板不重复挂 Detach 处理器。
-
-MAUI 的 `LinkLayer.Handles`（连线 overlay）、WinUI 的 `DispatcherQueuePriority.Low` + 命令式 `Arrange`、WinForms 的 `Control.BeginInvoke` 异步 `Schedule` + `Control` 容器 + `BringToFront/SendToBack`，都应该落在这些层里，而不是回到 Core 加 `if`。
 
 ---
 
@@ -139,9 +136,9 @@ MAUI 的 `LinkLayer.Handles`（连线 overlay）、WinUI 的 `DispatcherQueuePri
 - 指标：墙钟（包含 Pool 批次排空 + 一次真实布局/渲染回合，不是 GPU 帧时）、`GC.GetTotalAllocatedBytes`、Gen0/1/2、池的 `Active/Pending/Recycled/Created/Reused/Destroyed`、`VisibleItems`；`ViewPoolCore` 为此公开了 `CreatedViewCount` / `ReusedViewCount` / `DestroyedViewCount`。
 - 结果写各自工程下的 `BenchmarkDotNet.Artifacts/view-pipeline/*.md` 与 `*.json`；一轮先 warmup，再取中位数/P95，不是均值。运行命令与纪律见 `Src/Test/README.md`。
 - 一次只跑一家，别并行驱动多个 UI 进程；WinUI / MAUI 独立宿主直接运行产物，不经过 `dotnet run`。
-- Razor 的 2000 节点 / 3000 连线 / 20 步场景（`HtmlRenderer`，`InProcessEmitToolchain`，依赖图 `-p:Optimize=true`）：Initial 约 0.36 ms / 0.04 MB；每个视口步约 0.88 ms / 0.15 MB（合并集合通知前的旧值是 18.5 ms / 6.85 MB）。`ViewPool` 的 `OnCollectionChanged` 现在只排队一次 `Task.Yield` 后的快照 + `StateHasChanged`，不再为虚拟化发出的每个 Add/Remove 重渲染。它量的是 renderer 构造渲染树 + 静态 HTML，不含 Blazor 的 DOM patch/JS transport，也不是窗口布局；节点模板比 demo 轻，所以只能同 Razor 自身前后比。BDN optimizer validator 保持开启，依赖未优化时拒绝运行。`--probe` 是“renderer 确实重渲染了真实 `ViewPool`”的证据。
+- Razor 的 2000 节点 / 3000 连线 / 20 步场景（`HtmlRenderer`，`InProcessEmitToolchain`，依赖图 `-p:Optimize=true`）：Initial 约 0.36 ms / 0.04 MB；每个视口步约 0.88 ms / 0.15 MB。`ViewPool` 的 `OnCollectionChanged` 只排队一次 `Task.Yield` 后的快照 + `StateHasChanged`，不为虚拟化发出的每个 Add/Remove 重渲染。它量的是 renderer 构造渲染树 + 静态 HTML，不含 Blazor 的 DOM patch/JS transport，也不是窗口布局；节点模板比 demo 轻，所以只能同 Razor 自身前后比。BDN optimizer validator 保持开启，依赖未优化时拒绝运行。`--probe` 验证 renderer 重渲染了真实 `ViewPool`。
 
-**Avalonia 基线**（16 核 Windows、.NET 10.0.12、2000 节点 / 3000 条本地连线、视口 1200×800、20 步、5 轮、自适应策略；节点=Border+Text，连线=1×1 占位，因此是**管线下限**，不是完整 demo 视图的性能）：Initial 中位 13.4 ms / P95 15.1 ms；Scroll step 11.7 / 13.6 ms；Full visibility 230 / 426 ms（约 0.046 ms/view，分配 61.6 MB）。正常视口约 180–280 个可见项；全量是一次性物化 5001 个视图的最坏情况。固定 1024/16 的对照是 Full 248 / 443 ms。
+**Avalonia 的测量口径**（16 核 Windows、.NET 10.0.12、2000 节点 / 3000 条本地连线、视口 1200×800、20 步、5 轮、自适应策略；节点=Border+Text，连线=1×1 占位，因此是**管线下限**，不是完整 demo 视图的性能）：正常视口约 180–280 个可见项；全量是一次性物化 5001 个视图的最坏情况。
 
 **六家完整矩阵**（同一台 16 核 Windows、.NET 10.0.12、2000/3000、1200×800、20 步、5 轮、自适应；中位 ms，Full 分配 MB）：
 
@@ -154,13 +151,13 @@ MAUI 的 `LinkLayer.Handles`（连线 overlay）、WinUI 的 `DispatcherQueuePri
 | WinUI | 29.40 | 6.00 | 392.53 | 10.0 |
 | MAUI | 286.46 | 37.54 | 5070.75 | 357.0 |
 
-WinForms 的 Full 现在是 **2000 个节点窗口** 的成本：`ViewLinkLayer` 把 3000 条连线挡在主池外，`WorkflowLinkLayer` 在画布 `Paint` 里一趟画完。旧实现（每线一个窗口）Full 是 13.4–15.3 s；单层后约 4.14 s，Initial 60 ms、Scroll 23 ms。剩余成本是节点 HWND 本身（裸 WinForms 探针：2000 个含子控件的视图 `Controls.Add` ≈ 2.3 s）。MAUI 的 Active 也只到 2000/5001，同样是 overlay 把连线挡在主池外。两者的 Full 不能与另外四家按视图数直接横比；单层连线的分配更高（每次几何变脏重发采样曲线），正确性优先。
+WinForms 的 Full 是 **2000 个节点窗口** 的成本：`ViewLinkLayer` 把 3000 条连线挡在主池外，`WorkflowLinkLayer` 在画布 `Paint` 里一趟画完。剩余成本是节点 HWND 本身（裸 WinForms 探针：2000 个含子控件的视图 `Controls.Add` ≈ 2.3 s）。MAUI 的 Active 也只到 2000/5001，同样是 overlay 把连线挡在主池外。两者的 Full 不能与另外四家按视图数直接横比；单层连线的分配更高（每次几何变脏重发采样曲线），正确性优先。
 
 当前管线的关键成本控制：pending 用 `Queue + HashSet`（增删查 O(1)，移除后留下 tombstone 由出队时跳过）；Avalonia `ViewContainer` 用引用比较 `HashSet<Control>` 做挂载去重，不再 `Children.Contains`；`LinkLayer.IsActive=false` 时完全跳过整集枚举；每批受 `BatchSize=1024` 与 16ms 双重限制。
 
 ## 七、Razor/Blazor：renderer-native 例外
 
-Razor 的 `ViewPool` 组件**不接** `ViewSourcePipelineCore`，这是刻意的，不是漏做：
+Razor 的 `ViewPool` 组件**不接** `ViewSourcePipelineCore`：
 
 - `IViewFactory` 的 `TView` 在 Blazor 里没有可创建的实例；组件/元素只由 renderer 在执行 `BuildRenderTree` 时产生，`RenderFragment` 不是有树成员与绑定态的视图。
 - `IViewContainer` 的 `Attach/Detach/Activate/Deactivate` 假定适配器拥有视觉树与绑定态，而 Blazor renderer 拥有它们；Core 的“同一视图实例换绑到另一个 item”在 Blazor 里正是 `@key` 要避免的位置复用。

@@ -1,8 +1,7 @@
 # Templates — WinUI
 
-> **本文只写模板侧独有的东西**：条目产出什么形状、哪些接线必须手写、这一家模板特有的坑。
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
-> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/winui.md`，本文只指路不抄；
+> **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/winui.md`；
 > 包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
 > **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.WinUI.Templates/working/content/`；引用别处一律写全路径。
 
@@ -25,9 +24,9 @@
 | minimap-overlay | **薄壳**：继承适配器的 `WorkflowMinimapOverlay`，只设四个画刷 | `workflow-minimap-overlay/TemplateClass.cs` 的构造器 |
 | template-selector | `DataTemplateSelector` 子类，四个 `DataTemplate?` 属性 | `workflow-template-selector/TemplateClass.cs` 的四个 `DataTemplate?` 属性 |
 
-三个不出 XAML 的条目**仍然可以有 XAML 之外的形状差**：template-selector 是七家里唯一
-**同时覆写两个重载**的（`SelectTemplateCore(object)` 与 `SelectTemplateCore(object, DependencyObject)`，
-后者直接转发给前者，`workflow-template-selector/TemplateClass.cs` 的两个 `SelectTemplateCore`）。
+三个不出 XAML 的条目仍有 XAML 之外的形状差：template-selector
+**同时覆写两个重载**（`SelectTemplateCore(object)` 与 `SelectTemplateCore(object, DependencyObject)`，
+后者转发给前者，`workflow-template-selector/TemplateClass.cs` 的两个 `SelectTemplateCore`）。
 
 ---
 
@@ -37,7 +36,7 @@
    `Width` / `Height` / `Canvas.Left` / `Canvas.Top` / `Canvas.ZIndex` 五项，**没有**第四项变换绑定 ——
    对比 WPF/Avalonia 两家都在模板根上绑了 `WorkflowCanvasTransformBehavior.Transform`。
    原因（画布平移走合成变换、不镜像到子元素）在 `memory/modules/WorkflowSystem/adapters/winui.md` §三·D1，
-   本文只指路。⇒ **跨平台抄这段模板时，"少了一个绑定"是这一家的正确形态，不是漏写。**
+   本文只指路。⇒ **"少了一个绑定"是这一家的正确形态，不是漏写。**
 2. **连线模板故意不绑 `Width`/`Height`**，理由写在 `workflow-tree-view/TemplateClass.xaml` 的 `LinkTemplate` 注释里：
    `Do not bind Width/Height here; LinkView sizes its own box.`
    ⇒ 与 WPF 的 `Width="{Binding ElementName=PART_Canvas, Path=ActualWidth}"` **正好相反**。
@@ -46,8 +45,7 @@
    `ViewPool` 两个属性（`behaviors:ViewPool.ItemsSource` / `TemplateSelector`）也与其他家一致。
 4. **`ScrollViewer` 要显式 `ZoomMode="Disabled"`**（`workflow-tree-view/TemplateClass.xaml` 的 `PART_ScrollViewer`）——
    WinUI 的 `ScrollViewer` 自带缩放，不关掉会与适配器的 Ctrl+滚轮打架。
-   ⚠ 这条在 WPF/Avalonia/MAUI/Razor 的 tree-view 里**没有对应物**（那几个没有这个属性），
-   抄这段时容易一起漏。
+   ⚠ WPF/Avalonia/MAUI/Razor 的 tree-view 没有这个属性，抄这段时容易一起漏。
 5. **标尺避让由模板自己做**：`Canvas.RenderTransform` 里的 `TranslateTransform` 绑
    `ElementName=PART_GridDecorator` 的 `RulerThickness`（`workflow-tree-view/TemplateClass.xaml` 的 `Canvas.RenderTransform`）。
 6. **`Clip="{x:Null}"` 是一条链，不是一处**。link-view 的根（`workflow-link-view/TemplateClass.xaml`）
@@ -92,12 +90,11 @@ slot-view 的 `Path` 只有一个 `Fill`（`workflow-slot-view/TemplateClass.xam
 `workflow-slot-view/TemplateClass.xaml.cs` 与 `workflow-minimap-overlay/TemplateClass.cs`
 各有一份完全相同的 `ParseColor(string hex)`（处理 8 位 `#AARRGGBB` 与 6 位 `#RRGGBB` 两种长度）。
 ⇒ 改一处的解析规则（比如支持 3 位缩写）时，另一处不会跟着变。同一份 `ParseColor` 在
-Razor 模板里有**多份**逐字重复（`../adapters/razor.md` §二·7），所以这条不是 WinUI 独有；
-WinUI 独有的是"只重复两份、且两份之间逐字相同"。
+Razor 模板里有多份逐字重复（`../adapters/razor.md` §二·7）；WinUI 是两份逐字相同。
 
 ---
 
-## 四、指路（这些结论已经在别处写好，本文不抄）
+## 四、指路
 
 | 结论 | 在哪 |
 |---|---|

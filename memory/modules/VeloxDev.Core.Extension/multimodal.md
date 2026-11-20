@@ -18,9 +18,8 @@ MAF / M.E.AI 把多模态内容当作普通 `AIContent`：本地字节用 `DataC
 视频 MP4/WebM/MKV/AVI/MPEG/QuickTime/FLV；文档 PDF/RTF/Office/OpenDocument/EPUB；文本 plain/Markdown/
 HTML/CSV/JSON/XML；其余为 Binary（默认不在 `AllowedKinds` 里）。
 
-它**不做**像素/音频/视频编解码。Core.Extension 是平台中立的，引入原生媒体库会把依赖强加给每个
-消费者；宿主的 WPF、Avalonia/SkiaSharp、MAUI、ffmpeg 本来就有编解码器，所以转码是
-`IAgentMediaTranscoder` 这条缝。
+它**不做**像素/音频/视频编解码。Core.Extension 平台中立；编解码归宿主（WPF、Avalonia/SkiaSharp、MAUI、ffmpeg 各有），转码因此走
+`IAgentMediaTranscoder`。
 
 ---
 
@@ -59,7 +58,7 @@ HTML/CSV/JSON/XML；其余为 Binary（默认不在 `AllowedKinds` 里）。
 
 | 坑 | 事实 |
 |---|---|
-| 没有 `ImageContent` | M.E.AI 10.10.0 只有 `TextContent` / `DataContent` / `UriContent`；旧例子的 `ImageContent` 不适用 |
+| 没有 `ImageContent` | M.E.AI 10.10.0 只有 `TextContent` / `DataContent` / `UriContent` |
 | 工具结果带媒体无效 | tool 消息只有文本通道；载荷必须由宿主作为 user 消息补发 |
 | MIME 必须正确 | `image/png` / `image/jpeg` / `audio/mpeg` / `application/pdf` 等，不要统一 `application/octet-stream` |
 | 容器与 kind 可能不唯一 | ISO BMFF / EBML 同时承载音频和视频，ZIP 同时是普通压缩包与 OOXML/ODF；用声明类型细化，但字节仍决定容器 |

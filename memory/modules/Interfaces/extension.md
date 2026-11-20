@@ -15,7 +15,7 @@
 
 三问都过，再选子目录：**子目录 = 它服务的模块**（`AspectOriented`/`DynamicTheme`/`MVVM`/`Tickable`/`Timing`/`TransitionSystem`/`WorkflowSystem`），不是按「契约种类」分。一个新模块的契约就新开一个子目录。
 
-**判据的可执行版本**：`grep -rn "public interface" Src/Core/VeloxDev.Core/Interfaces/` 得到一批接口 —— 每一条都能指名它的 ≥2 个实现方家族；做不到的那些都在 `Interfaces/` 外（清单见 `architecture.md` §二）。分布上 `WorkflowSystem` 最多，`TransitionSystem`、`Timing`、`MVVM`、`DynamicTheme` 次之，`Tickable` 与 `AspectOriented` 各只有一处。
+**判据的可执行版本**：`grep -rn "public interface" Src/Core/VeloxDev.Core/Interfaces/` 得到一批接口 —— 每一条都能指名它的 ≥2 个实现方家族；做不到的那些都在 `Interfaces/` 外（清单见 `architecture.md` §二）。
 
 ---
 
@@ -43,7 +43,7 @@
 |---|---|
 | `ITransitionEffect.cs` 的 `InvokeCancled` | 拼写错（`Canceled` 事件是对的，`InvokeCancled` 少一个 `c`）。**改名是破坏性变更**：`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的私有字段也叫 `_cancled`。新契约别复制这个拼写 |
 | `IVeloxCommand`（`IVeloxCommand.cs`） | 它 `: System.Windows.Input.ICommand` —— 契约直接继承了一个 BCL 接口，于是实现方必须同时满足两边。只在「所有实现方本来就都要实现 BCL 接口」时才这么做 |
-| `Interfaces/Tickable/ITickable.cs` | **当心不可见字符** —— 这个名字曾带着一个 U+200B（2026-10-01 已清除，见 architecture.md §八·9）。**新契约绝对不要**引入 Cf 类字符：编译器忽略它，所以能编译，但裸路径打不开、`grep -l` 漏、文档生成器可能崩 —— 而代码评审看不出来 |
+| `Interfaces/Tickable/ITickable.cs` | **当心不可见字符**：Cf 类字符能让编译器忽略，所以能编译，但裸路径打不开、`grep -l` 漏、文档生成器可能崩 —— 代码评审看不出来（见 architecture.md §六·9） |
 | `IWorkflowTreeViewModel.cs` | 单个文件里声明多个接口（`ITransitionScheduler.cs`、四族 VM 文件都是这样）是既有做法，但代价是**按文件名找接口会失效**；新契约优先一文件一接口 |
 
 ---
@@ -85,7 +85,7 @@
 
 **不成立就别拆**，仓内其余契约都没拆。判断口诀：**看有没有一个"永远不该 `Wake`/`Seek`"的接收方**；没有就一个接口到底。
 
-**千万别这样拆**：不要为了「以后可能要只读」把每个契约都配一个 `Control` 双胞胎 —— `Control` 后缀在全仓**只出现过一次**，是强信号，滥用会让「哪个是该实现的」变成猜谜。
+不要为了「以后可能要只读」把每个契约都配一个 `Control` 双胞胎：`Control` 后缀在全仓**只出现过一次**，是强信号，滥用会让「哪个是该实现的」变成猜谜。
 
 ---
 
