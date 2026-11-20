@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 
@@ -56,6 +58,79 @@ public static class XamlTransition
         var transition = Transition<VeloxDev.WinForms.Xaml.Controls.Control>.Create().Effect(effect);
         transition.GetState().SetValue(new DependencyTransitionProperty(target, property), to);
         Transition<VeloxDev.WinForms.Xaml.Controls.Control>.Execute(target, new[] { transition }, CanMutualTask: true);
+    }
+
+    /// <summary>
+    /// Animates <paramref name="property"/> through <paramref name="frames"/>, one segment per adjacent pair.
+    /// </summary>
+    /// <param name="target">The control whose property is animated.</param>
+    /// <param name="property">The dependency property to animate.</param>
+    /// <param name="frames">The keyframes; they are sorted by <see cref="KeyFrame.Offset"/>.</param>
+    /// <param name="duration">The total duration of the whole chain.</param>
+    /// <param name="ease">The easing applied to every segment; omitted means <c>Cubic.Out</c>.</param>
+    /// <remarks>
+    /// Offsets are normalized to <c>0..1</c>. A first frame above zero animates from the property's current value
+    /// to that frame; a first frame at zero applies immediately. Each segment's duration is its share of
+    /// <paramref name="duration"/>. The chain is one mutual run, so a new animation supersedes the whole sequence.
+    /// </remarks>
+    public static void AnimateKeyFrames(
+        VeloxDev.WinForms.Xaml.Controls.Control target,
+        DependencyProperty property,
+        IReadOnlyList<KeyFrame> frames,
+        TimeSpan duration,
+        IEaseCalculator? ease = null)
+    {
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (property is null) throw new ArgumentNullException(nameof(property));
+        if (frames is null) throw new ArgumentNullException(nameof(frames));
+        if (target.IsDisposed || target.Disposing || frames.Count == 0)
+        {
+            return;
+        }
+
+        var ordered = new KeyFrame[frames.Count];
+        for (var index = 0; index < frames.Count; index++)
+        {
+            ordered[index] = frames[index];
+        }
+
+        Array.Sort(ordered, static (left, right) => left.Offset.CompareTo(right.Offset));
+
+        var ticks = Math.Max(0L, duration.Ticks);
+        var root = Transition<VeloxDev.WinForms.Xaml.Controls.Control>.Create();
+        var segment = root;
+        var previousOffset = 0d;
+
+        for (var index = 0; index < ordered.Length; index++)
+        {
+            var frame = ordered[index];
+            var offset = Clamp(frame.Offset, 0d, 1d);
+            var span = Math.Max(0d, offset - previousOffset);
+            var segmentDuration = TimeSpan.FromTicks((long)Math.Round(ticks * span));
+            var to = frame.Value;
+            if (to is not null && !property.PropertyType.IsInstanceOfType(to))
+            {
+                to = XamlRuntime.ConvertValue(to, property.PropertyType);
+            }
+
+            segment.GetState().SetValue(new DependencyTransitionProperty(target, property), to);
+            segment.Effect(new TransitionEffect
+            {
+                Duration = segmentDuration,
+                Ease = ease ?? Eases.Cubic.Out,
+            });
+
+            previousOffset = offset;
+            if (index < ordered.Length - 1)
+            {
+                segment = segment.Then<Transition<VeloxDev.WinForms.Xaml.Controls.Control>>();
+            }
+        }
+
+        Transition<VeloxDev.WinForms.Xaml.Controls.Control>.Execute(
+            target,
+            new[] { root },
+            CanMutualTask: true);
     }
 
     /// <summary>Stops every animation currently running on <paramref name="target"/>.</summary>

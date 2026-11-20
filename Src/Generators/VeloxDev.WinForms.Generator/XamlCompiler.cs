@@ -1063,6 +1063,12 @@ internal sealed class XamlCompiler
             return;
         }
 
+        if (action.Name.LocalName == "KeyFrameAnimation")
+        {
+            EmitKeyFrameAnimation(action, ownerType, triggerVariable, isEnter);
+            return;
+        }
+
         EmitCustomTriggerAction(action, triggerVariable, isEnter);
     }
 
@@ -1130,6 +1136,105 @@ internal sealed class XamlCompiler
             $"{triggerVariable}.{member} = new {SyntaxHelpers.Fqn("TransitionAction")} "
             + $"{{ Property = {dependencyProperty}, To = {toExpression},{effect} }};");
     }
+
+    private void EmitKeyFrameAnimation(XElement action, ITypeSymbol ownerType, string triggerVariable, bool isEnter)
+    {
+        var propertyPath = action.Attribute("Property")?.Value;
+        if (string.IsNullOrWhiteSpace(propertyPath))
+        {
+            Report(Diagnostics.UnsupportedConstruct, action, "A KeyFrameAnimation needs a Property attribute.");
+            return;
+        }
+
+        if (!TryResolveControlProperty(ownerType, propertyPath!.Trim(), action, out var dependencyProperty, out var valueType))
+        {
+            return;
+        }
+
+        var effectParts = new List<string>();
+        var durationAttribute = action.Attribute("Duration");
+        if (durationAttribute is not null)
+        {
+            if (!TimeSpan.TryParse(durationAttribute.Value, CultureInfo.InvariantCulture, out _))
+            {
+                Report(Diagnostics.UnsupportedValue, durationAttribute, durationAttribute.Value, "System.TimeSpan");
+                return;
+            }
+
+            effectParts.Add(
+                $"Duration = global::System.TimeSpan.Parse({SyntaxHelpers.Quote(durationAttribute.Value)}, global::System.Globalization.CultureInfo.InvariantCulture)");
+        }
+
+        var easeAttribute = action.Attribute("Ease");
+        if (easeAttribute is not null && TryMapEase(easeAttribute.Value, out var ease))
+        {
+            effectParts.Add($"Ease = {ease}");
+        }
+        else if (easeAttribute is not null)
+        {
+            Report(Diagnostics.UnsupportedValue, easeAttribute, easeAttribute.Value, "Ease");
+        }
+
+        var frames = action.Elements().Where(child => child.Name.LocalName == "KeyFrame").ToArray();
+        if (frames.Length == 0)
+        {
+            Report(Diagnostics.UnsupportedConstruct, action, "A KeyFrameAnimation needs at least one KeyFrame element.");
+            return;
+        }
+
+        var actionVariable = NextVariable();
+        var initializer = $"Property = {dependencyProperty}";
+        if (effectParts.Count > 0)
+        {
+            initializer += ", " + string.Join(", ", effectParts);
+        }
+
+        _current.Line(
+            $"var {actionVariable} = new {SyntaxHelpers.Fqn("KeyFrameAnimation")} {{ {initializer} }};");
+
+        foreach (var frame in action.Elements())
+        {
+            if (frame.Name.LocalName != "KeyFrame")
+            {
+                Report(Diagnostics.UnsupportedConstruct, frame, "A KeyFrameAnimation accepts only KeyFrame children.");
+                continue;
+            }
+
+            var offsetAttribute = frame.Attribute("Offset");
+            if (offsetAttribute is null)
+            {
+                Report(Diagnostics.UnsupportedConstruct, frame, "A KeyFrame needs an Offset attribute.");
+                continue;
+            }
+
+            if (!double.TryParse(offsetAttribute.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var offset))
+            {
+                Report(Diagnostics.UnsupportedValue, frame, offsetAttribute.Value, "System.Double");
+                continue;
+            }
+
+            var valueAttribute = frame.Attribute("Value");
+            if (valueAttribute is null)
+            {
+                Report(Diagnostics.UnsupportedConstruct, frame, "A KeyFrame needs a Value attribute.");
+                continue;
+            }
+
+            var valueExpression = CreatePropertyValueExpression(frame, dependencyProperty, valueType, valueAttribute.Value);
+            if (valueExpression is null)
+            {
+                continue;
+            }
+
+            _current.Line(
+                $"{actionVariable}.KeyFrames.Add(new {SyntaxHelpers.Fqn("KeyFrame")} "
+                + $"{{ Offset = {offset.ToString("R", CultureInfo.InvariantCulture)}D, Value = {valueExpression} }});");
+        }
+
+        var member = isEnter ? "EnterAction" : "ExitAction";
+        _current.Line($"{triggerVariable}.{member} = {actionVariable};");
+    }
+
 
     private void EmitCustomTriggerAction(XElement action, string triggerVariable, bool isEnter)
     {

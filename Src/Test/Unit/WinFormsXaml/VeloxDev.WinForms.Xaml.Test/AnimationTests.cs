@@ -1,4 +1,5 @@
 using VeloxDev.TransitionSystem;
+using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Test.Fixtures;
 using VeloxDev.WinForms.Xaml.Test.Infrastructure;
 using Thickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
@@ -57,6 +58,55 @@ public sealed class AnimationTests
 
         Assert.IsTrue(XamlTestSurface.PumpUntil(() => control.Glow >= 0.75d - 1e-6));
         Assert.AreEqual(0.75d, control.Glow, 1e-6);
+    }
+
+    [TestMethod]
+    public void AnimateKeyFrames_ReachesTheEndAndPassesThroughTheMiddle()
+    {
+        using var control = new ProbeControl();
+        XamlTestSurface.EnsureHandle(control);
+        var frames = new[]
+        {
+            new KeyFrame { Offset = 0d, Value = 0d },
+            new KeyFrame { Offset = 0.5d, Value = 0.5d },
+            new KeyFrame { Offset = 1d, Value = 1d },
+        };
+
+        XamlTransition.AnimateKeyFrames(
+            control,
+            ProbeControl.GlowProperty,
+            frames,
+            TimeSpan.FromMilliseconds(300),
+            Eases.Cubic.Out);
+
+        Assert.IsTrue(
+            XamlTestSurface.PumpUntil(() => control.Glow >= 0.999d),
+            $"Glow never reached 1; last value {control.Glow}");
+        Assert.IsTrue(
+            control.GlowValues.Any(static value => value > 0.2d && value < 0.8d),
+            "the keyframe chain never produced a middle frame");
+    }
+
+    [TestMethod]
+    public void KeyFrameAnimation_InvokesTheSameChain()
+    {
+        using var control = new ProbeControl();
+        XamlTestSurface.EnsureHandle(control);
+        var action = new KeyFrameAnimation
+        {
+            Property = ProbeControl.GlowProperty,
+            Duration = TimeSpan.FromMilliseconds(240),
+            Ease = Eases.Cubic.Out,
+        };
+        action.KeyFrames.Add(new KeyFrame { Offset = 0d, Value = 0d });
+        action.KeyFrames.Add(new KeyFrame { Offset = 0.5d, Value = 0.5d });
+        action.KeyFrames.Add(new KeyFrame { Offset = 1d, Value = 1d });
+
+        action.Invoke(control);
+
+        Assert.IsTrue(
+            XamlTestSurface.PumpUntil(() => control.Glow >= 0.999d),
+            $"Glow never reached 1; last value {control.Glow}");
     }
 
     [TestMethod]

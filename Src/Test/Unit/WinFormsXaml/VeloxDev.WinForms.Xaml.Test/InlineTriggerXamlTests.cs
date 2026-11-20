@@ -207,6 +207,50 @@ public sealed class InlineTriggerXamlTests
     }
 
     [TestMethod]
+    public void InlineKeyFrameAnimation_EmitsTheFrameChain()
+    {
+        const string xaml = """
+            <local:ProbeView
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:local="clr-namespace:Probe"
+                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+                x:Class="Probe.ProbeView">
+              <local:ProbeCard x:Name="card">
+                <local:ProbeCard.Triggers>
+                  <v:Trigger Property="IsHot" Value="True">
+                    <v:Trigger.EnterAction>
+                      <v:KeyFrameAnimation Property="Glow" Duration="0:0:0.3" Ease="CubicOut">
+                        <v:KeyFrame Offset="0" Value="0" />
+                        <v:KeyFrame Offset="0.5" Value="0.5" />
+                        <v:KeyFrame Offset="1" Value="1" />
+                      </v:KeyFrameAnimation>
+                    </v:Trigger.EnterAction>
+                  </v:Trigger>
+                </local:ProbeCard.Triggers>
+              </local:ProbeCard>
+            </local:ProbeView>
+            """;
+
+        var (run, output) = GeneratorProbe.RunAndCompile(
+            [new XamlFileGenerator()],
+            Source,
+            "InlineKeyFrameProbe",
+            new InMemoryAdditionalText("ProbeView.xaml", xaml));
+
+        Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
+        Assert.IsEmpty(
+            output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
+            GeneratorProbe.Describe(output.GetDiagnostics()));
+
+        var generated = run.GeneratedText();
+        StringAssert.Contains(generated, "new global::VeloxDev.WinForms.Xaml.KeyFrameAnimation { Property = global::Probe.ProbeCard.GlowProperty");
+        StringAssert.Contains(generated, "Ease = global::VeloxDev.TransitionSystem.Eases.Cubic.Out");
+        StringAssert.Contains(generated, "KeyFrames.Add(new global::VeloxDev.WinForms.Xaml.KeyFrame { Offset = 0.5D, Value = 0.5D });");
+        StringAssert.Contains(generated, "KeyFrames.Add(new global::VeloxDev.WinForms.Xaml.KeyFrame { Offset = 1D, Value = 1D });");
+    }
+
+    [TestMethod]
     public void InlineTrigger_EntersAndExitsWithSetterAndTransition()
     {
         using var view = new GeneratedView();

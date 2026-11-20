@@ -10,6 +10,9 @@ state in a `ConditionalWeakTable<Control, State>`; attach behaviour `X` to a con
 
 ## XAML control library
 
+Targets `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`. The older TFMs use the
+small shim in `Xaml/Compat.cs`; the XAML surface is the same on all four.
+
 The XAML layer lives in `VeloxDev.WinForms.Xaml` (runtime) and `VeloxDev.WinForms.Xaml.Controls`
 (controls and layout primitives); vector shapes are in `VeloxDev.WinForms.Xaml.Controls.Shapes`.
 Every control derives from the XAML `Control`, so its properties are dependency properties and the
@@ -43,6 +46,47 @@ WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(myCanvas, tree);
 ```
 
 ---
+
+## XAML animations
+
+A XAML control's dependency properties animate through the WinForms transition system. In markup,
+put a `TransitionAction` under a trigger's `EnterAction` / `ExitAction`:
+
+```xml
+<v:Button Content="Save">
+  <v:Button.Triggers>
+    <v:Trigger Property="IsPointerOver" Value="True">
+      <v:Trigger.EnterAction>
+        <v:TransitionAction Property="Background" To="#FF2B6CFF"
+                            Duration="0:0:0.18" Ease="CubicOut" />
+      </v:Trigger.EnterAction>
+      <v:Trigger.ExitAction>
+        <v:TransitionAction Property="Background" To="#FF20242C"
+                            Duration="0:0:0.24" Ease="CubicOut" />
+      </v:Trigger.ExitAction>
+    </v:Trigger>
+  </v:Button.Triggers>
+</v:Button>
+```
+
+For more than two stops, a `KeyFrameAnimation` chains one transition per adjacent frame pair:
+
+```xml
+<v:Trigger.EnterAction>
+  <v:KeyFrameAnimation Property="Background" Duration="0:0:0.6" Ease="CubicInOut">
+    <v:KeyFrame Offset="0" Value="#FF20242C" />
+    <v:KeyFrame Offset="0.5" Value="#FF2B6CFF" />
+    <v:KeyFrame Offset="1" Value="#FF20242C" />
+  </v:KeyFrameAnimation>
+</v:Trigger.EnterAction>
+```
+
+From code-behind, call `XamlTransition.Animate(control, property, value, effect)` for one segment or
+`XamlTransition.AnimateKeyFrames(control, property, frames, duration, ease)` for a keyed chain; `Stop`
+ends the run. A single `TransitionAction`'s default effect (240 ms `Cubic.Out`) applies only when
+both `Duration` and `Ease` are omitted. Only XAML `Control` DPs animate; native controls do not. The
+full reference — attributes, supported value types, custom actions and limits — is in
+`skills/veloxdev-create-workflow/references/practices/gui/winforms-xaml.md`.
 
 ## Surface controls
 
