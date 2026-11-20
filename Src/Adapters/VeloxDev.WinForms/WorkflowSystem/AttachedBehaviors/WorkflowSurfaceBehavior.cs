@@ -365,14 +365,18 @@ public sealed class WorkflowSurfaceBehavior
     {
         state.DataContextHandler = OnHostDataContextChanged;
 
-        // XAML Control 隐藏了 WinForms 的 DataContext/事件；两者要分别订，才知道宿主换了数据上下文。
+        // XAML Control 有自己的 DataContext 事件；原生宿主没有这个成员（只有 BindingContextChanged）。
         if (host is VeloxDev.WinForms.Xaml.Controls.Control xaml)
         {
             xaml.DataContextChanged += state.DataContextHandler;
         }
         else
         {
+#if NET8_0_OR_GREATER
             host.DataContextChanged += state.DataContextHandler;
+#else
+            host.BindingContextChanged += state.DataContextHandler;
+#endif
         }
     }
 
@@ -389,7 +393,11 @@ public sealed class WorkflowSurfaceBehavior
         }
         else
         {
+#if NET8_0_OR_GREATER
             host.DataContextChanged -= state.DataContextHandler;
+#else
+            host.BindingContextChanged -= state.DataContextHandler;
+#endif
         }
 
         state.DataContextHandler = null;
@@ -2057,7 +2065,7 @@ public sealed class WorkflowSurfaceBehavior
 
             initialRevealHeld = true;
             initialRevealSettleTicks = 0;
-            initialRevealStarted = Environment.TickCount64;
+            initialRevealStarted = TickCount64;
 
             HoldInitialReveal(host);
             HoldInitialReveal(canvas);
@@ -2115,7 +2123,7 @@ public sealed class WorkflowSurfaceBehavior
                 initialRevealSettleTicks = 0;
             }
 
-            var timedOut = Environment.TickCount64 - initialRevealStarted >= InitialRevealTimeoutMilliseconds;
+            var timedOut = TickCount64 - initialRevealStarted >= InitialRevealTimeoutMilliseconds;
             if (initialRevealSettleTicks >= InitialRevealSettleTicks || timedOut)
             {
                 EndInitialReveal();

@@ -174,7 +174,7 @@ public readonly struct GridLength : IEquatable<GridLength>
         {
             var weight = text.Length == 1
                 ? 1d
-                : double.TryParse(text[..^1], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                : double.TryParse(text.Substring(0, text.Length - 1), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
                     ? parsed
                     : double.NaN;
             if (double.IsNaN(weight) || weight < 0d)

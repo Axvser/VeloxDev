@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using NativeTextBox = System.Windows.Forms.TextBox;
 
@@ -99,6 +100,11 @@ public class TextBox : Control
         typeof(TextBox),
         new PropertyMetadata(new Thickness(1f), OnVisualPropertyChanged));
 
+    private const int EmSetCueBanner = 0x1501;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int message, IntPtr wParam, string lParam);
+
     private readonly NativeTextBox editor;
 
     // 原生的 TextChanged 回写 DP 时，DP 回调不能再写一次原生 Text，否则光标会跳。
@@ -126,6 +132,7 @@ public class TextBox : Control
         editor.MouseWheel += (_, e) => OnMouseWheel(e);
         editor.GotFocus += (_, e) => OnGotFocus(e);
         editor.LostFocus += (_, e) => OnLostFocus(e);
+        editor.HandleCreated += (_, _) => ApplyPlaceholder();
         Controls.Add(editor);
         ApplyEditorProperties();
     }
@@ -344,10 +351,10 @@ public class TextBox : Control
             editor.ForeColor = ForeColor;
             editor.Font = Font;
             editor.Enabled = IsEnabled;
-            editor.PlaceholderText = PlaceholderText;
+            ApplyPlaceholder();
 
-            var start = Math.Clamp(SelectionStart, 0, editor.TextLength);
-            var length = Math.Clamp(SelectionLength, 0, editor.TextLength - start);
+            var start = Clamp(SelectionStart, 0, editor.TextLength);
+            var length = Clamp(SelectionLength, 0, editor.TextLength - start);
             if (editor.SelectionStart != start)
             {
                 editor.SelectionStart = start;
@@ -364,6 +371,16 @@ public class TextBox : Control
         }
 
         ApplyEditorBounds();
+    }
+
+    private void ApplyPlaceholder()
+    {
+        if (editor.IsDisposed || !editor.IsHandleCreated)
+        {
+            return;
+        }
+
+        SendMessage(editor.Handle, EmSetCueBanner, IntPtr.Zero, PlaceholderText ?? string.Empty);
     }
 
     private void ApplyEditorBounds()

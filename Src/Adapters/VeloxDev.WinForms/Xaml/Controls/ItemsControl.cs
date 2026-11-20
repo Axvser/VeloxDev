@@ -160,7 +160,19 @@ public class ItemsControl : Control
         if (ItemTemplate is { } template)
         {
             var content = template.CreateContent();
-            content.DataContext = item;
+            if (content is Control xaml)
+            {
+                xaml.DataContext = item;
+            }
+            else
+            {
+#if NET8_0_OR_GREATER
+                content.DataContext = item;
+#else
+                content.Tag = item;
+#endif
+            }
+
             return content;
         }
 

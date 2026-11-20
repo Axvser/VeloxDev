@@ -196,14 +196,14 @@ public class ProgressBar : Control
             return 0d;
         }
 
-        return Math.Clamp((Value - Minimum) / range, 0d, 1d);
+        return Clamp((Value - Minimum) / range, 0d, 1d);
     }
 
     private static object? CoerceValue(System.Windows.Forms.Control target, object? value)
     {
         if (target is ProgressBar bar && value is double number)
         {
-            return Math.Clamp(number, Math.Min(bar.Minimum, bar.Maximum), Math.Max(bar.Minimum, bar.Maximum));
+            return Clamp(number, Math.Min(bar.Minimum, bar.Maximum), Math.Max(bar.Minimum, bar.Maximum));
         }
 
         return value;

@@ -455,12 +455,12 @@ public class ScrollBar : Control
         var ratio = span > 0 ? (double)largeChange / span : 1d;
         var thumbLength = (int)Math.Round(trackLength * ratio);
         var minimumLength = Math.Min(Math.Max(1, ThumbMinLength), trackLength);
-        thumbLength = Math.Clamp(thumbLength, minimumLength, trackLength);
+        thumbLength = Clamp(thumbLength, minimumLength, trackLength);
 
         var travel = trackLength - thumbLength;
         var amplitude = MaximumValue - Minimum;
         var position = amplitude <= 0 ? 0d : (double)(Value - Minimum) / amplitude * travel;
-        var offset = (int)Math.Round(Math.Clamp(position, 0d, travel));
+        var offset = (int)Math.Round(Clamp(position, 0d, travel));
 
         return horizontal
             ? new Rectangle(track.X + offset, track.Y, thumbLength, track.Height)
@@ -522,7 +522,7 @@ public class ScrollBar : Control
             return baseValue;
         }
 
-        return Math.Clamp(value, bar.Minimum, bar.MaximumValue);
+        return Clamp(value, bar.Minimum, bar.MaximumValue);
     }
 
     private static void OnValuePropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
@@ -544,7 +544,7 @@ public class ScrollBar : Control
         }
 
         // 范围收窄后旧 Value 可能落在界外；写回会触发 ValueChanged，订阅方本来也需要这次通知。
-        var clamped = Math.Clamp(bar.Value, bar.Minimum, bar.MaximumValue);
+        var clamped = Clamp(bar.Value, bar.Minimum, bar.MaximumValue);
         if (clamped != bar.Value)
         {
             bar.SetValue(ValueProperty, clamped);

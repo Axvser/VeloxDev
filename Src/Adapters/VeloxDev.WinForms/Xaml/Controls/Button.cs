@@ -226,7 +226,7 @@ public class Button : ContentControl
 
     private static Color Blend(Color color, Color towards, float amount)
     {
-        amount = Math.Clamp(amount, 0f, 1f);
+        amount = Clamp(amount, 0f, 1f);
         return Color.FromArgb(
             color.A,
             (int)(color.R + ((towards.R - color.R) * amount)),

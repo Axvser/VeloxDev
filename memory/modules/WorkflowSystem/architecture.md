@@ -9,7 +9,7 @@
 ## 一、这个模块是什么、不是什么
 
 **是什么**：节点图编辑器的「模型树 + 编译运行 + 画布几何/虚拟化」三层，**零 UI 依赖** ——
-`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `<TargetFrameworks>` 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`，整个项目运行期只引了一个 `Microsoft.Bcl.HashCode`（另有生成器包与项目引用，见 §五）。
+`Src/Core/VeloxDev.Core/VeloxDev.Core.csproj` 的 `<TargetFrameworks>` 是 `netstandard2.0;netframework4.6.1;net5.0;netcoreapp3.0;net8.0`，运行期不再引 `Microsoft.Bcl.HashCode`：net461 的 `ValueTuple` 由 `System.ValueTuple` 包补，`HashCode` 由 `Compat/HashCode.cs` 提供（另有生成器包与项目引用，见 §五）。
 
 **自动布局也在本模块（2026-10-30 起）**：`WorkflowSystem/Layout/` 是可注入的布局管道。第一版实现**层级对齐**（`HierarchyAlignmentStage`：扇出组、扇入合流点、单子边）与**坐标后的分离约束投影**（`TileSeparationStage`），没有断环/分层/排序/正交走线；宿主入口是节点扩展 `node.Arrange(options)`（从 Parent 找到树、再走该树 helper 上注册的 `IWorkflowLayoutSolver`），细节、扩展路径和坑见 [layout.md](layout.md)。
 

@@ -22,7 +22,7 @@ internal static class PathGeometry
             return path;
         }
 
-        var tokens = TokenPattern.Matches(data).Select(static match => match.Value).ToArray();
+        var tokens = TokenPattern.Matches(data).Cast<Match>().Select(static match => match.Value).ToArray();
         var index = 0;
         var command = ' ';
         var current = new PointF();

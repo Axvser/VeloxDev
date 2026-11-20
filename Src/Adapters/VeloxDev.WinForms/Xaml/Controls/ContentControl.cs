@@ -242,7 +242,19 @@ public class ContentControl : Control
         }
 
         _templateContent = template.CreateContent();
-        _templateContent.DataContext = Content;
+        if (_templateContent is Control xaml)
+        {
+            xaml.DataContext = Content;
+        }
+        else
+        {
+#if NET8_0_OR_GREATER
+            _templateContent.DataContext = Content;
+#else
+            _templateContent.Tag = Content;
+#endif
+        }
+
         Controls.Add(_templateContent);
         PerformLayout();
         Invalidate();

@@ -28,11 +28,13 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 
-	<ItemGroup>
-		<PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
+	<!-- MSBuild 属性默认不透给分析器，必须显式声明，否则生成器读到的永远是默认值。 -->
+	<!-- net461 的 BCL 没有 ValueTuple；其余目标框架自带。不引 Microsoft.Bcl.HashCode，
+	     它的 net461 构建会发「未正式支持」警告。HashCode 由 Compat/HashCode.cs 提供。 -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'netframework4.6.1'">
+		<PackageReference Include="System.ValueTuple" Version="4.5.0" />
 	</ItemGroup>
 
-	<!-- MSBuild 属性默认不透给分析器，必须显式声明，否则生成器读到的永远是默认值。 -->
 	<ItemGroup>
 		<CompilerVisibleProperty Include="VeloxAgentContextTreeRoot" />
 		<CompilerVisibleProperty Include="VeloxAgentContextTree" />

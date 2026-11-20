@@ -831,19 +831,28 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     /// bindings re-resolve; descendants without a local value follow.
     /// </summary>
     /// <remarks>
-    /// The .NET 10 base <see cref="System.Windows.Forms.Control.DataContext"/> is deliberately hidden: this one participates in the XAML
-    /// control tree's inheritance and in dependency-property change notification.
+    /// This is the XAML tree's own context: it participates in inheritance and dependency-property change
+    /// notification. Newer WinForms bases may also expose a native <c>DataContext</c>; this property is the one the
+    /// XAML runtime, bindings and triggers use.
     /// </remarks>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+#if NET8_0_OR_GREATER
     public new object? DataContext
+#else
+    public object? DataContext
+#endif
     {
         get => DataContextProperty.GetValue(this);
         set => DataContextProperty.SetValue(this, value);
     }
 
     /// <summary>Raised when this control's effective data context changes.</summary>
+#if NET8_0_OR_GREATER
     public new event EventHandler? DataContextChanged;
+#else
+    public event EventHandler? DataContextChanged;
+#endif
 
     /// <summary>Raised when a pointer button is pressed on this control or bubbles from a descendant.</summary>
     public event EventHandler<PointerPressedEventArgs>? PointerPressed;
@@ -1696,7 +1705,9 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         else
         {
             _templateContent.BindingContext = BindingContext;
+#if NET8_0_OR_GREATER
             _templateContent.DataContext = context;
+#endif
         }
     }
 

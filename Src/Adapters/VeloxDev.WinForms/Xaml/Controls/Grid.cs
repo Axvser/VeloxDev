@@ -123,10 +123,10 @@ public class Grid : Control
                 continue;
             }
 
-            var column = Math.Clamp(GetColumn(child), 0, Math.Max(0, columns.Length - 1));
-            var row = Math.Clamp(GetRow(child), 0, Math.Max(0, rows.Length - 1));
-            var columnSpan = Math.Clamp(GetColumnSpan(child), 1, columns.Length - column);
-            var rowSpan = Math.Clamp(GetRowSpan(child), 1, rows.Length - row);
+            var column = Clamp(GetColumn(child), 0, Math.Max(0, columns.Length - 1));
+            var row = Clamp(GetRow(child), 0, Math.Max(0, rows.Length - 1));
+            var columnSpan = Clamp(GetColumnSpan(child), 1, columns.Length - column);
+            var rowSpan = Clamp(GetRowSpan(child), 1, rows.Length - row);
 
             var width = 0;
             for (var index = column; index < column + columnSpan; index++)
@@ -237,8 +237,8 @@ public class Grid : Control
 
             var measured = XamlLayout.Measure(child, available);
             var index = isColumn
-                ? Math.Clamp(GetColumn(child), 0, sizes.Length - 1)
-                : Math.Clamp(GetRow(child), 0, sizes.Length - 1);
+                ? Clamp(GetColumn(child), 0, sizes.Length - 1)
+                : Clamp(GetRow(child), 0, sizes.Length - 1);
 
             var isAuto = isColumn
                 ? definitions[index] is ColumnDefinition { Width.IsAuto: true }

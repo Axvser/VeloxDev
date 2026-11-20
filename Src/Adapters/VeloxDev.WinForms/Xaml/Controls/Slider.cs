@@ -300,7 +300,7 @@ public class Slider : Control
             return 0d;
         }
 
-        return Math.Clamp((Value - Minimum) / range, 0d, 1d);
+        return Clamp((Value - Minimum) / range, 0d, 1d);
     }
 
     private void SetValueFromPoint(Point location)
@@ -319,28 +319,28 @@ public class Slider : Control
             fraction = 1d - ((location.Y - bounds.Top - (thumb / 2d)) / trackHeight);
         }
 
-        Value = Coerce(Minimum + (Math.Clamp(fraction, 0d, 1d) * (Maximum - Minimum)));
+        Value = Coerce(Minimum + (Clamp(fraction, 0d, 1d) * (Maximum - Minimum)));
     }
 
     private double Coerce(double value)
     {
         var minimum = Math.Min(Minimum, Maximum);
         var maximum = Math.Max(Minimum, Maximum);
-        value = Math.Clamp(value, minimum, maximum);
+        value = Clamp(value, minimum, maximum);
         if (IsSnapToTickEnabled && TickFrequency > 0d)
         {
             var steps = Math.Round((value - minimum) / TickFrequency);
             value = minimum + (steps * TickFrequency);
         }
 
-        return Math.Clamp(value, minimum, maximum);
+        return Clamp(value, minimum, maximum);
     }
 
     private static object? CoerceValue(System.Windows.Forms.Control target, object? value)
     {
         if (target is Slider slider && value is double number)
         {
-            return Math.Clamp(number, Math.Min(slider.Minimum, slider.Maximum), Math.Max(slider.Minimum, slider.Maximum));
+            return Clamp(number, Math.Min(slider.Minimum, slider.Maximum), Math.Max(slider.Minimum, slider.Maximum));
         }
 
         return value;

@@ -389,8 +389,8 @@ public class ScrollViewer : Control
                 : (int)Math.Round(Math.Max(0d, extentHeight - innerHeight));
 
             var offset = ScrollOffset;
-            var x = Math.Clamp(offset.X, 0, maxX);
-            var y = Math.Clamp(offset.Y, 0, maxY);
+            var x = Clamp(offset.X, 0, maxX);
+            var y = Clamp(offset.Y, 0, maxY);
             if (x != offset.X || y != offset.Y)
             {
                 SetValue(ScrollOffsetProperty, new Point(x, y));

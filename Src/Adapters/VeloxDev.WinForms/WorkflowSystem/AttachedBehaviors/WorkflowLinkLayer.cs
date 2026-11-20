@@ -368,11 +368,11 @@ public static class WorkflowLinkLayer
             }
 
             var stale = new List<IWorkflowLinkViewModel>();
-            foreach (var (link, _) in linkHandlers)
+            foreach (var pair in linkHandlers)
             {
-                if (!live.Contains(link))
+                if (!live.Contains(pair.Key))
                 {
-                    stale.Add(link);
+                    stale.Add(pair.Key);
                 }
             }
 
@@ -436,10 +436,12 @@ public static class WorkflowLinkLayer
             // 离开可见集/换树时撤掉已发布的曲线，别让一条不在画的线还回答命中。
             link.PublishCurve(null);
 
-            if (!linkHandlers.Remove(link, out var handler))
+            if (!linkHandlers.TryGetValue(link, out var handler))
             {
                 return;
             }
+
+            linkHandlers.Remove(link);
 
             if (link is INotifyPropertyChanged notifier)
             {
@@ -698,8 +700,8 @@ public static class WorkflowLinkLayer
 
                 var senderModel = ResolveModel(senderSlot, senderSlot.Parent, ox, oy);
                 var receiverModel = ResolveModel(receiverSlot, receiverSlot.Parent, ox, oy);
-                if (!double.IsFinite(senderModel.X) || !double.IsFinite(senderModel.Y)
-                    || !double.IsFinite(receiverModel.X) || !double.IsFinite(receiverModel.Y))
+                if (!IsFinite(senderModel.X) || !IsFinite(senderModel.Y)
+                    || !IsFinite(receiverModel.X) || !IsFinite(receiverModel.Y))
                 {
                     link.PublishCurve(null);
                     continue;
@@ -776,7 +778,7 @@ public static class WorkflowLinkLayer
         {
             if (curve.Length <= 0) return;
 
-            var head = Math.Clamp(headFraction, 0, 1) * curve.Length;
+            var head = Clamp(headFraction, 0, 1) * curve.Length;
             var tail = TailFraction * curve.Length;
 
             for (var pass = 0; pass < 2; pass++)
@@ -794,7 +796,7 @@ public static class WorkflowLinkLayer
                     if (alpha <= 0.004) continue;
 
                     var blended = Mix(color, Color.White, f0);
-                    var a = (int)Math.Round(Math.Clamp(bloom ? alpha * 0.22 : alpha, 0, 1) * 255);
+                    var a = (int)Math.Round(Clamp(bloom ? alpha * 0.22 : alpha, 0, 1) * 255);
                     flowPen.Color = Color.FromArgb(a, blended.R, blended.G, blended.B);
                     flowPen.Width = bloom ? thickness + 9 : (float)(thickness * (0.45 + (0.95 * f0)));
                     flowPen.StartCap = flowPen.EndCap = LineCap.Round;
@@ -805,7 +807,7 @@ public static class WorkflowLinkLayer
 
         private void DrawRun(Graphics g, LinkCurve curve, double from, double to)
         {
-            from = Math.Clamp(from, 0, curve.Length);
+            from = Clamp(from, 0, curve.Length);
             to = Math.Min(to, curve.Length);
             if (to <= from) return;
 

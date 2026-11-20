@@ -183,13 +183,27 @@ public readonly struct Thickness : IEquatable<Thickness>
     public override bool Equals(object? obj) => obj is Thickness other && Equals(other);
 
     /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(Left, Top, Right, Bottom);
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            var hash = Left.GetHashCode();
+            hash = (hash * 397) ^ Top.GetHashCode();
+            hash = (hash * 397) ^ Right.GetHashCode();
+            hash = (hash * 397) ^ Bottom.GetHashCode();
+            return hash;
+        }
+    }
 
     /// <summary>Returns the four sides in left, top, right, bottom order.</summary>
     /// <returns>The invariant-culture literal form.</returns>
-    public override string ToString() => string.Create(
+    public override string ToString() => string.Format(
         CultureInfo.InvariantCulture,
-        $"{Left},{Top},{Right},{Bottom}");
+        "{0},{1},{2},{3}",
+        Left,
+        Top,
+        Right,
+        Bottom);
 
     private static int Round(float value) => (int)Math.Round(value, MidpointRounding.AwayFromZero);
 }
