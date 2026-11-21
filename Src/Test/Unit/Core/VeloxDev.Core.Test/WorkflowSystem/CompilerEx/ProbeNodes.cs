@@ -9,12 +9,13 @@ namespace VeloxDev.Core.Test.WorkflowSystem.CompilerEx;
 // ─────────────────────────────────────────────────────────────────────────────
 // 探针基建:CompilerEx(编译器 → 运行时引擎)契约测试用。节点不挂树、不走 undo/Link,
 // 只实现 Compiler/Engine 真正消费的东西 —— 槽连接拓扑 + Helper 的
-// AccessAsync/ReceiveAsync + ICompileTimeAware/IRuntimeAware/ICompileTimeRouter/IRedirectable 钩子。
+// AccessAsync/ReceiveAsync。可选的通知接口(ICompileTimeAware / IRuntimeAware)只挂在
+// ProbeNode 上;PlainNode 什么都不实现,用来钉住「引擎不依赖节点提供编译状态」。
 // 每个节点记录自己每次被驱动的调用(ProbeCall),供断言"驱动顺序/每 pass 数据/重定向跳段"。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>Record of one ReceiveAsync drive: the driven node, the runtime pass attempt, the input data received, and the phase.</summary>
-internal readonly record struct ProbeCall(ProbeNode Node, int Attempt, object? Data, bool Compiled);
+internal readonly record struct ProbeCall(ProbeNodeBase Node, int Attempt, object? Data, bool Compiled);
 
 /// <summary>No-op IVeloxCommand: countable, with an optional Execute hook (models ReceiveCommand dispatch).</summary>
 internal sealed class TestCommand : IVeloxCommand
@@ -86,7 +87,7 @@ internal sealed class TestSlot : IWorkflowSlotViewModel
 /// injected Handler. AccessAsync passes by default; the node's AccessGate can reject individual edges (pruned at
 /// compile time).
 /// </summary>
-internal sealed class ProbeHelper : NodeHelper<ProbeNode>
+internal sealed class ProbeHelper : NodeHelper<ProbeNodeBase>
 {
     public override async Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct)
     {
@@ -117,10 +118,11 @@ internal sealed class ProbeHelper : NodeHelper<ProbeNode>
 }
 
 /// <summary>
-/// Probe node: IWorkflowNodeViewModel + compile identity (ICompileTimeAware) + runtime injection (IRuntimeAware).
-/// Handler defaults to null (ReceiveAsync returns null); tests inject per-node behavior through Handler/AccessGate.
+/// The part of a probe node the compiler and engine actually consume: slots, a helper, and call recording. It
+/// implements none of the optional notification contracts — <see cref="ProbeNode"/> adds those, and
+/// <see cref="PlainNode"/> deliberately does not.
 /// </summary>
-internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAware
+internal abstract class ProbeNodeBase : IWorkflowNodeViewModel
 {
     private readonly ProbeHelper _helper;
 
@@ -141,9 +143,6 @@ internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAw
 
     /// <summary>Deliveries received via ReceiveCommand (edge broadcast / manual Run); the chain-level engine must not trigger these.</summary>
     public List<ITaskContext> ReceivedDeliveries { get; } = [];
-
-    /// <summary>Sessions injected by the runtime engine (IRuntimeAware.AttachRuntimeContext).</summary>
-    public List<IRuntimeContext> AttachedContexts { get; } = [];
 
     public IWorkflowNodeViewModelHelper HelperInstance => _helper;
 
@@ -170,7 +169,7 @@ internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAw
     public IVeloxCommand ReverseBroadcastCommand { get; } = new TestCommand();
     public IVeloxCommand CloseCommand { get; } = new TestCommand();
 
-    public ProbeNode(string? name = null)
+    protected ProbeNodeBase(string? name = null)
     {
         Name = name ?? $"n{NextId()}";
         _helper = new ProbeHelper();
@@ -186,21 +185,6 @@ internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAw
         });
 
         _helper.Install(this);
-    }
-
-    // ── ICompileTimeAware ──
-    public ICompileContext? CompileContext { get; private set; }
-    public void AttachCompileTimeContext(ICompileContext context) => CompileContext = context;
-
-    // ── IRuntimeAware ──
-
-    // 注入时先跑它、再记录上下文。测试可以在这里抛异常，钉住「宿主契约出错时引擎怎么办」。
-    public Action<IRuntimeContext>? AttachGate { get; set; }
-
-    public void AttachRuntimeContext(IRuntimeContext context)
-    {
-        AttachGate?.Invoke(context);
-        AttachedContexts.Add(context);
     }
 
     // ── IWorkflowViewModel 基础设施 ──
@@ -219,6 +203,50 @@ internal class ProbeNode : IWorkflowNodeViewModel, ICompileTimeAware, IRuntimeAw
 }
 
 /// <summary>
+/// Probe node that opts into the optional notifications: compile identity (ICompileTimeAware) and session injection
+/// (IRuntimeAware). Handler defaults to null (ReceiveAsync returns null); tests inject per-node behavior through
+/// Handler/AccessGate.
+/// </summary>
+internal class ProbeNode : ProbeNodeBase, ICompileTimeAware, IRuntimeAware
+{
+    public ProbeNode(string? name = null) : base(name) { }
+
+    /// <summary>Sessions injected by the runtime engine (IRuntimeAware.AttachRuntimeContext).</summary>
+    public List<IRuntimeContext> AttachedContexts { get; } = [];
+
+    // 注入时先跑它、再记录上下文。测试可以在这里抛异常，钉住「宿主契约出错时引擎怎么办」。
+    public Action<IRuntimeContext>? AttachGate { get; set; }
+
+    public void AttachRuntimeContext(IRuntimeContext context)
+    {
+        AttachGate?.Invoke(context);
+        AttachedContexts.Add(context);
+    }
+
+    // ── ICompileTimeAware ──
+
+    // 设了就抛这个异常，钉住「编译期通知失败不影响编译产物」。
+    public Action<ICompileContext>? CompileAttachGate { get; set; }
+
+    public ICompileContext? CompileContext { get; private set; }
+
+    public void AttachCompileTimeContext(ICompileContext context)
+    {
+        CompileAttachGate?.Invoke(context);
+        CompileContext = context;
+    }
+}
+
+/// <summary>
+/// Probe node implementing none of the optional notification contracts. Used to pin that compile identity,
+/// join aggregation and redirect skipping work without the node carrying any compiler state.
+/// </summary>
+internal sealed class PlainNode : ProbeNodeBase
+{
+    public PlainNode(string? name = null) : base(name) { }
+}
+
+/// <summary>
 /// Router node: ICompileTimeRouter. Static mode exposes only the currently selected branch at compile time;
 /// Dynamic exposes all branches, ResolveRouteKey(null) returns null (undecidable at compile time) and the key is
 /// decided at runtime by Selection.
@@ -231,7 +259,7 @@ internal sealed class RouterNode : ProbeNode, ICompileTimeRouter
     public object? Selection { get; set; }
 
     /// <summary>Full branch table: key → downstream node list (empty list = terminal).</summary>
-    public Dictionary<object, IReadOnlyList<ProbeNode>> RouteTable { get; } = new();
+    public Dictionary<object, IReadOnlyList<ProbeNodeBase>> RouteTable { get; } = new();
 
     public RouterNode(string? name = null) : base(name) { }
 

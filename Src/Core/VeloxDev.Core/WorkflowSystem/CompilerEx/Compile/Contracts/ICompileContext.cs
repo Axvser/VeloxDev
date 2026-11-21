@@ -4,8 +4,9 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 
 /// <summary>
-/// The compile-time identity context interface. Implemented by <see cref="CompileContext"/> and injected into
-/// nodes via <see cref="ICompileTimeAware.AttachCompileTimeContext"/>.
+/// The compile-time identity context interface. Implemented by <see cref="CompileContext"/>; the authoritative
+/// copy is held by the compiled graph (<see cref="CompiledGraph.TryGetCompileInfo"/>), and
+/// <see cref="ICompileTimeAware.AttachCompileTimeContext"/> receives a snapshot as an optional notification.
 /// </summary>
 [AgentContext(AgentLanguages.Chinese, "编译期身份上下文：固定编号 Order / 链内索引 ChainIndex / 子图偏移 Offset")]
 [AgentContext(AgentLanguages.English, "Compile-time identity context: fixed Order / in-chain index ChainIndex / sub-graph Offset")]

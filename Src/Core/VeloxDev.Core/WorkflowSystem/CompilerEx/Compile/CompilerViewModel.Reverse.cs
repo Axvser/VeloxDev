@@ -131,6 +131,6 @@ public sealed partial class CompilerViewModel
         };
         foreach (var e in tail.Entries)
             entriesOut.Add(e);
-        return new CompiledGraph { Entries = entriesOut };
+        return new CompiledGraph { Entries = entriesOut, CompileBindings = state.Bindings };
     }
 }

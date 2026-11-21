@@ -38,15 +38,21 @@
 - **异常语义**：`Task.WhenAll` 下一个分支抛异常时整组跑完再抛，不立即中止兄弟。节点异常在它自己的驱动里就被消化成「报告 + 记 null」（§六），到不了 `Task.WhenAll`。
 - 汇合点仍在整组之后，且分支是**单线程交错**（不是线程并行），所以产物表 `_outputs` **没有加锁**、也不需要。前提是宿主把运行钉在一个 `SynchronizationContext` 上；节点内部若自己 `Task.Run` 就会破坏这个前提。
 
-## 四、`ICompileTimeAware` / `IRuntimeAware` / `IRedirectable` 是**可选**实现的，Core 自带的节点一个都没实现
+## 四、编译身份归编译产物；Node 侧接口分两类
 
-`ICompileTimeAware` / `IRuntimeAware` / `IRedirectable` **都不在** `IWorkflowNodeViewModel` 的继承链上（`Interfaces/WorkflowSystem/Components/IWorkflowNodeViewModel.cs` 的 `IWorkflowNodeViewModel` 接口）—— Core 的 `NodeDefaultViewModel` 只实现 `IWorkflowNodeViewModel, IWorkflowIdentifiable`（生成器也不补）。实现它们的是 **demo 的节点**：`Examples/Workflow/Common/Lib/…` 的 `PythonScriptNodeViewModel`、`TimerNodeViewModel`、`EnumSelectorNodeViewModel`、`ControllerViewModel`。
+**身份存在图上，不在节点上。** `CompilerViewModel.AssignCompileIdentity` 把 `NodeCompileInfo` 写进 `CompiledGraph.CompileBindings`（每个节点一条，`WorkflowReferenceEqualityComparer`），所有子图共享同一份；`graph.TryGetCompileInfo(node)` 是唯一读取口。引擎不靠节点提供任何状态：
 
-自研节点不实现时**静默降级**，没有任何提示：
+- `RuntimeEngine.NodeOrder` / `DriveAsync`（`CurrentOrder` 与汇合注入）/ `NotifyErrorAsync` / `CompensateAsync` 都从绑定表取；`RuntimeEngine.RunAsync` 把表随调用链下传，并写进 `RuntimeContext.CompileBindings` 供 `ReportNodeAsync` 与 `IsCurrentPassOrPreserved` 使用。
+- 绑定表**不进序列化**：`SerializeCompiledGraph` 往返后的图对所有节点返回 false，Order = -1。
 
-- `AttachCompileTimeContext` 只在 `node is ICompileTimeAware` 时注入（`CompilerViewModel.cs` 的 `AttachCompileTimeContext`）⇒ 取不到 `CompileContext` ⇒ `Order` 恒 `-1`、`InputNodes` 恒 `null`；
-- 于是多输入汇合点**拿不到 `GroupData`**，只看到上一个节点写进 `Data` 的输出（`RuntimeEngine.cs` 的 `DriveAsync` 里注入条件不成立）；
-- 重定向按 `order < target` 跳过节点，而 `-1` 永远小于目标 ⇒ 这类节点在**重跑里不会被驱动**。
+Node 侧接口按方向分：
+
+| 方向 | 接口 | 不实现的后果 |
+|---|---|---|
+| Node → 编译器（提供上下文/决策） | `ICompileTimeRouter`、`IRedirectable` | 该节点不是路由器 / 没有回退策略，功能由别的机制补 |
+| 编译器 → Node（通知） | `ICompileTimeAware`（`AssignCompileIdentity` 调 `AttachCompileTimeContext`，发一份 `CompileContext` 快照）、`IRuntimeAware`（`DriveAsync` 推会话） | **没有后果**：引擎从不回读通知副本；`IRuntimeContext` 本来就是 `ReceiveAsync` 的参数。通知自己抛异常也只跳过通知 —— 编译期直接忽略，运行时写一行 `[RuntimeAware]` 日志后照常驱动 |
+
+`ICompileTimeAware` 的副本可被节点随意改，不影响运行（判别测试 `CompileIdentityOwnershipTests.EngineReadsTheGraphBinding_NotTheNodesNotificationCopy`）；`PlainNode`（什么都不实现）仍有汇合 `GroupData`、可被重定向重跑、错误记录带正确 Order（同文件其余用例）。
 
 ## 五、两条与「广播路径」的不对称
 
@@ -77,7 +83,7 @@
 
 ## 七、测试在哪、什么没测
 
-- 引擎子集在 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`：**全部用手写探针**（`ProbeNode` 实现 `ICompileTimeAware` / `IRuntimeAware`，`RedirectableNode : ProbeNode` 实现 `IRedirectable`）驱动，**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`** ⇒ 它证明的是「**契约被实现时**是对的」，不是「没实现时会怎样」—— 第四节那类静默降级正好落在覆盖之外。
+- 引擎子集在 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`：**全部用手写探针**（`ProbeNodeBase` 只有拓扑与调用记录；`ProbeNode` 加 `ICompileTimeAware` / `IRuntimeAware`；`PlainNode` 两者都不实现；`RedirectableNode : ProbeNode` 实现 `IRedirectable`），**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`**。`CompileIdentityOwnershipTests` 用 `PlainNode` 钉住「不实现通知接口时汇合/重定向/状态码仍正确」。
 - 并发契约由 `ParallelExecutionTests` 钉住（其中 `FanOut_CompilesToAParallelSegment` 是前置确认）：时间窗相交、上限为 1 时串行、分支只看得到扇出源载荷、**日志按真实时序**（因果交错：A 先记一行、等 B 记完再记第二行 → 断言 `A1 < B1 < A2`，成块合并必然读成 `A1, A2, B1`）、重定向取分支序最先。其中有的在串行引擎下必然失败（时间窗不相交 / `s0.Calls == 2`）。
 - 日志 sink 与上限另由 `CompilerLogWriterTests`（`Core.Test`）钉住：writer 与 `Logs` 逐行同序、上限只裁内存（`0` = 只落 writer）、**writer 抛异常不改变运行**（吞掉并报 `LogWriteFailed`）、分支的 `Warn` 不置会话的 `RedirectRequested`；Agent 路径那条在 `Core.Extension.Test` 的 `WorkflowLifecycleFidelityTests.WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink`。
 - **没测**：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 这几个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值。（重定向上限 50 次那条路由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 钉住。）
@@ -91,7 +97,7 @@
 1. **一个节点就能把整棵树拖进 payload**：节点的 `Parent` 是可写的 `IWorkflowTreeViewModel`，以图为根加载还会得到**第二棵孤儿树**作为节点的 Parent；slot 的 `Targets`/`Sources` 同理会把**整个连通分量**拖进来。⇒ 快照模式按**声明类型**排除这两类（`typeof(IWorkflowTreeViewModel)`、`typeof(ObservableCollection<IWorkflowSlotViewModel>)`），经 `SerializationOptions.WithExcludedPropertyTypes` 落到既有的 `WritablePropertiesOnlyResolver` 上（默认空 ⇒ 树的往返逐字不变）。**按名排除会误伤**：`Parent` 在 slot 上指的是它的**节点**，那是前向需要的。
 2. **枚举键会退化成 `long`**：实测钉在 `ComponentModelExTests.AnEnumInAnObjectMember_ComesBackAsItsNumber`，且 `TypeNameHandling.All` **也救不回来**。静态分支靠两边都退化相等；**动态分支在运行期重新解析出真枚举、与还原出的 `long` 永不相等** ⇒ 那条分支会像「没有下游」一样结束。⇒ `BranchSegment`/`BranchOption` 各带一个「键的类型名」侧信道（**只在键是枚举时**记录），在 `[OnDeserialized]` 里用 `CompileKeyNormalizer` 归一化。用 `[OnDeserialized]` 而不是生成的 setter：后者在编译器赋值时就会触发，加载时也可能早于类型名成员被读到。越界数字保持为未定义枚举值、类型名解析不到就原样保留，都不抛。
 
-**两种模式的代价**：默认**快照** = 段结构 + 每个节点自身的状态，**不可回灌**（还原节点无 `Parent` ⇒ 几何不再按缩放坍缩、移动不再标脏）；`includeTree: true` = 保留外向引用、可回灌，但 payload ≈ 整棵树 + 连通分量。两种模式下**还原节点的 `RuntimeId` 都是新的、编译身份都不在**（两者都不可写 ⇒ 被 resolver 丢掉），即第四节那条静默降级。
+**两种模式的代价**：默认**快照** = 段结构 + 每个节点自身的状态，**不可回灌**（还原节点无 `Parent` ⇒ 几何不再按缩放坍缩、移动不再标脏）；`includeTree: true` = 保留外向引用、可回灌，但 payload ≈ 整棵树 + 连通分量。两种模式下**还原节点的 `RuntimeId` 都是新的，还原图也没有绑定表**（绑定表是运行期状态，不进归档）⇒ `TryGetCompileInfo` 对所有还原节点返回 false、Order = -1。
 
 **列表视图有两条路**：嵌套模板直接绑 `Entries` / `Options` / `Branches`；想一次看到整张结构就用 `CompiledOutline.Of(graph)`（Core 的纯函数 → `Depth`/`Kind`/`Label`/`Nodes`，段类型词 `Execute`/`Branch`/`Parallel` 与 Agent 侧那份投影一致）。图在编译后冻结，所以拍平只需算一次。demo 的 Avalonia 侧栏已按后者做了一个面板：控制器编译后**推**给树（`TreeViewModel.RefreshCompiledStructure`，与 `Run` 推 `BeginWorkflowRun` 同一约定 —— 树不订阅控制器的属性变化），**其余六家只差同一段 XAML**。
 
@@ -128,7 +134,7 @@
 - **取消只进 sink，不进日志**：宿主自己停的运行不是失败，写一行 `[Error]` 会让以后读 `Logs` 的人以为出过错。`RunOutcome` 才是把 `"Stopped"` 拆成 Failed / Cancelled 的那个成员（`RunOutcome.Unknown` = 取消之外没跑完，例如异常穿出 `RunAsync`）。
 - **观察者与 sink 抛异常都不改运行**（各留一行日志）；补偿器抛异常不掩盖原始失败、也不中断其余节点；重试策略抛异常当作「不再试」。
 
-**宿主契约的失败点都与节点体同一套失败纪律（记 Error → 重定向或结束）**：`ResolveRouteKey`、`ResolveRedirectAsync` 与 `IRuntimeAware.AttachRuntimeContext`。少了它，宿主实现一抛异常就穿出 `RunAsync`、`Status` 停在 `"Running"`（会话谎称还在跑），或被空 catch 吞掉、节点被**无声跳过**。`EngineHostContractFailureTests` 的用例分别钉住；重定向上限那条路补 `Status = "Stopped"`，由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 覆盖。
+**决定走向的宿主契约，失败都与节点体同一套纪律（记 Error → 重定向或结束）**：`ResolveRouteKey` 与 `ResolveRedirectAsync`。少了它，宿主实现一抛异常就穿出 `RunAsync`、`Status` 停在 `"Running"`（会话谎称还在跑），或被空 catch 吞掉、节点被**无声跳过**。`EngineHostContractFailureTests` 的前两个用例分别钉住；重定向上限那条路补 `Status = "Stopped"`，由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 覆盖。`IRuntimeAware.AttachRuntimeContext` **不在这条纪律里**：它只是通知，抛异常写一行日志后节点体照常执行（`EngineHostContractFailureTests.AnAttachThatThrows_OnlySkipsTheNotification_TheRunContinues`）。
 
 **注释风格**：`CompilerEx` 的 `internal`/`private` 成员上仍是英语 `///`（`RuntimeEngine` 里那几个老私有方法、`BranchRuntimeContext` 整份），新写的行按手册 §二 用中文 `//`，文件里两种并存。
 
@@ -168,7 +174,6 @@
 
 | 未做 | 说明 |
 |---|---|
-| 节点缺契约时给一次提示 | 第四节那些降级目前完全静默；编译期警告或日志都还没做 |
 | 只编译的两个工具纳入闸门 | Agent 侧的 `CompileWorkflow`/`CompileNodeResult` 会写节点编译身份却不受 `WithAllowNodeExecution` 约束 —— 属 `VeloxDev.Core.Extension` 模块 |
 | 编译执行时补 `Sender`/`Receiver` | 第五节的不对称仍未消 |
 | `ExecuteCommandOnNode` 的完成语义 | Agent 侧它同步返回、不等完成，而同族的 `ExecuteNode` 会等 `Exited` —— 属 Extension 模块 |

@@ -32,6 +32,9 @@ public sealed class WorkflowAgentToolkit
     private readonly ToolCallLedger _ledger;
     private IWorkflowTreeViewModel Tree => _scope.Tree;
 
+    // 最近一次编译的产物：GetCompileStatus 不重新编译，编译身份从这张图上读。
+    private CompiledGraph? _lastCompiledGraph;
+
     /// <summary>
     /// Creates the toolkit for a scope that owns the session's tool-call allowance.
     /// </summary>
@@ -2411,6 +2414,7 @@ public sealed class WorkflowAgentToolkit
 
             var graphs = await new CompilerViewModel().CompileAsync(node, CompileRole.Root);
             if (graphs.Count == 0) return Error("Compile produced no graphs from this start node.");
+            _lastCompiledGraph = graphs[0];
 
             var run = new CompiledRun(NextHandle(), new ManualExecutionGate());
             run.Context = NewSession(seed, target: null, run);
@@ -2574,6 +2578,7 @@ public sealed class WorkflowAgentToolkit
                 return Error(role == CompileRole.Terminal
                     ? "Compile produced no graph for this terminal node."
                     : "Compile produced no graphs from this start node.");
+            _lastCompiledGraph = graphs[0];
 
             // The same session a background run gets — the scope's log writer, the host's configuration, the
             // checkpoint place, the failure records — apart from a gate, which this entry has no use for: it waits
@@ -3095,13 +3100,13 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Compiler Functions ──────────────────────────
 
-    [Description("Compiles the workflow sub-graph reachable from a start node (typically the controller/entry node) and returns the compiled plan: compiled segments (chain / branch / parallel), routing branches with their options/skipped/terminal flags, fan-out groups, and every compile-aware node's Order / ChainIndex / Offset. Order = -1 means the node is on a pruned static branch — absolute stop (do NOT drive it as part of the live chain). Compiling also attaches compile identity to nodes (updates IsCompileStopped badges). Use GetCompileStatus afterwards to read the identity without recompiling.")]
+    [Description("Compiles the workflow sub-graph reachable from a start node (typically the controller/entry node) and returns the compiled plan: compiled segments (chain / branch / parallel), routing branches with their options/skipped/terminal flags, fan-out groups, and every compiled node's Order / ChainIndex / Offset. Order = -1 means the node is on a pruned static branch — absolute stop (do NOT drive it as part of the live chain). Compiling also notifies nodes implementing ICompileTimeAware (updates IsCompileStopped badges); the engine itself never needs that interface. Use GetCompileStatus afterwards to read the identity without recompiling.")]
     private Task<string> CompileWorkflow(
         [Description("Node index of the compile entry point (usually the controller/entry node).")] int startNodeIndex,
         CancellationToken cancellationToken = default)
         => CompileRoleAsync(startNodeIndex, CompileRole.Root, cancellationToken);
 
-    [Description("Reverse-compiles a node's ancestor cone (Terminal role, read-only): the upstream producers feeding the node, traced backward from its input slots; returns the compiled plan that computes just that node's result — compiled segments plus every compile-aware node's Order / ChainIndex / Offset. No controller/start node is needed: the cone's entry frontier is derived automatically. Routers on the cone keep real BranchSegment semantics and only the branch leading to the node is compiled (sibling branches are absent, not Order=-1). If MORE THAN ONE route key of the same router reaches the node, compilation returns an error — a single forward run can only take one branch, so that node has no result; ask for a node on one of those branches instead. Same artifact shape as CompileWorkflow, scoped to the node instead of the whole reachable chain. Compiling attaches compile identity to the cone's nodes. Use GetCompileStatus afterwards to read the identity without recompiling.")]
+    [Description("Reverse-compiles a node's ancestor cone (Terminal role, read-only): the upstream producers feeding the node, traced backward from its input slots; returns the compiled plan that computes just that node's result — compiled segments plus every compiled node's Order / ChainIndex / Offset. No controller/start node is needed: the cone's entry frontier is derived automatically. Routers on the cone keep real BranchSegment semantics and only the branch leading to the node is compiled (sibling branches are absent, not Order=-1). If MORE THAN ONE route key of the same router reaches the node, compilation returns an error — a single forward run can only take one branch, so that node has no result; ask for a node on one of those branches instead. Same artifact shape as CompileWorkflow, scoped to the node instead of the whole reachable chain. Compiling notifies cone nodes implementing ICompileTimeAware. Use GetCompileStatus afterwards to read the identity without recompiling.")]
     private Task<string> CompileNodeResult(
         [Description("Node index whose ancestor cone to compile (its output is what a terminal run would compute).")] int nodeIndex,
         CancellationToken cancellationToken = default)
@@ -3115,6 +3120,7 @@ public sealed class WorkflowAgentToolkit
         {
             var compiler = new CompilerViewModel();
             var graphs = await compiler.CompileAsync(node, role, ct);
+            if (graphs.Count > 0) _lastCompiledGraph = graphs[0];
 
             var entries = new VeloxJsonArray();
             foreach (var g in graphs)
@@ -3135,7 +3141,7 @@ public sealed class WorkflowAgentToolkit
         }
     }
 
-    [Description("Returns the current compile identity of every compile-aware node (Order / ChainIndex / Offset, isStopped = Order == -1) WITHOUT recompiling. Call CompileWorkflow / CompileNodeResult first to populate it.")]
+    [Description("Returns the current compile identity of every compiled node (Order / ChainIndex / Offset, isStopped = Order == -1) WITHOUT recompiling. Call CompileWorkflow / CompileNodeResult first to populate it.")]
     private string GetCompileStatus()
     {
         var orders = BuildCompileOrders();
@@ -3288,20 +3294,23 @@ public sealed class WorkflowAgentToolkit
     private VeloxJsonArray BuildCompileOrders()
     {
         var arr = new VeloxJsonArray();
+        if (_lastCompiledGraph is not { } graph) return arr;
+
+        // 编译身份归编译产物：遍历树找「实现了通知接口的节点」会漏掉未实现 ICompileTimeAware 的节点。
         for (int i = 0; i < Tree.Nodes.Count; i++)
         {
             var n = Tree.Nodes[i];
-            if (n is ICompileTimeAware aware && aware.CompileContext is { } cc)
+            if (graph.TryGetCompileInfo(n, out var info) && info is not null)
             {
                 arr.Add(new VeloxJsonObject
                 {
                     ["i"] = i,
                     ["id"] = GetComponentId(n),
                     ["t"] = n.GetType().Name,
-                    ["order"] = cc.Order,
-                    ["chainIndex"] = cc.ChainIndex,
-                    ["offset"] = cc.Offset,
-                    ["isStopped"] = cc.Order == -1,
+                    ["order"] = info.Order,
+                    ["chainIndex"] = info.ChainIndex,
+                    ["offset"] = info.Offset,
+                    ["isStopped"] = info.Order == -1,
                 });
             }
         }

@@ -50,8 +50,8 @@
 - `IContext` — 工作流上下文体系的根契约，统一携带负载 `Data`（运行期为真实数据、编译身份为 null）。
 - `IAccessContext` — 一次数据流访问（边）：`IsCompilePhase`（true = 编译期静态检测，false = 运行期实时检测）、`Sender` / `Receiver`；节点的 `AccessAsync` 门禁入参。
 - `ITaskContext` — 任务载荷：`Data` / `Sender` / `Receiver`（均可空，继承自 `IAccessContext`）。主动唤起节点时构造它——`ExecuteNode` 的 `parameter` 即成为 `ITaskContext.Data`。
-- `IRuntimeContext` — 编译器运行时会话（UID / 日志 / 共享变量 / 状态 / 重定向状态；可写 `Data`）；编译驱动时由引擎注入。
-- `ICompileContext` — 编译期身份（Order / ChainIndex / Offset）；由 Compiler 注入。
+- `IRuntimeContext` — 编译器运行时会话（UID / 日志 / 共享变量 / 状态 / 重定向状态；可写 `Data`）；编译驱动时它就是 `ReceiveAsync` 的参数（`IRuntimeAware` 只是同一个对象的可选额外通知）。
+- `ICompileContext` — 编译期身份（Order / ChainIndex / Offset）；给实现 `ICompileTimeAware` 的节点的通知快照，权威副本在 `CompiledGraph.TryGetCompileInfo`。
 
 ## 插槽连接安全规则
 

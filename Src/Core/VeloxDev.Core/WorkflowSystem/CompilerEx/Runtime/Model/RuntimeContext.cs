@@ -9,9 +9,9 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// One runtime execution session (also the public VM carrying the UID):
 /// shared context (UID / sequence / logs / shared variables) plus execution position and decision
 /// state (maintained by the engine, bound to UI progress).
-/// Nodes implement <see cref="IRuntimeAware"/> and the engine injects this object before driving.
 /// Inherits <see cref="ITaskContext"/>: the compiler passes this session object directly into
 /// <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/> and writes <see cref="Data"/> per node.
+/// <see cref="IRuntimeAware"/> is only an optional extra notification of that same object.
 /// </summary>
 public sealed partial class RuntimeContext : IRuntimeContext
 {
@@ -61,6 +61,19 @@ public sealed partial class RuntimeContext : IRuntimeContext
     // 这次驱动报了什么级别：null = 干净返回，Warning = Warn()，Error = Error() 或抛异常。
     // 引擎按它决定停不停 —— Warning 完全不影响控制流（值照常传下去），Error 在没有处理者时结束整轮。
     internal ExecutionReportLevel? ReportedLevel { get; set; }
+
+    // 本次运行的编译绑定，RunAsync 开头从根图取一份写进来。引擎的主路径把绑定当参数往下传（宿主自带
+    // IRuntimeContext 时也拿得到），这里只服务具体类自己的两个方法：节点报错时取 Order、汇合聚合判保留前缀。
+    internal IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo>? CompileBindings { get; set; }
+
+    internal bool TryGetCompileInfo(IWorkflowNodeViewModel? node, out NodeCompileInfo? info)
+    {
+        if (node is not null && CompileBindings is { } bindings && bindings.TryGetValue(node, out info))
+            return true;
+
+        info = null;
+        return false;
+    }
 
     /// <summary>
     /// Whether this drive reported anything at all — a warning, an error, or a throw. The engine clears it before
@@ -352,7 +365,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
     internal async Task ReportNodeAsync(IWorkflowNodeViewModel? node, ExecutionReportLevel level, string message)
     {
         if (ErrorSink is not { } sink) return;
-        var order = (node as ICompileTimeAware)?.CompileContext?.Order ?? -1;
+        var order = TryGetCompileInfo(node, out var info) ? info!.Order : -1;
         var record = new ExecutionError(ExecutionFailurePhase.Node, node, message, null, Attempt, order, level);
         try
         {
@@ -441,5 +454,5 @@ public sealed partial class RuntimeContext : IRuntimeContext
     private bool IsCurrentPassOrPreserved(IWorkflowNodeViewModel source, (int Attempt, object? Value) entry)
         => entry.Attempt == Attempt
            || (ActiveRedirectTarget is int t
-               && (source as ICompileTimeAware)?.CompileContext?.Order is int o && o < t);
+               && TryGetCompileInfo(source, out var info) && info!.Order < t);
 }

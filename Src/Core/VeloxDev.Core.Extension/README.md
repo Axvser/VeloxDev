@@ -285,9 +285,10 @@ restored nodes have no `Parent`: their geometry no longer collapses for the canv
 marks a tree dirty. Reach for `includeTree: true` when the result must go back onto a canvas, and expect that
 document to cost about the size of the tree.
 
-⚙ **A restored node gets a fresh `RuntimeId` and carries no compile identity.** Neither member is writable, so a round
-trip cannot preserve them — `Order` is `-1` on a restored node, the same silent degradation a node that does not
-implement `ICompileTimeAware` already shows.
+⚙ **A restored node gets a fresh `RuntimeId`, and the restored graph has no compile bindings.** Neither member is
+writable and the binding table is runtime state, so a round trip cannot preserve them — `Order` is `-1` on every
+restored node. A node that does not implement `ICompileTimeAware` keeps its identity because the binding table lives
+on the graph, not on the node.
 
 ⚙ **Branch keys are the exception that is repaired.** An enum key would come back as its number — JSON has no notion
 of an enum inside an `object` member, measured, and no setting changes that — the archive format has no per-member

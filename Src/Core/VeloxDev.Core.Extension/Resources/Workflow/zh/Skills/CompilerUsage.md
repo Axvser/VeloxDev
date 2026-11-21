@@ -38,11 +38,11 @@ Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持�
 
 其他 Terminal 要点：
 - 若**同一个 router 有多条 route key 都通往被查询节点**，`CompileNodeResult` 会返回错误——单次正向运行只能走一条分支，该节点没有良定义的结果。
-- 编译驱动时引擎会给实现 `IRuntimeAware` 的节点注入 `IRuntimeContext` 会话（UID / 日志 / 共享变量 / 执行位置）。
+- 编译驱动时，每个节点都会把 `IRuntimeContext` 会话（UID / 日志 / 共享变量 / 执行位置）作为 `ReceiveAsync` 参数拿到。`IRuntimeAware` 只是同一个对象的可选额外通知。
 
 ### 编译身份（ICompileContext）
 
-每个实现 `ICompileTimeAware` 的节点在编译完成后都会拿到一个 `ICompileContext`：
+编译身份属于编译产物，不属于节点：`CompiledGraph.TryGetCompileInfo(node)` 对每个被编译的节点都查得到，与节点是否实现接口无关。实现 `ICompileTimeAware` 的节点会额外收到一份 `ICompileContext` 快照，那只是给显示用的通知——引擎从不回读它。
 
 | 成员 | 含义 |
 |---|---|
@@ -50,7 +50,7 @@ Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持�
 | `ChainIndex` | 线性段内索引。 |
 | `Offset` | 子图入口偏移。 |
 
-用 `GetCompileStatus` 查询（逐节点返回 `{i, id, t, order, chainIndex, offset, isStopped}`）。
+用 `GetCompileStatus` 查询（逐个编译节点返回 `{i, id, t, order, chainIndex, offset, isStopped}`）。
 
 ### 路由模式（RouterCompileMode）
 

@@ -17,8 +17,8 @@
 | 领域校验（`ValidateWorkflow` 的结构检查之外） | 实现 `IWorkflowTreeValidator`（`Name` + `Validate`），在程序集的模块初始化器里 `WorkflowValidation.Register(instance)`；每次调用取快照合并，单条记录带 `validator` 与可选 `code`。校验器只读树；抛错只记一条 `warn` | Core.Extension 的 `Agent/Workflow/Validation/WorkflowValidation.cs` |
 | 节点默认坐标/尺寸 | `[DefaultAnchor(h, v, layer)]` / `[DefaultSize(w, h)]`，可加在不带 `[WorkflowBuilder.*]` 的子类上 | `Templates/NodeLayoutAttributes.cs` 的 `DefaultAnchorAttribute` / `DefaultSizeAttribute` |
 | 分支路由节点 | 实现 `ICompileTimeRouter`（`GetRouteTable` + `ResolveRouteKey`） | `CompilerEx/Compile/Contracts/ICompileTimeRouter.cs` |
-| 读编译身份 | 实现 `ICompileTimeAware`（`CompileContext.Order/ChainIndex/Offset/InputNodes`） | `CompilerEx/Compile/Contracts/ICompileTimeAware.cs` |
-| 运行期读上下文 | 实现 `IRuntimeAware`（`AttachRuntimeContext`） | `CompilerEx/Runtime/Contracts/IRuntimeAware.cs` |
+| 读编译身份 | **不实现接口**：编译后用 `compiledGraph.TryGetCompileInfo(node, out var info)` 读 `NodeCompileInfo`。要在节点上显示徽标，才实现 `ICompileTimeAware` 收一份通知快照（引擎不回读） | `CompilerEx/Compile/Model/CompiledGraph.cs` 的 `TryGetCompileInfo`；`CompilerEx/Compile/Contracts/ICompileTimeAware.cs` |
+| 运行期读上下文 | **不实现接口**：把 `ReceiveAsync` 收到的 `ITaskContext` 转成 `IRuntimeContext`（编译运行时它就是同一个会话）。`IRuntimeAware` 只在需要运行开始前就持有会话（例如给 UI 绑定）时才实现 | `CompilerEx/Runtime/Contracts/IRuntimeContext.cs`；`CompilerEx/Runtime/Contracts/IRuntimeAware.cs` |
 | 重定向（回退到上游节点重跑） | 实现 `IRedirectable`（`ResolveRedirectAsync` 返回上游节点） | `CompilerEx/Runtime/Contracts/IRedirectable.cs` |
 | 运行要能**中途存盘、之后再接着跑** | 配 `RuntimeContext.CheckpointStore`（`IExecutionCheckpointStore`，Core 自带 `InMemoryCheckpointStore`，落盘用 `Core.Extension` 的 `FileCheckpointStore`）；恢复把 store 里的 `ExecutionCheckpoint` 传给 `RuntimeEngine.RunAsync(graph, context, ct, resumeFrom)`。**图必须是同一张**（指纹不符会拒），序列化往返过的图恢复不了 | `CompilerEx/Runtime/Contracts/IExecutionCheckpointStore.cs`；[compiler-execution.md](compiler-execution.md) §十一 |
 | 运行要能暂停 / 观察 / 重试 / 收结构化错误 / 失败后补偿 / 失败后退回宿主指定的上游 | **不是实现接口，是往会话插一个对象**：`RuntimeContext` 的 `ExecutionGate` / `Observer` / `RetryPolicy` / `ErrorSink` / `Compensation` / `HostRedirect`。六个契约都随库带默认实现（`ManualExecutionGate`、`ExponentialBackoffRetry`…）与委托适配器，不配置就什么都没有；`HostRedirect` 只对**没有** `IRedirectable` 的失败节点生效 | `CompilerEx/Runtime/Model/RuntimeContext.cs`（「可选能力」一节）；语义见 [compiler-execution.md](compiler-execution.md) §十 与 §六 |
@@ -108,13 +108,12 @@
 | 16 | 手写 `Targets`/`Sources` 来建连接 | 会漏掉 `LinksMap`、两端 slot 的状态位、以及 undo 项 | 只用两阶段 `SendConnection` / `ReceiveConnection`（**没有**公开的「连这两个节点」API） | `StandardEx/WorkflowTreeEx.cs` 的 `StandardSendConnection` / `StandardReceiveConnection`；`Templates/Helpers/TreeHelper.cs` 的 `SendConnection` / `ReceiveConnection` |
 | 17 | 用值相等比较节点 / 用 `IWorkflowNodeViewModel` 当字典键但没给比较器 | 节点/插槽是引用身份；`GroupData` 的 Key 就是节点引用 | 用 `WorkflowReferenceEqualityComparer<T>.Instance` | `GUI/Virtualization/WorkflowSpatialEx.cs` 的 `WorkflowReferenceEqualityComparer<T>`；`CompilerEx/Runtime/Model/RuntimeContext.cs` 的 `_outputs` |
 | 18 | 深拷贝 `CanvasLayout` 以外的几何记录后当状态保存 | `Anchor`/`Size` 的折叠临时对象带 `_owner`/`_collapseScale`；序列化靠它们回写原值 | 需要克隆走 `Clone()`；需要保存走序列化钩子 | `GUI/GeometryModels/Anchor.cs` 的 `_collapseScale` / `_owner` 与三个序列化钩子 |
-| 19 | 在 `ReceiveAsync` 里想读写「共享变量」，却发现 `context` 上没有 `Set`/`TryGet` | `ReceiveAsync` 收的是 `ITaskContext`，它**只有**继承来的 `Data`/`Sender`/`Receiver`/`IsCompilePhase`（`Interfaces/WorkflowSystem/Execution/ITaskContext.cs` 的 `ITaskContext`、`IContext.cs` 的 `IContext`）。`Set`/`TryGet` 在 `IRuntimeContext` 上（`CompilerEx/Runtime/Model/RuntimeContext.cs` 的 `Set` / `TryGet`） | 实现 `IRuntimeAware` 拿 `IRuntimeContext`（`CompilerEx/Runtime/Contracts/IRuntimeAware.cs`），或把状态放在 `Data` 里往下传 | 同上 |
+| 19 | 在 `ReceiveAsync` 里想读写「共享变量」，却发现 `context` 上没有 `Set`/`TryGet` | `ReceiveAsync` 收的是 `ITaskContext`，它**只有**继承来的 `Data`/`Sender`/`Receiver`/`IsCompilePhase`（`Interfaces/WorkflowSystem/Execution/ITaskContext.cs` 的 `ITaskContext`、`IContext.cs` 的 `IContext`）。`Set`/`TryGet` 在 `IRuntimeContext` 上（`CompilerEx/Runtime/Model/RuntimeContext.cs` 的 `Set` / `TryGet`），编译运行时传进来的实际对象就是它 | `ctx as IRuntimeContext` 后直接调用；`IRuntimeAware` 不是必需的 | 同上 |
 | 19b | 在 `ReceiveAsync` 里改共享状态，并指望它只属于自己这条分支 | 扇出分支**是并发交错的**（`RunParallelAsync` 用 `Task.WhenAll`）：`Data`、重定向旗标、日志由每分支的 `BranchRuntimeContext` 隔离，但**黑板 `Set`/`TryGet` 仍然共享** —— 按契约它就是全跑共享的，两个分支写同一个键是**竞态** | 分支私有的东西放 `Data` 或自己的字段；`Set`/`TryGet` 只放「整个运行共享」的状态 | `CompilerEx/Runtime/Model/BranchRuntimeContext.cs`；[compiler-execution.md](compiler-execution.md) §一/§三 |
 | 20 | 在适配器里 `new` 一个自己的 Tree/Node | 视图必须绑定到**已经 `InitializeWorkflow()` 过**的组件；适配器只负责视图池化与几何 | 组件由用户 ViewModel 层提供，适配器只消费 | `Templates/ViewModels/*.cs` 的构造即 `InitializeWorkflow()` |
 | 21 | `[SlotSelectors]` 标了却还想让 Agent 用 `PatchNodeProperties` 改它 | 工具面**主动拒绝**并指向专用工具 | 用 `SetEnumSlotCollection` | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/ComponentPatcher.cs` 里 `// Reject [SlotSelectors]-marked properties` 那一段 |
 | 22 | 连线视图在悬停时取键盘焦点（为了让 Delete 生效），却不拦平台随之而来的「把焦点元素滚进视口」 | 连线视图的框往往是**整块画布大小** ⇒ 焦点一落上去，滚动容器就把画布跳一段。三家机制不同：Avalonia 是 `ScrollViewer.BringIntoViewOnFocusChange`（默认 true）、WPF 是 `RequestBringIntoView`、Jalium 是平台的安全区/软键盘事件分支延迟发的 `BringIntoView`（**极小概率**：需「表面持有焦点 + 该事件 + 其后一次布局」同时成立） | 在**该视图自己**身上吃掉这条请求（`AddHandler(RequestBringIntoViewEvent, …, e => e.Handled = true)`；Jalium 那种要按 `TargetObject == this` 收窄）。**不要**关掉整块画布的自动滚进视口 —— 节点卡里输入框的同类请求仍该生效 | 七家非 Trimmed demo 的实测见各自 `adapters/<平台>.md` §五；Avalonia 的因果 A/B 与 Jalium 的 IL 级机制链都记在那里 |
 | 23 | 在节点里 `Warn(...)` 一句，以为它像 `Error(...)` 一样会停住整轮（或反过来：`Error(...)` 一句以为只是记个日志） | 两档不同：`Warn` **完全不影响控制流**（值照传、连 `IRedirectable` 都不问）；`Error` 与未捕获的异常是**停止** —— 没人能处理就结束整轮（`CurrentOrder = -1`、`EndedWithError`）。而全仓生产代码没有一个 `IRedirectable` 实现者，所以「有没有人处理」的答案目前恒为「没有」 | 只是想说句话 → `Log`；想记一笔让宿主看得到但不打断 → `Warn`/`WarnAsync`；这一步失败、整轮该停 → `Error`/`ErrorAsync`；想改路线而不是停 → 实现 `IRedirectable` | `CompilerEx/Runtime/RuntimeEngine.cs` 的 `RunExecuteAsync` / `DriveAsync`；[compiler-execution.md](compiler-execution.md) §六 |
-| 24 | 写自研节点时不实现 `ICompileTimeAware` / `IRuntimeAware` | 三个契约**都不在** `IWorkflowNodeViewModel` 的继承链上，Core 的 `NodeDefaultViewModel` 也不实现、生成器也不补 ⇒ **静默降级**：`Order` 恒 `-1`、多输入汇合点拿不到 `GroupData`、重定向重跑里不会被驱动。只有 demo 的节点实现了它们 | 需要编译身份/汇合聚合/重定向就显式实现；照着 demo 的节点写 | `Interfaces/WorkflowSystem/Components/IWorkflowNodeViewModel.cs` 的 `IWorkflowNodeViewModel` 接口；[compiler-execution.md](compiler-execution.md) §四 |
 | 25 | 自己写一个 `IRuntimeContext` 实现（或从别处拿一个），指望暂停 / 观察 / 重试 / 错误 sink / 补偿 / 宿主重定向照旧生效 | 那六个是 `RuntimeContext` 的**具体类成员**，引擎按 `context as RuntimeContext`（扇出内透过 `BranchRuntimeContext.Session`）取 —— 换掉实现就**静默**一个也拿不到。与 `MaxParallelBranches`、`LogWriter` 同样的取舍（给 `IRuntimeContext` 加成员会破坏每个外部实现） | 要用这几条就 `new RuntimeContext(...)` 并把对象插上去；自定义实现只在确实不需要它们时用 | `CompilerEx/Runtime/RuntimeEngine.cs` 的 `Session(IRuntimeContext)`；`CompilerEx/Runtime/Model/RuntimeContext.cs` 的「可选能力」一节 |
 
 | 26 | 把「容忍多近才不动」「钉住不移动」写进 `TileSeparationStage` 的分支 | 产品规则就绑死在一个阶段上，未来换分层方案时无法整体替换；硬违规与软对齐的边界也会散在代码里 | 实现 `IWorkflowLayoutPositionPolicy`，由 `TileSeparationStage` 构造函数注入；硬违规仍由阶段强制修复 | `Src/Core/VeloxDev.Core/WorkflowSystem/Layout/TileSeparationStage.cs` 的 `_policy.ShouldApply`；`TolerancePositionPolicy.cs` |
@@ -194,7 +193,7 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 
 ### 3.7 加一个可重定向节点
 
-实现 `IRedirectable`，在 `ResolveRedirectAsync` 里返回**上游节点**（`IWorkflowNodeViewModel?`）；引擎自己把它映射成 `CompileContext.Order`。
+实现 `IRedirectable`，在 `ResolveRedirectAsync` 里返回**上游节点**（`IWorkflowNodeViewModel?`）；引擎从图的绑定表把它映射成编译 Order。
 - 目标必须能由请求节点经 `SearchReverseNodes` 到达，且 `Order >= 0`（在本次编译图里）；下游、兄弟分支、被剪枝的节点、无关链都会被忽略并写一行日志。
 - 单次运行最多 `MaxRedirects = 50`（`RunAsync` 内的常量）。
 - 被跳过的节点再次执行时，只有 `Attempt == 当前 Attempt` 或 `Order < ActiveRedirectTarget` 的输出才被采信（`CompilerEx/Runtime/Model/RuntimeContext.cs` 的 `IsCurrentPassOrPreserved`）。**这是「前缀保留」契约**：终止节点之前的产物可以直接用，之后的一律重算。
@@ -299,7 +298,7 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 - [ ] **`RuntimeEngine.RunGraphAsync` 的段分派**：`CompilerEx/Runtime/RuntimeEngine.cs` 的 `RunGraphAsync`（`RunExecuteAsync` / `RunBranchAsync` / `RunParallelAsync`）—— 加段类型必须加分支
 - [ ] **`Context` 契约**：`CompilerEx/Runtime/Contracts/IRuntimeContext.cs` 与 `CompilerEx/Compile/Contracts/ICompileContext.cs` 加成员会影响所有实现
 - [ ] `VeloxDev.Core.Test/WorkflowSystem/CompilerEx/` 的探针节点（`ProbeNodes.cs`）—— 这是唯一覆盖编译/运行路径的测试面
-- [ ] AI 工具面的 `CompileNodeResult` / `BuildCompileOrders`（`WorkflowAgentToolkit.cs`）—— 它读 `ICompileTimeAware.CompileContext` 并据此判 `isStopped`
+- [ ] AI 工具面的 `CompileNodeResult` / `BuildCompileOrders`（`WorkflowAgentToolkit.cs`）—— 它读最近一次编译产物 `_lastCompiledGraph.TryGetCompileInfo` 并据此判 `isStopped`
 
 ### 4.5 加一个 **AI 工具**
 

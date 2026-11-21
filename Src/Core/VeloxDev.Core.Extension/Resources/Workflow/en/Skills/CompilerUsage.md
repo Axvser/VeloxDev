@@ -5,7 +5,7 @@ description: Drive the workflow compiler — CompileWorkflow (Root plan) vs Comp
 
 ## 🧭 Skill: Compiler & Compile-Time Routing
 
-The WorkflowSystem has a compiler that decomposes a sub-graph into a compiled plan — chain segments (`ChainSegment`, reported as `Execute`), routing points (`BranchSegment`, reported as `Branch`) and fan-out groups (`ParallelSegment`, reported as `Parallel`) — and assigns every compile-aware node a fixed **compile identity**. The compile tools give you the same view the compiler UI shows.
+The WorkflowSystem has a compiler that decomposes a sub-graph into a compiled plan — chain segments (`ChainSegment`, reported as `Execute`), routing points (`BranchSegment`, reported as `Branch`) and fan-out groups (`ParallelSegment`, reported as `Parallel`) — and assigns every compiled node a fixed **compile identity**. The compile tools give you the same view the compiler UI shows.
 
 Every compile call names one node and a role for it:
 - **Root** — the node is the start/entry (e.g. a controller); compile its reachable sub-graph downstream.
@@ -38,11 +38,11 @@ To get a value for such a node:
 
 Other Terminal notes:
 - `CompileNodeResult` returns an error when **more than one route key of the same router** reaches the queried node — a single forward run can only take one branch, so that node has no well-defined result.
-- During the compiled run the engine injects an `IRuntimeContext` session (UID / logs / shared variables / execution position) into nodes implementing `IRuntimeAware`.
+- During a compiled run every node receives an `IRuntimeContext` session (UID / logs / shared variables / execution position) as its `ReceiveAsync` argument. `IRuntimeAware` is only an optional extra notification of the same object.
 
 ### Compile identity (ICompileContext)
 
-Every node implementing `ICompileTimeAware` receives an `ICompileContext` after compilation:
+Compile identity belongs to the compiled graph, not to the node: `CompiledGraph.TryGetCompileInfo(node)` reports it for every compiled node, whether or not the node implements anything. A node implementing `ICompileTimeAware` additionally receives an `ICompileContext` snapshot, which is a notification for display — the engine never reads it back.
 
 | Member | Meaning |
 |---|---|
@@ -50,7 +50,7 @@ Every node implementing `ICompileTimeAware` receives an `ICompileContext` after 
 | `ChainIndex` | Index within a linear segment. |
 | `Offset` | Sub-graph entry offset. |
 
-Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset, isStopped}` per node).
+Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset, isStopped}` per compiled node).
 
 ### Routing modes (RouterCompileMode)
 
@@ -72,7 +72,7 @@ Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset,
 3. **Respect stopped nodes** — a node with `Order = -1` is compiled out of the active path. Do NOT drive it as part of the live chain.
 4. **Run the whole chain** — call `RunCompiledWorkflow(nodeIndex)` to execute the compiled chain end-to-end (the demo's Run path). Read the returned `runStatus` (`Completed` / `Stopped`), `logs` (the execution trail), `data` (final payload) and `endedWithError`.
 5. **Get one node's result** — call `GetNodeResult(nodeIndex)` to compute just that node from its ancestor cone. If it returns an error saying the node was NOT reached, the router selected a different branch (see above) — do not fabricate, follow the recovery steps instead.
-6. **Runtime session** — during a compiled run the engine injects an `IRuntimeContext` session (UID / logs / shared variables / execution position) into nodes implementing `IRuntimeAware`. Shared variables are written with `Set(key, value)` and read with `TryGet(key, ...)`.
+6. **Runtime session** — during a compiled run every node receives an `IRuntimeContext` session (UID / logs / shared variables / execution position) as its `ReceiveAsync` argument. Shared variables are written with `Set(key, value)` and read with `TryGet(key, ...)`.
 
 ### Long, holdable or recoverable runs
 

@@ -16,8 +16,9 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 ///    terminal branch;
 ///  - the node all branch exits jointly point to → join point, used as the start of the next chain segment in the
 ///    parent graph (order carries an offset, not reset to zero);
-///  - after compiling, every node implementing <see cref="ICompileTimeAware"/> is injected with a
-///    <see cref="CompileContext"/>.
+///  - every compiled node's identity is recorded in the graph's binding table
+///    (<see cref="CompiledGraph.TryGetCompileInfo"/>); a node implementing <see cref="ICompileTimeAware"/> is also
+///    notified with a <see cref="CompileContext"/> copy, but the runtime never reads that copy back.
 /// Runtime redirect is handled by nodes implementing <see cref="IRedirectable"/> (in-chain redirect); the compiled
 /// graph itself is acyclic.
 /// </summary>
@@ -81,7 +82,7 @@ public sealed partial class CompilerViewModel
             if (node is ICompileTimeRouter router)
             {
                 FlushChain(entries, chain, state, offset);
-                AttachCompileContext(node, state.Counter, 0, offset, state);
+                AssignCompileIdentity(node, state.Counter, 0, offset, state);
                 state.Counter++;
 
                 var routeTable = await router.GetRouteTable();
@@ -149,7 +150,8 @@ public sealed partial class CompilerViewModel
                             Entries = new ObservableCollection<CompileSegment>
                             {
                                 new ParallelSegment { Branches = new ObservableCollection<CompiledGraph>(branches) },
-                            }
+                            },
+                            CompileBindings = state.Bindings,
                         },
                     });
                     // Add the last node of each fan-out branch to the exits; CommonNext will compute their common downstream (join point).
@@ -245,7 +247,11 @@ public sealed partial class CompilerViewModel
         }
 
         FlushChain(entries, chain, state, offset);
-        return new CompiledGraph { Entries = new ObservableCollection<CompileSegment>(entries) };
+        return new CompiledGraph
+        {
+            Entries = new ObservableCollection<CompileSegment>(entries),
+            CompileBindings = state.Bindings,
+        };
     }
 
     /// <summary>Flushes the current linear chain into an ChainSegment and assigns each node in the chain a compile identity.</summary>
@@ -254,23 +260,42 @@ public sealed partial class CompilerViewModel
     {
         if (chain.Count == 0) return;
         for (int i = 0; i < chain.Count; i++)
-            AttachCompileContext(chain[i], state.Counter + i, i, offset, state);
+            AssignCompileIdentity(chain[i], state.Counter + i, i, offset, state);
         state.Counter += chain.Count;
         entries.Add(new ChainSegment { Nodes = new ObservableCollection<IWorkflowNodeViewModel>(chain) });
         chain.Clear();
     }
 
-    private static void AttachCompileContext(IWorkflowNodeViewModel node, int order, int chainIndex, int offset,
+    private static void AssignCompileIdentity(IWorkflowNodeViewModel node, int order, int chainIndex, int offset,
         CompileState state)
     {
+        var info = new NodeCompileInfo(
+            order,
+            chainIndex,
+            offset,
+            state.JoinInputs.TryGetValue(node, out var inputs) ? inputs : null);
+
+        // 权威副本留在图上：引擎只读这一份，节点实现与否都不影响汇合与重定向。
+        state.Bindings[node] = info;
+
+        // 给节点的那一份只是通知（例如显示编译徽标）；节点改了它也不会影响上面的绑定表。
+        // 通知失败同样不属于编译失败：产物已经完整，节点自己的显示问题不该挡住编译。
         if (node is ICompileTimeAware aware)
-            aware.AttachCompileTimeContext(new CompileContext
+        {
+            try
             {
-                Order = order,
-                ChainIndex = chainIndex,
-                Offset = offset,
-                InputNodes = state.JoinInputs.TryGetValue(node, out var inputs) ? inputs : null,
-            });
+                aware.AttachCompileTimeContext(new CompileContext
+                {
+                    Order = info.Order,
+                    ChainIndex = info.ChainIndex,
+                    Offset = info.Offset,
+                    InputNodes = info.InputNodes,
+                });
+            }
+            catch (Exception)
+            {
+            }
+        }
     }
 
     /// <summary>
@@ -288,7 +313,7 @@ public sealed partial class CompilerViewModel
             if (state.Visited.Contains(n)) continue;
             if (!ReferenceEquals(n, start) && HasMultipleInputs(n)) continue;
             state.Visited.Add(n);
-            AttachCompileContext(n, -1, -1, 0, state);
+            AssignCompileIdentity(n, -1, -1, 0, state);
             foreach (var t in AllTargets(n))
                 if (t is not null) queue.Enqueue(t);
         }
@@ -460,6 +485,13 @@ public sealed partial class CompilerViewModel
 
         /// <summary>Join point → input source node list (registered from each branch exit at compile-time, so the join point's compile identity can backfill InputNodes).</summary>
         public readonly Dictionary<IWorkflowNodeViewModel, IReadOnlyList<IWorkflowNodeViewModel>> JoinInputs =
+            new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+
+        /// <summary>
+        /// Node → compile identity for this whole compile. Every graph produced by it shares this instance, so the
+        /// runtime has one table to read from the root graph.
+        /// </summary>
+        public readonly Dictionary<IWorkflowNodeViewModel, NodeCompileInfo> Bindings =
             new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
     }
 }

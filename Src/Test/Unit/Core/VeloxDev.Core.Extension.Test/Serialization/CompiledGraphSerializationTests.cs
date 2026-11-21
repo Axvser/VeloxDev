@@ -238,6 +238,26 @@ public class CompiledGraphSerializationTests
             "RuntimeId is a get-only member, so a restored node gets a fresh one");
     }
 
+    /// <summary>
+    /// The binding table is runtime state, not document content: a restored graph reports no identity for its nodes,
+    /// exactly as if they had never been compiled.
+    /// </summary>
+    [TestMethod]
+    public void ASnapshot_DoesNotCarryTheCompileBindings()
+    {
+        var (_, _, graph) = CompiledDemo();
+        var liveNode = FirstNode(graph);
+        Assert.IsTrue(graph.TryGetCompileInfo(liveNode, out var liveInfo),
+            "precondition: the live graph knows its nodes' identities");
+        Assert.IsNotNull(liveInfo);
+
+        var restored = graph.SerializeCompiledGraph().DeserializeCompiledGraph();
+
+        Assert.IsFalse(restored!.TryGetCompileInfo(FirstNode(restored), out var restoredInfo),
+            "the binding table must not be serialized");
+        Assert.IsNull(restoredInfo);
+    }
+
     /// <summary>A one-line-per-segment description, so a structure mismatch is readable in the failure message.</summary>
     private static string Describe(CompiledGraph graph)
     {

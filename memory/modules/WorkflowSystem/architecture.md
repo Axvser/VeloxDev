@@ -130,8 +130,10 @@ CompilerViewModel.CompileAsync<T>(node, role, ct)          CompilerEx/Compile/Co
   ↓ 产出
 CompiledGraph { Entries: CompileSegment[] }                CompilerEx/Compile/Model/CompiledGraph.cs 的 CompiledGraph
   段有三种：ChainSegment / BranchSegment / ParallelSegment
-  ↓ 每个节点被 AttachCompileTimeContext 注入 CompileContext { Order, ChainIndex, Offset, InputNodes }
-                                                           CompilerViewModel.cs 的 AttachCompileTimeContext
+  ↓ 每个节点把 NodeCompileInfo { Order, ChainIndex, Offset, InputNodes } 记进图自带的绑定表
+    graph.TryGetCompileInfo(node)                          CompiledGraph.cs 的 CompileBindings / TryGetCompileInfo
+    （实现 ICompileTimeAware 的节点另收一份 CompileContext 通知，引擎不回读）
+                                                           CompilerViewModel.cs 的 AssignCompileIdentity
   ↓
 RuntimeEngine.RunAsync(graph, IRuntimeContext, ct)         CompilerEx/Runtime/RuntimeEngine.cs 的 RunAsync
   → RunGraphAsync / RunExecuteAsync / RunBranchAsync / RunParallelAsync（均在 RuntimeEngine.cs）
@@ -148,7 +150,7 @@ RuntimeEngine.RunAsync(graph, IRuntimeContext, ct)         CompilerEx/Runtime/Ru
 
 **UI 可见的写入必须回宿主上下文**：命令体在 `CommandPipeline` 的线程池线程继续执行（锁后 `ConfigureAwait(false)`），而 `HasCompiledGraphs` / `RuntimeContext` / `IsActive` / `BeginWorkflowRun` 都被 WinUI 绑定；WinUI 不替后台 `PropertyChanged` 编组，WPF 容忍。demo 的 `ControllerViewModel` 在构造时记下 `SynchronizationContext`，把这些写入包回创建线程；headless 无上下文时原地执行。执行期间节点自己的 `LastStatus` 等属性若在引擎线程写，平台绑定同样可能不刷新。
 
-**汇合聚合**：`CompileContext.InputNodes.Count > 1` 时，`DriveAsync` 注入 `new GroupData(context.CollectGroupedInputs(inputs))` 作为 `Data`（`RuntimeEngine.cs` 的 `DriveAsync`），它是一个只读字典 `IReadOnlyDictionary<IWorkflowNodeViewModel, object?>`（`CompilerEx/Runtime/Model/GroupData.cs` 的 `IGroupData` / `GroupData`），Key = 来源 Node 的**引用身份**（比较器是 `WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>`，`GUI/Virtualization/WorkflowSpatialEx.cs` 末尾的 `WorkflowReferenceEqualityComparer<T>`）。单输入时 `Data` 保持裸链式传递，`InputNodes` 为 `null`。
+**汇合聚合**：绑定表里的 `NodeCompileInfo.InputNodes.Count > 1` 时，`DriveAsync` 注入 `new GroupData(context.CollectGroupedInputs(inputs))` 作为 `Data`（`RuntimeEngine.cs` 的 `DriveAsync`），它是一个只读字典 `IReadOnlyDictionary<IWorkflowNodeViewModel, object?>`（`CompilerEx/Runtime/Model/GroupData.cs` 的 `IGroupData` / `GroupData`），Key = 来源 Node 的**引用身份**（比较器是 `WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>`，`GUI/Virtualization/WorkflowSpatialEx.cs` 末尾的 `WorkflowReferenceEqualityComparer<T>`）。单输入时 `Data` 保持裸链式传递，`InputNodes` 为 `null`。
 
 ### 3.4 渲染（几何）
 

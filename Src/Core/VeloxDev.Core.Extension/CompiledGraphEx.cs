@@ -36,9 +36,10 @@ namespace VeloxDev.Serialization;
 /// </list>
 /// <para>
 /// Independently of the mode, a restored node gets a <b>fresh <c>RuntimeId</c></b> (it is not a writable member) and
-/// carries <b>no compile identity</b> (<c>ICompileTimeAware.CompileContext</c> is not writable either). Branch keys
-/// are the exception that is repaired: an enum key comes back as its number from any round trip, so the compiler
-/// records the type beside it and it is restored on load — see <c>CompileKeyNormalizer</c>.
+/// the restored graph carries <b>no compile bindings</b> — the identity table is runtime state, so
+/// <see cref="CompiledGraph.TryGetCompileInfo"/> reports false for every restored node. Branch keys are the
+/// exception that is repaired: an enum key comes back as its number from any round trip, so the compiler records
+/// the type beside it and it is restored on load — see <c>CompileKeyNormalizer</c>.
 /// </para>
 /// </summary>
 public static class CompiledGraphEx
