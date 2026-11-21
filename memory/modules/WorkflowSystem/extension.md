@@ -16,6 +16,7 @@
 | 连接规则 | 重写 `TreeHelper<T>.ValidateConnection(sender, receiver)`（默认 `true`） | `Templates/Helpers/TreeHelper.cs` 的 `TreeHelper<T>.ValidateConnection` |
 | 领域校验（`ValidateWorkflow` 的结构检查之外） | 实现 `IWorkflowTreeValidator`（`Name` + `Validate`），在程序集的模块初始化器里 `WorkflowValidation.Register(instance)`；每次调用取快照合并，单条记录带 `validator` 与可选 `code`。校验器只读树；抛错只记一条 `warn` | Core.Extension 的 `Agent/Workflow/Validation/WorkflowValidation.cs` |
 | 节点默认坐标/尺寸 | `[DefaultAnchor(h, v, layer)]` / `[DefaultSize(w, h)]`，可加在不带 `[WorkflowBuilder.*]` 的子类上 | `Templates/NodeLayoutAttributes.cs` 的 `DefaultAnchorAttribute` / `DefaultSizeAttribute` |
+| 读节点的世界坐标/尺寸（setter 收的那一帧） | `node.GetWorldAnchor()` / `node.GetWorldSize()`；底层是 `Anchor.Expand(scale)` / `Size.Expand(scale)`，与 getter 的 `Collapse` 互逆。直接读 `node.Anchor` 拿到的是折叠帧 | `StandardEx/WorkflowNodeEx.cs` 的 `GetWorldAnchor` / `GetWorldSize`；`GUI/GeometryModels/Anchor.cs` 的 `Collapse` / `Expand` |
 | 分支路由节点 | 实现 `ICompileTimeRouter`（`GetRouteTable` + `ResolveRouteKey`） | `CompilerEx/Compile/Contracts/ICompileTimeRouter.cs` |
 | 读编译身份 | **不实现接口**：编译后用 `compiledGraph.TryGetCompileInfo(node, out var info)` 读 `NodeCompileInfo`。要在节点上显示徽标，才实现 `ICompileTimeAware` 收一份通知快照（引擎不回读） | `CompilerEx/Compile/Model/CompiledGraph.cs` 的 `TryGetCompileInfo`；`CompilerEx/Compile/Contracts/ICompileTimeAware.cs` |
 | 运行期读上下文 | **不实现接口**：把 `ReceiveAsync` 收到的 `ITaskContext` 转成 `IRuntimeContext`（编译运行时它就是同一个会话）。`IRuntimeAware` 只在需要运行开始前就持有会话（例如给 UI 绑定）时才实现 | `CompilerEx/Runtime/Contracts/IRuntimeContext.cs`；`CompilerEx/Runtime/Contracts/IRuntimeAware.cs` |
@@ -96,7 +97,7 @@
 | 4 | 依赖 `WorkflowGuard.Fail` 在 Release 里挡错误输入 | `[Conditional("DEBUG")]` 把**整个调用点连同消息参数**编译掉。Release 是彻底空操作 | 在调用方自己判断并处理；把它当 debug 断言，不当运行时防御 | `WorkflowGuard.cs` 的 `WorkflowGuard.Fail`（`[Conditional("DEBUG")]`）；`StandardEx/WorkflowSlotEx.cs` 的 `StandardSetChannel` |
 | 5 | 手动往 `Helper.VisibleItems` 里塞/删元素 | 空间索引与实际可见集脱钩，之后查询与渲染都不一致 | 改 `Viewport`（同步虚拟化）或 `MarkDirty()`（下一 tick 把虚拟化 + 广播布局送回宿主上下文执行） | `GUI/Virtualization/WorkflowSpatialEx.cs` 的 `VirtualizeCore`；`Templates/Helpers/TreeHelper.cs` 的 `Update` / `MarkDirty` |
 | 6 | 在 `Virtualize` 之外自己写一套「哪些节点可见」的副本 | 副本会漂；`BroadcastVisibleItemLayout` 只对权威 `VisibleItems` 重发 `Anchor`/`Size` | 只用 `VisibleItems` + `VisibleItemAdded/Removed` 事件 | `Templates/Helpers/TreeHelper.cs` 的 `VisibleItemAdded` / `VisibleItemRemoved` 与 `BroadcastVisibleItemLayout` |
-| 7 | 在适配器里重新实现坐标换算（`ToWorld`/`ClampScrollOffset`/`SlotAnchorFrom*`） | 自己内联会让七家行为各不相同；`WorkflowSurfaceMath` 是唯一的坐标数学 | 调 `WorkflowSurfaceMath` 的静态方法 | `GUI/Math/WorkflowSurfaceMath.cs` 的 `WorkflowSurfaceMath` |
+| 7 | 在适配器里重新实现坐标换算（`ToCanvasLocal`/`ClampScrollOffset`/`SlotAnchorFrom*`） | 自己内联会让七家行为各不相同；`WorkflowSurfaceMath` 是唯一的坐标数学 | 调 `WorkflowSurfaceMath` 的静态方法 | `GUI/Math/WorkflowSurfaceMath.cs` 的 `WorkflowSurfaceMath` |
 | 8 | 手写一个 ViewModel 但不在构造函数里调 `InitializeWorkflow()` | Helper 永远不会 `Install`，命令与事件全都不工作，且**不报错** | 构造函数第一行 `InitializeWorkflow();` | `Templates/ViewModels/NodeDefaultComponent.cs` 的 `NodeDefaultComponent()` 构造函数 |
 | 9 | 在 `InitializeWorkflowCore` 里用 `CreateSlotCommand` 挂初始插槽 | 那时 `node.Parent == null`；`StandardCreateSlot` 的幂等守卫也会把重复派发吞掉，队列里留下幽灵 undo 项 | 按生成器的方式：直接 `field.Parent = this; Slots.Add(field);` | `Writers/WorkflowWriter.cs` 的 `GenerateInitializeWorkflowBody` 里 Slot 分支及其上方注释；`StandardEx/WorkflowNodeEx.cs` 的 `StandardCreateSlot` 幂等守卫 |
 | 10 | `[WorkflowBuilder.NodeAttribute]` 的类里手写 `Helper` 属性 / `GetHelper()` / `InitializeWorkflow()` / `SetHelper()` | 生成器会再生成一份，直接编译冲突（这条**会**报错，算运气好的） | 只写业务成员，这些留给生成器 | `Writers/WorkflowWriter.cs` 的 `GenerateWorkflowLifecycleBody` |
@@ -202,7 +203,7 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 ### 3.8 加一个网格装饰器 / 小地图
 
 实现 `IWorkflowGridDecorator`（`ScrollOffsetX/Y`、`ContentOffsetX/Y`、只读 `RulerBand`）或 `IWorkflowMinimapOverlay`（额外 `ViewportWidth/Height`、`WorkflowTree`、`IsMinimapVisible`）。
-- `WorkflowSurfaceMath` 里已备好小地图数学：`MinimapFit` / `MinimapLocal` / `MinimapViewportRect` / `MinimapToWorld` / `MinimapToScroll`（`GUI/Math/WorkflowSurfaceMath.cs` 的这五个同名方法）—— 别自己推。
+- `WorkflowSurfaceMath` 里已备好小地图数学：`MinimapFit` / `MinimapLocal` / `MinimapViewportRect` / `MinimapToCanvasLocal` / `MinimapToScroll`（`GUI/Math/WorkflowSurfaceMath.cs` 的这五个同名方法）—— 别自己推。
 - `RulerBand` 要转发给 `WorkflowSpatialEx.SetVirtualizeInset`，否则有标尺的那条边上的节点看不见。
 
 ### 3.9 加一家新平台适配器

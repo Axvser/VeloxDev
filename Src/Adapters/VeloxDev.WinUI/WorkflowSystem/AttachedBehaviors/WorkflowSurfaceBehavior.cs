@@ -874,14 +874,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             VirtualizeAtScroll(input.Tree, committedX, committedY, viewer.ViewportWidth, viewer.ViewportHeight);
         }
 
-        public void CenterOn(double worldX, double worldY)
+        public void CenterOn(double localX, double localY)
         {
             if (state.ScrollViewer is not { } viewer) return;
             if (state.Host is not { } host || host.DataContext is not ITreeComponent viewModel) return;
 
             var layout = viewModel.Layout;
             var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
-                worldX, worldY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
+                localX, localY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
             var maxH = GetHorizontalScrollMaximum(viewer);
             var maxV = GetVerticalScrollMaximum(viewer);
 
@@ -898,7 +898,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 maxH = GetHorizontalScrollMaximum(viewer);
                 maxV = GetVerticalScrollMaximum(viewer);
                 (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
-                    worldX, worldY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
+                    localX, localY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
             }
 
             var committedX = WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH);
@@ -1027,7 +1027,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             canvasTranslateY = transform.Y;
         }
 
-        return WorkflowSurfaceMath.ToWorldAnchor(
+        return WorkflowSurfaceMath.ToCanvasLocalAnchor(
             EffectiveScrollX(state) + point.X - canvasTranslateX,
             EffectiveScrollY(state) + point.Y - canvasTranslateY,
             0,
@@ -1626,8 +1626,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
         // 有在途滚动时按目标位置算可见区：内容当帧已经在目标处（见 ApplyLayout 的补偿）。
-        var viewportX = WorkflowSurfaceMath.ToWorld(EffectiveScrollX(state), viewModel.Layout.ActualOffset.Horizontal);
-        var viewportY = WorkflowSurfaceMath.ToWorld(EffectiveScrollY(state), viewModel.Layout.ActualOffset.Vertical);
+        var viewportX = WorkflowSurfaceMath.ToCanvasLocal(EffectiveScrollX(state), viewModel.Layout.ActualOffset.Horizontal);
+        var viewportY = WorkflowSurfaceMath.ToCanvasLocal(EffectiveScrollY(state), viewModel.Layout.ActualOffset.Vertical);
         viewModel.GetHelper().Viewport = new Viewport(
             viewportX, viewportY,
             state.ScrollViewer.ViewportWidth,
@@ -1648,8 +1648,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         var layout = viewModel.Layout;
         var helper = viewModel.GetHelper();
         helper.Viewport = new Viewport(
-            WorkflowSurfaceMath.ToWorld(scrollX, layout.ActualOffset.Horizontal),
-            WorkflowSurfaceMath.ToWorld(scrollY, layout.ActualOffset.Vertical),
+            WorkflowSurfaceMath.ToCanvasLocal(scrollX, layout.ActualOffset.Horizontal),
+            WorkflowSurfaceMath.ToCanvasLocal(scrollY, layout.ActualOffset.Vertical),
             viewportW, viewportH);
         helper.Virtualize(helper.Viewport);
     }

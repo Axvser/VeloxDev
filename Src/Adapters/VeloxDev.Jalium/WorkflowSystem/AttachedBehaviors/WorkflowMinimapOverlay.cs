@@ -398,12 +398,12 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             return;
         }
 
-        var (wx, wy) = WorkflowSurfaceMath.MinimapToWorld(mini.X, mini.Y, ox, oy, scale, bounds.X, bounds.Y);
-        NavigateToWorld(wx, wy);
+        var (wx, wy) = WorkflowSurfaceMath.MinimapToCanvasLocal(mini.X, mini.Y, ox, oy, scale, bounds.X, bounds.Y);
+        NavigateToCanvasLocal(wx, wy);
     }
 
     /// <summary>Centers the view on a world point, growing the canvas if the target scroll runs past an edge.</summary>
-    public void NavigateToWorld(double wx, double wy)
+    public void NavigateToCanvasLocal(double wx, double wy)
     {
         if (_tree is null || ScrollViewer is null)
         {
@@ -480,8 +480,8 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
                 NodeCornerRadius, NodeCornerRadius);
         }
 
-        var worldLeft = WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX);
-        var worldTop = WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY);
+        var worldLeft = WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetX, ContentOffsetX);
+        var worldTop = WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetY, ContentOffsetY);
         var (vx, vy, vw, vh) = WorkflowSurfaceMath.MinimapViewportRect(
             ox, oy, scale, worldLeft, worldTop, ViewportWidth, ViewportHeight,
             bounds.X, bounds.Y, Width, Height, minRectSize: 2);

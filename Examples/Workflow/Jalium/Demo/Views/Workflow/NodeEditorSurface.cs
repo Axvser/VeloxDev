@@ -876,20 +876,20 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
     private Point ToCanvas(double wx, double wy) => new(wx + OriginX, wy + OriginY);
 
-    /// <summary>Center the view on a world point, growing the canvas if the target scroll runs
+    /// <summary>Center the view on a canvas-local point, growing the canvas if the target scroll runs
     /// past an edge. Shared by pan and the minimap's drag-to-pan (same as the NodeEditorDemo).</summary>
     /// <inheritdoc />
-    public void CenterOn(double worldX, double worldY) => NavigateToWorld(worldX, worldY);
+    public void CenterOn(double localX, double localY) => NavigateToCanvasLocal(localX, localY);
 
-    public void NavigateToWorld(double wx, double wy)
+    public void NavigateToCanvasLocal(double localX, double localY)
     {
         if (_scrollViewer == null)
         {
             return;
         }
 
-        double targetH = wx - _scrollViewer.ViewportWidth / 2 + OriginX;
-        double targetV = wy - _scrollViewer.ViewportHeight / 2 + OriginY;
+        double targetH = localX - _scrollViewer.ViewportWidth / 2 + OriginX;
+        double targetV = localY - _scrollViewer.ViewportHeight / 2 + OriginY;
 
         if (targetH < 0)
         {
@@ -1175,7 +1175,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         dc.DrawLine(s_dividerPen, new Point(scrollX, scrollY + ruler), new Point(scrollX + vw, scrollY + ruler));
 
         // Top ruler: ticks at world grid x crossing the viewport, canvas x = world + originX.
-        double worldLeft = WorkflowSurfaceMath.GridWorldLeft(scrollX, originX);
+        double worldLeft = WorkflowSurfaceMath.GridCanvasLeft(scrollX, originX);
         for (double g = WorkflowSurfaceMath.GridFirstLine(worldLeft, GridStep); g + originX <= scrollX + vw; g += GridStep)
         {
             double x = g + originX;
@@ -1193,7 +1193,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         }
 
         // Left ruler: ticks at world grid y crossing the viewport, canvas y = world + originY.
-        double worldTop = WorkflowSurfaceMath.GridWorldTop(scrollY, originY);
+        double worldTop = WorkflowSurfaceMath.GridCanvasTop(scrollY, originY);
         for (double g = WorkflowSurfaceMath.GridFirstLine(worldTop, GridStep); g + originY <= scrollY + vh; g += GridStep)
         {
             double y = g + originY;

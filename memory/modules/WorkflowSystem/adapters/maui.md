@@ -110,8 +110,8 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
   `ExtentWidth/ViewportWidth`，非 Windows 回退模型）。落地后再把锚点回写到**夹取后**的值（`ApplyPanTargetAsync` 的 `appliedOffset*` 重锚），
   否则记账跑在原生前面 → 内容先钉住再跳一帧。夹带一次 `Task.Yield()` 等比原生重测（缩放回中用 `RecenterOnWorldPointAsync`、恢复用 `ApplyPendingScrollRestoreCore`）。
 - **小地图拖动**：最大值必须取**模型**，不能用 `_scrollView.ContentSize`（那个跟着异步布局落后）—— 用 ContentSize 会把目标钉在当前边缘，
-  2px 节流随即跳过滚动，画布永远长不大，形成**自锁**（`WorkflowMinimapOverlay.cs` 的 `NavigateToWorld` 注释；同方法里扩张后重算）。
-  它同样在扩张后用 `WorkflowSurfaceBehavior.Refresh` 主动推一次布局（`NavigateToWorld`）。
+  2px 节流随即跳过滚动，画布永远长不大，形成**自锁**（`WorkflowMinimapOverlay.cs` 的 `NavigateToCanvasLocal` 注释；同方法里扩张后重算）。
+  它同样在扩张后用 `WorkflowSurfaceBehavior.Refresh` 主动推一次布局（`NavigateToCanvasLocal`）。
 
 ### 8. `Handler.PlatformView` 是唯一通往原生的路，且它有三个时序坑
 
@@ -145,17 +145,17 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
 现在 `WorkflowSurfaceBehavior` 的 `ActualScroll(state)` 在 Windows 上直接读原生 `ScrollViewer.HorizontalOffset/VerticalOffset`
 （同一帧的两轴），`OnScrolled` 也只排一次 `Refresh` 到下一轮 UI 派发；事件不丢，更新成对。
 
-⚠ **两条通道只能有一条 `NavigateToWorld`。**（2026-11-18 用户报告小地图拖动抖动，X/Y 不匹配）
+⚠ **两条通道只能有一条 `NavigateToCanvasLocal`。**（2026-11-18 用户报告小地图拖动抖动，X/Y 不匹配）
 `PanGestureRecognizer` 用 `_dragStart + TotalX/Y`（累计增量 + 起点）而原生探针用绝对 `PointerMoved` 坐标；两者同时驱动时目标在
 两套坐标之间交替，视觉上就是 X/Y 各自抖动。现在用 `_panActive`（手势 Started/Completed）和 `_nativePointerActive`（原生按下/释放）互斥：**Windows 上优先原生绝对坐标**（`PanGesture.TotalX/Y` 在 WinUI 会带屏幕/元素偏移，曾把目标一次推出上千像素），手势只在原生探针没挂上时兜底；`OnDragInteraction` 被两者压住。另：`_nativePressedHandler` **不能**在 `_isDragging` 已为真时覆盖
 `OnStartInteraction` 记下的 `_dragStartX/Y` —— 起点混用会让累计增量落在错误的基准上。每次按下还重置
 `_lastScrollX/Y`，否则从上一轮继承的 2px 节流会吞掉第一笔拖动。
 
 **视口往返（2026-10-03 接上挂树口）**：这家本来就有整套恢复机（`RequestViewportRestore` → 调度器 +
-`Task.Yield` + `ToScreen` + clamp），但它只对宿主开放，宿主不调就不恢复。现在
+`Task.Yield` + `ToScroll` + clamp），但它只对宿主开放，宿主不调就不恢复。现在
 `Attach`/`OnLoaded`/`OnBindingContextChanged` 三处都会 `CaptureViewportRestore`（树引用变了才算，
 且必须在 `Refresh` **之前** —— 那次 `UpdateVisibleRegion` 会把它覆盖成本地 (0,0)）。同一轮还修了一处坐标
-不一致：持久化过去写原始滚动值、恢复却按世界坐标处理，`ActualOffset ≠ 0` 时会加两次；现在两侧都写世界。
+不一致：持久化过去写原始滚动值、恢复却按画布局部处理，`ActualOffset ≠ 0` 时会加两次；现在两侧都写画布局部。
 见 [../extension.md](../extension.md) §3.9-10。
 
 ### 11. 非 Windows 平台没有键态来源，修饰键只能填 `None`

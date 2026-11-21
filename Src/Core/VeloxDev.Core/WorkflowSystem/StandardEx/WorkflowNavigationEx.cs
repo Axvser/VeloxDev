@@ -7,7 +7,7 @@ namespace VeloxDev.WorkflowSystem.StandardEx;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The surface owns the scroll; these methods only turn a component into the world point to center on. The
+/// The surface owns the scroll; these methods only turn a component into the canvas-local point to center on. The
 /// request travels through <see cref="WorkflowInput.Navigator"/>, which an adapter registers while its surface
 /// is attached. A tree with no attached navigator returns <see langword="false"/> and changes nothing — the same
 /// optional-capability contract as <see cref="WorkflowInput.Scroller"/>.

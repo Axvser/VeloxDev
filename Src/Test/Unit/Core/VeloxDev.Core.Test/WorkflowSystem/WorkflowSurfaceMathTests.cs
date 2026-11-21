@@ -171,24 +171,24 @@ public class WorkflowSurfaceMathTests
     // ── Grid offset helpers ──────────────────────────────────────────────────
 
     [TestMethod]
-    public void GridWorldLeft_ScrollMinusContentOffset_Difference()
+    public void GridCanvasLeft_ScrollMinusContentOffset_Difference()
     {
-        Assert.AreEqual(90d, WorkflowSurfaceMath.GridWorldLeft(120, 30));
-        Assert.AreEqual(90d, WorkflowSurfaceMath.GridWorldTop(120, 30));
+        Assert.AreEqual(90d, WorkflowSurfaceMath.GridCanvasLeft(120, 30));
+        Assert.AreEqual(90d, WorkflowSurfaceMath.GridCanvasTop(120, 30));
     }
 
     [TestMethod]
-    public void GridWorldLeft_NegativeContentOffset_ScrollSpaceWorldLeft()
+    public void GridCanvasLeft_NegativeContentOffset_ScrollSpaceCanvasLeft()
     {
-        // Overscrolled origin: content offset negative means world 0 sits below the scroll origin,
-        // so the visible world-left is positive scroll minus that offset.
-        Assert.AreEqual(150d, WorkflowSurfaceMath.GridWorldLeft(120, -30));
+        // Overscrolled origin: content offset negative means canvas-local 0 sits below the scroll origin,
+        // so the visible left edge is positive scroll minus that offset.
+        Assert.AreEqual(150d, WorkflowSurfaceMath.GridCanvasLeft(120, -30));
     }
 
     [TestMethod]
-    public void GridX_ContentRectOrigin_WorldToScreen()
+    public void GridX_ContentRectOrigin_CanvasLocalToContent()
     {
-        // worldLeft 100, ruler-less content area (contentRect.X == 0): screen = world − worldLeft.
+        // localLeft 100, ruler-less content area (contentRect.X == 0): x = local − localLeft.
         Assert.AreEqual(60d, WorkflowSurfaceMath.GridX(160, 100, 0));
     }
 
@@ -375,18 +375,18 @@ public class WorkflowSurfaceMathTests
     }
 
     [TestMethod]
-    public void MinimapToWorld_InvertsLocalMapping()
+    public void MinimapToCanvasLocal_InvertsLocalMapping()
     {
         // (local − origin)/scale + contentLeft round-trips the MinimapLocal sample.
-        var (wx, wy) = WorkflowSurfaceMath.MinimapToWorld(100, 168, 10, 20, 2, 5, 6);
-        Assert.AreEqual(50d, wx);
-        Assert.AreEqual(80d, wy);
+        var (lx, ly) = WorkflowSurfaceMath.MinimapToCanvasLocal(100, 168, 10, 20, 2, 5, 6);
+        Assert.AreEqual(50d, lx);
+        Assert.AreEqual(80d, ly);
     }
 
     [TestMethod]
-    public void MinimapToScroll_CentersWorldOnViewport()
+    public void MinimapToScroll_CentersCanvasLocalOnViewport()
     {
-        // scroll = world − viewport/2 + contentOffset; may be negative — the caller feeds the result
+        // scroll = local − viewport/2 + contentOffset; may be negative — the caller feeds the result
         // into ClampScrollOffset, which expands the canvas for the overshoot.
         var (sx, sy) = WorkflowSurfaceMath.MinimapToScroll(300, 200, 800, 600, 40, 30);
         Assert.AreEqual(-60d, sx);
@@ -406,30 +406,30 @@ public class WorkflowSurfaceMathTests
         Assert.AreEqual(5d, WorkflowSurfaceMath.MinThumbSize(10, 0.5, 4));
     }
 
-    // ── Screen ↔ world conversion ───────────────────────────────────────────
+    // ── Scroll ↔ canvas-local conversion ────────────────────────────────────
 
     [TestMethod]
-    public void ToWorld_ScrollMinusActualOffset_WorldSpace()
+    public void ToCanvasLocal_ScrollMinusActualOffset()
     {
-        Assert.AreEqual(90d, WorkflowSurfaceMath.ToWorld(120, 30));
-        // Overscrolled origin (negative offset): world 0 sits below the scroll origin.
-        Assert.AreEqual(80d, WorkflowSurfaceMath.ToWorld(50, -30));
+        Assert.AreEqual(90d, WorkflowSurfaceMath.ToCanvasLocal(120, 30));
+        // Overscrolled origin (negative offset): canvas-local 0 sits below the scroll origin.
+        Assert.AreEqual(80d, WorkflowSurfaceMath.ToCanvasLocal(50, -30));
     }
 
     [TestMethod]
-    public void ToScreen_AddsActualOffset()
+    public void ToScroll_AddsActualOffset()
     {
         var layout = new CanvasLayout { NegativeOffset = new Offset(40, 30) };
-        var screen = WorkflowSurfaceMath.ToScreen(60, 50, layout);
-        Assert.AreEqual(100d, screen.Horizontal);
-        Assert.AreEqual(80d, screen.Vertical);
+        var scroll = WorkflowSurfaceMath.ToScroll(60, 50, layout);
+        Assert.AreEqual(100d, scroll.Horizontal);
+        Assert.AreEqual(80d, scroll.Vertical);
     }
 
     [TestMethod]
-    public void ToWorldAnchor_SubtractsActualOffsetAndKeepsLayer()
+    public void ToCanvasLocalAnchor_SubtractsActualOffsetAndKeepsLayer()
     {
         var layout = new CanvasLayout { NegativeOffset = new Offset(40, 30) };
-        var anchor = WorkflowSurfaceMath.ToWorldAnchor(200, 160, 2, layout);
+        var anchor = WorkflowSurfaceMath.ToCanvasLocalAnchor(200, 160, 2, layout);
         Assert.AreEqual(160d, anchor.Horizontal);
         Assert.AreEqual(130d, anchor.Vertical);
         Assert.AreEqual(2, anchor.Layer);

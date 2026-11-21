@@ -64,6 +64,16 @@ public sealed partial class Anchor(double left = 0d, double top = 0d, int layer 
         return new Anchor(Horizontal * sx, Vertical * sy, Layer) { _collapseScale = scale, _owner = this };
     }
 
+    /// <summary>World value recovered from a collapsed view value: <c>world = view * scale</c> (identity when null/1/0). Inverse of <see cref="Collapse"/>.</summary>
+    public Anchor Expand(Scale? scale)
+    {
+        if (scale is null || (scale.Horizontal == 1d && scale.Vertical == 1d)) return this;
+        var sx = scale.Horizontal == 0d ? 1d : scale.Horizontal;
+        var sy = scale.Vertical == 0d ? 1d : scale.Vertical;
+        if (sx == 1d && sy == 1d) return this;
+        return new Anchor(Horizontal * sx, Vertical * sy, Layer);
+    }
+
     // 钩子直接挂在 BCL 那四个特性上，生成器会调它们。方法必须是 internal 或更宽 ——
     // 生成代码在同一个程序集的 VeloxDev.Serialization.Generated 里，private 够不着。
     [OnSerializing]

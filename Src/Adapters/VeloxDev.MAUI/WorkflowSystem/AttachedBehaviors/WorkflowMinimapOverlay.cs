@@ -92,7 +92,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private WorkflowBounds _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
-    // Windows 上平移手势与原生指针探针会同时活着。只让其中一个驱动 NavigateToWorld；
+    // Windows 上平移手势与原生指针探针会同时活着。只让其中一个驱动 NavigateToCanvasLocal；
     // 两个都写时，绝对指针坐标与手势累计增量交替成为目标，X/Y 会以各自的节奏抖。
     // 非 Windows 目标没有手势/原生探针路径，两个标记保持 false；Windows 在 #if 分支内改写。
     private bool _panActive = false;
@@ -242,7 +242,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             ComputeDrawing(aw, ah);
             _lastScrollX = float.MinValue;
             _lastScrollY = float.MinValue;
-            NavigateToWorld(_dragStartX, _dragStartY);
+            NavigateToCanvasLocal(_dragStartX, _dragStartY);
             _isDragging = true;
         };
         _nativeMovedHandler = (s, e) =>
@@ -252,7 +252,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             // 在 WinUI 上会带屏幕/元素偏移，拿它加到局部起点上会把目标一次推出上千像素。
             if (this.Handler?.PlatformView is not UIElement mm) return;
             var pt = e.GetCurrentPoint(mm).Position;
-            NavigateToWorld((float)pt.X, (float)pt.Y);
+            NavigateToCanvasLocal((float)pt.X, (float)pt.Y);
         };
         _nativeReleasedHandler = (s, e) =>
         {
@@ -284,7 +284,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
                 {
                     var x = _dragStartX + (float)e.TotalX;
                     var y = _dragStartY + (float)e.TotalY;
-                    NavigateToWorld(x, y);
+                    NavigateToCanvasLocal(x, y);
                 }
                 break;
             case GestureStatus.Completed:
@@ -418,8 +418,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             }
         _lastGlobalBounds = WorkflowBounds.FromNodes(_lastNodeRects);
 
-        var rawVpX = WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX);
-        var rawVpY = WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY);
+        var rawVpX = WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetX, ContentOffsetX);
+        var rawVpY = WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetY, ContentOffsetY);
         var vpX = double.IsNaN(rawVpX) ? 0 : rawVpX;
         var vpY = double.IsNaN(rawVpY) ? 0 : rawVpY;
         var vpW = double.IsNaN(ViewportWidth) ? 1 : Math.Max(1, ViewportWidth);
@@ -536,7 +536,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             _dragStartX = pt.X;
             _dragStartY = pt.Y;
 #endif
-            NavigateToWorld(pt.X, pt.Y);
+            NavigateToCanvasLocal(pt.X, pt.Y);
             _isDragging = true;
 
             SubscribeDragCapture();
@@ -557,7 +557,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             if (_panActive || _nativePointerActive) return;
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
-            NavigateToWorld(pt.X, pt.Y);
+            NavigateToCanvasLocal(pt.X, pt.Y);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -626,7 +626,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         if (!_isDragging) return;
         var pos = e.GetPosition(this);
         if (pos is null) return;
-        NavigateToWorld((float)pos.Value.X, (float)pos.Value.Y);
+        NavigateToCanvasLocal((float)pos.Value.X, (float)pos.Value.Y);
     }
 
     private void OnParentPointerReleased(object? sender, PlatformInput.PointerEventArgs e)
@@ -648,12 +648,12 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     /// WorkflowSurfaceBehavior prevents the cascade that caused the original
     /// crash — expansion is safe now.
     /// </summary>
-    private void NavigateToWorld(float adjX, float adjY)
+    private void NavigateToCanvasLocal(float adjX, float adjY)
     {
         if (_drawGb.IsEmpty || _sc <= 0) return;
 
-        // MinimapToWorld：world = (mm − origin)/scale + contentLeft；MinimapToScroll 再把世界目标换算成能把它居中到视口的滚动偏移。
-        var (wcx, wcy) = WorkflowSurfaceMath.MinimapToWorld(
+        // MinimapToCanvasLocal：world = (mm − origin)/scale + contentLeft；MinimapToScroll 再把世界目标换算成能把它居中到视口的滚动偏移。
+        var (wcx, wcy) = WorkflowSurfaceMath.MinimapToCanvasLocal(
             adjX, adjY, _ox, _oy, _sc, _drawGb.Left, _drawGb.Top);
         var (scrollX, scrollY) = WorkflowSurfaceMath.MinimapToScroll(
             wcx, wcy, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);

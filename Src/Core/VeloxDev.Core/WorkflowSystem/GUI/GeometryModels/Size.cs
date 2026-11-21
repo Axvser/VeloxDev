@@ -58,6 +58,16 @@ public sealed partial class Size(double width = 0d, double height = 0d)
         return new Size(Width * sx, Height * sy) { _collapseScale = scale, _owner = this };
     }
 
+    /// <summary>World value recovered from a collapsed view value: <c>world = view * scale</c> (identity when null/1/0). Inverse of <see cref="Collapse"/>.</summary>
+    public Size Expand(Scale? scale)
+    {
+        if (scale is null || (scale.Horizontal == 1d && scale.Vertical == 1d)) return this;
+        var sx = scale.Horizontal == 0d ? 1d : scale.Horizontal;
+        var sy = scale.Vertical == 0d ? 1d : scale.Vertical;
+        if (sx == 1d && sy == 1d) return this;
+        return new Size(Width * sx, Height * sy);
+    }
+
     // 钩子直接挂在 BCL 那四个特性上，生成器会调它们。方法必须是 internal 或更宽 ——
     // 生成代码在同一个程序集的 VeloxDev.Serialization.Generated 里，private 够不着。
     [OnSerializing]

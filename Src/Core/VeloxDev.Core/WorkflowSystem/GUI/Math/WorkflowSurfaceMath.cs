@@ -24,28 +24,28 @@ public static class WorkflowSurfaceMath
     /// </summary>
     public const double DefaultPanExtendRatio = 0.15;
 
-    // ── ① Viewport / screen↔world conversion ─────────────────────────────────
+    // ── ① Viewport / scroll↔canvas-local conversion ──────────────────────────
 
     /// <summary>
-    /// Converts a screen/scroll coordinate to world space: <c>world = scroll − actualOffset</c>.
-    /// The canvas is translated by <see cref="CanvasLayout.ActualOffset"/>, so world coordinates
-    /// (node anchors, slot anchors) and screen coordinates differ by exactly that offset.
+    /// Converts a scroll coordinate to canvas-local space: <c>local = scroll − actualOffset</c>.
+    /// The canvas is translated by <see cref="CanvasLayout.ActualOffset"/>, so canvas-local coordinates
+    /// (node and slot anchors) and scroll coordinates differ by exactly that offset.
     /// </summary>
-    public static double ToWorld(double scroll, double actualOffset)
+    public static double ToCanvasLocal(double scroll, double actualOffset)
         => scroll - actualOffset;
 
     /// <summary>
-    /// Converts a screen point to a world-space <see cref="Anchor"/>: <c>world = screen − ActualOffset</c>.
+    /// Converts a scroll point to a canvas-local <see cref="Anchor"/>: <c>local = scroll − ActualOffset</c>.
     /// Used when writing pointer positions back to the model (e.g. <c>SetPointerCommand</c>, slot hit-testing).
     /// </summary>
-    public static Anchor ToWorldAnchor(double screenX, double screenY, int layer, CanvasLayout layout)
-        => new(screenX - layout.ActualOffset.Horizontal, screenY - layout.ActualOffset.Vertical, layer);
+    public static Anchor ToCanvasLocalAnchor(double scrollX, double scrollY, int layer, CanvasLayout layout)
+        => new(scrollX - layout.ActualOffset.Horizontal, scrollY - layout.ActualOffset.Vertical, layer);
 
     /// <summary>
-    /// Converts a world point to a screen <see cref="Offset"/>: <c>screen = world + ActualOffset</c>.
+    /// Converts a canvas-local point to the scroll coordinate: <c>scroll = local + ActualOffset</c>.
     /// </summary>
-    public static Offset ToScreen(double worldX, double worldY, CanvasLayout layout)
-        => new(worldX + layout.ActualOffset.Horizontal, worldY + layout.ActualOffset.Vertical);
+    public static Offset ToScroll(double localX, double localY, CanvasLayout layout)
+        => new(localX + layout.ActualOffset.Horizontal, localY + layout.ActualOffset.Vertical);
 
     /// <summary>Below this, a coordinate is the scroll viewer reporting "has not moved" rather than a position.</summary>
     private const double ViewportRestoreEpsilon = 0.5;
@@ -64,23 +64,23 @@ public static class WorkflowSurfaceMath
 
     /// <summary>
     /// The scroll position that shows <paramref name="layout"/>'s saved viewport:
-    /// <c>screen = world + ActualOffset</c>. Inverse of <see cref="ViewportOffsetFromScroll"/>.
+    /// <c>scroll = local + ActualOffset</c>. Inverse of <see cref="ViewportOffsetFromScroll"/>.
     /// </summary>
     public static Offset ViewportRestoreScroll(CanvasLayout layout)
-        => ToScreen(layout.ViewportOffset.Horizontal, layout.ViewportOffset.Vertical, layout);
+        => ToScroll(layout.ViewportOffset.Horizontal, layout.ViewportOffset.Vertical, layout);
 
     /// <summary>
-    /// The world-space <see cref="CanvasLayout.ViewportOffset"/> to persist for a scroll position:
-    /// <c>world = scroll − ActualOffset</c>. Inverse of <see cref="ViewportRestoreScroll"/>.
+    /// The canvas-local <see cref="CanvasLayout.ViewportOffset"/> to persist for a scroll position:
+    /// <c>local = scroll − ActualOffset</c>. Inverse of <see cref="ViewportRestoreScroll"/>.
     /// </summary>
     /// <remarks>
-    /// Adapters persist through this rather than calling <see cref="ToWorld"/> themselves, so that every write
+    /// Adapters persist through this rather than calling <see cref="ToCanvasLocal"/> themselves, so that every write
     /// site names its direction. Writing the raw scroll is a defect that stays invisible until
     /// <see cref="CanvasLayout.ActualOffset"/> is non-zero — which is why it survived in one adapter.
     /// </remarks>
     public static Offset ViewportOffsetFromScroll(double scrollX, double scrollY, CanvasLayout layout)
-        => new(ToWorld(scrollX, layout.ActualOffset.Horizontal),
-               ToWorld(scrollY, layout.ActualOffset.Vertical));
+        => new(ToCanvasLocal(scrollX, layout.ActualOffset.Horizontal),
+               ToCanvasLocal(scrollY, layout.ActualOffset.Vertical));
 
     // ── ② Pan overscroll clamp ───────────────────────────────────────────────
 
@@ -157,7 +157,7 @@ public static class WorkflowSurfaceMath
         => extendRatio > 0 ? Math.Max(excess, extendRatio * AxisBaseExtent(layout, horizontal)) : excess;
 
     /// <summary>
-    /// World extent of an axis before any zoom auto-extend: <c>OriginSize + PositiveOffset + NegativeOffset</c>.
+    /// Canvas extent of an axis before any zoom auto-extend: <c>OriginSize + PositiveOffset + NegativeOffset</c>.
     /// Mirrors the baseWidth/baseHeight terms CanvasLayout recomputes inside its layout Update — the quantum is
     /// scaled by the same extent the canvas grows from, so the two cannot drift.
     /// </summary>
@@ -185,46 +185,46 @@ public static class WorkflowSurfaceMath
     // ── ③ Grid offset math ───────────────────────────────────────────────────
 
     /// <summary>
-    /// Left edge of the visible world region in scroll space: <c>worldLeft = ScrollOffsetX − ContentOffsetX</c>.
-    /// The grid decorator starts drawing its vertical lines from this world x-coordinate.
+    /// Left edge of the visible canvas-local region: <c>localLeft = ScrollOffsetX − ContentOffsetX</c>.
+    /// The grid decorator starts drawing its vertical lines from this x-coordinate.
     /// </summary>
-    public static double GridWorldLeft(double scrollOffset, double contentOffset)
+    public static double GridCanvasLeft(double scrollOffset, double contentOffset)
         => scrollOffset - contentOffset;
 
     /// <summary>
-    /// Converts a world x-coordinate to a screen x-coordinate inside the content area:
-    /// <c>x = contentRect.X + (worldValue − worldLeft)</c>.
+    /// Converts a canvas-local x-coordinate to an x-coordinate inside the content area:
+    /// <c>x = contentRect.X + (localValue − localLeft)</c>.
     /// </summary>
-    public static double GridX(double worldValue, double worldLeft, double contentRectX)
-        => contentRectX + (worldValue - worldLeft);
+    public static double GridX(double localValue, double localLeft, double contentRectX)
+        => contentRectX + (localValue - localLeft);
 
     /// <summary>
-    /// Top edge of the visible world region in scroll space: <c>worldTop = ScrollOffsetY − ContentOffsetY</c>.
-    /// Y-axis mirror of <see cref="GridWorldLeft"/> (previously every grid decorator inlined this).
+    /// Top edge of the visible canvas-local region: <c>localTop = ScrollOffsetY − ContentOffsetY</c>.
+    /// Y-axis mirror of <see cref="GridCanvasLeft"/> (previously every grid decorator inlined this).
     /// </summary>
-    public static double GridWorldTop(double scrollOffset, double contentOffset)
+    public static double GridCanvasTop(double scrollOffset, double contentOffset)
         => scrollOffset - contentOffset;
 
     /// <summary>
-    /// Converts a world y-coordinate to a screen y-coordinate inside the content area:
-    /// <c>y = contentRect.Y + (worldValue − worldTop)</c>. Y-axis mirror of <see cref="GridX"/>.
+    /// Converts a canvas-local y-coordinate to a y-coordinate inside the content area:
+    /// <c>y = contentRect.Y + (localValue − localTop)</c>. Y-axis mirror of <see cref="GridX"/>.
     /// </summary>
-    public static double GridY(double worldValue, double worldTop, double contentRectY)
-        => contentRectY + (worldValue - worldTop);
+    public static double GridY(double localValue, double localTop, double contentRectY)
+        => contentRectY + (localValue - localTop);
 
     /// <summary>
-    /// Grid-line snapping: the first world value aligned to the spacing grid at or below
-    /// <paramref name="worldLeft"/>: <c>first = ⌊worldLeft / spacing⌋ · spacing</c>. Every grid
+    /// Grid-line snapping: the first canvas-local value aligned to the spacing grid at or below
+    /// <paramref name="localLeft"/>: <c>first = ⌊localLeft / spacing⌋ · spacing</c>. Every grid
     /// decorator previously inlined this loop-start computation.
     /// </summary>
-    public static double GridFirstLine(double worldLeft, double spacing)
-        => Math.Floor(worldLeft / spacing) * spacing;
+    public static double GridFirstLine(double localLeft, double spacing)
+        => Math.Floor(localLeft / spacing) * spacing;
 
     // ── ④ Slot anchor conversion ─────────────────────────────────────────────
 
     /// <summary>
-    /// Computes the slot anchor from a measured visual center in screen space:
-    /// <c>anchor = visualCenter − ActualOffset</c> (anchors live in world space). Layer is preserved from
+    /// Computes the slot anchor from a measured visual center in scroll space:
+    /// <c>anchor = visualCenter − ActualOffset</c> (anchors live in canvas-local space). Layer is preserved from
     /// the slot.
     /// </summary>
     public static Anchor SlotAnchorFromVisualCenter(double centerX, double centerY, int layer, CanvasLayout layout)
@@ -239,10 +239,10 @@ public static class WorkflowSurfaceMath
 
     /// <summary>
     /// Computes the slot anchor from a measured visual center that is already in canvas-local
-    /// (world) space: <c>anchor = center</c>. Adapters whose canvas-level translation (WPF's
+    /// space: <c>anchor = center</c>. Adapters whose canvas-level translation (WPF's
     /// per-node offset / WinUI &amp; MAUI's canvas <c>Translation</c>) is already inverted by the
     /// coordinate-host transform land here; <see cref="SlotAnchorFromVisualCenter"/> is the
-    /// screen-space variant that still subtracts <c>ActualOffset</c>. Choosing the wrong one is
+    /// scroll-space variant that still subtracts <c>ActualOffset</c>. Choosing the wrong one is
     /// a silent offset bug, so the two contracts are named explicitly.
     /// </summary>
     public static Anchor SlotAnchorFromCanvasLocal(double centerX, double centerY, int layer)
@@ -266,15 +266,15 @@ public static class WorkflowSurfaceMath
     }
 
     /// <summary>
-    /// Maps a world point onto the minimap draw area through a computed fit transform:
-    /// <c>local = origin + (world − contentOrigin)·scale</c>. Used to position node thumbnails,
+    /// Maps a canvas-local point onto the minimap draw area through a computed fit transform:
+    /// <c>local = origin + (content − contentOrigin)·scale</c>. Used to position node thumbnails,
     /// link endpoints, and the viewport indicator in every minimap render loop.
     /// </summary>
     public static (double LocalX, double LocalY) MinimapLocal(
-        double worldX, double worldY,
+        double contentX, double contentY,
         double contentLeft, double contentTop,
         double originX, double originY, double scale)
-        => (originX + (worldX - contentLeft) * scale, originY + (worldY - contentTop) * scale);
+        => (originX + (contentX - contentLeft) * scale, originY + (contentY - contentTop) * scale);
 
     /// <summary>
     /// Maps the world-space viewport rectangle onto the minimap draw area through the same fit transform
@@ -300,26 +300,26 @@ public static class WorkflowSurfaceMath
     }
 
     /// <summary>
-    /// Resolves a minimap point back to world space: <c>world = (mm − origin)/scale + contentLeft</c>.
+    /// Resolves a minimap point back to canvas-local space: <c>local = (mm − origin)/scale + contentLeft</c>.
     /// </summary>
-    public static (double WorldX, double WorldY) MinimapToWorld(
+    public static (double LocalX, double LocalY) MinimapToCanvasLocal(
         double mmX, double mmY, double originX, double originY, double scale,
         double contentLeft, double contentTop)
         => ((mmX - originX) / scale + contentLeft, (mmY - originY) / scale + contentTop);
 
     /// <summary>
-    /// Converts a world target into a scroll offset that centers it on the viewport:
-    /// <c>scroll = world − viewportSize/2 + contentOffset</c>. The caller then clamps/expands via
+    /// Converts a canvas-local target into a scroll offset that centers it on the viewport:
+    /// <c>scroll = local − viewportSize/2 + contentOffset</c>. The caller then clamps/expands via
     /// <see cref="ClampScrollOffset"/>.
     /// </summary>
     public static (double ScrollX, double ScrollY) MinimapToScroll(
-        double worldX, double worldY, double viewportWidth, double viewportHeight,
+        double localX, double localY, double viewportWidth, double viewportHeight,
         double contentOffsetX, double contentOffsetY)
-        => (worldX - viewportWidth / 2 + contentOffsetX, worldY - viewportHeight / 2 + contentOffsetY);
+        => (localX - viewportWidth / 2 + contentOffsetX, localY - viewportHeight / 2 + contentOffsetY);
 
     /// <summary>
-    /// The scroll offset that centers the world point (<paramref name="worldX"/>, <paramref name="worldY"/>) in a
-    /// viewport: <c>scroll = world − viewportSize/2 + ActualOffset</c>.
+    /// The scroll offset that centers the canvas-local point (<paramref name="localX"/>, <paramref name="localY"/>)
+    /// in a viewport: <c>scroll = local − viewportSize/2 + ActualOffset</c>.
     /// </summary>
     /// <remarks>
     /// The five callers (WPF / Avalonia / WinUI / MAUI / Razor) resolve the result against their own scrollable
@@ -327,15 +327,15 @@ public static class WorkflowSurfaceMath
     /// <see cref="CanvasLayout.NegativeOffset"/> / <see cref="CanvasLayout.PositiveOffset"/> by the exact excess)
     /// and then re-reading the range; a surface that cannot grow clamps with <see cref="ClampValue"/>, so the
     /// point lands as close to the center as it allows. Jalium computes its own target in
-    /// <c>WorkflowSurfaceBehavior.NavigateToWorld</c> (and grows there too); WinForms' pan engine accepts signed
+    /// <c>WorkflowSurfaceBehavior.NavigateToCanvasLocal</c> (and grows there too); WinForms' pan engine accepts signed
     /// targets and needs no ceiling. This is the absolute counterpart of the wheel scroll:
     /// <see cref="CanvasLayout.ViewportOffset"/> holds <c>scroll − ActualOffset</c>, so the inverse is exactly the
     /// offset added here.
     /// </remarks>
     public static (double ScrollX, double ScrollY) CenterScroll(
-        double worldX, double worldY, double viewportWidth, double viewportHeight, CanvasLayout layout)
-        => (worldX - viewportWidth / 2 + layout.ActualOffset.Horizontal,
-            worldY - viewportHeight / 2 + layout.ActualOffset.Vertical);
+        double localX, double localY, double viewportWidth, double viewportHeight, CanvasLayout layout)
+        => (localX - viewportWidth / 2 + layout.ActualOffset.Horizontal,
+            localY - viewportHeight / 2 + layout.ActualOffset.Vertical);
 
     /// <summary>
     /// Scroll-space coordinates of the center of the currently visible viewport:
@@ -350,8 +350,8 @@ public static class WorkflowSurfaceMath
     /// The world point currently under the center of the visible viewport, through the layout's coordinate
     /// chain. Nodes always render at canvas-local origin-collapsed <c>world/scale</c>; the surface
     /// translates by <see cref="CanvasLayout.ActualOffset"/> and the scroll offset subtracts, so the
-    /// collapsed coordinate at the viewport center is <c>screenCenter − ActualOffset</c>, and inverting
-    /// the collapse gives <c>world = (screenCenter − ActualOffset)·scale</c>. In viewport-center mode the
+    /// canvas-local coordinate at the viewport center is <c>scrollCenter − ActualOffset</c>, and inverting
+    /// the collapse gives <c>world = (scrollCenter − ActualOffset)·scale</c>. In viewport-center mode the
     /// adapter captures this world point, writes it as the new <see cref="CanvasLayout.CollapsePivot"/>,
     /// and scrolls to <see cref="PivotCenterScroll"/> so it stays at the viewport center. The canvas
     /// geometry is untouched by the zoom — only the scroll moves.
@@ -417,9 +417,9 @@ public static class WorkflowSurfaceMath
         => (SafeInverse(scaleX), SafeInverse(scaleY), -anchorX, -anchorY);
 
     /// <summary>
-    /// World-space bounds a node occupies after collapsing toward the origin:
+    /// Canvas-local bounds a node occupies after collapsing toward the origin:
     /// <c>(anchorX/scaleX, anchorY/scaleY, width/scaleX, height/scaleY)</c>. Mirrors the per-node
-    /// <see cref="ScaleCollapse"/> render transform so minimaps (and any world-space overlay) can draw the
+    /// <see cref="ScaleCollapse"/> render transform so minimaps (and any canvas-local overlay) can draw the
     /// collapsed thumbnails without touching the model.
     /// </summary>
     public static (double Left, double Top, double Width, double Height) ScaleVisualBounds(
@@ -502,15 +502,15 @@ public static class WorkflowSurfaceMath
 }
 
 /// <summary>
-/// Axis-aligned bounds over workflow content in world space — the union/empty semantics every
+/// Axis-aligned bounds over workflow content in canvas-local space — the union/empty semantics every
 /// minimap previously carried as its own private <c>BoundsRect</c> struct (WPF/WinUI/Avalonia/MAUI).
-/// Coordinates live in world space (node anchors + sizes); the minimap fits these into its draw area.
+/// Coordinates live in canvas-local space (node anchors + sizes); the minimap fits these into its draw area.
 /// </summary>
 public readonly struct WorkflowBounds
 {
-    /// <summary>The left edge of the bounds in world space.</summary>
+    /// <summary>The left edge of the bounds in canvas-local space.</summary>
     public double Left { get; init; }
-    /// <summary>The top edge of the bounds in world space.</summary>
+    /// <summary>The top edge of the bounds in canvas-local space.</summary>
     public double Top { get; init; }
     /// <summary>The width of the bounds.</summary>
     public double Width { get; init; }

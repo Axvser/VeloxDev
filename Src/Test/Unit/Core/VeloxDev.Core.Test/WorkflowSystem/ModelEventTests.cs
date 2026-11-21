@@ -78,6 +78,22 @@ public sealed class ModelEventTests
         Assert.AreEqual(0, moved, "只是不报");
     }
 
+    [TestMethod]
+    public void MoveCommand_NotifiesAnchorOnce()
+    {
+        var holder = new TreeHolder();
+        var node = NodeIn(holder, 10, 20);
+        var notifications = 0;
+        node.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(NodeDefaultComponent.Anchor)) notifications++;
+        };
+
+        node.MoveCommand.Execute(new Offset(5, 5));
+
+        Assert.AreEqual(1, notifications, "the setter is the only notification owner");
+    }
+
     // ── 尺寸 ────────────────────────────────────────────────────────────────
 
     [TestMethod]

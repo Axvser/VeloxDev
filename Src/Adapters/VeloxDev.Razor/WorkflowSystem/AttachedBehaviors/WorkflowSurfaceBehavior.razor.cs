@@ -935,8 +935,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             // 规范（上报）坐标系 —— 与 XAML 几家一致：预留标尺内缩与左/上越界增长都只是视觉平移，所以这里上报的 world-left 是 scroll − (ActualOffset + 越界量)。装饰器为刻度再加回标尺预留。
             var effX = contentX + Math.Max(0, _offsetX - RulerThickness);
             var effY = contentY + Math.Max(0, _offsetY - RulerThickness);
-            var viewportX = WorkflowSurfaceMath.ToWorld(scrollLeft, effX);
-            var viewportY = WorkflowSurfaceMath.ToWorld(scrollTop, effY);
+            var viewportX = WorkflowSurfaceMath.ToCanvasLocal(scrollLeft, effX);
+            var viewportY = WorkflowSurfaceMath.ToCanvasLocal(scrollTop, effY);
 
             // 让虚拟化可见区修正与预留标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
             Tree.SetVirtualizeInset(left: RulerThickness, top: RulerThickness);
@@ -960,8 +960,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             // 轻量覆盖层（网格装饰器）经 feed 更新，纯滚动不动节点/连线内容子树。画布宿主/网格/坐标轴归 JS，网格不再依赖重渲染。只有画布增长（边缘扩展）会改变连线层尺寸（SurfaceCanvas 上下文），所以只有那时才重渲染整个表面。
             _feed.Publish(_viewport);
             // 缩略图画在节点/世界内容之上，所以必须用物理可见世界矩形（含边缘平移）—— 而不是规范（排除标尺）的那个。
-            var physX = WorkflowSurfaceMath.ToWorld(scrollLeft, _offsetX + contentX);
-            var physY = WorkflowSurfaceMath.ToWorld(scrollTop, _offsetY + contentY);
+            var physX = WorkflowSurfaceMath.ToCanvasLocal(scrollLeft, _offsetX + contentX);
+            var physY = WorkflowSurfaceMath.ToCanvasLocal(scrollTop, _offsetY + contentY);
             PushMinimapViewport(physX, physY);
             PushSurfaceLayout(contentX, contentY);
             if (grew)
@@ -972,15 +972,15 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     }
 
     /// <summary>
-    /// Pushes the current viewport world rect to the minimap's JS, which moves the viewport-block
+    /// Pushes the current viewport canvas-local rect to the minimap's JS, which moves the viewport-block
     /// indicator directly (no .NET re-render). No-op when no minimap has registered that scroller id.
     /// </summary>
-    private void PushMinimapViewport(double worldX, double worldY)
+    private void PushMinimapViewport(double localX, double localY)
     {
         if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
         {
             _ = _module.InvokeVoidAsync("setMinimapViewport",
-                ScrollViewerId, worldX, worldY, _viewportW, _viewportH);
+                ScrollViewerId, localX, localY, _viewportW, _viewportH);
         }
     }
 
@@ -1066,13 +1066,13 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// applies the new offset/extent and the scroll together — otherwise the browser would clamp the scroll to
     /// the old extent and the point would stop at the edge instead of the center.
     /// </remarks>
-    private async Task CenterOnAsync(double worldX, double worldY)
+    private async Task CenterOnAsync(double localX, double localY)
     {
         var module = _module;
         var id = ScrollViewerId;
         if (module is null || string.IsNullOrWhiteSpace(id) || Tree?.Layout is not { } layout) return;
 
-        var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(worldX, worldY, _viewportW, _viewportH, layout);
+        var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(localX, localY, _viewportW, _viewportH, layout);
         var maxH = Math.Max(0d, _canvasW - _viewportW - _offsetX);
         var maxV = Math.Max(0d, _canvasH - _viewportH - _offsetY);
 
@@ -1081,7 +1081,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         if (clampedX != desiredX || clampedY != desiredY)
         {
             // 负向增长改 ActualOffset，正向增长改 ActualSize；按新布局重算目标和内容范围，再一次性下发给 DOM。
-            (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(worldX, worldY, _viewportW, _viewportH, layout);
+            (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(localX, localY, _viewportW, _viewportH, layout);
         }
 
         await module.InvokeVoidAsync("applySurfaceNavigation", id,
@@ -1112,7 +1112,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             _ = module.InvokeVoidAsync("scrollSurfaceBy", id, wheelDeltaX, -wheelDeltaY);
         }
 
-        public void CenterOn(double worldX, double worldY) => _ = owner.CenterOnAsync(worldX, worldY);
+        public void CenterOn(double localX, double localY) => _ = owner.CenterOnAsync(localX, localY);
     }
 
     /// <inheritdoc />

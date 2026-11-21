@@ -627,8 +627,8 @@ public sealed class WorkflowSurfaceBehavior
             return false;
         }
 
-        viewportX = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.ScrollX, viewModel.Layout.ActualOffset.Horizontal);
-        viewportY = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.ScrollY, viewModel.Layout.ActualOffset.Vertical);
+        viewportX = WorkflowSurfaceMath.ToCanvasLocal(state.ScrollViewer.ScrollX, viewModel.Layout.ActualOffset.Horizontal);
+        viewportY = WorkflowSurfaceMath.ToCanvasLocal(state.ScrollViewer.ScrollY, viewModel.Layout.ActualOffset.Vertical);
         return true;
     }
 
@@ -1216,10 +1216,10 @@ public sealed class WorkflowSurfaceBehavior
                 dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, GetNativeScrollMaximum(state, horizontal: false)) : viewer.ScrollY);
         }
 
-        public void CenterOn(double worldX, double worldY) => _ = CenterOnAsync(worldX, worldY);
+        public void CenterOn(double localX, double localY) => _ = CenterOnAsync(localX, localY);
 
         // 越界时和滚轮/平移一样按差额长画布；MAUI 的原生范围异步重测，所以增长后让出一拍再读。
-        private async Task CenterOnAsync(double worldX, double worldY)
+        private async Task CenterOnAsync(double localX, double localY)
         {
             if (state.ScrollViewer is not { } viewer || state.Host is not { } host) return;
             var viewModel = ResolveTreeViewModel(host, state);
@@ -1228,7 +1228,7 @@ public sealed class WorkflowSurfaceBehavior
             var w = double.IsNaN(viewer.Width) ? 1d : viewer.Width;
             var h = double.IsNaN(viewer.Height) ? 1d : viewer.Height;
             var layout = viewModel.Layout;
-            var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(worldX, worldY, w, h, layout);
+            var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(localX, localY, w, h, layout);
 
             var maxH = GetHorizontalScrollMaximum(state);
             var maxV = GetVerticalScrollMaximum(state);
@@ -1240,7 +1240,7 @@ public sealed class WorkflowSurfaceBehavior
                 await Task.Yield();
                 maxH = GetHorizontalScrollMaximum(state);
                 maxV = GetVerticalScrollMaximum(state);
-                (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(worldX, worldY, w, h, layout);
+                (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(localX, localY, w, h, layout);
             }
 
             var x = WorkflowSurfaceMath.ClampValue(desiredX, 0d, GetNativeScrollMaximum(state, horizontal: true));
@@ -2093,8 +2093,8 @@ public sealed class WorkflowSurfaceBehavior
         UpdateGridDecorator(viewModel, state, scrollX, scrollY);
         UpdateMinimapOverlay(viewModel, state, scrollX, scrollY);
 
-        var viewportX = WorkflowSurfaceMath.ToWorld(scrollX, viewModel.Layout.ActualOffset.Horizontal);
-        var viewportY = WorkflowSurfaceMath.ToWorld(scrollY, viewModel.Layout.ActualOffset.Vertical);
+        var viewportX = WorkflowSurfaceMath.ToCanvasLocal(scrollX, viewModel.Layout.ActualOffset.Horizontal);
+        var viewportY = WorkflowSurfaceMath.ToCanvasLocal(scrollY, viewModel.Layout.ActualOffset.Vertical);
         viewModel.GetHelper().Viewport = new Viewport(
             double.IsNaN(viewportX) ? 0 : viewportX,
             double.IsNaN(viewportY) ? 0 : viewportY,
@@ -2190,8 +2190,8 @@ public sealed class WorkflowSurfaceBehavior
                 return;
             }
 
-            // ToScreen：screen = world + ActualOffset（待恢复视口是世界坐标）。
-            var target = WorkflowSurfaceMath.ToScreen(state.PendingViewportX, state.PendingViewportY, viewModel.Layout);
+            // ToScroll：scroll = local + ActualOffset（待恢复视口是画布局部坐标）。
+            var target = WorkflowSurfaceMath.ToScroll(state.PendingViewportX, state.PendingViewportY, viewModel.Layout);
             var targetX = WorkflowSurfaceMath.ClampValue(target.Horizontal, 0, GetHorizontalScrollMaximum(state));
             var targetY = WorkflowSurfaceMath.ClampValue(target.Vertical, 0, GetVerticalScrollMaximum(state));
 

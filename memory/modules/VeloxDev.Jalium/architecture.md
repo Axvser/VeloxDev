@@ -120,7 +120,7 @@ RegisterInterpolator(typeof(SolidColorBrush), new BrushSampler());  // 同一个
 
 ### 3.3 小地图的 `ScrollViewer` 由模板按名字接上
 
-`WorkflowMinimapOverlay.ScrollViewer` 是普通自动属性，`NavigateToWorld` 要求 `_tree` 与 `ScrollViewer` **同时非空**。**适配器会赋值**：`ScrollViewerName` DP + `ResolveScrollViewer()`（`FindName(name) is ScrollViewer viewer`，`Loaded` 时再兜一次）⇒ 模板只要写 `ScrollViewerName="PART_ScrollViewer"`（`workflow-tree-view/TemplateClass.jalxaml`）就接上，宿主不必自己赋（Trimmed demo 宿主是标记，没有 `ScrollViewer = viewer`）。（非 Trimmed demo `Examples/Workflow/Jalium/` 走 `Minimap(viewer)` 构造器。）
+`WorkflowMinimapOverlay.ScrollViewer` 是普通自动属性，`NavigateToCanvasLocal` 要求 `_tree` 与 `ScrollViewer` **同时非空**。**适配器会赋值**：`ScrollViewerName` DP + `ResolveScrollViewer()`（`FindName(name) is ScrollViewer viewer`，`Loaded` 时再兜一次）⇒ 模板只要写 `ScrollViewerName="PART_ScrollViewer"`（`workflow-tree-view/TemplateClass.jalxaml`）就接上，宿主不必自己赋（Trimmed demo 宿主是标记，没有 `ScrollViewer = viewer`）。（非 Trimmed demo `Examples/Workflow/Jalium/` 走 `Minimap(viewer)` 构造器。）
 
 ### 3.4 画布变换的通道：`CanvasTransform` 附着属性
 

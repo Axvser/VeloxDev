@@ -59,35 +59,39 @@ public static class WorkflowNodeEx
 
     // The Anchor/Size getters collapse toward the world origin by Layout.Scale (value / scale), so
     // in-place mutation of the returned value would write to a discarded copy. All mutations must go
-    // through the property setters, which store the ORIGINAL world value. sx/sy here are the inverse
-    // collapse factors: collapsed = world / scale, so world = collapsed * scale.
+    // through the property setters, which store the ORIGINAL world value.
 
-    private static (double Sx, double Sy) ViewToWorldFactors(INodeComponent component)
+    /// <summary>Returns the node's stored world anchor — the value its setter accepts — undoing the getter's scale collapse.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="component"/> is <see langword="null"/>.</exception>
+    public static Anchor GetWorldAnchor(this INodeComponent component)
     {
-        var scale = component.Parent?.Layout?.Scale;
-        return (
-            scale is null || scale.Horizontal == 0 ? 1 : scale.Horizontal,
-            scale is null || scale.Vertical == 0 ? 1 : scale.Vertical);
+        if (component is null) throw new ArgumentNullException(nameof(component));
+        return component.Anchor.Expand(component.Parent?.Layout?.Scale);
+    }
+
+    /// <summary>Returns the node's stored world size — the value its setter accepts — undoing the getter's scale collapse.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="component"/> is <see langword="null"/>.</exception>
+    public static Size GetWorldSize(this INodeComponent component)
+    {
+        if (component is null) throw new ArgumentNullException(nameof(component));
+        return component.Size.Expand(component.Parent?.Layout?.Scale);
     }
 
     /// <summary>Sets the node's anchor to <paramref name="anchor"/> and notifies listeners.</summary>
     public static void StandardSetAnchor(this INodeComponent component, Anchor anchor)
     {
         if (component is null) return;
-        // `anchor` is already a world coordinate (screen minus ActualOffset); store directly.
+        // `anchor` is already a world coordinate (the frame the getter's collapse divides); store directly.
+        // 通知归 setter：Anchor/Size 的实现必须在 setter 里发 PropertyChanged，标准实现与生成器都是这样做的。
         component.Anchor = new Anchor(anchor.Horizontal, anchor.Vertical, anchor.Layer);
-        component.OnPropertyChanged(nameof(component.Anchor));
     }
 
     /// <summary>Sets only the node's layer, keeping its world position.</summary>
     public static void StandardSetLayer(this INodeComponent component, int layer)
     {
         if (component is null) return;
-        // Recover the world H/V from the collapsed view anchor before changing only the layer.
-        var a = component.Anchor;
-        var (sx, sy) = ViewToWorldFactors(component);
-        component.Anchor = new Anchor(a.Horizontal * sx, a.Vertical * sy, layer);
-        component.OnPropertyChanged(nameof(component.Anchor));
+        var world = component.GetWorldAnchor();
+        component.Anchor = new Anchor(world.Horizontal, world.Vertical, layer);
     }
     /// <summary>Sets the node's size to <paramref name="size"/> once the resizing hooks allow it.</summary>
     public static void StandardSetSize(this INodeComponent component, Size size)
@@ -101,7 +105,6 @@ public static class WorkflowNodeEx
         if (handle.PreventDefault) return;
 
         component.Size = to;
-        component.OnPropertyChanged(nameof(component.Size));
 
         events?.RaiseResized(from, to, handle);
     }
@@ -112,23 +115,21 @@ public static class WorkflowNodeEx
         if (component is null) return;
         // `offset` is a view-space (drag) delta: the collapsed anchor moves by it, then convert back
         // to world so the node visual follows the pointer exactly (world' = (collapsed + offset) * scale).
-        var a = component.Anchor;
-        var (sx, sy) = ViewToWorldFactors(component);
+        var view = component.Anchor;
+        var scale = component.Parent?.Layout?.Scale;
 
         // 事件里的两端都写成**世界坐标的完整落位**（含图层）：宿主若拿 `To` 自己落位、或存 `From` 以后撤销，
-        // 都不会把节点的图层悄悄抹成 0。
-        var from = new Anchor(a.Horizontal * sx, a.Vertical * sy, a.Layer);
-        var to = new Anchor(
-            (a.Horizontal + offset.Horizontal) * sx,
-            (a.Vertical + offset.Vertical) * sy,
-            a.Layer);
+        // 都不会把节点的图层悄悄抹成 0。`Expand` 在 1 缩放时返回原实例，事件里各拷一份，免得宿主改到模型。
+        var world = view.Expand(scale);
+        var from = new Anchor(world.Horizontal, world.Vertical, world.Layer);
+        var to = new Anchor(view.Horizontal + offset.Horizontal, view.Vertical + offset.Vertical, view.Layer)
+            .Expand(scale);
 
         var events = component.GetHelper() as INodeEvents;
         var handle = events?.RaiseMoving(from, to) ?? new WorkflowEventHandle();
         if (handle.PreventDefault) return;
 
         component.Anchor = to;
-        component.OnPropertyChanged(nameof(component.Anchor));
 
         events?.RaiseMoved(from, to, handle);
     }
@@ -309,13 +310,9 @@ public static class WorkflowNodeEx
 
         // Core change of approach 2: collect only "valid" connections (connections where both endpoint nodes exist)
         var connectionsToRemove = new List<ILinkComponent>();
-        var slotConnections = new Dictionary<ISlotComponent, (HashSet<ISlotComponent> Targets, HashSet<ISlotComponent> Sources)>();
 
         foreach (var slot in component.Slots)
         {
-            var validTargets = new HashSet<ISlotComponent>();
-            var validSources = new HashSet<ISlotComponent>();
-
             // Only collect connections whose target node exists in the same tree
             foreach (var target in slot.Targets)
             {
@@ -324,7 +321,6 @@ public static class WorkflowNodeEx
                     if (tree.LinksMap.TryGetValue(slot, out var dic) && dic.TryGetValue(target, out var link))
                     {
                         connectionsToRemove.Add(link);
-                        validTargets.Add(target);
                     }
                 }
             }
@@ -337,12 +333,9 @@ public static class WorkflowNodeEx
                     if (tree.LinksMap.TryGetValue(source, out var dic) && dic.TryGetValue(slot, out var link))
                     {
                         connectionsToRemove.Add(link);
-                        validSources.Add(source);
                     }
                 }
             }
-
-            slotConnections[slot] = (validTargets, validSources);
         }
 
         // Deduplicate the connections
@@ -358,7 +351,7 @@ public static class WorkflowNodeEx
             // Undo: undo the deletion
             () =>
             {
-                RestoreNode(tree, component, oldParent, distinctConnections, slotConnections);
+                RestoreNode(tree, component, oldParent, distinctConnections);
             }
         ));
 
@@ -373,22 +366,7 @@ public static class WorkflowNodeEx
         // Phase 1: break all connection relations
         foreach (var link in connections)
         {
-            var sender = link.Sender;
-            var receiver = link.Receiver;
-
-            if (tree.LinksMap.TryGetValue(sender, out var receiverDict))
-            {
-                receiverDict.Remove(receiver);
-                if (receiverDict.Count == 0)
-                {
-                    tree.LinksMap.Remove(sender);
-                }
-            }
-
-            tree.Links.Remove(link);
-            sender.Targets.Remove(receiver);
-            receiver.Sources.Remove(sender);
-            link.IsVisible = false;
+            WorkflowLinkEx.RemoveLinkFromTree(tree, link);
         }
 
         // Phase 2: break the slots' parent-child relations
@@ -409,8 +387,7 @@ public static class WorkflowNodeEx
         ITreeComponent tree,
         INodeComponent node,
         ITreeComponent oldParent,
-        List<ILinkComponent> connections,
-        Dictionary<ISlotComponent, (HashSet<ISlotComponent> Targets, HashSet<ISlotComponent> Sources)> slotConnections)
+        List<ILinkComponent> connections)
     {
         // Phase 1: restore the node itself
         node.Parent = oldParent;
@@ -423,64 +400,12 @@ public static class WorkflowNodeEx
         foreach (var slot in node.Slots)
         {
             slot.Parent = node;
-
-            if (slotConnections.TryGetValue(slot, out var connectionsInfo))
-            {
-                if (connectionsInfo.Targets != null)
-                {
-                    foreach (var target in connectionsInfo.Targets)
-                    {
-                        if (!slot.Targets.Contains(target))
-                        {
-                            slot.Targets.Add(target);
-                        }
-                    }
-                }
-
-                if (connectionsInfo.Sources != null)
-                {
-                    foreach (var source in connectionsInfo.Sources)
-                    {
-                        if (!slot.Sources.Contains(source))
-                        {
-                            slot.Sources.Add(source);
-                        }
-                    }
-                }
-            }
         }
 
         // Phase 3: restore all connections (now safe because they are all valid)
         foreach (var link in connections)
         {
-            var sender = link.Sender;
-            var receiver = link.Receiver;
-
-            // Restore the mapping
-            if (!tree.LinksMap.ContainsKey(sender))
-            {
-                tree.LinksMap[sender] = [];
-            }
-            tree.LinksMap[sender][receiver] = link;
-
-            // Restore the collections
-            if (!tree.Links.Contains(link))
-            {
-                tree.Links.Add(link);
-            }
-
-            // Restore the bidirectional relations (avoiding duplicates)
-            if (!sender.Targets.Contains(receiver))
-            {
-                sender.Targets.Add(receiver);
-            }
-            if (!receiver.Sources.Contains(sender))
-            {
-                receiver.Sources.Add(sender);
-            }
-
-            // Show the link
-            link.IsVisible = true;
+            WorkflowLinkEx.RestoreLinkToTree(tree, link);
         }
 
         // Phase 4: batch-update the state of all affected components

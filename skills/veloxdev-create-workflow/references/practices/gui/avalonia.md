@@ -37,7 +37,7 @@ The canvas is a `ScrollViewer` + `Canvas`, and node and link views bind their `R
 </Canvas>
 ```
 
-The decorator has two hit-test-transparent layers: the grid at the bottom and the ruler at `ZIndex="100"` — translucent top/left bands, ticks and world-value labels. Its `RulerBand => RulerThickness` is read by `WorkflowSurfaceBehavior` and forwarded to the virtualizer; a decorator that returns `0` while still covering the top/left with a band culls nodes that are visibly under it. The grid maths use the same `RulerThickness` as the content offset (`GridWorldLeft` / `GridX`), so ticks and nodes stay in one coordinate space while panning.
+The decorator has two hit-test-transparent layers: the grid at the bottom and the ruler at `ZIndex="100"` — translucent top/left bands, ticks and world-value labels. Its `RulerBand => RulerThickness` is read by `WorkflowSurfaceBehavior` and forwarded to the virtualizer; a decorator that returns `0` while still covering the top/left with a band culls nodes that are visibly under it. The grid maths use the same `RulerThickness` as the content offset (`GridCanvasLeft` / `GridX`), so ticks and nodes stay in one coordinate space while panning.
 
 ## Adding your own content to a node
 

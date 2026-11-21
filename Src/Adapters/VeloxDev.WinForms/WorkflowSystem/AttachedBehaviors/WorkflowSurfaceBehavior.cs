@@ -1950,7 +1950,7 @@ public sealed class WorkflowSurfaceBehavior
                 -state.PanOffset.Y + dy);
         }
 
-        public void CenterOn(double worldX, double worldY)
+        public void CenterOn(double localX, double localY)
         {
             if (state.Tree?.Layout is not { } layout)
             {
@@ -1962,8 +1962,8 @@ public sealed class WorkflowSurfaceBehavior
             // 节点的 Anchor/Size 是「折叠后」的画布局部坐标；视口还必须加上 CanvasLayout.ActualOffset
             // （负向扩展后的画布原点）。只做 world - viewport/2 会在平移/缩放后把目标送偏同样的偏移。
             var (scrollX, scrollY) = WorkflowSurfaceMath.CenterScroll(
-                worldX,
-                worldY,
+                localX,
+                localY,
                 size.Width,
                 size.Height,
                 layout);

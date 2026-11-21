@@ -240,7 +240,7 @@ link.Locate();   // the midpoint of its two endpoint nodes' centers
 
 ⚙ **`Locate()` reads model data only.** A slot targets its parent node (not its measured anchor), and a link targets the midpoint of its endpoints (not its published curve), so an element that is off-screen, unmeasured or not yet drawn still reaches the centre. It pans only — the zoom is untouched — and returns `false` without changing anything when the tree has no navigator or the target has no finite position.
 
-⚙ **A target outside the current extent grows the canvas.** Five surfaces (WPF / Avalonia / WinUI / MAUI / Razor) apply `ClampScrollOffset` with `extendRatio: 0`, then re-read the extent before scrolling; Jalium's `NavigateToWorld` grows by the same rule; WinForms' pan engine accepts signed targets and has no extent ceiling. An implementation that cannot grow clamps, so the point lands as close to the centre as it allows.
+⚙ **A target outside the current extent grows the canvas.** Five surfaces (WPF / Avalonia / WinUI / MAUI / Razor) apply `ClampScrollOffset` with `extendRatio: 0`, then re-read the extent before scrolling; Jalium's `NavigateToCanvasLocal` grows by the same rule; WinForms' pan engine accepts signed targets and has no extent ceiling. An implementation that cannot grow clamps, so the point lands as close to the centre as it allows.
 
 ⚙ **Ctrl+wheel is the zoom gesture, not a scroll.** It is routed first, so `PreventDefault` on `PointerWheelChanged` suppresses the zoom as well; without Ctrl the wheel never zooms.
 

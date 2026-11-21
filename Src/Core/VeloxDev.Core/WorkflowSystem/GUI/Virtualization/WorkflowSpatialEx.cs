@@ -326,7 +326,7 @@ public static class WorkflowSpatialEx
     /// <para>
     /// The frame is the one <see cref="QueryNodes(ITreeComponent, Viewport)"/> queries in. A node's
     /// <see cref="INodeComponent.Anchor"/> getter returns that frame, and
-    /// <see cref="WorkflowSurfaceMath.ToWorldAnchor(double, double, int, CanvasLayout)"/> produces a point in
+    /// <see cref="WorkflowSurfaceMath.ToCanvasLocalAnchor(double, double, int, CanvasLayout)"/> produces a point in
     /// it from a pointer position — so a marquee built from two routed pointer positions needs no
     /// scaling of its own. Multiplying by <see cref="CanvasLayout.Scale"/> here would size the rectangle
     /// wrongly everywhere except at 100% zoom. (Writing a node's <c>Anchor</c> is the other direction and

@@ -373,7 +373,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         dc.DrawLine(_dividerPen!, new Point(scrollX, scrollY + ruler), new Point(scrollX + viewportWidth, scrollY + ruler));
 
         // 上标尺：刻度落在穿过视口的世界网格线上，画布 x = world + originX。
-        double worldLeft = WorkflowSurfaceMath.GridWorldLeft(scrollX, originX);
+        double worldLeft = WorkflowSurfaceMath.GridCanvasLeft(scrollX, originX);
         for (double g = WorkflowSurfaceMath.GridFirstLine(worldLeft, step); g + originX <= scrollX + viewportWidth; g += step)
         {
             double x = g + originX;
@@ -391,7 +391,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         }
 
         // 左标尺：刻度落在穿过视口的世界网格线上，画布 y = world + originY。
-        double worldTop = WorkflowSurfaceMath.GridWorldTop(scrollY, originY);
+        double worldTop = WorkflowSurfaceMath.GridCanvasTop(scrollY, originY);
         for (double g = WorkflowSurfaceMath.GridFirstLine(worldTop, step); g + originY <= scrollY + viewportHeight; g += step)
         {
             double y = g + originY;

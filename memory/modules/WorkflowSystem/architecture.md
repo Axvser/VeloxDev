@@ -53,6 +53,10 @@
 | `TreeHelper.VisibleItems` | `WorkflowSpatialEx.VirtualizeCore`（`GUI/Virtualization/WorkflowSpatialEx.cs` 的 `VirtualizeCore`） | 任何地方直接改它都会让空间索引与可见集脱钩 |
 | `slot.Anchor` | 适配器的 slot-layout 行为，经 `WorkflowLayoutBatch` 合并后测量写入（布局 pass 同帧 `Flush`，其余触发到渲染优先级 `Schedule`） | 见 [scheduling.md](scheduling.md) 与 `GUI/Rendering/WorkflowSlotUpdateGate.cs` 的 `WorkflowSlotUpdateGate` 类声明上方的长注释 |
 | `VirtualLink` | `StandardSendConnection` / `StandardResetVirtualLink`（`StandardEx/WorkflowTreeEx.cs` 的同名两个方法） | `VirtualLink.Sender/Receiver` 的 Anchor 被直接赋值，不走 setter |
+| 连线挂上/摘下树（`LinksMap`、`Links`、两端 `Targets`/`Sources`、`IsVisible`、`UpdateState`） | `WorkflowLinkEx.RemoveLinkFromTree` / `RestoreLinkToTree`（`StandardEx/WorkflowLinkEx.cs`） | 新建连线、批量清理、节点删除、槽删除都只调这两个；调用方只负责批次与 undo 包装 |
+| 连接拖拽状态（起点、候选、预览阶段） | `WorkflowInput.For(tree)`（`GUI/Events/WorkflowInput.cs`） | `WorkflowTreeEx.TreeCache` 只留 undo/redo 栈 |
+| 一对口能否连接 | `WorkflowTreeEx.EvaluateConnection`（`StandardEx/WorkflowTreeEx.cs`） | 预览、显式查询、落手共用；落手传 `checkSender: false`（发送端能力在拖拽开始时已验） |
+| `Anchor` / `Size` 的 `PropertyChanged` | 组件的 setter | `StandardSetAnchor` / `StandardSetLayer` / `StandardMove` / `StandardSetSize` 只赋值，不再补发通知 |
 
 ### 一个反直觉点：`Anchor` / `Size` 的 getter 返回的是「折叠后的临时对象」
 
@@ -60,16 +64,16 @@
 
 > `Src/Core/VeloxDev.Core/WorkflowSystem/StandardEx/WorkflowNodeEx.cs`（`StandardSetAnchor` 上方）——「The Anchor/Size getters collapse toward the world origin by Layout.Scale (value / scale), so in-place mutation of the returned value would write to a discarded copy. All mutations must go through the property setters, which store the ORIGINAL world value.」
 
-所以 `node.Anchor.Horizontal = 5;` 或者 `node.Anchor + someOffset` 里对 `node.Anchor` 的属性赋值**全部丢失**。`StandardMove` 也是按这个语义写的：`world' = (collapsed + offset) * scale`（`StandardEx/WorkflowNodeEx.cs` 的 `StandardMove`）。
+所以 `node.Anchor.Horizontal = 5;` 或者 `node.Anchor + someOffset` 里对 `node.Anchor` 的属性赋值**全部丢失**。`StandardMove` 也是按这个语义写的：`world' = (collapsed + offset) * scale`（`StandardEx/WorkflowNodeEx.cs` 的 `StandardMove`）。读世界值用 `node.GetWorldAnchor()` / `GetWorldSize()`（`WorkflowNodeEx`），它们是 `Anchor/Size.Expand(scale)` 的节点级入口；`Collapse` 与 `Expand` 是严格互逆的一对（null/1/0 缩放返回原实例）。
 
 **写侧两个命令收的不是同一个帧**（`Anchor` 这个名字下同时存在两帧，读错只在 `Scale ≠ 1` 时显形）：
 
 | 入口 | 收什么帧 | 依据 |
 |---|---|---|
 | `SetAnchorCommand` | **世界**帧，原样存 | `StandardEx/WorkflowNodeEx.cs` 的 `StandardSetAnchor` |
-| `MoveCommand` | **视图**增量，内部乘 `Scale` | `StandardEx/WorkflowNodeEx.cs` 的 `StandardMove` + `ViewToWorldFactors` |
+| `MoveCommand` | **视图**增量，内部乘 `Scale` | `StandardEx/WorkflowNodeEx.cs` 的 `StandardMove`（`Anchor.Expand`） |
 
-⇒ 把节点的位置**报出去**（Agent 工具面、宿主、外层 API）要乘 `Scale` 回到世界帧（`VeloxDev.Core.Extension` 的 `WorkflowAgentToolkit.WorldFrame`，工具面在 `Scale=0.5 / 2.0` 上有测试）；渲染与空间索引则**留在折叠帧**，两者不要互相"修正"。另外 `WorkflowSurfaceMath.ToWorldAnchor` 名字里的 "world" 是**折叠帧**（`screen − ActualOffset`），全类同名的还有好几处，判据见 `skills/veloxdev-create-workflow/references/canvas-math.md` 的那张表。非 1 缩放的读/写往返由 `VeloxDev.Core.Extension.Test` 的 `NodeGeometryToolTests` 的 `MoveNode_LandsWhereADragWould_AtANonUnitScale` / `QueryTools_ReportTheWorldPosition_ThePlacementToolsTake` / `SetNodePosition_ReadsBackThroughGetNodeDetail_AtANonUnitScale` 这几条钉住 —— `AnchorSizeCollapseTests` 只钉 `Collapse` 这一个纯变换，不覆盖 VM getter、命令与序列化。
+⇒ 把节点的位置**报出去**（Agent 工具面、宿主、外层 API）要乘 `Scale` 回到世界帧（`WorkflowNodeEx.GetWorldAnchor` / `GetWorldSize`，即 `Anchor/Size.Expand`；`Collapse` 是它的逆）；渲染与空间索引则**留在折叠帧**，两者不要互相"修正"。`WorkflowSurfaceMath` 的 `ToCanvasLocal*` 是 `scroll − ActualOffset` 的画布局部帧（不是存储的世界值），`WorldAtViewportCenter` 才返回世界帧。非 1 缩放的读/写往返由 `VeloxDev.Core.Extension.Test` 的 `NodeGeometryToolTests` 的 `MoveNode_LandsWhereADragWould_AtANonUnitScale` / `QueryTools_ReportTheWorldPosition_ThePlacementToolsTake` / `SetNodePosition_ReadsBackThroughGetNodeDetail_AtANonUnitScale` 这几条钉住 —— `AnchorSizeCollapseTests` 钉 `Collapse`/`Expand` 这两个纯变换与节点扩展，不覆盖命令与序列化。
 
 ---
 
@@ -96,7 +100,7 @@ ReceiveConnection(receiverSlot) → 校验 receiver 方向 → ValidateConnectio
                                 → 拒同节点 → 清同向冲突 → 按 receiver channel 清旧 → StandardCreateNewConnection
 ```
 
-依据：`StandardEx/WorkflowTreeEx.cs` 的 `StandardSendConnection` / `StandardReceiveConnection`。**注意校验全在 receiver 侧**：`SendConnection` 只查 sender 自己的能力和容量。
+依据：`StandardEx/WorkflowTreeEx.cs` 的 `StandardSendConnection` / `StandardReceiveConnection`。**注意校验全在 receiver 侧**：`SendConnection` 只查 sender 自己的能力和容量。发送/接收能力、同节点与 `ValidateConnection` 只有一份实现（`EvaluateConnection`），预览与落手共用；`Connecting` 仍只在落手时发。
 
 #### 3.2.1 拖动中的连接预览（候选口与阶段）
 
@@ -255,7 +259,7 @@ ITreeEvents : Connecting/Connected
 
 ⇒ 「加一个新的连线交互动作」（比如双击重命名）就是订标准输入：适配器把那次指针事件路由进来，宿主在组件上订它 —— **不用改 Core**；**手势**（平移、拖动、连线、缩放）仍是适配器的事，但**四个手势都读这一笔按下的句柄**：订阅者置 `PreventDefault`，框架那一手就不执行 —— 与菜单、Delete 是同一条契约。各家把句柄交到手势手上的路径不同（隧道相 / 组件自己转发 / JS 先问再动手），见 [extension.md](extension.md) 的「否决某一次自带手势」那一行与 `adapters/<平台>.md`。**普通滚轮整笔归适配器**：平台的滚动容器**一次都不许滚画布** —— 适配器自己拦下、路由、再按裁决决定这一笔的归属：订阅方置 `PreventDefault` 就是「这一次不滚」，由他经 `WorkflowInput.Scroller`（`IWorkflowSurfaceScroller`，中立滚动请求，收的是**滚轮增量**不是像素）决定往哪滚；没人碰就由适配器执行**默认竖滚**，步长复刻平台自己那一手（WPF 实测一格 48 = `WheelScrollLines` 3 × 16；Avalonia 一格 50）。Ctrl+滚轮（缩放）仍是这四个手势之一，走另一支（挂在滚动容器的预览相上，与本支不重叠）。
 ⇒ **平台原生的 Shift+滚轮横滚被这一条有意取代**（Avalonia 实测其 `ScrollViewer` 本来就会横滚，一格 50；WinUI 与浏览器同理，WPF 不会）：默认恒为垂直，横不横**由宿主的订阅决定**。所以「默认滚动是垂直、按住 Shift 横滚」是宿主十来行的事，七家的 demo 是同一段代码。宿主读**滚轮事件自带的 `Modifiers`**（适配器在构造 `PointerWheelEventArgs` 时从平台键盘状态填好），它**不依赖键盘焦点** —— 七个 Trimmed demo 都这么写，未点击画布时 Shift+滚轮也直接横滚（七家实测见 `adapters/avalonia.md`）。
-**绝对定位是另一条中立能力**：适配器在 `WorkflowInput.Navigator`（`IWorkflowSurfaceNavigator`）上注册 `CenterOn(worldX, worldY)`，`WorkflowNavigationEx` 的 `node/slot/link.Locate()` 只负责把元素换算成世界点（节点自身矩形中心 / 插槽父节点矩形中心 / 连线两端节点矩形中心的中点）——全部取自模型，不依赖插槽锚点或已发布曲线，滚动由适配器用 `WorkflowSurfaceMath.CenterScroll` 完成；只平移、不改缩放，没有表面时返回 `false`。**目标越界时按差额延展画布**（`ClampScrollOffset`、`extendRatio: 0`，再 ApplyLayout/UpdateLayout 后重算目标）：WPF / Avalonia / WinUI / MAUI / Razor 已对齐，Jalium 的 `NavigateToWorld` 走 Grow，WinForms 由平移引擎处理。**与缩放无关**：节点/尺寸 getter 已按 `Scale` 坍缩，`CenterScroll` 再加 `ActualOffset`，所以 0.5× / 2× 下用的是同一个公式；前提是画布 extent 已按 `Layout.ActualSize` 更新（模板绑定它）。
+**绝对定位是另一条中立能力**：适配器在 `WorkflowInput.Navigator`（`IWorkflowSurfaceNavigator`）上注册 `CenterOn(localX, localY)`，`WorkflowNavigationEx` 的 `node/slot/link.Locate()` 只负责把元素换算成画布局部点（节点自身矩形中心 / 插槽父节点矩形中心 / 连线两端节点矩形中心的中点）——全部取自模型，不依赖插槽锚点或已发布曲线，滚动由适配器用 `WorkflowSurfaceMath.CenterScroll` 完成；只平移、不改缩放，没有表面时返回 `false`。**目标越界时按差额延展画布**（`ClampScrollOffset`、`extendRatio: 0`，再 ApplyLayout/UpdateLayout 后重算目标）：WPF / Avalonia / WinUI / MAUI / Razor 已对齐，Jalium 的 `NavigateToCanvasLocal` 走 Grow，WinForms 由平移引擎处理。**与缩放无关**：节点/尺寸 getter 已按 `Scale` 坍缩，`CenterScroll` 再加 `ActualOffset`，所以 0.5× / 2× 下用的是同一个公式；前提是画布 extent 已按 `Layout.ActualSize` 更新（模板绑定它）。
 
 **滚轮增量的符号是契约的一部分**：`DeltaY` 正 = 远离用户，`DeltaX` 正 = **向右** —— 两者都是**平台自己的约定**（`WM_MOUSEHWHEEL`、浏览器 `deltaX`）。`IWorkflowSurfaceScroller.ScrollBy` 收同号：正的 X 把画面移向**右边的**内容。⇒ **两轴的正不是同一个物理方向**，所以「把竖滚的增量塞进横轴来改轴」（demo 的 `Shift+竖滚` 就这么做的）**必须自己取反**，否则方向会反 —— 七家共享的 `dx = -(deltaX/Notch)*step` 正是为此存在，却也因此让**真横向滚轮**倒着走（`hwheel` 动词可量到）。
 ⚠ 横轴在这三家**到不了换算行**：**WPF 与 Jalium 的滚轮事件本身没有横轴分量**（`MouseWheelEventArgs` 只有 `Delta`）；**Avalonia 的事件带着 `e.Delta.X`，但默认滚那一支调的是 `ScrollBy(0d, …)`**（默认就是竖滚，宿主若要横滚得自己调）。Razor 有**两处**取反（JS 边界 × C#），翻一处会把那家弄反。

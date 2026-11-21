@@ -285,10 +285,10 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
         if (e.Handle.PreventDefault) return;
 
-        // 画布坐标 → 宿主局部的一点：先按逆变换回到画布局部，再由画布换到宿主 —— PlacementRect 相对宿主。
-        var screen = WorkflowSurfaceMath.ToScreen(e.Position.Horizontal, e.Position.Vertical, tree.Layout);
-        var point = state.Canvas.TranslatePoint(new Point(screen.Horizontal, screen.Vertical), host)
-                    ?? new Point(screen.Horizontal, screen.Vertical);
+        // 画布局部 → 宿主局部的一点：先加 ActualOffset 得到滚动坐标，再由画布换到宿主 —— PlacementRect 相对宿主。
+        var scroll = WorkflowSurfaceMath.ToScroll(e.Position.Horizontal, e.Position.Vertical, tree.Layout);
+        var point = state.Canvas.TranslatePoint(new Point(scroll.Horizontal, scroll.Vertical), host)
+                    ?? new Point(scroll.Horizontal, scroll.Vertical);
 
         state.MenuLink = link;
 
@@ -316,7 +316,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         var point = e.GetPosition(state.Canvas);
         var layer = (e.Source as Visual)?.ZIndex ?? 0;
-        var anchor = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, layer, viewModel.Layout);
+        var anchor = WorkflowSurfaceMath.ToCanvasLocalAnchor(point.X, point.Y, layer, viewModel.Layout);
         var input = WorkflowInput.For(viewModel);
         var target = ResolveTarget(e.Source, viewModel, anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
@@ -956,14 +956,14 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
                 dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, maxV) : viewer.Offset.Y);
         }
 
-        public void CenterOn(double worldX, double worldY)
+        public void CenterOn(double localX, double localY)
         {
             if (state.ScrollViewer is not { } viewer) return;
             if (state.Host is not { } host || host.DataContext is not ITreeComponent viewModel) return;
 
             var layout = viewModel.Layout;
             var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
-                worldX, worldY, viewer.Viewport.Width, viewer.Viewport.Height, layout);
+                localX, localY, viewer.Viewport.Width, viewer.Viewport.Height, layout);
             var maxH = GetHorizontalScrollMaximum(viewer);
             var maxV = GetVerticalScrollMaximum(viewer);
 
@@ -978,7 +978,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
                 maxH = GetHorizontalScrollMaximum(viewer);
                 maxV = GetVerticalScrollMaximum(viewer);
                 (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
-                    worldX, worldY, viewer.Viewport.Width, viewer.Viewport.Height, layout);
+                    localX, localY, viewer.Viewport.Width, viewer.Viewport.Height, layout);
             }
 
             viewer.Offset = new Vector(
@@ -1048,7 +1048,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
 
         var point = e.GetPosition(state.Canvas);
-        var pointer = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout);
+        var pointer = WorkflowSurfaceMath.ToCanvasLocalAnchor(point.X, point.Y, 0, viewModel.Layout);
         viewModel.SetPointerCommand.Execute(pointer);
 
         // 连线建立过程中橡皮筋就在指针底下，逐帧判悬停只会把沿途那些实连线点亮（VirtualLink 仅在拖时可见）。
@@ -1263,8 +1263,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
-        var viewportX = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.Offset.X, viewModel.Layout.ActualOffset.Horizontal);
-        var viewportY = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.Offset.Y, viewModel.Layout.ActualOffset.Vertical);
+        var viewportX = WorkflowSurfaceMath.ToCanvasLocal(state.ScrollViewer.Offset.X, viewModel.Layout.ActualOffset.Horizontal);
+        var viewportY = WorkflowSurfaceMath.ToCanvasLocal(state.ScrollViewer.Offset.Y, viewModel.Layout.ActualOffset.Vertical);
         viewModel.GetHelper().Viewport = new Viewport(
             viewportX, viewportY,
             state.ScrollViewer.Viewport.Width,

@@ -112,12 +112,7 @@ public sealed class WorkflowInput
 
         if (ReferenceEquals(connectionSender, sender)) return;
 
-        if (connectionSender is { } previous)
-        {
-            previous.State &= ~SlotState.PreviewSender;
-            previous.GetHelper().UpdateState();
-        }
-
+        ClearConnectionSender();
         connectionSender = sender;
         ClearPreviewReceiver();
         previewCheck = null;
@@ -166,11 +161,22 @@ public sealed class WorkflowInput
         if (connectionSender is null && previewReceiver is null && previewState == ConnectionPreviewState.None)
             return;
 
-        connectionSender = null;
+        ClearConnectionSender();
         ClearPreviewReceiver();
         previewCheck = null;
         SetPreviewState(ConnectionPreviewState.None);
         RaisePreviewChanged();
+    }
+
+    private void ClearConnectionSender()
+    {
+        if (connectionSender is { } sender)
+        {
+            sender.State &= ~SlotState.PreviewSender;
+            sender.GetHelper().UpdateState();
+        }
+
+        connectionSender = null;
     }
 
     private void ClearPreviewReceiver()
@@ -238,7 +244,7 @@ public sealed class WorkflowInput
     public IWorkflowSurfaceScroller? Scroller { get; set; }
 
     /// <summary>
-    /// How a host centers this surface on a world point, or <see langword="null"/> until an adapter registers one.
+    /// How a host centers this surface on a canvas-local point, or <see langword="null"/> until an adapter registers one.
     /// </summary>
     /// <remarks>
     /// The absolute companion of <see cref="Scroller"/>: that one turns a wheel delta into a scroll, this one

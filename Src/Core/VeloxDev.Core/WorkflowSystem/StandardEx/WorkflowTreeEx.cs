@@ -110,8 +110,6 @@ public static class WorkflowTreeEx
     /// <summary>Starts building a connection from <paramref name="slot"/>.</summary>
     public static void StandardSendConnection(this ITreeComponent component, ISlotComponent slot)
     {
-        var cache = GetCache(component);
-
         if (component.VirtualLink is not { Sender: { } sender, Receiver: { } receiver })
         {
             return;
@@ -128,7 +126,6 @@ public static class WorkflowTreeEx
         if (!canBeSender)
         {
             component.StandardResetVirtualLink();
-            cache.CurrentSender = null;
             return;
         }
 
@@ -141,7 +138,6 @@ public static class WorkflowTreeEx
         component.VirtualLink.IsVisible = true;
 
         // 4. Update state
-        cache.CurrentSender = slot;
         slot.State = SlotState.PreviewSender;
         slot.GetHelper().UpdateState();
         WorkflowInput.For(component).SetConnectionSender(slot);
@@ -212,7 +208,18 @@ public static class WorkflowTreeEx
         if (sender is null) throw new ArgumentNullException(nameof(sender));
         if (receiver is null) throw new ArgumentNullException(nameof(receiver));
 
-        if (!sender.StandardCanBeSender())
+        return EvaluateConnection(component, sender, receiver, checkSender: true);
+    }
+
+    // 预览、显式查询与落手共用的规则；落手不再重查发送端能力（拖拽开始时已经验过），
+    // 由 checkSender 控制，避免两处各自维护一套判定。
+    private static ConnectionCheck EvaluateConnection(
+        ITreeComponent component,
+        ISlotComponent sender,
+        ISlotComponent receiver,
+        bool checkSender)
+    {
+        if (checkSender && !sender.StandardCanBeSender())
             return ConnectionCheck.Rejected(ConnectionRejectReason.SenderCannotSend);
 
         if (!receiver.StandardCanBeReceiver())
@@ -263,8 +270,8 @@ public static class WorkflowTreeEx
     /// <summary>Completes a connection at <paramref name="slot"/>.</summary>
     public static void StandardReceiveConnection(this ITreeComponent component, ISlotComponent slot)
     {
-        var cache = GetCache(component);
-        if (cache.CurrentSender == null) return;
+        var sender = WorkflowInput.For(component).ConnectionSender;
+        if (sender is null) return;
 
         // Check the receiver's capability
         bool canBeReceiver = slot.StandardCanBeReceiver();
@@ -277,51 +284,38 @@ public static class WorkflowTreeEx
         // 事件先问（可逐次否决），校验器再问（Helper 的规则）：两者任一说不，这次连接就不成立。
         var helper = component.GetHelper();
         var events = helper as ITreeEvents;
-        var handle = events?.RaiseConnecting(cache.CurrentSender, slot) ?? new WorkflowEventHandle();
+        var handle = events?.RaiseConnecting(sender, slot) ?? new WorkflowEventHandle();
         if (handle.PreventDefault)
         {
             component.StandardResetVirtualLink();
-            cache.CurrentSender = null;
             return;
         }
 
-        // Check the user-custom validation logic
-        if (!helper.ValidateConnection(cache.CurrentSender, slot))
+        // 落手与预览共用一套规则；发送端能力在拖拽开始时已经验过，这里不重复。
+        if (!EvaluateConnection(component, sender, slot, checkSender: false).IsValid)
         {
             component.StandardResetVirtualLink();
-            cache.CurrentSender = null;
-            return;
-        }
-
-        // Check for connections within the same node
-        if (cache.CurrentSender.Parent == slot.Parent)
-        {
-            component.StandardResetVirtualLink();
-            cache.CurrentSender = null;
             return;
         }
 
         // Enforce the hard rule: check and clean up same-direction connection conflicts
-        component.StandardCleanupSameDirectionConnections(cache.CurrentSender, slot);
+        component.StandardCleanupSameDirectionConnections(sender, slot);
 
         // Clean up connections smartly based on the receiver's channel type
         component.StandardSmartCleanupReceiverConnections(slot);
 
         // Create the new connection
-        component.StandardCreateNewConnection(cache.CurrentSender, slot);
+        component.StandardCreateNewConnection(sender, slot);
 
-        events?.RaiseConnected(cache.CurrentSender, slot, handle);
+        events?.RaiseConnected(sender, slot, handle);
 
         // Reset state
         component.StandardResetVirtualLink();
-        cache.CurrentSender = null;
     }
 
     /// <summary>Clears the virtual link and its preview state.</summary>
     public static void StandardResetVirtualLink(this ITreeComponent component)
     {
-        var cache = GetCache(component);
-
         // Reset to "no value" (NaN) rather than the origin (0,0,0): the virtual-link endpoints have no valid coordinates before a drag.
         if (component.VirtualLink is { } virtualLink)
         {
@@ -330,13 +324,7 @@ public static class WorkflowTreeEx
             virtualLink.IsVisible = false;
         }
 
-        if (cache.CurrentSender != null)
-        {
-            cache.CurrentSender.State &= ~SlotState.PreviewSender;
-            cache.CurrentSender.GetHelper().UpdateState();
-        }
-
-        cache.CurrentSender = null;
+        // 拖拽状态只有 WorkflowInput 一份：它同时清掉发送端的 PreviewSender 位。
         WorkflowInput.For(component).ClearConnectionPreview();
     }
     #endregion
@@ -541,46 +529,10 @@ public static class WorkflowTreeEx
 
         // Create the new connection
         var newLink = component.GetHelper().CreateLink(sender, receiver);
-        newLink.IsVisible = true;
 
         component.StandardSubmit(new ActionPair(
-            () =>
-            {
-                if (!component.LinksMap.ContainsKey(sender))
-                    component.LinksMap[sender] = [];
-
-                component.LinksMap[sender][receiver] = newLink;
-                component.Links.Add(newLink);
-
-                if (!sender.Targets.Contains(receiver))
-                    sender.Targets.Add(receiver);
-                if (!receiver.Sources.Contains(sender))
-                    receiver.Sources.Add(sender);
-
-                sender.GetHelper().UpdateState();
-                receiver.GetHelper().UpdateState();
-
-                newLink.IsVisible = true;
-            },
-            () =>
-            {
-                component.Links.Remove(newLink);
-                if (component.LinksMap.ContainsKey(sender))
-                {
-                    component.LinksMap[sender].Remove(receiver);
-                    if (component.LinksMap[sender].Count == 0)
-                        component.LinksMap.Remove(sender);
-                }
-
-                sender.Targets.Remove(receiver);
-                receiver.Sources.Remove(sender);
-
-                sender.GetHelper().UpdateState();
-                receiver.GetHelper().UpdateState();
-
-                newLink.IsVisible = false;
-            }
-        ));
+            () => WorkflowLinkEx.RestoreLinkToTree(component, newLink),
+            () => WorkflowLinkEx.RemoveLinkFromTree(component, newLink)));
     }
 
     private static void StandardRemoveConnections(this ITreeComponent component,
@@ -589,98 +541,17 @@ public static class WorkflowTreeEx
         if (component is null || connectionsToRemove.Count == 0)
             return;
 
-        var redoActions = new List<Action>();
-        var undoActions = new List<Action>();
-
-        // Collect all affected slots for unified state updates
-        var affectedSlots = new HashSet<ISlotComponent>();
-
-        foreach (var (sender, receiver, link) in connectionsToRemove)
-        {
-            affectedSlots.Add(sender);
-            affectedSlots.Add(receiver);
-
-            redoActions.Add(() =>
+        component.StandardSubmit(new ActionPair(
+            () =>
             {
-                // Remove the link from the Links collection
-                component.Links.Remove(link);
-
-                // Remove the link mapping from LinksMap
-                if (component.LinksMap.TryGetValue(sender, out var receiverLinks))
-                {
-                    receiverLinks.Remove(receiver);
-                    if (receiverLinks.Count == 0)
-                    {
-                        component.LinksMap.Remove(sender);
-                    }
-                }
-
-                // Update the sender's target collection
-                sender.Targets.Remove(receiver);
-
-                // Update the receiver's source collection
-                receiver.Sources.Remove(sender);
-
-                // Hide the link
-                link.IsVisible = false;
-            });
-
-            undoActions.Add(() =>
+                foreach (var (_, _, link) in connectionsToRemove)
+                    WorkflowLinkEx.RemoveLinkFromTree(component, link);
+            },
+            () =>
             {
-                // Ensure LinksMap has a dictionary for the sender
-                if (!component.LinksMap.ContainsKey(sender))
-                {
-                    component.LinksMap[sender] = [];
-                }
-
-                // Restore the link mapping
-                component.LinksMap[sender][receiver] = link;
-
-                // Restore the link in the Links collection
-                component.Links.Add(link);
-
-                // Restore the sender's target collection
-                if (!sender.Targets.Contains(receiver))
-                {
-                    sender.Targets.Add(receiver);
-                }
-
-                // Restore the receiver's source collection
-                if (!receiver.Sources.Contains(sender))
-                {
-                    receiver.Sources.Add(sender);
-                }
-
-                // Show the link
-                link.IsVisible = true;
-            });
-        }
-
-        // Add state-update actions to the redo/undo
-        redoActions.Add(() =>
-        {
-            foreach (var slot in affectedSlots)
-            {
-                slot?.GetHelper().UpdateState();
-            }
-        });
-
-        undoActions.Add(() =>
-        {
-            foreach (var slot in affectedSlots)
-            {
-                slot?.GetHelper().UpdateState();
-            }
-        });
-
-        // Build the complete action pair
-        var actionPair = new ActionPair(
-            () => { foreach (var action in redoActions) action(); },
-            () => { foreach (var action in undoActions) action(); }
-        );
-
-        // Submit to the undo/redo stack
-        component.StandardSubmit(actionPair);
+                foreach (var (_, _, link) in connectionsToRemove)
+                    WorkflowLinkEx.RestoreLinkToTree(component, link);
+            }));
     }
 
     private static bool ShouldCleanupConnections(SlotChannel channel, bool isSender, int existingConnections)
@@ -810,7 +681,6 @@ public static class WorkflowTreeEx
     #region Cache Management
     private class TreeCache
     {
-        public ISlotComponent? CurrentSender { get; set; }
         public ConcurrentStack<IActionPair> RedoStack { get; } = new();
         public ConcurrentStack<IActionPair> UndoStack { get; } = new();
     }

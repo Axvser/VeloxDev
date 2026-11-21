@@ -1,7 +1,7 @@
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
-/// Scrolls the surface a tree is drawn on so a world point sits at the viewport center.
+/// Scrolls the surface a tree is drawn on so a canvas-local point sits at the viewport center.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,9 +23,9 @@ namespace VeloxDev.WorkflowSystem;
 public interface IWorkflowSurfaceNavigator
 {
     /// <summary>
-    /// Scrolls so the world point (<paramref name="worldX"/>, <paramref name="worldY"/>) is at the viewport center.
+    /// Scrolls so the canvas-local point (<paramref name="localX"/>, <paramref name="localY"/>) is at the viewport center.
     /// </summary>
-    /// <param name="worldX">Horizontal world coordinate.</param>
-    /// <param name="worldY">Vertical world coordinate.</param>
-    void CenterOn(double worldX, double worldY);
+    /// <param name="localX">Horizontal canvas-local coordinate.</param>
+    /// <param name="localY">Vertical canvas-local coordinate.</param>
+    void CenterOn(double localX, double localY);
 }

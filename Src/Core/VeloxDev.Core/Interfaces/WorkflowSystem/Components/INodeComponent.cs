@@ -15,11 +15,19 @@ public interface INodeComponent : IWorkflowComponent
     public ITreeComponent? Parent { get; set; }
 
     /// <summary>The node's anchor position on the canvas.</summary>
+    /// <remarks>
+    /// The setter is responsible for raising <see cref="IWorkflowComponent.OnPropertyChanged"/> for
+    /// <see cref="Anchor"/>: the framework assigns through this property and does not raise a second notification.
+    /// </remarks>
     [AgentContext(AgentLanguages.Chinese, "当前Node在画布中的锚点坐标")]
     [AgentContext(AgentLanguages.English, "The anchor position of the current node on the canvas")]
     public Anchor Anchor { get; set; }
 
     /// <summary>The node's size.</summary>
+    /// <remarks>
+    /// The setter is responsible for raising <see cref="IWorkflowComponent.OnPropertyChanged"/> for
+    /// <see cref="Size"/>: the framework assigns through this property and does not raise a second notification.
+    /// </remarks>
     [AgentContext(AgentLanguages.Chinese, "当前Node的尺寸")]
     [AgentContext(AgentLanguages.English, "The size of the current node")]
     public Size Size { get; set; }

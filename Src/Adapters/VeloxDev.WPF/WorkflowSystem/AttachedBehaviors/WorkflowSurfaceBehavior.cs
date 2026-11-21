@@ -297,10 +297,10 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         // 菜单的 DataContext 就是这条连线，条目据此绑定命令。
         state.LinkMenu.DataContext = link;
 
-        // 画布坐标 → 设备坐标：先按适配器那套逆变换（world + ActualOffset）回到画布局部，再由画布换到屏幕；
+        // 画布局部 → 设备坐标：先加 ActualOffset 得到滚动坐标，再由画布换到屏幕；
         // AbsolutePoint 用 DIP，所以最后按 DPI 折回去。
-        var local = WorkflowSurfaceMath.ToScreen(e.Position.Horizontal, e.Position.Vertical, tree.Layout);
-        var device = state.Canvas.PointToScreen(new Point(local.Horizontal, local.Vertical));
+        var scroll = WorkflowSurfaceMath.ToScroll(e.Position.Horizontal, e.Position.Vertical, tree.Layout);
+        var device = state.Canvas.PointToScreen(new Point(scroll.Horizontal, scroll.Vertical));
         // netframework4.6.1 没有 VisualTreeHelper.GetDpi，退回呈现源的设备变换，两者给的是同一个缩放。
 #if NETFRAMEWORK
         var toDevice = PresentationSource.FromVisual(state.Canvas)?.CompositionTarget?.TransformToDevice;
@@ -750,7 +750,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var point = e.GetPosition(state.Canvas);
-        var pointer = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, 0, viewModel.Layout);
+        var pointer = WorkflowSurfaceMath.ToCanvasLocalAnchor(point.X, point.Y, 0, viewModel.Layout);
         viewModel.SetPointerCommand.Execute(pointer);
 
         // 拉线时指针下正挂着橡皮筋，那段时间不转发，否则沿途实连线会一路亮起；
@@ -992,14 +992,14 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(newY, 0d, maxV));
         }
 
-        public void CenterOn(double worldX, double worldY)
+        public void CenterOn(double localX, double localY)
         {
             if (state.ScrollViewer is not { } viewer) return;
             if (state.Host is not { } host || host.DataContext is not ITreeComponent viewModel) return;
 
             var layout = viewModel.Layout;
             var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
-                worldX, worldY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
+                localX, localY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
             var maxH = GetHorizontalScrollMaximum(viewer);
             var maxV = GetVerticalScrollMaximum(viewer);
 
@@ -1016,7 +1016,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 maxH = GetHorizontalScrollMaximum(viewer);
                 maxV = GetVerticalScrollMaximum(viewer);
                 (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
-                    worldX, worldY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
+                    localX, localY, viewer.ViewportWidth, viewer.ViewportHeight, layout);
             }
 
             viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH));
@@ -1030,7 +1030,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         SurfaceState state, ITreeComponent tree, Point point, FrameworkElement source, DependencyObject? hit,
         Func<Anchor, IWorkflowComponent?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
-        var anchor = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, Panel.GetZIndex(source), tree.Layout);
+        var anchor = WorkflowSurfaceMath.ToCanvasLocalAnchor(point.X, point.Y, Panel.GetZIndex(source), tree.Layout);
         var input = WorkflowInput.For(tree);
         var target = ResolveTarget(hit, tree, anchor.Horizontal, anchor.Vertical, input.HitRadius);
 
@@ -1363,8 +1363,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         UpdateGridDecorator(viewModel, state);
         UpdateMinimapOverlay(viewModel, state);
-        var viewportX = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.HorizontalOffset, viewModel.Layout.ActualOffset.Horizontal);
-        var viewportY = WorkflowSurfaceMath.ToWorld(state.ScrollViewer.VerticalOffset, viewModel.Layout.ActualOffset.Vertical);
+        var viewportX = WorkflowSurfaceMath.ToCanvasLocal(state.ScrollViewer.HorizontalOffset, viewModel.Layout.ActualOffset.Horizontal);
+        var viewportY = WorkflowSurfaceMath.ToCanvasLocal(state.ScrollViewer.VerticalOffset, viewModel.Layout.ActualOffset.Vertical);
         viewModel.GetHelper().Viewport = new Viewport(
             viewportX, viewportY,
             state.ScrollViewer.ViewportWidth,

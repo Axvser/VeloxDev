@@ -279,18 +279,18 @@ public static class WorkflowSurfaceBehavior
 
     /// <summary>Centers the view on a world point, growing the canvas if the target scroll runs past an edge.</summary>
     /// <param name="host">The element the behavior is enabled on.</param>
-    /// <param name="worldX">The world X.</param>
-    /// <param name="worldY">The world Y.</param>
+    /// <param name="localX">The canvas-local X.</param>
+    /// <param name="localY">The canvas-local Y.</param>
     /// <remarks>Shared by the pan and the minimap's drag-to-pan.</remarks>
-    public static void NavigateToWorld(FrameworkElement host, double worldX, double worldY)
+    public static void NavigateToCanvasLocal(FrameworkElement host, double localX, double localY)
     {
         if (!States.TryGetValue(host, out var state) || state.ScrollViewer is not { } viewer || state.Tree is null)
         {
             return;
         }
 
-        var targetHorizontal = worldX - viewer.ViewportWidth / 2d + ContentOriginX(state);
-        var targetVertical = worldY - viewer.ViewportHeight / 2d + ContentOriginY(state);
+        var targetHorizontal = localX - viewer.ViewportWidth / 2d + ContentOriginX(state);
+        var targetVertical = localY - viewer.ViewportHeight / 2d + ContentOriginY(state);
 
         if (targetHorizontal < 0d)
         {
@@ -1448,8 +1448,8 @@ public static class WorkflowSurfaceBehavior
             if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(newY, 0d, viewer.ScrollableHeight));
         }
 
-        public void CenterOn(double worldX, double worldY)
-            => NavigateToWorld(state.Host, worldX, worldY);
+        public void CenterOn(double localX, double localY)
+            => NavigateToCanvasLocal(state.Host, localX, localY);
     }
 
     private static void OnKeyDown(object? sender, PlatformInput.KeyEventArgs e)

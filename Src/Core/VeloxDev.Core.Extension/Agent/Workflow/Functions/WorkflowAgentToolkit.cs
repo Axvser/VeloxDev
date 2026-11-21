@@ -622,8 +622,8 @@ public sealed class WorkflowAgentToolkit
         for (int i = 0; i < limit; i++)
         {
             var node = nodes[i];
-            var world = WorldAnchor(node);
-            var size = WorldSize(node);
+            var world = node.GetWorldAnchor();
+            var size = node.GetWorldSize();
             var obj = new VeloxJsonObject
             {
                 ["i"] = i,
@@ -674,8 +674,8 @@ public sealed class WorkflowAgentToolkit
 
     private string BuildNodeDetailJson(INodeComponent node, int nodeIndex)
     {
-        var world = WorldAnchor(node);
-        var size = WorldSize(node);
+        var world = node.GetWorldAnchor();
+        var size = node.GetWorldSize();
         var obj = new VeloxJsonObject
         {
             ["i"] = nodeIndex,
@@ -1336,23 +1336,25 @@ public sealed class WorkflowAgentToolkit
         // collapsed frame (QueryNodes reads Anchor's getter frame), while the caller's left/top/width/height
         // are world coordinates; convert the rectangle once instead of comparing the two frames.
         const double padding = 30;
-        var (scaleX, scaleY) = CollapsedFactors(Tree);
+        var scale = Tree.Layout?.Scale;
         bool moved = false;
         try
         {
             for (int attempt = 0; attempt < 100; attempt++)
             {
                 // Query only nodes that intersect with the candidate region (padded)
+                var viewTopLeft = new Anchor(left - padding, top - padding, 0).Collapse(scale);
+                var viewSize = new Size(width + padding * 2, height + padding * 2).Collapse(scale);
                 var queryViewport = new Viewport(
-                    (left - padding) / scaleX, (top - padding) / scaleY,
-                    (width + padding * 2) / scaleX, (height + padding * 2) / scaleY);
+                    viewTopLeft.Horizontal, viewTopLeft.Vertical,
+                    viewSize.Width, viewSize.Height);
                 var nearby = Tree.QueryNodes(queryViewport);
 
                 bool overlap = false;
                 foreach (var existing in nearby)
                 {
-                    var existingAnchor = WorldAnchor(existing);
-                    var existingSize = WorldSize(existing);
+                    var existingAnchor = existing.GetWorldAnchor();
+                    var existingSize = existing.GetWorldSize();
                     double ex = existingAnchor.Horizontal;
                     double ew = existingSize.Width;
 
@@ -1373,8 +1375,8 @@ public sealed class WorkflowAgentToolkit
                 bool overlap = false;
                 foreach (var existing in Tree.Nodes)
                 {
-                    var existingAnchor = WorldAnchor(existing);
-                    var existingSize = WorldSize(existing);
+                    var existingAnchor = existing.GetWorldAnchor();
+                    var existingSize = existing.GetWorldSize();
                     double ex = existingAnchor.Horizontal;
                     double ey = existingAnchor.Vertical;
                     double ew = existingSize.Width;
@@ -3192,8 +3194,8 @@ public sealed class WorkflowAgentToolkit
                 for (var i = 0; i < Tree.Nodes.Count; i++)
                 {
                     var node = Tree.Nodes[i];
-                    var world = WorldAnchor(node);
-                    var size = WorldSize(node);
+                    var world = node.GetWorldAnchor();
+                    var size = node.GetWorldSize();
                     nodes.Add(new VeloxJsonObject
                     {
                         ["i"] = i,
@@ -3661,41 +3663,6 @@ public sealed class WorkflowAgentToolkit
     /// Multiplying back by the live scale answers in the frame the caller is already working in.
     /// </para>
     /// </remarks>
-    private static Anchor WorldAnchor(INodeComponent node) => WorldFrame(node, node.Anchor);
-
-    /// <summary>A node's size in the <b>world</b> frame — as <see cref="WorldAnchor"/> is for its position.</summary>
-    private static Size WorldSize(INodeComponent node) => WorldFrame(node, node.Size);
-
-    /// <summary>
-    /// Converts a world length to the collapsed frame the spatial index reads. <c>1</c> when the tree has no
-    /// scale or a zero scale, matching <c>Anchor.Collapse</c> / <c>Size.Collapse</c>.
-    /// </summary>
-    private static (double X, double Y) CollapsedFactors(ITreeComponent tree)
-    {
-        var scale = tree.Layout?.Scale;
-        return (
-            scale is null || scale.Horizontal == 0d ? 1d : scale.Horizontal,
-            scale is null || scale.Vertical == 0d ? 1d : scale.Vertical);
-    }
-
-    private static Anchor WorldFrame(INodeComponent node, Anchor collapsed)
-    {
-        var scale = node.Parent?.Layout?.Scale;
-        if (scale is null || scale.Horizontal == 0d || scale.Vertical == 0d) return collapsed;
-        if (scale.Horizontal == 1d && scale.Vertical == 1d) return collapsed;
-
-        return new Anchor(collapsed.Horizontal * scale.Horizontal, collapsed.Vertical * scale.Vertical, collapsed.Layer);
-    }
-
-    private static Size WorldFrame(INodeComponent node, Size collapsed)
-    {
-        var scale = node.Parent?.Layout?.Scale;
-        if (scale is null || scale.Horizontal == 0d || scale.Vertical == 0d) return collapsed;
-        if (scale.Horizontal == 1d && scale.Vertical == 1d) return collapsed;
-
-        return new Size(collapsed.Width * scale.Horizontal, collapsed.Height * scale.Vertical);
-    }
-
     private static void AppendScalarProperties(VeloxJsonObject obj, object target)
     {
         foreach (var prop in PropertiesOf(target))

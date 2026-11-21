@@ -89,18 +89,11 @@ public sealed class WorkflowLayoutApplier : IWorkflowLayoutApplier
         if (!ReferenceEquals(source.Parent, _tree)) return false;
 
         var node = problem.Nodes[index];
-        var anchor = source.Anchor;
-        if (anchor.Layer != node.Layer) return false;
+        var world = source.GetWorldAnchor();
+        if (world.Layer != node.Layer) return false;
 
-        // The getter is collapsed by the live scale, so recover the world value before comparing it with
-        // the snapshot (the snapshot stores world coordinates).
-        var scale = source.Parent?.Layout?.Scale ?? _tree.Layout?.Scale;
-        var scaleX = scale is null || scale.Horizontal == 0d ? 1d : scale.Horizontal;
-        var scaleY = scale is null || scale.Vertical == 0d ? 1d : scale.Vertical;
-        var x = anchor.Horizontal * scaleX;
-        var y = anchor.Vertical * scaleY;
-
-        return Math.Abs(x - node.X) <= Epsilon && Math.Abs(y - node.Y) <= Epsilon;
+        return Math.Abs(world.Horizontal - node.X) <= Epsilon
+            && Math.Abs(world.Vertical - node.Y) <= Epsilon;
     }
 
     private readonly struct NodeMove

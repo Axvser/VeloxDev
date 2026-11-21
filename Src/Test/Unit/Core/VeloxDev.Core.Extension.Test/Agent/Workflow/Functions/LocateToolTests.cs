@@ -20,11 +20,11 @@ public class LocateToolTests
         public double X { get; private set; }
         public double Y { get; private set; }
 
-        public void CenterOn(double worldX, double worldY)
+        public void CenterOn(double localX, double localY)
         {
             Calls++;
-            X = worldX;
-            Y = worldY;
+            X = localX;
+            Y = localY;
         }
     }
 

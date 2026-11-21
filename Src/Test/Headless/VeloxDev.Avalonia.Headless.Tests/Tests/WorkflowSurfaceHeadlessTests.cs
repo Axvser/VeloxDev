@@ -80,9 +80,9 @@ public sealed class WorkflowSurfaceHeadlessTests
 
             surface.ScrollTo(120d, 80d);
 
-            var expectedLeft = Wf.WorkflowSurfaceMath.ToWorld(
+            var expectedLeft = Wf.WorkflowSurfaceMath.ToCanvasLocal(
                 120d, graph.Tree.Layout.ActualOffset.Horizontal);
-            var expectedTop = Wf.WorkflowSurfaceMath.ToWorld(
+            var expectedTop = Wf.WorkflowSurfaceMath.ToCanvasLocal(
                 80d, graph.Tree.Layout.ActualOffset.Vertical);
 
             Assert.AreEqual(expectedLeft, graph.Tree.Helper.Viewport.Horizontal, 0.5);

@@ -260,8 +260,8 @@ public sealed class GridDecorator : Panel, IWorkflowGridDecorator
         var spacing = Math.Max(8, _gridSpacing);
         var majorStep = spacing * Math.Max(1, _majorLineEvery);
 
-        var worldLeft = WorkflowSurfaceMath.GridWorldLeft(_scrollOffsetX, _contentOffsetX);
-        var worldTop = WorkflowSurfaceMath.GridWorldTop(_scrollOffsetY, _contentOffsetY);
+        var worldLeft = WorkflowSurfaceMath.GridCanvasLeft(_scrollOffsetX, _contentOffsetX);
+        var worldTop = WorkflowSurfaceMath.GridCanvasTop(_scrollOffsetY, _contentOffsetY);
         var worldRight = worldLeft + bounds.Width;
         var worldBottom = worldTop + bounds.Height;
 

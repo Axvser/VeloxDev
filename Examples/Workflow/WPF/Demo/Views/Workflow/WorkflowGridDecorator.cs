@@ -163,8 +163,8 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
             var ruler = Math.Max(0, owner.RulerThickness);
             var spacing = Math.Max(8, owner.GridSpacing);
             var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
-            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
-            var worldTop = WorkflowSurfaceMath.GridWorldTop(owner.ScrollOffsetY, owner.ContentOffsetY);
+            var worldLeft = WorkflowSurfaceMath.GridCanvasLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridCanvasTop(owner.ScrollOffsetY, owner.ContentOffsetY);
             var worldRight = worldLeft + bounds.Width;
             var worldBottom = worldTop + bounds.Height;
 
@@ -208,8 +208,8 @@ public sealed class WorkflowGridDecorator : Grid, IWorkflowGridDecorator
 
             var spacing = Math.Max(8, owner.GridSpacing);
             var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
-            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
-            var worldTop = WorkflowSurfaceMath.GridWorldTop(owner.ScrollOffsetY, owner.ContentOffsetY);
+            var worldLeft = WorkflowSurfaceMath.GridCanvasLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridCanvasTop(owner.ScrollOffsetY, owner.ContentOffsetY);
             var worldRight = worldLeft + bounds.Width;
             var worldBottom = worldTop + bounds.Height;
 

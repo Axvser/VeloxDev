@@ -150,8 +150,8 @@ internal sealed class WorkflowRulerOverlayForm : Form
 
         var spacing = Math.Max(8, GridSpacing);
         var majorStep = spacing * Math.Max(1, MajorFreq);
-        var worldLeft = WorkflowSurfaceMath.GridWorldLeft(ScrollOffsetX, ContentOffsetX);
-        var worldTop = WorkflowSurfaceMath.GridWorldTop(ScrollOffsetY, ContentOffsetY);
+        var worldLeft = WorkflowSurfaceMath.GridCanvasLeft(ScrollOffsetX, ContentOffsetX);
+        var worldTop = WorkflowSurfaceMath.GridCanvasTop(ScrollOffsetY, ContentOffsetY);
         var worldRight = worldLeft + cw;
         var worldBottom = worldTop + ch;
 

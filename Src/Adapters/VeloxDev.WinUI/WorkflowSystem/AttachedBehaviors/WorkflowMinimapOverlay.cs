@@ -373,8 +373,8 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         var vw = Math.Max(1, ViewportWidth);
         var vh = Math.Max(1, ViewportHeight);
         _lastViewport = WorkflowBounds.FromNode(
-            WorkflowSurfaceMath.ToWorld(ScrollOffsetX, ContentOffsetX),
-            WorkflowSurfaceMath.ToWorld(ScrollOffsetY, ContentOffsetY),
+            WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetX, ContentOffsetX),
+            WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetY, ContentOffsetY),
             vw, vh);
     }
 
@@ -422,7 +422,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         var pt = e.GetCurrentPoint(this).Position;
 
         // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
-        NavigateToWorld(pt.X, pt.Y);
+        NavigateToCanvasLocal(pt.X, pt.Y);
         _isDragging = true;
         CapturePointer(e.Pointer);
         e.Handled = true;
@@ -432,7 +432,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     {
         if (!_isDragging) return;
         var pt = e.GetCurrentPoint(this).Position;
-        NavigateToWorld(pt.X, pt.Y);
+        NavigateToCanvasLocal(pt.X, pt.Y);
         e.Handled = true;
     }
 
@@ -448,14 +448,14 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         _isDragging = false;
     }
 
-    private void NavigateToWorld(double adjX, double adjY)
+    private void NavigateToCanvasLocal(double adjX, double adjY)
     {
         var gb = _lastGlobalBounds;
         if (gb.IsEmpty) return;
         var (ox, oy, _, _, sc) = ComputeTransform(gb);
         if (sc <= 0) return;
 
-        var (wcx, wcy) = WorkflowSurfaceMath.MinimapToWorld(adjX, adjY, ox, oy, sc, gb.Left, gb.Top);
+        var (wcx, wcy) = WorkflowSurfaceMath.MinimapToCanvasLocal(adjX, adjY, ox, oy, sc, gb.Left, gb.Top);
         var (scrollX, scrollY) = WorkflowSurfaceMath.MinimapToScroll(
             wcx, wcy, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
         if (_scrollViewer is not null && WorkflowTree?.Layout is { } layout)

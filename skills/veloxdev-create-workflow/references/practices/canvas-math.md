@@ -56,7 +56,7 @@ A link is drawn between two **slot anchors**, not node centres.
 
 ### Minimap
 
-If you build your own, `WorkflowSurfaceMath` has the whole mapping: `MinimapFit`, `MinimapLocal`, `MinimapViewportRect`, `MinimapToWorld`, `MinimapToScroll`, `MinThumbSize` — all in collapsed space.
+If you build your own, `WorkflowSurfaceMath` has the whole mapping: `MinimapFit`, `MinimapLocal`, `MinimapViewportRect`, `MinimapToCanvasLocal`, `MinimapToScroll`, `MinThumbSize` — all in collapsed space.
 
 ## The full model
 
@@ -208,15 +208,15 @@ var curve = LinkCurve.BuildLinkCubic(link, s.X, s.Y, e.X, e.Y, pullMinimum);
 
 | Member | Result |
 |---|---|
-| `ToWorld(scroll, actualOffset)` | `scroll − actualOffset` — scroll to collapsed |
-| `ToWorldAnchor(screenX, screenY, layer, layout)` | `(screenX − ActualOffset.H, screenY − ActualOffset.V, layer)` |
-| `ToScreen(worldX, worldY, layout)` | `(worldX + ActualOffset.H, worldY + ActualOffset.V)` |
+| `ToCanvasLocal(scroll, actualOffset)` | `scroll − actualOffset` — scroll → canvas-local |
+| `ToCanvasLocalAnchor(scrollX, scrollY, layer, layout)` | `(scrollX − ActualOffset.H, scrollY − ActualOffset.V, layer)` |
+| `ToScroll(localX, localY, layout)` | `(localX + ActualOffset.H, localY + ActualOffset.V)` |
 | `ScrollMax(extent, viewport)` | `max(0, extent − viewport)` |
 | `ClampValue(value, min, max)` | `max(min, min(value, max))` |
 | `ClampScrollOffset(…)` | see above; **mutates `layout`** |
-| `GridWorldLeft(scrollOffset, contentOffset)` / `GridWorldTop` | `scrollOffset − contentOffset` |
-| `GridX(worldValue, worldLeft, contentRectX)` / `GridY` | `contentRectX + (worldValue − worldLeft)` |
-| `GridFirstLine(worldLeft, spacing)` | `floor(worldLeft / spacing) * spacing` |
+| `GridCanvasLeft(scrollOffset, contentOffset)` / `GridCanvasTop` | `scrollOffset − contentOffset` |
+| `GridX(localValue, localLeft, contentRectX)` / `GridY` | `contentRectX + (localValue − localLeft)` |
+| `GridFirstLine(localLeft, spacing)` | `floor(localLeft / spacing) * spacing` |
 | `SlotAnchorFromVisualCenter` / `SlotAnchorFromCanvasLocal` / `SlotAnchorFromNode` | see above |
 | `ScrollCenter(scrollX, scrollY, vpW, vpH)` | the viewport centre in scroll space |
 | `WorldAtViewportCenter(…)` | `((cx − ActualOffset.H) * Scale.H, (cy − ActualOffset.V) * Scale.V)` — the collapsed→world conversion in `WorkflowSurfaceMath` |
@@ -225,13 +225,13 @@ var curve = LinkCurve.BuildLinkCubic(link, s.X, s.Y, e.X, e.Y, pullMinimum);
 | `ScaleCollapse(anchorX, anchorY, scaleX, scaleY)` | `(1/sx, 1/sy, −ax, −ay)` — the transform a scale container applies |
 | `ScaleVisualBounds(…)` | the collapsed bounding box |
 | `EnsureNegativeCover(tree)` | grows `NegativeOffset`; **mutates `layout`**, returns `true` if it grew |
-| `MinimapFit` · `MinimapLocal` · `MinimapViewportRect` · `MinimapToWorld` · `MinimapToScroll` · `MinThumbSize` | the minimap mapping |
+| `MinimapFit` · `MinimapLocal` · `MinimapViewportRect` · `MinimapToCanvasLocal` · `MinimapToScroll` · `MinThumbSize` | the minimap mapping |
 
-Plus `WorkflowBounds` — a struct with `FromNode`, `FromNodes`, `Union`, `IsEmpty`, in collapsed space.
+Plus `WorkflowBounds` — a struct with `FromNode`, `FromNodes`, `Union`, `IsEmpty`, in canvas-local space.
 
-⚙ Several members are *named* "world" (`ToWorld`, `GridWorldLeft`, `WorkflowBounds`) but operate in **collapsed** space. Trust the table, not the name.
+⚙ Everything in this table that deals with content coordinates uses **canvas-local** (`scroll − ActualOffset`). Only `WorldAtViewportCenter`, `Anchor.Expand` / `Size.Expand`, and `WorkflowNodeEx.GetWorldAnchor` / `GetWorldSize` produce the stored **world** value.
 
-⚙ **`WorldAtViewportCenter` is one collapsed→world conversion; the node helpers have another.** `WorkflowNodeEx.StandardMove` and `StandardSetLayer` convert through the shared `ViewToWorldFactors`, because a drag delta arrives in **view** space while `Anchor` is stored in **world** space. A custom drag uses those methods: `StandardSetAnchor` for an anchor that is already world (`screen − ActualOffset`), `StandardMove` for a view-space delta.
+⚙ **`WorldAtViewportCenter` is one collapsed→world conversion; the node helpers have another.** `WorkflowNodeEx.StandardMove` and `StandardSetLayer` use `Anchor.Expand`; read a node's stored value with `node.GetWorldAnchor()` / `GetWorldSize()`. A custom drag uses `StandardSetAnchor` for an anchor already in world space, `StandardMove` for a view-space delta.
 
 ⚙ `ClampScrollOffset` and `EnsureNegativeCover` are the two members of this class that write to `CanvasLayout`; everything else is pure.
 

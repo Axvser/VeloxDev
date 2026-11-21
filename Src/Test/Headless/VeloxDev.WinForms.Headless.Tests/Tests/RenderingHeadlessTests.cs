@@ -78,7 +78,7 @@ public sealed class RenderingHeadlessTests
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.FillRectangle(Brushes.Black, ClientRectangle);
 
-            var worldLeft = WorkflowSurfaceMath.GridWorldLeft(ScrollOffsetX, ContentOffsetX);
+            var worldLeft = WorkflowSurfaceMath.GridCanvasLeft(ScrollOffsetX, ContentOffsetX);
             var first = WorkflowSurfaceMath.GridFirstLine(worldLeft, 40);
             for (var value = first; value <= worldLeft + Width + 40; value += 40)
             {

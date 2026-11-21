@@ -6,8 +6,8 @@ namespace VeloxDev.WorkflowSystem;
 /// <remarks>
 /// <para>This is the only component in the layout pipeline that reads the model during the snapshot phase.
 /// It runs on the calling thread and converts the collapsed geometry the node getters expose back to world
-/// coordinates (<c>world = collapsed × scale</c>), because the applier writes world coordinates through
-/// <c>StandardSetAnchor</c>.</para>
+/// coordinates through <see cref="WorkflowNodeEx.GetWorldAnchor"/> / <see cref="WorkflowNodeEx.GetWorldSize"/>,
+/// because the applier writes world coordinates through <c>StandardSetAnchor</c>.</para>
 /// <para>A node participates in at most one snapshot entry; links whose endpoints are not in the tree are
 /// ignored. Self-links are not layout input and are dropped.</para>
 /// <para>Nodes whose world geometry is <c>NaN</c> or infinite — an unmeasured or programmatically created
@@ -29,12 +29,6 @@ public static class WorkflowLayoutProblemBuilder
 
         options ??= new WorkflowLayoutOptions();
 
-        // collapapsed = world / scale, so world = collapsed * scale. Scale 0 is the identity, matching
-        // Anchor.Collapse / Size.Collapse.
-        var scale = tree.Layout?.Scale;
-        var scaleX = scale is null || scale.Horizontal == 0d ? 1d : scale.Horizontal;
-        var scaleY = scale is null || scale.Vertical == 0d ? 1d : scale.Vertical;
-
         var nodes = new List<WorkflowLayoutNode>();
         var sources = new List<INodeComponent>();
         var skipped = new List<int>();
@@ -50,12 +44,12 @@ public static class WorkflowLayoutProblemBuilder
                 var sourceIndex = originalIndex++;
                 if (node is null) continue;
 
-                var anchor = node.Anchor;
-                var size = node.Size;
-                var x = anchor.Horizontal * scaleX;
-                var y = anchor.Vertical * scaleY;
-                var width = size.Width * scaleX;
-                var height = size.Height * scaleY;
+                var anchor = node.GetWorldAnchor();
+                var size = node.GetWorldSize();
+                var x = anchor.Horizontal;
+                var y = anchor.Vertical;
+                var width = size.Width;
+                var height = size.Height;
 
                 // Unmeasured nodes (NaN anchors/sizes) must not poison the tile index or the cost.
                 if (!IsFinite(x) || !IsFinite(y) || !IsFinite(width) || !IsFinite(height))
