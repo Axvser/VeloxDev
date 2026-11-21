@@ -27,7 +27,7 @@ public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Controls.User
 
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public IWorkflowLinkViewModel? ViewModel
+    public ILinkComponent? ViewModel
     {
         get => _attachment.Link;
         set => _attachment.Bind(value);

@@ -25,11 +25,11 @@ public static class AgentSelectionVisual
 
     private sealed class Attachment(Control view)
     {
-        private IWorkflowNodeViewModel? _node;
+        private INodeComponent? _node;
 
         internal void Bind()
         {
-            if (view.DataContext is not IWorkflowNodeViewModel node)
+            if (view.DataContext is not INodeComponent node)
             {
                 Detach();
                 SetClass(false);
@@ -60,7 +60,7 @@ public static class AgentSelectionVisual
             _node = null;
         }
 
-        private void OnSelectionChanged(IWorkflowNodeViewModel node)
+        private void OnSelectionChanged(INodeComponent node)
         {
             if (ReferenceEquals(node, _node))
                 SetClass(AgentSelection.IsSelected(node));

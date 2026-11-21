@@ -29,7 +29,7 @@ These are **single-step calls** — there is no composite tool. Perform each ste
 |---|---|
 | PatchNodeProperties before CreateNode | Node has no Parent; slot lifecycle hooks do not fire |
 | ConnectSlots before slots exist | Slot ID lookup fails or connects wrong slot |
-| SetEnumSlotCollection before CreateNode | OutputSlots are created but OnWorkflowSlotAdded cannot register them |
+| SetEnumSlotCollection before CreateNode | OutputSlots are created but OnSlotComponentAdded cannot register them |
 | ExecuteNode before connections | Receive produces no downstream effects |
 
 ### ⚠ Silent Skip Warning

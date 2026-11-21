@@ -24,7 +24,7 @@ public sealed class NodeMoveEventArgs : EventArgs
     /// <param name="from">Where it is now, layer included.</param>
     /// <param name="to">Where it is going, layer included.</param>
     /// <param name="handle">The handle for this action — the same instance the other phase carries.</param>
-    public NodeMoveEventArgs(IWorkflowNodeViewModel node, Anchor from, Anchor to, WorkflowEventHandle handle)
+    public NodeMoveEventArgs(INodeComponent node, Anchor from, Anchor to, WorkflowEventHandle handle)
     {
         Node = node;
         From = from;
@@ -33,7 +33,7 @@ public sealed class NodeMoveEventArgs : EventArgs
     }
 
     /// <summary>The node being placed.</summary>
-    public IWorkflowNodeViewModel Node { get; }
+    public INodeComponent Node { get; }
 
     /// <summary>Where the node is now — a complete placement, layer included.</summary>
     public Anchor From { get; }

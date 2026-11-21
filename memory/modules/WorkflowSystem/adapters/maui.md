@@ -41,7 +41,7 @@
   `DataTemplateSelector.SelectTemplate`；选择器抛异常（典型：只声明 `NodeTemplate` 的选择器遇到插槽/树节点）
   或返回 null 时，该类型记进 `_unsupportedTypes` 并返回 null，异常不越过工厂。于是**只有节点模板的 demo/模板
   可以把 `ViewPool.ItemsSource` 直绑 `Helper.VisibleItems`**，连线交给共享链接层画，池不需要模板侧的过滤包装。
-- **连线不进主池**：`ViewLinkLayer.IsActive = true` 且 `Handles(item) => item is IWorkflowLinkViewModel`，
+- **连线不进主池**：`ViewLinkLayer.IsActive = true` 且 `Handles(item) => item is ILinkComponent`，
   主池在入队与物化两处跳过它们；`Render` 是空实现，`WorkflowLinkOverlay` 继续从 `VisibleItems` 画全部可见连线。
 - `ViewLayerPolicy` 恒返回 0（层序交给 XAML 元素顺序），`ViewMeasureHost` 是空实现（几何由 MAUI 布局 pass 给出），
   `ViewDiagnostics` 写 `Debug.WriteLine`。
@@ -72,7 +72,7 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
 `px = RulerThickness + c + ContentOffset − ScrollOffset`），并因此**必须自己做包围盒裁剪**
 （`CullMargin = 24`，裁剪判定在 `IDrawable.Draw` 里用 `IntersectsViewport`）。这一层永远是满屏**视口**尺寸，不是内容尺寸，裁剪不能省。
 **每帧画哪些线由枚举源决定**：`EnumerateVisibleLinks` 取 Core 的虚拟化可见集（`tree.GetHelper().VisibleItems`
-里过滤出 `IWorkflowLinkViewModel`），因此是 O(可见) 而不是 O(全部) —— 与其余六家同源。包围盒裁剪留作第二道筛子：
+里过滤出 `ILinkComponent`），因此是 O(可见) 而不是 O(全部) —— 与其余六家同源。包围盒裁剪留作第二道筛子：
 可见集用的是「两端节点包围盒的并集」，比曲线本身粗，并集擦过视口时曲线仍可能落在外面。
 虚拟连线不在 `tree.Links` 里（可见集里那份是同一个实例），所以它从可见集里排除、单独补在最后 —— 橡皮筋要压在实连线之上。
 **按可见集裁剪不会漏画真在视口里的线**：`NodePairBoundsProvider.CalculateBounds()` 取的是两端节点包围盒的**并集**
@@ -384,7 +384,7 @@ MAUI 没有跨平台的键盘状态 API：`Microsoft.Maui.Controls.PointerEventA
    `WorkflowInput.ApplyDefault` 在 `IsSuspended` 时直接返回、不改指针目标（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/WorkflowInput.cs` 的 `ApplyDefault`）。挂起/恢复由**表面**自己报：弹出时置 `input.IsSuspended = true`、收起时复位
    （`WorkflowSurfaceBehavior.cs` 的 `ShowLinkMenu` / `DismissLinkMenu`）。**本层没有 `_menuOpen`，平台侧也没有 `IsSuspended` 守卫** —— 这个状态只能有一个家，在输入路由上。
    **「菜单不得比它作用的连线活得久」这条守卫由树的 `LinkRemoved` 实现**：那条线离开 `tree.Links` 时树报 `LinkRemoved`
-   （`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Components/IWorkflowTreeViewModel.cs` 的 `LinkRemoved`、`Templates/Helpers/TreeHelper.cs` 的 `LinkRemoved`），表面按 `ReferenceEquals(state.MenuLink, link)` 判定后收自己那份弹窗 —— Windows 调原生
+   （`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Components/ITreeComponent.cs` 的 `LinkRemoved`、`Templates/Helpers/TreeHelper.cs` 的 `LinkRemoved`），表面按 `ReferenceEquals(state.MenuLink, link)` 判定后收自己那份弹窗 —— Windows 调原生
    flyout 的 `Hide()`，非 Windows 走 `DismissLinkMenu(state)`（`WorkflowSurfaceBehavior.cs` 的两条 `LinkRemoved` 处理）。收起照常复位 `IsSuspended`，单一责任人不变。
 5. **菜单条目来自声明的资源，接线与呈现都在适配层**：模板/demo 在 XAML 里声明 `LinkContextMenu`
    （`WorkflowView.xaml` 的 `LinkMenuKey="LinkContextMenu"` 属性 + 资源里那条

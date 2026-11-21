@@ -12,7 +12,7 @@ public partial class WorkflowEnumSelectorView : ComponentBase, IDisposable
     public EnumSelectorNodeViewModel? Selector { get; set; }
 
     [Parameter]
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     private object? _selectedValue;
     private object[] _items = [];

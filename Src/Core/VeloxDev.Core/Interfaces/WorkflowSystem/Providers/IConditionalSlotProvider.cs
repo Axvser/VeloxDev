@@ -4,10 +4,10 @@ namespace VeloxDev.WorkflowSystem;
 
 /// <summary>A slot provider whose slots follow one selector, typed by <typeparamref name="TSlot"/>.</summary>
 public interface IConditionalSlotProvider<TSlot> : IEnumerable<TSlot>
-    where TSlot : IWorkflowSlotViewModel, new()
+    where TSlot : ISlotComponent, new()
 {
     /// <summary>The node the provider is installed on, or <see langword="null"/> when it is not installed.</summary>
-    public IWorkflowNodeViewModel? Parent { get; set; }
+    public INodeComponent? Parent { get; set; }
 
     /// <summary>The selector type's name, as stored in the model.</summary>
     public string SelectorTypeName { get; set; }
@@ -31,7 +31,7 @@ public interface IConditionalSlotProvider<TSlot> : IEnumerable<TSlot>
     /// <summary>Installs the provider on <paramref name="parent"/> for the member <paramref name="memberName"/>.</summary>
     /// <param name="parent">The node the provider is installed on.</param>
     /// <param name="memberName">The member whose value selects the slot.</param>
-    public void Install(IWorkflowNodeViewModel parent, string memberName);
+    public void Install(INodeComponent parent, string memberName);
 
     /// <summary>Detaches the provider from its node.</summary>
     public void Uninstall();
@@ -54,7 +54,7 @@ public interface IConditionalSlotProvider<TSlot> : IEnumerable<TSlot>
 public interface IConditionalSlotProvider
 {
     /// <summary>The node the enumerator is installed on, or <see langword="null"/> when it is not installed.</summary>
-    public IWorkflowNodeViewModel? Parent { get; }
+    public INodeComponent? Parent { get; }
 
     /// <summary>The selector type's name, as stored in the model.</summary>
     public string SelectorTypeName { get; }
@@ -74,7 +74,7 @@ public interface IConditionalSlotProvider
     /// <param name="value">The selector value.</param>
     /// <param name="slot">The slot, or <see langword="null"/> when the value has none.</param>
     /// <returns><see langword="true"/> when a slot was found.</returns>
-    public bool TrySelect(object value, out IWorkflowSlotViewModel? slot);
+    public bool TrySelect(object value, out ISlotComponent? slot);
 
     /// <summary>
     /// Switches the enumerator to another selector type.

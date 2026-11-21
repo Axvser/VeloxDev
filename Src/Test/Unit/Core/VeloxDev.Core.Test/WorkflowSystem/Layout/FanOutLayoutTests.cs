@@ -18,12 +18,12 @@ public class FanOutLayoutTests
         PositionTolerance = tolerance,
     };
 
-    private static (TreeDefaultViewModel Tree, NodeDefaultViewModel Parent, NodeDefaultViewModel[] Children)
+    private static (TreeDefaultComponent Tree, NodeDefaultComponent Parent, NodeDefaultComponent[] Children)
         TreeWithThreeChildren(params (double X, double Y)[] positions)
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var parent = LayoutTestKit.AddNode(tree, 0, 100);
-        var children = new NodeDefaultViewModel[positions.Length];
+        var children = new NodeDefaultComponent[positions.Length];
         for (var i = 0; i < positions.Length; i++)
         {
             children[i] = LayoutTestKit.AddNode(tree, positions[i].X, positions[i].Y, height: 20);

@@ -61,21 +61,21 @@ public class SerializationGoldenTests
     /// A mounted two-node tree: reference ids for the repeated <c>Parent</c> back-references, the interface-keyed
     /// <c>LinksMap</c>, and the world-coordinate expansion the geometry hooks perform.
     /// </summary>
-    private static TreeDefaultViewModel BuildTree()
+    private static TreeDefaultComponent BuildTree()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         tree.Layout.Scale = new Scale(2d, 2d);
 
-        var node = new NodeDefaultViewModel();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
         node.Anchor = new Anchor(1400d, 900d, 0);
         node.Size = new Size(300d, 200d);
-        node.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneTarget });
+        node.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneTarget });
 
-        var other = new NodeDefaultViewModel();
+        var other = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(other);
         other.Anchor = new Anchor(200d, 100d, 0);
-        other.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneSource });
+        other.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneSource });
 
         return tree;
     }
@@ -88,7 +88,7 @@ public class SerializationGoldenTests
     public void ASlotEnumerator_MatchesItsGoldenFile()
     {
         // 枚举器实现 IEnumerable，却被写成对象而不是数组 —— 这条只有黄金文件看得见。
-        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
         AssertMatchesGolden("slot-enumerator", enumerator.Serialize());
     }
 
@@ -112,7 +112,7 @@ public class SerializationGoldenTests
     public void TheGoldenFilesAreStillReadableByTheCurrentImplementation()
     {
         // 冻结的字节能被读回来 —— 黄金文件本身也要是活的，否则它只是文本。
-        var tree = File.ReadAllText(Path.Combine(GoldenDirectory, "tree.json")).Deserialize<TreeDefaultViewModel>();
+        var tree = File.ReadAllText(Path.Combine(GoldenDirectory, "tree.json")).Deserialize<TreeDefaultComponent>();
         Assert.IsNotNull(tree);
         Assert.HasCount(2, tree.Nodes, "the frozen document must still contain both nodes");
     }

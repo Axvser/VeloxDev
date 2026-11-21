@@ -24,7 +24,7 @@ else Console.WriteLine("target NOT reached — no value fabricated");
 
 ```csharp
 Task<IReadOnlyList<CompiledGraph>> CompileAsync<T>(T component, CompileRole role, CancellationToken ct = default)
-    where T : IWorkflowViewModel;
+    where T : IWorkflowComponent;
 Task RunAsync(CompiledGraph graph, IRuntimeContext context, CancellationToken ct, ExecutionCheckpoint? resumeFrom = null);
 ```
 
@@ -112,15 +112,15 @@ Every reached node is handed an `ICompileContext`:
 ## Node author contract
 
 ```csharp
-public interface IWorkflowNodeViewModelHelper : IWorkflowHelper
+public interface INodeHelper : IWorkflowHelper
 {
     Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct);    // the single execution entry
     Task<bool>    AccessAsync(IAccessContext context, CancellationToken ct);   // the edge gate
     Task BroadcastAsync(object? parameter, CancellationToken ct);
     Task ReverseBroadcastAsync(object? parameter, CancellationToken ct);
-    void Install(IWorkflowNodeViewModel node);
-    void Uninstall(IWorkflowNodeViewModel node);
-    void CreateSlot(IWorkflowSlotViewModel slot);
+    void Install(INodeComponent node);
+    void Uninstall(INodeComponent node);
+    void CreateSlot(ISlotComponent slot);
     void Move(Offset offset);
     void SetAnchor(Anchor anchor);
     void SetSize(Size size);
@@ -162,7 +162,7 @@ The single discriminator a node uses inside `ReceiveAsync` is `ctx is IRuntimeCo
 ```csharp
 public interface ICompileTimeRouter
 {
-    Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable();
+    Task<IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>>> GetRouteTable();
     Task<object?> ResolveRouteKey(object? payload);   // the runtime context, or null at compile time
 }
 ```
@@ -200,7 +200,7 @@ When a node has more than one distinct upstream node, the engine hands it an `IG
 if (context.Data is IGroupData group && group.TryGetValue(sourceNode, out var value)) { … }
 ```
 
-`IGroupData` is an `IReadOnlyDictionary<IWorkflowNodeViewModel, object?>`, keyed by **source node reference identity**.
+`IGroupData` is an `IReadOnlyDictionary<INodeComponent, object?>`, keyed by **source node reference identity**.
 
 ⚙ **The join node implements `ICompileTimeAware`.** The injection is guarded on a non-null compile context; with the interface, the node receives the group. The join is how "wait for all inputs" is expressed: the fan-out group completes before the join runs.
 
@@ -213,7 +213,7 @@ if (context.Data is IGroupData group && group.TryGetValue(sourceNode, out var va
 ```csharp
 public interface IRedirectable
 {
-    Task<IWorkflowNodeViewModel?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct);
+    Task<INodeComponent?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct);
 }
 ```
 

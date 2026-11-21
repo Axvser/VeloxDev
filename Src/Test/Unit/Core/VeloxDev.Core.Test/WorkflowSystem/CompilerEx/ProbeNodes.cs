@@ -57,12 +57,12 @@ internal sealed class TestCommand : IVeloxCommand
     public Task ChangeSemaphoreAsync(int semaphore) => Task.CompletedTask;
 }
 
-/// <summary>Minimal IWorkflowSlotViewModel: a data carrier whose Targets/Sources/Parent can be wired directly.</summary>
-internal sealed class TestSlot : IWorkflowSlotViewModel
+/// <summary>Minimal ISlotComponent: a data carrier whose Targets/Sources/Parent can be wired directly.</summary>
+internal sealed class TestSlot : ISlotComponent
 {
-    public ObservableCollection<IWorkflowSlotViewModel> Targets { get; set; } = [];
-    public ObservableCollection<IWorkflowSlotViewModel> Sources { get; set; } = [];
-    public IWorkflowNodeViewModel? Parent { get; set; }
+    public ObservableCollection<ISlotComponent> Targets { get; set; } = [];
+    public ObservableCollection<ISlotComponent> Sources { get; set; } = [];
+    public INodeComponent? Parent { get; set; }
     public SlotChannel Channel { get; set; } = SlotChannel.OneBoth;
     public SlotState State { get; set; } = SlotState.StandBy;
     public Anchor Anchor { get; set; } = new(double.NaN, double.NaN, 0);
@@ -78,8 +78,8 @@ internal sealed class TestSlot : IWorkflowSlotViewModel
     public void InitializeWorkflow() { }
     public void OnPropertyChanging(string p) => PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(p));
     public void OnPropertyChanged(string p) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
-    public IWorkflowSlotViewModelHelper GetHelper() => throw new NotSupportedException();
-    public void SetHelper(IWorkflowSlotViewModelHelper helper) { }
+    public ISlotHelper GetHelper() => throw new NotSupportedException();
+    public void SetHelper(ISlotHelper helper) { }
 }
 
 /// <summary>
@@ -122,7 +122,7 @@ internal sealed class ProbeHelper : NodeHelper<ProbeNodeBase>
 /// implements none of the optional notification contracts — <see cref="ProbeNode"/> adds those, and
 /// <see cref="PlainNode"/> deliberately does not.
 /// </summary>
-internal abstract class ProbeNodeBase : IWorkflowNodeViewModel
+internal abstract class ProbeNodeBase : INodeComponent
 {
     private readonly ProbeHelper _helper;
 
@@ -144,14 +144,14 @@ internal abstract class ProbeNodeBase : IWorkflowNodeViewModel
     /// <summary>Deliveries received via ReceiveCommand (edge broadcast / manual Run); the chain-level engine must not trigger these.</summary>
     public List<ITaskContext> ReceivedDeliveries { get; } = [];
 
-    public IWorkflowNodeViewModelHelper HelperInstance => _helper;
+    public INodeHelper HelperInstance => _helper;
 
     public string Name { get; }
 
-    public IWorkflowTreeViewModel? Parent { get; set; }
+    public ITreeComponent? Parent { get; set; }
     public Anchor Anchor { get; set; } = new();
     public Size Size { get; set; } = new();
-    public ObservableCollection<IWorkflowSlotViewModel> Slots { get; set; } = [];
+    public ObservableCollection<ISlotComponent> Slots { get; set; } = [];
 
     /// <summary>Input slot (receiver side).</summary>
     public TestSlot Input { get; }
@@ -187,14 +187,14 @@ internal abstract class ProbeNodeBase : IWorkflowNodeViewModel
         _helper.Install(this);
     }
 
-    // ── IWorkflowViewModel 基础设施 ──
+    // ── IWorkflowComponent 基础设施 ──
     public event PropertyChangingEventHandler? PropertyChanging;
     public event PropertyChangedEventHandler? PropertyChanged;
     public void InitializeWorkflow() { }
     public void OnPropertyChanging(string p) => PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(p));
     public void OnPropertyChanged(string p) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
-    public IWorkflowNodeViewModelHelper GetHelper() => _helper;
-    public void SetHelper(IWorkflowNodeViewModelHelper helper) { }
+    public INodeHelper GetHelper() => _helper;
+    public void SetHelper(INodeHelper helper) { }
 
     public override string ToString() => Name;
 
@@ -276,15 +276,15 @@ internal sealed class RouterNode : ProbeNode, ICompileTimeRouter
         return Task.FromResult(Selection);
     }
 
-    public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
+    public Task<IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>>> GetRouteTable()
     {
-        IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> result;
+        IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>> result;
         if (CompileMode == RouterCompileMode.Static && Selection is not null && RouteTable.ContainsKey(Selection))
         {
             // Static:编译产物只有当前选中分支一条路。
-            result = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
+            result = new Dictionary<object, IReadOnlyList<INodeComponent>>
             {
-                [Selection] = RouteTable[Selection].Cast<IWorkflowNodeViewModel>().ToList(),
+                [Selection] = RouteTable[Selection].Cast<INodeComponent>().ToList(),
             };
         }
         else
@@ -292,27 +292,27 @@ internal sealed class RouterNode : ProbeNode, ICompileTimeRouter
             // Dynamic:全部分支存活。
             result = RouteTable.ToDictionary(
                 kv => kv.Key,
-                kv => (IReadOnlyList<IWorkflowNodeViewModel>)kv.Value.Cast<IWorkflowNodeViewModel>().ToList());
+                kv => (IReadOnlyList<INodeComponent>)kv.Value.Cast<INodeComponent>().ToList());
         }
         return Task.FromResult(result);
     }
 }
 
 /// <summary>
-/// Redirectable node: IWorkflowNodeViewModel + IRedirectable. After the node triggers Error/Warn, the engine calls
+/// Redirectable node: INodeComponent + IRedirectable. After the node triggers Error/Warn, the engine calls
 /// ResolveRedirectAsync — returning an upstream node re-runs the whole graph from it, returning null continues.
 /// </summary>
 internal sealed class RedirectableNode : ProbeNode, IRedirectable
 {
     /// <summary>Redirect decision: given the runtime context, returns the upstream target node (null = continue).</summary>
-    public Func<IRuntimeContext, IWorkflowNodeViewModel?>? Resolve { get; set; }
+    public Func<IRuntimeContext, INodeComponent?>? Resolve { get; set; }
 
     // 设了就抛这个异常，而不是给出任何决定。
     public Exception? ResolveThrows { get; set; }
 
     public RedirectableNode(string? name = null) : base(name) { }
 
-    public Task<IWorkflowNodeViewModel?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
+    public Task<INodeComponent?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
     {
         if (ResolveThrows is { } error) throw error;
         return Task.FromResult(Resolve?.Invoke(context));

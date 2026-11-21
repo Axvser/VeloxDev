@@ -103,7 +103,7 @@ The generated files are defaults, not fixtures. The node view's `InputSlot` / `O
 
 ⚙ **The ViewModels are yours.** The tree, node, slot and link ViewModels, your node types and their helpers — see [model.md](model.md). The minimal working set to copy is `Examples/Workflow/<GUI> Trimmed/Demo/ViewModels/Workflow/` in a source checkout, or on GitHub if you installed from NuGet.
 
-⚙ **The wiring is yours.** Add the `VeloxDev.<GUI>` package, set the tree's `DataContext` (or `Tree` parameter) to your `IWorkflowTreeViewModel`, and make sure your node view's `DataContext` is your node ViewModel.
+⚙ **The wiring is yours.** Add the `VeloxDev.<GUI>` package, set the tree's `DataContext` (or `Tree` parameter) to your `ITreeComponent`, and make sure your node view's `DataContext` is your node ViewModel.
 
 ⚙ **The link menu is declared and empty.** The tree item declares the menu and wires the right-press to it — `LinkMenuKey` plus a resource on the markup platforms (WPF/Avalonia/WinUI/MAUI/Jalium), a `<LinkMenu>` fragment on Razor, a `WorkflowSurfaceBehavior.SetLinkMenuBuilder` delegate in the WinForms tree's code-behind — and every entry is yours. Add the entries there rather than writing right-press code; each entry is bound to the pressed link, so `Command="{Binding DeleteCommand}"` (or the GUI's equivalent) is the whole entry. See [view-layer.md](view-layer.md#the-link-context-menu).
 

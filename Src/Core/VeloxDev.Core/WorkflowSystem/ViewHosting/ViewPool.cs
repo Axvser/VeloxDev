@@ -49,7 +49,7 @@ public abstract class ViewPoolCore<THost, TView, TItem, TPriorityCore> : IDispos
     /// <summary>Creates a pool and starts tracking <paramref name="source"/>.</summary>
     /// <param name="hostElement">The host element the host materializes views into.</param>
     /// <param name="host">The composed platform layers.</param>
-    /// <param name="source">The visible-item collection, usually <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>.</param>
+    /// <param name="source">The visible-item collection, usually <see cref="ITreeHelper.VisibleItems"/>.</param>
     /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="source"/> cannot be enumerated.</exception>
     protected ViewPoolCore(
@@ -469,7 +469,7 @@ public sealed class ViewPool<THost, TView, TItem, TPriorityCore>
     /// <summary>Creates a pool and starts tracking <paramref name="source"/>.</summary>
     /// <param name="hostElement">The host element the host materializes views into.</param>
     /// <param name="host">The composed platform layers.</param>
-    /// <param name="source">The visible-item collection, usually <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>.</param>
+    /// <param name="source">The visible-item collection, usually <see cref="ITreeHelper.VisibleItems"/>.</param>
     public ViewPool(
         THost hostElement,
         IViewHost<THost, TView, TItem, TPriorityCore> host,

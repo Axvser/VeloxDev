@@ -183,7 +183,7 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
 
     // ── Link input: hover highlight and delete ──────────────────────────────────
 
-    private void AttachLinkInput(IWorkflowTreeViewModel tree)
+    private void AttachLinkInput(ITreeComponent tree)
     {
         DetachLinkInput();
 
@@ -277,7 +277,7 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
     {
         if (e.Modifiers.HasFlag(InputModifiers.Control))
         {
-            if (e.Target is IWorkflowNodeViewModel node) AgentSelection.Toggle(node);
+            if (e.Target is INodeComponent node) AgentSelection.Toggle(node);
             e.Handle.PreventDefault = true;
         }
         else if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
@@ -288,7 +288,7 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
 
     // ── Node context menu: the shared layout presets ─────────────────────────────
 
-    private ContextMenuStrip BuildNodeLayoutMenu(IWorkflowNodeViewModel node)
+    private ContextMenuStrip BuildNodeLayoutMenu(INodeComponent node)
     {
         var menu = new ContextMenuStrip();
 
@@ -317,7 +317,7 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
         return menu;
     }
 
-    private void ApplyNodeLayout(IWorkflowNodeViewModel node, WorkflowLayoutTraversal traversal)
+    private void ApplyNodeLayout(INodeComponent node, WorkflowLayoutTraversal traversal)
     {
         try
         {

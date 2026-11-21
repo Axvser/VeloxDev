@@ -13,11 +13,11 @@ public class WorkflowUndoCountTests
     [TestMethod]
     public void DeleteSlotWithConnections_UndoOnceRestoresSlotAndConnections()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
-        var otherNode = new NodeDefaultViewModel();
-        var slot = new SlotDefaultViewModel { Channel = SlotChannel.MultipleBoth };
-        var otherSlot = new SlotDefaultViewModel { Channel = SlotChannel.MultipleBoth };
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
+        var otherNode = new NodeDefaultComponent();
+        var slot = new SlotDefaultComponent { Channel = SlotChannel.MultipleBoth };
+        var otherSlot = new SlotDefaultComponent { Channel = SlotChannel.MultipleBoth };
 
         tree.GetHelper().CreateNode(node);
         tree.GetHelper().CreateNode(otherNode);

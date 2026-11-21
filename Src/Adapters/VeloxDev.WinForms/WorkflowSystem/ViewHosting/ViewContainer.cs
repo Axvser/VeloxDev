@@ -14,7 +14,7 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// how to release their subscriptions. Because
 /// WinForms has no z-order property, the container also keeps link views behind node views when a view is attached.
 /// </remarks>
-public sealed class ViewContainer : IViewContainer<Control, Control, IWorkflowViewModel>
+public sealed class ViewContainer : IViewContainer<Control, Control, IWorkflowComponent>
 {
     private static readonly string[] ContextPropertyNames = ["ViewModel", "DataContext", "BindingContext"];
 
@@ -51,9 +51,9 @@ public sealed class ViewContainer : IViewContainer<Control, Control, IWorkflowVi
     }
 
     /// <inheritdoc />
-    public void Activate(Control view, IWorkflowViewModel item)
+    public void Activate(Control view, IWorkflowComponent item)
     {
-        if (item is IWorkflowLinkViewModel)
+        if (item is ILinkComponent)
         {
             linkViews.Add(view);
         }
@@ -94,24 +94,24 @@ public sealed class ViewContainer : IViewContainer<Control, Control, IWorkflowVi
         }
     }
 
-    private static void ApplyBinding(Control view, IWorkflowViewModel item)
+    private static void ApplyBinding(Control view, IWorkflowComponent item)
     {
         // 连线视图由适配器那份「附加」收绑：订阅、雕刻、命中契约都归它，控件本身只是用户画的视图。
-        if (item is IWorkflowLinkViewModel link && WorkflowLinkAttachment.For(view) is { } linkAttachment)
+        if (item is ILinkComponent link && WorkflowLinkAttachment.For(view) is { } linkAttachment)
         {
             linkAttachment.Bind(link);
             return;
         }
 
         // 节点卡片同理：绑定、摆位、折叠与模型事件都归附加。
-        if (item is IWorkflowNodeViewModel node && WorkflowNodeAttachment.For(view) is { } nodeAttachment)
+        if (item is INodeComponent node && WorkflowNodeAttachment.For(view) is { } nodeAttachment)
         {
             nodeAttachment.Node = node;
             return;
         }
 
         // 插槽视图同理：绑定、状态着色、通道事件与拖拽连线都归附加。
-        if (item is IWorkflowSlotViewModel slot && WorkflowSlotAttachment.For(view) is { } slotAttachment)
+        if (item is ISlotComponent slot && WorkflowSlotAttachment.For(view) is { } slotAttachment)
         {
             slotAttachment.Slot = slot;
             return;

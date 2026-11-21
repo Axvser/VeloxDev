@@ -15,14 +15,14 @@ public sealed class NodeEventArgs : EventArgs
     /// <summary>Creates the argument.</summary>
     /// <param name="node">The node the action is about.</param>
     /// <param name="handle">The handle for this action — the same instance the other phase carries.</param>
-    public NodeEventArgs(IWorkflowNodeViewModel node, WorkflowEventHandle handle)
+    public NodeEventArgs(INodeComponent node, WorkflowEventHandle handle)
     {
         Node = node;
         Handle = handle;
     }
 
     /// <summary>The node the action is about.</summary>
-    public IWorkflowNodeViewModel Node { get; }
+    public INodeComponent Node { get; }
 
     /// <summary>Veto or silence the action.</summary>
     public WorkflowEventHandle Handle { get; }

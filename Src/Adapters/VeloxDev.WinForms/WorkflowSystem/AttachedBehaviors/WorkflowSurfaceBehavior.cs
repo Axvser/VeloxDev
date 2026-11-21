@@ -88,12 +88,12 @@ public sealed class WorkflowSurfaceBehavior
 
     /// <summary>The tree bound to the surface when no ancestor data context carries one.</summary>
     public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.RegisterAttached(
-        "WorkflowTree", typeof(IWorkflowTreeViewModel), typeof(WorkflowSurfaceBehavior),
+        "WorkflowTree", typeof(ITreeComponent), typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(null, OnPartConfigurationChanged));
 
     /// <summary>Fills the link context menu the surface opens on a right press.</summary>
     public static readonly DependencyProperty LinkMenuBuilderProperty = DependencyProperty.RegisterAttached(
-        "LinkMenuBuilder", typeof(Action<ContextMenuStrip, IWorkflowLinkViewModel>), typeof(WorkflowSurfaceBehavior),
+        "LinkMenuBuilder", typeof(Action<ContextMenuStrip, ILinkComponent>), typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(null));
 
     /// <summary>Gets whether the surface lifecycle is active on <paramref name="element"/>.</summary>
@@ -159,19 +159,19 @@ public sealed class WorkflowSurfaceBehavior
         => SetRequired(element, TemplateSelectorProperty, value);
 
     /// <summary>Gets the explicitly bound workflow tree.</summary>
-    public static IWorkflowTreeViewModel? GetWorkflowTree(Control element)
-        => (IWorkflowTreeViewModel?)GetRequired(element, WorkflowTreeProperty);
+    public static ITreeComponent? GetWorkflowTree(Control element)
+        => (ITreeComponent?)GetRequired(element, WorkflowTreeProperty);
 
     /// <summary>Binds a workflow tree explicitly; otherwise the surface resolves one from an ancestor data context.</summary>
-    public static void SetWorkflowTree(Control element, IWorkflowTreeViewModel? value)
+    public static void SetWorkflowTree(Control element, ITreeComponent? value)
         => SetRequired(element, WorkflowTreeProperty, value);
 
     /// <summary>Gets the link-menu builder.</summary>
-    public static Action<ContextMenuStrip, IWorkflowLinkViewModel>? GetLinkMenuBuilder(Control element)
-        => (Action<ContextMenuStrip, IWorkflowLinkViewModel>?)GetRequired(element, LinkMenuBuilderProperty);
+    public static Action<ContextMenuStrip, ILinkComponent>? GetLinkMenuBuilder(Control element)
+        => (Action<ContextMenuStrip, ILinkComponent>?)GetRequired(element, LinkMenuBuilderProperty);
 
     /// <summary>Sets the builder that fills the link context menu.</summary>
-    public static void SetLinkMenuBuilder(Control element, Action<ContextMenuStrip, IWorkflowLinkViewModel>? value)
+    public static void SetLinkMenuBuilder(Control element, Action<ContextMenuStrip, ILinkComponent>? value)
         => SetRequired(element, LinkMenuBuilderProperty, value);
 
     /// <summary>
@@ -632,7 +632,7 @@ public sealed class WorkflowSurfaceBehavior
         EnsurePool(host, state);
     }
 
-    private static void AttachTree(Control host, SurfaceState state, IWorkflowTreeViewModel? tree)
+    private static void AttachTree(Control host, SurfaceState state, ITreeComponent? tree)
     {
         DetachTree(host, state);
         state.Tree = tree;
@@ -744,7 +744,7 @@ public sealed class WorkflowSurfaceBehavior
         return state.GeneratedSelector;
     }
 
-    private static void RegisterScroller(SurfaceState state, IWorkflowTreeViewModel tree)
+    private static void RegisterScroller(SurfaceState state, ITreeComponent tree)
     {
         ClearScroller(state);
         var scroller = new SurfaceScroller(state);
@@ -1395,7 +1395,7 @@ public sealed class WorkflowSurfaceBehavior
     /// <param name="clickCount">How many clicks this press completes.</param>
     /// <returns>The handle the route produced, or <see langword="null"/> when no surface or tree was found.</returns>
     internal static WorkflowEventHandle? RouteComponentPress(
-        Control source, IWorkflowViewModel target, PlatformInput.MouseButtons button, int clickCount)
+        Control source, IWorkflowComponent target, PlatformInput.MouseButtons button, int clickCount)
     {
         var host = FindSurfaceHost(source);
         if (host is null)
@@ -1420,7 +1420,7 @@ public sealed class WorkflowSurfaceBehavior
 
     // 离开表面时必须把「原来那个 target」交给 Exited：Core 对显式 Exited 不再合成前一个目标的
     // Exited，target 传 null 只会通知树，节点/插槽的 Input.PointerExited 会漏掉。
-    private static void RoutePointerExit(IWorkflowTreeViewModel tree, object? source)
+    private static void RoutePointerExit(ITreeComponent tree, object? source)
     {
         var input = WorkflowInput.For(tree);
         input.Route(new Wf.PointerExitedEventArgs(
@@ -1434,7 +1434,7 @@ public sealed class WorkflowSurfaceBehavior
     /// <param name="clickCount">How many clicks the gesture that just ended had.</param>
     /// <returns>The handle the route produced, or <see langword="null"/> when no surface or tree was found.</returns>
     internal static WorkflowEventHandle? RouteComponentRelease(
-        Control source, IWorkflowViewModel target, PlatformInput.MouseButtons button, int clickCount)
+        Control source, IWorkflowComponent target, PlatformInput.MouseButtons button, int clickCount)
     {
         var host = FindSurfaceHost(source);
         if (host is null)
@@ -1457,23 +1457,23 @@ public sealed class WorkflowSurfaceBehavior
         return handle;
     }
 
-    internal static IWorkflowViewModel? ResolveTarget(
-        Control? hit, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    internal static IWorkflowComponent? ResolveTarget(
+        Control? hit, ITreeComponent tree, double x, double y, double radius)
     {
         for (var current = hit; current is not null; current = current.Parent)
         {
             // Tag 优先：节点/插槽附件把它写成所属模型；DataContext 可能继承的是树或别的
             // 上下文，非模型的值不能把同一控件上的 Tag 挡住。
-            var model = current.Tag as IWorkflowViewModel
-                ?? ResolveValue(current, "ViewModel") as IWorkflowViewModel
-                ?? ResolveValue(current, "DataContext") as IWorkflowViewModel
-                ?? ResolveValue(current, "BindingContext") as IWorkflowViewModel;
+            var model = current.Tag as IWorkflowComponent
+                ?? ResolveValue(current, "ViewModel") as IWorkflowComponent
+                ?? ResolveValue(current, "DataContext") as IWorkflowComponent
+                ?? ResolveValue(current, "BindingContext") as IWorkflowComponent;
 
             switch (model)
             {
-                case IWorkflowNodeViewModel node:
+                case INodeComponent node:
                     return node;
-                case IWorkflowSlotViewModel slot:
+                case ISlotComponent slot:
                     return slot;
             }
         }
@@ -1482,8 +1482,8 @@ public sealed class WorkflowSurfaceBehavior
     }
 
     private static WorkflowEventHandle RoutePointer(
-        SurfaceState state, IWorkflowTreeViewModel tree, Point point,
-        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
+        SurfaceState state, ITreeComponent tree, Point point,
+        Func<Anchor, IWorkflowComponent?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         var canvas = state.Canvas ?? state.Host;
         var hit = canvas.GetChildAtPoint(point);
@@ -1526,7 +1526,7 @@ public sealed class WorkflowSurfaceBehavior
     }
 
     private static WorkflowEventHandle RouteWheel(
-        Control host, SurfaceState state, IWorkflowTreeViewModel tree, Control hit, double deltaX, double deltaY)
+        Control host, SurfaceState state, ITreeComponent tree, Control hit, double deltaX, double deltaY)
     {
         var canvas = state.Canvas ?? host;
         var point = canvas.PointToClient(Cursor.Position);
@@ -1539,7 +1539,7 @@ public sealed class WorkflowSurfaceBehavior
         return handle;
     }
 
-    private static void ApplyZoomFactor(Control host, SurfaceState state, IWorkflowTreeViewModel tree, double factor)
+    private static void ApplyZoomFactor(Control host, SurfaceState state, ITreeComponent tree, double factor)
     {
         // 缩放会同时改 Scale、节点卡片尺寸/字号、连线几何和 grid；这些更新必须在同一帧落地。
         // 只节流滚轮还不够：中间一帧会以「新尺寸 + 旧位置」或「旧后缓冲被拉伸」出现。整个事务停
@@ -1689,7 +1689,7 @@ public sealed class WorkflowSurfaceBehavior
 
     // 表面可能从 DataContext/Tag 解析出树，而没有写 WorkflowTree DP；连线层要读同一份解析结果，
     // 否则 DataContext 型宿主只有节点、没有连线。
-    internal static IWorkflowTreeViewModel? GetSurfaceTree(Control control)
+    internal static ITreeComponent? GetSurfaceTree(Control control)
     {
         var host = FindSurfaceHost(control);
         return host is not null
@@ -1699,7 +1699,7 @@ public sealed class WorkflowSurfaceBehavior
             : null;
     }
 
-    private static IWorkflowTreeViewModel? ResolveTree(Control host)
+    private static ITreeComponent? ResolveTree(Control host)
     {
         if (GetWorkflowTree(host) is { } explicitTree)
         {
@@ -1709,10 +1709,10 @@ public sealed class WorkflowSurfaceBehavior
         var current = host;
         while (current is not null)
         {
-            IWorkflowTreeViewModel? tree = ResolveValue(current, "ViewModel") as IWorkflowTreeViewModel;
-            tree ??= ResolveValue(current, "DataContext") as IWorkflowTreeViewModel;
-            tree ??= ResolveValue(current, "BindingContext") as IWorkflowTreeViewModel;
-            tree ??= current.Tag as IWorkflowTreeViewModel;
+            ITreeComponent? tree = ResolveValue(current, "ViewModel") as ITreeComponent;
+            tree ??= ResolveValue(current, "DataContext") as ITreeComponent;
+            tree ??= ResolveValue(current, "BindingContext") as ITreeComponent;
+            tree ??= current.Tag as ITreeComponent;
             if (tree is not null)
             {
                 return tree;
@@ -1869,7 +1869,7 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        if (e.Target is not IWorkflowLinkViewModel link)
+        if (e.Target is not ILinkComponent link)
         {
             return;
         }
@@ -2002,8 +2002,8 @@ public sealed class WorkflowSurfaceBehavior
 
         public override DataTemplate? SelectTemplate(object? item) => item switch
         {
-            IWorkflowNodeViewModel => nodeTemplate,
-            IWorkflowLinkViewModel => linkTemplate,
+            INodeComponent => nodeTemplate,
+            ILinkComponent => linkTemplate,
             _ => null,
         };
 
@@ -2173,7 +2173,7 @@ public sealed class WorkflowSurfaceBehavior
             initialRevealSeen.Clear();
         }
 
-        public void QueueZoom(Control host, IWorkflowTreeViewModel tree, double factor)
+        public void QueueZoom(Control host, ITreeComponent tree, double factor)
         {
             pendingZoomFactor *= factor;
 
@@ -2251,7 +2251,7 @@ public sealed class WorkflowSurfaceBehavior
 
         public Control? PointerPressSource { get; set; }
 
-        public IWorkflowTreeViewModel? Tree { get; set; }
+        public ITreeComponent? Tree { get; set; }
 
         public INotifyPropertyChanged? TreeNotifier { get; set; }
 
@@ -2287,13 +2287,13 @@ public sealed class WorkflowSurfaceBehavior
 
         public ContextMenuStrip? LinkMenu { get; set; }
 
-        public IWorkflowLinkViewModel? MenuLink { get; set; }
+        public ILinkComponent? MenuLink { get; set; }
 
         public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
 
-        public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
+        public EventHandler<ILinkComponent>? MenuLinkRemoved { get; set; }
 
-        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
+        public ITreeComponent? LastRestoreTree { get; set; }
 
         public bool HasPendingRestore { get; set; }
 
@@ -2389,9 +2389,9 @@ public sealed class WorkflowSurfaceBehavior
 
         public void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName is nameof(IWorkflowTreeViewModel.Layout)
-                or nameof(IWorkflowTreeViewModel.Nodes)
-                or nameof(IWorkflowTreeViewModel.Links))
+            if (e.PropertyName is nameof(ITreeComponent.Layout)
+                or nameof(ITreeComponent.Nodes)
+                or nameof(ITreeComponent.Links))
             {
                 ScheduleLayout(Host, this);
             }
@@ -2619,7 +2619,7 @@ public sealed class WorkflowSurfaceBehavior
 
             var anchor = new Anchor(point.X, point.Y, 0);
             var input = WorkflowInput.For(tree);
-            IWorkflowViewModel? target = null;
+            IWorkflowComponent? target = null;
 
             // 指针在画布之外（滚动条、小地图、表面边框）时没有组件目标；不要拿画布坐标
             // 去命中一条实际被覆盖住的连线。

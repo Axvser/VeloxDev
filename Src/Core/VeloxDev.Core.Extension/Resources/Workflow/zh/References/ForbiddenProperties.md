@@ -28,8 +28,8 @@
 节点类型可声明**插槽集合属性**（如 `ObservableCollection<SlotViewModel> OutputSlots`）。  
 这些属性由源码生成的 `INotifyCollectionChanged` 生命周期钩子驱动：
 
-- 向集合添加插槽 → 触发 `OnWorkflowSlotAdded` → 通过 `CreateSlotCommand` 自动注册到节点。
-- 从集合移除插槽 → 触发 `OnWorkflowSlotRemoved` → 自动删除插槽及其连接。
+- 向集合添加插槽 → 触发 `OnSlotComponentAdded` → 通过 `CreateSlotCommand` 自动注册到节点。
+- 从集合移除插槽 → 触发 `OnSlotComponentRemoved` → 自动删除插槽及其连接。
 - **使用 `AddSlotToCollection` / `RemoveSlotFromCollection`** 管理这些集合，禁止对集合管理的插槽使用 `CreateSlotOnNode`。
 - 使用 **`ListSlotProperties`** 区分单个属性插槽与集合属性插槽。
 - **`GetNodeDetail`** 输出中，每个插槽的 `prop` 字段显示其所属属性名（如 `InputSlot`、`OutputSlots[2]`）。

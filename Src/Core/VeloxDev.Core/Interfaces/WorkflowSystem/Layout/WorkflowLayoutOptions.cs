@@ -71,7 +71,7 @@ public sealed class WorkflowLayoutOptions
     /// <para>The node must belong to the tree and have finite world geometry; otherwise the problem builder
     /// rejects the snapshot.</para>
     /// </remarks>
-    public IWorkflowNodeViewModel? StartNode { get; set; }
+    public INodeComponent? StartNode { get; set; }
 
     /// <summary>Which links the scoped traversal follows; ignored when <see cref="StartNode"/> is null.</summary>
     public WorkflowLayoutTraversal Traversal { get; set; } = WorkflowLayoutTraversal.Downstream;
@@ -90,7 +90,7 @@ public sealed class WorkflowLayoutOptions
     /// Evaluated once per node, on the calling thread, while the snapshot is built. Pinned nodes are still
     /// obstacles for the nodes around them.
     /// </remarks>
-    public Func<IWorkflowNodeViewModel, bool>? Pinned { get; set; }
+    public Func<INodeComponent, bool>? Pinned { get; set; }
 
     /// <summary>Whether solving should stop short of writing the result back to the model.</summary>
     /// <remarks>

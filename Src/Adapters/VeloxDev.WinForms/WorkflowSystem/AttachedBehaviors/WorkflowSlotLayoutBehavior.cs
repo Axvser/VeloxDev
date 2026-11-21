@@ -34,7 +34,7 @@ public sealed class WorkflowSlotLayoutBehavior
     }
 
     private static readonly ConditionalWeakTable<Control, LayoutState> States = new();
-    private static readonly ConditionalWeakTable<IWorkflowSlotViewModel, LocalAnchorBox> LocalAnchors = new();
+    private static readonly ConditionalWeakTable<ISlotComponent, LocalAnchorBox> LocalAnchors = new();
 
     /// <summary>The slot's centre in its node view's client coordinates, in the same units as the node's Anchor/Size.</summary>
     private sealed class LocalAnchorBox
@@ -45,7 +45,7 @@ public sealed class WorkflowSlotLayoutBehavior
 
     // 曲线要的是「端口在节点内的局部位置」：它只随布局/缩放变，不随画布平移变。从控件左/上逐级
     // 累加到节点根即可得到，完全不经过屏幕坐标，因此不会在测量滞后时把平移量混进来。
-    internal static bool TryGetLocalAnchor(IWorkflowSlotViewModel slot, out double x, out double y)
+    internal static bool TryGetLocalAnchor(ISlotComponent slot, out double x, out double y)
     {
         if (slot is not null && LocalAnchors.TryGetValue(slot, out var box))
         {
@@ -499,8 +499,8 @@ public sealed class WorkflowSlotLayoutBehavior
         if (state is not null)
         {
             state.SlotPropertyNames.Clear();
-            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
-            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
+            state.SlotPropertyNames.Add(nameof(INodeComponent.Anchor));
+            state.SlotPropertyNames.Add(nameof(INodeComponent.Size));
             // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
             // OnPropertyChanged("OutputSlots") 才匹配得上。
             foreach (var name in slotNames)
@@ -603,7 +603,7 @@ public sealed class WorkflowSlotLayoutBehavior
         return true;
     }
 
-    private static void SyncNamedSlot(Control parentHost, Control host, Control? coordinateHost, IWorkflowNodeViewModel node, string slotName)
+    private static void SyncNamedSlot(Control parentHost, Control host, Control? coordinateHost, INodeComponent node, string slotName)
     {
         var slotControl = FindControlByName(parentHost, slotName);
         if (slotControl is null)
@@ -625,7 +625,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private static void SyncSlotEnumerator(Control parentHost, Control host, Control? coordinateHost, IWorkflowNodeViewModel node, string enumeratorName)
+    private static void SyncSlotEnumerator(Control parentHost, Control host, Control? coordinateHost, INodeComponent node, string enumeratorName)
     {
         var itemsHost = FindControlByName(parentHost, enumeratorName);
         if (itemsHost is null)
@@ -639,7 +639,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private static void SyncSlot(Control host, Control? coordinateHost, Control slotControl, IWorkflowNodeViewModel node)
+    private static void SyncSlot(Control host, Control? coordinateHost, Control slotControl, INodeComponent node)
     {
         var slot = ResolveSlot(slotControl);
         if (slot is null || slotControl.Width <= 0 || slotControl.Height <= 0)
@@ -802,15 +802,15 @@ public sealed class WorkflowSlotLayoutBehavior
         return ResolveValue(control, "ViewModel") ?? ResolveValue(control, "DataContext") ?? ResolveValue(control, "BindingContext") ?? control.Tag;
     }
 
-    private static IWorkflowNodeViewModel? ResolveNode(Control control)
+    private static INodeComponent? ResolveNode(Control control)
     {
         var current = control;
         while (current is not null)
         {
-            var node = ResolveValue(current, "ViewModel") as IWorkflowNodeViewModel
-                ?? ResolveValue(current, "DataContext") as IWorkflowNodeViewModel
-                ?? ResolveValue(current, "BindingContext") as IWorkflowNodeViewModel
-                ?? current.Tag as IWorkflowNodeViewModel;
+            var node = ResolveValue(current, "ViewModel") as INodeComponent
+                ?? ResolveValue(current, "DataContext") as INodeComponent
+                ?? ResolveValue(current, "BindingContext") as INodeComponent
+                ?? current.Tag as INodeComponent;
 
             if (node is not null)
             {
@@ -823,12 +823,12 @@ public sealed class WorkflowSlotLayoutBehavior
         return null;
     }
 
-    private static IWorkflowSlotViewModel? ResolveSlot(Control control)
+    private static ISlotComponent? ResolveSlot(Control control)
     {
-        return control.Tag as IWorkflowSlotViewModel
-            ?? ResolveValue(control, "ViewModel") as IWorkflowSlotViewModel
-            ?? ResolveValue(control, "DataContext") as IWorkflowSlotViewModel
-            ?? ResolveValue(control, "BindingContext") as IWorkflowSlotViewModel;
+        return control.Tag as ISlotComponent
+            ?? ResolveValue(control, "ViewModel") as ISlotComponent
+            ?? ResolveValue(control, "DataContext") as ISlotComponent
+            ?? ResolveValue(control, "BindingContext") as ISlotComponent;
     }
 
     private static object? ResolveValue(Control control, string propertyName)

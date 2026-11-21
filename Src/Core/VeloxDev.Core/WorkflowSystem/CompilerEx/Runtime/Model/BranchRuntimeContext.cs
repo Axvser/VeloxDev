@@ -102,7 +102,7 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
     public int CurrentOrder { get => _session.CurrentOrder; set => _session.CurrentOrder = value; }
 
     /// <inheritdoc />
-    public IWorkflowNodeViewModel? Target { get => _session.Target; set => _session.Target = value; }
+    public INodeComponent? Target { get => _session.Target; set => _session.Target = value; }
 
     /// <inheritdoc />
     public bool TargetReached { get => _session.TargetReached; set => _session.TargetReached = value; }
@@ -114,10 +114,10 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
     public int? ActiveRedirectTarget { get => _session.ActiveRedirectTarget; set => _session.ActiveRedirectTarget = value; }
 
     /// <inheritdoc />
-    public IWorkflowSlotViewModel? Sender => _session.Sender;
+    public ISlotComponent? Sender => _session.Sender;
 
     /// <inheritdoc />
-    public IWorkflowSlotViewModel? Receiver => _session.Receiver;
+    public ISlotComponent? Receiver => _session.Receiver;
 
     private int _localSequence;
 
@@ -155,7 +155,7 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
     }
 
     /// <summary>The node being driven in this branch right now — this branch's own, so siblings cannot overwrite it.</summary>
-    internal IWorkflowNodeViewModel? CurrentNode { get; set; }
+    internal INodeComponent? CurrentNode { get; set; }
 
     /// <inheritdoc />
     public Task ErrorAsync(string message) => ReportAsync(ExecutionReportLevel.Error, message);
@@ -193,13 +193,13 @@ internal sealed class BranchRuntimeContext(IRuntimeContext session) : IRuntimeCo
     /// Shared: the registry is keyed by source node, each branch touches distinct nodes, and the join point runs
     /// after the whole group — so one registry serves both, and the session's lock covers it.
     /// </remarks>
-    public void RegisterOutput(IWorkflowNodeViewModel node, object? value) => _session.RegisterOutput(node, value);
+    public void RegisterOutput(INodeComponent node, object? value) => _session.RegisterOutput(node, value);
 
     /// <inheritdoc />
     public void ResetOutputs() => _session.ResetOutputs();
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<IWorkflowNodeViewModel, object?> CollectGroupedInputs(
-        System.Collections.Generic.IEnumerable<IWorkflowNodeViewModel> inputNodes)
+    public IReadOnlyDictionary<INodeComponent, object?> CollectGroupedInputs(
+        System.Collections.Generic.IEnumerable<INodeComponent> inputNodes)
         => _session.CollectGroupedInputs(inputNodes);
 }

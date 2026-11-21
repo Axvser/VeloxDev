@@ -6,7 +6,7 @@ namespace Demo;
 
 public partial class TreeView : UserControl
 {
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private IInputEvents? _events;
 
     public TreeView()
@@ -24,7 +24,7 @@ public partial class TreeView : UserControl
     {
         Unwire();
 
-        if (DataContext is not IWorkflowTreeViewModel tree) return;
+        if (DataContext is not ITreeComponent tree) return;
         if (tree.GetHelper() is not IInputEvents events) return;
 
         // VeloxDev customization: 树一级的键与滚轮都订在**树的 Helper** 上 —— 与连线视图订自己那一条同一条路，

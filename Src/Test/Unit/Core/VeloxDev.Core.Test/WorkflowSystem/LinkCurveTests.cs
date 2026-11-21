@@ -178,9 +178,9 @@ public class LinkCurveTests
 
     // ── 能力契约：默认 helper 就具备，且过渲染就绪门 ─────────────────────────
 
-    private static IWorkflowNodeViewModel NodeWithSlots(params IWorkflowSlotViewModel[] slots)
+    private static INodeComponent NodeWithSlots(params ISlotComponent[] slots)
     {
-        var node = new NodeDefaultViewModel();
+        var node = new NodeDefaultComponent();
         foreach (var slot in slots)
         {
             slot.Parent = node;
@@ -189,15 +189,15 @@ public class LinkCurveTests
         return node;
     }
 
-    private static IWorkflowLinkViewModel ReadyLink(out IWorkflowSlotViewModel sender, out IWorkflowSlotViewModel receiver)
+    private static ILinkComponent ReadyLink(out ISlotComponent sender, out ISlotComponent receiver)
     {
-        var a = NodeWithSlots(new SlotDefaultViewModel());
-        var b = NodeWithSlots(new SlotDefaultViewModel());
+        var a = NodeWithSlots(new SlotDefaultComponent());
+        var b = NodeWithSlots(new SlotDefaultComponent());
         sender = a.Slots[0];
         receiver = b.Slots[0];
         sender.Anchor = new Anchor(100, 50, 0);
         receiver.Anchor = new Anchor(300, 50, 0);
-        return new LinkDefaultViewModel { Sender = sender, Receiver = receiver, IsVisible = true };
+        return new LinkDefaultComponent { Sender = sender, Receiver = receiver, IsVisible = true };
     }
 
     [TestMethod]
@@ -215,9 +215,9 @@ public class LinkCurveTests
         // 门只看「有没有画出来的曲线」，不问锚点测没测到 —— 有的平台（Jalium）按设计从不写 slot.Anchor，
         // 用「锚点已测量」当门会让它整家连线静默失效，而且那回答的是模型而不是画出来的东西。
         // 视图画不出来时会把曲线撤回，所以「没有曲线」就是「那里没有东西」。
-        var a = NodeWithSlots(new SlotDefaultViewModel());
-        var b = NodeWithSlots(new SlotDefaultViewModel());
-        var link = new LinkDefaultViewModel { Sender = a.Slots[0], Receiver = b.Slots[0], IsVisible = true };
+        var a = NodeWithSlots(new SlotDefaultComponent());
+        var b = NodeWithSlots(new SlotDefaultComponent());
+        var link = new LinkDefaultComponent { Sender = a.Slots[0], Receiver = b.Slots[0], IsVisible = true };
         Assert.IsTrue(double.IsNaN(a.Slots[0].Anchor.Horizontal));
 
         link.PublishCurve(LinkCurve.FromPoints([0d, 100d], [0d, 0d]));

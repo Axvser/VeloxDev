@@ -10,7 +10,7 @@ namespace VeloxDev.Adapters.Benchmarks.Headed;
 // 刻意做小：一张边框 + 一段文字。WinForms 没有 DataContext，池按约定写 ViewModel 属性。
 internal sealed class WinFormsBenchmarkNodeView : Panel
 {
-    private IWorkflowNodeViewModel? _node;
+    private INodeComponent? _node;
 
     public WinFormsBenchmarkNodeView()
     {
@@ -31,10 +31,10 @@ internal sealed class WinFormsBenchmarkNodeView : Panel
     // 池的 ViewContainer 按 ViewModel/DataContext/BindingContext 三个约定名接线。
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public IWorkflowViewModel? ViewModel
+    public IWorkflowComponent? ViewModel
     {
         get => _node;
-        set => Bind(value as IWorkflowNodeViewModel);
+        set => Bind(value as INodeComponent);
     }
 
     protected override void OnParentChanged(EventArgs e)
@@ -45,7 +45,7 @@ internal sealed class WinFormsBenchmarkNodeView : Panel
         Apply();
     }
 
-    private void Bind(IWorkflowNodeViewModel? node)
+    private void Bind(INodeComponent? node)
     {
         if (ReferenceEquals(_node, node))
         {
@@ -68,7 +68,7 @@ internal sealed class WinFormsBenchmarkNodeView : Panel
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
         {
             Apply();
         }
@@ -103,7 +103,7 @@ internal sealed class WinFormsBenchmarkLinkView : Panel
 
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public IWorkflowViewModel? ViewModel
+    public IWorkflowComponent? ViewModel
     {
         get => null;
         set { }
@@ -116,5 +116,5 @@ internal sealed class WinFormsBenchmarkTemplateSelector : WfXaml.TemplateSelecto
     private static readonly WfXaml.DataTemplate LinkTemplate = new(() => new WinFormsBenchmarkLinkView());
 
     public override WfXaml.DataTemplate? SelectTemplate(object? item)
-        => item is IWorkflowNodeViewModel ? NodeTemplate : LinkTemplate;
+        => item is INodeComponent ? NodeTemplate : LinkTemplate;
 }

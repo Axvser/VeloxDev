@@ -24,7 +24,7 @@ public class ComponentPatcherTests
     [TestMethod]
     public void AnUnmountedComponentIsRefusedBeforeAnythingIsWritten()
     {
-        var result = Patch(new NodeDefaultViewModel(), """{"State":"X"}""");
+        var result = Patch(new NodeDefaultComponent(), """{"State":"X"}""");
 
         Assert.AreEqual("error", result["status"]?.Value<string>());
         StringAssert.Contains(result["message"]?.Value<string>() ?? string.Empty, "not mounted");
@@ -33,7 +33,7 @@ public class ComponentPatcherTests
     [TestMethod]
     public void AnUnknownPropertyIsSkippedRatherThanGuessedAt()
     {
-        var result = Patch(new TreeDefaultViewModel(), """{"NoSuchThing":1}""");
+        var result = Patch(new TreeDefaultComponent(), """{"NoSuchThing":1}""");
 
         var detail = DetailFor(result, "NoSuchThing");
         Assert.AreEqual("skipped", detail["status"]?.Value<string>());
@@ -43,7 +43,7 @@ public class ComponentPatcherTests
     [TestMethod]
     public void FrameworkManagedPropertiesAreRejected()
     {
-        var result = Patch(new TreeDefaultViewModel(), """{"Nodes":[]}""");
+        var result = Patch(new TreeDefaultComponent(), """{"Nodes":[]}""");
 
         var detail = DetailFor(result, "Nodes");
         Assert.AreEqual("rejected", detail["status"]?.Value<string>());
@@ -55,8 +55,8 @@ public class ComponentPatcherTests
     {
         // Anchor 有 SetAnchorCommand —— patcher 必须把改动让给命令管线，而不是直接写属性。
         // 挂上去才能过 ResolveTree 那一关，而这一条本身也是被测行为之一。
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
 
         var detail = DetailFor(Patch(node, """{"Anchor":{"Horizontal":1.0}}"""), "Anchor");
@@ -67,7 +67,7 @@ public class ComponentPatcherTests
     [TestMethod]
     public void APropertyWithoutABackingCommandIsWrittenThroughTheAccessor()
     {
-        var target = new TreeDefaultViewModel();
+        var target = new TreeDefaultComponent();
 
         // Layout 是 [VeloxProperty] 提升出来的属性，没有 SetLayoutCommand —— 直接写这条路是通的。
         // 值按访问器的 typeof 字面量给出的目标类型读回（经 AgentJsonValue，枚举那一类也认）。

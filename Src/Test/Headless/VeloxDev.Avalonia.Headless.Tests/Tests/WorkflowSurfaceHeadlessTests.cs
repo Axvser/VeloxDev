@@ -202,8 +202,8 @@ public sealed class WorkflowSurfaceHeadlessTests
         {
             var graph = TestGraph.Create(connect: false);
             var node = graph.Left;
-            var input = new Wf.SlotDefaultViewModel();
-            var output = new Wf.SlotDefaultViewModel();
+            var input = new Wf.SlotDefaultComponent();
+            var output = new Wf.SlotDefaultComponent();
             node.GetHelper().CreateSlot(input);
             node.GetHelper().CreateSlot(output);
 
@@ -333,7 +333,7 @@ public sealed class WorkflowSurfaceHeadlessTests
             Behaviors.WorkflowEvents.SetNode(view, null);
         });
 
-    private sealed class NodeSink : Wf.IWorkflowNodeEventSink
+    private sealed class NodeSink : Wf.INodeEventSink
     {
         public int Moving;
         public int Moved;
@@ -403,7 +403,7 @@ public sealed class WorkflowSurfaceHeadlessTests
             Assert.IsTrue(graph.Tree.Layout.NegativeOffset.Horizontal > 0d, "the canvas grew before the origin");
 
             // Past the far edge: the node is outside the current extent, so the extent has to grow.
-            var edge = new Wf.NodeDefaultViewModel
+            var edge = new Wf.NodeDefaultComponent
             {
                 Parent = graph.Tree,
                 Anchor = new Wf.Anchor(9000, 4000, 0),

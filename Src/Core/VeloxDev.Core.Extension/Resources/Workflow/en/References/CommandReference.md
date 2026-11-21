@@ -19,8 +19,8 @@
 | Execute node | ExecuteNode | Node.ReceiveCommand (ITaskContext) |
 | Any other | ExecuteCommandOnNode / ExecuteCommandById | Resolved by name |
 | Patch custom props | PatchNodeProperties / PatchComponentById | Direct (non-command props only) |
-| Add slot to collection | AddSlotToCollection | Collection lifecycle (OnWorkflowSlotAdded) |
-| Remove slot from collection | RemoveSlotFromCollection | Collection lifecycle (OnWorkflowSlotRemoved) |
+| Add slot to collection | AddSlotToCollection | Collection lifecycle (OnSlotComponentAdded) |
+| Remove slot from collection | RemoveSlotFromCollection | Collection lifecycle (OnSlotComponentRemoved) |
 | Set enum on slot collection | SetEnumSlotCollection | Clears + rebuilds enum-driven collection |
 | Find nodes by filter | FindNodes | Introspection (no mutation) |
 | Resolve slot ID by property | ResolveSlotId | Introspection (no mutation) |

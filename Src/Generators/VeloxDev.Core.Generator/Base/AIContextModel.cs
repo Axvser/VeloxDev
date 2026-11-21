@@ -259,10 +259,10 @@ namespace VeloxDev.Generators.Base
 
         private static readonly string[] ComponentInterfaces =
         [
-            "VeloxDev.WorkflowSystem.IWorkflowTreeViewModel",
-            "VeloxDev.WorkflowSystem.IWorkflowNodeViewModel",
-            "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel",
-            "VeloxDev.WorkflowSystem.IWorkflowLinkViewModel",
+            "VeloxDev.WorkflowSystem.ITreeComponent",
+            "VeloxDev.WorkflowSystem.INodeComponent",
+            "VeloxDev.WorkflowSystem.ISlotComponent",
+            "VeloxDev.WorkflowSystem.ILinkComponent",
         ];
 
         /// <summary>
@@ -550,10 +550,10 @@ namespace VeloxDev.Generators.Base
         {
             if (symbol.TypeKind != TypeKind.Class) return null;
 
-            if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.IWorkflowNodeViewModel")) return "Nodes";
-            if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel")) return "Slots";
-            if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.IWorkflowLinkViewModel")) return "Links";
-            if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.IWorkflowTreeViewModel")) return "Trees";
+            if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.INodeComponent")) return "Nodes";
+            if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.ISlotComponent")) return "Slots";
+            if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.ILinkComponent")) return "Links";
+            if (ImplementsInterface(symbol, "VeloxDev.WorkflowSystem.ITreeComponent")) return "Trees";
 
             // 接口是 Workflow 生成器在同一编译趟注入的，生成器之间看不见彼此的产物 —— 所以消费方声明的组件
             // 在这里一个接口都查不到。认作者写下的那个特性，与 `VeloxJsonModel.RootReason` 同一条规则
@@ -916,7 +916,7 @@ namespace VeloxDev.Generators.Base
         /// <summary>Whether the type is a single workflow slot — the interface itself counts, as it does for <c>IsAssignableFrom</c>.</summary>
         /// <remarks>
         /// 两条判据缺一不可。接口那条对框架自己的槽类型成立（它们是手写的，接口就在源码里），
-        /// 而 `[WorkflowBuilder.Slot&lt;T&gt;]` 那条对**消费方声明**的槽类型成立 —— 它们的 `IWorkflowSlotViewModel`
+        /// 而 `[WorkflowBuilder.Slot&lt;T&gt;]` 那条对**消费方声明**的槽类型成立 —— 它们的 `ISlotComponent`
         /// 是 Workflow 生成器在**同一编译趟**注入的，这边扫 `AllInterfaces` 时还看不到。
         /// 与 `VeloxJsonModel.RootReason`、`WorkflowWriter` 里那份同名兜底是同一条规则。
         /// 漏掉第二条的症状：`EnumSelectorNodeViewModel.InputSlot` 这类属性拿不到 `IsSingleSlot`，
@@ -925,7 +925,7 @@ namespace VeloxDev.Generators.Base
         /// </remarks>
         private static bool IsSingleSlotType(ITypeSymbol type)
         {
-            const string slotInterface = "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel";
+            const string slotInterface = "VeloxDev.WorkflowSystem.ISlotComponent";
 
             if (type is not INamedTypeSymbol named) return false;
 

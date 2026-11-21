@@ -5,7 +5,7 @@ using VeloxDev.WorkflowSystem;
 namespace Demo.Views.Workflow;
 
 // 兜底节点卡：节点类型自带视图时不会用到。
-// 故意留空：IWorkflowNodeViewModel 只有几何与插槽、没有显示名 —— 标题是具体 ViewModel 的属性，
+// 故意留空：INodeComponent 只有几何与插槽、没有显示名 —— 标题是具体 ViewModel 的属性，
 // 所以这张卡没法诚实地说出它不认识的那个节点叫什么。这个 demo 里每种节点都有自己的视图
 // （ControllerView / TimerNodeView / PythonNodeView / EnumSelectorNodeView），它只会画到外来类型上。
 // 共用的仍是同一套外壳：卡面、发丝边、类型色条都来自 CardPalette，外来节点因此落在与已知
@@ -16,7 +16,7 @@ internal sealed class NodeView : NodeViewBase
 
     protected override bool IsBareCard => true;
 
-    protected override void Build(IWorkflowNodeViewModel node, Grid content)
+    protected override void Build(INodeComponent node, Grid content)
     {
         // 兜底卡没有主体：只有卡面与那条贯穿全高的色条
     }

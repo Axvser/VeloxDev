@@ -15,7 +15,7 @@ public enum ConnectionRejectReason
     /// <summary>Both ports belong to the same node.</summary>
     SameNode = 3,
 
-    /// <summary><see cref="IWorkflowTreeViewModelHelper.ValidateConnection"/> refused the pair.</summary>
+    /// <summary><see cref="ITreeHelper.ValidateConnection"/> refused the pair.</summary>
     RejectedByRule = 4,
 
     /// <summary>A <see cref="WorkflowInput.PreviewValidating"/> subscriber refused the candidate for this preview only.</summary>
@@ -28,13 +28,13 @@ public enum ConnectionRejectReason
 /// <remarks>
 /// <para>
 /// The check is the framework's own rule set — direction, same-node, and
-/// <see cref="IWorkflowTreeViewModelHelper.ValidateConnection"/> — and it has no side effects. The preview path
+/// <see cref="ITreeHelper.ValidateConnection"/> — and it has no side effects. The preview path
 /// uses the very same check, so a green rubber band and a completed connection cannot disagree about those rules.
 /// Channel capacity is not a rejection: completing a connection cleans up existing connections according to the
 /// channel, so a passing check means "acceptable, possibly after that cleanup".
 /// </para>
 /// <para>
-/// It deliberately excludes <see cref="IWorkflowTreeEvents.Connecting"/>: that event is a per-attempt veto raised
+/// It deliberately excludes <see cref="ITreeEvents.Connecting"/>: that event is a per-attempt veto raised
 /// only when the pointer is released, and it may depend on state that a preview should not consume. A host that
 /// wants a preview-only restriction subscribes to <see cref="WorkflowInput.PreviewValidating"/> instead.
 /// </para>

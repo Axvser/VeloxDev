@@ -22,9 +22,9 @@ public sealed partial class CompiledGraph
 
     // 节点 → 编译身份。同一趟编译的每一层子图共享这一份；运行期只读，扇出的并发分支安全。
     // 不是 VeloxProperty ⇒ 不进归档：还原出来的图没有绑定，与还原节点丢失编译身份一致。
-    internal IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> CompileBindings { get; init; } =
-        new Dictionary<IWorkflowNodeViewModel, NodeCompileInfo>(
-            WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+    internal IReadOnlyDictionary<INodeComponent, NodeCompileInfo> CompileBindings { get; init; } =
+        new Dictionary<INodeComponent, NodeCompileInfo>(
+            WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
 
     /// <summary>
     /// Reads the compile identity the compiler assigned to <paramref name="node"/> in this graph.
@@ -35,7 +35,7 @@ public sealed partial class CompiledGraph
     /// <see langword="true"/> when the node has a binding; <see langword="false"/> for nodes that were never
     /// compiled into it and for a graph restored from a document, whose bindings are not serialized.
     /// </returns>
-    public bool TryGetCompileInfo(IWorkflowNodeViewModel node, out NodeCompileInfo? info)
+    public bool TryGetCompileInfo(INodeComponent node, out NodeCompileInfo? info)
     {
         if (node is null)
         {

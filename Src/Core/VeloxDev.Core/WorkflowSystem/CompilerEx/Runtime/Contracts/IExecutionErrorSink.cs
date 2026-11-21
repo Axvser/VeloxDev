@@ -47,7 +47,7 @@ public enum ExecutionReportLevel
 /// </param>
 public readonly record struct ExecutionError(
     ExecutionFailurePhase Phase,
-    IWorkflowNodeViewModel? Node,
+    INodeComponent? Node,
     string Message,
     Exception? Error,
     int Attempt,

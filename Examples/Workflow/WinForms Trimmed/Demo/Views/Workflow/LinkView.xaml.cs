@@ -31,7 +31,7 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Controls.UserContr
     /// <summary>Gets or sets the link this view renders.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public IWorkflowLinkViewModel? ViewModel
+    public ILinkComponent? ViewModel
     {
         get => _attachment.Link;
         set => _attachment.Bind(value);

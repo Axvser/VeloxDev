@@ -11,7 +11,7 @@ public sealed class PointerMovedEventArgs : PointerEventArgs
     /// <param name="target">The component the pointer is on, or <see langword="null"/> for empty canvas.</param>
     /// <param name="handle">The handle for this action.</param>
     public PointerMovedEventArgs(
-        Anchor position, InputModifiers modifiers, object? source, IWorkflowViewModel? target, WorkflowEventHandle handle)
+        Anchor position, InputModifiers modifiers, object? source, IWorkflowComponent? target, WorkflowEventHandle handle)
         : base(position, modifiers, source, target, handle)
     {
     }

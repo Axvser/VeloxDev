@@ -10,7 +10,7 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// Resolves a WinUI view for one workflow item from a <see cref="DataTemplateSelector"/> or a
 /// resource key, and caches the template by runtime type.
 /// </summary>
-public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, FrameworkElement>
+public sealed class ViewFactory : IViewFactory<IWorkflowComponent, FrameworkElement>
 {
     private readonly Panel _panel;
     private readonly DataTemplateSelector? _templateSelector;
@@ -28,12 +28,12 @@ public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, FrameworkElem
 
     /// <summary>Gets whether this factory materializes the item; WinUI materializes every item, links included.</summary>
     /// <param name="item">The item to test.</param>
-    public bool WantsItem(IWorkflowViewModel item) => true;
+    public bool WantsItem(IWorkflowComponent item) => true;
 
     /// <summary>Creates a view for <paramref name="item"/>, or returns <see langword="null"/> when no template matches its runtime type.</summary>
     /// <param name="item">The item to materialize.</param>
     /// <returns>The template's root <see cref="FrameworkElement"/>, or <see langword="null"/>.</returns>
-    public FrameworkElement? CreateView(IWorkflowViewModel item)
+    public FrameworkElement? CreateView(IWorkflowComponent item)
     {
         if (!FindTemplate(item, out var template) || template is null)
         {

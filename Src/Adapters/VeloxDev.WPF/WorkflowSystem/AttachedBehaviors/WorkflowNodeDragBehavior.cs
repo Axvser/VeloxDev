@@ -181,9 +181,9 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
         return EnumerateVisualAncestors(control).OfType<FrameworkElement>().FirstOrDefault(x => x.Name == hostName);
     }
 
-    private static IWorkflowNodeViewModel? ResolveNode(FrameworkElement control)
+    private static INodeComponent? ResolveNode(FrameworkElement control)
     {
-        if (control.DataContext is IWorkflowNodeViewModel node)
+        if (control.DataContext is INodeComponent node)
         {
             return node;
         }
@@ -191,7 +191,7 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
         return EnumerateVisualAncestors(control)
             .OfType<FrameworkElement>()
             .Select(static x => x.DataContext)
-            .OfType<IWorkflowNodeViewModel>()
+            .OfType<INodeComponent>()
             .FirstOrDefault();
     }
 

@@ -91,7 +91,7 @@ namespace VeloxDev.Generators.Writers
             var interfaces = new List<string> { GetWorkflowInterfaceName(model.WorkflowType) };
             if (!HasIdentifiableInfrastructure(model.TargetClassSymbol))
             {
-                interfaces.Add($"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowIdentifiable");
+                interfaces.Add($"{NAMESPACE_VELOX_IWORKFLOW}.IRuntimeIdentifiable");
             }
             return [.. interfaces];
         }
@@ -316,20 +316,20 @@ namespace VeloxDev.Generators.Writers
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualLinkType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultViewModel")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultViewModel");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultComponent")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultComponent");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultComponent")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultComponent");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultComponent")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultComponent");
         }
 
         private INamedTypeSymbol? GetTypeSymbolFromReferencedAssemblies(string fullyQualifiedName)
@@ -355,10 +355,10 @@ namespace VeloxDev.Generators.Writers
         {
             return workflowType switch
             {
-                1 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowTreeViewModel",
-                2 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowNodeViewModel",
-                3 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowSlotViewModel",
-                4 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowLinkViewModel",
+                1 => $"{NAMESPACE_VELOX_IWORKFLOW}.ITreeComponent",
+                2 => $"{NAMESPACE_VELOX_IWORKFLOW}.INodeComponent",
+                3 => $"{NAMESPACE_VELOX_IWORKFLOW}.ISlotComponent",
+                4 => $"{NAMESPACE_VELOX_IWORKFLOW}.ILinkComponent",
                 _ => throw new ArgumentException($"Unknown workflow type: {workflowType}")
             };
         }
@@ -367,10 +367,10 @@ namespace VeloxDev.Generators.Writers
         {
             return workflowType switch
             {
-                1 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowTreeViewModelHelper",
-                2 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowNodeViewModelHelper",
-                3 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowSlotViewModelHelper",
-                4 => $"{NAMESPACE_VELOX_IWORKFLOW}.IWorkflowLinkViewModelHelper",
+                1 => $"{NAMESPACE_VELOX_IWORKFLOW}.ITreeHelper",
+                2 => $"{NAMESPACE_VELOX_IWORKFLOW}.INodeHelper",
+                3 => $"{NAMESPACE_VELOX_IWORKFLOW}.ISlotHelper",
+                4 => $"{NAMESPACE_VELOX_IWORKFLOW}.ILinkHelper",
                 _ => throw new ArgumentException($"Unknown workflow type: {workflowType}")
             };
         }
@@ -423,7 +423,7 @@ namespace VeloxDev.Generators.Writers
         private void GenerateHelperOverrideBody(StringBuilder sb, WorkflowAttributeModel model)
         {
             sb.AppendLine($$"""
-                    protected override void EnsureWorkflowHelper()
+                    protected override void EnsureComponentHelper()
                     {
                         if (Helper is not {{model.HelperType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}})
                         {
@@ -495,7 +495,7 @@ namespace VeloxDev.Generators.Writers
                 private bool __veloxWorkflowHelperInstalled;
                 private bool __veloxWorkflowCoreInitialized;
 
-                protected virtual void EnsureWorkflowHelper()
+                protected virtual void EnsureComponentHelper()
                 {
                     if (Helper is not {{helperType}})
                     {
@@ -512,7 +512,7 @@ namespace VeloxDev.Generators.Writers
                     if (!__veloxWorkflowInitializationStarted)
                     {
                         __veloxWorkflowInitializationStarted = true;
-                        EnsureWorkflowHelper();
+                        EnsureComponentHelper();
                     }
                     if (!__veloxWorkflowHelperInstalled)
                     {
@@ -546,15 +546,15 @@ namespace VeloxDev.Generators.Writers
          {{GenerateHelperProperty(model)}}
          {{GenerateIdentifiableMember()}}
 
-         private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel virtualLink = new {{model.VirtualLinkType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() { Sender = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}(), Receiver = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() };
+         private {{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent virtualLink = new {{model.VirtualLinkType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() { Sender = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}(), Receiver = new {{model.VirtualSlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}() };
          private {{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout layout = new();
-         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel> nodes = [];
-         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel> links = [];
-         private {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel>> linksMap = [];
+         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent> nodes = [];
+         private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent> links = [];
+         private {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent>> linksMap = [];
 
          protected virtual {{TaskFullName}} CreateNode({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
          {
-             if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel node) return {{TaskFullName}}.CompletedTask;
+             if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent node) return {{TaskFullName}}.CompletedTask;
              Helper.CreateNode(node);
              return {{TaskFullName}}.CompletedTask;
          }
@@ -571,19 +571,19 @@ namespace VeloxDev.Generators.Writers
          }
          protected virtual {{TaskFullName}} SendConnection({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
          {
-             if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot) return {{TaskFullName}}.CompletedTask;
+             if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent slot) return {{TaskFullName}}.CompletedTask;
              Helper.SendConnection(slot);
              return {{TaskFullName}}.CompletedTask;
          }
          protected virtual {{TaskFullName}} ReceiveConnection({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
          {
-             if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot) return {{TaskFullName}}.CompletedTask;
+             if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent slot) return {{TaskFullName}}.CompletedTask;
              Helper.ReceiveConnection(slot);
              return {{TaskFullName}}.CompletedTask;
          }
          protected virtual {{TaskFullName}} Submit({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
          {
-             if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowActionPair actionPair) return {{TaskFullName}}.CompletedTask;
+             if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.IActionPair actionPair) return {{TaskFullName}}.CompletedTask;
              Helper.Submit(actionPair);
              return {{TaskFullName}}.CompletedTask;
          }
@@ -620,7 +620,7 @@ namespace VeloxDev.Generators.Writers
         }
         partial void OnLayoutChanging({{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout newValue);
         partial void OnLayoutChanged({{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.CanvasLayout newValue);
-        public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel VirtualLink
+        public {{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent VirtualLink
         {
             get => virtualLink;
             set
@@ -634,9 +634,9 @@ namespace VeloxDev.Generators.Writers
                OnPropertyChanged(nameof(VirtualLink));
             }
         }
-        partial void OnVirtualLinkChanging({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel newValue);
-        partial void OnVirtualLinkChanged({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel newValue);
-        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel> Nodes
+        partial void OnVirtualLinkChanging({{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent newValue);
+        partial void OnVirtualLinkChanged({{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent newValue);
+        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent> Nodes
         {
             get => nodes;
             set
@@ -650,9 +650,9 @@ namespace VeloxDev.Generators.Writers
                OnPropertyChanged(nameof(Nodes));
             }
         }
-        partial void OnNodesChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel> newValue);
-        partial void OnNodesChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel> newValue);
-        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel> Links
+        partial void OnNodesChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent> newValue);
+        partial void OnNodesChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent> newValue);
+        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent> Links
         {
             get => links;
             set
@@ -666,9 +666,9 @@ namespace VeloxDev.Generators.Writers
                OnPropertyChanged(nameof(Links));
             }
         }
-        partial void OnLinksChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel> newValue);
-        partial void OnLinksChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel> newValue);
-        public {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel>> LinksMap
+        partial void OnLinksChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent> newValue);
+        partial void OnLinksChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent> newValue);
+        public {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent>> LinksMap
         {
             get => linksMap;
             set
@@ -682,8 +682,8 @@ namespace VeloxDev.Generators.Writers
                OnPropertyChanged(nameof(LinksMap));
             }
         }
-        partial void OnLinksMapChanging({{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel>> oldValue,{{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel>> newValue);
-        partial void OnLinksMapChanged({{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel>> oldValue,{{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowLinkViewModel>> newValue);
+        partial void OnLinksMapChanging({{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent>> oldValue,{{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent>> newValue);
+        partial void OnLinksMapChanged({{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent>> oldValue,{{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{DictionaryFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent, {{NAMESPACE_VELOX_IWORKFLOW}}.ILinkComponent>> newValue);
 
         private {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand? _buffer_CreateNodeCommand = null;
         public {{NAMESPACE_VELOX_IMVVM}}.IVeloxCommand CreateNodeCommand
@@ -792,10 +792,10 @@ namespace VeloxDev.Generators.Writers
                     {{GenerateHelperProperty(model)}}
                     {{GenerateIdentifiableMember()}}
 
-                    private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel? parent = null;
+                    private {{NAMESPACE_VELOX_IWORKFLOW}}.ITreeComponent? parent = null;
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Anchor anchor = {{GenerateNodeAnchorInitializer(model.TargetClassSymbol)}};
                     private {{NAMESPACE_VELOX_WORKFLOW}}.Size size = {{GenerateNodeSizeInitializer(model.TargetClassSymbol)}};
-                    private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> slots = [];
+                    private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> slots = [];
 
                     // Workspace zoom: when the parent layout's Scale changes, re-raise Anchor/Size so
                     // views re-read the collapsed values (Anchor/Size getters divide by Layout.Scale).
@@ -826,7 +826,7 @@ namespace VeloxDev.Generators.Writers
                     }
                     protected virtual {{TaskFullName}} CreateSlot({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
                     {
-                        if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot) return {{TaskFullName}}.CompletedTask;
+                        if (parameter is not {{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent slot) return {{TaskFullName}}.CompletedTask;
                         Helper.CreateSlot(slot);
                         return {{TaskFullName}}.CompletedTask;
                     }
@@ -855,7 +855,7 @@ namespace VeloxDev.Generators.Writers
 
                     {{GenerateWorkflowLifecycleBody(model, GenerateInitializeWorkflowBody(model.TargetClassSymbol, isOverride: false))}}
 
-                    public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel Parent
+                    public {{NAMESPACE_VELOX_IWORKFLOW}}.ITreeComponent Parent
                     {
                         get => parent;
                         set
@@ -870,8 +870,8 @@ namespace VeloxDev.Generators.Writers
                            OnPropertyChanged(nameof(Parent));
                         }
                     }
-                    partial void OnParentChanging({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel newValue);
-                    partial void OnParentChanged({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowTreeViewModel newValue);
+                    partial void OnParentChanging({{NAMESPACE_VELOX_IWORKFLOW}}.ITreeComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.ITreeComponent newValue);
+                    partial void OnParentChanged({{NAMESPACE_VELOX_IWORKFLOW}}.ITreeComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.ITreeComponent newValue);
                     public {{NAMESPACE_VELOX_WORKFLOW}}.Anchor Anchor
                     {
                         get => anchor.Collapse(parent?.Layout?.Scale);
@@ -904,7 +904,7 @@ namespace VeloxDev.Generators.Writers
                     }
                     partial void OnSizeChanging({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
                     partial void OnSizeChanged({{NAMESPACE_VELOX_WORKFLOW}}.Size oldValue,{{NAMESPACE_VELOX_WORKFLOW}}.Size newValue);
-                    public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Slots
+                    public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> Slots
                     {
                         get => slots;
                         set
@@ -918,9 +918,9 @@ namespace VeloxDev.Generators.Writers
                            OnPropertyChanged(nameof(Slots));
                         }
                     }
-                    partial void OnSlotsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-                    partial void OnSlotsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-                    public virtual T CreateWorkflowSlot<T>() where T : class, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel
+                    partial void OnSlotsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> newValue);
+                    partial void OnSlotsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> newValue);
+                    public virtual T CreateSlotComponent<T>() where T : class, {{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent
                     {
                         try
                         {
@@ -932,13 +932,13 @@ namespace VeloxDev.Generators.Writers
                         catch
                         {
                         }
-                        return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotDefaultViewModel();
+                        return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotDefaultComponent();
                     }
-                    protected virtual void OnWorkflowSlotAdded({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot)
+                    protected virtual void OnSlotComponentAdded({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent slot)
                     {
                         CreateSlotCommand.Execute(slot);
                     }
-                    protected virtual void OnWorkflowSlotRemoved({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot)
+                    protected virtual void OnSlotComponentRemoved({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent slot)
                     {
                         slot?.DeleteCommand.Execute(null);
                     }
@@ -1054,9 +1054,9 @@ namespace VeloxDev.Generators.Writers
         {{GenerateHelperProperty(model)}}
         {{GenerateIdentifiableMember()}}
 
-        private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> targets = [];
-        private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> sources = [];
-        private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel? parent = null;
+        private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> targets = [];
+        private {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> sources = [];
+        private {{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent? parent = null;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel channel = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel.MultipleBoth;
         private {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState state = {{NAMESPACE_VELOX_IWORKFLOW}}.SlotState.StandBy;
         // Slot anchor defaults to NaN (no value): links don't render until both anchors are measured by the GUI (written with real coordinates).
@@ -1090,7 +1090,7 @@ namespace VeloxDev.Generators.Writers
 
         {{GenerateWorkflowLifecycleBody(model, string.Empty)}}
 
-        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Targets
+        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> Targets
         {
             get => targets;
             set
@@ -1104,9 +1104,9 @@ namespace VeloxDev.Generators.Writers
                OnPropertyChanged(nameof(Targets));
             }
         }
-        partial void OnTargetsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-        partial void OnTargetsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> Sources
+        partial void OnTargetsChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> newValue);
+        partial void OnTargetsChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> newValue);
+        public {{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> Sources
         {
             get => sources;
             set
@@ -1120,9 +1120,9 @@ namespace VeloxDev.Generators.Writers
                OnPropertyChanged(nameof(Sources));
             }
         }
-        partial void OnSourcesChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-        partial void OnSourcesChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel> newValue);
-        public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel Parent
+        partial void OnSourcesChanging({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> newValue);
+        partial void OnSourcesChanged({{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> oldValue,{{ObservableCollectionFullName}}<{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent> newValue);
+        public {{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent Parent
         {
             get => parent;
             set
@@ -1136,8 +1136,8 @@ namespace VeloxDev.Generators.Writers
                OnPropertyChanged(nameof(Parent));
             }
         }
-        partial void OnParentChanging({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel newValue);
-        partial void OnParentChanged({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowNodeViewModel newValue);
+        partial void OnParentChanging({{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent newValue);
+        partial void OnParentChanged({{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.INodeComponent newValue);
         public {{NAMESPACE_VELOX_IWORKFLOW}}.SlotChannel Channel
         {
             get => channel;
@@ -1250,8 +1250,8 @@ namespace VeloxDev.Generators.Writers
         {{GenerateHelperProperty(model)}}
         {{GenerateIdentifiableMember()}}
 
-        private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel sender = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
-        private {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel receiver = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+        private {{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent sender = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
+        private {{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent receiver = new {{model.SlotType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}}();
         private bool isVisible = false;
 
         protected virtual {{TaskFullName}} Delete({{ObjectFullName}}? parameter, {{CancellationTokenFullName}} ct)
@@ -1266,7 +1266,7 @@ namespace VeloxDev.Generators.Writers
 
         {{GenerateWorkflowLifecycleBody(model, string.Empty)}}
 
-        public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel Sender
+        public {{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent Sender
         {
             get => sender;
             set
@@ -1280,9 +1280,9 @@ namespace VeloxDev.Generators.Writers
                OnPropertyChanged(nameof(Sender));
             }
         }
-        partial void OnSenderChanging({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel newValue);
-        partial void OnSenderChanged({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel newValue);
-        public {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel Receiver
+        partial void OnSenderChanging({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent newValue);
+        partial void OnSenderChanged({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent newValue);
+        public {{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent Receiver
         {
             get => receiver;
             set
@@ -1296,8 +1296,8 @@ namespace VeloxDev.Generators.Writers
                OnPropertyChanged(nameof(Receiver));
             }
         }
-        partial void OnReceiverChanging({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel newValue);
-        partial void OnReceiverChanged({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel newValue);
+        partial void OnReceiverChanging({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent newValue);
+        partial void OnReceiverChanged({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent oldValue,{{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent newValue);
         public bool IsVisible
         {
             get => isVisible;
@@ -1344,7 +1344,7 @@ namespace VeloxDev.Generators.Writers
 
         /// <summary>
         /// True when the target class (or any base) already exposes a RuntimeId member or implements
-        /// IWorkflowIdentifiable — in that case the generator must not emit a duplicate member/interface.
+        /// IRuntimeIdentifiable — in that case the generator must not emit a duplicate member/interface.
         /// </summary>
         private static bool HasIdentifiableInfrastructure(INamedTypeSymbol symbol)
         {
@@ -1354,7 +1354,7 @@ namespace VeloxDev.Generators.Writers
             while (current != null && current.SpecialType != SpecialType.System_Object)
             {
                 if (current.AllInterfaces.Any(i =>
-                    i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).EndsWith("IWorkflowIdentifiable")))
+                    i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).EndsWith("IRuntimeIdentifiable")))
                     return true;
                 current = current.BaseType;
             }
@@ -1529,7 +1529,7 @@ namespace VeloxDev.Generators.Writers
         {
             // 1. 直接接口符号比较（接口已可见时有效）。
             INamedTypeSymbol? slotInterface = Symbol != null
-                ? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.IWorkflowSlotViewModel")
+                ? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.ISlotComponent")
                 : null;
 
             if (slotInterface != null)
@@ -1541,11 +1541,11 @@ namespace VeloxDev.Generators.Writers
             else
             {
                 if (typeSymbol.AllInterfaces.Any(i =>
-                    i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).EndsWith("IWorkflowSlotViewModel")))
+                    i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).EndsWith("ISlotComponent")))
                     return true;
             }
 
-            // 2. 基于名称的兜底：沿类型层级找 [WorkflowBuilder.SlotAttribute]。这处理用户自定义 SlotViewModel 子类 —— 它们的 IWorkflowSlotViewModel 实现由生成器在同一编译趟注入，扫描时 AllInterfaces 还看不到。
+            // 2. 基于名称的兜底：沿类型层级找 [WorkflowBuilder.SlotAttribute]。这处理用户自定义 SlotViewModel 子类 —— 它们的 ISlotComponent 实现由生成器在同一编译趟注入，扫描时 AllInterfaces 还看不到。
             var current = typeSymbol as INamedTypeSymbol;
             while (current != null && current.SpecialType != SpecialType.System_Object)
             {
@@ -1669,9 +1669,9 @@ namespace VeloxDev.Generators.Writers
                 }
                 else if (m.IsWorkflowSlot)
                 {
-                    // 经属性赋值以触发 OnXxxChanging/Changed 通知。父级赋值与 Slots 注册仍直接用背后的字段，因为此刻 node.Parent == null —— 绝不能走 CreateSlotCommand/OnWorkflowSlotAdded（它们要求节点已在树上）。
+                    // 经属性赋值以触发 OnXxxChanging/Changed 通知。父级赋值与 Slots 注册仍直接用背后的字段，因为此刻 node.Parent == null —— 绝不能走 CreateSlotCommand/OnSlotComponentAdded（它们要求节点已在树上）。
                     var nonNullableType = m.FullTypeName.TrimEnd('?');
-                    sb.AppendLine($"if ({m.FieldName} is null) {m.PropertyName} = CreateWorkflowSlot<{nonNullableType}>();");
+                    sb.AppendLine($"if ({m.FieldName} is null) {m.PropertyName} = CreateSlotComponent<{nonNullableType}>();");
                     sb.AppendLine($"{m.FieldName}.Parent = this;");
                     sb.AppendLine($"if (!Slots.Contains({m.FieldName})) Slots.Add({m.FieldName});");
                 }

@@ -20,29 +20,29 @@ namespace TemplateNamespace;
 /// </remarks>
 public sealed class TemplateClass : DataTemplateSelector
 {
-    /// <summary>The template used for <see cref="IWorkflowNodeViewModel"/> items.</summary>
+    /// <summary>The template used for <see cref="INodeComponent"/> items.</summary>
     public DataTemplate? NodeTemplate { get; set; }
 
-    /// <summary>The template used for <see cref="IWorkflowSlotViewModel"/> items.</summary>
+    /// <summary>The template used for <see cref="ISlotComponent"/> items.</summary>
     public DataTemplate? SlotTemplate { get; set; }
 
-    /// <summary>The template used for <see cref="IWorkflowLinkViewModel"/> items.</summary>
+    /// <summary>The template used for <see cref="ILinkComponent"/> items.</summary>
     public DataTemplate? LinkTemplate { get; set; }
 
-    /// <summary>The template used for <see cref="IWorkflowTreeViewModel"/> items.</summary>
+    /// <summary>The template used for <see cref="ITreeComponent"/> items.</summary>
     public DataTemplate? TreeTemplate { get; set; }
 
     /// <inheritdoc />
     public override DataTemplate SelectTemplate(object? item, DependencyObject container)
         => item switch
         {
-            IWorkflowLinkViewModel => LinkTemplate
+            ILinkComponent => LinkTemplate
                 ?? throw new InvalidOperationException("LinkTemplate is not set."),
-            IWorkflowSlotViewModel => SlotTemplate
+            ISlotComponent => SlotTemplate
                 ?? throw new InvalidOperationException("SlotTemplate is not set."),
-            IWorkflowNodeViewModel => NodeTemplate
+            INodeComponent => NodeTemplate
                 ?? throw new InvalidOperationException("NodeTemplate is not set."),
-            IWorkflowTreeViewModel => TreeTemplate
+            ITreeComponent => TreeTemplate
                 ?? throw new InvalidOperationException("TreeTemplate is not set."),
             _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")
         };

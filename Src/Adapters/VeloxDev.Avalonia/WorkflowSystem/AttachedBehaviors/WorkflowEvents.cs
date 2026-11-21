@@ -14,8 +14,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The value is an <see cref="IWorkflowNodeEventSink"/> / <see cref="IWorkflowSlotEventSink"/> /
-/// <see cref="IWorkflowTreeEventSink"/> — one object with a method per event, rather than one attached property per
+/// The value is an <see cref="INodeEventSink"/> / <see cref="ISlotEventSink"/> /
+/// <see cref="ITreeEventSink"/> — one object with a method per event, rather than one attached property per
 /// event. The forwarding itself is <see cref="WorkflowEventRelay"/>, so all seven platforms share it and none of
 /// them can drift.
 /// </para>
@@ -33,17 +33,17 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <seealso cref="WorkflowEventRelay"/>
 public sealed class WorkflowEvents : AvaloniaObject
 {
-    /// <summary>The <see cref="IWorkflowNodeEventSink"/> for the node this element is showing.</summary>
-    public static readonly AttachedProperty<IWorkflowNodeEventSink?> NodeProperty =
-        AvaloniaProperty.RegisterAttached<WorkflowEvents, Control, IWorkflowNodeEventSink?>("Node");
+    /// <summary>The <see cref="INodeEventSink"/> for the node this element is showing.</summary>
+    public static readonly AttachedProperty<INodeEventSink?> NodeProperty =
+        AvaloniaProperty.RegisterAttached<WorkflowEvents, Control, INodeEventSink?>("Node");
 
-    /// <summary>The <see cref="IWorkflowSlotEventSink"/> for the slot this element is showing.</summary>
-    public static readonly AttachedProperty<IWorkflowSlotEventSink?> SlotProperty =
-        AvaloniaProperty.RegisterAttached<WorkflowEvents, Control, IWorkflowSlotEventSink?>("Slot");
+    /// <summary>The <see cref="ISlotEventSink"/> for the slot this element is showing.</summary>
+    public static readonly AttachedProperty<ISlotEventSink?> SlotProperty =
+        AvaloniaProperty.RegisterAttached<WorkflowEvents, Control, ISlotEventSink?>("Slot");
 
-    /// <summary>The <see cref="IWorkflowTreeEventSink"/> for the tree this element is showing.</summary>
-    public static readonly AttachedProperty<IWorkflowTreeEventSink?> TreeProperty =
-        AvaloniaProperty.RegisterAttached<WorkflowEvents, Control, IWorkflowTreeEventSink?>("Tree");
+    /// <summary>The <see cref="ITreeEventSink"/> for the tree this element is showing.</summary>
+    public static readonly AttachedProperty<ITreeEventSink?> TreeProperty =
+        AvaloniaProperty.RegisterAttached<WorkflowEvents, Control, ITreeEventSink?>("Tree");
 
     static WorkflowEvents()
     {
@@ -53,23 +53,23 @@ public sealed class WorkflowEvents : AvaloniaObject
         TreeProperty.Changed.AddClassHandler<Control>(OnSinkChanged);
     }
 
-    /// <summary>Sets the <see cref="IWorkflowNodeEventSink"/> for <paramref name="element"/>.</summary>
-    public static void SetNode(AvaloniaObject element, IWorkflowNodeEventSink? value) => element.SetValue(NodeProperty, value);
+    /// <summary>Sets the <see cref="INodeEventSink"/> for <paramref name="element"/>.</summary>
+    public static void SetNode(AvaloniaObject element, INodeEventSink? value) => element.SetValue(NodeProperty, value);
 
-    /// <summary>Gets the <see cref="IWorkflowNodeEventSink"/> attached to <paramref name="element"/>.</summary>
-    public static IWorkflowNodeEventSink? GetNode(AvaloniaObject element) => element.GetValue(NodeProperty);
+    /// <summary>Gets the <see cref="INodeEventSink"/> attached to <paramref name="element"/>.</summary>
+    public static INodeEventSink? GetNode(AvaloniaObject element) => element.GetValue(NodeProperty);
 
-    /// <summary>Sets the <see cref="IWorkflowSlotEventSink"/> for <paramref name="element"/>.</summary>
-    public static void SetSlot(AvaloniaObject element, IWorkflowSlotEventSink? value) => element.SetValue(SlotProperty, value);
+    /// <summary>Sets the <see cref="ISlotEventSink"/> for <paramref name="element"/>.</summary>
+    public static void SetSlot(AvaloniaObject element, ISlotEventSink? value) => element.SetValue(SlotProperty, value);
 
-    /// <summary>Gets the <see cref="IWorkflowSlotEventSink"/> attached to <paramref name="element"/>.</summary>
-    public static IWorkflowSlotEventSink? GetSlot(AvaloniaObject element) => element.GetValue(SlotProperty);
+    /// <summary>Gets the <see cref="ISlotEventSink"/> attached to <paramref name="element"/>.</summary>
+    public static ISlotEventSink? GetSlot(AvaloniaObject element) => element.GetValue(SlotProperty);
 
-    /// <summary>Sets the <see cref="IWorkflowTreeEventSink"/> for <paramref name="element"/>.</summary>
-    public static void SetTree(AvaloniaObject element, IWorkflowTreeEventSink? value) => element.SetValue(TreeProperty, value);
+    /// <summary>Sets the <see cref="ITreeEventSink"/> for <paramref name="element"/>.</summary>
+    public static void SetTree(AvaloniaObject element, ITreeEventSink? value) => element.SetValue(TreeProperty, value);
 
-    /// <summary>Gets the <see cref="IWorkflowTreeEventSink"/> attached to <paramref name="element"/>.</summary>
-    public static IWorkflowTreeEventSink? GetTree(AvaloniaObject element) => element.GetValue(TreeProperty);
+    /// <summary>Gets the <see cref="ITreeEventSink"/> attached to <paramref name="element"/>.</summary>
+    public static ITreeEventSink? GetTree(AvaloniaObject element) => element.GetValue(TreeProperty);
 
     // 每个元素一份订阅：值变了、或它换了个 DataContext（池化视图就是这样），都要重新接。
     private static readonly ConditionalWeakTable<Control, Attachment> Attachments = new();
@@ -105,17 +105,17 @@ public sealed class WorkflowEvents : AvaloniaObject
             Disconnect();
 
             var context = _element.DataContext;
-            if (GetNode(_element) is { } nodeSink && context is IWorkflowNodeViewModel node)
+            if (GetNode(_element) is { } nodeSink && context is INodeComponent node)
             {
                 _node = WorkflowEventRelay.Attach(node, nodeSink);
             }
 
-            if (GetSlot(_element) is { } slotSink && context is IWorkflowSlotViewModel slot)
+            if (GetSlot(_element) is { } slotSink && context is ISlotComponent slot)
             {
                 _slot = WorkflowEventRelay.Attach(slot, slotSink);
             }
 
-            if (GetTree(_element) is { } treeSink && context is IWorkflowTreeViewModel tree)
+            if (GetTree(_element) is { } treeSink && context is ITreeComponent tree)
             {
                 _tree = WorkflowEventRelay.Attach(tree, treeSink);
             }

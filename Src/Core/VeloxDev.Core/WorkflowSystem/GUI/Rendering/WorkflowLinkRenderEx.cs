@@ -21,10 +21,10 @@ public static class WorkflowLinkRenderEx
     ///
     /// How to consume it (first line of each GUI's link view OnRender):
     /// <code>
-    /// if (DataContext is IWorkflowLinkViewModel link &amp;&amp; !link.IsRenderReady()) return;
+    /// if (DataContext is ILinkComponent link &amp;&amp; !link.IsRenderReady()) return;
     /// </code>
     /// </summary>
-    public static bool IsRenderReady(this IWorkflowLinkViewModel link)
+    public static bool IsRenderReady(this ILinkComponent link)
     {
         if (!link.IsVisible) return false;
         return WorkflowSlotUpdateGate.IsLinkRenderReady(link);

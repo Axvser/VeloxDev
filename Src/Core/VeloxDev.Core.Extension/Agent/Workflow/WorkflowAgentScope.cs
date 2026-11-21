@@ -20,10 +20,10 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.AI.Workflow;
 
 /// <summary>Configures and runs an Agent over one workflow tree: tools, capabilities, prompts, skills, MCP servers and sub-agents.</summary>
-public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNotifier, IAsyncDisposable
+public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, IAsyncDisposable
 {
     /// <summary>The workflow tree this scope operates on.</summary>
-    public IWorkflowTreeViewModel Tree { get; private set; } = tree;
+    public ITreeComponent Tree { get; private set; } = tree;
 
     /// <summary>
     /// The cap on a single tool result's text, in characters. A result over it is replaced by a short
@@ -247,7 +247,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
             ?? ((usage.InputTokenCount ?? 0) + (usage.OutputTokenCount ?? 0)));
     }
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IWorkflowTreeViewModel, SemaphoreSlim> TreeGates = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ITreeComponent, SemaphoreSlim> TreeGates = new();
 
     /// <summary>
     /// One writer at a time per tree, shared by every scope over that tree (and by every subsystem the scope
@@ -255,7 +255,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// </summary>
     internal SemaphoreSlim MutationGate => TreeGates.GetValue(Tree, static _ => new SemaphoreSlim(1, 1));
 
-    private Func<string, IWorkflowTreeViewModel>? _workflowLoader;
+    private Func<string, ITreeComponent>? _workflowLoader;
 
     /// <summary>Raised after <see cref="LoadWorkflow"/> replaces the scope's tree.</summary>
     public event EventHandler? TreeChanged;
@@ -264,7 +264,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// Supplies the loader <see cref="LoadWorkflow"/> uses. The host should also rebind its surface when
     /// <see cref="TreeChanged"/> fires; the scope's tools follow the new tree immediately.
     /// </summary>
-    public WorkflowAgentScope WithWorkflowLoader(Func<string, IWorkflowTreeViewModel> loader)
+    public WorkflowAgentScope WithWorkflowLoader(Func<string, ITreeComponent> loader)
     {
         _workflowLoader = loader ?? throw new ArgumentNullException(nameof(loader));
         return this;
@@ -272,16 +272,16 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
 
     /// <summary>
     /// Replaces this scope's tree with a graph deserialized from <paramref name="json"/>. The loader is the
-    /// host's (see <see cref="WithWorkflowLoader"/>), falling back to <see cref="TreeDefaultViewModel"/>.
+    /// host's (see <see cref="WithWorkflowLoader"/>), falling back to <see cref="TreeDefaultComponent"/>.
     /// The old tree is left untouched; the host owns closing it.
     /// </summary>
-    public IWorkflowTreeViewModel LoadWorkflow(string json)
+    public ITreeComponent LoadWorkflow(string json)
     {
         if (string.IsNullOrWhiteSpace(json)) throw new ArgumentException("A graph document is required.", nameof(json));
 
         var restored = _workflowLoader is { } loader
             ? loader(json)
-            : VeloxDev.Serialization.ViewModelSerializer.Deserialize<TreeDefaultViewModel>(json);
+            : VeloxDev.Serialization.ViewModelSerializer.Deserialize<TreeDefaultComponent>(json);
         if (restored is null) throw new InvalidOperationException("The workflow loader returned null.");
 
         Tree = restored;
@@ -1650,7 +1650,7 @@ public class WorkflowAgentScope(IWorkflowTreeViewModel tree) : IAgentToolCallNot
     /// attached to one agent must not share a key, and a scope's tree is what makes it distinct.
     /// </summary>
     internal string StateDiscriminator { get; } =
-        tree is IWorkflowIdentifiable identifiable && !string.IsNullOrEmpty(identifiable.RuntimeId)
+        tree is IRuntimeIdentifiable identifiable && !string.IsNullOrEmpty(identifiable.RuntimeId)
             ? identifiable.RuntimeId
             : Guid.NewGuid().ToString("N");
 

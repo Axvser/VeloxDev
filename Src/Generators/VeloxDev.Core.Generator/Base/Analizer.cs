@@ -752,7 +752,7 @@ namespace VeloxDev.Generators.Base
                 {
                     yield return $"    foreach (var _slotItem in Enumerate{PropertyName}Items(old))";
                     yield return "    {";
-                    yield return "        OnWorkflowSlotRemoved(_slotItem);";
+                    yield return "        OnSlotComponentRemoved(_slotItem);";
                     yield return "    }";
                 }
                 yield return $"    OnItemRemovedFrom{PropertyName}(Enumerate{PropertyName}Items(old));";
@@ -773,7 +773,7 @@ namespace VeloxDev.Generators.Base
                 {
                     yield return $"    foreach (var _slotItem in Enumerate{PropertyName}Items(value))";
                     yield return "    {";
-                    yield return "        OnWorkflowSlotAdded(_slotItem);";
+                    yield return "        OnSlotComponentAdded(_slotItem);";
                     yield return "    }";
                 }
                 yield return $"    OnItemAddedTo{PropertyName}(Enumerate{PropertyName}Items(value));";
@@ -797,7 +797,7 @@ namespace VeloxDev.Generators.Base
 
                 yield return "if (old is not null)";
                 yield return "{";
-                yield return "    OnWorkflowSlotRemoved(old);";
+                yield return "    OnSlotComponentRemoved(old);";
                 yield return "}";
             }
 
@@ -818,7 +818,7 @@ namespace VeloxDev.Generators.Base
 
                 yield return "if (value is not null)";
                 yield return "{";
-                yield return "    OnWorkflowSlotAdded(value);";
+                yield return "    OnSlotComponentAdded(value);";
                 yield return "}";
             }
 
@@ -888,19 +888,19 @@ namespace VeloxDev.Generators.Base
                 }
 
                 var slotLifecycleAdd = UseWorkflowSlotCollectionLifecycle
-                    ? $"{RETRACT}        foreach (var _slotItem in Enumerate{PropertyName}Items(e.NewItems))\n{RETRACT}        {{\n{RETRACT}            OnWorkflowSlotAdded(_slotItem);\n{RETRACT}        }}"
+                    ? $"{RETRACT}        foreach (var _slotItem in Enumerate{PropertyName}Items(e.NewItems))\n{RETRACT}        {{\n{RETRACT}            OnSlotComponentAdded(_slotItem);\n{RETRACT}        }}"
                     : string.Empty;
 
                 var slotLifecycleRemove = UseWorkflowSlotCollectionLifecycle
-                    ? $"{RETRACT}        foreach (var _slotItem in Enumerate{PropertyName}Items(e.OldItems))\n{RETRACT}        {{\n{RETRACT}            OnWorkflowSlotRemoved(_slotItem);\n{RETRACT}        }}"
+                    ? $"{RETRACT}        foreach (var _slotItem in Enumerate{PropertyName}Items(e.OldItems))\n{RETRACT}        {{\n{RETRACT}            OnSlotComponentRemoved(_slotItem);\n{RETRACT}        }}"
                     : string.Empty;
 
                 var slotLifecycleReplaceRemove = UseWorkflowSlotCollectionLifecycle
-                    ? $"{RETRACT}            foreach (var _slotItem in Enumerate{PropertyName}Items(e.OldItems))\n{RETRACT}            {{\n{RETRACT}                OnWorkflowSlotRemoved(_slotItem);\n{RETRACT}            }}"
+                    ? $"{RETRACT}            foreach (var _slotItem in Enumerate{PropertyName}Items(e.OldItems))\n{RETRACT}            {{\n{RETRACT}                OnSlotComponentRemoved(_slotItem);\n{RETRACT}            }}"
                     : string.Empty;
 
                 var slotLifecycleReplaceAdd = UseWorkflowSlotCollectionLifecycle
-                    ? $"{RETRACT}            foreach (var _slotItem in Enumerate{PropertyName}Items(e.NewItems))\n{RETRACT}            {{\n{RETRACT}                OnWorkflowSlotAdded(_slotItem);\n{RETRACT}            }}"
+                    ? $"{RETRACT}            foreach (var _slotItem in Enumerate{PropertyName}Items(e.NewItems))\n{RETRACT}            {{\n{RETRACT}                OnSlotComponentAdded(_slotItem);\n{RETRACT}            }}"
                     : string.Empty;
 
                 return $$"""

@@ -165,13 +165,13 @@ public class AgentPermissionPolicyTests
     [TestMethod]
     public void Plan_RefusesAWriteAtTheGate_AndNamesTheWayOut()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithPermissionMode(AgentPermissionMode.Plan);
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithPermissionMode(AgentPermissionMode.Plan);
 
         Assert.IsTrue(scope.ProvideTools().Any(t => t.Name == "CreateNode"),
             "the tool is on the surface; the mode refuses the call, it does not hide the capability");
 
         var refused = JObject.Parse(Invoke(scope, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!), ("x", 0d), ("y", 0d)));
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!), ("x", 0d), ("y", 0d)));
 
         Assert.AreEqual("error", refused["status"]?.Value<string>(), refused.ToString());
         var message = refused["message"]!.Value<string>()!;
@@ -184,13 +184,13 @@ public class AgentPermissionPolicyTests
     [TestMethod]
     public void EachMode_StopsWhereTheMatrixSaysItStops()
     {
-        var planned = new WorkflowAgentScope(new TreeDefaultViewModel()).WithPermissionMode(AgentPermissionMode.Plan);
+        var planned = new WorkflowAgentScope(new TreeDefaultComponent()).WithPermissionMode(AgentPermissionMode.Plan);
         Assert.IsEmpty(JArray.Parse(Invoke(planned, "ListNodes")),
             "reading is how a plan gets made — ListNodes answers with the (empty) node list, not a refusal");
 
-        var editing = new WorkflowAgentScope(new TreeDefaultViewModel()).WithPermissionMode(AgentPermissionMode.AutoEdit);
+        var editing = new WorkflowAgentScope(new TreeDefaultComponent()).WithPermissionMode(AgentPermissionMode.AutoEdit);
         Assert.AreEqual("ok", JObject.Parse(Invoke(editing, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>(),
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>(),
             "AutoEdit is the mode that trusts an edit and not an execution");
 
         Assert.AreEqual("error", JObject.Parse(Invoke(editing, "ExecuteNode", ("nodeIndex", 0)))["status"]?.Value<string>(),
@@ -201,12 +201,12 @@ public class AgentPermissionPolicyTests
     [TestMethod]
     public void ARule_StopsWhatTheModeWouldRun()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithPermissionMode(AgentPermissionMode.AutoEdit)
             .WithPermissionRule(PermissionDecision.Deny, "CreateNode");
 
         var refused = JObject.Parse(Invoke(scope, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!), ("x", 0d), ("y", 0d)));
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!), ("x", 0d), ("y", 0d)));
 
         var message = refused["message"]!.Value<string>()!;
         StringAssert.Contains(message, "deny rule",
@@ -236,12 +236,12 @@ public class AgentPermissionPolicyTests
             DefaultMode = "build",
         };
 
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithAgentModes(options)
             .WithPermissionMode(AgentPermissionMode.Plan);
 
         Assert.AreEqual("error", JObject.Parse(Invoke(scope, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>(),
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>(),
             "the behavioural mode cannot widen the permission mode");
     }
 
@@ -258,12 +258,12 @@ public class AgentPermissionPolicyTests
     [TestMethod]
     public void AModeSwitchedMidSession_GovernsTheVeryNextCall()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var scope = new WorkflowAgentScope(tree);
 
         var create = new (string, object?)[]
         {
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!), ("x", 0d), ("y", 0d),
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!), ("x", 0d), ("y", 0d),
         };
 
         Assert.AreEqual("ok", JObject.Parse(Invoke(scope, "CreateNode", create))["status"]?.Value<string>(),
@@ -283,7 +283,7 @@ public class AgentPermissionPolicyTests
     [TestMethod]
     public void SetPermissionMode_ReportsWhetherItMoved()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
 
         Assert.IsTrue(scope.SetPermissionMode(AgentPermissionMode.Manual));
         Assert.IsFalse(scope.SetPermissionMode(AgentPermissionMode.Manual), "the second call moved nothing");
@@ -297,7 +297,7 @@ public class AgentPermissionPolicyTests
     public async Task TheAgent_CanEnterPlan_AndOutAgain()
     {
         var asked = new List<string>();
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var scope = new WorkflowAgentScope(tree)
             .WithPermissionMode(AgentPermissionMode.AutoEdit)
             .WithConfirmationHandler(args => { asked.Add(args.OperationKey); args.Result = AgentConfirmationResult.AllowOnce; return Task.CompletedTask; });
@@ -310,7 +310,7 @@ public class AgentPermissionPolicyTests
         CollectionAssert.Contains(asked, "mode:plan", "entering is a change the user is shown");
 
         Assert.AreEqual("error", JObject.Parse(Invoke(scope, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>(),
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>(),
             "and it binds the Agent itself, not only the host's calls");
         Assert.IsEmpty(tree.Nodes);
 
@@ -319,14 +319,14 @@ public class AgentPermissionPolicyTests
         Assert.AreEqual(AgentPermissionMode.AutoEdit, scope.PermissionMode,
             "leaving restores where it was, rather than choosing a mode for the session");
         Assert.AreEqual("ok", JObject.Parse(Invoke(scope, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>());
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>());
     }
 
     /// <summary>A declined switch changes nothing — in either direction.</summary>
     [TestMethod]
     public void ADeclinedSwitch_ChangesNothing()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var scope = new WorkflowAgentScope(tree)
             .WithPermissionMode(AgentPermissionMode.AutoEdit)
             .WithConfirmationHandler(args => { args.Result = AgentConfirmationResult.Deny; return Task.CompletedTask; });
@@ -339,7 +339,7 @@ public class AgentPermissionPolicyTests
     [TestMethod]
     public void NoTool_MovesTheAgentToAWiderMode()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithPermissionMode(AgentPermissionMode.Plan)
             .WithConfirmationHandler(args => { args.Result = AgentConfirmationResult.AllowAlways; return Task.CompletedTask; });
 
@@ -354,7 +354,7 @@ public class AgentPermissionPolicyTests
         Invoke(scope, "ExitPlanMode");
 
         Assert.AreEqual("error", JObject.Parse(Invoke(scope, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>(),
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!), ("x", 0d), ("y", 0d)))["status"]?.Value<string>(),
             "a deny rule is not something a mode change can shake off");
     }
 

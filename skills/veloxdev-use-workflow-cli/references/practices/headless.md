@@ -37,7 +37,7 @@ public partial class SourceNode
 {
     public SourceNode() => InitializeWorkflow();
 
-    [VeloxProperty] public partial SlotDefaultViewModel OutputSlot { get; set; }
+    [VeloxProperty] public partial SlotDefaultComponent OutputSlot { get; set; }
 }
 
 public sealed class SourceHelper : NodeHelper<SourceNode>
@@ -52,7 +52,7 @@ public partial class SinkNode
 {
     public SinkNode() => InitializeWorkflow();
 
-    [VeloxProperty] public partial SlotDefaultViewModel InputSlot { get; set; }
+    [VeloxProperty] public partial SlotDefaultComponent InputSlot { get; set; }
 }
 
 public sealed class SinkHelper : NodeHelper<SinkNode>
@@ -92,7 +92,7 @@ using MyNodes;
 using VeloxDev.Serialization;
 using VeloxDev.WorkflowSystem;
 
-var tree = new TreeDefaultViewModel();
+var tree = new TreeDefaultComponent();
 tree.GetHelper().CreateNode(new SourceNode());
 
 var path = args.Length > 0 ? args[0] : "graph.json";

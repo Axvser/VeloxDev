@@ -8,8 +8,8 @@ namespace VeloxDev.WorkflowSystem;
 /// <remarks>
 /// <para>
 /// A card that draws a node's ports needs two things a node does not publish through
-/// <see cref="IWorkflowNodeViewModel"/>: which side of the node each slot faces, and what an enumerated port is
-/// called. The first is <see cref="IWorkflowSlotViewModel.Channel"/> and needs nothing added. The second lives on
+/// <see cref="INodeComponent"/>: which side of the node each slot faces, and what an enumerated port is
+/// called. The first is <see cref="ISlotComponent.Channel"/> and needs nothing added. The second lives on
 /// the <see cref="IConditionalSlot"/> entries inside a <see cref="SlotEnumerator{TSlot}"/>, and the enumerator is
 /// held in a property the node names itself — so a caller that holds only the node has no way to reach it.
 /// </para>

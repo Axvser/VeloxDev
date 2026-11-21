@@ -2,7 +2,7 @@ namespace VeloxDev.WorkflowSystem;
 
 /// <summary>One-call entry points for layout: the whole tree, or one node's reachable subgraph.</summary>
 /// <remarks>
-/// <para>The node overload is the primary entry point: it finds the tree through <see cref="IWorkflowNodeViewModel.Parent"/>
+/// <para>The node overload is the primary entry point: it finds the tree through <see cref="INodeComponent.Parent"/>
 /// and asks that tree's helper for the registered <see cref="IWorkflowLayoutSolver"/>. That keeps custom
 /// solutions per editor: replacing the solver on one tree's helper never affects another tree.</para>
 /// <para>The tree overload uses the same helper, so a host only needs one registration point. If a helper does
@@ -18,7 +18,7 @@ public static class WorkflowLayoutEx
     /// <returns>The apply result for the solved layout.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static WorkflowLayoutResult Arrange(
-        this IWorkflowTreeViewModel tree, WorkflowLayoutOptions? options = null)
+        this ITreeComponent tree, WorkflowLayoutOptions? options = null)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
@@ -42,7 +42,7 @@ public static class WorkflowLayoutEx
     /// <see cref="WorkflowLayoutOptions.PinStartNode"/> when the start node should be allowed to move too.
     /// </remarks>
     public static WorkflowLayoutResult Arrange(
-        this IWorkflowNodeViewModel node, WorkflowLayoutOptions? options = null)
+        this INodeComponent node, WorkflowLayoutOptions? options = null)
     {
         if (node is null) throw new ArgumentNullException(nameof(node));
 

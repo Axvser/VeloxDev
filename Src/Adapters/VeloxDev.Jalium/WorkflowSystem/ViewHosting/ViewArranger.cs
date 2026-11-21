@@ -10,10 +10,10 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// <see cref="VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowLinkBounds"/>; writing geometry here would
 /// fight both.
 /// </remarks>
-public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, FrameworkElement>
+public sealed class ViewArranger : IViewArranger<IWorkflowComponent, FrameworkElement>
 {
     /// <inheritdoc />
-    public void Arrange(FrameworkElement view, IWorkflowViewModel item)
+    public void Arrange(FrameworkElement view, IWorkflowComponent item)
     {
     }
 }

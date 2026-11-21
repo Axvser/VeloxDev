@@ -301,10 +301,10 @@ namespace VeloxDev.Generators.Base
 
         private static readonly string[] ComponentInterfaces =
         [
-            "VeloxDev.WorkflowSystem.IWorkflowTreeViewModel",
-            "VeloxDev.WorkflowSystem.IWorkflowNodeViewModel",
-            "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel",
-            "VeloxDev.WorkflowSystem.IWorkflowLinkViewModel",
+            "VeloxDev.WorkflowSystem.ITreeComponent",
+            "VeloxDev.WorkflowSystem.INodeComponent",
+            "VeloxDev.WorkflowSystem.ISlotComponent",
+            "VeloxDev.WorkflowSystem.ILinkComponent",
         ];
 
         /// <summary>
@@ -317,10 +317,10 @@ namespace VeloxDev.Generators.Base
         /// </remarks>
         private static readonly Dictionary<string, string> BuilderContracts = new(System.StringComparer.Ordinal)
         {
-            ["TreeAttribute"] = "VeloxDev.WorkflowSystem.IWorkflowTreeViewModel",
-            ["NodeAttribute"] = "VeloxDev.WorkflowSystem.IWorkflowNodeViewModel",
-            ["SlotAttribute"] = "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel",
-            ["LinkAttribute"] = "VeloxDev.WorkflowSystem.IWorkflowLinkViewModel",
+            ["TreeAttribute"] = "VeloxDev.WorkflowSystem.ITreeComponent",
+            ["NodeAttribute"] = "VeloxDev.WorkflowSystem.INodeComponent",
+            ["SlotAttribute"] = "VeloxDev.WorkflowSystem.ISlotComponent",
+            ["LinkAttribute"] = "VeloxDev.WorkflowSystem.ILinkComponent",
         };
 
         /// <summary>
@@ -677,7 +677,7 @@ namespace VeloxDev.Generators.Base
 
             if (DeclaredIn(symbol, assembly)) return true;
 
-            // 别的程序集里的**封闭**泛型：`SlotEnumerator<SlotDefaultViewModel>` 的定义在 Core，但只有见过
+            // 别的程序集里的**封闭**泛型：`SlotEnumerator<SlotDefaultComponent>` 的定义在 Core，但只有见过
             // 这个实例的消费方才发得出它的条目 —— 声明它的那一侧永远不会知道有这么一个组合。
             // 门槛与旧的契约解析器一致：有公开无参构造、且不是框架容器（容器由运行时写成数组/对象）。
             return symbol.IsGenericType
@@ -697,7 +697,7 @@ namespace VeloxDev.Generators.Base
         /// </summary>
         /// <remarks>
         /// 判据是**类型实参里还有类型参数**，不是 <c>TypeParameters.Length</c> —— 后者对封闭实例照样返回定义上的
-        /// 那些参数，用它会把 <c>SlotEnumerator&lt;SlotDefaultViewModel&gt;</c> 一起挡掉。
+        /// 那些参数，用它会把 <c>SlotEnumerator&lt;SlotDefaultComponent&gt;</c> 一起挡掉。
         /// </remarks>
         private static bool IsOpenGeneric(INamedTypeSymbol symbol)
         {

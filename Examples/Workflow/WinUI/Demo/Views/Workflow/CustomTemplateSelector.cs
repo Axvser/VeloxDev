@@ -29,9 +29,9 @@ public partial class CustomTemplateSelector : DataTemplateSelector
             PythonScriptNodeViewModel => PythonTemplate ??
                 throw new InvalidOperationException("PythonTemplate is not set"),
             // Any other workflow node type falls back to the generic node card.
-            IWorkflowNodeViewModel => NodeTemplate ??
+            INodeComponent => NodeTemplate ??
                 throw new InvalidOperationException("NodeTemplate is not set"),
-            IWorkflowLinkViewModel => LinkTemplate ??
+            ILinkComponent => LinkTemplate ??
                 throw new InvalidOperationException("LinkTemplate is not set"),
             _ => throw new InvalidOperationException($"Unknown data type: {item?.GetType().Name}")
         };

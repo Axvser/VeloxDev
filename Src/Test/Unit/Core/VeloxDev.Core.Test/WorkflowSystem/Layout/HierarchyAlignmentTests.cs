@@ -20,7 +20,7 @@ public class HierarchyAlignmentTests
     [TestMethod]
     public void SingleChild_IsCentredAndPlacedToTheRightOfItsParent()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var parent = LayoutTestKit.AddNode(tree, 0, 0);
         var child = LayoutTestKit.AddNode(tree, 300, 200, height: 20);
         LayoutTestKit.AddLink(tree, parent, child);
@@ -36,7 +36,7 @@ public class HierarchyAlignmentTests
     [TestMethod]
     public void Chain_CascadesTheCentreAndTheColumnDownstream()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var first = LayoutTestKit.AddNode(tree, 0, 0);
         var second = LayoutTestKit.AddNode(tree, 300, 200, height: 20);
         var third = LayoutTestKit.AddNode(tree, 600, 400, height: 20);
@@ -56,7 +56,7 @@ public class HierarchyAlignmentTests
     [TestMethod]
     public void FanIn_IsCentredOnTheParentsBoundingBox()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var tall = LayoutTestKit.AddNode(tree, 0, 0);                    // 0..40
         var shortParent = LayoutTestKit.AddNode(tree, 0, 100, height: 20); // 100..120
         var merge = LayoutTestKit.AddNode(tree, 400, 500, height: 20);
@@ -73,7 +73,7 @@ public class HierarchyAlignmentTests
     [TestMethod]
     public void FanInAfterFanOut_MeetsTheGroupCentre()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var source = LayoutTestKit.AddNode(tree, 0, 0);                  // centre 20
         var first = LayoutTestKit.AddNode(tree, 300, 50, height: 20);
         var second = LayoutTestKit.AddNode(tree, 300, 250, height: 20);
@@ -95,14 +95,14 @@ public class HierarchyAlignmentTests
     [TestMethod]
     public void Tolerance_PreservesAClosePlacement_AndAlignsAFarOne()
     {
-        var closeTree = new TreeDefaultViewModel();
+        var closeTree = new TreeDefaultComponent();
         var closeParent = LayoutTestKit.AddNode(closeTree, 0, 0);
         var closeChild = LayoutTestKit.AddNode(closeTree, 164, 14, height: 20);
         LayoutTestKit.AddLink(closeTree, closeParent, closeChild);
 
         var close = LayoutTestKit.Solve(closeTree, out _, Options(tolerance: 8));
 
-        var farTree = new TreeDefaultViewModel();
+        var farTree = new TreeDefaultComponent();
         var farParent = LayoutTestKit.AddNode(farTree, 0, 0);
         var farChild = LayoutTestKit.AddNode(farTree, 164, 30, height: 20);
         LayoutTestKit.AddLink(farTree, farParent, farChild);
@@ -116,7 +116,7 @@ public class HierarchyAlignmentTests
     [TestMethod]
     public void Tolerance_IsAppliedPerAxis()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var parent = LayoutTestKit.AddNode(tree, 0, 0);
         var child = LayoutTestKit.AddNode(tree, 200, 14, height: 20);
         LayoutTestKit.AddLink(tree, parent, child);
@@ -132,7 +132,7 @@ public class HierarchyAlignmentTests
     [TestMethod]
     public void PinnedNode_IsNotAligned()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var first = LayoutTestKit.AddNode(tree, 0, 0);
         var second = LayoutTestKit.AddNode(tree, 0, 200);
         var merge = LayoutTestKit.AddNode(tree, 400, 1000);

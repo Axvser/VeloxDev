@@ -267,7 +267,7 @@ public sealed class WorkflowSurfaceHeadlessTests
         Assert.IsTrue(graph.Tree.Layout.NegativeOffset.Horizontal > 0d, "the canvas grew before the origin");
 
         // Past the far edge: the node is outside the current extent, so the extent has to grow.
-        var edge = new Wf.NodeDefaultViewModel
+        var edge = new Wf.NodeDefaultComponent
         {
             Parent = graph.Tree,
             Anchor = new Wf.Anchor(9000, 4000, 0),

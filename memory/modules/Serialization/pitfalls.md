@@ -87,16 +87,16 @@
 
 `NameOf` / `TypeOf` 是一对字典查找，`ReadObjectValue` 靠 `TypeOf($type) ?? 声明类型` 落回一个类型。所以名字必须**唯一标识一个封闭类型**。
 
-**泛型名字必须带类型实参**：不带时同一泛型定义的两个封闭实例会注册**同一个字符串**（`SlotEnumerator<SlotDefaultViewModel>` 与 `SlotEnumerator<Demo.ViewModels.SlotViewModel>` 都会写成 `"VeloxDev.WorkflowSystem.SlotEnumerator, VeloxDev.Core"`），`TypesByName[那个名字]` 谁后注册谁赢。
+**泛型名字必须带类型实参**：不带时同一泛型定义的两个封闭实例会注册**同一个字符串**（`SlotEnumerator<SlotDefaultComponent>` 与 `SlotEnumerator<Demo.ViewModels.SlotViewModel>` 都会写成 `"VeloxDev.WorkflowSystem.SlotEnumerator, VeloxDev.Core"`），`TypesByName[那个名字]` 谁后注册谁赢。
 
 - **写侧不受影响**：读写器表按 `Type` 索引；且 `$type` 只在声明类型 ≠ 运行期类型时才写。
 - **读侧受影响**，只在 `$type` 真的出现时：解析可能落到另一个封闭实例 → `Create()` 造出错类型 → 生成 reader 那句 `(SlotEnumerator<X>)` 转型失败。
 - `SlotEnumerator` 只作为**具体声明类型**出现时不写 `$type`；黄金文件里的 `$type` **全是非泛型**。
 - **`ConditionalSlot<T>` 同样会撞**，不止 SlotEnumerator。
 
-`WrittenName` **逐层**带上实参：`SlotEnumerator<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>, VeloxDev.Core`。**非泛型类型的名字不变**，所以黄金文件不受影响。
+`WrittenName` **逐层**带上实参：`SlotEnumerator<VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core>, VeloxDev.Core`。**非泛型类型的名字不变**，所以黄金文件不受影响。
 
-**嵌套泛型要逐层写，不能攒到最内层**：`A<int>.B<string>` 与 `A.B<int, string>` 是两个类型，挤平就拼成同一个字符串。所以是 `Probe.Envelope<…SlotDefaultViewModel, VeloxDev.Core>+Inner<…>, Probe` —— 每层的实参紧跟自己那层的名字，嵌套用 `+` 连（与 `Type.FullName` 一致）。
+**嵌套泛型要逐层写，不能攒到最内层**：`A<int>.B<string>` 与 `A.B<int, string>` 是两个类型，挤平就拼成同一个字符串。所以是 `Probe.Envelope<…SlotDefaultComponent, VeloxDev.Core>+Inner<…>, Probe` —— 每层的实参紧跟自己那层的名字，嵌套用 `+` 连（与 `Type.FullName` 一致）。
 
 **Roslyn 的 `TypeArguments` 是平铺的**：包含类型的实参也在里面，**外层在前**。自己那一段靠 `Arity` 从尾部切（`Skip(Length - Arity)`），实测证实了顺序。判定在 `OwnTypeArgumentsOf`。
 
@@ -111,7 +111,7 @@
 1. **生成器不能引用它为之生成代码的程序集。** 所以 `ArchiveOptions` 在生成器里镜像成 `ArchiveFlags`，枚举值只能手工保持同步。特性实参到达时是**底层整数**，不是枚举。
    **`JsonIgnoreCondition` 故意没有镜像**：它按名字判（`ReadJsonIgnoreCondition` 拿常量值反查字段名再 `switch`）。理由是实测踩过 —— 它的顺序是 `Never=0, Always=1, WhenWritingDefault=2, WhenWritingNull=3`（.NET 10 又加了 `WhenWriting=4`/`WhenReading=5`），按 `Always/Never/WhenWritingNull/WhenWritingDefault` 记**会把后两个写反**，症状是 `WhenWritingDefault` 静默不生效。**枚举顺序不是它表达的意思**。
 2. **源生成器看不见别的生成器的产物。** `[VeloxProperty]` 提升出来的属性在 VeloxJson 生成器的视图里**不存在** —— 所以「忽略字段、改用属性」不可表达（两者产出的代码完全一样），`IgnoreField` 因此取「该成员整个不进文档」这个唯一可实现的语义。
-3. **引用程序集剥掉非 public 成员 —— 消费方看不见它们。** 实测：测试程序集看 `SlotEnumerator<SlotDefaultViewModel>` 时**看不到** `internal` 的 `OnDeserializing`/`OnDeserialized`。所以**钩子方法要能被别的程序集调，就必须是 `public`**；`internal` 只在「类型由它自己的程序集序列化」时够用。判据是 `IsReachableFromGeneratedCode`，它按**程序集**判。
+3. **引用程序集剥掉非 public 成员 —— 消费方看不见它们。** 实测：测试程序集看 `SlotEnumerator<SlotDefaultComponent>` 时**看不到** `internal` 的 `OnDeserializing`/`OnDeserialized`。所以**钩子方法要能被别的程序集调，就必须是 `public`**；`internal` 只在「类型由它自己的程序集序列化」时够用。判据是 `IsReachableFromGeneratedCode`，它按**程序集**判。
    **推论**：外程序集里 `internal`/`private` 的钩子生成器**根本看不到**，也就**无法**为它出声 —— 症状是那个回调静默不跑。`VELOX_JSON_HOOK002` / `VELOX_JSON_MEMBER001` 只覆盖够得着却不可调的情况。
 
 **钩子就是 BCL 那四个**（`System.Runtime.Serialization` 的 `[OnSerializing]` / `[OnSerialized]` / `[OnDeserializing]` / `[OnDeserialized]`），生成器沿基类链先基后派生地调，带 `StreamingContext` 的传 `default(...)`。

@@ -34,7 +34,7 @@ public class AgentCapabilityProvidersTests
     {
         // The whole point of attaching it: the tools are the framework's, and they arrive without this
         // repo listing them anywhere.
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithTodoTracking();
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithTodoTracking();
 
         var client = await OfflineAgent.RunOnce(scope);
 
@@ -52,7 +52,7 @@ public class AgentCapabilityProvidersTests
     {
         // The list lives in the framework's provider and there is no other way to reach it, so a host that
         // wants to show the plan the model is working to needs this handle.
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
 
         Assert.IsNull(scope.Todo, "nothing is attached until asked for");
 
@@ -68,7 +68,7 @@ public class AgentCapabilityProvidersTests
     {
         // A scope that was not asked for todos must not grow them: the composition is fixed, but what is
         // in it is not. A bare scope carries only its own provider.
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
 
         var providers = scope.CreateContextProviders();
 
@@ -92,7 +92,7 @@ public class AgentCapabilityProvidersTests
             DefaultMode = "build",
         };
 
-        var client = await OfflineAgent.RunOnce(new WorkflowAgentScope(new TreeDefaultViewModel()).WithAgentModes(options));
+        var client = await OfflineAgent.RunOnce(new WorkflowAgentScope(new TreeDefaultComponent()).WithAgentModes(options));
 
         CollectionAssert.IsSubsetOf(new[] { "mode_set", "mode_get" }, client.ToolNames);
         Assert.IsTrue(client.Prose.Any(p => p.Contains("build") && p.Contains("plan")),
@@ -103,7 +103,7 @@ public class AgentCapabilityProvidersTests
     public void WithAgentModes_ExposesTheProviderForAHostToBind()
     {
         // A mode switch in the host UI needs both directions: read the current mode, and set it.
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
         Assert.IsNull(scope.AgentMode);
 
         scope.WithAgentModes(new AgentModeProviderOptions
@@ -118,7 +118,7 @@ public class AgentCapabilityProvidersTests
     [TestMethod]
     public void WithAgentModes_RefusesANullOptionsBag()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
 
         Assert.ThrowsExactly<ArgumentNullException>(() => scope.WithAgentModes(null!));
     }
@@ -131,7 +131,7 @@ public class AgentCapabilityProvidersTests
         // Compaction rewrites the message history, so every provider after it must see the bounded form.
         // Asserted through the state key rather than the type: the type lives in a namespace MAF marks
         // [Experimental], and a test has no business naming it any more than a host does.
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithContextCompaction(maxContextWindowTokens: 128_000, maxOutputTokens: 8_000)
             .WithSkills(new SkillScope());
 
@@ -149,9 +149,9 @@ public class AgentCapabilityProvidersTests
     {
         // Two trees each carrying their own compaction must not share one state key, which is what the
         // framework rejects at agent construction.
-        var first = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var first = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithContextCompaction(128_000, 8_000).CreateContextProviders()[0];
-        var second = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var second = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithContextCompaction(128_000, 8_000).CreateContextProviders()[0];
 
         Assert.AreNotEqual(first.StateKeys[0], second.StateKeys[0]);
@@ -163,7 +163,7 @@ public class AgentCapabilityProvidersTests
     public void NativeCapabilities_SitAfterTheSubsystemsAndBeforeHostFactories()
     {
         // Fixed order, not attachment order — attached here in the reverse of what is asserted.
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithContextProvider(_ => new MarkerProvider())
             .WithTodoTracking()
             .WithSkills(new SkillScope())
@@ -184,7 +184,7 @@ public class AgentCapabilityProvidersTests
     {
         // The framework unions the providers' tool lists without deduplicating, so a name offered twice
         // reaches the model twice. Attaching everything at once is the arrangement that would expose it.
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithTodoTracking()
             .WithAgentModes(new AgentModeProviderOptions
             {
@@ -210,7 +210,7 @@ public class AgentCapabilityProvidersTests
     {
         // Version is documented as "everything this scope can be configured with". Attaching a provider
         // changes what the Agent is shown, so a render cached against the old version is stale.
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
         var before = scope.Version;
 
         scope.WithTodoTracking();

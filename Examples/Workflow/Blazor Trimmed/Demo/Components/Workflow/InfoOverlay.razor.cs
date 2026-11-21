@@ -18,7 +18,7 @@ public partial class InfoOverlay : ComponentBase, IDisposable
 {
     /// <summary>Gets or sets the workflow tree rendered by the surface.</summary>
     [Parameter]
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     /// <summary>Gets or sets the surface viewport context pushed by <see cref="WorkflowSurfaceBehavior"/>.</summary>
     [Parameter]
@@ -38,7 +38,7 @@ public partial class InfoOverlay : ComponentBase, IDisposable
     private string _copyLabel = "复制";
 
     private INotifyPropertyChanged? _layoutNotify;
-    private IWorkflowTreeViewModel? _subscribedTree;
+    private ITreeComponent? _subscribedTree;
 
     private string CopyLabel => _copyLabel;
     private string[] Lines
@@ -122,11 +122,11 @@ public partial class InfoOverlay : ComponentBase, IDisposable
         var virtualLink = Tree.VirtualLink;
         foreach (var item in Tree.GetHelper().VisibleItems)
         {
-            if (item is IWorkflowNodeViewModel)
+            if (item is INodeComponent)
             {
                 visibleNodes++;
             }
-            else if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, virtualLink))
+            else if (item is ILinkComponent link && !ReferenceEquals(link, virtualLink))
             {
                 visibleLinks++;
             }

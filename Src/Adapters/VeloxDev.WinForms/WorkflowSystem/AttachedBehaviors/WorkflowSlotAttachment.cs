@@ -48,9 +48,9 @@ public sealed class WorkflowSlotAttachment
 
     private readonly Control target;
     private readonly ModelChangeRelay relay;
-    private readonly IWorkflowSlotEventSink eventSink;
+    private readonly ISlotEventSink eventSink;
 
-    private IWorkflowSlotViewModel? slot;
+    private ISlotComponent? slot;
     private IDisposable? modelEvents;
     private GraphicsPath? iconPath;
     private string slotPath = string.Empty;
@@ -103,7 +103,7 @@ public sealed class WorkflowSlotAttachment
         target.HandleCreated += (_, _) =>
         {
             // 池可能只设了 Tag 而控件还没句柄：有句柄时补一次绑定。
-            if (slot is null && target.Tag is IWorkflowSlotViewModel tagged) Slot = tagged;
+            if (slot is null && target.Tag is ISlotComponent tagged) Slot = tagged;
         };
         target.Disposed += (_, _) => Detach();
     }
@@ -121,7 +121,7 @@ public sealed class WorkflowSlotAttachment
     /// <summary>Gets or sets the workflow slot bound to this control.</summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IWorkflowSlotViewModel? Slot
+    public ISlotComponent? Slot
     {
         get => slot;
         set
@@ -298,7 +298,7 @@ public sealed class WorkflowSlotAttachment
     }
 
     // 助手自己接模型事件、自己摘订阅，把每条转成事件；视图只订事件，不碰 Helper。
-    private sealed class SlotEventSink(WorkflowSlotAttachment owner) : IWorkflowSlotEventSink
+    private sealed class SlotEventSink(WorkflowSlotAttachment owner) : ISlotEventSink
     {
         public void OnChannelChanging(SlotChannelEventArgs e) => owner.ChannelChanging?.Invoke(owner, e);
 

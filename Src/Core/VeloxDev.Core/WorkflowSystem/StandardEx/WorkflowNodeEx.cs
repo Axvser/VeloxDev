@@ -8,7 +8,7 @@ public static class WorkflowNodeEx
 {
     /// <summary>Returns the standard commands a node helper drives.</summary>
     public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands
-        (this IWorkflowNodeViewModel component)
+        (this INodeComponent component)
         =>
         [
             component.SetAnchorCommand,
@@ -21,7 +21,7 @@ public static class WorkflowNodeEx
         ];
 
     /// <summary>Adds <paramref name="slot"/> to the node, as one undoable step when the node is attached.</summary>
-    public static void StandardCreateSlot(this IWorkflowNodeViewModel component, IWorkflowSlotViewModel slot)
+    public static void StandardCreateSlot(this INodeComponent component, ISlotComponent slot)
     {
         if (component is null) return;
 
@@ -43,7 +43,7 @@ public static class WorkflowNodeEx
                 component.Slots.Add(slot);
             return;
         }
-        component.Parent.GetHelper().Submit(new WorkflowActionPair(
+        component.Parent.GetHelper().Submit(new ActionPair(
             () =>
             {
                 slot.Parent = newParent;
@@ -62,7 +62,7 @@ public static class WorkflowNodeEx
     // through the property setters, which store the ORIGINAL world value. sx/sy here are the inverse
     // collapse factors: collapsed = world / scale, so world = collapsed * scale.
 
-    private static (double Sx, double Sy) ViewToWorldFactors(IWorkflowNodeViewModel component)
+    private static (double Sx, double Sy) ViewToWorldFactors(INodeComponent component)
     {
         var scale = component.Parent?.Layout?.Scale;
         return (
@@ -71,7 +71,7 @@ public static class WorkflowNodeEx
     }
 
     /// <summary>Sets the node's anchor to <paramref name="anchor"/> and notifies listeners.</summary>
-    public static void StandardSetAnchor(this IWorkflowNodeViewModel component, Anchor anchor)
+    public static void StandardSetAnchor(this INodeComponent component, Anchor anchor)
     {
         if (component is null) return;
         // `anchor` is already a world coordinate (screen minus ActualOffset); store directly.
@@ -80,7 +80,7 @@ public static class WorkflowNodeEx
     }
 
     /// <summary>Sets only the node's layer, keeping its world position.</summary>
-    public static void StandardSetLayer(this IWorkflowNodeViewModel component, int layer)
+    public static void StandardSetLayer(this INodeComponent component, int layer)
     {
         if (component is null) return;
         // Recover the world H/V from the collapsed view anchor before changing only the layer.
@@ -90,13 +90,13 @@ public static class WorkflowNodeEx
         component.OnPropertyChanged(nameof(component.Anchor));
     }
     /// <summary>Sets the node's size to <paramref name="size"/> once the resizing hooks allow it.</summary>
-    public static void StandardSetSize(this IWorkflowNodeViewModel component, Size size)
+    public static void StandardSetSize(this INodeComponent component, Size size)
     {
         if (component is null) return;
         var from = component.Size;
         var to = new Size(size.Width, size.Height);
 
-        var events = component.GetHelper() as IWorkflowNodeEvents;
+        var events = component.GetHelper() as INodeEvents;
         var handle = events?.RaiseResizing(from, to) ?? new WorkflowEventHandle();
         if (handle.PreventDefault) return;
 
@@ -107,7 +107,7 @@ public static class WorkflowNodeEx
     }
 
     /// <summary>Moves the node by the view-space delta <paramref name="offset"/> once the moving hooks allow it.</summary>
-    public static void StandardMove(this IWorkflowNodeViewModel component, Offset offset)
+    public static void StandardMove(this INodeComponent component, Offset offset)
     {
         if (component is null) return;
         // `offset` is a view-space (drag) delta: the collapsed anchor moves by it, then convert back
@@ -123,7 +123,7 @@ public static class WorkflowNodeEx
             (a.Vertical + offset.Vertical) * sy,
             a.Layer);
 
-        var events = component.GetHelper() as IWorkflowNodeEvents;
+        var events = component.GetHelper() as INodeEvents;
         var handle = events?.RaiseMoving(from, to) ?? new WorkflowEventHandle();
         if (handle.PreventDefault) return;
 
@@ -134,11 +134,11 @@ public static class WorkflowNodeEx
     }
 
     /// <summary>Delivers <paramref name="parameter"/> along every outgoing connection, after access validation.</summary>
-    public static async Task StandardBroadcastAsync(this IWorkflowNodeViewModel component, object? parameter, CancellationToken ct = default)
+    public static async Task StandardBroadcastAsync(this INodeComponent component, object? parameter, CancellationToken ct = default)
     {
         var helper = component?.GetHelper() ?? throw new ArgumentException($"Failed to obtain the Helper instance.");
 
-        List<(IWorkflowNodeViewModel Node, ITaskContext Context)> nodes = [];
+        List<(INodeComponent Node, ITaskContext Context)> nodes = [];
         foreach (var sender in component.Slots.ToArray())
         {
             ct.ThrowIfCancellationRequested();
@@ -167,11 +167,11 @@ public static class WorkflowNodeEx
     }
 
     /// <summary>Delivers <paramref name="parameter"/> along every incoming connection, after access validation.</summary>
-    public static async Task StandardReverseBroadcastAsync(this IWorkflowNodeViewModel component, object? parameter, CancellationToken ct = default)
+    public static async Task StandardReverseBroadcastAsync(this INodeComponent component, object? parameter, CancellationToken ct = default)
     {
         var helper = component?.GetHelper() ?? throw new ArgumentException($"Failed to obtain the Helper instance.");
 
-        List<(IWorkflowNodeViewModel Node, ITaskContext Context)> nodes = [];
+        List<(INodeComponent Node, ITaskContext Context)> nodes = [];
         foreach (var receiver in component.Slots.ToArray())
         {
             ct.ThrowIfCancellationRequested();
@@ -207,9 +207,9 @@ public static class WorkflowNodeEx
     /// <param name="predicate">Optional filter predicate. If null, all reachable nodes are returned.</param>
     /// <param name="maxDepth">Maximum search depth. 0 means unlimited.</param>
     /// <returns>An enumerable of matching downstream nodes (excluding the starting node).</returns>
-    public static IEnumerable<IWorkflowNodeViewModel> SearchForwardNodes(
-        this IWorkflowNodeViewModel component,
-        Func<IWorkflowNodeViewModel, bool>? predicate = null,
+    public static IEnumerable<INodeComponent> SearchForwardNodes(
+        this INodeComponent component,
+        Func<INodeComponent, bool>? predicate = null,
         int maxDepth = 0)
     {
         return SearchRelativeNodesCore(component, forward: true, predicate, maxDepth);
@@ -223,9 +223,9 @@ public static class WorkflowNodeEx
     /// <param name="predicate">Optional filter predicate. If null, all reachable nodes are returned.</param>
     /// <param name="maxDepth">Maximum search depth. 0 means unlimited.</param>
     /// <returns>An enumerable of matching upstream nodes (excluding the starting node).</returns>
-    public static IEnumerable<IWorkflowNodeViewModel> SearchReverseNodes(
-        this IWorkflowNodeViewModel component,
-        Func<IWorkflowNodeViewModel, bool>? predicate = null,
+    public static IEnumerable<INodeComponent> SearchReverseNodes(
+        this INodeComponent component,
+        Func<INodeComponent, bool>? predicate = null,
         int maxDepth = 0)
     {
         return SearchRelativeNodesCore(component, forward: false, predicate, maxDepth);
@@ -238,12 +238,12 @@ public static class WorkflowNodeEx
     /// <param name="predicate">Optional filter predicate. If null, all reachable nodes are returned.</param>
     /// <param name="maxDepth">Maximum search depth. 0 means unlimited.</param>
     /// <returns>An enumerable of matching nodes from both directions (excluding the starting node).</returns>
-    public static IEnumerable<IWorkflowNodeViewModel> SearchAllRelativeNodes(
-        this IWorkflowNodeViewModel component,
-        Func<IWorkflowNodeViewModel, bool>? predicate = null,
+    public static IEnumerable<INodeComponent> SearchAllRelativeNodes(
+        this INodeComponent component,
+        Func<INodeComponent, bool>? predicate = null,
         int maxDepth = 0)
     {
-        var visited = new HashSet<IWorkflowNodeViewModel> { component };
+        var visited = new HashSet<INodeComponent> { component };
         foreach (var node in SearchRelativeNodesCore(component, true, null, maxDepth, visited))
         {
             if (predicate is null || predicate(node)) yield return node;
@@ -254,15 +254,15 @@ public static class WorkflowNodeEx
         }
     }
 
-    private static IEnumerable<IWorkflowNodeViewModel> SearchRelativeNodesCore(
-        IWorkflowNodeViewModel start,
+    private static IEnumerable<INodeComponent> SearchRelativeNodesCore(
+        INodeComponent start,
         bool forward,
-        Func<IWorkflowNodeViewModel, bool>? predicate,
+        Func<INodeComponent, bool>? predicate,
         int maxDepth,
-        HashSet<IWorkflowNodeViewModel>? visited = null)
+        HashSet<INodeComponent>? visited = null)
     {
         visited ??= [start];
-        var queue = new Queue<(IWorkflowNodeViewModel Node, int Depth)>();
+        var queue = new Queue<(INodeComponent Node, int Depth)>();
         queue.Enqueue((start, 0));
 
         while (queue.Count > 0)
@@ -291,7 +291,7 @@ public static class WorkflowNodeEx
     }
 
     /// <summary>Deletes the node and its connections as one undoable step, once the deleting hooks allow it.</summary>
-    public static void StandardDelete(this IWorkflowNodeViewModel component)
+    public static void StandardDelete(this INodeComponent component)
     {
         if (component is null) return;
         if (component.Parent is null)
@@ -300,7 +300,7 @@ public static class WorkflowNodeEx
             return;
         }
 
-        var events = component.GetHelper() as IWorkflowNodeEvents;
+        var events = component.GetHelper() as INodeEvents;
         var handle = events?.RaiseDeleting() ?? new WorkflowEventHandle();
         if (handle.PreventDefault) return;
 
@@ -308,13 +308,13 @@ public static class WorkflowNodeEx
         var oldParent = component.Parent;
 
         // Core change of approach 2: collect only "valid" connections (connections where both endpoint nodes exist)
-        var connectionsToRemove = new List<IWorkflowLinkViewModel>();
-        var slotConnections = new Dictionary<IWorkflowSlotViewModel, (HashSet<IWorkflowSlotViewModel> Targets, HashSet<IWorkflowSlotViewModel> Sources)>();
+        var connectionsToRemove = new List<ILinkComponent>();
+        var slotConnections = new Dictionary<ISlotComponent, (HashSet<ISlotComponent> Targets, HashSet<ISlotComponent> Sources)>();
 
         foreach (var slot in component.Slots)
         {
-            var validTargets = new HashSet<IWorkflowSlotViewModel>();
-            var validSources = new HashSet<IWorkflowSlotViewModel>();
+            var validTargets = new HashSet<ISlotComponent>();
+            var validSources = new HashSet<ISlotComponent>();
 
             // Only collect connections whose target node exists in the same tree
             foreach (var target in slot.Targets)
@@ -349,7 +349,7 @@ public static class WorkflowNodeEx
         var distinctConnections = connectionsToRemove.Distinct().ToList();
 
         // Handle all deletions with a single atomic operation
-        tree.GetHelper().Submit(new WorkflowActionPair(
+        tree.GetHelper().Submit(new ActionPair(
             // Redo: perform the deletion
             () =>
             {
@@ -366,9 +366,9 @@ public static class WorkflowNodeEx
     }
 
     private static void ExecuteNodeDeletion(
-        IWorkflowTreeViewModel tree,
-        IWorkflowNodeViewModel node,
-        List<IWorkflowLinkViewModel> connections)
+        ITreeComponent tree,
+        INodeComponent node,
+        List<ILinkComponent> connections)
     {
         // Phase 1: break all connection relations
         foreach (var link in connections)
@@ -406,11 +406,11 @@ public static class WorkflowNodeEx
     }
 
     private static void RestoreNode(
-        IWorkflowTreeViewModel tree,
-        IWorkflowNodeViewModel node,
-        IWorkflowTreeViewModel oldParent,
-        List<IWorkflowLinkViewModel> connections,
-        Dictionary<IWorkflowSlotViewModel, (HashSet<IWorkflowSlotViewModel> Targets, HashSet<IWorkflowSlotViewModel> Sources)> slotConnections)
+        ITreeComponent tree,
+        INodeComponent node,
+        ITreeComponent oldParent,
+        List<ILinkComponent> connections,
+        Dictionary<ISlotComponent, (HashSet<ISlotComponent> Targets, HashSet<ISlotComponent> Sources)> slotConnections)
     {
         // Phase 1: restore the node itself
         node.Parent = oldParent;
@@ -497,10 +497,10 @@ public static class WorkflowNodeEx
     }
 
     private static void UpdateAllAffectedStates(
-        List<IWorkflowLinkViewModel> connections,
-        IList<IWorkflowSlotViewModel> slots)
+        List<ILinkComponent> connections,
+        IList<ISlotComponent> slots)
     {
-        var allAffectedSlots = new HashSet<IWorkflowSlotViewModel>(slots);
+        var allAffectedSlots = new HashSet<ISlotComponent>(slots);
 
         foreach (var link in connections)
         {

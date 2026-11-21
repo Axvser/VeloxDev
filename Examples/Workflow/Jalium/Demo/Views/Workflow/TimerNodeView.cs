@@ -16,10 +16,10 @@ internal sealed class TimerNodeView : NodeViewBase
 
     protected override Color Accent => CardPalette.AccentTimerPython;
 
-    protected override string InitialExecOrder(IWorkflowNodeViewModel node)
+    protected override string InitialExecOrder(INodeComponent node)
         => node is TimerNodeViewModel { HasExecutionOrder: true } vm ? vm.ExecutionOrderText : string.Empty;
 
-    protected override void Build(IWorkflowNodeViewModel node, Grid content)
+    protected override void Build(INodeComponent node, Grid content)
     {
         var vm = (TimerNodeViewModel)node;
         var body = new StackPanel { Margin = new Thickness(12, 9), Spacing = 5 };

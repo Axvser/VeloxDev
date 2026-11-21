@@ -11,7 +11,7 @@ namespace VeloxDev.Adapters.Benchmarks.Headed;
 // 刻意做小：一张边框 + 一段文字；锚点与尺寸走真实的绑定通知。
 internal sealed class WpfBenchmarkNodeView : Border
 {
-    private IWorkflowNodeViewModel? _node;
+    private INodeComponent? _node;
 
     public WpfBenchmarkNodeView()
     {
@@ -31,9 +31,9 @@ internal sealed class WpfBenchmarkNodeView : Border
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
-        => Bind(DataContext as IWorkflowNodeViewModel);
+        => Bind(DataContext as INodeComponent);
 
-    private void Bind(IWorkflowNodeViewModel? node)
+    private void Bind(INodeComponent? node)
     {
         if (ReferenceEquals(_node, node))
         {
@@ -56,7 +56,7 @@ internal sealed class WpfBenchmarkNodeView : Border
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
         {
             Apply();
         }
@@ -97,7 +97,7 @@ internal sealed class WpfBenchmarkTemplateSelector : DataTemplateSelector
     private readonly DataTemplate _link = CreateTemplate(typeof(WpfBenchmarkLinkView));
 
     public override DataTemplate SelectTemplate(object item, DependencyObject container)
-        => item is IWorkflowNodeViewModel ? _node : _link;
+        => item is INodeComponent ? _node : _link;
 
     private static DataTemplate CreateTemplate(Type viewType)
     {

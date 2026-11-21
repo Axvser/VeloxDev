@@ -8,12 +8,12 @@ namespace VeloxDev.WorkflowSystem;
 /// </summary>
 public sealed class WorkflowNodeScaleTracker
 {
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private CanvasLayout? _layout;
     private Action? _onScaleDirty;
 
     /// <summary>Attaches to <paramref name="tree"/> (null detaches). The callback fires on Layout.Scale change.</summary>
-    public void Attach(IWorkflowTreeViewModel? tree, Action onScaleDirty)
+    public void Attach(ITreeComponent? tree, Action onScaleDirty)
     {
         if (ReferenceEquals(_tree, tree))
         {
@@ -57,7 +57,7 @@ public sealed class WorkflowNodeScaleTracker
 
     private void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(IWorkflowTreeViewModel.Layout))
+        if (e.PropertyName != nameof(ITreeComponent.Layout))
         {
             return;
         }

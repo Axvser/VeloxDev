@@ -24,7 +24,7 @@ public interface IWorkflowMinimapOverlay : IWorkflowGridDecorator
     double ViewportHeight { get; set; }
 
     /// <summary>The workflow tree whose nodes/links the minimap renders.</summary>
-    IWorkflowTreeViewModel? WorkflowTree { get; set; }
+    ITreeComponent? WorkflowTree { get; set; }
 
     /// <summary>Whether the minimap overlay should render.</summary>
     bool IsMinimapVisible { get; set; }

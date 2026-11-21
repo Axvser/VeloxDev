@@ -6,7 +6,7 @@ namespace Demo.Components.Workflow;
 /// <summary>
 /// A Razor/Blazor workflow tree surface composing the surface behavior, grid decorator,
 /// minimap, and a pooled node/link view layer. Set <see cref="Tree"/> to an
-/// <see cref="IWorkflowTreeViewModel"/> to render; re-rendering, slot enumeration and the
+/// <see cref="ITreeComponent"/> to render; re-rendering, slot enumeration and the
 /// default palette are supplied by the surface behavior. Override <see cref="NodeTemplate"/>
 /// to replace the generated node card.
 /// </summary>
@@ -14,7 +14,7 @@ public partial class TreeView : ComponentBase, IDisposable
 {
     /// <summary>Gets or sets the workflow tree rendered by this surface.</summary>
     [Parameter]
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     /// <summary>Gets or sets the scroll container element id.</summary>
     [Parameter]
@@ -26,7 +26,7 @@ public partial class TreeView : ComponentBase, IDisposable
 
     /// <summary>Gets or sets an optional per-node template (overrides the generated <c>NodeView</c>).</summary>
     [Parameter]
-    public RenderFragment<IWorkflowNodeViewModel>? NodeTemplate { get; set; }
+    public RenderFragment<INodeComponent>? NodeTemplate { get; set; }
 
     /// <summary>Gets or sets the minor grid spacing in pixels.</summary>
     [Parameter]
@@ -34,7 +34,7 @@ public partial class TreeView : ComponentBase, IDisposable
 
     // VeloxDev customization: 树一级的键与滚轮都订在**树的 Helper** 上 —— 与连线视图订自己那一条同一条路，
     // 适配器只负责把平台的输入翻译过来，这里决定收到之后做什么。
-    private IWorkflowTreeViewModel? _subscribedTree;
+    private ITreeComponent? _subscribedTree;
     private IInputEvents? _events;
 
     /// <inheritdoc />

@@ -19,7 +19,7 @@ public partial class LinkView : ContentView
     }
 
     public static readonly BindableProperty WorkflowTreeProperty = BindableProperty.Create(
-        nameof(WorkflowTree), typeof(IWorkflowTreeViewModel), typeof(LinkView), null);
+        nameof(WorkflowTree), typeof(ITreeComponent), typeof(LinkView), null);
     public static readonly BindableProperty InteractionSourceProperty = BindableProperty.Create(
         nameof(InteractionSource), typeof(View), typeof(LinkView), null);
     public static readonly BindableProperty ScrollOffsetXProperty = BindableProperty.Create(
@@ -39,7 +39,7 @@ public partial class LinkView : ContentView
     public static readonly BindableProperty StrokeWidthProperty = BindableProperty.Create(
         nameof(StrokeWidth), typeof(double), typeof(LinkView), (double)2);
 
-    public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
+    public ITreeComponent? WorkflowTree { get => (ITreeComponent?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
     public View? InteractionSource { get => (View?)GetValue(InteractionSourceProperty); set => SetValue(InteractionSourceProperty, value); }
     public double ScrollOffsetX { get => (double)GetValue(ScrollOffsetXProperty); set => SetValue(ScrollOffsetXProperty, value); }
     public double ScrollOffsetY { get => (double)GetValue(ScrollOffsetYProperty); set => SetValue(ScrollOffsetYProperty, value); }

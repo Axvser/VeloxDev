@@ -44,7 +44,7 @@ public enum ExecutionObservationKind
 /// <param name="Elapsed">How long the step took, where that is meaningful.</param>
 public readonly record struct ExecutionObservation(
     ExecutionObservationKind Kind,
-    IWorkflowNodeViewModel? Node,
+    INodeComponent? Node,
     string? Detail,
     int Attempt,
     TimeSpan Elapsed);

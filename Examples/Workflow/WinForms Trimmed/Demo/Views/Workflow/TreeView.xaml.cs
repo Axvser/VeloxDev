@@ -12,7 +12,7 @@ namespace Demo.Views.Workflow;
 /// </summary>
 public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private IInputEvents? _events;
 
     /// <summary>Creates the surface, runs the generated initializer and wires the link menu and HUD.</summary>
@@ -35,7 +35,7 @@ public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserContr
     /// <summary>The workflow tree the surface renders.</summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IWorkflowTreeViewModel? ViewModel
+    public ITreeComponent? ViewModel
     {
         get => WorkflowSurfaceBehavior.GetWorkflowTree(this);
         set

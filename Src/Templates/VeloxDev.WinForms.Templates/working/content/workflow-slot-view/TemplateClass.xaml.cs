@@ -8,7 +8,7 @@ namespace TemplateNamespace;
 
 public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
-    private IWorkflowSlotViewModel? slot;
+    private ISlotComponent? slot;
     private INotifyPropertyChanged? notifier;
 
     public TemplateClass()
@@ -19,7 +19,7 @@ public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Controls.User
 
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public IWorkflowSlotViewModel? ViewModel
+    public ISlotComponent? ViewModel
     {
         get => slot;
         set
@@ -58,7 +58,7 @@ public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Controls.User
 
     private void OnSlotPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.State) or null)
+        if (e.PropertyName is nameof(ISlotComponent.State) or null)
         {
             UpdateGlyph();
         }

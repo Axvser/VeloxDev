@@ -17,7 +17,7 @@ public sealed class SlotChannelEventArgs : EventArgs
     /// <param name="from">Its current channel.</param>
     /// <param name="to">The channel it is going to.</param>
     /// <param name="handle">The handle for this action — the same instance the other phase carries.</param>
-    public SlotChannelEventArgs(IWorkflowSlotViewModel slot, SlotChannel from, SlotChannel to, WorkflowEventHandle handle)
+    public SlotChannelEventArgs(ISlotComponent slot, SlotChannel from, SlotChannel to, WorkflowEventHandle handle)
     {
         Slot = slot;
         From = from;
@@ -26,7 +26,7 @@ public sealed class SlotChannelEventArgs : EventArgs
     }
 
     /// <summary>The slot being changed.</summary>
-    public IWorkflowSlotViewModel Slot { get; }
+    public ISlotComponent Slot { get; }
 
     /// <summary>Its current channel.</summary>
     public SlotChannel From { get; }

@@ -63,7 +63,7 @@ The decorator has two hit-test-transparent layers: the grid at the bottom and th
 
 ⚙ **Set `AvaloniaUseCompiledBindingsByDefault=true`** in your project (the shipped demos do). Without it you must write `x:DataType` explicitly on every binding scope or you get `AVLN2100`.
 
-⚙ **A `DataTemplate` needs a concrete `x:DataType`, not an interface.** The canvas binds `Helper.VisibleItems`, and `IWorkflowTreeViewModel` exposes only `GetHelper()` with no `Helper` property, so an interface `DataType` fails with `AVLN2000`. Point it at your tree ViewModel type.
+⚙ **A `DataTemplate` needs a concrete `x:DataType`, not an interface.** The canvas binds `Helper.VisibleItems`, and `ITreeComponent` exposes only `GetHelper()` with no `Helper` property, so an interface `DataType` fails with `AVLN2000`. Point it at your tree ViewModel type.
 
 ⚙ The **node** view in the template ships `x:CompileBindings="False"` with an inline note — replace it with your concrete `x:DataType` once your ViewModel exists. The **tree** view ships a placeholder `x:DataType="vm:TreeViewModel"` with `xmlns:vm="using:MyApp.Views"`, which **fails to compile until you repoint it** at your ViewModels namespace. That failure is deliberate: a clear error beats a canvas that silently renders nothing. See [templates.md](../templates.md#checking-the-generated-suite).
 

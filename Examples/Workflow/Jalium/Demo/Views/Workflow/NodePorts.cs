@@ -59,11 +59,11 @@ internal static class NodePorts
     public const double BodyPaddingTop = 10;
 
     // 输入口，带显示名（单口节点为空串）。
-    public static IReadOnlyList<(IWorkflowSlotViewModel Slot, string Name)> Inputs(IWorkflowNodeViewModel node)
+    public static IReadOnlyList<(ISlotComponent Slot, string Name)> Inputs(INodeComponent node)
     {
         if (node is PythonScriptNodeViewModel python)
         {
-            return python.InputSlots.Items.Select(i => ((IWorkflowSlotViewModel)i.Slot, i.Name)).ToList();
+            return python.InputSlots.Items.Select(i => ((ISlotComponent)i.Slot, i.Name)).ToList();
         }
 
         var single = InputSlotOf(node);
@@ -71,14 +71,14 @@ internal static class NodePorts
     }
 
     // 输出口，带显示名（单口节点为空串）。
-    public static IReadOnlyList<(IWorkflowSlotViewModel Slot, string Name)> Outputs(IWorkflowNodeViewModel node)
+    public static IReadOnlyList<(ISlotComponent Slot, string Name)> Outputs(INodeComponent node)
     {
         switch (node)
         {
             case PythonScriptNodeViewModel python:
-                return python.OutputSlots.Items.Select(i => ((IWorkflowSlotViewModel)i.Slot, i.Name)).ToList();
+                return python.OutputSlots.Items.Select(i => ((ISlotComponent)i.Slot, i.Name)).ToList();
             case EnumSelectorNodeViewModel e:
-                return e.OutputSlots.Items.Select(i => ((IWorkflowSlotViewModel)i.Slot, i.Name)).ToList();
+                return e.OutputSlots.Items.Select(i => ((ISlotComponent)i.Slot, i.Name)).ToList();
         }
 
         var single = OutputSlotOf(node);
@@ -87,7 +87,7 @@ internal static class NodePorts
 
     // 节点显示名：Common/Lib 的视图模型发布的 Title（Timer / PythonScript / EnumSelector 都有），不发布的就是空串 ——
     // 控制器视图模型是其中一个，所以它的卡片自己给标题，而不是读这里。
-    public static string TitleOf(IWorkflowNodeViewModel node) => node switch
+    public static string TitleOf(INodeComponent node) => node switch
     {
         TimerNodeViewModel t => t.Title,
         PythonScriptNodeViewModel p => p.Title,
@@ -96,15 +96,15 @@ internal static class NodePorts
     };
 
     // 这个节点的口是按行排的（带名字的 SlotEnumerator），还是卡边中点一个口。
-    public static bool UsesPortRows(IWorkflowNodeViewModel node)
+    public static bool UsesPortRows(INodeComponent node)
         => node is PythonScriptNodeViewModel or EnumSelectorNodeViewModel;
 
     // 这颗口的方框边长（设计单位）：行内的小口 24，卡边中点的大口 32。
-    public static double PortBoxSize(IWorkflowNodeViewModel node)
+    public static double PortBoxSize(INodeComponent node)
         => UsesPortRows(node) ? PortBoxSmall : PortBoxLarge;
 
     // 第一行端口的上沿（设计单位）：每张卡的端口行都从自己那段表头下面起。
-    public static double RowsTop(IWorkflowNodeViewModel node)
+    public static double RowsTop(INodeComponent node)
         => TitleBarH + (node switch
         {
             PythonScriptNodeViewModel => DescriptorHeight,
@@ -113,7 +113,7 @@ internal static class NodePorts
         });
 
     // 行距：装得下就用固定 RowH，装不下就压到可用高度里均分，尽量不把行推到卡外（尽力而为的装箱，端口比行名重要）。
-    public static double RowPitchFor(int count, IWorkflowNodeViewModel node, double designHeight)
+    public static double RowPitchFor(int count, INodeComponent node, double designHeight)
     {
         if (count <= 0)
         {
@@ -125,7 +125,7 @@ internal static class NodePorts
     }
 
     // 输入口中心（设计坐标）。
-    public static Point InputCenterLocalDesign(IWorkflowNodeViewModel node, int i, double designHeight)
+    public static Point InputCenterLocalDesign(INodeComponent node, int i, double designHeight)
     {
         if (node is EnumSelectorNodeViewModel)
         {
@@ -143,7 +143,7 @@ internal static class NodePorts
     }
 
     // 输出口中心（设计坐标）。
-    public static Point OutputCenterLocalDesign(IWorkflowNodeViewModel node, int i, double designWidth, double designHeight)
+    public static Point OutputCenterLocalDesign(INodeComponent node, int i, double designWidth, double designHeight)
     {
         if (!UsesPortRows(node))
         {
@@ -155,7 +155,7 @@ internal static class NodePorts
     }
 
     // 找出一个插槽是它节点的输入还是输出，以及在那一串里的序号。
-    public static (bool IsInput, int Index)? IndexOf(IWorkflowNodeViewModel node, IWorkflowSlotViewModel slot)
+    public static (bool IsInput, int Index)? IndexOf(INodeComponent node, ISlotComponent slot)
     {
         var inputs = Inputs(node);
         for (int i = 0; i < inputs.Count; i++)
@@ -179,15 +179,15 @@ internal static class NodePorts
     }
 
     // 单口节点的那个口。按类型取而不是按属性名反射 —— 每个节点类型自己那一行就是它的整份「端口表」，
-    // 而适配器持有的 IWorkflowNodeViewModel 接口不说这些属性叫什么。
-    private static IWorkflowSlotViewModel? InputSlotOf(IWorkflowNodeViewModel node) => node switch
+    // 而适配器持有的 INodeComponent 接口不说这些属性叫什么。
+    private static ISlotComponent? InputSlotOf(INodeComponent node) => node switch
     {
         EnumSelectorNodeViewModel e => e.InputSlot,
         TimerNodeViewModel t => t.InputSlot,
         _ => null,
     };
 
-    private static IWorkflowSlotViewModel? OutputSlotOf(IWorkflowNodeViewModel node) => node switch
+    private static ISlotComponent? OutputSlotOf(INodeComponent node) => node switch
     {
         ControllerViewModel c => c.OutputSlot,
         TimerNodeViewModel t => t.OutputSlot,

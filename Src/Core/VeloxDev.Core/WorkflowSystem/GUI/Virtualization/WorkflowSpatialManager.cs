@@ -7,19 +7,19 @@ namespace VeloxDev.WorkflowSystem;
 /// </summary>
 public sealed class WorkflowSpatialManager : IDisposable
 {
-    private readonly IWorkflowTreeViewModel _tree;
+    private readonly ITreeComponent _tree;
     private readonly SpatialGridHashMap<NodeBoundsProvider> _nodeMap;
     private readonly SpatialGridHashMap<NodePairBoundsProvider> _nodePairMap;
-    private readonly Dictionary<IWorkflowNodeViewModel, NodeBoundsProvider> _nodeProviders = [];
-    private readonly Dictionary<IWorkflowLinkViewModel, NodePairBoundsProvider> _nodePairProviders = [];
-    private readonly Dictionary<NodePairBoundsProvider, IWorkflowLinkViewModel> _pairToLink = [];
+    private readonly Dictionary<INodeComponent, NodeBoundsProvider> _nodeProviders = [];
+    private readonly Dictionary<ILinkComponent, NodePairBoundsProvider> _nodePairProviders = [];
+    private readonly Dictionary<NodePairBoundsProvider, ILinkComponent> _pairToLink = [];
     // Reverse index: for each node, all NodePairBoundsProviders that have it as an endpoint.
     // Used by depth-expanded AgentBounds queries to walk the connection graph.
-    private readonly Dictionary<IWorkflowNodeViewModel, List<NodePairBoundsProvider>> _nodeToPairs = [];
+    private readonly Dictionary<INodeComponent, List<NodePairBoundsProvider>> _nodeToPairs = [];
     // Links whose LinkAdded fired before one of their endpoint nodes was registered. They are
     // retried on every OnNodeAdded; without this they would be silently dropped forever and could
     // never enter VisibleItems — "slot colored but link never visible".
-    private readonly HashSet<IWorkflowLinkViewModel> _pendingLinks = [];
+    private readonly HashSet<ILinkComponent> _pendingLinks = [];
     private readonly double _cellSize;
     private bool _disposed;
 
@@ -27,7 +27,7 @@ public sealed class WorkflowSpatialManager : IDisposable
     public Viewport GlobalBounds => Viewport.Union(_nodeMap.Bounds, _nodePairMap.Bounds);
 
     /// <summary>Creates a manager over <paramref name="tree"/> with the given spatial cell size.</summary>
-    public WorkflowSpatialManager(IWorkflowTreeViewModel tree, double cellSize)
+    public WorkflowSpatialManager(ITreeComponent tree, double cellSize)
     {
         _tree = tree ?? throw new ArgumentNullException(nameof(tree));
         _cellSize = Math.Max(1d, cellSize);
@@ -87,9 +87,9 @@ public sealed class WorkflowSpatialManager : IDisposable
 
         // 1. Collect directly visible pairs from spatial grid
         var seenPairs = new HashSet<NodePairBoundsProvider>();
-        var seenNodes = new HashSet<IWorkflowNodeViewModel>();
+        var seenNodes = new HashSet<INodeComponent>();
         var directPairs = new List<NodePairBoundsProvider>();
-        var frontier = new List<IWorkflowNodeViewModel>();
+        var frontier = new List<INodeComponent>();
 
         foreach (var provider in _nodePairMap.Query(viewport))
         {
@@ -104,7 +104,7 @@ public sealed class WorkflowSpatialManager : IDisposable
         // 2. Expand by depth: walk connected pairs via reverse index
         for (int d = 0; d < expansionDepth && frontier.Count > 0; d++)
         {
-            var nextFrontier = new List<IWorkflowNodeViewModel>();
+            var nextFrontier = new List<INodeComponent>();
             foreach (var node in frontier)
             {
                 if (!_nodeToPairs.TryGetValue(node, out var connectedPairs)) continue;
@@ -128,7 +128,7 @@ public sealed class WorkflowSpatialManager : IDisposable
     /// Queries all individually visible nodes that intersect with the specified viewport.
     /// Isolated nodes (not connected by any link) are surfaced here.
     /// </summary>
-    public IEnumerable<IWorkflowNodeViewModel> QueryNodes(Viewport viewport)
+    public IEnumerable<INodeComponent> QueryNodes(Viewport viewport)
     {
         if (viewport.IsEmpty) yield break;
 
@@ -139,7 +139,7 @@ public sealed class WorkflowSpatialManager : IDisposable
     /// <summary>
     /// Returns the links corresponding to the specified AgentBounds (node pairs).
     /// </summary>
-    internal IEnumerable<IWorkflowLinkViewModel> ResolveLinksFromPairs(IEnumerable<NodePairBoundsProvider> pairs)
+    internal IEnumerable<ILinkComponent> ResolveLinksFromPairs(IEnumerable<NodePairBoundsProvider> pairs)
     {
         foreach (var pair in pairs)
         {
@@ -148,15 +148,15 @@ public sealed class WorkflowSpatialManager : IDisposable
         }
     }
 
-    private void InsertLink(IWorkflowLinkViewModel link)
+    private void InsertLink(ILinkComponent link)
     {
         if (link == null || _nodePairProviders.ContainsKey(link)) return;
 
         // Insert an AgentBounds proxy so the spatial grid can detect that both
         // endpoints should be considered visible when their combined bounds
         // intersect the viewport (e.g. a long link crossing the viewport).
-        if (link.Sender?.Parent is IWorkflowNodeViewModel nodeA &&
-            link.Receiver?.Parent is IWorkflowNodeViewModel nodeB &&
+        if (link.Sender?.Parent is INodeComponent nodeA &&
+            link.Receiver?.Parent is INodeComponent nodeB &&
             nodeA != nodeB &&
             _nodeProviders.TryGetValue(nodeA, out var providerA) &&
             _nodeProviders.TryGetValue(nodeB, out var providerB))
@@ -172,8 +172,8 @@ public sealed class WorkflowSpatialManager : IDisposable
             AddToNodeIndex(nodeA, pairProvider);
             AddToNodeIndex(nodeB, pairProvider);
         }
-        else if (link.Sender?.Parent is IWorkflowNodeViewModel &&
-                 link.Receiver?.Parent is IWorkflowNodeViewModel &&
+        else if (link.Sender?.Parent is INodeComponent &&
+                 link.Receiver?.Parent is INodeComponent &&
                  link.Sender.Parent != link.Receiver.Parent)
         {
             // Both endpoints exist and differ, but at least one endpoint node is not registered yet
@@ -184,7 +184,7 @@ public sealed class WorkflowSpatialManager : IDisposable
         }
     }
 
-    private void RemoveLink(IWorkflowLinkViewModel link)
+    private void RemoveLink(ILinkComponent link)
     {
         if (link == null) return;
 
@@ -200,7 +200,7 @@ public sealed class WorkflowSpatialManager : IDisposable
         }
     }
 
-    private void AddToNodeIndex(IWorkflowNodeViewModel node, NodePairBoundsProvider pair)
+    private void AddToNodeIndex(INodeComponent node, NodePairBoundsProvider pair)
     {
         if (!_nodeToPairs.TryGetValue(node, out var list))
         {
@@ -224,7 +224,7 @@ public sealed class WorkflowSpatialManager : IDisposable
         }
     }
 
-    private void InsertNode(IWorkflowNodeViewModel node)
+    private void InsertNode(INodeComponent node)
     {
         if (node == null || _nodeProviders.ContainsKey(node)) return;
 
@@ -233,7 +233,7 @@ public sealed class WorkflowSpatialManager : IDisposable
         _nodeMap.Insert(provider);
     }
 
-    private void RemoveNode(IWorkflowNodeViewModel node)
+    private void RemoveNode(INodeComponent node)
     {
         if (node == null || !_nodeProviders.TryGetValue(node, out var provider)) return;
 
@@ -242,7 +242,7 @@ public sealed class WorkflowSpatialManager : IDisposable
         _nodeProviders.Remove(node);
     }
 
-    private void OnNodeAdded(object? sender, IWorkflowNodeViewModel node)
+    private void OnNodeAdded(object? sender, INodeComponent node)
     {
         InsertNode(node);
         // A node may have been registered after some of its links were added (LinkAdded → InsertLink
@@ -263,17 +263,17 @@ public sealed class WorkflowSpatialManager : IDisposable
         }
     }
 
-    private void OnNodeRemoved(object? sender, IWorkflowNodeViewModel node)
+    private void OnNodeRemoved(object? sender, INodeComponent node)
     {
         RemoveNode(node);
     }
 
-    private void OnLinkAdded(object? sender, IWorkflowLinkViewModel link)
+    private void OnLinkAdded(object? sender, ILinkComponent link)
     {
         InsertLink(link);
     }
 
-    private void OnLinkRemoved(object? sender, IWorkflowLinkViewModel link)
+    private void OnLinkRemoved(object? sender, ILinkComponent link)
     {
         RemoveLink(link);
     }

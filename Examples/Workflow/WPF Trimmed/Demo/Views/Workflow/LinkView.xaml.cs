@@ -22,7 +22,7 @@ public partial class LinkView : UserControl
 
     // The link this view last published a curve to; retracted on rebind so a pooled view cannot leave a
     // stale curve answering for a link that no longer draws here.
-    private IWorkflowLinkViewModel? _publishedLink;
+    private ILinkComponent? _publishedLink;
 
     public LinkView()
     {
@@ -82,11 +82,11 @@ public partial class LinkView : UserControl
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
-    private IWorkflowLinkViewModel? _inputLink;
+    private ILinkComponent? _inputLink;
 
     private void ResubscribeInput()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (ReferenceEquals(link, _inputLink)) return;
 
         UnsubscribeInput();
@@ -117,12 +117,12 @@ public partial class LinkView : UserControl
     {
         if (e.Key != InputKey.Delete) return;
         if (e.Handle.PreventDefault) return;
-        if ((DataContext as IWorkflowLinkViewModel) is { } link && link.DeleteCommand.CanExecute(null)) link.DeleteCommand.Execute(null);
+        if ((DataContext as ILinkComponent) is { } link && link.DeleteCommand.CanExecute(null)) link.DeleteCommand.Execute(null);
     }
 
     private bool IsVirtualLink
         => IsVirtual
-            || DataContext is IWorkflowLinkViewModel
+            || DataContext is ILinkComponent
             {
                 Sender.Parent: null,
                 Receiver.Parent: null
@@ -136,15 +136,15 @@ public partial class LinkView : UserControl
     {
         base.OnRender(ctx);
         if (!CanRender) return;
-        if (DataContext is IWorkflowLinkViewModel link && !link.IsRenderReady()) return;
+        if (DataContext is ILinkComponent link && !link.IsRenderReady()) return;
 
         // Publish the curve the surface hit-tests against: same control points as BuildCurve, same
         // canvas-local space. Replace this together with BuildCurve if you change the shape.
-        PublishCurve(LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
+        PublishCurve(LinkCurve.BuildLinkCubic(DataContext as ILinkComponent, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
 
         var color = IsHighlighted ? HighlightColor : LineColor;
         var thickness = 2;
-        var geometry = BuildCurve(DataContext as IWorkflowLinkViewModel);
+        var geometry = BuildCurve(DataContext as ILinkComponent);
 
         // Extension point: this is the hover feedback. Swap the halo's width or alpha, or HighlightColor,
         // to restyle the highlighted link.
@@ -171,7 +171,7 @@ public partial class LinkView : UserControl
 
     // Extension point: the control points set the curve's shape. Core derives them from each port's own edge
     // (LinkCurve.LinkCurvePoints) — keep that source if you replace the drawing.
-    private Geometry BuildCurve(IWorkflowLinkViewModel? link)
+    private Geometry BuildCurve(ILinkComponent? link)
     {
         var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull);
         var figure = new PathFigure
@@ -195,7 +195,7 @@ public partial class LinkView : UserControl
     // Extension point: change the second argument if one view no longer draws exactly one link.
     private void PublishCurve(LinkCurve curve)
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (!ReferenceEquals(_publishedLink, link))
         {
             _publishedLink?.PublishCurve(null);

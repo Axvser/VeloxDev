@@ -13,7 +13,7 @@ namespace VeloxDev.Cli;
 /// turned into "decline" later.
 /// </para>
 /// </summary>
-internal sealed class RedirectPolicy(Func<IWorkflowTreeViewModel> tree)
+internal sealed class RedirectPolicy(Func<ITreeComponent> tree)
 {
     // -1 is "none"; valid node indices are non-negative. An int field is what lets the setting be read without a
     // lock from a run thread while an MCP tool changes it.
@@ -45,7 +45,7 @@ internal sealed class RedirectPolicy(Func<IWorkflowTreeViewModel> tree)
     }
 
     /// <summary>The delegate installed on every run session. Returns <c>null</c> when nothing is configured.</summary>
-    public IWorkflowNodeViewModel? Resolve(IRuntimeContext context, IWorkflowNodeViewModel failing)
+    public INodeComponent? Resolve(IRuntimeContext context, INodeComponent failing)
     {
         var index = NodeIndex;
         if (index is not { } value) return null;

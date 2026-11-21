@@ -46,7 +46,7 @@ public partial class PayloadHolderNode
 /// <summary>A slot component declared the documented way, and nothing else.</summary>
 /// <remarks>
 /// The four <c>[WorkflowBuilder.*]</c> attributes are the only component declaration a consuming project writes;
-/// the <c>IWorkflow*ViewModel</c> interface that would otherwise identify the component is injected by another
+/// the <c>I*Component</c> interface that would otherwise identify the component is injected by another
 /// generator in the same pass, so a generator that scans for the interface cannot see it. Only a
 /// <c>[WorkflowBuilder.Node]</c> fixture existed before this one, which left three of the four declaration
 /// routes unguarded.
@@ -106,8 +106,8 @@ public class DiscoveryCoverageTests
 {
     private static WorkflowAgentScope ScopeWith(params object[] nodes)
     {
-        var tree = new TreeDefaultViewModel();
-        foreach (var node in nodes) tree.GetHelper().CreateNode((IWorkflowNodeViewModel)node);
+        var tree = new TreeDefaultComponent();
+        foreach (var node in nodes) tree.GetHelper().CreateNode((INodeComponent)node);
         return new WorkflowAgentScope(tree);
     }
 
@@ -128,7 +128,7 @@ public class DiscoveryCoverageTests
     [TestMethod]
     public void AComponentDeclaredOnlyWithWorkflowBuilder_IsCreatableByTheAgent()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
 
         var created = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "CreateNode",
             ("fullTypeName", typeof(UnannotatedNode).FullName!)));

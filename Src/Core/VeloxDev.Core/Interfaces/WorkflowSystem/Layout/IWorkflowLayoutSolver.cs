@@ -16,7 +16,7 @@ public interface IWorkflowLayoutSolver
     /// <param name="options">Gaps, tolerance, pinning and the optional start node.</param>
     /// <returns>The apply result for the solved layout.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
-    WorkflowLayoutResult Arrange(IWorkflowTreeViewModel tree, WorkflowLayoutOptions options);
+    WorkflowLayoutResult Arrange(ITreeComponent tree, WorkflowLayoutOptions options);
 }
 
 /// <summary>
@@ -24,7 +24,7 @@ public interface IWorkflowLayoutSolver
 /// </summary>
 /// <remarks>
 /// <para>The helper is the registration point because its lifetime matches the editor. Register a custom
-/// <see cref="IWorkflowLayoutSolver"/> once; every <see cref="WorkflowLayoutEx.Arrange(IWorkflowNodeViewModel, WorkflowLayoutOptions?)"/>
+/// <see cref="IWorkflowLayoutSolver"/> once; every <see cref="WorkflowLayoutEx.Arrange(INodeComponent, WorkflowLayoutOptions?)"/>
 /// call on a node of that tree reaches it through the node's parent.</para>
 /// <para>The start node is only a scope: when it is supplied the solver should set
 /// <see cref="WorkflowLayoutOptions.StartNode"/> (the helper does this) and leave everything outside its
@@ -40,5 +40,5 @@ public interface IWorkflowLayoutHost
     /// <param name="options">Layout options; a default set when omitted.</param>
     /// <returns>The apply result.</returns>
     WorkflowLayoutResult Arrange(
-        IWorkflowNodeViewModel? start, WorkflowLayoutOptions? options = null);
+        INodeComponent? start, WorkflowLayoutOptions? options = null);
 }

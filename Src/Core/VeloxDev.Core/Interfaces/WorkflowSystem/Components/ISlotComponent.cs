@@ -7,22 +7,22 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>A workflow slot: one connection point on a node.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Slot组件接口，维护Node与Node之间的连接关系")]
 [AgentContext(AgentLanguages.English, "Workflow Slot component interface, maintaining connections between Nodes")]
-public interface IWorkflowSlotViewModel : IWorkflowViewModel
+public interface ISlotComponent : IWorkflowComponent
 {
     /// <summary>The slots this slot connects out to.</summary>
     [AgentContext(AgentLanguages.Chinese, "当前Slot连接到的目标Slot集合")]
     [AgentContext(AgentLanguages.English, "Collection of target slots connected from the current slot")]
-    public ObservableCollection<IWorkflowSlotViewModel> Targets { get; set; }
+    public ObservableCollection<ISlotComponent> Targets { get; set; }
 
     /// <summary>The slots that connect into this slot.</summary>
     [AgentContext(AgentLanguages.Chinese, "当前Slot接收到连接的源Slot集合")]
     [AgentContext(AgentLanguages.English, "Collection of source slots connected to the current slot")]
-    public ObservableCollection<IWorkflowSlotViewModel> Sources { get; set; }
+    public ObservableCollection<ISlotComponent> Sources { get; set; }
 
-    /// <summary>The parent <see cref="IWorkflowNodeViewModel"/> this slot belongs to.</summary>
+    /// <summary>The parent <see cref="INodeComponent"/> this slot belongs to.</summary>
     [AgentContext(AgentLanguages.Chinese, "所属的Node组件")]
     [AgentContext(AgentLanguages.English, "The parent Node component")]
-    public IWorkflowNodeViewModel? Parent { get; set; }
+    public INodeComponent? Parent { get; set; }
 
     /// <summary>The slot's channel type.</summary>
     [AgentContext(AgentLanguages.Chinese, "当前Slot的通道类型")]
@@ -64,33 +64,33 @@ public interface IWorkflowSlotViewModel : IWorkflowViewModel
     public IVeloxCommand DeleteCommand { get; }
 
     /// <summary>Gets the helper that carries this slot's behaviour.</summary>
-    public IWorkflowSlotViewModelHelper GetHelper();
+    public ISlotHelper GetHelper();
 
     /// <summary>Sets the helper that carries this slot's behaviour.</summary>
     /// <param name="helper">The helper to install.</param>
-    public void SetHelper(IWorkflowSlotViewModelHelper helper);
+    public void SetHelper(ISlotHelper helper);
 }
 
-/// <summary>The behaviour behind an <see cref="IWorkflowSlotViewModel"/>.</summary>
-public interface IWorkflowSlotViewModelHelper : IWorkflowHelper
+/// <summary>The behaviour behind an <see cref="ISlotComponent"/>.</summary>
+public interface ISlotHelper : IWorkflowHelper
 {
     /// <summary>Raised after a target slot is added.</summary>
-    public event EventHandler<IWorkflowSlotViewModel>? TargetAdded;
+    public event EventHandler<ISlotComponent>? TargetAdded;
 
     /// <summary>Raised after a target slot is removed.</summary>
-    public event EventHandler<IWorkflowSlotViewModel>? TargetRemoved;
+    public event EventHandler<ISlotComponent>? TargetRemoved;
 
     /// <summary>Raised after a source slot is added.</summary>
-    public event EventHandler<IWorkflowSlotViewModel>? SourceAdded;
+    public event EventHandler<ISlotComponent>? SourceAdded;
 
     /// <summary>Raised after a source slot is removed.</summary>
-    public event EventHandler<IWorkflowSlotViewModel>? SourceRemoved;
+    public event EventHandler<ISlotComponent>? SourceRemoved;
 
     /// <summary>Attaches this helper to <paramref name="slot"/>.</summary>
-    public void Install(IWorkflowSlotViewModel slot);
+    public void Install(ISlotComponent slot);
 
     /// <summary>Detaches this helper from <paramref name="slot"/>.</summary>
-    public void Uninstall(IWorkflowSlotViewModel slot);
+    public void Uninstall(ISlotComponent slot);
 
     /// <summary>Sets the slot's channel to <paramref name="channel"/>.</summary>
     public void SetChannel(SlotChannel channel);

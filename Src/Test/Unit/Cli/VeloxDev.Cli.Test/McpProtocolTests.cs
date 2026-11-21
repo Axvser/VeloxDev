@@ -75,7 +75,7 @@ public class McpProtocolTests
 
         var result = await client.CallToolAsync("ListNodes", new Dictionary<string, object?>());
         var text = string.Join("\n", result.Content.Select(c => c.ToString()));
-        StringAssert.Contains(text, "NodeDefaultViewModel");
+        StringAssert.Contains(text, "NodeDefaultComponent");
 
         // This is the worker path end to end: the server serializes the live graph, launches a child, and returns
         // the child's result.
@@ -85,7 +85,7 @@ public class McpProtocolTests
         StringAssert.Contains(runText, "\"outcome\":\"Completed\"");
         StringAssert.Contains(runText, "run.log", "the isolated run must report the log file it wrote");
         Assert.IsTrue(File.Exists(log));
-        StringAssert.Contains(File.ReadAllText(log), "NodeDefaultViewModel");
+        StringAssert.Contains(File.ReadAllText(log), "NodeDefaultComponent");
 
         // The worker wrote its post-run tree. Adopting it is an explicit LoadArchive; no state is merged behind
         // the client's back.
@@ -101,9 +101,9 @@ public class McpProtocolTests
 
         // LoadArchive replaces the session behind the already-registered tools. The tool list must stay usable.
         using var second = new TestArchive();
-        var secondTree = new VeloxDev.WorkflowSystem.TreeDefaultViewModel();
-        secondTree.GetHelper().CreateNode(new VeloxDev.WorkflowSystem.NodeDefaultViewModel());
-        secondTree.GetHelper().CreateNode(new VeloxDev.WorkflowSystem.NodeDefaultViewModel());
+        var secondTree = new VeloxDev.WorkflowSystem.TreeDefaultComponent();
+        secondTree.GetHelper().CreateNode(new VeloxDev.WorkflowSystem.NodeDefaultComponent());
+        secondTree.GetHelper().CreateNode(new VeloxDev.WorkflowSystem.NodeDefaultComponent());
         var secondPath = second.WriteTree(secondTree);
 
         var loaded = await client.CallToolAsync("LoadArchive",
@@ -113,7 +113,7 @@ public class McpProtocolTests
 
         var after = await client.CallToolAsync("ListNodes", new Dictionary<string, object?>());
         var afterText = string.Join("\n", after.Content.Select(c => c.ToString()));
-        Assert.AreEqual(2, CountOccurrences(afterText, "NodeDefaultViewModel"),
+        Assert.AreEqual(2, CountOccurrences(afterText, "NodeDefaultComponent"),
             $"the graph after the swap is the second archive's, not the first: {afterText}");
     }
 
@@ -124,7 +124,7 @@ public class McpProtocolTests
         var firstPath = first.WriteTree(TestArchive.TreeWithOneNode(out _));
 
         using var second = new TestArchive();
-        var secondTree = new VeloxDev.WorkflowSystem.TreeDefaultViewModel();
+        var secondTree = new VeloxDev.WorkflowSystem.TreeDefaultComponent();
         secondTree.GetHelper().CreateNode(new VeloxDev.Cli.Test.Plugin.CrashingNodeViewModel());
         var secondPath = second.WriteTree(secondTree);
         var plugin = typeof(VeloxDev.Cli.Test.Plugin.CrashingNodeViewModel).Assembly.Location;
@@ -162,7 +162,7 @@ public class McpProtocolTests
     {
         // The node calls Environment.Exit(42). The worker must die; the MCP server must answer the next call.
         using var fixture = new TestArchive();
-        var tree = new VeloxDev.WorkflowSystem.TreeDefaultViewModel();
+        var tree = new VeloxDev.WorkflowSystem.TreeDefaultComponent();
         tree.GetHelper().CreateNode(new VeloxDev.Cli.Test.Plugin.CrashingNodeViewModel());
         var archive = fixture.WriteTree(tree);
         var plugin = typeof(VeloxDev.Cli.Test.Plugin.CrashingNodeViewModel).Assembly.Location;
@@ -195,7 +195,7 @@ public class McpProtocolTests
     public async Task AHangingWorker_IsKilledAndReportedAsCancelled()
     {
         using var fixture = new TestArchive();
-        var tree = new VeloxDev.WorkflowSystem.TreeDefaultViewModel();
+        var tree = new VeloxDev.WorkflowSystem.TreeDefaultComponent();
         tree.GetHelper().CreateNode(new VeloxDev.Cli.Test.Plugin.HangingNodeViewModel());
         var archive = fixture.WriteTree(tree);
         var plugin = typeof(VeloxDev.Cli.Test.Plugin.HangingNodeViewModel).Assembly.Location;
@@ -232,7 +232,7 @@ public class McpProtocolTests
     public async Task CancellingARunKillsTheWorkerAndLeavesTheServerAlive()
     {
         using var fixture = new TestArchive();
-        var tree = new VeloxDev.WorkflowSystem.TreeDefaultViewModel();
+        var tree = new VeloxDev.WorkflowSystem.TreeDefaultComponent();
         tree.GetHelper().CreateNode(new VeloxDev.Cli.Test.Plugin.HangingNodeViewModel());
         var archive = fixture.WriteTree(tree);
         var plugin = typeof(VeloxDev.Cli.Test.Plugin.HangingNodeViewModel).Assembly.Location;
@@ -312,7 +312,7 @@ public class McpProtocolTests
     public async Task ABackgroundJobCanBeCancelled()
     {
         using var fixture = new TestArchive();
-        var tree = new VeloxDev.WorkflowSystem.TreeDefaultViewModel();
+        var tree = new VeloxDev.WorkflowSystem.TreeDefaultComponent();
         tree.GetHelper().CreateNode(new VeloxDev.Cli.Test.Plugin.HangingNodeViewModel());
         var archive = fixture.WriteTree(tree);
         var plugin = typeof(VeloxDev.Cli.Test.Plugin.HangingNodeViewModel).Assembly.Location;
@@ -355,12 +355,12 @@ public class McpProtocolTests
 
     private static (string Archive, string Plugin) WriteSlowChain(TestArchive fixture, int count, bool flakyTail = false)
     {
-        var tree = new VeloxDev.WorkflowSystem.TreeDefaultViewModel();
-        var nodes = new List<VeloxDev.WorkflowSystem.IWorkflowNodeViewModel>();
+        var tree = new VeloxDev.WorkflowSystem.TreeDefaultComponent();
+        var nodes = new List<VeloxDev.WorkflowSystem.INodeComponent>();
 
         for (var index = 0; index < count; index++)
         {
-            VeloxDev.WorkflowSystem.IWorkflowNodeViewModel node =
+            VeloxDev.WorkflowSystem.INodeComponent node =
                 flakyTail && index == count - 1
                     ? new VeloxDev.Cli.Test.Plugin.FlakyNodeViewModel()
                     : new VeloxDev.Cli.Test.Plugin.SlowNodeViewModel();

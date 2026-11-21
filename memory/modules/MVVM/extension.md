@@ -157,7 +157,7 @@
 ### 与别的模块的联动
 
 - **生成器版本**：本项目 `Src/Generators/VeloxDev.Core.Generator/` 的改动要落进各处的 `PackageReference` 才在 Release 生效（Debug 走 `ProjectReference`，analyzer 不随它传递）—— 那属于 Generator 模块，清单见 `memory/modules/VeloxDev.Core.Generator/extension.md` §四。
-- **Workflow 槽位**：`MVVMWriter.GenerateBody` 会为 `UseWorkflowSlotLifecycle` 的属性发 `CreateWorkflowSlot<T>` / `OnWorkflowSlotAdded` / `OnWorkflowSlotRemoved`，其中引用 `SlotDefaultViewModel` 与 `CreateSlotCommand` —— **这条契约的归口在 WorkflowSystem**，见 `memory/modules/WorkflowSystem/`。MVVM 侧只知道「有这么三个方法要被生成」。
+- **Workflow 槽位**：`MVVMWriter.GenerateBody` 会为 `UseWorkflowSlotLifecycle` 的属性发 `CreateSlotComponent<T>` / `OnSlotComponentAdded` / `OnSlotComponentRemoved`，其中引用 `SlotDefaultComponent` 与 `CreateSlotCommand` —— **这条契约的归口在 WorkflowSystem**，见 `memory/modules/WorkflowSystem/`。MVVM 侧只知道「有这么三个方法要被生成」。
 
 ---
 

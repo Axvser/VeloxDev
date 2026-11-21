@@ -34,9 +34,9 @@ internal sealed class WinUiBenchmarkTemplateSelector : DataTemplateSelector
 
     /// <inheritdoc />
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
-        => item is IWorkflowNodeViewModel ? _node : _link;
+        => item is INodeComponent ? _node : _link;
 
     /// <inheritdoc />
     protected override DataTemplate SelectTemplateCore(object item)
-        => item is IWorkflowNodeViewModel ? _node : _link;
+        => item is INodeComponent ? _node : _link;
 }

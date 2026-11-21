@@ -16,7 +16,7 @@ namespace VeloxDev.WorkflowSystem.StandardEx;
 /// Every target is model data, so nothing has to be measured or drawn first: a node centers on its rectangle,
 /// a slot on its parent node's rectangle, and a link on the midpoint between its two endpoint nodes' rectangle
 /// centers. <c>Locate</c> therefore works for elements that are off-screen and have no view yet — it never reads
-/// <see cref="IWorkflowSlotViewModel.Anchor"/> or a published link curve, which exist only after layout/drawing.
+/// <see cref="ISlotComponent.Anchor"/> or a published link curve, which exist only after layout/drawing.
 /// Panning only: the current zoom is preserved.
 /// </para>
 /// </remarks>
@@ -28,7 +28,7 @@ public static class WorkflowNavigationEx
     /// <returns><see langword="true"/> when a surface navigator handled the request; otherwise
     /// <see langword="false"/> (no surface, or the node has no finite position).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="node"/> is <see langword="null"/>.</exception>
-    public static bool Locate(this IWorkflowNodeViewModel node)
+    public static bool Locate(this INodeComponent node)
     {
         if (node is null) throw new ArgumentNullException(nameof(node));
 
@@ -49,7 +49,7 @@ public static class WorkflowNavigationEx
     /// model data, so the request works before anything is drawn.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="slot"/> is <see langword="null"/>.</exception>
-    public static bool Locate(this IWorkflowSlotViewModel slot)
+    public static bool Locate(this ISlotComponent slot)
     {
         if (slot is null) throw new ArgumentNullException(nameof(slot));
 
@@ -72,7 +72,7 @@ public static class WorkflowNavigationEx
     /// both endpoint nodes are model data, so an off-screen link can be located before its view exists.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="link"/> is <see langword="null"/>.</exception>
-    public static bool Locate(this IWorkflowLinkViewModel link)
+    public static bool Locate(this ILinkComponent link)
     {
         if (link is null) throw new ArgumentNullException(nameof(link));
 
@@ -90,7 +90,7 @@ public static class WorkflowNavigationEx
         return true;
     }
 
-    private static bool TryGetNodeCenter(IWorkflowNodeViewModel node, out double x, out double y)
+    private static bool TryGetNodeCenter(INodeComponent node, out double x, out double y)
     {
         var anchor = node.Anchor;
         var size = node.Size;
@@ -99,7 +99,7 @@ public static class WorkflowNavigationEx
         return IsFinite(x) && IsFinite(y);
     }
 
-    private static IWorkflowSurfaceNavigator? NavigatorOf(IWorkflowTreeViewModel? tree)
+    private static IWorkflowSurfaceNavigator? NavigatorOf(ITreeComponent? tree)
         => tree is null ? null : WorkflowInput.For(tree).Navigator;
 
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);

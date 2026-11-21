@@ -224,7 +224,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 ### 4.11 连线菜单：条目是宿主策略，适配器只管弹出与收尾
 
-`SetLinkMenuBuilder(host, Action<ContextMenuStrip, IWorkflowLinkViewModel>)` 是填适配器那份菜单的入口；模板的 tree 不给条目，两个 demo 各加一项 `Delete` 执行 `link.DeleteCommand`。适配器在 `AttachLinkInput` 里订阅输入路由的 `PointerPressed` 与树的 `LinkRemoved`：右键命中连线且 `e.Handle.PreventDefault` 为假时 `ShowLinkMenu`，开菜单置 `WorkflowInput.IsSuspended = true`，`Closed` 恢复；`LinkRemoved` 命中当前 `MenuLink` 时关菜单。
+`SetLinkMenuBuilder(host, Action<ContextMenuStrip, ILinkComponent>)` 是填适配器那份菜单的入口；模板的 tree 不给条目，两个 demo 各加一项 `Delete` 执行 `link.DeleteCommand`。适配器在 `AttachLinkInput` 里订阅输入路由的 `PointerPressed` 与树的 `LinkRemoved`：右键命中连线且 `e.Handle.PreventDefault` 为假时 `ShowLinkMenu`，开菜单置 `WorkflowInput.IsSuspended = true`，`Closed` 恢复；`LinkRemoved` 命中当前 `MenuLink` 时关菜单。
 
 ⚠ **订阅顺序**：`ShowLinkMenu` 是适配器自己的 `PointerPressed` 处理器，它在 Route 的过程中读 `PreventDefault`；宿主之后订阅的处理器再置 `PreventDefault` 已经晚于这次检查，拦不住菜单。空白按下的平移检查发生在 `Route` 返回之后（`OnCanvasMouseDown`），那里任何处理器都能否决。
 

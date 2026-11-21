@@ -7,7 +7,7 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Owns a WPF view's panel membership and bound state for the main view pool.</summary>
-public sealed class ViewContainer : IViewContainer<Panel, FrameworkElement, IWorkflowViewModel>
+public sealed class ViewContainer : IViewContainer<Panel, FrameworkElement, IWorkflowComponent>
 {
     private readonly HashSet<FrameworkElement> _attached = new(FrameworkElementReferenceComparer.Instance);
 
@@ -27,7 +27,7 @@ public sealed class ViewContainer : IViewContainer<Panel, FrameworkElement, IWor
     }
 
     /// <inheritdoc />
-    public void Activate(FrameworkElement view, IWorkflowViewModel item)
+    public void Activate(FrameworkElement view, IWorkflowComponent item)
     {
         view.DataContext = item;
         view.Visibility = Visibility.Visible;

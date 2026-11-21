@@ -21,17 +21,17 @@ public readonly struct TaskContext : ITaskContext
     /// <summary>Upstream output slot (sender), nullable.</summary>
     [AgentContext(AgentLanguages.Chinese, "上游输出槽（发送端），可为空")]
     [AgentContext(AgentLanguages.English, "Upstream output slot (sender), nullable")]
-    public IWorkflowSlotViewModel? Sender { get; }
+    public ISlotComponent? Sender { get; }
 
     /// <summary>This node's input slot (receiver), nullable.</summary>
     [AgentContext(AgentLanguages.Chinese, "本节点输入槽（接收端），可为空")]
     [AgentContext(AgentLanguages.English, "This node's input slot (receiver), nullable")]
-    public IWorkflowSlotViewModel? Receiver { get; }
+    public ISlotComponent? Receiver { get; }
 
     /// <summary>Creates a task context from its parts.</summary>
     public TaskContext(object? data = null,
-        IWorkflowSlotViewModel? sender = null,
-        IWorkflowSlotViewModel? receiver = null)
+        ISlotComponent? sender = null,
+        ISlotComponent? receiver = null)
     {
         Data = data;
         Sender = sender;
@@ -40,8 +40,8 @@ public readonly struct TaskContext : ITaskContext
 
     /// <summary>Deconstructs the context into its data, sender and receiver parts.</summary>
     public void Deconstruct(out object? data,
-        out IWorkflowSlotViewModel? sender,
-        out IWorkflowSlotViewModel? receiver)
+        out ISlotComponent? sender,
+        out ISlotComponent? receiver)
     {
         data = Data;
         sender = Sender;

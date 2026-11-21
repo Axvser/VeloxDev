@@ -31,48 +31,48 @@ namespace VeloxDev.WorkflowSystem;
 public sealed class WorkflowInput
 {
     // 一棵树一个：与树同寿，适配器与宿主都用这个调用取它。
-    private static readonly ConditionalWeakTable<IWorkflowTreeViewModel, WorkflowInput> Instances = new();
+    private static readonly ConditionalWeakTable<ITreeComponent, WorkflowInput> Instances = new();
 
-    private readonly IWorkflowTreeViewModel tree;
-    private IWorkflowViewModel? pointerTarget;
-    private IWorkflowSlotViewModel? connectionSender;
-    private IWorkflowSlotViewModel? previewReceiver;
+    private readonly ITreeComponent tree;
+    private IWorkflowComponent? pointerTarget;
+    private ISlotComponent? connectionSender;
+    private ISlotComponent? previewReceiver;
     private ConnectionPreviewState previewState;
     private ConnectionCheck? previewCheck;
 
     /// <summary>Creates the input route for one tree.</summary>
     /// <param name="tree">The tree whose components receive input.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
-    public WorkflowInput(IWorkflowTreeViewModel tree) => this.tree = tree ?? throw new ArgumentNullException(nameof(tree));
+    public WorkflowInput(ITreeComponent tree) => this.tree = tree ?? throw new ArgumentNullException(nameof(tree));
 
     /// <summary>
     /// The one input route for this tree, created on first use and kept as long as the tree lives.
     /// </summary>
     /// <param name="tree">The tree to route input for.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
-    public static WorkflowInput For(IWorkflowTreeViewModel tree)
+    public static WorkflowInput For(ITreeComponent tree)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
         return Instances.GetValue(tree, static t => new WorkflowInput(t));
     }
 
     /// <summary>The tree this route belongs to — the one an adapter passes to <see cref="For"/>.</summary>
-    public IWorkflowTreeViewModel Tree => tree;
+    public ITreeComponent Tree => tree;
 
     /// <summary>
     /// The component the pointer is currently on, or <see langword="null"/> when it is over empty canvas. Maintained
     /// by <see cref="Route(PointerEventArgs)"/> unless <see cref="IsSuspended"/> is set.
     /// </summary>
-    public IWorkflowViewModel? PointerTarget => pointerTarget;
+    public IWorkflowComponent? PointerTarget => pointerTarget;
 
     /// <summary>The link the pointer is currently on, or <see langword="null"/> — <see cref="PointerTarget"/> as a link.</summary>
-    public IWorkflowLinkViewModel? HoveredLink => pointerTarget as IWorkflowLinkViewModel;
+    public ILinkComponent? HoveredLink => pointerTarget as ILinkComponent;
 
     /// <summary>The port a connection drag started from, or <see langword="null"/> when no drag is in progress.</summary>
-    public IWorkflowSlotViewModel? ConnectionSender => connectionSender;
+    public ISlotComponent? ConnectionSender => connectionSender;
 
     /// <summary>The candidate port under the pointer during a connection drag, or <see langword="null"/>.</summary>
-    public IWorkflowSlotViewModel? PreviewReceiver => previewReceiver;
+    public ISlotComponent? PreviewReceiver => previewReceiver;
 
     /// <summary>The current stage of the connection drag.</summary>
     public ConnectionPreviewState PreviewState => previewState;
@@ -97,12 +97,12 @@ public sealed class WorkflowInput
     /// Not raised on every pointer move: the same candidate is reported once, and again only when
     /// <see cref="StandardEx.WorkflowTreeEx.StandardRefreshConnectionPreview"/> is called explicitly. Use that
     /// method after an asynchronous check completes. The release-time
-    /// <see cref="IWorkflowTreeEvents.Connecting"/> veto remains the final decision.
+    /// <see cref="ITreeEvents.Connecting"/> veto remains the final decision.
     /// </remarks>
     public event EventHandler<ConnectionPreviewValidatingEventArgs>? PreviewValidating;
 
     /// <summary>Starts (or replaces) the connection drag's sender and resets the candidate.</summary>
-    internal void SetConnectionSender(IWorkflowSlotViewModel? sender)
+    internal void SetConnectionSender(ISlotComponent? sender)
     {
         if (sender is null)
         {
@@ -126,7 +126,7 @@ public sealed class WorkflowInput
     }
 
     /// <summary>Records the candidate port under the pointer and the check computed for it.</summary>
-    internal void SetConnectionPreview(IWorkflowSlotViewModel? receiver, ConnectionCheck check)
+    internal void SetConnectionPreview(ISlotComponent? receiver, ConnectionCheck check)
     {
         if (connectionSender is null)
         {
@@ -192,7 +192,7 @@ public sealed class WorkflowInput
 
     /// <summary>Lets subscribers refuse a framework-valid candidate for this preview.</summary>
     internal ConnectionCheck RaisePreviewValidating(
-        IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, ConnectionCheck check)
+        ISlotComponent sender, ISlotComponent receiver, ConnectionCheck check)
     {
         var handler = PreviewValidating;
         if (handler is null) return check;
@@ -349,20 +349,20 @@ public sealed class WorkflowInput
     // 树的取法一律用适配器传进来的那棵（`tree`），**不从模型的 Parent 推**：拖拽预览的插槽、还没挂到树上的
     // 节点、以及占位用的旧 Sender，它们的 Parent 链随时可能是 null 或指向别处，而适配器手里那棵永远是对的。
     // 中间那几级才走模型关系（只有 slot → 它所属的 node 这一跳）。
-    private IEnumerable<IWorkflowHelper> Chain(IWorkflowViewModel? target)
+    private IEnumerable<IWorkflowHelper> Chain(IWorkflowComponent? target)
     {
         switch (target)
         {
-            case IWorkflowSlotViewModel slot:
+            case ISlotComponent slot:
                 yield return slot.GetHelper();
                 if (slot.Parent is { } owner) yield return owner.GetHelper();
                 break;
 
-            case IWorkflowNodeViewModel node:
+            case INodeComponent node:
                 yield return node.GetHelper();
                 break;
 
-            case IWorkflowLinkViewModel link:
+            case ILinkComponent link:
                 yield return link.GetHelper();
                 break;
         }

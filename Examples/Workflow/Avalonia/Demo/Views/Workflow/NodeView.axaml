@@ -9,7 +9,7 @@
 
 	<!-- The fallback node card: what the canvas draws for a node type that ships no view of its own.
 
-	     Bare on purpose. The framework's IWorkflowNodeViewModel carries geometry and slots and no display
+	     Bare on purpose. The framework's INodeComponent carries geometry and slots and no display
 	     name — a title is a property of the concrete ViewModel — so this card cannot honestly label a node
 	     it knows nothing else about. Every node type in this demo has a view of its own (ControllerView,
 	     TimerNodeView, PythonNodeView, EnumSelectorNodeView), so this renders only for a foreign type.

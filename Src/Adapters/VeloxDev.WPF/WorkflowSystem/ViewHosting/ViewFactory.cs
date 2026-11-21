@@ -8,7 +8,7 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Resolves a WPF view for one workflow item and caches the template by runtime type.</summary>
-public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, FrameworkElement>
+public sealed class ViewFactory : IViewFactory<IWorkflowComponent, FrameworkElement>
 {
     private readonly Panel _panel;
     private readonly DataTemplateSelector? _templateSelector;
@@ -25,10 +25,10 @@ public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, FrameworkElem
     }
 
     /// <inheritdoc />
-    public bool WantsItem(IWorkflowViewModel item) => true;
+    public bool WantsItem(IWorkflowComponent item) => true;
 
     /// <inheritdoc />
-    public FrameworkElement? CreateView(IWorkflowViewModel item)
+    public FrameworkElement? CreateView(IWorkflowComponent item)
     {
         if (!FindTemplate(item, out var template) || template is null)
         {

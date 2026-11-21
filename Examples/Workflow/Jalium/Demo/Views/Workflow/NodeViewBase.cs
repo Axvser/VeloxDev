@@ -19,7 +19,7 @@ internal abstract class NodeViewBase : Canvas
     private Border? _agentRing;
 
     // 绑定到这张卡的节点视图模型。
-    protected IWorkflowNodeViewModel Node { get; private set; } = null!;
+    protected INodeComponent Node { get; private set; } = null!;
 
     // 卡片标题行上的标题，给标题会变的卡用。
     protected TextBlock? TitleText { get; private set; }
@@ -34,10 +34,10 @@ internal abstract class NodeViewBase : Canvas
     protected abstract Color Accent { get; }
 
     // 标题行右侧状态胶囊的初始文字；空串即这张卡没有胶囊（Controller 卡就没有）。
-    protected virtual string InitialStatus(IWorkflowNodeViewModel node) => string.Empty;
+    protected virtual string InitialStatus(INodeComponent node) => string.Empty;
 
     // 标题行右侧执行序号的初始文字；空串即不显示。
-    protected virtual string InitialExecOrder(IWorkflowNodeViewModel node) => string.Empty;
+    protected virtual string InitialExecOrder(INodeComponent node) => string.Empty;
 
     // 胶囊文字是否加粗（Enum 卡的路由结果加粗，Python 卡的状态不加粗）。
     protected virtual bool StatusBold => false;
@@ -48,10 +48,10 @@ internal abstract class NodeViewBase : Canvas
     protected virtual bool IsBareCard => false;
 
     // 卡片标题。接口只有几何与插槽、没有显示名，所以读类型自己发布的 Title；不发布的类型（控制器）重写此方法给出自己的名字。
-    protected virtual string TitleFor(IWorkflowNodeViewModel node) => NodePorts.TitleOf(node);
+    protected virtual string TitleFor(INodeComponent node) => NodePorts.TitleOf(node);
 
     // 把主体内容放进 content（卡片的第 2 行）。
-    protected abstract void Build(IWorkflowNodeViewModel node, Grid content);
+    protected abstract void Build(INodeComponent node, Grid content);
 
     // 节点属性变化时调用，子类据此更新标题 / 状态文字。
     protected virtual void OnNodePropertyChanged(string propertyName)
@@ -63,7 +63,7 @@ internal abstract class NodeViewBase : Canvas
     public double DesignHeight { get; private set; }
 
     // 把视图绑到一个节点并搭出它的卡片。
-    public void Bind(IWorkflowNodeViewModel node)
+    public void Bind(INodeComponent node)
     {
         Node = node;
         Children.Clear();
@@ -156,7 +156,7 @@ internal abstract class NodeViewBase : Canvas
     }
 
     // 类型的 [DefaultSize] 特性是节点设计画布的唯一来源；只有类型没声明 DefaultSize 时才退回活的 node.Size。
-    private static (double Width, double Height) ResolveDesignSize(IWorkflowNodeViewModel node)
+    private static (double Width, double Height) ResolveDesignSize(INodeComponent node)
     {
         if (Attribute.GetCustomAttribute(node.GetType(), typeof(DefaultSizeAttribute)) is DefaultSizeAttribute d
             && d.Width > 0 && d.Height > 0)
@@ -175,7 +175,7 @@ internal abstract class NodeViewBase : Canvas
         }
     }
 
-    private void OnAgentSelectionChanged(IWorkflowNodeViewModel node)
+    private void OnAgentSelectionChanged(INodeComponent node)
     {
         if (ReferenceEquals(node, Node))
         {

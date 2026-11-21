@@ -52,7 +52,7 @@
 1. 姊妹模块 `VeloxDev.Core.Test` **没有**这组引用 → 那边写不出任何生成器类型。
 2. 本模块是**两个测试项目中唯一能声明生成类型的**：`Agent/Workflow/Functions/WorkflowSerializationTests.cs` 的 `TestEnumNode`（`enum TestRouteKind`、`[WorkflowBuilder.Node<NodeHelper<TestEnumNode>>(workSemaphore: 1)]`、`[VeloxProperty] partial` 属性 + 构造函数里的 `OutputSlots.SetSelector(typeof(TestRouteKind))`）是全仓库测试项目里**唯一**一处生成类型。
 
-同一文件里的 `TreeZoomedBeforeSave_NodesVisibleAfterRoundTrip` 和 `TreeZoomedBeforeSave_NodeDefaultViewModel_KeepsAnchorAndSize` 是这条通道唯一的价值证明：断言保存进 JSON 的是**世界**坐标 Anchor，且 getter 在加载后恰好折叠一次。
+同一文件里的 `TreeZoomedBeforeSave_NodesVisibleAfterRoundTrip` 和 `TreeZoomedBeforeSave_NodeDefaultComponent_KeepsAnchorAndSize` 是这条通道唯一的价值证明：断言保存进 JSON 的是**世界**坐标 Anchor，且 getter 在加载后恰好折叠一次。
 
 ---
 

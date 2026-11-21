@@ -440,7 +440,7 @@ public static class WorkflowSurfaceMath
     /// and the Jalium demo previously inlined as <c>EnsureNegativeCover</c>.
     ///
     /// Why it is needed: zoom-in makes <see cref="CanvasLayout.Scale"/> smaller, and every node's
-    /// <see cref="IWorkflowNodeViewModel.Anchor"/> getter collapses toward the world origin (world ÷ Scale),
+    /// <see cref="INodeComponent.Anchor"/> getter collapses toward the world origin (world ÷ Scale),
     /// so negative-world content folds further negative on every notch. Meanwhile the canvas translate stays
     /// pinned at <see cref="CanvasLayout.NegativeOffset"/> (ActualOffset == NegativeOffset) and the scroll
     /// floor is 0 — once <c>collapsed &lt; −NegativeOffset</c>, that content (and the link polylines drawn in the
@@ -455,7 +455,7 @@ public static class WorkflowSurfaceMath
     /// </summary>
     /// <returns>True if the cover grew (the caller should re-apply layout where its branch would otherwise
     /// skip a layout pass; viewport-center branches re-apply unconditionally and can ignore the value).</returns>
-    public static bool EnsureNegativeCover(IWorkflowTreeViewModel? tree)
+    public static bool EnsureNegativeCover(ITreeComponent? tree)
     {
         if (tree is null || tree.Nodes is null)
         {

@@ -89,14 +89,14 @@ public class TreeHelperTickTests
     {
         var previous = SynchronizationContext.Current;
         var counting = new CountingContext();
-        TreeDefaultViewModel tree = null!;
-        TreeHelper<TreeDefaultViewModel> helper = null!;
+        TreeDefaultComponent tree = null!;
+        TreeHelper<TreeDefaultComponent> helper = null!;
 
         try
         {
             SynchronizationContext.SetSynchronizationContext(counting);
-            tree = new TreeDefaultViewModel();
-            helper = new TreeHelper<TreeDefaultViewModel>(cellSize: 100);
+            tree = new TreeDefaultComponent();
+            helper = new TreeHelper<TreeDefaultComponent>(cellSize: 100);
             tree.SetHelper(helper);
         }
         finally
@@ -158,17 +158,17 @@ public class TreeHelperTickTests
         var previous = SynchronizationContext.Current;
         var old = new DeferredContext();
         var rebound = new DeferredContext();
-        TreeDefaultViewModel tree = null!;
-        TreeHelper<TreeDefaultViewModel> helper = null!;
-        NodeDefaultViewModel node = null!;
+        TreeDefaultComponent tree = null!;
+        TreeHelper<TreeDefaultComponent> helper = null!;
+        NodeDefaultComponent node = null!;
 
         try
         {
             SynchronizationContext.SetSynchronizationContext(old);
-            tree = new TreeDefaultViewModel();
-            helper = new TreeHelper<TreeDefaultViewModel>(cellSize: 100);
+            tree = new TreeDefaultComponent();
+            helper = new TreeHelper<TreeDefaultComponent>(cellSize: 100);
             tree.SetHelper(helper);
-            node = new NodeDefaultViewModel
+            node = new NodeDefaultComponent
             {
                 Parent = tree,
                 Anchor = new Anchor(10, 10, 0),
@@ -200,7 +200,7 @@ public class TreeHelperTickTests
             helper.Viewport = new Viewport(0, 0, 400, 400);
             node.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName is nameof(NodeDefaultViewModel.Anchor) or nameof(NodeDefaultViewModel.Size))
+                if (e.PropertyName is nameof(NodeDefaultComponent.Anchor) or nameof(NodeDefaultComponent.Size))
                 {
                     notifications.Add(Environment.CurrentManagedThreadId);
                 }
@@ -232,17 +232,17 @@ public class TreeHelperTickTests
     {
         var previous = SynchronizationContext.Current;
         var stalled = new CountingContext();
-        TreeDefaultViewModel tree = null!;
-        TreeHelper<TreeDefaultViewModel> helper = null!;
-        NodeDefaultViewModel node = null!;
+        TreeDefaultComponent tree = null!;
+        TreeHelper<TreeDefaultComponent> helper = null!;
+        NodeDefaultComponent node = null!;
 
         try
         {
             SynchronizationContext.SetSynchronizationContext(stalled);
-            tree = new TreeDefaultViewModel();
-            helper = new TreeHelper<TreeDefaultViewModel>(cellSize: 100);
+            tree = new TreeDefaultComponent();
+            helper = new TreeHelper<TreeDefaultComponent>(cellSize: 100);
             tree.SetHelper(helper);
-            node = new NodeDefaultViewModel
+            node = new NodeDefaultComponent
             {
                 Parent = tree,
                 Anchor = new Anchor(10, 10, 0),
@@ -282,7 +282,7 @@ public class TreeHelperTickTests
             helper.Viewport = new Viewport(0, 0, 400, 400);
             node.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName is nameof(NodeDefaultViewModel.Anchor) or nameof(NodeDefaultViewModel.Size))
+                if (e.PropertyName is nameof(NodeDefaultComponent.Anchor) or nameof(NodeDefaultComponent.Size))
                 {
                     layoutNotifications.Add(Environment.CurrentManagedThreadId);
                 }
@@ -314,16 +314,16 @@ public class TreeHelperTickTests
     {
         using var ui = new PumpContext();
 
-        TreeDefaultViewModel tree = null!;
-        TreeHelper<TreeDefaultViewModel> helper = null!;
+        TreeDefaultComponent tree = null!;
+        TreeHelper<TreeDefaultComponent> helper = null!;
         bool bothVisibleBeforeDirty = false;
         var collectionChanges = new ConcurrentBag<int>();
         var layoutNotifications = new ConcurrentBag<int>();
 
         ui.Invoke(() =>
         {
-            tree = new TreeDefaultViewModel();
-            helper = new TreeHelper<TreeDefaultViewModel>(cellSize: 100);
+            tree = new TreeDefaultComponent();
+            helper = new TreeHelper<TreeDefaultComponent>(cellSize: 100);
             tree.SetHelper(helper);
             helper.Viewport = new Viewport(0, 0, 400, 400);
 
@@ -342,7 +342,7 @@ public class TreeHelperTickTests
 
             staying.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName is nameof(NodeDefaultViewModel.Anchor) or nameof(NodeDefaultViewModel.Size))
+                if (e.PropertyName is nameof(NodeDefaultComponent.Anchor) or nameof(NodeDefaultComponent.Size))
                 {
                     layoutNotifications.Add(Environment.CurrentManagedThreadId);
                 }
@@ -381,7 +381,7 @@ public class TreeHelperTickTests
         }
     }
 
-    private static NodeDefaultViewModel NewNode(TreeDefaultViewModel tree, double left, double top)
+    private static NodeDefaultComponent NewNode(TreeDefaultComponent tree, double left, double top)
         => new()
         {
             Parent = tree,

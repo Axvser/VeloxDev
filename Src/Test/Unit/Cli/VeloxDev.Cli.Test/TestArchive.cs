@@ -21,7 +21,7 @@ internal sealed class TestArchive : IDisposable
     /// The type parameter is deliberately concrete: serializing through a base or interface reference makes the
     /// writer emit a root <c>$type</c>, while a host that calls <c>treeViewModel.Serialize()</c> does not.
     /// </remarks>
-    public string WriteTree<T>(T tree) where T : IWorkflowTreeViewModel, INotifyPropertyChanged
+    public string WriteTree<T>(T tree) where T : ITreeComponent, INotifyPropertyChanged
     {
         var json = tree.Serialize();
         File.WriteAllText(Path, json);
@@ -41,10 +41,10 @@ internal sealed class TestArchive : IDisposable
         return Path;
     }
 
-    public static TreeDefaultViewModel TreeWithOneNode(out NodeDefaultViewModel node)
+    public static TreeDefaultComponent TreeWithOneNode(out NodeDefaultComponent node)
     {
-        var tree = new TreeDefaultViewModel();
-        node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
         return tree;
     }

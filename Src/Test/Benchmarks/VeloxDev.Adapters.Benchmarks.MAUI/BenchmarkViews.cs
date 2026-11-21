@@ -40,5 +40,5 @@ internal sealed class BenchmarkTemplateSelector : DataTemplateSelector
     private readonly DataTemplate _link = new(static () => new BenchmarkLinkView());
 
     protected override DataTemplate OnSelectTemplate(object item, BindableObject container)
-        => item is IWorkflowNodeViewModel ? _node : _link;
+        => item is INodeComponent ? _node : _link;
 }

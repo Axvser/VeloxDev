@@ -365,7 +365,7 @@ public sealed class WorkflowDemoSession : IDisposable
         public int Retries;
     }
 
-    private static string NameOf(IWorkflowNodeViewModel node)
+    private static string NameOf(INodeComponent node)
         => node is PythonScriptNodeViewModel python ? python.Title : node.GetType().Name;
 
     // 运行产物落在这个目录下：与 python 节点的临时文件同处，且不会脏了工作区（demo 从 IDE 启动时工作目录是仓库根）。
@@ -555,7 +555,7 @@ public sealed class WorkflowDemoSession : IDisposable
         slot.SetChannelCommand.Execute(channel);
     }
 
-    private static void Connect(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    private static void Connect(ITreeComponent tree, ISlotComponent sender, ISlotComponent receiver)
     {
         tree.GetHelper().SendConnection(sender);
         tree.GetHelper().ReceiveConnection(receiver);

@@ -1,4 +1,4 @@
-// VeloxDev customization: The XAML owns the surface; give it an IWorkflowTreeViewModel as its data context.
+// VeloxDev customization: The XAML owns the surface; give it an ITreeComponent as its data context.
 
 namespace TemplateNamespace;
 

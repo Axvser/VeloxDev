@@ -9,7 +9,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// <param name="Output">What it returned, as it was registered for downstream nodes.</param>
 /// <param name="Order">The node's compile order, or <c>-1</c> when it has none.</param>
 public readonly record struct NodeCompensation(
-    IWorkflowNodeViewModel Node,
+    INodeComponent Node,
     object? Output,
     int Order);
 

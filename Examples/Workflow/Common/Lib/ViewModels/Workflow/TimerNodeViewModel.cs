@@ -81,15 +81,15 @@ public partial class TimerNodeViewModel : ICompileTimeRouter, ICompileTimeAware
 
     /// <summary>Route table: one branch "tick" carrying every downstream target of <see cref="OutputSlot"/> (empty list = terminal).</summary>
     /// <inheritdoc/>
-    public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
+    public Task<IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>>> GetRouteTable()
     {
         var targets = OutputSlot?.Targets;
-        var list = new List<IWorkflowNodeViewModel>();
+        var list = new List<INodeComponent>();
         if (targets is not null)
             foreach (var t in targets)
-                if (t.Parent is IWorkflowNodeViewModel parent && !list.Contains(parent))
+                if (t.Parent is INodeComponent parent && !list.Contains(parent))
                     list.Add(parent);
-        return Task.FromResult<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>>(
-            new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> { ["tick"] = list.AsReadOnly() });
+        return Task.FromResult<IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>>>(
+            new Dictionary<object, IReadOnlyList<INodeComponent>> { ["tick"] = list.AsReadOnly() });
     }
 }

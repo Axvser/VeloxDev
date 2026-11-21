@@ -12,8 +12,8 @@ public sealed class WorkflowEventRelayTests
     [TestMethod]
     public void Attach_ForwardsBothPhasesWithCompletePlacements()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel { Parent = tree, Anchor = new Anchor(10, 20, layer: 3) };
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent { Parent = tree, Anchor = new Anchor(10, 20, layer: 3) };
         tree.Nodes.Add(node);
         var sink = new NodeSink();
         using var subscription = WorkflowEventRelay.Attach(node, sink);
@@ -30,8 +30,8 @@ public sealed class WorkflowEventRelayTests
     [TestMethod]
     public void Attach_ASinkCanRefuseTheAction()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel { Parent = tree, Anchor = new Anchor(10, 20) };
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent { Parent = tree, Anchor = new Anchor(10, 20) };
         tree.Nodes.Add(node);
         var sink = new NodeSink { RefuseMoving = true };
         using var subscription = WorkflowEventRelay.Attach(node, sink);
@@ -47,8 +47,8 @@ public sealed class WorkflowEventRelayTests
     [TestMethod]
     public void Dispose_StopsTheForwarding()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel { Parent = tree, Anchor = new Anchor(10, 20) };
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent { Parent = tree, Anchor = new Anchor(10, 20) };
         tree.Nodes.Add(node);
         var sink = new NodeSink();
         WorkflowEventRelay.Attach(node, sink)?.Dispose();
@@ -62,11 +62,11 @@ public sealed class WorkflowEventRelayTests
     [TestMethod]
     public void Attach_ForwardsConnections()
     {
-        var tree = new TreeDefaultViewModel();
-        var a = new NodeDefaultViewModel { Parent = tree };
-        var b = new NodeDefaultViewModel { Parent = tree };
-        var sa = new SlotDefaultViewModel { Parent = a };
-        var sb = new SlotDefaultViewModel { Parent = b };
+        var tree = new TreeDefaultComponent();
+        var a = new NodeDefaultComponent { Parent = tree };
+        var b = new NodeDefaultComponent { Parent = tree };
+        var sa = new SlotDefaultComponent { Parent = a };
+        var sb = new SlotDefaultComponent { Parent = b };
         a.Slots.Add(sa);
         b.Slots.Add(sb);
         tree.Nodes.Add(a);
@@ -83,7 +83,7 @@ public sealed class WorkflowEventRelayTests
         Assert.AreSame(sb, sink.Connecting.Receiver);
     }
 
-    private sealed class NodeSink : IWorkflowNodeEventSink
+    private sealed class NodeSink : INodeEventSink
     {
         public bool RefuseMoving { get; init; }
         public int MovingCount { get; private set; }
@@ -104,7 +104,7 @@ public sealed class WorkflowEventRelayTests
         public void OnDeleted(NodeEventArgs e) { }
     }
 
-    private sealed class TreeSink : IWorkflowTreeEventSink
+    private sealed class TreeSink : ITreeEventSink
     {
         public int ConnectingCount { get; private set; }
         public int ConnectedCount { get; private set; }

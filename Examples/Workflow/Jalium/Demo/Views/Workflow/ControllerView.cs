@@ -17,12 +17,12 @@ internal sealed class ControllerView : NodeViewBase
     protected override Color Accent => CardPalette.AccentController;
 
     // 控制器视图模型不发布 Title，卡片自己起名 —— 与这套设计的 Avalonia / WinUI / MAUI 三张卡同字
-    protected override string TitleFor(IWorkflowNodeViewModel node) => "Controller";
+    protected override string TitleFor(INodeComponent node) => "Controller";
 
     // 这张卡没有状态胶囊：设计里头部只有类型色条 + 标题（原来是右上角一颗 Running/Idle 的灰字）
-    protected override string InitialStatus(IWorkflowNodeViewModel node) => string.Empty;
+    protected override string InitialStatus(INodeComponent node) => string.Empty;
 
-    protected override void Build(IWorkflowNodeViewModel node, Grid content)
+    protected override void Build(INodeComponent node, Grid content)
     {
         var vm = (ControllerViewModel)node;
 

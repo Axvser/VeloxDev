@@ -11,8 +11,8 @@ namespace Demo.Views.Workflow;
 /// Realtime floating-text info layer (bottom-left corner HUD): translucent-rounded panel showing
 /// canvas actual size, the visible viewport (canvas + world), zoom/origin and the visible node/link
 /// elements materialized by the Core virtualization. Purely model-driven — it reads
-/// <see cref="IWorkflowTreeViewModelHelper.Viewport"/> (kept current by the surface's pan/layout
-/// pump), <see cref="CanvasLayout"/> and <see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>.
+/// <see cref="ITreeHelper.Viewport"/> (kept current by the surface's pan/layout
+/// pump), <see cref="CanvasLayout"/> and <see cref="ITreeHelper.VisibleItems"/>.
 /// The surface canvas repaints it with the canvas frame
 /// and binds the tree on session attach; the <c>复制</c> button copies the current multi-line info to the clipboard.
 /// </summary>
@@ -33,7 +33,7 @@ public sealed class InfoOverlay : Panel
     private readonly Button _copy;
     private readonly GraphicsPath _round = new();
 
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private INotifyPropertyChanged? _layoutNotify;
     private string[] _lines = [];
     private string _copyText = "";
@@ -70,7 +70,7 @@ public sealed class InfoOverlay : Panel
     }
 
     /// <summary>Binds a workflow tree (model events refresh layout/scale/visible counts).</summary>
-    public void Bind(IWorkflowTreeViewModel? tree)
+    public void Bind(ITreeComponent? tree)
     {
         Unsubscribe();
         _tree = tree;
@@ -237,11 +237,11 @@ public sealed class InfoOverlay : Panel
         var virtualLink = _tree.VirtualLink;
         foreach (var item in _tree.GetHelper().VisibleItems)
         {
-            if (item is IWorkflowNodeViewModel)
+            if (item is INodeComponent)
             {
                 visibleNodes++;
             }
-            else if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, virtualLink))
+            else if (item is ILinkComponent link && !ReferenceEquals(link, virtualLink))
             {
                 visibleLinks++;
             }

@@ -1,4 +1,4 @@
-// VeloxDev customization: Initialize tree-specific UI behavior here; provide an IWorkflowTreeViewModel as the data context.
+// VeloxDev customization: Initialize tree-specific UI behavior here; provide an ITreeComponent as the data context.
 using Microsoft.UI.Xaml.Controls;
 
 namespace TemplateNamespace;

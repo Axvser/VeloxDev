@@ -18,7 +18,7 @@ public sealed class PointerPressedEventArgs : PointerEventArgs
     /// <param name="clickCount">How many clicks this press completes.</param>
     /// <param name="handle">The handle for this action.</param>
     public PointerPressedEventArgs(
-        Anchor position, InputModifiers modifiers, object? source, IWorkflowViewModel? target,
+        Anchor position, InputModifiers modifiers, object? source, IWorkflowComponent? target,
         MouseButton button, int clickCount, WorkflowEventHandle handle)
         : base(position, modifiers, source, target, handle)
     {

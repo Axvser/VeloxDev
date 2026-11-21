@@ -9,7 +9,7 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 /// TEMP pure-data probe (no GUI): does a collapse-Scale write refresh the spatial providers in time
 /// for a subsequent Virtualize? The NodeBoundsProvider / NodePairBoundsProvider caches the node's
 /// COLLAPSED Anchor/Size and refreshes only on node Anchor/Size PropertyChanged. Generated nodes
-/// (and NodeDefaultViewModel) re-raise Anchor/Size when the parent Layout.Scale changes via their
+/// (and NodeDefaultComponent) re-raise Anchor/Size when the parent Layout.Scale changes via their
 /// WorkflowNodeScaleTracker (attached in the Parent setter). If that synchronous chain fires before
 /// the next Virtualize, a window at the NEW collapsed coordinates must still hit the node — if the
 /// providers were stale (scale-1 rect), the query misses and the node drops out of VisibleItems.
@@ -22,7 +22,7 @@ public class DeepZoomSpatialRefreshProbeTests
     [TestMethod]
     public void ScaleWrite_ThenVirtualize_KeepsNodeVisible_AtNewCollapsedPosition()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var node = new TestEnumNode();
         tree.GetHelper().CreateNode(node);
 
@@ -30,7 +30,7 @@ public class DeepZoomSpatialRefreshProbeTests
         node.Anchor = new Anchor(80, 80, 0);
         node.Size = new Size(260, 180);
 
-        var visible = new ObservableCollection<IWorkflowViewModel>();
+        var visible = new ObservableCollection<IWorkflowComponent>();
         Assert.AreEqual(1, tree.EnableMap(200, visible), "spatial map should enable once");
         tree.Virtualize(new Viewport(0, 0, 2000, 2000));
         Assert.IsTrue(visible.Contains(node), "precondition: node visible at scale 1");

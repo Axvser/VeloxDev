@@ -19,8 +19,8 @@
 | 执行节点 | ExecuteNode | Node.ReceiveCommand（ITaskContext） |
 | 其他操作 | ExecuteCommandOnNode / ExecuteCommandById | 按名称解析 |
 | 修改自定义属性 | PatchNodeProperties / PatchComponentById | 直接设置（仅非命令属性） |
-| 向集合添加插槽 | AddSlotToCollection | 集合生命周期（OnWorkflowSlotAdded） |
-| 从集合移除插槽 | RemoveSlotFromCollection | 集合生命周期（OnWorkflowSlotRemoved） |
+| 向集合添加插槽 | AddSlotToCollection | 集合生命周期（OnSlotComponentAdded） |
+| 从集合移除插槽 | RemoveSlotFromCollection | 集合生命周期（OnSlotComponentRemoved） |
 | 设置枚举插槽集合 | SetEnumSlotCollection | 清除并重建枚举驱动集合 |
 | 按条件查找节点 | FindNodes | 仅只读查询 |
 | 通过属性解析插槽 ID | ResolveSlotId | 仅只读查询 |

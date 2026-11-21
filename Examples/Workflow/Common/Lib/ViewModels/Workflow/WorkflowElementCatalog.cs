@@ -20,7 +20,7 @@ public enum WorkflowElementKind
 public sealed class WorkflowElementEntry : INotifyPropertyChanged
 {
     /// <summary>Creates a row for an element.</summary>
-    public WorkflowElementEntry(IWorkflowViewModel element, string label, WorkflowElementKind kind)
+    public WorkflowElementEntry(IWorkflowComponent element, string label, WorkflowElementKind kind)
     {
         Element = element;
         Label = label;
@@ -31,7 +31,7 @@ public sealed class WorkflowElementEntry : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>The node, slot or link the row acts on.</summary>
-    public IWorkflowViewModel Element { get; }
+    public IWorkflowComponent Element { get; }
 
     /// <summary>The text shown for the row.</summary>
     public string Label { get; }
@@ -67,12 +67,12 @@ public sealed class WorkflowElementEntry : INotifyPropertyChanged
     // 列表里的行对象活到下一次重建；它们订阅的是节点的属性变化，重建后由 catalog 换掉。
     internal void Refresh() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DetailText)));
 
-    private static string BuildDetail(IWorkflowViewModel element, WorkflowElementKind kind)
+    private static string BuildDetail(IWorkflowComponent element, WorkflowElementKind kind)
     {
         var text = new StringBuilder();
         switch (element)
         {
-            case IWorkflowNodeViewModel node:
+            case INodeComponent node:
                 text.AppendLine($"类型    {node.GetType().Name.Replace("ViewModel", string.Empty)}");
                 text.AppendLine($"位置    ({node.Anchor.Horizontal:0}, {node.Anchor.Vertical:0}) · 图层 {node.Anchor.Layer}");
                 text.AppendLine($"大小    {node.Size.Width:0} × {node.Size.Height:0}");
@@ -96,7 +96,7 @@ public sealed class WorkflowElementEntry : INotifyPropertyChanged
                 }
                 break;
 
-            case IWorkflowSlotViewModel slot:
+            case ISlotComponent slot:
                 text.AppendLine($"所属    {WorkflowElementCatalog.Describe(slot.Parent)}");
                 text.AppendLine($"通道    {slot.Channel}");
                 text.AppendLine($"状态    {slot.State}");
@@ -104,7 +104,7 @@ public sealed class WorkflowElementEntry : INotifyPropertyChanged
                 text.AppendLine($"位置    ({slot.Anchor.Horizontal:0}, {slot.Anchor.Vertical:0})");
                 break;
 
-            case IWorkflowLinkViewModel link:
+            case ILinkComponent link:
                 text.AppendLine($"起点    {WorkflowElementCatalog.Describe(link.Sender?.Parent)}");
                 text.AppendLine($"终点    {WorkflowElementCatalog.Describe(link.Receiver?.Parent)}");
                 text.AppendLine($"可见    {(link.IsVisible ? "是" : "否")}");
@@ -118,7 +118,7 @@ public sealed class WorkflowElementEntry : INotifyPropertyChanged
         return text.ToString().TrimEnd();
     }
 
-    private static string CompileText(IWorkflowNodeViewModel node)
+    private static string CompileText(INodeComponent node)
     {
         if (node is not ICompileTimeAware aware || aware.CompileContext is not { } context)
             return "未编译";
@@ -141,8 +141,8 @@ public sealed class WorkflowElementEntry : INotifyPropertyChanged
 public sealed class WorkflowElementCatalog : INotifyPropertyChanged
 {
     private readonly SynchronizationContext? _ui = SynchronizationContext.Current;
-    private readonly HashSet<IWorkflowNodeViewModel> _trackedNodes = [];
-    private IWorkflowTreeViewModel? _tree;
+    private readonly HashSet<INodeComponent> _trackedNodes = [];
+    private ITreeComponent? _tree;
 
     /// <summary>The nodes in the tree.</summary>
     public ObservableCollection<WorkflowElementEntry> Nodes { get; } = [];
@@ -163,10 +163,10 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
     public event EventHandler? Changed;
 
     /// <summary>Creates a catalog, optionally already bound to <paramref name="tree"/>.</summary>
-    public WorkflowElementCatalog(IWorkflowTreeViewModel? tree = null) => SetTree(tree);
+    public WorkflowElementCatalog(ITreeComponent? tree = null) => SetTree(tree);
 
     /// <summary>Rebinds the catalog to <paramref name="tree"/>; the previous tree's events are detached.</summary>
-    public void SetTree(IWorkflowTreeViewModel? tree)
+    public void SetTree(ITreeComponent? tree)
     {
         if (ReferenceEquals(_tree, tree)) return;
 
@@ -186,9 +186,9 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
     /// <returns><see langword="true"/> when a surface navigator handled it.</returns>
     public bool Locate(WorkflowElementEntry entry) => entry.Kind switch
     {
-        WorkflowElementKind.Node => ((IWorkflowNodeViewModel)entry.Element).Locate(),
-        WorkflowElementKind.Slot => ((IWorkflowSlotViewModel)entry.Element).Locate(),
-        WorkflowElementKind.Link => ((IWorkflowLinkViewModel)entry.Element).Locate(),
+        WorkflowElementKind.Node => ((INodeComponent)entry.Element).Locate(),
+        WorkflowElementKind.Slot => ((ISlotComponent)entry.Element).Locate(),
+        WorkflowElementKind.Link => ((ILinkComponent)entry.Element).Locate(),
         _ => false,
     };
 
@@ -197,13 +197,13 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
     {
         switch (entry.Element)
         {
-            case IWorkflowNodeViewModel node:
+            case INodeComponent node:
                 node.GetHelper().Delete();
                 break;
-            case IWorkflowSlotViewModel slot:
+            case ISlotComponent slot:
                 slot.GetHelper().Delete();
                 break;
-            case IWorkflowLinkViewModel link:
+            case ILinkComponent link:
                 link.GetHelper().Delete();
                 break;
         }
@@ -280,9 +280,9 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
     }
 
     // Slots are not exposed as one collection on the tree; subscribe to each node's own.
-    private void SyncSlotHandlers(IWorkflowTreeViewModel tree)
+    private void SyncSlotHandlers(ITreeComponent tree)
     {
-        var current = new HashSet<IWorkflowNodeViewModel>(tree.Nodes);
+        var current = new HashSet<INodeComponent>(tree.Nodes);
         foreach (var node in _trackedNodes.ToArray())
         {
             if (current.Contains(node)) continue;
@@ -298,7 +298,7 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
 
     // 只在“编译完成 / 某个节点被驱动”这些明确时点刷新检查器的选中行，不订阅节点的每一次属性变化：
     // 后者会在启动布局期把每一行都打成脏的，WPF 的 CollectionView 会因此反复重整列表。
-    private void OnElementDetailsInvalidated(IWorkflowNodeViewModel? node)
+    private void OnElementDetailsInvalidated(INodeComponent? node)
     {
         if (_ui is not null && !ReferenceEquals(_ui, SynchronizationContext.Current))
         {
@@ -311,12 +311,12 @@ public sealed class WorkflowElementCatalog : INotifyPropertyChanged
 
         var matches = node is null
             || ReferenceEquals(selected.Element, node)
-            || (selected.Element is IWorkflowSlotViewModel slot && ReferenceEquals(slot.Parent, node));
+            || (selected.Element is ISlotComponent slot && ReferenceEquals(slot.Parent, node));
 
         if (matches) selected.Refresh();
     }
 
-    internal static string Describe(IWorkflowNodeViewModel? node)
+    internal static string Describe(INodeComponent? node)
     {
         if (node is null) return "?";
 

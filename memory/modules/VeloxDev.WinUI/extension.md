@@ -123,7 +123,7 @@
 ## 六、本模块专属的几条禁令
 
 1. **不要为了「对齐别家」把合成平移换回 `RenderTransform` 绑定。** 那会与 `Canvas.Translation`（`WorkflowSurfaceBehavior.ApplyLayout` 里的 `state.Canvas.Translation`）叠加成双倍位移，而且槽位锚点必须跟着从 `SlotAnchorFromCanvasLocal` 改回 `SlotAnchorFromNode`（`WorkflowSlotLayoutBehavior.SyncSlot` 的分支就是为这件事存在的）。
-2. **不要给 `ViewArranger` 的连线分支补写 `Canvas.SetLeft/SetTop`**（`IWorkflowLinkViewModel` 分支保持不写几何）。它是 offset frame 的前提，注释已说明理由。
+2. **不要给 `ViewArranger` 的连线分支补写 `Canvas.SetLeft/SetTop`**（`ILinkComponent` 分支保持不写几何）。它是 offset frame 的前提，注释已说明理由。
 3. **不要把 `Refresh` 从 `OnViewChanged` 里摘掉来「省性能」**。它是这一家在「模板换树后重新解析」上的唯一自动路径（名称域只有 `FindName` 一条路）；摘掉之后一切依赖宿主显式调。要优化就在 `ResolveNamedControls`/`UnsubscribeResolvedControls` 内部省，别动调用关系。
 4. **不要引用 `Docs/`**（不在本仓库），**也不要把 `docs` 站点的措辞当依据** —— 依据只能是 `Src/` 与 `Examples/` 里的代码。
 5. **改这一家时先确认参考实现是哪一个**：工作流是 `Examples/Workflow/WinUI Trimmed/`（**整目录都可照抄** —— code-behind 只做宿主输入接线，没有漂移探针）；非 Trimmed 的 `Examples/Workflow/WinUI/` 停在 offset frame 之前的老做法。

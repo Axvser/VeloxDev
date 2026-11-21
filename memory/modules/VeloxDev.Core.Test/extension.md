@@ -81,7 +81,7 @@
 | 新增一个内建采样器 | **多处手写期望表**：`TransitionSystem/NativeSamplersTests.cs`、`TransitionSystem/NativeSamplersExtendedTests.cs`、`TransitionSystem/SamplerConformanceTests.cs`（都是逐类型手写的，没有反射枚举兜底） |
 | 改 `ITimeSourceControl` 的形状 | `Timing/FakeTimeSource.cs` 的 `FakeTimeSource` 会编译不过；不要用 `throw new NotImplementedException()` 蒙过去 |
 | 改 `TransitionHostBase<TPriority>` 的虚方法签名 | `TestHosts.cs` 的三个宿主（`ImmediateHost` / `InlinePostHost<T>` / `DeferredHost`） |
-| 改 `IWorkflow{Tree,Node,Slot,Link}ViewModel` | `WorkflowSystem/Support/WorkflowTestKit.cs` 的四个 Stub（`StubCommand` / `StubSlot` / `StubNode` / `StubTree`）+ `WorkflowSystem/CompilerEx/ProbeNodes.cs` 的 `TestCommand`/`TestSlot`/`ProbeNode` |
+| 改 `I{Tree,Node,Slot,Link}Component` | `WorkflowSystem/Support/WorkflowTestKit.cs` 的四个 Stub（`StubCommand` / `StubSlot` / `StubNode` / `StubTree`）+ `WorkflowSystem/CompilerEx/ProbeNodes.cs` 的 `TestCommand`/`TestSlot`/`ProbeNode` |
 | 改名一个 `internal` 成员 | 本模块大量直测 internal（`Src/Core/VeloxDev.Core/Properties/AssemblyInfo.cs` 的 `InternalsVisibleTo`）；改名前先 grep 本目录 |
 | 改 `TransitionEx` 的扩展方法 | `ChainRepeatTests` 的 `ChainNode` 是唯一经手 `Then`/`Repeat` 的地方；`AwaitThen` / `Await` 目前**零测试** |
 | 新增一个 Core 主题目录 | `architecture.md` §五的「零测试」缺口表要一起改 |

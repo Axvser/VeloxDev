@@ -28,8 +28,8 @@ Node types may declare **typed slot properties** (e.g. `InputSlot`, `OutputSlot`
 
 Node types may declare **slot collection properties** (e.g. `ObservableCollection<SlotViewModel> OutputSlots`). These are backed by source-generated `INotifyCollectionChanged` lifecycle hooks:
 
-- Adding a slot triggers `OnWorkflowSlotAdded` → auto-registers with the node via `CreateSlotCommand`.
-- Removing a slot triggers `OnWorkflowSlotRemoved` → auto-deletes the slot and its connections.
+- Adding a slot triggers `OnSlotComponentAdded` → auto-registers with the node via `CreateSlotCommand`.
+- Removing a slot triggers `OnSlotComponentRemoved` → auto-deletes the slot and its connections.
 - **Use `AddSlotToCollection` / `RemoveSlotFromCollection`** — do NOT use `CreateSlotOnNode` for collection-managed slots.
 - Use **`ListSlotProperties`** to discover whether slots are single properties or collection properties.
 - **`GetNodeDetail`** output includes a `prop` field on each slot (e.g. `InputSlot`, `OutputSlots[2]`).

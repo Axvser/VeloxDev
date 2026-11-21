@@ -310,7 +310,7 @@ public class DemoGraphTests
 
         var place = await session.Checkpoints.LoadAsync(CancellationToken.None);
         Assert.IsNotNull(place);
-        var generatorKey = ((IWorkflowIdentifiable)PythonNode(session, "Generate Dataset")).RuntimeId;
+        var generatorKey = ((IRuntimeIdentifiable)PythonNode(session, "Generate Dataset")).RuntimeId;
         Assert.IsTrue(place.Outputs.ContainsKey(generatorKey),
             "the place files the generator's success under its own identity, not under a position");
 

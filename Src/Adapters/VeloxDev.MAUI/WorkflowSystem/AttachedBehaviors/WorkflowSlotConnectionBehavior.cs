@@ -21,8 +21,8 @@ public sealed class WorkflowSlotConnectionBehavior
     private sealed class ActiveConnection
     {
         public View SourceView { get; init; } = null!;
-        public IWorkflowSlotViewModel SourceSlot { get; init; } = null!;
-        public IWorkflowTreeViewModel Tree { get; init; } = null!;
+        public ISlotComponent SourceSlot { get; init; } = null!;
+        public ITreeComponent Tree { get; init; } = null!;
         public VisualElement? CoordinateHost { get; init; }
         public ContentView? Surface { get; init; }
         public Anchor Pointer { get; set; } = new();
@@ -219,8 +219,8 @@ public sealed class WorkflowSlotConnectionBehavior
 
     private static bool TryBeginConnection(View view, Point? pointer)
     {
-        if (view.BindingContext is not IWorkflowSlotViewModel slot
-            || slot.Parent?.Parent is not IWorkflowTreeViewModel tree)
+        if (view.BindingContext is not ISlotComponent slot
+            || slot.Parent?.Parent is not ITreeComponent tree)
         {
             return false;
         }
@@ -327,7 +327,7 @@ public sealed class WorkflowSlotConnectionBehavior
         }
     }
 
-    private static IWorkflowSlotViewModel? FindReceiver(ActiveConnection active)
+    private static ISlotComponent? FindReceiver(ActiveConnection active)
     {
         // 直接遍历画布子元素（都是节点 ContentView），不要对整棵可视树递归 FindDescendants；插槽视图在节点 ContentView 内，
         // 只需下钻一层就能找到带 WorkflowSlotConnectionBehavior 的视图。
@@ -337,7 +337,7 @@ public sealed class WorkflowSlotConnectionBehavior
         }
 
         const double minimumRadius = 18d;
-        IWorkflowSlotViewModel? receiver = null;
+        ISlotComponent? receiver = null;
         var nearestDistance = double.MaxValue;
 
         foreach (var child in canvas.Children)
@@ -347,7 +347,7 @@ public sealed class WorkflowSlotConnectionBehavior
                 continue;
             }
 
-            if (GetIsEnabled(nodeView) && nodeView.BindingContext is IWorkflowSlotViewModel directSlot)
+            if (GetIsEnabled(nodeView) && nodeView.BindingContext is ISlotComponent directSlot)
             {
                 // 插槽视图直接挂在画布下（少见但支持）。
                 TryMatchSlot(nodeView, directSlot, active, minimumRadius,
@@ -368,14 +368,14 @@ public sealed class WorkflowSlotConnectionBehavior
         Element root,
         ActiveConnection active,
         double minimumRadius,
-        ref IWorkflowSlotViewModel? receiver,
+        ref ISlotComponent? receiver,
         ref double nearestDistance)
     {
         foreach (var next in EnumerateChildren(root))
         {
             if (next is View view
                 && GetIsEnabled(view)
-                && view.BindingContext is IWorkflowSlotViewModel slot)
+                && view.BindingContext is ISlotComponent slot)
             {
                 TryMatchSlot(view, slot, active, minimumRadius,
                     ref receiver, ref nearestDistance);
@@ -391,10 +391,10 @@ public sealed class WorkflowSlotConnectionBehavior
 
     private static void TryMatchSlot(
         View view,
-        IWorkflowSlotViewModel slot,
+        ISlotComponent slot,
         ActiveConnection active,
         double minimumRadius,
-        ref IWorkflowSlotViewModel? receiver,
+        ref ISlotComponent? receiver,
         ref double nearestDistance)
     {
         if (!view.IsVisible
@@ -433,7 +433,7 @@ public sealed class WorkflowSlotConnectionBehavior
         IsDraggingConnection = false;
     }
 
-    private static bool SynchronizeSlotAnchor(View view, VisualElement? coordinateHost, IWorkflowSlotViewModel slot)
+    private static bool SynchronizeSlotAnchor(View view, VisualElement? coordinateHost, ISlotComponent slot)
     {
         if (coordinateHost is null || view.Width <= 0 || view.Height <= 0 || !TryGetCenterRelativeTo(view, coordinateHost, out var center))
         {

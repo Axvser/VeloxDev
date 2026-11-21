@@ -159,7 +159,7 @@ public sealed partial class PolylineCurveView : UserControl
     private LinkCurve? _curve;
 
     // 本视图当前描述的链接（池化复用会把 DataContext 改到另一条 / 置空），撤曲线时要认它。
-    private IWorkflowLinkViewModel? _boundLink;
+    private ILinkComponent? _boundLink;
 
     // 包围盒原点：几何写成「原始 canvas-local 坐标 − 原点」，元素再平移回原点，画出来的位置仍是原始坐标；
     // 形状因此都落在本视图的盒子里，合成层不会在盒子边缘把它们裁掉。
@@ -315,7 +315,7 @@ public sealed partial class PolylineCurveView : UserControl
     // 池化改绑会先退旧树再订新树，摘树则退订；订阅数归零时时钟自己停表（一棵树始终只有一条周期）。
     private void RefreshFlowSubscription()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         var clock = _isLoaded && !IsVirtual && RenderReady
             ? WorkflowFlowClock.ForLink(link)
             : null;
@@ -474,7 +474,7 @@ public sealed partial class PolylineCurveView : UserControl
     // 所以「几何/显隐/周期」三件事在改绑后必定与当前这条链接一致
     private void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
     {
-        var link = args.NewValue as IWorkflowLinkViewModel;
+        var link = args.NewValue as ILinkComponent;
         if (!ReferenceEquals(_boundLink, link))
         {
             // 改绑/回收：旧链接的曲线必须撤掉，否则一条已经不画这条线的线还会被命中
@@ -499,7 +499,7 @@ public sealed partial class PolylineCurveView : UserControl
     }
 
     // 虚拟连线的阶段：订模型自己的 Preview。改绑/回收都要换订阅，否则旧橡皮筋的阶段色会留在本视图上。
-    private void ResubscribePreview(IWorkflowLinkViewModel? link)
+    private void ResubscribePreview(ILinkComponent? link)
     {
         var preview = link as IConnectionPreviewLink;
         if (ReferenceEquals(preview, _previewLink)) return;
@@ -529,7 +529,7 @@ public sealed partial class PolylineCurveView : UserControl
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
-    private IWorkflowLinkViewModel? _inputLink;
+    private ILinkComponent? _inputLink;
 
     private void ResubscribeInput()
     {
@@ -565,7 +565,7 @@ public sealed partial class PolylineCurveView : UserControl
     // 控制点拉出规则由 BuildCubic 给出（max(40, |dx|/2)，两端水平出线），与静息线画的同一条。
     private void RefreshGeometry()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         _curve = LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
 

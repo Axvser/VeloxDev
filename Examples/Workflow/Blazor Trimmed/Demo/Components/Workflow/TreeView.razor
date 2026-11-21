@@ -51,7 +51,7 @@
 @code {
     // Link template for the pooled layer: swap it for your own markup, and keep the wrapper
     // non-interactive — the surface's canvas gestures rely on that.
-    private static RenderFragment<IWorkflowLinkViewModel> RenderGenericLink(SurfaceCanvas canvas)
+    private static RenderFragment<ILinkComponent> RenderGenericLink(SurfaceCanvas canvas)
         => link => @<div style="display:contents;pointer-events:none;">
                         <LinkView Link="link" CanvasWidth="@canvas.Width" CanvasHeight="@canvas.Height" />
                     </div>;
@@ -61,7 +61,7 @@
     /// the generated <c>NodeView</c> with input/output slot hosts populated generically
     /// from <c>Node.Slots</c> (channel-based input/output split).
     /// </summary>
-    private RenderFragment<IWorkflowNodeViewModel> RenderGenericNode => node => @<text>
+    private RenderFragment<INodeComponent> RenderGenericNode => node => @<text>
         @{ var names = WorkflowPresentation.SlotNamesOf(node); }
         <NodeView Node="node" Tree="Tree" AllowOverflow="true">
             <InputSlots>

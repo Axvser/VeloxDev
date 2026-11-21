@@ -37,7 +37,7 @@ public sealed class WorkflowSlotConnectionBehavior : AvaloniaObject
 
     private static void OnPointerPressed(object? sender, PlatformInput.PointerPressedEventArgs e)
     {
-        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot } control)
+        if (sender is not Control { DataContext: ISlotComponent slot } control)
             return;
 
         // 这一笔按下已经由表面在隧道相里路由过 —— 它比这里更早，句柄就存在表面里。订阅者在插槽自己的
@@ -51,7 +51,7 @@ public sealed class WorkflowSlotConnectionBehavior : AvaloniaObject
 
     private static void OnPointerReleased(object? sender, PlatformInput.PointerReleasedEventArgs e)
     {
-        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot })
+        if (sender is not Control { DataContext: ISlotComponent slot })
             return;
 
         slot.ReceiveConnectionCommand.Execute(null);

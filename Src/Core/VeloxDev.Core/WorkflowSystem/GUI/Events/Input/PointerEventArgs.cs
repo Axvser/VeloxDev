@@ -29,7 +29,7 @@ public abstract class PointerEventArgs : EventArgs
     /// <param name="target">The component the pointer is on, or <see langword="null"/> for empty canvas.</param>
     /// <param name="handle">The handle for this action, shared with the whole route.</param>
     protected PointerEventArgs(
-        Anchor position, InputModifiers modifiers, object? source, IWorkflowViewModel? target, WorkflowEventHandle handle)
+        Anchor position, InputModifiers modifiers, object? source, IWorkflowComponent? target, WorkflowEventHandle handle)
     {
         Position = position ?? throw new ArgumentNullException(nameof(position));
         Modifiers = modifiers;
@@ -58,7 +58,7 @@ public abstract class PointerEventArgs : EventArgs
     /// The route hands this same value to every element it bubbles through — an ancestor sees the original target,
     /// not itself.
     /// </remarks>
-    public IWorkflowViewModel? Target { get; }
+    public IWorkflowComponent? Target { get; }
 
     /// <summary>
     /// The handle for this action. Set <see cref="WorkflowEventHandle.PreventDefault"/> to keep the framework's own

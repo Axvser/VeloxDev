@@ -67,7 +67,7 @@ public static class WorkflowSurfaceBehavior
 
         public FrameworkElement? PointerPressSource;
 
-        public IWorkflowTreeViewModel? Tree;
+        public ITreeComponent? Tree;
 
         public WorkflowInput? Input;
 
@@ -84,7 +84,7 @@ public static class WorkflowSurfaceBehavior
 
         public ContextMenu? LinkMenu;
 
-        public IWorkflowLinkViewModel? MenuLink;
+        public ILinkComponent? MenuLink;
 
         public bool IsPanning;
 
@@ -131,10 +131,10 @@ public static class WorkflowSurfaceBehavior
 
         public EventHandler<Wf.PointerPressedEventArgs>? InputPressedHandler;
 
-        public EventHandler<IWorkflowLinkViewModel>? LinkRemovedHandler;
+        public EventHandler<ILinkComponent>? LinkRemovedHandler;
 
         // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
-        public IWorkflowTreeViewModel? LastRestoreTree;
+        public ITreeComponent? LastRestoreTree;
 
         public bool HasPendingRestore;
 
@@ -724,8 +724,8 @@ public static class WorkflowSurfaceBehavior
     /// A slot's own <see cref="FrameworkElement.DataContext"/> is the slot, not the tree, so anything that needs
     /// the tree (cancelling a connection, for one) has to reach the host first.
     /// </remarks>
-    public static IWorkflowTreeViewModel? TreeOf(DependencyObject element)
-        => FindHost(element)?.DataContext as IWorkflowTreeViewModel;
+    public static ITreeComponent? TreeOf(DependencyObject element)
+        => FindHost(element)?.DataContext as ITreeComponent;
 
     private static FrameworkElement? FindHost(DependencyObject source)
     {
@@ -744,7 +744,7 @@ public static class WorkflowSurfaceBehavior
 
     private static void BindTree(FrameworkElement host, SurfaceState state)
     {
-        if (host.DataContext is not IWorkflowTreeViewModel tree || ReferenceEquals(tree, state.Tree))
+        if (host.DataContext is not ITreeComponent tree || ReferenceEquals(tree, state.Tree))
         {
             return;
         }
@@ -953,7 +953,7 @@ public static class WorkflowSurfaceBehavior
     // 必须在任何 UpdateViewport 之前 —— 那一步会拿控件当前（还没滚过去的）位置覆盖 ViewportOffset。
     private static void CaptureViewportRestore(FrameworkElement host, SurfaceState state)
     {
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+        if (host.DataContext is not ITreeComponent viewModel) return;
         if (ReferenceEquals(viewModel, state.LastRestoreTree)) return;
 
         state.LastRestoreTree = viewModel;
@@ -1492,7 +1492,7 @@ public static class WorkflowSurfaceBehavior
         Point anchorPoint,
         Point worldPoint,
         DependencyObject? hit,
-        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
+        Func<Anchor, IWorkflowComponent?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         if (state.Input is not { } input)
         {
@@ -1508,8 +1508,8 @@ public static class WorkflowSurfaceBehavior
         SurfaceState state,
         FrameworkElement host,
         Point anchorPoint,
-        IWorkflowViewModel? target,
-        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
+        IWorkflowComponent? target,
+        Func<Anchor, IWorkflowComponent?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         var handle = new WorkflowEventHandle();
 
@@ -1531,8 +1531,8 @@ public static class WorkflowSurfaceBehavior
 
     // 指针底下是什么，由适配器回答 —— 节点和插槽也是答案的一部分。只认连线的话，路由的 Target 就永远
     // 只是「连线或空白」，`WorkflowInput.Chain` 里 slot → node → tree 那条链于是永远走不到。
-    private static IWorkflowViewModel? ResolveTarget(
-        DependencyObject? hit, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    private static IWorkflowComponent? ResolveTarget(
+        DependencyObject? hit, ITreeComponent tree, double x, double y, double radius)
     {
         if (hit is not null)
         {
@@ -1540,9 +1540,9 @@ public static class WorkflowSurfaceBehavior
             {
                 switch (candidate)
                 {
-                    case FrameworkElement { DataContext: IWorkflowNodeViewModel node }:
+                    case FrameworkElement { DataContext: INodeComponent node }:
                         return node;
-                    case FrameworkElement { DataContext: IWorkflowSlotViewModel slot }:
+                    case FrameworkElement { DataContext: ISlotComponent slot }:
                         return slot;
                 }
             }
@@ -1556,7 +1556,7 @@ public static class WorkflowSurfaceBehavior
     // `WorkflowInput.Chain` 里 slot → node → tree 那条链才走得通。解析不出宿主或树时返回 null，
     // 调用方按「没否决」处理。
     internal static WorkflowEventHandle? RouteComponentPress(
-        DependencyObject? control, IWorkflowViewModel component, MouseButtonEventArgs e)
+        DependencyObject? control, IWorkflowComponent component, MouseButtonEventArgs e)
     {
         if (control is null)
         {
@@ -1626,12 +1626,12 @@ public static class WorkflowSurfaceBehavior
         || ReferenceEquals(candidate, state.GridDecoratorElement);
 
     private static bool IsNodeOrSlotVisual(DependencyObject source)
-        => source is FrameworkElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel };
+        => source is FrameworkElement { DataContext: INodeComponent or ISlotComponent };
 
     private static bool IsSlotVisual(DependencyObject source)
         => EnumerateSelfAndVisualAncestors(source)
             .OfType<FrameworkElement>()
-            .Any(x => x.DataContext is IWorkflowSlotViewModel);
+            .Any(x => x.DataContext is ISlotComponent);
 
     // 落在可编辑控件里的按下，焦点归那个控件 —— 表面不该把它抢走，否则 Ctrl+Z 撤的是画布而不是文字。
     private static bool IsInsideEditable(DependencyObject? source)
@@ -1656,7 +1656,7 @@ public static class WorkflowSurfaceBehavior
     // 条目由宿主在资源里声明（LinkMenuKey），库只负责订阅、定位、弹出与开合上报。
     private static void OnLinkPointerPressed(SurfaceState state, Wf.PointerPressedEventArgs e)
     {
-        if (e.Button != Wf.MouseButton.Right || e.Target is not IWorkflowLinkViewModel link)
+        if (e.Button != Wf.MouseButton.Right || e.Target is not ILinkComponent link)
         {
             return;
         }
@@ -1709,7 +1709,7 @@ public static class WorkflowSurfaceBehavior
         menu.Open(ToMenuPosition(host, e.Position));
     }
 
-    private static void OnLinkRemoved(SurfaceState state, IWorkflowLinkViewModel link)
+    private static void OnLinkRemoved(SurfaceState state, ILinkComponent link)
     {
         // 树报的是离场的那条线，本家只认自己这份菜单指着的那条。
         if (ReferenceEquals(state.MenuLink, link))

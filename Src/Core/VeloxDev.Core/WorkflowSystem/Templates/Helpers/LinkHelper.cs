@@ -6,7 +6,7 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>
 /// [ Component Helper ] Provide standard supports for Link Component.
 /// </summary>
-public class LinkHelper : LinkHelper<IWorkflowLinkViewModel>
+public class LinkHelper : LinkHelper<ILinkComponent>
 {
 
 }
@@ -15,8 +15,8 @@ public class LinkHelper : LinkHelper<IWorkflowLinkViewModel>
 /// [ Component Helper ] Provide standard supports for Link Component.
 /// </summary>
 /// <typeparam name="T">The type of the Link ViewModel that this helper is designed for. </typeparam>
-public class LinkHelper<T> : IWorkflowLinkViewModelHelper, ILinkHitTestable, IInputEvents
-    where T : class, IWorkflowLinkViewModel
+public class LinkHelper<T> : ILinkHelper, ILinkHitTestable, IInputEvents
+    where T : class, ILinkComponent
 {
     /// <summary>The link this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
     public T? Component { get; protected set; }
@@ -47,13 +47,13 @@ public class LinkHelper<T> : IWorkflowLinkViewModelHelper, ILinkHitTestable, IIn
         => hitCurve is not null && hitCurve.Contains(x, y, radius);
 
     /// <inheritdoc />
-    public virtual void Install(IWorkflowLinkViewModel link)
+    public virtual void Install(ILinkComponent link)
     {
         Component = link as T;
         commands = link.GetStandardCommands();
     }
     /// <inheritdoc />
-    public virtual void Uninstall(IWorkflowLinkViewModel link)
+    public virtual void Uninstall(ILinkComponent link)
     {
         Component = null;
         commands = [];

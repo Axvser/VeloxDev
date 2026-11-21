@@ -40,7 +40,7 @@ public sealed partial class TemplateClass : UserControl
 
     // The drawn curve, published un-baked (raw canvas-local DP values) so a surface can hit-test it.
     private LinkCurve? _curve;
-    private IWorkflowLinkViewModel? _boundLink;
+    private ILinkComponent? _boundLink;
 
     // Offset-frame origin actually applied: the geometry is baked +(_offsetX,_offsetY) and this element
     // is placed at −(_offsetX,_offsetY), so an endpoint's DRAWN canvas-local coordinate still equals its
@@ -106,7 +106,7 @@ public sealed partial class TemplateClass : UserControl
 
     private bool IsVirtualLink
         => IsVirtual
-            || DataContext is IWorkflowLinkViewModel
+            || DataContext is ILinkComponent
             {
                 Sender.Parent: null,
                 Receiver.Parent: null
@@ -132,7 +132,7 @@ public sealed partial class TemplateClass : UserControl
 
     private void OnDataContextChanged(object sender, DataContextChangedEventArgs args)
     {
-        var link = args.NewValue as IWorkflowLinkViewModel;
+        var link = args.NewValue as ILinkComponent;
         if (!ReferenceEquals(_boundLink, link))
         {
             // Pool reuse / hide: retract the previous link's curve, or it keeps answering hit tests.
@@ -152,13 +152,13 @@ public sealed partial class TemplateClass : UserControl
     {
         UnsubscribeLayout();
 
-        if (DataContext is not IWorkflowLinkViewModel link)
+        if (DataContext is not ILinkComponent link)
         {
             return;
         }
 
-        var tree = link.Sender?.Parent?.Parent as IWorkflowTreeViewModel
-                   ?? link.Receiver?.Parent?.Parent as IWorkflowTreeViewModel;
+        var tree = link.Sender?.Parent?.Parent as ITreeComponent
+                   ?? link.Receiver?.Parent?.Parent as ITreeComponent;
 
         // A virtual link's endpoints are deliberately parentless, so this must not be the only way to
         // find the tree: fall back to the host chain.
@@ -172,11 +172,11 @@ public sealed partial class TemplateClass : UserControl
     }
 
     // Walk the host chain for the tree that carries this view; a virtual link has no endpoints to walk.
-    private IWorkflowTreeViewModel? FindHostTree()
+    private ITreeComponent? FindHostTree()
     {
         for (var p = Parent as FrameworkElement; p is not null; p = p.Parent as FrameworkElement)
         {
-            if (p.DataContext is IWorkflowTreeViewModel tree)
+            if (p.DataContext is ITreeComponent tree)
             {
                 return tree;
             }
@@ -296,7 +296,7 @@ public sealed partial class TemplateClass : UserControl
     // (LinkCurve.LinkCurvePoints) — keep that source if you replace the drawing.
     private void BuildCurve(double ox, double oy)
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, 40);
         _pathFigure.StartPoint = new Point(points[0].X + ox, points[0].Y + oy);
         _segment.Point1 = new Point(points[1].X + ox, points[1].Y + oy);

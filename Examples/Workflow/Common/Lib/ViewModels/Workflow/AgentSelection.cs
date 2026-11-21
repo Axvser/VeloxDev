@@ -15,10 +15,10 @@ namespace Demo.Workflow;
 public static class AgentSelection
 {
     /// <summary>Raised after a node enters or leaves the Agent's working set.</summary>
-    public static event Action<IWorkflowNodeViewModel>? Changed;
+    public static event Action<INodeComponent>? Changed;
 
     /// <summary>Whether <paramref name="node"/> is in its tree's Agent selection.</summary>
-    public static bool IsSelected(IWorkflowNodeViewModel? node)
+    public static bool IsSelected(INodeComponent? node)
     {
         if (node?.Parent is not { } tree) return false;
 
@@ -29,7 +29,7 @@ public static class AgentSelection
     }
 
     /// <summary>Toggles <paramref name="node"/> and notifies the cards when the set actually changed.</summary>
-    public static bool Toggle(IWorkflowNodeViewModel? node)
+    public static bool Toggle(INodeComponent? node)
     {
         if (node?.Parent is null) return false;
 
@@ -43,7 +43,7 @@ public static class AgentSelection
     }
 
     /// <summary>Clears the tree's selection and notifies every card that was on it.</summary>
-    public static int Clear(IWorkflowTreeViewModel? tree)
+    public static int Clear(ITreeComponent? tree)
     {
         if (tree is null) return 0;
 

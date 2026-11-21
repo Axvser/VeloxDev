@@ -12,7 +12,7 @@ Package: **`VeloxDev.Core.Extension`** (`netstandard2.0;net8.0`). It also carrie
 ## The wiring
 
 ```csharp
-var scope = tree.AsAgentScope()                       // tree : IWorkflowTreeViewModel
+var scope = tree.AsAgentScope()                       // tree : ITreeComponent
     .WithPromptLanguage(AgentLanguages.English)
     .WithOutputLanguage(AgentLanguages.Chinese)
     .WithAutoDiscovery()                              // register the concrete node/slot types

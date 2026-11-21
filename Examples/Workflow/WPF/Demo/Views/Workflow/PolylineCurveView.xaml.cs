@@ -93,7 +93,7 @@ public partial class PolylineCurveView : UserControl
 
     // 当前把曲线发布给了哪条链接。视图会被池化改绑，换绑时要把旧链接的曲线撤掉，
     // 否则一条已经不在场上的线仍然可被点中。
-    private IWorkflowLinkViewModel? _publishedLink;
+    private ILinkComponent? _publishedLink;
 
     // 本视图订的那棵树共用的时钟；每次 tick 把它的两个标量抄进本视图的属性。
     private WorkflowFlowClock? _clock;
@@ -262,11 +262,11 @@ public partial class PolylineCurveView : UserControl
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
-    private IWorkflowLinkViewModel? _inputLink;
+    private ILinkComponent? _inputLink;
 
     private void ResubscribeInput()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (ReferenceEquals(link, _inputLink)) return;
 
         UnsubscribeInput();
@@ -299,7 +299,7 @@ public partial class PolylineCurveView : UserControl
     private void RefreshFlowSubscription()
     {
         var clock = _loaded && !IsVirtual && CanRender
-            ? WorkflowFlowClock.ForLink(DataContext as IWorkflowLinkViewModel)
+            ? WorkflowFlowClock.ForLink(DataContext as ILinkComponent)
             : null;
 
         if (ReferenceEquals(clock, _clock)) return;
@@ -396,7 +396,7 @@ public partial class PolylineCurveView : UserControl
     // 弧长表由 Core 的 LinkCurve 拥有：端点变化时重建，同一份同时用于绘制、取点与命中。
     private void RefreshGeometry()
     {
-        var curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        var curve = LinkCurve.BuildLinkCubic(DataContext as ILinkComponent, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         _curve = curve;
 
         // 线体只在曲线变化时重建；帧回调（BandHead/BandIntensity）不再碰它
@@ -408,7 +408,7 @@ public partial class PolylineCurveView : UserControl
     // 把曲线交给链接的 Helper，界面据此在 canvas-local 空间里判命中。
     private void PublishCurve()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (!ReferenceEquals(_publishedLink, link))
         {
             _publishedLink?.PublishCurve(null);

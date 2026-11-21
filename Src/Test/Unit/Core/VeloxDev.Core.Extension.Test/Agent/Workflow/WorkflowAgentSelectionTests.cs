@@ -18,11 +18,11 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow;
 [TestClass]
 public class WorkflowAgentSelectionTests
 {
-    private static (TreeDefaultViewModel Tree, NodeDefaultViewModel First, NodeDefaultViewModel Second) TreeWithTwoNodes()
+    private static (TreeDefaultComponent Tree, NodeDefaultComponent First, NodeDefaultComponent Second) TreeWithTwoNodes()
     {
-        var tree = new TreeDefaultViewModel();
-        var first = new NodeDefaultViewModel();
-        var second = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var first = new NodeDefaultComponent();
+        var second = new NodeDefaultComponent();
         var helper = tree.GetHelper();
         helper.CreateNode(first);
         helper.CreateNode(second);
@@ -39,7 +39,7 @@ public class WorkflowAgentSelectionTests
         var text = new WorkflowAgentScope(tree).BuildDynamicInstructions()!;
         StringAssert.Contains(text, "Current Node Selection");
         StringAssert.Contains(text, first.RuntimeId);
-        StringAssert.Contains(text, nameof(NodeDefaultViewModel));
+        StringAssert.Contains(text, nameof(NodeDefaultComponent));
         StringAssert.Contains(text, "**1** node");
     }
 
@@ -48,7 +48,7 @@ public class WorkflowAgentSelectionTests
     {
         var (tree, first, second) = TreeWithTwoNodes();
 
-        Assert.AreEqual(2, new List<IWorkflowNodeViewModel> { first, second }.SelectForAgent());
+        Assert.AreEqual(2, new List<INodeComponent> { first, second }.SelectForAgent());
 
         var text = new WorkflowAgentScope(tree).BuildDynamicInstructions()!;
         var firstAt = text.IndexOf(first.RuntimeId, StringComparison.Ordinal);
@@ -66,7 +66,7 @@ public class WorkflowAgentSelectionTests
         var scope = new WorkflowAgentScope(tree);
 
         Assert.IsTrue(first.SelectForAgent());
-        Assert.AreEqual(1, new List<IWorkflowNodeViewModel> { second }.SelectForAgent());
+        Assert.AreEqual(1, new List<INodeComponent> { second }.SelectForAgent());
 
         var text = scope.BuildDynamicInstructions()!;
         StringAssert.Contains(text, first.RuntimeId);
@@ -81,7 +81,7 @@ public class WorkflowAgentSelectionTests
 
         Assert.IsTrue(first.SelectForAgent());
         Assert.IsFalse(first.SelectForAgent(), "an already-selected node is a HashSet-style no-op");
-        Assert.AreEqual(0, new List<IWorkflowNodeViewModel> { first }.SelectForAgent());
+        Assert.AreEqual(0, new List<INodeComponent> { first }.SelectForAgent());
     }
 
     [TestMethod]
@@ -89,7 +89,7 @@ public class WorkflowAgentSelectionTests
     {
         var (tree, first, _) = TreeWithTwoNodes();
 
-        Assert.AreEqual(1, new List<IWorkflowNodeViewModel> { first, first }.SelectForAgent());
+        Assert.AreEqual(1, new List<INodeComponent> { first, first }.SelectForAgent());
 
         Assert.AreEqual(1, tree.GetAgentSelection().Count);
     }
@@ -128,7 +128,7 @@ public class WorkflowAgentSelectionTests
         var (firstTree, first, _) = TreeWithTwoNodes();
         var (secondTree, second, _) = TreeWithTwoNodes();
 
-        Assert.AreEqual(2, new List<IWorkflowNodeViewModel> { first, second }.SelectForAgent());
+        Assert.AreEqual(2, new List<INodeComponent> { first, second }.SelectForAgent());
 
         Assert.AreEqual(1, firstTree.GetAgentSelection().Count);
         Assert.AreEqual(1, secondTree.GetAgentSelection().Count);
@@ -137,17 +137,17 @@ public class WorkflowAgentSelectionTests
     [TestMethod]
     public void AnUnattachedNode_CannotBeAdded()
     {
-        var orphan = new NodeDefaultViewModel();
+        var orphan = new NodeDefaultComponent();
 
         Assert.IsFalse(orphan.SelectForAgent());
-        Assert.AreEqual(0, new List<IWorkflowNodeViewModel> { orphan }.SelectForAgent());
+        Assert.AreEqual(0, new List<INodeComponent> { orphan }.SelectForAgent());
     }
 
     [TestMethod]
     public void ANodeNotMountedInTheTree_CannotBeAdded()
     {
         var (tree, _, _) = TreeWithTwoNodes();
-        var detached = new NodeDefaultViewModel { Parent = tree };
+        var detached = new NodeDefaultComponent { Parent = tree };
 
         Assert.IsFalse(detached.SelectForAgent());
     }
@@ -155,13 +155,13 @@ public class WorkflowAgentSelectionTests
     [TestMethod]
     public void AnEmptySelection_ReturnsZero()
     {
-        Assert.AreEqual(0, new List<IWorkflowNodeViewModel>().SelectForAgent());
+        Assert.AreEqual(0, new List<INodeComponent>().SelectForAgent());
     }
 
     [TestMethod]
     public void ANullCollection_ReturnsZero()
     {
-        IReadOnlyCollection<IWorkflowNodeViewModel>? none = null;
+        IReadOnlyCollection<INodeComponent>? none = null;
 
         Assert.AreEqual(0, none!.SelectForAgent());
         Assert.AreEqual(0, none!.DeselectForAgent());
@@ -170,7 +170,7 @@ public class WorkflowAgentSelectionTests
     [TestMethod]
     public void AClearWithNoTree_ReturnsZero()
     {
-        IWorkflowTreeViewModel? none = null;
+        ITreeComponent? none = null;
 
         Assert.AreEqual(0, none!.ClearAgentSelection());
     }
@@ -247,13 +247,13 @@ public class WorkflowAgentSelectionTests
     [TestMethod]
     public void ALargeSelection_ReportsTheFullCountAndCapsTheList()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var helper = tree.GetHelper();
-        var nodes = new List<IWorkflowNodeViewModel>();
+        var nodes = new List<INodeComponent>();
 
         for (var i = 0; i <= WorkflowAgentSelection.MaxRenderedNodes; i++)
         {
-            var node = new NodeDefaultViewModel();
+            var node = new NodeDefaultComponent();
             helper.CreateNode(node);
             nodes.Add(node);
         }
@@ -263,7 +263,7 @@ public class WorkflowAgentSelectionTests
         var text = new WorkflowAgentScope(tree).BuildDynamicInstructions()!;
         StringAssert.Contains(text, $"**{nodes.Count}** nodes");
         StringAssert.Contains(text, "1 more are in the selection");
-        var lastId = ((IWorkflowIdentifiable)nodes[^1]).RuntimeId;
+        var lastId = ((IRuntimeIdentifiable)nodes[^1]).RuntimeId;
         Assert.IsFalse(text.Contains(lastId, StringComparison.Ordinal),
             "an identity beyond the cap must not be listed");
     }
@@ -272,7 +272,7 @@ public class WorkflowAgentSelectionTests
     public void DeselectingOneNode_RemovesOnlyThatNode()
     {
         var (tree, first, second) = TreeWithTwoNodes();
-        new List<IWorkflowNodeViewModel> { first, second }.SelectForAgent();
+        new List<INodeComponent> { first, second }.SelectForAgent();
         var scope = new WorkflowAgentScope(tree);
 
         Assert.IsTrue(first.DeselectForAgent());
@@ -290,9 +290,9 @@ public class WorkflowAgentSelectionTests
     public void DeselectingSeveralNodes_PreservesTheRemainingOrder()
     {
         var (tree, first, second) = TreeWithTwoNodes();
-        var third = new NodeDefaultViewModel();
+        var third = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(third);
-        new List<IWorkflowNodeViewModel> { first, second, third }.SelectForAgent();
+        new List<INodeComponent> { first, second, third }.SelectForAgent();
 
         Assert.IsTrue(second.DeselectForAgent());
 
@@ -365,7 +365,7 @@ public class WorkflowAgentSelectionTests
     {
         var (tree, first, second) = TreeWithTwoNodes();
         first.SelectForAgent();
-        new List<IWorkflowNodeViewModel> { first, second }.SelectForAgent();
+        new List<INodeComponent> { first, second }.SelectForAgent();
 
         tree.Nodes.Clear();
 
@@ -392,7 +392,7 @@ public class WorkflowAgentSelectionTests
         var (tree, first, _) = TreeWithTwoNodes();
         first.SelectForAgent();
 
-        tree.Nodes = new ObservableCollection<IWorkflowNodeViewModel>();
+        tree.Nodes = new ObservableCollection<INodeComponent>();
 
         Assert.AreEqual(0, tree.GetAgentSelection().Count,
             "replacing the parent's Nodes collection makes the old identities meaningless");
@@ -404,7 +404,7 @@ public class WorkflowAgentSelectionTests
         var (tree, first, _) = TreeWithTwoNodes();
         first.SelectForAgent();
 
-        ((IWorkflowNodeEvents)first.GetHelper()).RaiseDeleted(new WorkflowEventHandle());
+        ((INodeEvents)first.GetHelper()).RaiseDeleted(new WorkflowEventHandle());
 
         Assert.AreEqual(0, tree.GetAgentSelection().Count,
             "the semantic delete event must release the node as a last line of defence");
@@ -418,7 +418,7 @@ public class WorkflowAgentSelectionTests
         first.SelectForAgent();
         second.SelectForAgent();
 
-        Assert.AreEqual(2, new List<IWorkflowNodeViewModel> { first, second }.DeselectForAgent());
+        Assert.AreEqual(2, new List<INodeComponent> { first, second }.DeselectForAgent());
 
         Assert.IsFalse(new WorkflowAgentScope(firstTree).BuildDynamicInstructions()!
             .Contains("Current Node Selection", StringComparison.Ordinal));
@@ -429,27 +429,27 @@ public class WorkflowAgentSelectionTests
     [TestMethod]
     public void DeselectingAnUnattachedNode_IsIgnored()
     {
-        var orphan = new NodeDefaultViewModel();
+        var orphan = new NodeDefaultComponent();
 
         Assert.IsFalse(orphan.DeselectForAgent());
-        Assert.AreEqual(0, new List<IWorkflowNodeViewModel> { orphan }.DeselectForAgent());
+        Assert.AreEqual(0, new List<INodeComponent> { orphan }.DeselectForAgent());
         Assert.IsNull(orphan.Parent);
     }
 
     [TestMethod]
     public void NullEntries_AreIgnored()
     {
-        Assert.AreEqual(0, new List<IWorkflowNodeViewModel> { null! }.DeselectForAgent());
-        Assert.AreEqual(0, new List<IWorkflowNodeViewModel> { null! }.SelectForAgent());
+        Assert.AreEqual(0, new List<INodeComponent> { null! }.DeselectForAgent());
+        Assert.AreEqual(0, new List<INodeComponent> { null! }.SelectForAgent());
     }
 
     [TestMethod]
     public void GetAgentSelection_ReturnsASnapshot()
     {
         var (tree, first, second) = TreeWithTwoNodes();
-        var third = new NodeDefaultViewModel();
+        var third = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(third);
-        new List<IWorkflowNodeViewModel> { first, second }.SelectForAgent();
+        new List<INodeComponent> { first, second }.SelectForAgent();
 
         var snapshot = tree.GetAgentSelection();
         third.SelectForAgent();
@@ -460,11 +460,11 @@ public class WorkflowAgentSelectionTests
     }
 
     /// <summary>A collection whose own shape throws, used to prove the silent <c>-1</c> path.</summary>
-    private sealed class ThrowingCollection : IReadOnlyCollection<IWorkflowNodeViewModel>
+    private sealed class ThrowingCollection : IReadOnlyCollection<INodeComponent>
     {
         public int Count => throw new InvalidOperationException("boom");
 
-        public IEnumerator<IWorkflowNodeViewModel> GetEnumerator() => throw new InvalidOperationException("boom");
+        public IEnumerator<INodeComponent> GetEnumerator() => throw new InvalidOperationException("boom");
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }

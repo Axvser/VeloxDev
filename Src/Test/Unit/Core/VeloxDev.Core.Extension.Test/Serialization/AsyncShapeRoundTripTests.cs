@@ -98,9 +98,9 @@ public partial class AsyncShapeRoundTripTests
     {
         // 声明类型不是数组时，顶层数组是「读错了」而不是「读成了一棵树」—— 两个面都要说同一句话。
         Assert.ThrowsExactly<InvalidOperationException>(
-            () => VeloxJsonSerializer.Deserialize("[1, 2]", typeof(TreeDefaultViewModel)));
+            () => VeloxJsonSerializer.Deserialize("[1, 2]", typeof(TreeDefaultComponent)));
 
         await Assert.ThrowsExactlyAsync<InvalidOperationException>(
-            () => VeloxJsonSerializer.DeserializeAsync(new ChunkedTextReader("[1, 2]", 1), typeof(TreeDefaultViewModel)));
+            () => VeloxJsonSerializer.DeserializeAsync(new ChunkedTextReader("[1, 2]", 1), typeof(TreeDefaultComponent)));
     }
 }

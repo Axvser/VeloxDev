@@ -19,35 +19,35 @@ public partial class TemplateClass : ComponentBase
     [Parameter]
     public Func<object, object>? KeySelector { get; set; }
 
-    /// <summary>Gets or sets the template for <see cref="IWorkflowNodeViewModel"/> items.</summary>
+    /// <summary>Gets or sets the template for <see cref="INodeComponent"/> items.</summary>
     [Parameter]
-    public RenderFragment<IWorkflowNodeViewModel>? NodeTemplate { get; set; }
+    public RenderFragment<INodeComponent>? NodeTemplate { get; set; }
 
-    /// <summary>Gets or sets the template for <see cref="IWorkflowSlotViewModel"/> items.</summary>
+    /// <summary>Gets or sets the template for <see cref="ISlotComponent"/> items.</summary>
     [Parameter]
-    public RenderFragment<IWorkflowSlotViewModel>? SlotTemplate { get; set; }
+    public RenderFragment<ISlotComponent>? SlotTemplate { get; set; }
 
-    /// <summary>Gets or sets the template for <see cref="IWorkflowLinkViewModel"/> items.</summary>
+    /// <summary>Gets or sets the template for <see cref="ILinkComponent"/> items.</summary>
     [Parameter]
-    public RenderFragment<IWorkflowLinkViewModel>? LinkTemplate { get; set; }
+    public RenderFragment<ILinkComponent>? LinkTemplate { get; set; }
 
-    /// <summary>Gets or sets the template for <see cref="IWorkflowTreeViewModel"/> items.</summary>
+    /// <summary>Gets or sets the template for <see cref="ITreeComponent"/> items.</summary>
     [Parameter]
-    public RenderFragment<IWorkflowTreeViewModel>? TreeTemplate { get; set; }
+    public RenderFragment<ITreeComponent>? TreeTemplate { get; set; }
 
     private RenderFragment? Select(object item)
         => item switch
         {
-            IWorkflowLinkViewModel link => LinkTemplate is null
+            ILinkComponent link => LinkTemplate is null
                 ? throw new InvalidOperationException("LinkTemplate is not set.")
                 : LinkTemplate(link),
-            IWorkflowSlotViewModel slot => SlotTemplate is null
+            ISlotComponent slot => SlotTemplate is null
                 ? throw new InvalidOperationException("SlotTemplate is not set.")
                 : SlotTemplate(slot),
-            IWorkflowNodeViewModel node => NodeTemplate is null
+            INodeComponent node => NodeTemplate is null
                 ? throw new InvalidOperationException("NodeTemplate is not set.")
                 : NodeTemplate(node),
-            IWorkflowTreeViewModel tree => TreeTemplate is null
+            ITreeComponent tree => TreeTemplate is null
                 ? throw new InvalidOperationException("TreeTemplate is not set.")
                 : TreeTemplate(tree),
             _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")

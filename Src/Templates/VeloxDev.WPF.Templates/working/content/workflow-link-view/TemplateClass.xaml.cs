@@ -20,7 +20,7 @@ public partial class TemplateClass : UserControl
 
     // The link this view last published a curve to; retracted on rebind so a pooled view cannot leave a
     // stale curve answering for a link that no longer draws here.
-    private IWorkflowLinkViewModel? _publishedLink;
+    private ILinkComponent? _publishedLink;
 
     public TemplateClass()
     {
@@ -69,7 +69,7 @@ public partial class TemplateClass : UserControl
 
     private bool IsVirtualLink
         => IsVirtual
-            || DataContext is IWorkflowLinkViewModel
+            || DataContext is ILinkComponent
             {
                 Sender.Parent: null,
                 Receiver.Parent: null
@@ -83,14 +83,14 @@ public partial class TemplateClass : UserControl
     {
         base.OnRender(ctx);
         if (!CanRender) return;
-        if (DataContext is IWorkflowLinkViewModel link && !link.IsRenderReady()) return;
+        if (DataContext is ILinkComponent link && !link.IsRenderReady()) return;
 
         // Publish the curve the surface hit-tests against: same control points as BuildCurve, same
         // canvas-local space. Replace this together with BuildCurve if you change the shape.
-        PublishCurve(LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
+        PublishCurve(LinkCurve.BuildLinkCubic(DataContext as ILinkComponent, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
 
         var thickness = TemplateLinkThickness;
-        var geometry = BuildCurve(DataContext as IWorkflowLinkViewModel);
+        var geometry = BuildCurve(DataContext as ILinkComponent);
 
         var brush = new SolidColorBrush(LineColor);
         var pen = IsVirtualLink
@@ -102,7 +102,7 @@ public partial class TemplateClass : UserControl
 
     // Extension point: the control points set the curve's shape. Core derives them from each port's own edge
     // (LinkCurve.LinkCurvePoints) — keep that source if you replace the drawing.
-    private Geometry BuildCurve(IWorkflowLinkViewModel? link)
+    private Geometry BuildCurve(ILinkComponent? link)
     {
         var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull);
         var figure = new PathFigure
@@ -126,7 +126,7 @@ public partial class TemplateClass : UserControl
     // Extension point: change the second argument if one view no longer draws exactly one link.
     private void PublishCurve(LinkCurve curve)
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (!ReferenceEquals(_publishedLink, link))
         {
             _publishedLink?.PublishCurve(null);

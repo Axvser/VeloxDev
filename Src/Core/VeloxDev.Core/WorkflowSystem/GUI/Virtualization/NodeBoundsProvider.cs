@@ -10,13 +10,13 @@ internal sealed class NodeBoundsProvider : ISpatialBoundsProvider, IDisposable
 {
     private static readonly PropertyChangedEventArgs BoundsChangedEventArgs = new(nameof(Bounds));
 
-    private readonly IWorkflowNodeViewModel _node;
+    private readonly INodeComponent _node;
     private Viewport _cachedBounds;
     private bool _disposed;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    internal NodeBoundsProvider(IWorkflowNodeViewModel node)
+    internal NodeBoundsProvider(INodeComponent node)
     {
         _node = node ?? throw new ArgumentNullException(nameof(node));
         _cachedBounds = GetCurrentBounds();
@@ -26,7 +26,7 @@ internal sealed class NodeBoundsProvider : ISpatialBoundsProvider, IDisposable
     /// <summary>
     /// Gets the associated node view model.
     /// </summary>
-    internal IWorkflowNodeViewModel Node => _node;
+    internal INodeComponent Node => _node;
 
     /// <inheritdoc/>
     public Viewport Bounds => _cachedBounds;
@@ -49,8 +49,8 @@ internal sealed class NodeBoundsProvider : ISpatialBoundsProvider, IDisposable
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(IWorkflowNodeViewModel.Anchor) ||
-            e.PropertyName == nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName == nameof(INodeComponent.Anchor) ||
+            e.PropertyName == nameof(INodeComponent.Size))
         {
             UpdateBounds();
         }

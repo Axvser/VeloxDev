@@ -10,7 +10,7 @@ namespace VeloxDev.WorkflowSystem;
 
 /// <summary>A slot collection driven by one selector: each value of the selector type maps to one slot, and switching the selector swaps the whole set.</summary>
 public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IConditionalSlotProvider, System.ComponentModel.INotifyPropertyChanged
-    where TSlot : IWorkflowSlotViewModel, new()
+    where TSlot : ISlotComponent, new()
 {
     /// <summary>Creates an empty enumerator.</summary>
     public SlotEnumerator()
@@ -18,7 +18,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         Items = [];
     }
 
-    [VeloxProperty] private IWorkflowNodeViewModel? _parent;
+    [VeloxProperty] private INodeComponent? _parent;
     [VeloxProperty] private string selectorTypeName = string.Empty;
     [VeloxProperty] private Dictionary<object, TSlot> conditionMap = [];
 
@@ -417,16 +417,16 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
             return;
         }
 
-        tree.GetHelper().Submit(new WorkflowActionPair(
+        tree.GetHelper().Submit(new ActionPair(
             () => ApplyNewState(tree, newState, isFresh ? previousSelectorTypeName : null, isFresh ? previousWiring : null),
             () => ApplyAttachedState(tree, oldState)));
     }
 
     private void ApplyNewState(
-        IWorkflowTreeViewModel tree,
+        ITreeComponent tree,
         SelectorState state,
         string? previousSelectorTypeName,
-        List<(string Name, IWorkflowSlotViewModel[] Targets, IWorkflowSlotViewModel[] Sources)>? previousWiring)
+        List<(string Name, ISlotComponent[] Targets, ISlotComponent[] Sources)>? previousWiring)
     {
         ApplyAttachedState(tree, state);
         if (previousWiring is null) return;
@@ -474,8 +474,8 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
     /// A branch whose name is not in the old set is genuinely new and gets no wiring, which is the honest answer.
     /// </para>
     /// </remarks>
-    private static (string Name, IWorkflowSlotViewModel[] Targets, IWorkflowSlotViewModel[] Sources)? MatchBranch(
-        List<(string Name, IWorkflowSlotViewModel[] Targets, IWorkflowSlotViewModel[] Sources)> previous,
+    private static (string Name, ISlotComponent[] Targets, ISlotComponent[] Sources)? MatchBranch(
+        List<(string Name, ISlotComponent[] Targets, ISlotComponent[] Sources)> previous,
         string name,
         int index,
         bool byName)
@@ -491,7 +491,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         return index < previous.Count ? previous[index] : null;
     }
 
-    private static void ConnectSlots(IWorkflowTreeViewModel tree, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    private static void ConnectSlots(ITreeComponent tree, ISlotComponent sender, ISlotComponent receiver)
     {
         if (tree.LinksMap.TryGetValue(sender, out var existing) && existing.ContainsKey(receiver)) return;
 
@@ -512,8 +512,8 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
 
     private SelectorState CaptureState()
     {
-        var slots = new HashSet<IWorkflowSlotViewModel>(
-            Items.Select(item => (IWorkflowSlotViewModel)item.Slot));
+        var slots = new HashSet<ISlotComponent>(
+            Items.Select(item => (ISlotComponent)item.Slot));
         var links = Parent?.Parent?.Links
             .Where(link => slots.Contains(link.Sender) || slots.Contains(link.Receiver))
             .Distinct()
@@ -539,15 +539,15 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         OnPropertyChanged(nameof(CurrentValue));
     }
 
-    private void ApplyAttachedState(IWorkflowTreeViewModel tree, SelectorState state)
+    private void ApplyAttachedState(ITreeComponent tree, SelectorState state)
     {
         FlushDeferredRemovals();
 
         if (Parent is null)
             return;
 
-        var currentSlots = new HashSet<IWorkflowSlotViewModel>(
-            Items.Select(item => (IWorkflowSlotViewModel)item.Slot));
+        var currentSlots = new HashSet<ISlotComponent>(
+            Items.Select(item => (ISlotComponent)item.Slot));
         foreach (var link in tree.Links
             .Where(link => currentSlots.Contains(link.Sender) || currentSlots.Contains(link.Receiver))
             .ToArray())
@@ -606,7 +606,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         // race against container generation, causing adapters to find
         // missing or unmeasured containers and slot anchors falling
         // back to (0,0).
-        if (!string.IsNullOrEmpty(_memberName) && Parent is IWorkflowViewModel viewModel)
+        if (!string.IsNullOrEmpty(_memberName) && Parent is IWorkflowComponent viewModel)
         {
             var context = SynchronizationContext.Current;
             if (context is not null)
@@ -616,7 +616,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         }
     }
 
-    private static void RemoveLink(IWorkflowTreeViewModel tree, IWorkflowLinkViewModel link)
+    private static void RemoveLink(ITreeComponent tree, ILinkComponent link)
     {
         var sender = link.Sender;
         var receiver = link.Receiver;
@@ -635,7 +635,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         receiver.GetHelper().UpdateState();
     }
 
-    private static void RestoreLink(IWorkflowTreeViewModel tree, IWorkflowLinkViewModel link)
+    private static void RestoreLink(ITreeComponent tree, ILinkComponent link)
     {
         var sender = link.Sender;
         var receiver = link.Receiver;
@@ -663,16 +663,16 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
         string typeName,
         Type? type,
         IReadOnlyList<ConditionalSlot<TSlot>> items,
-        IReadOnlyList<IWorkflowLinkViewModel> links)
+        IReadOnlyList<ILinkComponent> links)
     {
         public string TypeName { get; } = typeName;
         public Type? Type { get; } = type;
         public IReadOnlyList<ConditionalSlot<TSlot>> Items { get; } = items;
-        public IReadOnlyList<IWorkflowLinkViewModel> Links { get; } = links;
+        public IReadOnlyList<ILinkComponent> Links { get; } = links;
     }
 
     /// <inheritdoc />
-    public void Install(IWorkflowNodeViewModel parent, string memberName)
+    public void Install(INodeComponent parent, string memberName)
     {
         Parent = parent;
         _memberName = memberName;
@@ -704,7 +704,7 @@ public partial class SlotEnumerator<TSlot> : IConditionalSlotProvider<TSlot>, IC
     // Slots 与 TrySelect 显式实现 —— 属性类型不协变，且 out 参数的类型不参与重载解析。
     IReadOnlyList<IConditionalSlot> IConditionalSlotProvider.Slots => Items;
 
-    bool IConditionalSlotProvider.TrySelect(object value, out IWorkflowSlotViewModel? slot)
+    bool IConditionalSlotProvider.TrySelect(object value, out ISlotComponent? slot)
     {
         var found = TrySelect(value, out TSlot? typed);
         slot = typed;

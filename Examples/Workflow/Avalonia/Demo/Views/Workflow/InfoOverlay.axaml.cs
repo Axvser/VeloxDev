@@ -17,7 +17,7 @@ namespace Demo;
 /// </summary>
 public partial class InfoOverlay : UserControl
 {
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private string _copyText = "";
 
     public InfoOverlay()
@@ -26,7 +26,7 @@ public partial class InfoOverlay : UserControl
         DataContextChanged += (_, _) =>
         {
             UnsubscribeTree();
-            _tree = DataContext as IWorkflowTreeViewModel;
+            _tree = DataContext as ITreeComponent;
             SubscribeTree();
             Refresh();
         };
@@ -103,11 +103,11 @@ public partial class InfoOverlay : UserControl
         var virtualLink = _tree.VirtualLink;
         foreach (var item in _tree.GetHelper().VisibleItems)
         {
-            if (item is IWorkflowNodeViewModel)
+            if (item is INodeComponent)
             {
                 visibleNodes++;
             }
-            else if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, virtualLink))
+            else if (item is ILinkComponent link && !ReferenceEquals(link, virtualLink))
             {
                 visibleLinks++;
             }

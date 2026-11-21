@@ -6,7 +6,7 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Applies a workflow item's geometry to its WinUI view imperatively and follows later geometry changes.</summary>
-public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, FrameworkElement>
+public sealed class ViewArranger : IViewArranger<IWorkflowComponent, FrameworkElement>
 {
     private readonly ViewLayoutTracker _layout;
 
@@ -17,7 +17,7 @@ public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, FrameworkEl
     }
 
     /// <inheritdoc />
-    public void Arrange(FrameworkElement view, IWorkflowViewModel item)
+    public void Arrange(FrameworkElement view, IWorkflowComponent item)
     {
         // 先退掉上一份订阅，再摆新几何：复用池化视图时旧 item 的延迟闭包不能插在两者之间。
         _layout.Release(view);
@@ -26,11 +26,11 @@ public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, FrameworkEl
         _layout.Track(view, item, ApplyGeometry);
     }
 
-    private static void ApplyGeometry(FrameworkElement view, IWorkflowViewModel item)
+    private static void ApplyGeometry(FrameworkElement view, IWorkflowComponent item)
     {
         switch (item)
         {
-            case IWorkflowNodeViewModel node:
+            case INodeComponent node:
                 Canvas.SetLeft(view, node.Anchor.Horizontal);
                 Canvas.SetTop(view, node.Anchor.Vertical);
                 Canvas.SetZIndex(view, node.Anchor.Layer);
@@ -39,7 +39,7 @@ public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, FrameworkEl
                 view.Height = node.Size.Height > 0 ? node.Size.Height : double.NaN;
                 break;
 
-            case IWorkflowLinkViewModel:
+            case ILinkComponent:
                 // 连线视图自己摆位置：Trimmed 用 offset frame，完整版用自身包围盒。
                 // 在这里钉 (0,0) 会覆盖它的自定位，把整条线平移一个覆盖量。
                 break;

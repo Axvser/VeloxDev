@@ -12,7 +12,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
 /// Attached behavior that turns a node view into a drag handle: a left-press followed by a move issues
-/// <see cref="IWorkflowNodeViewModel.MoveCommand"/> with the offset since the last move.
+/// <see cref="INodeComponent.MoveCommand"/> with the offset since the last move.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -247,16 +247,16 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
         return null;
     }
 
-    private static IWorkflowNodeViewModel? ResolveNode(FrameworkElement control)
+    private static INodeComponent? ResolveNode(FrameworkElement control)
     {
-        if (control.DataContext is IWorkflowNodeViewModel node)
+        if (control.DataContext is INodeComponent node)
         {
             return node;
         }
 
         foreach (var ancestor in EnumerateVisualAncestors(control))
         {
-            if (ancestor is FrameworkElement element && element.DataContext is IWorkflowNodeViewModel resolved)
+            if (ancestor is FrameworkElement element && element.DataContext is INodeComponent resolved)
             {
                 return resolved;
             }

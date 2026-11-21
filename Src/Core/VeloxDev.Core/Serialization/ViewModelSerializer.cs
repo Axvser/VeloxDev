@@ -36,7 +36,7 @@ public sealed class SerializationOptions
     /// <param name="types">The declared property types to drop. Exact matches only.</param>
     /// <remarks>
     /// The use it exists for: serializing a compiled graph without dragging in the tree it came from. A node's
-    /// <c>Parent</c> is a writable property of type <c>IWorkflowTreeViewModel</c>, so the reference graph reaches the
+    /// <c>Parent</c> is a writable property of type <c>ITreeComponent</c>, so the reference graph reaches the
     /// whole document from any single node. Unlike a name-based rule this cannot hit a slot's parent (which is its
     /// node and is forward-needed), and it is inert for the tree's own round trip because that path passes no
     /// exclusions.

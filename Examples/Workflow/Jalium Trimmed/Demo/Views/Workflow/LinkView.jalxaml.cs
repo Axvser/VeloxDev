@@ -45,11 +45,11 @@ public partial class LinkView : UserControl
 
     // The link this view last published a curve to; retracted on rebind so a pooled view cannot leave a
     // stale curve answering for a link that no longer draws here.
-    private IWorkflowLinkViewModel? _publishedLink;
+    private ILinkComponent? _publishedLink;
 
-    private IWorkflowLinkViewModel? _link;
-    private IWorkflowSlotViewModel? _sender;
-    private IWorkflowSlotViewModel? _receiver;
+    private ILinkComponent? _link;
+    private ISlotComponent? _sender;
+    private ISlotComponent? _receiver;
     private PropertyChangedEventHandler? _modelChanged;
     private readonly List<INotifyPropertyChanged> _watchedModels = [];
     private bool _refreshPending;
@@ -127,12 +127,12 @@ public partial class LinkView : UserControl
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
     private bool _lit;
-    private IWorkflowLinkViewModel? _inputLink;
+    private ILinkComponent? _inputLink;
     private IInputEvents? _inputEvents;
 
     private void ResubscribeInput()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (ReferenceEquals(link, _inputLink))
         {
             return;
@@ -184,7 +184,7 @@ public partial class LinkView : UserControl
             return;
         }
 
-        if (DataContext is IWorkflowLinkViewModel link && link.DeleteCommand.CanExecute(null))
+        if (DataContext is ILinkComponent link && link.DeleteCommand.CanExecute(null))
         {
             link.DeleteCommand.Execute(null);
         }
@@ -205,7 +205,7 @@ public partial class LinkView : UserControl
 
     private void Rebind()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (!ReferenceEquals(link, _link))
         {
             Unhook();
@@ -226,7 +226,7 @@ public partial class LinkView : UserControl
         Refresh();
     }
 
-    private void Watch(IWorkflowViewModel? model)
+    private void Watch(IWorkflowComponent? model)
     {
         if (_modelChanged is null)
         {
@@ -241,7 +241,7 @@ public partial class LinkView : UserControl
         }
 
         // 节点的锚点变了，它这张卡上的每个槽都要重新量一次 —— 所以也订节点。
-        var node = model is IWorkflowSlotViewModel slot ? slot.Parent : null;
+        var node = model is ISlotComponent slot ? slot.Parent : null;
         if (node is not null && _watchedModels.Contains(node) is false)
         {
             _watchedModels.Add(node);
@@ -356,7 +356,7 @@ public partial class LinkView : UserControl
     }
 
     // 拖拽预览：两端都是占位槽（没有父节点），也就是一条还没落到任何卡片上的线。
-    private static bool IsVirtualLink(IWorkflowLinkViewModel link)
+    private static bool IsVirtualLink(ILinkComponent link)
         => link.Sender.Parent is null && link.Receiver.Parent is null;
 
     // Extension point: the control points set the curve's shape. Core derives them from each port's own edge
@@ -381,7 +381,7 @@ public partial class LinkView : UserControl
     }
 
     // Extension point: change the second argument if one view no longer draws exactly one link.
-    private void PublishCurve(IWorkflowLinkViewModel link, LinkCurve curve)
+    private void PublishCurve(ILinkComponent link, LinkCurve curve)
     {
         if (!ReferenceEquals(_publishedLink, link))
         {

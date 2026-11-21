@@ -14,7 +14,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 public sealed class NodeCompileInfo
 {
     internal NodeCompileInfo(
-        int order, int chainIndex, int offset, IReadOnlyList<IWorkflowNodeViewModel>? inputNodes)
+        int order, int chainIndex, int offset, IReadOnlyList<INodeComponent>? inputNodes)
     {
         Order = order;
         ChainIndex = chainIndex;
@@ -35,5 +35,5 @@ public sealed class NodeCompileInfo
     /// The upstream sources a join point aggregates into <see cref="IGroupData"/>; <see langword="null"/> on chained
     /// and single-input nodes.
     /// </summary>
-    public IReadOnlyList<IWorkflowNodeViewModel>? InputNodes { get; }
+    public IReadOnlyList<INodeComponent>? InputNodes { get; }
 }

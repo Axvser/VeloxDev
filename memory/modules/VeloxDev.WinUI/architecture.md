@@ -102,7 +102,7 @@ return accepted;
 
 | 角色 | 怎么挂上去 | 宿主类型门槛 | 每元素状态存哪 | 需要谁的 `DataContext` |
 |---|---|---|---|---|
-| 画布宿主 `WorkflowSurfaceBehavior` | `IsEnabled="True"` + `ZoomEnabled` + 若干 `*Name` + `LinkMenuKey` | **`UserControl`**（`OnIsEnabledChanged` 里 `d is not UserControl` 即返回） | 私有附着 DP `StateProperty`，装 `SurfaceState` | **宿主自己**的 DC 必须是 `IWorkflowTreeViewModel`（各处都是 `host.DataContext is not IWorkflowTreeViewModel` 即返回） |
+| 画布宿主 `WorkflowSurfaceBehavior` | `IsEnabled="True"` + `ZoomEnabled` + 若干 `*Name` + `LinkMenuKey` | **`UserControl`**（`OnIsEnabledChanged` 里 `d is not UserControl` 即返回） | 私有附着 DP `StateProperty`，装 `SurfaceState` | **宿主自己**的 DC 必须是 `ITreeComponent`（各处都是 `host.DataContext is not ITreeComponent` 即返回） |
 | 插槽布局 `WorkflowSlotLayoutBehavior` | `IsEnabled="True"` + `SlotNames`/`SlotEnumeratorNames`/`CoordinateHost*` | **`UserControl`**（`OnIsEnabledChanged` 里 `d is not UserControl` 即返回） | 私有附着 DP `StateProperty` | 被挂的那个 `UserControl` 自己的 DC 是 node VM |
 | 节点拖拽 `WorkflowNodeDragBehavior` | `IsEnabled="True"` + `CoordinateHostName/Type` | **`UIElement`**（`OnIsEnabledChanged` 里 `d is not UIElement` 即返回）——最宽 | 私有附着 DP `StateProperty` | 自己或**任一祖先**（`ResolveNode`） |
 | 插槽连接 `WorkflowSlotConnectionBehavior` | `IsEnabled="True"` | **`Control`**（`OnIsEnabledChanged` 里 `d is not Control` 即返回） | 无 | **必须是自己**，不找祖先 |
@@ -145,8 +145,8 @@ return accepted;
 
 `ViewArranger.ApplyGeometry` 分两支：
 
-- 节点视图：写 `Canvas.SetLeft/SetTop/SetZIndex`，并按 `Size` 是否 > 0 决定写 `Width`/`Height` 还是 `double.NaN`（`IWorkflowNodeViewModel` 分支，注释：`(0,0)` 是「还没测量」，NaN 让平台自己定尺寸 —— WinUI 里 `Width = 0` 是**真的宽 0**）；
-- 连线视图：**什么都不写**（`IWorkflowLinkViewModel` 分支的空 `break`）。注释给出的理由是：Trimmed 的 `LinkView` 自己定位到 `−ActualOffset` 并把 `+ActualOffset` 烘进几何（offset frame），在 `Sender`/`Receiver`/`Anchor` 变更时把它钉回 `(0,0)` 会**抹掉这个自定位**、让整条线平移一个 cover 的量；而**不自定位的视图保持默认 `(0,0)`，与旧的钉法等价**。
+- 节点视图：写 `Canvas.SetLeft/SetTop/SetZIndex`，并按 `Size` 是否 > 0 决定写 `Width`/`Height` 还是 `double.NaN`（`INodeComponent` 分支，注释：`(0,0)` 是「还没测量」，NaN 让平台自己定尺寸 —— WinUI 里 `Width = 0` 是**真的宽 0**）；
+- 连线视图：**什么都不写**（`ILinkComponent` 分支的空 `break`）。注释给出的理由是：Trimmed 的 `LinkView` 自己定位到 `−ActualOffset` 并把 `+ActualOffset` 烘进几何（offset frame），在 `Sender`/`Receiver`/`Anchor` 变更时把它钉回 `(0,0)` 会**抹掉这个自定位**、让整条线平移一个 cover 的量；而**不自定位的视图保持默认 `(0,0)`，与旧的钉法等价**。
 
 ⇒ 换上一套「不自定位、指望池化器摆位置」的连线模板时，行为**恰好**退化成旧的钉 `(0,0)`，不报错。对照 WPF / Avalonia 的 `ViewContainer` 只写可见性与绑定态，几何全交模板。
 
@@ -196,7 +196,7 @@ return accepted;
 3. **`Refresh` 挂在 `ViewChanged` 上 ⇒ 每帧一次全量重解析，且成功是「自己把自己重挂一次」**（§三·2）。改 `ResolveNamedControls` 或 `UnsubscribeResolvedControls` 时记住：**这两段的副作用是热路径**，在滚动期间每帧执行。
 4. **模板缓存按 `Type` 键、永不失效**（`ViewHosting/ViewFactory.cs` 的 `_templates`，读取短路在 `FindTemplate` 的 `TryGetValue`）—— `DataTemplateSelector` 对同一类型的第二次返回不会被再问一遍；换 selector 会走 `ViewPool.Rebuild` 重建整个 system（新工厂 = 空缓存），没有单独的清缓存 API（WPF 同形，见其架构记忆 §五·7）。
 5. **`WorkflowCanvasTransformBehavior.OnTransformChanged` 的注释与代码不符**（见 `memory/modules/WorkflowSystem/adapters/winui.md` §四·P1）——它就在本模块的 `WorkflowSystem/AttachedBehaviors/` 里，且 `ApplyLayout` 现在**同时**把偏移写进 `Canvas.Translation`（`WorkflowSurfaceBehavior.ApplyLayout`）。
-6. **`IsSurfaceBlankInteraction` 认类型靠字符串**（`IsSurfaceBlankInteraction` 里 `string.Equals(x.GetType().Name, "ScrollContentPresenter")` 那一处）—— 同轴文档 §二·L8 已记；补充一条本模块侧的事实：**契约类型那一半用的是 `IsWorkflowNodeOrSlotVisual` 的 `source is FrameworkElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel }`，可靠**；不可靠的只有 WinUI 内部类型与 demo 类型。
+6. **`IsSurfaceBlankInteraction` 认类型靠字符串**（`IsSurfaceBlankInteraction` 里 `string.Equals(x.GetType().Name, "ScrollContentPresenter")` 那一处）—— 同轴文档 §二·L8 已记；补充一条本模块侧的事实：**契约类型那一半用的是 `IsWorkflowNodeOrSlotVisual` 的 `source is FrameworkElement { DataContext: INodeComponent or ISlotComponent }`，可靠**；不可靠的只有 WinUI 内部类型与 demo 类型。
 7. **`ViewPool` 的生命周期只在 `Panel` 上**：`ConditionalWeakTable<Panel, ViewSourcePipeline>`（`ViewPool.cs` 的 `Systems`）+ `panel.Unloaded`（`Rebuild` 里订阅）⇒ 换 `ItemsSource` 或 `TemplateSelector` 都走 `Rebuild`（先 `Cleanup` 停掉旧 system 再建新的），**没有**显式的「拆下」API；`Panel` 活着但已被移出可视树时，system 仍持有它。
 8. **模块里若干文件带 UTF-8 BOM，而 `State.cs` 的 `namespace` 正好在第 1 行** ⇒ 按行首锚定的统计（`grep -c '^namespace'`、`sed -n '1p'`）会**静默少算**，把 `VeloxDev.TransitionSystem` 数成比实际少一个。要数就用 `sed -e '1s/^\xef\xbb\xbf//'` 先削 BOM 再数。
 

@@ -7,7 +7,7 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>
 /// [ Component Helper ] Provide standard supports for Slot Component.
 /// </summary>
-public class SlotHelper : SlotHelper<IWorkflowSlotViewModel>
+public class SlotHelper : SlotHelper<ISlotComponent>
 {
 
 }
@@ -16,8 +16,8 @@ public class SlotHelper : SlotHelper<IWorkflowSlotViewModel>
 /// [ Component Helper ] Provide standard supports for Slot Component.
 /// </summary>
 /// <typeparam name="T">The type of the Slot ViewModel that this helper is designed for. </typeparam>
-public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, IInputEvents
-    where T : class, IWorkflowSlotViewModel
+public class SlotHelper<T> : ISlotHelper, ISlotEvents, IInputEvents
+    where T : class, ISlotComponent
 {
     /// <summary>The slot this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
     public T? Component { get; protected set; }
@@ -27,16 +27,16 @@ public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, 
     public InputRelay Input { get; } = new();
 
     /// <inheritdoc />
-    public event EventHandler<IWorkflowSlotViewModel>? TargetAdded;
+    public event EventHandler<ISlotComponent>? TargetAdded;
     /// <inheritdoc />
-    public event EventHandler<IWorkflowSlotViewModel>? TargetRemoved;
+    public event EventHandler<ISlotComponent>? TargetRemoved;
     /// <inheritdoc />
-    public event EventHandler<IWorkflowSlotViewModel>? SourceAdded;
+    public event EventHandler<ISlotComponent>? SourceAdded;
     /// <inheritdoc />
-    public event EventHandler<IWorkflowSlotViewModel>? SourceRemoved;
+    public event EventHandler<ISlotComponent>? SourceRemoved;
 
     /// <inheritdoc />
-    public virtual void Install(IWorkflowSlotViewModel slot)
+    public virtual void Install(ISlotComponent slot)
     {
         Component = slot as T;
         commands = slot.GetStandardCommands();
@@ -44,7 +44,7 @@ public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, 
         slot.Sources.CollectionChanged += OnSourcesChanged;
     }
     /// <inheritdoc />
-    public virtual void Uninstall(IWorkflowSlotViewModel slot)
+    public virtual void Uninstall(ISlotComponent slot)
     {
         Component = null;
         commands = [];
@@ -114,7 +114,7 @@ public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, 
                 if (e.NewItems is null) return;
                 foreach (var item in e.NewItems)
                 {
-                    if (item is IWorkflowSlotViewModel slot)
+                    if (item is ISlotComponent slot)
                     {
                         OnTargetAdded(slot);
                     }
@@ -124,7 +124,7 @@ public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, 
                 if (e.OldItems is null) return;
                 foreach (var item in e.OldItems)
                 {
-                    if (item is IWorkflowSlotViewModel slot)
+                    if (item is ISlotComponent slot)
                     {
                         OnTargetRemoved(slot);
                     }
@@ -133,9 +133,9 @@ public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, 
         }
     }
     /// <summary>Raises <see cref="TargetAdded"/>.</summary>
-    protected virtual void OnTargetAdded(IWorkflowSlotViewModel slot) => TargetAdded?.Invoke(Component, slot);
+    protected virtual void OnTargetAdded(ISlotComponent slot) => TargetAdded?.Invoke(Component, slot);
     /// <summary>Raises <see cref="TargetRemoved"/>.</summary>
-    protected virtual void OnTargetRemoved(IWorkflowSlotViewModel slot) => TargetRemoved?.Invoke(Component, slot);
+    protected virtual void OnTargetRemoved(ISlotComponent slot) => TargetRemoved?.Invoke(Component, slot);
 
     private void OnSourcesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -145,7 +145,7 @@ public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, 
                 if (e.NewItems is null) return;
                 foreach (var item in e.NewItems)
                 {
-                    if (item is IWorkflowSlotViewModel slot)
+                    if (item is ISlotComponent slot)
                     {
                         OnSourceAdded(slot);
                     }
@@ -155,7 +155,7 @@ public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, 
                 if (e.OldItems is null) return;
                 foreach (var item in e.OldItems)
                 {
-                    if (item is IWorkflowSlotViewModel slot)
+                    if (item is ISlotComponent slot)
                     {
                         OnSourceRemoved(slot);
                     }
@@ -164,7 +164,7 @@ public class SlotHelper<T> : IWorkflowSlotViewModelHelper, IWorkflowSlotEvents, 
         }
     }
     /// <summary>Raises <see cref="SourceAdded"/>.</summary>
-    protected virtual void OnSourceAdded(IWorkflowSlotViewModel slot) => SourceAdded?.Invoke(Component, slot);
+    protected virtual void OnSourceAdded(ISlotComponent slot) => SourceAdded?.Invoke(Component, slot);
     /// <summary>Raises <see cref="SourceRemoved"/>.</summary>
-    protected virtual void OnSourceRemoved(IWorkflowSlotViewModel slot) => SourceRemoved?.Invoke(Component, slot);
+    protected virtual void OnSourceRemoved(ISlotComponent slot) => SourceRemoved?.Invoke(Component, slot);
 }

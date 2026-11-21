@@ -13,7 +13,7 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// <see cref="Application"/> resources. A type whose lookup fails is reported as unsupported by returning
 /// <see langword="null"/>; the pool remembers that answer for the type.
 /// </remarks>
-public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, FrameworkElement>
+public sealed class ViewFactory : IViewFactory<IWorkflowComponent, FrameworkElement>
 {
     private readonly Panel _host;
     private readonly DataTemplateSelector? _selector;
@@ -30,10 +30,10 @@ public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, FrameworkElem
     }
 
     /// <inheritdoc />
-    public bool WantsItem(IWorkflowViewModel item) => true;
+    public bool WantsItem(IWorkflowComponent item) => true;
 
     /// <inheritdoc />
-    public FrameworkElement? CreateView(IWorkflowViewModel item)
+    public FrameworkElement? CreateView(IWorkflowComponent item)
         => FindTemplate(item)?.LoadContent() as FrameworkElement;
 
     // 解析顺序与旧管理器一致：选择器 → 沿视觉树上溯的 Resources → Application.Resources。

@@ -10,7 +10,7 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// The selector returns a <see cref="DataTemplate"/> and the factory creates its content. WinForms has no template
 /// cache to search, so the selector stays the single creation path for every item kind.
 /// </remarks>
-public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, Control>
+public sealed class ViewFactory : IViewFactory<IWorkflowComponent, Control>
 {
     private readonly TemplateSelector selector;
 
@@ -23,10 +23,10 @@ public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, Control>
     }
 
     /// <inheritdoc />
-    public bool WantsItem(IWorkflowViewModel item) => true;
+    public bool WantsItem(IWorkflowComponent item) => true;
 
     /// <inheritdoc />
-    public Control CreateView(IWorkflowViewModel item)
+    public Control CreateView(IWorkflowComponent item)
     {
         var template = selector.SelectTemplate(item)
             ?? throw new InvalidOperationException($"No DataTemplate applies to '{item?.GetType().FullName}'.");

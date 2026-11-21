@@ -16,7 +16,7 @@ public class WorkflowGuardTests
     public void SetChannelOnDetachedSlot_ThrowsInDebug()
     {
 #if DEBUG
-        var slot = new SlotDefaultViewModel();
+        var slot = new SlotDefaultComponent();
         try { slot.GetHelper().SetChannel(SlotChannel.OneTarget); Assert.Fail(); }
         catch (InvalidOperationException) { }
 #endif
@@ -26,7 +26,7 @@ public class WorkflowGuardTests
     public void SendConnectionOnDetachedSlot_ThrowsInDebug()
     {
 #if DEBUG
-        var slot = new SlotDefaultViewModel();
+        var slot = new SlotDefaultComponent();
         try { slot.GetHelper().SendConnection(); Assert.Fail(); }
         catch (InvalidOperationException) { }
 #endif
@@ -36,7 +36,7 @@ public class WorkflowGuardTests
     public void ReceiveConnectionOnDetachedSlot_ThrowsInDebug()
     {
 #if DEBUG
-        var slot = new SlotDefaultViewModel();
+        var slot = new SlotDefaultComponent();
         try { slot.GetHelper().ReceiveConnection(); Assert.Fail(); }
         catch (InvalidOperationException) { }
 #endif
@@ -46,7 +46,7 @@ public class WorkflowGuardTests
     public void DeleteDetachedSlot_ThrowsInDebug()
     {
 #if DEBUG
-        var slot = new SlotDefaultViewModel();
+        var slot = new SlotDefaultComponent();
         try { slot.GetHelper().Delete(); Assert.Fail(); }
         catch (InvalidOperationException) { }
 #endif
@@ -56,7 +56,7 @@ public class WorkflowGuardTests
     public void DeleteDetachedNode_ThrowsInDebug()
     {
 #if DEBUG
-        var node = new NodeDefaultViewModel();
+        var node = new NodeDefaultComponent();
         try { node.GetHelper().Delete(); Assert.Fail(); }
         catch (InvalidOperationException) { }
 #endif
@@ -66,7 +66,7 @@ public class WorkflowGuardTests
     public void DeleteDetachedLink_ThrowsInDebug()
     {
 #if DEBUG
-        var link = new LinkDefaultViewModel();
+        var link = new LinkDefaultComponent();
         try { link.GetHelper().Delete(); Assert.Fail(); }
         catch (InvalidOperationException) { }
 #endif
@@ -76,7 +76,7 @@ public class WorkflowGuardTests
     public void SetSelectorOnUninstalledEnumerator_ThrowsInDebug()
     {
 #if DEBUG
-        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
         try { enumerator.SetSelector(typeof(bool)); Assert.Fail(); }
         catch (InvalidOperationException) { }
 #endif
@@ -91,17 +91,17 @@ public class WorkflowGuardTests
     public void DetachedOperations_SilentNoOpInRelease()
     {
 #if !DEBUG
-        var slot = new SlotDefaultViewModel();
+        var slot = new SlotDefaultComponent();
         slot.GetHelper().SetChannel(SlotChannel.OneTarget); // no throw
         Assert.AreEqual(SlotChannel.OneBoth, slot.Channel, "SetChannel on a detached slot is a silent no-op in Release.");
 
-        var node = new NodeDefaultViewModel();
+        var node = new NodeDefaultComponent();
         node.GetHelper().Delete(); // no throw
 
-        var link = new LinkDefaultViewModel();
+        var link = new LinkDefaultComponent();
         link.GetHelper().Delete(); // no throw
 
-        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
         enumerator.SetSelector(typeof(bool)); // no throw
 #endif
     }

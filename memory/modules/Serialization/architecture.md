@@ -50,7 +50,7 @@
 跨程序集的条目**分两种，只有一种会重复**：
 
 - **非泛型类型只有声明方能发**（`Base/VeloxJsonModel.cs` 的 `IsWritableType`，判据是 `DeclaredIn`）—— 消费方走到它也只是运行期去注册表里查声明方已经登记好的那份，自己不注册。不会重复。
-- **封闭泛型两边都可能发**：`SlotEnumerator<>` 的定义在 Core，而 `SlotEnumerator<Demo.ViewModels.SlotViewModel>` 只有见过它的 Lib 命名得出来；反过来 Core 也发得出 `SlotEnumerator<SlotDefaultViewModel>`。当实参对两边都可见时，同一个 `Type` 就会两次到达注册处。
+- **封闭泛型两边都可能发**：`SlotEnumerator<>` 的定义在 Core，而 `SlotEnumerator<Demo.ViewModels.SlotViewModel>` 只有见过它的 Lib 命名得出来；反过来 Core 也发得出 `SlotEnumerator<SlotDefaultComponent>`。当实参对两边都可见时，同一个 `Type` 就会两次到达注册处。
 
 注册处因此有一条**归属规则**（`VeloxJsonRegistry.cs`）：**声明方的注册永远写得上；消费方只在还没有条目时写得上**。`RegisterWriter` / `RegisterReader` **收一个 `declaresType` 参数**，由生成的注册代码给出。
 
@@ -209,7 +209,7 @@
 
 **语料**（`Corpus.BuildTree`）**不覆盖新特性**：没有条件写出、没有 `EnumName`、没有必填成员、没有数组。它量的是**既有文档那条路**；新特性的开销只由用到它们的文档付。要量新特性，得先给 `Corpus` 加形状。
 
-⚠ **它也不覆盖这套格式最贵的那个形状**：树的 `LinksMap`（接口键套接口键的嵌套字典）在这张语料里是**空的**。只有 `SlotEnumerator` 会往它里面写（`SlotEnumerator.ConnectSlots`），而这棵树用的是 `NodeDefaultViewModel` / `SlotDefaultViewModel`；黄金文件 `tree.json` 同样写着 `"LinksMap": {}`，所以不是语料造错了。文档大小与耗时的对比里**没有「接口键字典」这一维**；要补上得让树带上 `SlotEnumerator`，而那会让 STJ 需要转换器（它的字典键必须是属性名），比较就不再是「配置对配置」了。
+⚠ **它也不覆盖这套格式最贵的那个形状**：树的 `LinksMap`（接口键套接口键的嵌套字典）在这张语料里是**空的**。只有 `SlotEnumerator` 会往它里面写（`SlotEnumerator.ConnectSlots`），而这棵树用的是 `NodeDefaultComponent` / `SlotDefaultComponent`；黄金文件 `tree.json` 同样写着 `"LinksMap": {}`，所以不是语料造错了。文档大小与耗时的对比里**没有「接口键字典」这一维**；要补上得让树带上 `SlotEnumerator`，而那会让 STJ 需要转换器（它的字典键必须是属性名），比较就不再是「配置对配置」了。
 
 ### 四·二、与 STJ / Newtonsoft 的同图对比
 
@@ -258,7 +258,7 @@
 
 - **写**：默认设置对 NaN/±Infinity 抛 `ArgumentException`，要 `AllowNamedFloatingPointLiterals` 才写得出去 —— 与 §三 那条「非有限值写成字符串」正是同一个分歧。
 - **读，第一处**：`Each parameter in the deserialization constructor on type 'Offset' must bind to an object property or field`。这些 ViewModel 是**主构造器类**，提升出来的属性名（`Horizontal`）与构造器形参名（`left`）不同；`IncludeFields` 也救不了（字段是 `_horizontal`）。修法是 `TypeInfoResolver` 的修饰器把 `CreateObject` 换成 `GetUninitializedObject` —— 跳过构造器建实例，与生成器 `Create()` 同源。**只对没有公开无参构造的类型生效**，所以落在 `Offset` 这类叶子上，不是每个对象都多一笔。
-- **读，第二处**：`Deserialization of interface or abstract types is not supported. Type 'IWorkflowLinkViewModel'. Path: $.VirtualLink`。修法是给接口 / 抽象类型配 `JsonPolymorphismOptions` 加一张**枚举出来的派生表**。**必须同时配在写这一侧**（判别符是写进去的）；派生表要排掉泛型 —— STJ 拒绝泛型派生类型，实测对着 `VeloxCommand\`1[T1…T9,TResult]` 抛 `must not be generic`。
+- **读，第二处**：`Deserialization of interface or abstract types is not supported. Type 'ILinkComponent'. Path: $.VirtualLink`。修法是给接口 / 抽象类型配 `JsonPolymorphismOptions` 加一张**枚举出来的派生表**。**必须同时配在写这一侧**（判别符是写进去的）；派生表要排掉泛型 —— STJ 拒绝泛型派生类型，实测对着 `VeloxCommand\`1[T1…T9,TResult]` 抛 `must not be generic`。
 
 **这两条是配置，不是替它写的序列化代码**：一旦手写转换器，那一行就不再是「System.Text.Json」，表就在声称一个它撑不住的比较。
 

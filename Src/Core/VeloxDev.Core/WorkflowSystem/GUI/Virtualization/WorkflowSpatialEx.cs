@@ -44,8 +44,8 @@ public static class WorkflowSpatialEx
     /// <param name="observable">
     /// The observable collection that will be used to track the visible nodes and links.
     /// </param>
-    public static int EnableMap<T>(this IWorkflowTreeViewModel tree, double cellSize, T observable)
-        where T : Collection<IWorkflowViewModel>, INotifyCollectionChanged
+    public static int EnableMap<T>(this ITreeComponent tree, double cellSize, T observable)
+        where T : Collection<IWorkflowComponent>, INotifyCollectionChanged
     {
         if (cellSize <= 0)
         {
@@ -89,13 +89,13 @@ public static class WorkflowSpatialEx
     /// 
     /// <exception cref="ArgumentNullException">
     /// Thrown if the spatial map has not been enabled for the workflow tree.
-    /// Use <see cref="EnableMap{T}(IWorkflowTreeViewModel, double, T)"/> to enable spatial indexing first.
+    /// Use <see cref="EnableMap{T}(ITreeComponent, double, T)"/> to enable spatial indexing first.
     /// </exception>
     /// 
     /// <exception cref="ArgumentException">
     /// Thrown if the viewport has invalid dimensions (e.g., zero or negative width/height).
     /// </exception>
-    public static void Virtualize(this IWorkflowTreeViewModel tree, Viewport viewport)
+    public static void Virtualize(this ITreeComponent tree, Viewport viewport)
     {
         if (viewport.Width <= 0 || viewport.Height <= 0)
             return;
@@ -115,14 +115,14 @@ public static class WorkflowSpatialEx
         }
     }
 
-    private static void VirtualizeCore(IWorkflowTreeViewModel tree, Viewport viewport)
+    private static void VirtualizeCore(ITreeComponent tree, Viewport viewport)
     {
         if (viewport.Width <= 0 || viewport.Height <= 0)
             return;
 
         if (!SpatialManagers.TryGetValue(tree, out var manager) ||
             !Observables.TryGetValue(tree, out var collection) ||
-            collection is not Collection<IWorkflowViewModel> observable)
+            collection is not Collection<IWorkflowComponent> observable)
         {
             throw new ArgumentNullException(
                 "The workflow must first successfully enable the spatial map before it can be virtualized.");
@@ -152,8 +152,8 @@ public static class WorkflowSpatialEx
         var agentBounds = manager.QueryAgentBounds(query, expansionDepth: 1).ToArray();
 
         // 2. Collect unique nodes from both ends of each AgentBounds
-        var visibleNodes = new HashSet<IWorkflowNodeViewModel>(
-            WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        var visibleNodes = new HashSet<INodeComponent>(
+            WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
         foreach (var pair in agentBounds)
         {
             visibleNodes.Add(pair.NodeA);
@@ -165,9 +165,9 @@ public static class WorkflowSpatialEx
             visibleNodes.Add(node);
 
         // 4. Build desired items: VirtualLink + all nodes + all links, in one pass
-        List<IWorkflowViewModel> desiredItems = [tree.VirtualLink];
-        var desiredSet = new HashSet<IWorkflowViewModel>(
-            WorkflowReferenceEqualityComparer<IWorkflowViewModel>.Instance)
+        List<IWorkflowComponent> desiredItems = [tree.VirtualLink];
+        var desiredSet = new HashSet<IWorkflowComponent>(
+            WorkflowReferenceEqualityComparer<IWorkflowComponent>.Instance)
         {
             tree.VirtualLink
         };
@@ -179,7 +179,7 @@ public static class WorkflowSpatialEx
             AddDesiredItem(desiredItems, desiredSet, link);
 
         // 5. Remove stale items from observable
-        foreach (var item in observable.OfType<IWorkflowViewModel>().ToArray())
+        foreach (var item in observable.OfType<IWorkflowComponent>().ToArray())
         {
             if (!desiredSet.Contains(item))
                 RemoveAll(observable, item);
@@ -202,7 +202,7 @@ public static class WorkflowSpatialEx
     /// <param name="tree">
     /// The workflow tree view model to be removed from spatial maps and observables. Cannot be null.
     /// </param>
-    public static int ClearMap(this IWorkflowTreeViewModel tree)
+    public static int ClearMap(this ITreeComponent tree)
     {
         var r1 = 2;
         var r2 = 8;
@@ -213,7 +213,7 @@ public static class WorkflowSpatialEx
             r1 = SpatialManagers.Remove(tree) ? 1 : 2;
         }
 
-        if (Observables.TryGetValue(tree, out var _observable) && _observable is Collection<IWorkflowViewModel> observable)
+        if (Observables.TryGetValue(tree, out var _observable) && _observable is Collection<IWorkflowComponent> observable)
         {
             observable.Remove(tree.VirtualLink);
             r2 = Observables.Remove(tree) ? 4 : 8;
@@ -232,7 +232,7 @@ public static class WorkflowSpatialEx
     /// the inset is read only inside <see cref="Virtualize"/> when the visible set is computed. Callers
     /// (surfaces/adapters) should set it from the ruler band's actual thickness on the occupied edges.
     /// </summary>
-    public static void SetVirtualizeInset(this IWorkflowTreeViewModel tree,
+    public static void SetVirtualizeInset(this ITreeComponent tree,
         double left = 0d, double top = 0d, double right = 0d, double bottom = 0d)
     {
         // Called on every surface pass, so keep it allocation-free and change-detecting: after the
@@ -273,19 +273,19 @@ public static class WorkflowSpatialEx
     /// </param>
     /// 
     /// <returns>
-    /// An enumerable collection of <see cref="IWorkflowNodeViewModel"/> instances
+    /// An enumerable collection of <see cref="INodeComponent"/> instances
     /// that intersect with the specified viewport.
     /// </returns>
     /// 
     /// <exception cref="ArgumentNullException">
     /// Thrown if the spatial map has not been enabled for the workflow tree.
-    /// Use <see cref="EnableMap{T}(IWorkflowTreeViewModel, double, T)"/> to enable spatial indexing first.
+    /// Use <see cref="EnableMap{T}(ITreeComponent, double, T)"/> to enable spatial indexing first.
     /// </exception>
     /// 
     /// <exception cref="ArgumentException">
     /// Thrown if the viewport has invalid dimensions (e.g., zero or negative width/height).
     /// </exception>
-    public static IEnumerable<IWorkflowNodeViewModel> QueryNodes(this IWorkflowTreeViewModel tree, Viewport viewport)
+    public static IEnumerable<INodeComponent> QueryNodes(this ITreeComponent tree, Viewport viewport)
     {
         if (viewport.Width <= 0 || viewport.Height <= 0)
             return [];
@@ -303,11 +303,11 @@ public static class WorkflowSpatialEx
     ///
     /// <param name="tree">
     /// The tree to search. Its spatial map must already be enabled — see
-    /// <see cref="EnableMap{T}(IWorkflowTreeViewModel, double, T)"/>.
+    /// <see cref="EnableMap{T}(ITreeComponent, double, T)"/>.
     /// </param>
     ///
     /// <param name="from">
-    /// One corner of the rectangle, in the frame <see cref="IWorkflowNodeViewModel.Anchor"/> is read in.
+    /// One corner of the rectangle, in the frame <see cref="INodeComponent.Anchor"/> is read in.
     /// </param>
     ///
     /// <param name="to">The opposite corner, in the same frame.</param>
@@ -324,8 +324,8 @@ public static class WorkflowSpatialEx
     /// </para>
     ///
     /// <para>
-    /// The frame is the one <see cref="QueryNodes(IWorkflowTreeViewModel, Viewport)"/> queries in. A node's
-    /// <see cref="IWorkflowNodeViewModel.Anchor"/> getter returns that frame, and
+    /// The frame is the one <see cref="QueryNodes(ITreeComponent, Viewport)"/> queries in. A node's
+    /// <see cref="INodeComponent.Anchor"/> getter returns that frame, and
     /// <see cref="WorkflowSurfaceMath.ToWorldAnchor(double, double, int, CanvasLayout)"/> produces a point in
     /// it from a pointer position — so a marquee built from two routed pointer positions needs no
     /// scaling of its own. Multiplying by <see cref="CanvasLayout.Scale"/> here would size the rectangle
@@ -334,9 +334,9 @@ public static class WorkflowSpatialEx
     /// </para>
     /// </remarks>
     ///
-    /// <seealso cref="QueryNodes(IWorkflowTreeViewModel, Viewport)"/>
-    public static IReadOnlyList<IWorkflowNodeViewModel> QueryNodes(
-        this IWorkflowTreeViewModel tree,
+    /// <seealso cref="QueryNodes(ITreeComponent, Viewport)"/>
+    public static IReadOnlyList<INodeComponent> QueryNodes(
+        this ITreeComponent tree,
         Anchor from,
         Anchor to)
     {
@@ -357,7 +357,7 @@ public static class WorkflowSpatialEx
         return [.. tree.QueryNodes(new Viewport(left, top, width, height))];
     }
 
-    private static void AddIfMissing(Collection<IWorkflowViewModel> observable, IWorkflowViewModel item)
+    private static void AddIfMissing(Collection<IWorkflowComponent> observable, IWorkflowComponent item)
     {
         if (!observable.Contains(item))
         {
@@ -365,7 +365,7 @@ public static class WorkflowSpatialEx
         }
     }
 
-    private static void AddDesiredItem(List<IWorkflowViewModel> desiredItems, HashSet<IWorkflowViewModel> desiredSet, IWorkflowViewModel item)
+    private static void AddDesiredItem(List<IWorkflowComponent> desiredItems, HashSet<IWorkflowComponent> desiredSet, IWorkflowComponent item)
     {
         if (desiredSet.Add(item))
         {
@@ -373,7 +373,7 @@ public static class WorkflowSpatialEx
         }
     }
 
-    private static void RemoveAll(Collection<IWorkflowViewModel> observable, IWorkflowViewModel item)
+    private static void RemoveAll(Collection<IWorkflowComponent> observable, IWorkflowComponent item)
     {
         while (observable.Contains(item))
         {

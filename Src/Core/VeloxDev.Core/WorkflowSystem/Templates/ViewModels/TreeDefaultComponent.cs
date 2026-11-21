@@ -4,15 +4,15 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
-/// <summary>The default implementation of <see cref="IWorkflowTreeViewModel"/>.</summary>
+/// <summary>The default implementation of <see cref="ITreeComponent"/>.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Tree组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Tree component interface")]
-public sealed partial class TreeDefaultViewModel : IWorkflowTreeViewModel, IWorkflowIdentifiable
+public sealed partial class TreeDefaultComponent : ITreeComponent, IRuntimeIdentifiable
 {
-    private IWorkflowTreeViewModelHelper helper = new TreeHelper();
+    private ITreeHelper helper = new TreeHelper();
 
     /// <summary>The helper that carries this component's behaviour.</summary>
-    public IWorkflowTreeViewModelHelper Helper
+    public ITreeHelper Helper
     {
         get => helper;
         private set
@@ -28,18 +28,18 @@ public sealed partial class TreeDefaultViewModel : IWorkflowTreeViewModel, IWork
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>Creates the component and installs its default helper.</summary>
-    public TreeDefaultViewModel() { InitializeWorkflow(); }
+    public TreeDefaultComponent() { InitializeWorkflow(); }
 
     [VeloxProperty] private CanvasLayout layout = new();
-    [VeloxProperty] private IWorkflowLinkViewModel virtualLink = new LinkDefaultViewModel() { Sender = new SlotDefaultViewModel(), Receiver = new SlotDefaultViewModel() };
-    [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> nodes = [];
-    [VeloxProperty] private ObservableCollection<IWorkflowLinkViewModel> links = [];
-    [VeloxProperty] private Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>> linksMap = [];
+    [VeloxProperty] private ILinkComponent virtualLink = new LinkDefaultComponent() { Sender = new SlotDefaultComponent(), Receiver = new SlotDefaultComponent() };
+    [VeloxProperty] private ObservableCollection<INodeComponent> nodes = [];
+    [VeloxProperty] private ObservableCollection<ILinkComponent> links = [];
+    [VeloxProperty] private Dictionary<ISlotComponent, Dictionary<ISlotComponent, ILinkComponent>> linksMap = [];
 
     [VeloxCommand]
     private Task CreateNode(object? parameter, CancellationToken ct)
     {
-        if (parameter is not IWorkflowNodeViewModel node) return Task.CompletedTask;
+        if (parameter is not INodeComponent node) return Task.CompletedTask;
         Helper.CreateNode(node);
         return Task.CompletedTask;
     }
@@ -59,21 +59,21 @@ public sealed partial class TreeDefaultViewModel : IWorkflowTreeViewModel, IWork
     [VeloxCommand]
     private Task SendConnection(object? parameter, CancellationToken ct)
     {
-        if (parameter is not IWorkflowSlotViewModel slot) return Task.CompletedTask;
+        if (parameter is not ISlotComponent slot) return Task.CompletedTask;
         Helper.SendConnection(slot);
         return Task.CompletedTask;
     }
     [VeloxCommand]
     private Task ReceiveConnection(object? parameter, CancellationToken ct)
     {
-        if (parameter is not IWorkflowSlotViewModel slot) return Task.CompletedTask;
+        if (parameter is not ISlotComponent slot) return Task.CompletedTask;
         Helper.ReceiveConnection(slot);
         return Task.CompletedTask;
     }
     [VeloxCommand]
     private Task Submit(object? parameter, CancellationToken ct)
     {
-        if (parameter is not IWorkflowActionPair actionPair) return Task.CompletedTask;
+        if (parameter is not IActionPair actionPair) return Task.CompletedTask;
         Helper.Submit(actionPair);
         return Task.CompletedTask;
     }
@@ -96,14 +96,14 @@ public sealed partial class TreeDefaultViewModel : IWorkflowTreeViewModel, IWork
     }
 
     /// <inheritdoc />
-    public IWorkflowTreeViewModelHelper GetHelper() => Helper;
+    public ITreeHelper GetHelper() => Helper;
     /// <inheritdoc />
     public void InitializeWorkflow()
     {
         Helper.Install(this);
     }
     /// <inheritdoc />
-    public void SetHelper(IWorkflowTreeViewModelHelper helper)
+    public void SetHelper(ITreeHelper helper)
     {
         if (ReferenceEquals(Helper, helper)) return;
         Helper.Uninstall(this);

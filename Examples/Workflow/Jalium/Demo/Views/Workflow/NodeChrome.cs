@@ -99,7 +99,7 @@ internal static class NodeChrome
     }
 
     // 兜底卡：只有卡面、发丝边与一条贯穿全高的类型色条，衬一个「?」。
-    // 故意留空：IWorkflowNodeViewModel 只有几何与插槽、没有显示名 —— 标题是具体 ViewModel 的属性，所以这张卡没法
+    // 故意留空：INodeComponent 只有几何与插槽、没有显示名 —— 标题是具体 ViewModel 的属性，所以这张卡没法
     // 诚实地报出它不认识的那个节点叫什么；这个 demo 里每种节点都有自己的视图，它只会画到外来类型上。
     public static Border BareCard(double width, double height, Color accent)
     {

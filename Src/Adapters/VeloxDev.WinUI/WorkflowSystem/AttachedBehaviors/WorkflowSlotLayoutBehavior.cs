@@ -245,7 +245,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     private static void RequestSync(UserControl control, bool force)
     {
         if (control.GetValue(StateProperty) is null
-            || control.DataContext is not IWorkflowNodeViewModel node)
+            || control.DataContext is not INodeComponent node)
         {
             return;
         }
@@ -273,11 +273,11 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
     private static void CancelSync(UserControl control)
     {
-        object owner = control.DataContext is IWorkflowNodeViewModel { Parent: { } tree } ? tree : control;
+        object owner = control.DataContext is INodeComponent { Parent: { } tree } ? tree : control;
         WorkflowLayoutBatch.For(owner).Cancel(control);
     }
 
-    private static object OwnerOf(UserControl control, IWorkflowNodeViewModel node)
+    private static object OwnerOf(UserControl control, INodeComponent node)
         => node.Parent ?? (object)control;
 
     // 指纹里的插槽数：容器数量变了（枚举插槽增删、模板重建）必须重测，哪怕节点外框尺寸没变。
@@ -316,7 +316,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         state.Syncing = true;
         try
         {
-            if (control.DataContext is not IWorkflowNodeViewModel node)
+            if (control.DataContext is not INodeComponent node)
             {
                 return;
             }
@@ -328,8 +328,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
             // 重建「变化时该触发同步」的属性名集合。
             state.SlotPropertyNames.Clear();
-            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
-            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
+            state.SlotPropertyNames.Add(nameof(INodeComponent.Anchor));
+            state.SlotPropertyNames.Add(nameof(INodeComponent.Size));
             // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
             // OnPropertyChanged("OutputSlots") 才匹配得上。
             foreach (var name in slotNames)
@@ -365,7 +365,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
     }
 
-    private static void SyncNamedSlot(UserControl parentHost, UserControl host, FrameworkElement? coordinateHost, IWorkflowNodeViewModel node, string? controlName)
+    private static void SyncNamedSlot(UserControl parentHost, UserControl host, FrameworkElement? coordinateHost, INodeComponent node, string? controlName)
     {
         if (string.IsNullOrWhiteSpace(controlName))
         {
@@ -378,7 +378,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
     }
 
-    private static void SyncSlotEnumerator(UserControl parentHost, UserControl host, FrameworkElement? coordinateHost, IWorkflowNodeViewModel node, string enumeratorName)
+    private static void SyncSlotEnumerator(UserControl parentHost, UserControl host, FrameworkElement? coordinateHost, INodeComponent node, string enumeratorName)
     {
         if (parentHost.FindName(enumeratorName) is not ItemsControl itemsControl || itemsControl.Items.Count == 0)
         {
@@ -421,9 +421,9 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
     }
 
-    private static void SyncSlot(UserControl host, FrameworkElement? coordinateHost, FrameworkElement control, IWorkflowNodeViewModel node)
+    private static void SyncSlot(UserControl host, FrameworkElement? coordinateHost, FrameworkElement control, INodeComponent node)
     {
-        if (control.DataContext is not IWorkflowSlotViewModel slot || control.ActualWidth <= 0 || control.ActualHeight <= 0)
+        if (control.DataContext is not ISlotComponent slot || control.ActualWidth <= 0 || control.ActualHeight <= 0)
         {
             return;
         }
@@ -492,7 +492,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
         {
             var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is FrameworkElement element && element.DataContext is IWorkflowSlotViewModel)
+            if (child is FrameworkElement element && element.DataContext is ISlotComponent)
             {
                 return element;
             }
@@ -507,7 +507,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         return null;
     }
 
-    private static Offset GetActualOffset(IWorkflowTreeViewModel? tree)
+    private static Offset GetActualOffset(ITreeComponent? tree)
     {
         if (tree is null)
         {

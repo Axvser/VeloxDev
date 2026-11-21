@@ -38,9 +38,9 @@ public class ResultCapCoverageTests
 
     private static WorkflowAgentScope TreeWith(int nodes)
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         for (var i = 0; i < nodes; i++)
-            tree.GetHelper().CreateNode(new NodeDefaultViewModel());
+            tree.GetHelper().CreateNode(new NodeDefaultComponent());
         return new WorkflowAgentScope(tree);
     }
 
@@ -110,7 +110,7 @@ public class ResultCapCoverageTests
         var scope = TreeWith(1);
 
         var answer = WorkflowToolInvoker.Invoke(scope, "GetTypeSchema",
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!), ("maxChars", 80));
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!), ("maxChars", 80));
         var json = JObject.Parse(answer);
         var preview = json["preview"]?.Value<string>() ?? string.Empty;
 

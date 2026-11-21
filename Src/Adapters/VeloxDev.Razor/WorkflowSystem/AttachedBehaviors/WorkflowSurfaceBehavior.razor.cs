@@ -16,7 +16,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// Blazor analogue of the XAML adapters' <c>WorkflowSurfaceBehavior</c> attached property.
 /// Renders a scrollable workflow canvas and orchestrates scroll reporting, canvas panning
 /// (middle mouse / space+left / left-drag on blank), viewport bookkeeping
-/// (<see cref="IWorkflowTreeViewModelHelper.Viewport"/>), and pushes a
+/// (<see cref="ITreeHelper.Viewport"/>), and pushes a
 /// <see cref="SurfaceViewport"/> context into the optional grid-decorator and minimap fragments.
 /// </summary>
 public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
@@ -26,7 +26,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
     /// <summary>Gets or sets the workflow tree rendered by the surface.</summary>
     [Parameter]
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     /// <summary>Gets or sets whether the surface behaviors (pan, scroll tracking) are enabled.</summary>
     [Parameter]
@@ -64,10 +64,10 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// <see cref="WorkflowInput"/> while it is open.
     /// </summary>
     [Parameter]
-    public RenderFragment<IWorkflowLinkViewModel>? LinkMenu { get; set; }
+    public RenderFragment<ILinkComponent>? LinkMenu { get; set; }
 
     /// <summary>Gets the link the open context menu is about, or <see langword="null"/> when none is open.</summary>
-    public IWorkflowLinkViewModel? MenuLink { get; private set; }
+    public ILinkComponent? MenuLink { get; private set; }
 
     /// <summary>Gets or sets the canvas background color.</summary>
     [Parameter]
@@ -126,8 +126,8 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
 
     // 树模型不会自动刷新视图：这里订上节点/连线集合、树自身、虚拟连线与每个节点的锚点/尺寸，
     // 变化时重渲染表面。ChildContent 随表面重渲染重新执行，模板的标记因此跟着刷新。
-    private readonly List<IWorkflowNodeViewModel> _subscribedNodes = [];
-    private IWorkflowTreeViewModel? _subscribedTreeModel;
+    private readonly List<INodeComponent> _subscribedNodes = [];
+    private ITreeComponent? _subscribedTreeModel;
     private INotifyPropertyChanged? _subscribedTreeNotifier;
     private INotifyPropertyChanged? _subscribedVirtualLink;
 
@@ -137,16 +137,16 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     // 连线右键菜单：条目由宿主以 LinkMenu 传入，接线全在这里 —— 订输入面、弹出、挂起指针跟踪。
     private WorkflowInput? _input;
     private EventHandler<Wf.PointerPressedEventArgs>? _menuPressed;
-    private EventHandler<IWorkflowLinkViewModel>? _menuLinkRemoved;
+    private EventHandler<ILinkComponent>? _menuLinkRemoved;
     private int _menuLeft;
     private int _menuTop;
 
     // 悬停命中的节点/插槽（JS 只在命中 id 变了时回传）：Moved 路由据此把目标认成节点/插槽，
     // 认不到才回退到共享的连线曲线命中。
-    private IWorkflowViewModel? _hoverTarget;
+    private IWorkflowComponent? _hoverTarget;
 
     // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的渲染不再把用户滚回去。
-    private IWorkflowTreeViewModel? _lastRestoreTree;
+    private ITreeComponent? _lastRestoreTree;
     private bool _hasPendingRestore;
     private double _pendingScrollX;
     private double _pendingScrollY;
@@ -291,7 +291,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         SubscribeTree(Tree);
     }
 
-    private void SubscribeTree(IWorkflowTreeViewModel? tree)
+    private void SubscribeTree(ITreeComponent? tree)
     {
         if (tree is null) return;
 
@@ -340,7 +340,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         UnsubscribeNodeChanges();
     }
 
-    private void SubscribeNodeChanges(IWorkflowTreeViewModel tree)
+    private void SubscribeNodeChanges(ITreeComponent tree)
     {
         foreach (var node in tree.Nodes)
         {
@@ -367,7 +367,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         // 拖拽中的节点位置与连线实时更新（Anchor/Size 变化）。缩放时表面已用 JS 同步盖上折叠后的
         // 节点几何与连线（applyZoomSurface），这里若重渲染整棵树，会用往返回来的旧值重建节点/连线层，
         // 缩放中途闪一下。
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
         {
             if (WorkflowGeometryScope.IsZooming) return;
             InvokeAsync(StateHasChanged);
@@ -448,7 +448,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     private void ShowLinkMenu(Wf.PointerPressedEventArgs e)
     {
         if (e.Button != Wf.MouseButton.Right) return;
-        if (e.Target is not IWorkflowLinkViewModel link || LinkMenu is null) return;
+        if (e.Target is not ILinkComponent link || LinkMenu is null) return;
 
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
         if (e.Handle.PreventDefault) return;
@@ -492,7 +492,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     /// </remarks>
     public async Task RoutePointerAsync(
         SurfacePointerKind kind, double clientX, double clientY,
-        Wf.MouseButton button = Wf.MouseButton.None, double deltaY = 0, IWorkflowViewModel? target = null,
+        Wf.MouseButton button = Wf.MouseButton.None, double deltaY = 0, IWorkflowComponent? target = null,
         Wf.InputModifiers modifiers = Wf.InputModifiers.None)
     {
         // 路由按树取用（Core 只保留一处）：本家不持有实例，换树自然换路由
@@ -623,7 +623,7 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     // 这一笔按下建一次句柄：订阅者在树上置 PreventDefault，本家的手势（平移/拖拽/连线/缩放）就不执行 ——
     // 与六家原生适配器读句柄同一契约，只是这里裁决要跨一次 JS↔.NET 往返。
     private static WorkflowEventHandle RoutePress(
-        IWorkflowTreeViewModel tree, IWorkflowViewModel? target, double x, double y,
+        ITreeComponent tree, IWorkflowComponent? target, double x, double y,
         Wf.MouseButton button, Wf.InputModifiers modifiers)
     {
         var input = WorkflowInput.For(tree);
@@ -636,23 +636,23 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
     // 落在节点/插槽上的按下由组件自己路由 —— Blazor 没有隧道相，表面的起手（JS mousedown）比组件晚，
     // 句柄只能由组件这一侧取。返回订阅者是否否决了这一笔。
     internal static bool RouteComponentPress(
-        IWorkflowTreeViewModel tree, IWorkflowViewModel target, double x, double y, int button, int modifiers)
+        ITreeComponent tree, IWorkflowComponent target, double x, double y, int button, int modifiers)
         => RoutePress(tree, target, x, y, ToButton(button), (Wf.InputModifiers)modifiers).PreventDefault;
 
     // JS 回传的 data-veloxdev-node-id / -slot-id 换回组件；认不到（空白、连线、已换树）返回 null。
-    private static IWorkflowViewModel? ResolveComponentTarget(string? id, IWorkflowTreeViewModel? tree)
+    private static IWorkflowComponent? ResolveComponentTarget(string? id, ITreeComponent? tree)
     {
         if (tree is null || string.IsNullOrEmpty(id))
         {
             return null;
         }
 
-        if (WorkflowRuntimeIds.TryFind<IWorkflowNodeViewModel>(id, out var node) && node is not null)
+        if (WorkflowRuntimeIds.TryFind<INodeComponent>(id, out var node) && node is not null)
         {
             return node;
         }
 
-        if (WorkflowRuntimeIds.TryFind<IWorkflowSlotViewModel>(id, out var slot) && slot is not null)
+        if (WorkflowRuntimeIds.TryFind<ISlotComponent>(id, out var slot) && slot is not null)
         {
             return slot;
         }

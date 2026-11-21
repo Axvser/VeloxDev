@@ -14,7 +14,7 @@ namespace VeloxDev.Core.Test.AI;
 [TestClass]
 public class AIContextTreeTests
 {
-    private const string SlotComponent = "VeloxDev.WorkflowSystem.SlotDefaultViewModel";
+    private const string SlotComponent = "VeloxDev.WorkflowSystem.SlotDefaultComponent";
 
     [TestMethod]
     public void TheFrameworkFragmentRegistersItselfWhenTheModuleLoads()
@@ -72,7 +72,7 @@ public class AIContextTreeTests
         Assert.IsNotNull(accessor);
 
         var slot = accessor.Create();
-        Assert.IsInstanceOfType<SlotDefaultViewModel>(slot);
+        Assert.IsInstanceOfType<SlotDefaultComponent>(slot);
 
         Assert.IsTrue(accessor.TryGet(slot, "Channel", out var before));
         Assert.IsInstanceOfType<SlotChannel>(before);

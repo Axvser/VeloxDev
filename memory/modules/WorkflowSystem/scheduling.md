@@ -10,7 +10,7 @@
 ## 二、API 与不变量
 
 `WorkflowLayoutBatch.For(owner, post)`：
-- `owner` 通常是 `IWorkflowNodeViewModel.Parent`（树），**同一棵树的节点必须传同一棵树**才会合并；节点还没有树时退回控件自身，只合并自己的请求。
+- `owner` 通常是 `INodeComponent.Parent`（树），**同一棵树的节点必须传同一棵树**才会合并；节点还没有树时退回控件自身，只合并自己的请求。
 - `post` 是 `Func<Action, bool>`：**必须异步**（内联执行会在调用方返回前清空队列，什么也合并不了）；平台拒绝入队时返回 `false`，Core 会把 `scheduled` 旗标放回去，下一次请求重排。
 
 | 成员 | 契约 |

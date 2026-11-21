@@ -7,10 +7,10 @@ namespace VeloxDev.WorkflowSystem;
 /// framework tears connections down.
 /// </summary>
 /// <remarks>
-/// Kept off <see cref="IWorkflowSlotViewModelHelper"/> for the same reason as <see cref="IWorkflowNodeEvents"/>:
+/// Kept off <see cref="ISlotHelper"/> for the same reason as <see cref="INodeEvents"/>:
 /// growing that interface would break every implementer, and events are opt-in.
 /// </remarks>
-public interface IWorkflowSlotEvents
+public interface ISlotEvents
 {
     /// <summary>Raised before the slot's channel changes. Refusing here protects this slot from the connections a
     /// channel change can tear down.</summary>

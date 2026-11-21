@@ -27,8 +27,8 @@
 
 **这 15 个之外的 Core 名字保持裸名**，别顺手也加前缀：
 
-- `WorkflowInput`（入口）、`WorkflowEventHandle`、`Anchor`、`Size`、`IWorkflowTreeViewModel` 这一族；
-- 按组件定制的事件族（`IWorkflowNodeEvents` / `IWorkflowSlotEvents` / `IWorkflowTreeEvents`）—— 它们的成员名不与平台类型同名，`Workflow` 前缀照留。
+- `WorkflowInput`（入口）、`WorkflowEventHandle`、`Anchor`、`Size`、`ITreeComponent` 这一族；
+- 按组件定制的事件族（`INodeEvents` / `ISlotEvents` / `ITreeEvents`）—— 它们的成员名不与平台类型同名，`Workflow` 前缀照留。
 
 **新增一个输入家族类型时**：加进上表，并按 §三 用。清单与代码同源在 `GUI/Events/Input/`，改名 / 新增 / 删除后本文跟着改。
 

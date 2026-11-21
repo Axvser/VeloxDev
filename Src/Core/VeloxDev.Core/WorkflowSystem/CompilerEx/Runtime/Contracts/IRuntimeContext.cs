@@ -8,7 +8,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// Compiler runtime session-context interface. One runtime execution session (UID / logs / shared
 /// variables / execution position). Inherits <see cref="ITaskContext"/>: when compiled execution drives a
 /// node, the engine passes this session object **as the task context** directly into
-/// <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/>.
+/// <see cref="INodeHelper.ReceiveAsync"/>.
 /// </summary>
 [AgentContext(AgentLanguages.Chinese, "编译器运行时会话上下文（继承 ITaskContext）：UID/日志/共享变量/执行位置，编译驱动时作为任务上下文传入节点")]
 [AgentContext(AgentLanguages.English, "Compiler runtime session context (inherits ITaskContext): UID/logs/shared variables/execution position, passed to nodes as the task context during compiled runs")]
@@ -48,14 +48,14 @@ public interface IRuntimeContext : ITaskContext
     /// Optional target node a run should track (result/terminal runs set this). The engine sets
     /// <see cref="TargetReached"/> once the node matching <see cref="Target"/> is actually driven.
     /// </summary>
-    IWorkflowNodeViewModel? Target { get; set; }
+    INodeComponent? Target { get; set; }
 
     /// <summary>Whether the <see cref="Target"/> node was actually driven during this run (false = its branch was not taken / condition not satisfied).</summary>
     bool TargetReached { get; set; }
 
     /// <summary>
     /// Chained result (shadows <see cref="IContext.Data"/> to add a setter): after driving each node the engine
-    /// writes back the <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/> return value for downstream nodes
+    /// writes back the <see cref="INodeHelper.ReceiveAsync"/> return value for downstream nodes
     /// to read. The base data-flow carrier <see cref="ITaskContext"/> stays read-only; only the runtime session
     /// is writable.
     /// </summary>
@@ -137,7 +137,7 @@ public interface IRuntimeContext : ITaskContext
     /// <summary>Registers a node's output for this run (written by the engine after DriveAsync drives it), stamped with the current pass, for downstream join points to aggregate.</summary>
     [AgentContext(AgentLanguages.Chinese, "登记节点本次运行的产物：引擎逐节点驱动后写入，带当前 pass 戳；多输入汇合点按输入组聚合")]
     [AgentContext(AgentLanguages.English, "Register a node's output for this run stamped with the current attempt: the engine writes it after driving each node, and multi-input joins aggregate per input group")]
-    void RegisterOutput(IWorkflowNodeViewModel node, object? value);
+    void RegisterOutput(INodeComponent node, object? value);
 
     /// <summary>Clears the output registry (once at the start of each <see cref="RuntimeEngine.RunAsync"/>).</summary>
     [AgentContext(AgentLanguages.Chinese, "清空产物登记表：每次 RunAsync 开始清空一次，重定向重跑不清空（由 pass 戳过滤陈旧产物）")]
@@ -154,5 +154,5 @@ public interface IRuntimeContext : ITaskContext
     /// </summary>
     [AgentContext(AgentLanguages.Chinese, "按输入组收集产物为只读字典：仅本 pass 产物 + 目标前契约保留 prefix；未登记的来源不包含（TryGetValue 返回 false）")]
     [AgentContext(AgentLanguages.English, "Collect outputs for a group of input nodes as a read-only dictionary: only this pass's outputs plus the contract-preserved prefix before the redirect target; unregistered sources are absent (TryGetValue returns false)")]
-    IReadOnlyDictionary<IWorkflowNodeViewModel, object?> CollectGroupedInputs(IEnumerable<IWorkflowNodeViewModel> inputNodes);
+    IReadOnlyDictionary<INodeComponent, object?> CollectGroupedInputs(IEnumerable<INodeComponent> inputNodes);
 }

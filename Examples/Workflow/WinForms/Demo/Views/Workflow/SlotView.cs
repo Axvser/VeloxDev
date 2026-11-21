@@ -17,7 +17,7 @@ namespace Demo.Views.Workflow;
 /// <para>
 /// The direction is carried by the <b>shape of the motion</b> rather than by a colour or a rotating token:
 /// ripples spread <b>outward</b> when the slot can send, <b>inward</b> when it can receive, and both ways at
-/// once when it can do either. That comes from <see cref="IWorkflowSlotViewModel.Channel"/> — the slot's
+/// once when it can do either. That comes from <see cref="ISlotComponent.Channel"/> — the slot's
 /// declared capacity — and not from what it happens to be connected to, so a port states what it is for even
 /// with nothing wired to it.
 /// </para>
@@ -121,7 +121,7 @@ public sealed class SlotView : Control
     /// <summary>Gets or sets the workflow slot bound to this view.</summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IWorkflowSlotViewModel? ViewModel
+    public ISlotComponent? ViewModel
     {
         get => _attachment.Slot;
         set => _attachment.Slot = value;

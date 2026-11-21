@@ -56,9 +56,9 @@ public class DeepZoomReachabilitySimTests
         return seq;
     }
 
-    private static List<IWorkflowNodeViewModel> BuildQuadrantNodes(double scale)
+    private static List<INodeComponent> BuildQuadrantNodes(double scale)
     {
-        var nodes = new List<IWorkflowNodeViewModel>();
+        var nodes = new List<INodeComponent>();
         var scaleValue = new Scale(scale, scale);
         foreach (var world in WorldAnchors)
         {

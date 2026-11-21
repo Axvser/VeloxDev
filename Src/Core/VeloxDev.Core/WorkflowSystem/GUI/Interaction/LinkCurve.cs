@@ -163,7 +163,7 @@ public sealed class LinkCurve
     /// into a straight line.
     /// </remarks>
     public static (double X, double Y)[] LinkCurvePoints(
-        IWorkflowLinkViewModel? link, double startX, double startY, double endX, double endY, double pullMinimum)
+        ILinkComponent? link, double startX, double startY, double endX, double endY, double pullMinimum)
     {
         var senderNode = link?.Sender?.Parent;
         var receiverNode = link?.Receiver?.Parent;
@@ -193,7 +193,7 @@ public sealed class LinkCurve
     /// <param name="pullMinimum">Least pull, in the view's units.</param>
     /// <param name="sampleCount">Number of points; <see cref="DefaultSampleCount"/> when not positive.</param>
     public static LinkCurve BuildLinkCubic(
-        IWorkflowLinkViewModel? link, double startX, double startY, double endX, double endY,
+        ILinkComponent? link, double startX, double startY, double endX, double endY,
         double pullMinimum, int sampleCount = DefaultSampleCount)
     {
         var points = LinkCurvePoints(link, startX, startY, endX, endY, pullMinimum);
@@ -231,7 +231,7 @@ public sealed class LinkCurve
     /// </summary>
     /// <param name="slot">The port.</param>
     /// <exception cref="ArgumentNullException"><paramref name="slot"/> is <see langword="null"/>.</exception>
-    public static (double X, double Y) PortOutward(IWorkflowSlotViewModel slot)
+    public static (double X, double Y) PortOutward(ISlotComponent slot)
     {
         if (slot is null) throw new ArgumentNullException(nameof(slot));
         return PortOutward(slot.Anchor.Horizontal, slot.Anchor.Vertical, slot.Parent);
@@ -251,7 +251,7 @@ public sealed class LinkCurve
     /// <param name="x">The port's x, in the same space as the node's anchor and size.</param>
     /// <param name="y">The port's y, in that same space.</param>
     /// <param name="node">The node the port sits on, or <see langword="null"/> for a port with no node.</param>
-    public static (double X, double Y) PortOutward(double x, double y, IWorkflowNodeViewModel? node)
+    public static (double X, double Y) PortOutward(double x, double y, INodeComponent? node)
     {
         if (node is null) return (0, 0);
 

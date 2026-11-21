@@ -10,7 +10,7 @@
 
 `Interfaces/Timing/ITimeSource.cs` 写的是 `namespace VeloxDev.Timing`，不是 `VeloxDev.Timing.Interfaces`；`Interfaces/WorkflowSystem/**` 是 `VeloxDev.WorkflowSystem`；`Interfaces/TransitionSystem/*` 是 `VeloxDev.TransitionSystem`。
 
-**`WorkflowSystem/` 内部再分层**：`Common/`（被多个组件族广泛实现的基础契约：`IWorkflowViewModel` / `IWorkflowIdentifiable` / `IWorkflowHelper`）、`Components/`（Node/Slot/Link/Tree + Helper）、`Connections/`（连接预览与裁决）、`Commands/`（`IWorkflowActionPair`；只有一种实现，不算 Common）、`Providers/`、`Spatial/`、`Surface/`、`Execution/`、`Enums/`（`SlotChannel`）。**模块自己的枚举统一放在对应 `Interfaces/<模块>/Enums/` 下**（TransitionSystem 的 `WarnStage`/`ErrorStage`/`RotationDirection` 同理），不留在实现目录里。`Common/` 的收口规则：**至少两个组件族实现、且至少一个其它层依赖**，否则放自己的层。`Layout/` 装布局管道的注入面：数据快照 `WorkflowLayoutProblem` / `State` / `Solution` / `Result` / `Options` 与 `IWorkflowLayoutStage` / `IWorkflowLayoutPositionPolicy` / `IWorkflowLayoutCost` / `IWorkflowLayoutPlanner` / `IWorkflowLayoutApplier` / `IWorkflowLayoutSolver` / `IWorkflowLayoutHost`。**目录叫 `Layout/`，命名空间仍是 `VeloxDev.WorkflowSystem`** —— 实现里也不要建 `.Layout` 子命名空间，它会遮蔽 MAUI 的 `Layout` 类型令适配器报 CS0118（见 `memory/modules/WorkflowSystem/layout.md` §一）。
+**`WorkflowSystem/` 内部再分层**：`Common/`（被多个组件族广泛实现的基础契约：`IWorkflowComponent` / `IRuntimeIdentifiable` / `IWorkflowHelper`）、`Components/`（Node/Slot/Link/Tree + Helper）、`Connections/`（连接预览与裁决）、`Commands/`（`IActionPair`；只有一种实现，不算 Common）、`Providers/`、`Spatial/`、`Surface/`、`Execution/`、`Enums/`（`SlotChannel`）。**模块自己的枚举统一放在对应 `Interfaces/<模块>/Enums/` 下**（TransitionSystem 的 `WarnStage`/`ErrorStage`/`RotationDirection` 同理），不留在实现目录里。`Common/` 的收口规则：**至少两个组件族实现、且至少一个其它层依赖**，否则放自己的层。`Layout/` 装布局管道的注入面：数据快照 `WorkflowLayoutProblem` / `State` / `Solution` / `Result` / `Options` 与 `IWorkflowLayoutStage` / `IWorkflowLayoutPositionPolicy` / `IWorkflowLayoutCost` / `IWorkflowLayoutPlanner` / `IWorkflowLayoutApplier` / `IWorkflowLayoutSolver` / `IWorkflowLayoutHost`。**目录叫 `Layout/`，命名空间仍是 `VeloxDev.WorkflowSystem`** —— 实现里也不要建 `.Layout` 子命名空间，它会遮蔽 MAUI 的 `Layout` 类型令适配器报 CS0118（见 `memory/modules/WorkflowSystem/layout.md` §一）。
 
 后果有三条，都是实际操作上的：
 
@@ -34,7 +34,7 @@
 | 编译期内部管线 `ICompile*` | `Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Compile/Contracts/`（`ICompileContext`、`ICompileTimeAware`、`ICompileTimeRouter`） | 只有该子系统实现 |
 | 运行期内部管线 `IExecution*`/`ILogWriter`/`INodeRetryPolicy`/`IRedirectable`/`IRuntimeAware`/`IRuntimeContext` | `Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Contracts/`（`IRedirectable.cs` 的 `IRedirectable`、`IRuntimeAware.cs` 的 `IRuntimeAware`、`IRuntimeContext.cs` 的 `IRuntimeContext` 等） | 运行期内部管线 |
 | `IGroupData` | `Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Model/GroupData.cs` 的 `IGroupData` | 引擎注入给节点的只读产物字典（详见 `memory/modules/WorkflowSystem/`） |
-| WorkflowSystem 事件/交互族 `IWorkflow*Events`、`IWorkflow*EventSink`、`IWorkflowSurfaceScroller`、`IWorkflowSurfaceNavigator`、`IInputEvents`、`ILinkHitTestable` | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/`、`GUI/Events/{Node,Slot,Tree,Input}/`、`GUI/Interaction/` | Core 内部事件轴，外部不实现 |
+| WorkflowSystem 事件/交互族 `I*Events`、`I*EventSink`、`IWorkflowSurfaceScroller`、`IWorkflowSurfaceNavigator`、`IInputEvents`、`ILinkHitTestable` | `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/`、`GUI/Events/{Node,Slot,Tree,Input}/`、`GUI/Interaction/` | Core 内部事件轴，外部不实现 |
 | `IConditionalSlot` | `Src/Core/VeloxDev.Core/WorkflowSystem/SelectorEx/ConditionalSlot.cs` 的 `IConditionalSlot` | SelectorEx 内部 |
 | `IAopHookTarget` | `Src/Core/VeloxDev.Core/AspectOriented/AspectHooks.cs` 的 `IAopHookTarget` | AOP 运行期内部 |
 | 强类型命令族 `IVeloxCommand<TParam1..TParamN, TResult>` 与 `IVeloxCommandEvents<TParam,TResult>` | `Src/Core/VeloxDev.Core/MVVM/CommandArities.cs`、`MVVM/CommandEventArgs{TParam,TResult}.cs` 的 `IVeloxCommandEvents<TParam, TResult>` | MVVM 模块内部管线 |
@@ -58,9 +58,9 @@
 | `IThemeObject` | **生成器**，除非基类已实现（那时只补 `base.` 调用） | `Src/Generators/VeloxDev.Core.Generator/Theme.cs` 的 `GenerateThemeConfigClass`（`baseHasIThemeObject` 判定与 `addInterface`）；手写实现只有测试 `Src/Test/Unit/Core/VeloxDev.Core.Test/DynamicTheme/ThemeTransitionTests.cs` 的 `Subject : IThemeObject` |
 | `ITickable` | **生成器**（`TickWriter` 给带 `[Tickable]` 的类型补齐成员） | `Src/Generators/VeloxDev.Core.Generator/Writers/TickWriter.cs` 的 `GenerateBaseInterfaces`；手写实现只有测试 `Src/Test/Unit/Core/VeloxDev.Core.Test/TimeLine/TickableBusTests.cs` 的 `PushCounter : ITickable` |
 | `IVeloxCommand` | 实现是 Core 的 `Src/Core/VeloxDev.Core/MVVM/VeloxCommand.cs` 的 `VeloxCommand`；**声明方是生成器**（生成 `XXCommand` 属性，类型为 `IVeloxCommand`） | `Src/Generators/VeloxDev.Core.Generator/Writers/CommandWriter.cs` 的 `CanUpcastTo`（`IVeloxCommand` 全名字符串）、`Writers/WorkflowWriter.cs` 的 `LinksMap` 属性模板（属性落地） |
-| `IWorkflow*ViewModel` 四族 | Core 的几个 `DefaultViewModel` 是默认实现；应用侧用带 `[WorkflowBuilder.Tree/Node/Slot/Link]` 的 partial 类，生成器补 commands 与属性通知；测试另有桩 | `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/{Tree,Node,Slot}DefaultViewModel.cs` 的 `TreeDefaultViewModel`/`NodeDefaultViewModel`/`SlotDefaultViewModel`、`LinkDefaultViewModel.cs` 的 `LinkDefaultViewModel`；生成器按工作流类型选接口见 `Src/Generators/…/Writers/WorkflowWriter.cs` 的 `GetWorkflowInterfaceName`；测试桩 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/Support/WorkflowTestKit.cs` 的 `StubTree` |
-| `IWorkflowActionPair`、`ITheme`、`ISlotProvider` | 前两者 Core 给默认实现、应用可另给；`ISlotProvider` 由应用实现 | `WorkflowActionPair` 结构体 `Src/Core/VeloxDev.Core/WorkflowSystem/WorkflowActionPair.cs` 的 `WorkflowActionPair`；`ITheme` 的 `Light`/`Dark` `Src/Core/VeloxDev.Core/DynamicTheme/{Light,Dark}.cs` 的 `Light`/`Dark`；`Examples/Workflow/Common/Lib/ViewModels/Workflow/PythonPortProvider.cs` 的 `PythonPortProvider`（生产代码里唯一的 `ISlotProvider` 实例，测试另有桩） |
-| `IWorkflowIdentifiable` | 只有 Core 的 DefaultViewModel 实现 | `…/Templates/ViewModels/{Tree,Node,Slot}DefaultViewModel.cs`、`LinkDefaultViewModel.cs`（同名类型）；`RuntimeId` 在需求侧被引用（`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Model/ExecutionCheckpoints.cs` 的 `KeyOf`） |
+| `I*Component` 四族 | Core 的几个 `DefaultComponent` 是默认实现；应用侧用带 `[WorkflowBuilder.Tree/Node/Slot/Link]` 的 partial 类，生成器补 commands 与属性通知；测试另有桩 | `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/{Tree,Node,Slot}DefaultComponent.cs` 的 `TreeDefaultComponent`/`NodeDefaultComponent`/`SlotDefaultComponent`、`LinkDefaultComponent.cs` 的 `LinkDefaultComponent`；生成器按工作流类型选接口见 `Src/Generators/…/Writers/WorkflowWriter.cs` 的 `GetWorkflowInterfaceName`；测试桩 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/Support/WorkflowTestKit.cs` 的 `StubTree` |
+| `IActionPair`、`ITheme`、`ISlotProvider` | 前两者 Core 给默认实现、应用可另给；`ISlotProvider` 由应用实现 | `ActionPair` 结构体 `Src/Core/VeloxDev.Core/WorkflowSystem/ActionPair.cs` 的 `ActionPair`；`ITheme` 的 `Light`/`Dark` `Src/Core/VeloxDev.Core/DynamicTheme/{Light,Dark}.cs` 的 `Light`/`Dark`；`Examples/Workflow/Common/Lib/ViewModels/Workflow/PythonPortProvider.cs` 的 `PythonPortProvider`（生产代码里唯一的 `ISlotProvider` 实例，测试另有桩） |
+| `IRuntimeIdentifiable` | 只有 Core 的 DefaultComponent 实现 | `…/Templates/ViewModels/{Tree,Node,Slot}DefaultComponent.cs`、`LinkDefaultComponent.cs`（同名类型）；`RuntimeId` 在需求侧被引用（`Src/Core/VeloxDev.Core/WorkflowSystem/CompilerEx/Runtime/Model/ExecutionCheckpoints.cs` 的 `KeyOf`） |
 
 ### B 类：平台实现（七家适配器必办/可办）
 
@@ -109,8 +109,8 @@
 
 | 被引用的模块 | 咬合在哪个接口/成员 |
 |---|---|
-| `VeloxDev.AI` | `[AgentContext]`/`[AgentCommandParameter]` 标在 WorkflowSystem 的契约上（`IWorkflowViewModel` 的 `[AgentContext]` 对、`IWorkflowTreeViewModel` 的 `LinksMap` 注解、`IContext` 的 `[AgentContext]` 等）。读取规则见 `memory/modules/AI/architecture.md` |
-| `VeloxDev.MVVM` | `IVeloxCommand` 作为契约的属性类型（`IWorkflowViewModel` 的 `CloseCommand`、`IWorkflowTreeViewModel` 的 `CreateNodeCommand` 等） |
+| `VeloxDev.AI` | `[AgentContext]`/`[AgentCommandParameter]` 标在 WorkflowSystem 的契约上（`IWorkflowComponent` 的 `[AgentContext]` 对、`ITreeComponent` 的 `LinksMap` 注解、`IContext` 的 `[AgentContext]` 等）。读取规则见 `memory/modules/AI/architecture.md` |
+| `VeloxDev.MVVM` | `IVeloxCommand` 作为契约的属性类型（`IWorkflowComponent` 的 `CloseCommand`、`ITreeComponent` 的 `CreateNodeCommand` 等） |
 | `VeloxDev.TimeLine` | `ITickable.cs` 的 `using VeloxDev.TimeLine`（`FrameEventArgs`）；`ITransitionInterpreter.cs` 不 `using VeloxDev.TimeLine`（`TransitionEventArgs` 在 `VeloxDev.TransitionSystem`） |
 | `VeloxDev.Threading` | `ITransitionHost<TPriorityCore>` 的基接口列表里的 `IThreadDispatcher<TPriorityCore>` |
 | `VeloxDev.Lifetime` | `ITransitionHost<TPriorityCore>` 的基接口列表里的 `IApplicationState` |
@@ -126,9 +126,9 @@
 2. **契约名带 `Control` 后缀的只有一处**：`ITimeSourceControl`（写侧），且它**继承**读侧 `ITimeSource`（`ITimeSourceControl.cs` 的 `ITimeSourceControl : ITimeSource`），不是平级。语义（为什么拆）写在它的 `<remarks>`。
 3. **`<TPriorityCore>` 家族一律"窄接口 : 宽接口"**，宽的那侧用 `Core` 后缀：`ITransitionEffect<TPriorityCore> : ITransitionEffectCore`（`ITransitionEffect.cs` 的声明）、`ITransitionScheduler<TPriorityCore> : ITransitionSchedulerCore`（`ITransitionScheduler.cs` 的声明）。窄接口用 `new` 重新声明克隆/执行成员（`ITransitionEffect.Clone`；`ITransitionScheduler.Execute` 是**重载收窄**而不是 `new`）。
 4. **空接口有两种，别混用**：`IAspectOriented` 与 `ITheme`（都是空接口体）是**约束载体**（只出现在 `where T : …` 里，`ProxyEx.cs` 的 `where T : IAspectOriented`、`AopCache.cs` 的两处 `where TInterface : class, IAspectOriented`、`ThemeConfigAttribute.cs` 的 `ThemeConfigAttribute<...>` 系列）；`ITaskContext : IAccessContext`、`ITransitionScheduler : ITransitionSchedulerCore` 是**派生收窄**（继承一个接口、一个成员都不加）。判断法：看它有没有被 `where` 用。
-5. **WorkflowSystem 四族的 helper 不在基接口上。** `IWorkflowViewModel` 只有初始化/通知/`CloseCommand`；`GetHelper()`/`SetHelper()` 由四个子契约各声明一次（`IWorkflowTreeViewModel`、`IWorkflowNodeViewModel`、`IWorkflowSlotViewModel`、`IWorkflowLinkViewModel`）—— 所以拿到基接口引用**拿不到 helper**。
+5. **WorkflowSystem 四族的 helper 不在基接口上。** `IWorkflowComponent` 只有初始化/通知/`CloseCommand`；`GetHelper()`/`SetHelper()` 由四个子契约各声明一次（`ITreeComponent`、`INodeComponent`、`ISlotComponent`、`ILinkComponent`）—— 所以拿到基接口引用**拿不到 helper**。
 6. **命令属性的数量按语义给，不按对称**：`IVeloxCommand` 属性在五个契约里按各自职责给出（Tree/Node 多，基类与 Link 少），不追求五个契约相同。
-7. **异步成员一律把取消参数放最后**，但默认值不统一：`ITimeSource.WaitWhileStalledAsync`（`CancellationToken cancellationToken = default`）与 `ITransitionScheduler` 两个 `Execute` 重载的 `externCts = default` 给默认值，WorkflowSystem 的 `ReceiveAsync`/`BroadcastAsync`/`ReverseBroadcastAsync`/`AccessAsync`（`IWorkflowNodeViewModelHelper`）不给，必须显式传。
+7. **异步成员一律把取消参数放最后**，但默认值不统一：`ITimeSource.WaitWhileStalledAsync`（`CancellationToken cancellationToken = default`）与 `ITransitionScheduler` 两个 `Execute` 重载的 `externCts = default` 给默认值，WorkflowSystem 的 `ReceiveAsync`/`BroadcastAsync`/`ReverseBroadcastAsync`/`AccessAsync`（`INodeHelper`）不给，必须显式传。
 8. **契约里的拼写错误会被固化。** `ITransitionEffectCore` 有 `Canceled` 事件却只有 `InvokeCancled(...)`（少一个 `c`），全仓按错拼写用（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的字段就叫 `_cancled`）。
 9. **改 `ITickable` 这类名字时当心不可见字符** —— 编译器忽略 Cf 类字符，带与不带**是同一个标识符**，所以编译得过、评审看不出来。坑**全在人这一侧**：裸路径打不开文件（实测 `FileNotFoundError`）、`grep -l` 漏、`git ls-files` 把路径转义成 `"…\342\200\213.cs"`。**纪律**：新契约的名字里绝不允许出现 Cf 类字符。
 
@@ -140,8 +140,8 @@
 |---|---|
 | 「消费者能干什么」的边界（读侧/写侧、谁收到什么接口） | `Interfaces/Timing/ITimeSourceControl.cs` 的 `<remarks>`（读侧/写侧拆分范式） |
 | 平台必须实现哪些成员 | `Interfaces/WorkflowSystem/Surface/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs`（数据交换契约，逐家实现），以及 `Interfaces/TransitionSystem/ITransitionHost.cs`（组合契约，无成员） |
-| 节点/树/槽/链的数据形状 | `Interfaces/WorkflowSystem/Components/IWorkflow{Tree,Node,Slot,Link}ViewModel.cs`（4 族各含 VM + Helper 两个接口） |
+| 节点/树/槽/链的数据形状 | `Interfaces/WorkflowSystem/Components/I{Tree,Node,Slot,Link}Component.cs`（4 族各含 VM + Helper 两个接口） |
 | 一次数据流访问的入参 | `Interfaces/WorkflowSystem/Execution/IAccessContext.cs`（编译期/运行期共用，靠 `IsCompilePhase` 区分） |
 | 生成器会注入哪些成员、注入到哪个接口 | `Src/Generators/VeloxDev.Core.Generator/Writers/`（`TickWriter.cs` 的 `GenerateBaseInterfaces`、`WorkflowWriter.cs` 的 `GetWorkflowInterfaceName`、`CommandWriter.cs` 的 `CanUpcastTo`、`Theme.cs` 的 `GenerateThemeConfigClass`、`AopSurface.cs` 的 `interfaceDeclaration`） |
-| Agent 能否看见这个契约 | `Interfaces/WorkflowSystem/**/*.cs` 里的 `[AgentContext]`（`IWorkflowTreeViewModel` 的 `[AgentContext]` 对是范式），读取规则在 `memory/modules/AI/architecture.md` |
+| Agent 能否看见这个契约 | `Interfaces/WorkflowSystem/**/*.cs` 里的 `[AgentContext]`（`ITreeComponent` 的 `[AgentContext]` 对是范式），读取规则在 `memory/modules/AI/architecture.md` |
 | 平台差异（不要在这里找） | `memory/modules/TransitionSystem/adapters/<平台>.md`、`memory/modules/WorkflowSystem/adapters/<平台>.md` |

@@ -170,15 +170,15 @@ public sealed class WorkflowNodeDragBehavior : AvaloniaObject
             .FirstOrDefault(x => x.Name == hostName);
     }
 
-    private static IWorkflowNodeViewModel? ResolveNode(Control control)
+    private static INodeComponent? ResolveNode(Control control)
     {
-        if (control.DataContext is IWorkflowNodeViewModel node)
+        if (control.DataContext is INodeComponent node)
             return node;
 
         return control.GetVisualAncestors()
             .OfType<StyledElement>()
             .Select(static x => x.DataContext)
-            .OfType<IWorkflowNodeViewModel>()
+            .OfType<INodeComponent>()
             .FirstOrDefault();
     }
 }

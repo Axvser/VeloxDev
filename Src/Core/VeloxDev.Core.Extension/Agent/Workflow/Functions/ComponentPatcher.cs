@@ -113,7 +113,7 @@ public static class ComponentPatcher
             // 目录生成器扫的时候看不见，所以为一个用旧版生成器构建的消费方，这个标志会缺 —— 而缺了它，
             // 直接给槽属性赋值这条绕过 CreateSlotCommand 的路就没人拦。
             if (prop.Has(AIContextFlags.IsSingleSlot)
-                || (accessor!.TryGet(target, propName, out var currentSlot) && currentSlot is IWorkflowSlotViewModel))
+                || (accessor!.TryGet(target, propName, out var currentSlot) && currentSlot is ISlotComponent))
             {
                 results.Add(new VeloxJsonObject
                 {
@@ -197,7 +197,7 @@ public static class ComponentPatcher
         // Properties are written directly (done above). This is intentionally non-undoable:
         // undo/redo is exclusively owned by Core's IVeloxCommand pipeline. A patch that must be
         // undoable is rejected above and routed to its backing command (e.g. Anchor →
-        // SetAnchorCommand). Never wrap these direct writes in Submit(WorkflowActionPair).
+        // SetAnchorCommand). Never wrap these direct writes in Submit(ActionPair).
         // Unmounted-target rejection (tree is null) is still enforced above.
 
         return new VeloxJsonObject
@@ -218,22 +218,22 @@ public static class ComponentPatcher
     /// <param name="jsonPatch">A JSON object string, e.g. {"Title":"New","Delay":500}.</param>
     /// <param name="tree">Ignored; the owning tree is resolved from the target.</param>
     /// <returns>A JSON result string describing successes and failures.</returns>
-    public static string ApplyPatchWithUndo(object target, string jsonPatch, IWorkflowTreeViewModel? tree = null)
+    public static string ApplyPatchWithUndo(object target, string jsonPatch, ITreeComponent? tree = null)
         => ApplyPatch(target, jsonPatch);
 
     /// <summary>
-    /// Resolves the owning <see cref="IWorkflowTreeViewModel"/> from a workflow component
+    /// Resolves the owning <see cref="ITreeComponent"/> from a workflow component
     /// by walking its Parent chain. Returns <c>null</c> for unmounted components — those
     /// must not be mutated because there is no undo history to record the change in.
     /// </summary>
-    private static IWorkflowTreeViewModel? ResolveTree(object target)
+    private static ITreeComponent? ResolveTree(object target)
     {
         return target switch
         {
-            IWorkflowTreeViewModel tree => tree,
-            IWorkflowNodeViewModel node => node.Parent,
-            IWorkflowSlotViewModel slot => slot.Parent?.Parent,
-            IWorkflowLinkViewModel link => link.Sender?.Parent?.Parent,
+            ITreeComponent tree => tree,
+            INodeComponent node => node.Parent,
+            ISlotComponent slot => slot.Parent?.Parent,
+            ILinkComponent link => link.Sender?.Parent?.Parent,
             _ => null,
         };
     }

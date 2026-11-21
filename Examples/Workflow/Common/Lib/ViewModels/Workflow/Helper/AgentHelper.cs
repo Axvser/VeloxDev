@@ -155,7 +155,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     // invocation, which is what lets a skill switched off, a custom tool registered late, or an MCP
     // server loaded mid-session reach the model on the very next turn without rebuilding the agent.
 
-    public async override void Install(IWorkflowTreeViewModel tree)
+    public async override void Install(ITreeComponent tree)
     {
         base.Install(tree);
 
@@ -164,7 +164,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         Session = await Agent.CreateSessionAsync();
     }
 
-    public override void Uninstall(IWorkflowTreeViewModel tree)
+    public override void Uninstall(ITreeComponent tree)
     {
         base.Uninstall(tree);
 
@@ -262,7 +262,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
     /// <summary>Optional custom prompt body text per mode, replacing the text the library ships for it.</summary>
     public Dictionary<AgentPermissionMode, string> ModePrompts { get; } = [];
 
-    public static async Task<AIAgent> ProvideAgent(IWorkflowTreeViewModel tree, AgentHelper helper)
+    public static async Task<AIAgent> ProvideAgent(ITreeComponent tree, AgentHelper helper)
     {
         // Create an isolated workspace
         var scope = tree.AsAgentScope()
@@ -391,7 +391,7 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
         return agent.WithPipeline(scope.Pipeline);
     }
 
-    public override IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    public override ILinkComponent CreateLink(ISlotComponent sender, ISlotComponent receiver)
     {
         return new LinkViewModel() { Sender = sender, Receiver = receiver };
     }

@@ -40,7 +40,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, IAsyncDispos
 
     /// <summary>Gets or sets the link rendered by this view.</summary>
     [Parameter]
-    public IWorkflowLinkViewModel? Link { get; set; }
+    public ILinkComponent? Link { get; set; }
 
     /// <summary>Gets or sets the canvas size the link spans.</summary>
     [Parameter]
@@ -62,7 +62,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, IAsyncDispos
     [Parameter]
     public bool? IsVirtualOverride { get; set; }
 
-    /// <summary>Gets or sets an explicit visibility override (defaults to <see cref="IWorkflowLinkViewModel.IsVisible"/>).</summary>
+    /// <summary>Gets or sets an explicit visibility override (defaults to <see cref="ILinkComponent.IsVisible"/>).</summary>
     [Parameter]
     public bool? CanRenderOverride { get; set; }
 
@@ -350,7 +350,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, IAsyncDispos
     private LinkCurve? _curve;
 
     // 端点缓存：同一条链接端点没动就不重建曲线，也不重复发布。
-    private IWorkflowLinkViewModel? _cacheLink;
+    private ILinkComponent? _cacheLink;
     private double _cacheSx = double.NaN;
     private double _cacheSy;
     private double _cacheEx;
@@ -647,7 +647,7 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, IAsyncDispos
         Sync(Link);
     }
 
-    private void Sync(IWorkflowLinkViewModel? link)
+    private void Sync(ILinkComponent? link)
     {
         if (link is null) return;
 
@@ -688,13 +688,13 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, IAsyncDispos
 
     private void OnLinkChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowLinkViewModel.IsVisible) or null or "")
+        if (e.PropertyName is nameof(ILinkComponent.IsVisible) or null or "")
         {
             CanRender = Link?.IsVisible == true;
         }
 
-        if (e.PropertyName is nameof(IWorkflowLinkViewModel.Sender)
-            or nameof(IWorkflowLinkViewModel.Receiver)
+        if (e.PropertyName is nameof(ILinkComponent.Sender)
+            or nameof(ILinkComponent.Receiver)
             or null or "")
         {
             IsVirtual = IsVirtualLink(Link);
@@ -721,13 +721,13 @@ public partial class TemplateLinkView : ComponentBase, IDisposable, IAsyncDispos
 
     private void OnEndpointChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.Anchor) or null or "")
+        if (e.PropertyName is nameof(ISlotComponent.Anchor) or null or "")
         {
             InvokeAsync(StateHasChanged);
         }
     }
 
-    private bool IsVirtualLink(IWorkflowLinkViewModel? link)
+    private bool IsVirtualLink(ILinkComponent? link)
         => link is null || (link.Sender?.Parent is null && link.Receiver?.Parent is null);
 
     /// <inheritdoc />

@@ -6,7 +6,7 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Owns an Avalonia view's panel membership and bound state for the main view pool.</summary>
-public sealed class ViewContainer : IViewContainer<Panel, Control, IWorkflowViewModel>
+public sealed class ViewContainer : IViewContainer<Panel, Control, IWorkflowComponent>
 {
     private readonly HashSet<Control> _attached = new(ControlReferenceComparer.Instance);
 
@@ -26,7 +26,7 @@ public sealed class ViewContainer : IViewContainer<Panel, Control, IWorkflowView
     }
 
     /// <inheritdoc />
-    public void Activate(Control view, IWorkflowViewModel item)
+    public void Activate(Control view, IWorkflowComponent item)
     {
         view.DataContext = item;
         view.IsVisible = true;

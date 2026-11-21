@@ -1,4 +1,4 @@
-// VeloxDev customization: Set BindingContext to your IWorkflowTreeViewModel before the control is loaded.
+// VeloxDev customization: Set BindingContext to your ITreeComponent before the control is loaded.
 
 namespace TemplateNamespace;
 

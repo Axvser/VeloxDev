@@ -21,14 +21,14 @@
 
     <UserControl.Resources>
         <!-- Node Templates -->
-        <DataTemplate x:Key="NodeTemplate" DataType="framework:IWorkflowNodeViewModel">
+        <DataTemplate x:Key="NodeTemplate" DataType="framework:INodeComponent">
             <local:NodeView Width="{Binding Size.Width}" Height="{Binding Size.Height}"
                             Canvas.Left="{Binding Anchor.Horizontal}" Canvas.Top="{Binding Anchor.Vertical}" ZIndex="{Binding Anchor.Layer}"
                             RenderTransform="{Binding $parent[local:TemplateClass].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
         </DataTemplate>
 
         <!-- Connection Templates -->
-        <DataTemplate x:Key="LinkTemplate" DataType="framework:IWorkflowLinkViewModel">
+        <DataTemplate x:Key="LinkTemplate" DataType="framework:ILinkComponent">
             <local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}"
                             EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}"
                             ZIndex="-1"

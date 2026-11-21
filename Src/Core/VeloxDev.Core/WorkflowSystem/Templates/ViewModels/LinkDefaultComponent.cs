@@ -3,16 +3,16 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
-/// <summary>The default implementation of <see cref="IWorkflowLinkViewModel"/>.</summary>
+/// <summary>The default implementation of <see cref="ILinkComponent"/>.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Link组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Link component interface")]
-public sealed partial class LinkDefaultViewModel : IConnectionPreviewLink, IWorkflowIdentifiable
+public sealed partial class LinkDefaultComponent : IConnectionPreviewLink, IRuntimeIdentifiable
 {
-    private IWorkflowLinkViewModelHelper helper = new LinkHelper();
+    private ILinkHelper helper = new LinkHelper();
     private ConnectionPreviewState preview = ConnectionPreviewState.None;
 
     /// <summary>The helper that carries this component's behaviour.</summary>
-    public IWorkflowLinkViewModelHelper Helper
+    public ILinkHelper Helper
     {
         get => helper;
         private set
@@ -28,10 +28,10 @@ public sealed partial class LinkDefaultViewModel : IConnectionPreviewLink, IWork
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>Creates the component and installs its default helper.</summary>
-    public LinkDefaultViewModel() { InitializeWorkflow(); }
+    public LinkDefaultComponent() { InitializeWorkflow(); }
 
-    [VeloxProperty] private IWorkflowSlotViewModel sender = new SlotDefaultViewModel();
-    [VeloxProperty] private IWorkflowSlotViewModel receiver = new SlotDefaultViewModel();
+    [VeloxProperty] private ISlotComponent sender = new SlotDefaultComponent();
+    [VeloxProperty] private ISlotComponent receiver = new SlotDefaultComponent();
     [VeloxProperty] private bool isVisible = false;
 
     [VeloxCommand]
@@ -47,7 +47,7 @@ public sealed partial class LinkDefaultViewModel : IConnectionPreviewLink, IWork
     }
 
     /// <inheritdoc />
-    public IWorkflowLinkViewModelHelper GetHelper() => Helper;
+    public ILinkHelper GetHelper() => Helper;
     /// <inheritdoc />
     public ConnectionPreviewState Preview => preview;
     /// <inheritdoc />
@@ -63,7 +63,7 @@ public sealed partial class LinkDefaultViewModel : IConnectionPreviewLink, IWork
         Helper.Install(this);
     }
     /// <inheritdoc />
-    public void SetHelper(IWorkflowLinkViewModelHelper helper)
+    public void SetHelper(ILinkHelper helper)
     {
         if (ReferenceEquals(Helper, helper)) return;
         Helper.Uninstall(this);

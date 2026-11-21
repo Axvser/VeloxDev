@@ -17,13 +17,13 @@ public sealed partial class CompileContext : ICompileContext
     public object? Data => null;
 
     /// <summary>Sender output slot of the edge to validate; null on the identity instance held by the node itself, only filled in on edge instances constructed by the compiler.</summary>
-    public IWorkflowSlotViewModel? Sender { get; set; }
+    public ISlotComponent? Sender { get; set; }
 
     /// <summary>Receiver input slot of the edge to validate; null on the identity instance held by the node itself, only filled in on edge instances constructed by the compiler.</summary>
-    public IWorkflowSlotViewModel? Receiver { get; set; }
+    public ISlotComponent? Receiver { get; set; }
 
     /// <summary>Join-point input source nodes (registered at compile-time; aggregated into GroupData injected as Data when Count &gt; 1 at runtime). Null on non-join nodes.</summary>
-    public IReadOnlyList<IWorkflowNodeViewModel>? InputNodes { get; set; }
+    public IReadOnlyList<INodeComponent>? InputNodes { get; set; }
 
     [VeloxProperty] private int _order = -1;         // Global computed order; -1 = absolute stop state
     [VeloxProperty] private int _chainIndex = -1;    // Order within its chain (starting at 0)

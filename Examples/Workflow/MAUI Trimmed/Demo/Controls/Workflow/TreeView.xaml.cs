@@ -1,4 +1,4 @@
-// VeloxDev customization: Set BindingContext to your IWorkflowTreeViewModel before the control is loaded.
+// VeloxDev customization: Set BindingContext to your ITreeComponent before the control is loaded.
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Controls;
@@ -31,7 +31,7 @@ public partial class TreeView : ContentView
     // 树一级的键与滚轮也订在**树的 Helper** 上 —— 与连线视图订自己那一条同一条路，适配器只负责把
     // 平台的输入翻译过来，这里决定收到之后做什么。
     private IInputEvents? _linkInput;
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
 
     private void SyncLinkInput()
     {
@@ -42,7 +42,7 @@ public partial class TreeView : ContentView
             _linkInput = null;
         }
 
-        _tree = BindingContext as IWorkflowTreeViewModel;
+        _tree = BindingContext as ITreeComponent;
 
         if (_tree is not null && _tree.GetHelper() is IInputEvents events)
         {
@@ -64,7 +64,7 @@ public partial class TreeView : ContentView
 
         if (e.Key == InputKey.Delete)
         {
-            if (e.Target is IWorkflowLinkViewModel link && link.DeleteCommand.CanExecute(null))
+            if (e.Target is ILinkComponent link && link.DeleteCommand.CanExecute(null))
             {
                 link.DeleteCommand.Execute(null);
             }

@@ -4,15 +4,15 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
-/// <summary>The default implementation of <see cref="IWorkflowNodeViewModel"/>.</summary>
+/// <summary>The default implementation of <see cref="INodeComponent"/>.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Node组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Node component interface")]
-public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWorkflowIdentifiable
+public sealed partial class NodeDefaultComponent : INodeComponent, IRuntimeIdentifiable
 {
-    private IWorkflowNodeViewModelHelper helper = new NodeHelper();
+    private INodeHelper helper = new NodeHelper();
 
     /// <summary>The helper that carries this component's behaviour.</summary>
-    public IWorkflowNodeViewModelHelper Helper
+    public INodeHelper Helper
     {
         get => helper;
         private set
@@ -28,12 +28,12 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>Creates the component and installs its default helper.</summary>
-    public NodeDefaultViewModel() { InitializeWorkflow(); }
+    public NodeDefaultComponent() { InitializeWorkflow(); }
 
-    [VeloxProperty] private IWorkflowTreeViewModel? parent = null;
+    [VeloxProperty] private ITreeComponent? parent = null;
     private Anchor anchor = new();
     private Size size = new();
-    [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> slots = [];
+    [VeloxProperty] private ObservableCollection<ISlotComponent> slots = [];
     private readonly WorkflowNodeScaleTracker _scaleTracker = new();
 
     // Anchor/Size are hand-written (not [VeloxProperty]) so their getters can collapse toward the
@@ -76,7 +76,7 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
     partial void OnSizeChanging(Size oldValue, Size newValue);
     partial void OnSizeChanged(Size oldValue, Size newValue);
 
-    partial void OnParentChanged(IWorkflowTreeViewModel? oldValue, IWorkflowTreeViewModel? newValue)
+    partial void OnParentChanged(ITreeComponent? oldValue, ITreeComponent? newValue)
         => _scaleTracker.Attach(newValue, OnScaleDirty);
 
     private void OnScaleDirty()
@@ -109,7 +109,7 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
     [VeloxCommand]
     private Task CreateSlot(object? parameter, CancellationToken ct)
     {
-        if (parameter is not IWorkflowSlotViewModel slot) return Task.CompletedTask;
+        if (parameter is not ISlotComponent slot) return Task.CompletedTask;
         Helper.CreateSlot(slot);
         return Task.CompletedTask;
     }
@@ -142,14 +142,14 @@ public sealed partial class NodeDefaultViewModel : IWorkflowNodeViewModel, IWork
     }
 
     /// <inheritdoc />
-    public IWorkflowNodeViewModelHelper GetHelper() => Helper;
+    public INodeHelper GetHelper() => Helper;
     /// <inheritdoc />
     public void InitializeWorkflow()
     {
         Helper.Install(this);
     }
     /// <inheritdoc />
-    public void SetHelper(IWorkflowNodeViewModelHelper helper)
+    public void SetHelper(INodeHelper helper)
     {
         if (ReferenceEquals(Helper, helper)) return;
         Helper.Uninstall(this);

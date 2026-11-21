@@ -47,10 +47,10 @@
   },
   "VirtualLink": {
     "$id": "11",
-    "$type": "VeloxDev.WorkflowSystem.LinkDefaultViewModel, VeloxDev.Core",
+    "$type": "VeloxDev.WorkflowSystem.LinkDefaultComponent, VeloxDev.Core",
     "Sender": {
       "$id": "12",
-      "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
+      "$type": "VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core",
       "Targets": [],
       "Sources": [],
       "Parent": null,
@@ -65,7 +65,7 @@
     },
     "Receiver": {
       "$id": "14",
-      "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
+      "$type": "VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core",
       "Targets": [],
       "Sources": [],
       "Parent": null,
@@ -83,7 +83,7 @@
   "Nodes": [
     {
       "$id": "16",
-      "$type": "VeloxDev.WorkflowSystem.NodeDefaultViewModel, VeloxDev.Core",
+      "$type": "VeloxDev.WorkflowSystem.NodeDefaultComponent, VeloxDev.Core",
       "Anchor": {
         "$id": "17",
         "Horizontal": 1400.0,
@@ -101,7 +101,7 @@
       "Slots": [
         {
           "$id": "19",
-          "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
+          "$type": "VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core",
           "Targets": [],
           "Sources": [],
           "Parent": {
@@ -120,7 +120,7 @@
     },
     {
       "$id": "21",
-      "$type": "VeloxDev.WorkflowSystem.NodeDefaultViewModel, VeloxDev.Core",
+      "$type": "VeloxDev.WorkflowSystem.NodeDefaultComponent, VeloxDev.Core",
       "Anchor": {
         "$id": "22",
         "Horizontal": 200.0,
@@ -138,7 +138,7 @@
       "Slots": [
         {
           "$id": "24",
-          "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
+          "$type": "VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core",
           "Targets": [],
           "Sources": [],
           "Parent": {

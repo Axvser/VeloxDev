@@ -47,7 +47,7 @@
 | `ViewLayerPolicy.cs` | `ViewLayerPolicy` | `GetZOrder` 恒 0（模板绑 z） |
 | `ViewLinkLayer.cs` | `ViewLinkLayer` | `IsActive=false`，连线仍由主池物化 |
 | `ViewMeasureHost.cs` | `ViewMeasureHost` | no-op（布局 pass 自己量） |
-| `ViewSourcePipeline.cs` | `ViewSourcePipeline` | 继承 `ViewSourcePipelineCore<Panel,Control,IWorkflowViewModel,DispatcherPriority,...>`，组合全部层 |
+| `ViewSourcePipeline.cs` | `ViewSourcePipeline` | 继承 `ViewSourcePipelineCore<Panel,Control,IWorkflowComponent,DispatcherPriority,...>`，组合全部层 |
 
 入口仍是 `WorkflowSystem/AttachedBehaviors/ViewPool.cs` 的附着属性 `ViewPool.ItemsSource` / `ViewPool.TemplateSelector`；它只创建/销毁 `ViewSourcePipeline`。
 

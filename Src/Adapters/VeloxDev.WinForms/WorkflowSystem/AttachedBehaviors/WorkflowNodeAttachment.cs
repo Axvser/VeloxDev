@@ -42,9 +42,9 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
 
     private readonly Control target;
     private readonly ModelChangeRelay relay;
-    private readonly IWorkflowNodeEventSink eventSink;
+    private readonly INodeEventSink eventSink;
 
-    private IWorkflowNodeViewModel? node;
+    private INodeComponent? node;
     private IDisposable? modelEvents;
     private Color surfaceBackdrop = Color.FromArgb(0x1E, 0x1E, 0x1E);
 
@@ -96,14 +96,14 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     /// generated ports say nothing about it and the view, which knows its node type, declares it here. Without a
     /// declaration the card has no title.
     /// </remarks>
-    public Func<IWorkflowNodeViewModel, string>? NodeTitle { get; set; }
+    public Func<INodeComponent, string>? NodeTitle { get; set; }
 
     /// <summary>How the card reads a slot's own display label, for slots that carry one.</summary>
     /// <remarks>
     /// This is the slot view model's own member, not the conditional-slot entry's name the generated ports carry —
     /// a different question, and one only the view can answer. Falls through to a positional label when unset.
     /// </remarks>
-    public Func<IWorkflowSlotViewModel, string?>? SlotLabel { get; set; }
+    public Func<ISlotComponent, string?>? SlotLabel { get; set; }
 
     /// <summary>Raised when the zoom collapse factor changes; re-flow the card's fixed metrics here.</summary>
     public event EventHandler<CollapseChangedEventArgs>? CollapseChanged;
@@ -139,7 +139,7 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     /// <summary>Gets or sets the node bound to this card.</summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IWorkflowNodeViewModel? Node
+    public INodeComponent? Node
     {
         get => node;
         set
@@ -236,14 +236,14 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
 
     /// <summary>
     /// Finds the node's fixed input slot — the property whose value is a concrete
-    /// <see cref="IWorkflowSlotViewModel"/> rather than a <see cref="SlotEnumerator{T}"/>.
+    /// <see cref="ISlotComponent"/> rather than a <see cref="SlotEnumerator{T}"/>.
     /// </summary>
     /// <returns>The input slot, or <see langword="null"/>.</returns>
     /// <remarks>
     /// Preferred over channel-based detection because an input's channel can still be the generated default when
     /// the card first renders — setting it runs through an asynchronous command.
     /// </remarks>
-    public IWorkflowSlotViewModel? ResolveInputSlot()
+    public ISlotComponent? ResolveInputSlot()
     {
         if (node?.Slots is not { } slots) return null;
 
@@ -272,7 +272,7 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     /// over the node's enumerator properties first, then falls back to a <c>Name</c>/<c>Title</c> property, then to
     /// a positional label.
     /// </remarks>
-    public string ResolveSlotLabel(IWorkflowSlotViewModel slot, int index)
+    public string ResolveSlotLabel(ISlotComponent slot, int index)
     {
         if (ReadEnumeratorLabel(slot) is { Length: > 0 } name)
         {
@@ -352,8 +352,8 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
             TitleChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor)
-            or nameof(IWorkflowNodeViewModel.Size)
+        if (e.PropertyName is nameof(INodeComponent.Anchor)
+            or nameof(INodeComponent.Size)
             or null or "")
         {
             ApplyPosition();
@@ -381,7 +381,7 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     // 在节点的枚举器属性里找哪个条目引用了这个插槽，取它的名字。
     // 走 IConditionalSlotProvider 这个非泛型视野，不反射 Items/Slot/Name —— 那三个成员名是
     // SlotEnumerator<T> 的私有形状，而接口就是为「只拿到一个 object 的调用方」准备的。
-    private string? ReadEnumeratorLabel(IWorkflowSlotViewModel slot)
+    private string? ReadEnumeratorLabel(ISlotComponent slot)
     {
         if (node?.GetHelper() is not IConditionalSlotProviders providers) return null;
 
@@ -411,7 +411,7 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
         relay.Clear();
     }
 
-    private sealed class NodeEventSink(WorkflowNodeAttachment owner) : IWorkflowNodeEventSink
+    private sealed class NodeEventSink(WorkflowNodeAttachment owner) : INodeEventSink
     {
         public void OnMoving(NodeMoveEventArgs e) => owner.Moving?.Invoke(owner, e);
         public void OnMoved(NodeMoveEventArgs e) => owner.Moved?.Invoke(owner, e);

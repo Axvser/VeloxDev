@@ -18,15 +18,15 @@ internal sealed class RenderScenario
 
     internal const double ViewportHeight = 800d;
 
-    private RenderScenario(TreeDefaultViewModel tree, Viewport[] scrollViewports)
+    private RenderScenario(TreeDefaultComponent tree, Viewport[] scrollViewports)
     {
         Tree = tree;
         ScrollViewports = scrollViewports;
     }
 
-    internal TreeDefaultViewModel Tree { get; }
+    internal TreeDefaultComponent Tree { get; }
 
-    internal IWorkflowTreeViewModelHelper Helper => Tree.GetHelper();
+    internal ITreeHelper Helper => Tree.GetHelper();
 
     internal Viewport Origin => new(0d, 0d, ViewportWidth, ViewportHeight);
 

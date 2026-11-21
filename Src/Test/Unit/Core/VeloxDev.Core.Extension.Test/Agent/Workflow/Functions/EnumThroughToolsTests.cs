@@ -37,7 +37,7 @@ public class EnumThroughToolsTests
     [TestMethod]
     public void PatchNodeProperties_SetsAnEnumFromItsMemberName()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var node = new EnumSelectorNodeViewModel();
         tree.GetHelper().CreateNode(node);
         Assert.AreEqual(RouterCompileMode.Dynamic, node.CompileMode, "precondition: the constructor default");
@@ -55,7 +55,7 @@ public class EnumThroughToolsTests
     [TestMethod]
     public void PatchNodeProperties_MatchesAnEnumNameCaseInsensitively()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var node = new EnumSelectorNodeViewModel();
         tree.GetHelper().CreateNode(node);
 
@@ -68,7 +68,7 @@ public class EnumThroughToolsTests
     [TestMethod]
     public void PatchNodeProperties_TakesAnEnumByItsUnderlyingNumber()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var node = new EnumSelectorNodeViewModel();
         tree.GetHelper().CreateNode(node);
 
@@ -87,7 +87,7 @@ public class EnumThroughToolsTests
     [TestMethod]
     public void PatchNodeProperties_RefusesAnUnknownEnumMemberAndLeavesThePropertyAlone()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var node = new EnumSelectorNodeViewModel();
         tree.GetHelper().CreateNode(node);
 
@@ -109,13 +109,13 @@ public class EnumThroughToolsTests
     [TestMethod]
     public void ExecuteCommandById_SetsASlotChannelFromItsMemberName()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
-        node.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.None });
+        node.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.None });
 
         var slot = node.Slots[0];
-        var slotId = ((IWorkflowIdentifiable)slot).RuntimeId;
+        var slotId = ((IRuntimeIdentifiable)slot).RuntimeId;
 
         var scope = new WorkflowAgentScope(tree).WithAllowedGenericCommands("SetChannel");
         var result = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "ExecuteCommandById",
@@ -129,10 +129,10 @@ public class EnumThroughToolsTests
     [TestMethod]
     public void ExecuteCommandById_TakesAChannelByItsUnderlyingNumber()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
-        node.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.None });
+        node.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.None });
 
         var slot = node.Slots[0];
 
@@ -147,7 +147,7 @@ public class EnumThroughToolsTests
     [TestMethod]
     public void AnEnumArgumentThatIsNeitherNameNorNumber_IsRefusedByType()
     {
-        var slot = new SlotDefaultViewModel { Channel = SlotChannel.None };
+        var slot = new SlotDefaultComponent { Channel = SlotChannel.None };
 
         var result = JObject.Parse(CommandInvoker.Invoke(slot, "SetChannel", "\"Sideways\""));
 
@@ -166,7 +166,7 @@ public class EnumThroughToolsTests
     [TestMethod]
     public void PatchNodeProperties_WithAJsonNull_ClearsRatherThanThrows()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var node = new EnumSelectorNodeViewModel();
         tree.GetHelper().CreateNode(node);
 

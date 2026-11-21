@@ -160,7 +160,7 @@ public partial class PolylineCurveView : Control
     private void RefreshFlowSubscription()
     {
         var clock = _attached && !IsVirtual && CanRender
-            ? WorkflowFlowClock.ForLink(DataContext as IWorkflowLinkViewModel)
+            ? WorkflowFlowClock.ForLink(DataContext as ILinkComponent)
             : null;
 
         if (ReferenceEquals(clock, _clock)) return;
@@ -208,11 +208,11 @@ public partial class PolylineCurveView : Control
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
-    private IWorkflowLinkViewModel? _inputLink;
+    private ILinkComponent? _inputLink;
 
     private void ResubscribeInput()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (ReferenceEquals(link, _inputLink)) return;
 
         UnsubscribeInput();
@@ -249,7 +249,7 @@ public partial class PolylineCurveView : Control
         if (change.Property == DataContextProperty)
         {
             // 池化改绑：旧链接不能留着一条指向本视图的曲线，否则它的命中会答在一个已经画着别人的控件上。
-            if (change.OldValue is IWorkflowLinkViewModel old && !ReferenceEquals(old, change.NewValue))
+            if (change.OldValue is ILinkComponent old && !ReferenceEquals(old, change.NewValue))
             {
                 old.PublishCurve(null);
             }
@@ -327,7 +327,7 @@ public partial class PolylineCurveView : Control
     // 曲线由 Core 构建一次：与绘制读的是同一次构建，所以命中与画出来的永远是一条。
     private void RefreshGeometry()
     {
-        var curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        var curve = LinkCurve.BuildLinkCubic(DataContext as ILinkComponent, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         _curve = curve;
         _body = curve.Length > 0 ? BuildSegment(0, curve.Length) : null;
 
@@ -339,7 +339,7 @@ public partial class PolylineCurveView : Control
     // Visual，菜单等事件的 sender 必须落在真正被看到的那个控件上，否则菜单会挂在隐藏控件上。
     private void PublishCurve()
     {
-        if (!IsVisible || DataContext is not IWorkflowLinkViewModel link)
+        if (!IsVisible || DataContext is not ILinkComponent link)
         {
             return;
         }

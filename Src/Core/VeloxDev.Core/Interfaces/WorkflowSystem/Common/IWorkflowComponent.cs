@@ -6,8 +6,8 @@ namespace VeloxDev.WorkflowSystem;
 
 /// <summary>The base contract every workflow component implements.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流组件接口，任何工作流组件都实现该接口")]
-[AgentContext(AgentLanguages.English, "Workflow ViewModel Base interface")]
-public interface IWorkflowViewModel : INotifyPropertyChanging, INotifyPropertyChanged
+[AgentContext(AgentLanguages.English, "Workflow component base interface")]
+public interface IWorkflowComponent : INotifyPropertyChanging, INotifyPropertyChanged
 {
     /// <summary>Initializes the workflow component.</summary>
     [AgentContext(AgentLanguages.Chinese, "初始化工作流组件，无参数")]

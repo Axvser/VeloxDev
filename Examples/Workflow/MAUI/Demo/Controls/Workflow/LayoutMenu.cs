@@ -46,7 +46,7 @@ internal static class LayoutMenu
 
     private static void Apply(View view, WorkflowLayoutTraversal traversal, double tolerance)
     {
-        if (view.BindingContext is not IWorkflowNodeViewModel node) return;
+        if (view.BindingContext is not INodeComponent node) return;
 
         try
         {

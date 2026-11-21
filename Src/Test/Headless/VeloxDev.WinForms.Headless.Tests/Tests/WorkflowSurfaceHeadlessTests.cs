@@ -90,7 +90,7 @@ public sealed class WorkflowSurfaceHeadlessTests
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
 
-        var visibleNodes = graph.Tree.Helper.VisibleItems.Count(item => item is IWorkflowNodeViewModel);
+        var visibleNodes = graph.Tree.Helper.VisibleItems.Count(item => item is INodeComponent);
 
         Assert.AreEqual(
             visibleNodes,

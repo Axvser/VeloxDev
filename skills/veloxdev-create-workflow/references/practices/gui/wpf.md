@@ -81,7 +81,7 @@ The tree's two `DataTemplate`s are where node positioning is declared:
 ```csharp
 protected override void OnRender(DrawingContext dc)
 {
-    if (DataContext is IWorkflowLinkViewModel link && !link.IsRenderReady()) return;
+    if (DataContext is ILinkComponent link && !link.IsRenderReady()) return;
     // cubic Bézier from Sender.Anchor to Receiver.Anchor, both control points pulled along
     // each port's own outward normal
 }
@@ -89,7 +89,7 @@ protected override void OnRender(DrawingContext dc)
 
 ⚙ Slot anchors on this adapter are measured in **screen space** and converted with `SlotAnchorFromVisualCenter`. The canvas itself is not translated for the child views, so the visual centre genuinely is a screen coordinate here.
 
-⚙ **Link input is Core's, forwarded by this adapter.** The surface translates the platform's pointer and keys into the standard input and routes them through `WorkflowInput.For(tree)`, resolving which link is under the pointer with `HitTestVisibleLinks` and taking keyboard focus when one is hovered. A host subscribes the routed `KeyDown`, checks the link, and runs `DeleteCommand`: the trimmed demo subscribes on the link view itself and reads its own `DataContext`; the full demo uses the tree-level shape (`Input.KeyDown`, then `e.Target is IWorkflowLinkViewModel`). The right-press link menu is wired through `WorkflowSurfaceBehavior.LinkMenuKey` plus a `ContextMenu` resource (closed when `GetHelper().LinkRemoved` names that link). Hover appearance is the host's — subscribe the link's own `IInputEvents` (see [view-layer.md](../view-layer.md#making-a-link-interactive)).
+⚙ **Link input is Core's, forwarded by this adapter.** The surface translates the platform's pointer and keys into the standard input and routes them through `WorkflowInput.For(tree)`, resolving which link is under the pointer with `HitTestVisibleLinks` and taking keyboard focus when one is hovered. A host subscribes the routed `KeyDown`, checks the link, and runs `DeleteCommand`: the trimmed demo subscribes on the link view itself and reads its own `DataContext`; the full demo uses the tree-level shape (`Input.KeyDown`, then `e.Target is ILinkComponent`). The right-press link menu is wired through `WorkflowSurfaceBehavior.LinkMenuKey` plus a `ContextMenu` resource (closed when `GetHelper().LinkRemoved` names that link). Hover appearance is the host's — subscribe the link's own `IInputEvents` (see [view-layer.md](../view-layer.md#making-a-link-interactive)).
 
 ⚙ `System.Windows.Shapes.Path` versus `System.IO.Path`: this demo does not need an alias, but code-first views that use both namespaces will.
 

@@ -14,7 +14,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 public interface ICompileTimeRouter
 {
     /// <summary>Branch table: key → downstream nodes. One branch can fan out to multiple targets.</summary>
-    Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable();
+    Task<IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>>> GetRouteTable();
 
     /// <summary>Given the current data payload (an <see cref="IRuntimeContext"/> instance at runtime, null at compile-time), returns the route key.</summary>
     Task<object?> ResolveRouteKey(object? payload);

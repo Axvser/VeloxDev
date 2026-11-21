@@ -687,7 +687,7 @@ namespace VeloxDev.Generators.Writers
 
                 if (parameter.NeedsLocal)
                 {
-                    // 局部变量必须声明成参数自己的类型：`out object` 传给 `out IWorkflowSlotViewModel?` 编不过。
+                    // 局部变量必须声明成参数自己的类型：`out object` 传给 `out ISlotComponent?` 编不过。
                     var parameterType = FullTypeOf(parameter.DeclaredTypeSymbol);
                     var keyword = parameter.RefKind == RefKind.Out ? "out" : "ref";
                     var initial = parameter.RefKind == RefKind.Out ? "default!" : $"({parameterType})args[{i}]!";

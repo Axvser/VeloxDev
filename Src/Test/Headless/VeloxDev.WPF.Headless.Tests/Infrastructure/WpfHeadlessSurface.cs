@@ -88,7 +88,7 @@ internal sealed class WpfHeadlessSurface : IDisposable
 
     public TestGraph Graph { get; }
 
-    public VeloxDev.WorkflowSystem.TreeDefaultViewModel Tree { get; }
+    public VeloxDev.WorkflowSystem.TreeDefaultComponent Tree { get; }
 
     public UserControl Host { get; }
 

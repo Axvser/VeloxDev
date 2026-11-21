@@ -27,7 +27,7 @@
 
 | 不在模块内 | 实际归谁 |
 |---|---|
-| 生成出来的代码**跑起来是什么行为** | 全在 Core。生成器只写声明与转发（例如 `OnWorkflowSlotAdded` 的**声明**由 `Writers/MVVMWriter.cs` 写，`CreateWorkflowSlot<T>()` 的**骨架**也由它写，但生命周期归 `WorkflowSystem`） |
+| 生成出来的代码**跑起来是什么行为** | 全在 Core。生成器只写声明与转发（例如 `OnSlotComponentAdded` 的**声明**由 `Writers/MVVMWriter.cs` 写，`CreateSlotComponent<T>()` 的**骨架**也由它写，但生命周期归 `WorkflowSystem`） |
 | 「哪些类会被处理」 | `Base/Analizer.cs` 里那张**硬编码的** `TriggerAttributes` 表。自定义特性、第三方特性一律不认 |
 | 编译错误 / 诊断 | 生成器自己发一组诊断（`Diagnostics.cs`；MVVM 侧 ID 统一成 `VELOX_MVVM_*`，Serialization 侧 `VELOX_JSON_*`）；MSBuild 侧另有 `VELOXCFG0001`（`VeloxDev.Core.Generator.targets`） |
 | 依赖注入、服务定位、注册表 | 完全不生成。生成的是「这个类自己怎么把自己装起来」，不是容器配置 |
@@ -77,7 +77,7 @@ context.RegisterSourceOutput(
 
 #### 三·四、`AIContextTree.cs` 与 `VeloxJson.cs`：另两个不走 `Targets` 的生成器
 
-它订阅 `CompilationProvider`，自己走一遍**整个程序集**（`Base/AIContextModel.cs` 的 `EnumerateTypes`），一次 `AddSource` 出全部产物。理由有三处是独立的：`Targets` 的 `IsCandidateClass` 只接受 `ClassDeclarationSyntax` 且要求 `partial`，**接口与枚举根本进不来**；它的触发集 `TriggerAttributes` 不含三个 Agent 特性；而「是不是组件」由**实现了哪个接口**决定（`IWorkflowNode{Trees,Slots,Links}ViewModel` 四选一），特性触发表达不了。
+它订阅 `CompilationProvider`，自己走一遍**整个程序集**（`Base/AIContextModel.cs` 的 `EnumerateTypes`），一次 `AddSource` 出全部产物。理由有三处是独立的：`Targets` 的 `IsCandidateClass` 只接受 `ClassDeclarationSyntax` 且要求 `partial`，**接口与枚举根本进不来**；它的触发集 `TriggerAttributes` 不含三个 Agent 特性；而「是不是组件」由**实现了哪个接口**决定（`I{Node,Tree,Slot,Link}Component` 四选一），特性触发表达不了。
 
 两条守卫：`AIContextModelBuilder.Applies` 要求编译单元里有 `VeloxDev.AI.AgentContextAttribute`，否则连遍历都不做；MSBuild 属性 `VeloxAgentContextTree=false` 可整体关闭。**根由 `VeloxAgentContextTreeRoot` 决定**（Core 自己设成 `Framework`，其余默认 `Customer`）—— 这个属性必须在消费工程的 `<ItemGroup>` 里用 **`<CompilerVisibleProperty Include="…" />`** 声明，否则分析器读到的永远是默认值（MSBuild 属性默认不透给分析器）。
 
@@ -204,7 +204,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 **两处会咬人的耦合：**
 
 1. **`TriggerAttributes` 是多个消费模块共用的同一张表。** 加一条会影响**所有**生成器对「哪些类进入流程」的判断；`MVVM.cs` 与 `Command.cs` 对同一个类**都**会产出（各自再靠 `CanWrite()` 过滤），所以给 MVVM 加特性时两个生成器都会被喂到。见 `extension.md` §三·1。
-2. **`Writers/MVVMWriter.cs` 的 `IsWorkflowComponent` 让 MVVM 生成器为 Workflow 类补 `CreateWorkflowSlot<T>()` / `OnWorkflowSlotAdded` / `OnWorkflowSlotRemoved` 三件套**。也就是说**这条契约的生成侧在 MVVM writer 里，而语义侧在 WorkflowSystem** —— 找「工作流槽位生命周期为什么长这样」不能只看 `Writers/WorkflowWriter.cs`。
+2. **`Writers/MVVMWriter.cs` 的 `IsWorkflowComponent` 让 MVVM 生成器为 Workflow 类补 `CreateSlotComponent<T>()` / `OnSlotComponentAdded` / `OnSlotComponentRemoved` 三件套**。也就是说**这条契约的生成侧在 MVVM writer 里，而语义侧在 WorkflowSystem** —— 找「工作流槽位生命周期为什么长这样」不能只看 `Writers/WorkflowWriter.cs`。
 
 ---
 
@@ -253,7 +253,7 @@ AOP 还有第三处：接口与代理实现的**类型名**里也拼命名空间
 6. **`Writers/WriterBase.cs` 的 `FormatModifiers` 修饰符重排是「不报重复定义」的依赖**，不是格式化洁癖。
 7. **裁剪/AOT 元数据与本模块无关。** 全部 writer 都不产出 `IsTrimmable` / `IsAotCompatible` / trim 注解；引擎侧也没有生成任何 `DynamicDependency` 之类的裁剪提示（全源 grep 无命中）。裁剪这条轴的开关在 csproj 与 MSBuild 属性上，见 §七。
 
-8. **「另一个生成器加上的接口」要在每个地方各自兜底，漏一处就是一整条功能坏掉，而且不报错。** `[WorkflowBuilder.Slot<T>]` / `Node<T>` / `Link<T>` 类型的 `IWorkflow*ViewModel` 是 Workflow 生成器在**同一编译趟**注入的，而另一个生成器扫 `AllInterfaces` 时看不见它 —— 生成器之间看不见彼此的产物。所以凡是「这个类型算不算组件/槽」的判断，都不能只查接口，要**同时认作者写下的那个特性**。已有的三处：
+8. **「另一个生成器加上的接口」要在每个地方各自兜底，漏一处就是一整条功能坏掉，而且不报错。** `[WorkflowBuilder.Slot<T>]` / `Node<T>` / `Link<T>` 类型的 `I*Component` 是 Workflow 生成器在**同一编译趟**注入的，而另一个生成器扫 `AllInterfaces` 时看不见它 —— 生成器之间看不见彼此的产物。所以凡是「这个类型算不算组件/槽」的判断，都不能只查接口，要**同时认作者写下的那个特性**。已有的三处：
 
    | 判据 | 在哪 | 认什么 |
    |---|---|---|

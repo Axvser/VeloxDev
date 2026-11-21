@@ -14,7 +14,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// </summary>
 public sealed partial class BranchSegment : CompileSegment
 {
-    [VeloxProperty] private IWorkflowNodeViewModel? _router;
+    [VeloxProperty] private INodeComponent? _router;
     [VeloxProperty] private ObservableCollection<BranchOption> _options = [];
     [VeloxProperty] private bool _isDynamic;
     [VeloxProperty] private object? _compileKey;

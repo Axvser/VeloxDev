@@ -43,7 +43,7 @@ public partial class FieldPayloadHolderNode
 [TestClass]
 public class ComponentContextDiscoveryTests
 {
-    private static WorkflowAgentScope Scope() => new(new TreeDefaultViewModel());
+    private static WorkflowAgentScope Scope() => new(new TreeDefaultComponent());
 
     private static string Context(string fullTypeName, string language = "English")
         => WorkflowToolInvoker.Invoke(Scope(), "GetComponentContext",
@@ -85,11 +85,11 @@ public class ComponentContextDiscoveryTests
     [TestMethod]
     public void GetComponentContext_RendersAnInterfaceBlockForAnInterface()
     {
-        var block = Context(typeof(IWorkflowNodeViewModel).FullName!);
+        var block = Context(typeof(INodeComponent).FullName!);
 
         StringAssert.Contains(block, "Interface");
         StringAssert.Contains(block, "| Name | ParameterType | Description |");
-        StringAssert.Contains(block, $"| {nameof(IWorkflowNodeViewModel.MoveCommand)} | {typeof(Offset).FullName} |",
+        StringAssert.Contains(block, $"| {nameof(INodeComponent.MoveCommand)} | {typeof(Offset).FullName} |",
             "the parameter type the interface declared is the column the model builds its JSON from");
     }
 
@@ -205,8 +205,8 @@ public class ComponentContextDiscoveryTests
         Assert.IsNotEmpty(slots, "and its slot components: " + listed);
 
         // 接口那一档（框架自己的四个组件由实现接口识别）。
-        CollectionAssert.Contains(nodes, typeof(NodeDefaultViewModel).FullName);
-        CollectionAssert.Contains(slots, typeof(SlotDefaultViewModel).FullName);
+        CollectionAssert.Contains(nodes, typeof(NodeDefaultComponent).FullName);
+        CollectionAssert.Contains(slots, typeof(SlotDefaultComponent).FullName);
 
         // [WorkflowBuilder.*] 那一档（消费方唯一会写下的声明），Node 与 Slot 各验一次。
         CollectionAssert.Contains(nodes, typeof(UnannotatedNode).FullName);

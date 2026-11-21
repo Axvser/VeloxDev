@@ -40,21 +40,21 @@ public class VeloxJsonSerializerTests
     }
 
     /// <summary>A mounted two-node tree with one slot each — the shape the goldens were captured from.</summary>
-    private static TreeDefaultViewModel BuildTree()
+    private static TreeDefaultComponent BuildTree()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         tree.Layout.Scale = new Scale(2d, 2d);
 
-        var node = new NodeDefaultViewModel();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
         node.Anchor = new Anchor(1400d, 900d, 0);
         node.Size = new Size(300d, 200d);
-        node.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneTarget });
+        node.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneTarget });
 
-        var other = new NodeDefaultViewModel();
+        var other = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(other);
         other.Anchor = new Anchor(200d, 100d, 0);
-        other.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneSource });
+        other.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneSource });
 
         return tree;
     }
@@ -66,12 +66,12 @@ public class VeloxJsonSerializerTests
     [TestMethod]
     public void TheFrozenDocument_ReadsBackThroughTheGeneratedReader()
     {
-        var tree = VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(Golden("tree").Replace("\r\n", "\n"));
+        var tree = VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(Golden("tree").Replace("\r\n", "\n"));
 
         Assert.IsNotNull(tree);
         Assert.HasCount(2, tree.Nodes, "the frozen document holds two nodes");
 
-        var first = (NodeDefaultViewModel)tree.Nodes[0];
+        var first = (NodeDefaultComponent)tree.Nodes[0];
 
         // 文件里存的是世界坐标 1400；getter 按画布缩放（2.0）折叠一次，所以读出来是 700 ——
         // 折叠恰好一次正是这条契约要保的东西。
@@ -85,13 +85,13 @@ public class VeloxJsonSerializerTests
     {
         var original = BuildTree();
 
-        var restored = VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(
+        var restored = VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(
             VeloxJsonSerializer.Serialize(original));
 
         Assert.IsNotNull(restored);
         Assert.HasCount(2, restored.Nodes);
         Assert.AreEqual(new Scale(2d, 2d), restored.Layout.Scale, "the zoom level survives");
-        Assert.AreEqual(700d, ((NodeDefaultViewModel)restored.Nodes[0]).Anchor.Horizontal, 1e-9,
+        Assert.AreEqual(700d, ((NodeDefaultComponent)restored.Nodes[0]).Anchor.Horizontal, 1e-9,
             "and the world coordinate the hooks expand on the way out comes back collapsed exactly once");
     }
 
@@ -102,11 +102,11 @@ public class VeloxJsonSerializerTests
         var original = BuildTree();
 
         var byOldWriter = original.Serialize();
-        var readByNew = VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(byOldWriter);
+        var readByNew = VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(byOldWriter);
         Assert.HasCount(2, readByNew!.Nodes, "the generated reader must read a file the old serializer wrote");
 
         var byNewWriter = VeloxJsonSerializer.Serialize(original);
-        var readByOld = byNewWriter.Deserialize<TreeDefaultViewModel>();
+        var readByOld = byNewWriter.Deserialize<TreeDefaultComponent>();
         Assert.HasCount(2, readByOld.Nodes, "the old serializer must read a file the generated reader wrote");
     }
 
@@ -115,11 +115,11 @@ public class VeloxJsonSerializerTests
     {
         // 反向对照：模块初始化器没跑的话，上面两条根本走不到。
         Assert.IsNotNull(
-            VeloxJsonRegistry.WriterFor(typeof(TreeDefaultViewModel)),
+            VeloxJsonRegistry.WriterFor(typeof(TreeDefaultComponent)),
             "the generated registration must have run when the assembly loaded");
         Assert.AreEqual(
-            "VeloxDev.WorkflowSystem.TreeDefaultViewModel, VeloxDev.Core",
-            VeloxJsonRegistry.NameOf(typeof(TreeDefaultViewModel)),
+            "VeloxDev.WorkflowSystem.TreeDefaultComponent, VeloxDev.Core",
+            VeloxJsonRegistry.NameOf(typeof(TreeDefaultComponent)),
             "the written type name is the wire format and must not drift");
     }
 

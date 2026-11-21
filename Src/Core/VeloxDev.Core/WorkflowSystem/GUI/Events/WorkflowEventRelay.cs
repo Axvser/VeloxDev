@@ -3,8 +3,8 @@ using System;
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
-/// Connects a host's <see cref="IWorkflowNodeEventSink"/> / <see cref="IWorkflowSlotEventSink"/> /
-/// <see cref="IWorkflowTreeEventSink"/> to a component's Helper, and hands back the subscription to dispose.
+/// Connects a host's <see cref="INodeEventSink"/> / <see cref="ISlotEventSink"/> /
+/// <see cref="ITreeEventSink"/> to a component's Helper, and hands back the subscription to dispose.
 ///
 /// The platforms that can write it declaratively do only this: a XAML attached property takes the sink from a
 /// binding and calls <c>Attach</c>; a Razor host subscribes to the Helper itself; the code-only platforms expose
@@ -21,10 +21,10 @@ public static class WorkflowEventRelay
     /// <param name="node">The node to watch.</param>
     /// <param name="sink">The host's handler.</param>
     /// <returns>The subscription, or <see langword="null"/> when the node's Helper offers no events.</returns>
-    public static IDisposable? Attach(IWorkflowNodeViewModel node, IWorkflowNodeEventSink sink)
+    public static IDisposable? Attach(INodeComponent node, INodeEventSink sink)
     {
         if (node is null || sink is null) return null;
-        if (node.GetHelper() is not IWorkflowNodeEvents events) return null;
+        if (node.GetHelper() is not INodeEvents events) return null;
 
         void Moving(object? _, NodeMoveEventArgs e) => sink.OnMoving(e);
         void Moved(object? _, NodeMoveEventArgs e) => sink.OnMoved(e);
@@ -55,10 +55,10 @@ public static class WorkflowEventRelay
     /// <param name="slot">The slot to watch.</param>
     /// <param name="sink">The host's handler.</param>
     /// <returns>The subscription, or <see langword="null"/> when the slot's Helper offers no events.</returns>
-    public static IDisposable? Attach(IWorkflowSlotViewModel slot, IWorkflowSlotEventSink sink)
+    public static IDisposable? Attach(ISlotComponent slot, ISlotEventSink sink)
     {
         if (slot is null || sink is null) return null;
-        if (slot.GetHelper() is not IWorkflowSlotEvents events) return null;
+        if (slot.GetHelper() is not ISlotEvents events) return null;
 
         void Changing(object? _, SlotChannelEventArgs e) => sink.OnChannelChanging(e);
         void Changed(object? _, SlotChannelEventArgs e) => sink.OnChannelChanged(e);
@@ -77,10 +77,10 @@ public static class WorkflowEventRelay
     /// <param name="tree">The tree to watch.</param>
     /// <param name="sink">The host's handler.</param>
     /// <returns>The subscription, or <see langword="null"/> when the tree's Helper offers no events.</returns>
-    public static IDisposable? Attach(IWorkflowTreeViewModel tree, IWorkflowTreeEventSink sink)
+    public static IDisposable? Attach(ITreeComponent tree, ITreeEventSink sink)
     {
         if (tree is null || sink is null) return null;
-        if (tree.GetHelper() is not IWorkflowTreeEvents events) return null;
+        if (tree.GetHelper() is not ITreeEvents events) return null;
 
         void Connecting(object? _, ConnectionEventArgs e) => sink.OnConnecting(e);
         void Connected(object? _, ConnectionEventArgs e) => sink.OnConnected(e);

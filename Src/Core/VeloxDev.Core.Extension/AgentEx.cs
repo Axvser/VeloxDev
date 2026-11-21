@@ -6,6 +6,6 @@ namespace VeloxDev.AI.Workflow;
 public static class AgentEx
 {
     /// <summary>Creates an Agent scope over <paramref name="tree"/>.</summary>
-    public static WorkflowAgentScope AsAgentScope(this IWorkflowTreeViewModel tree)
+    public static WorkflowAgentScope AsAgentScope(this ITreeComponent tree)
         => new(tree);
 }

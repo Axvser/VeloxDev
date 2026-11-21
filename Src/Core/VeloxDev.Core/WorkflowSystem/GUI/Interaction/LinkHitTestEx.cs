@@ -20,7 +20,7 @@ public static class LinkHitTestEx
     /// <summary>
     /// The link's hit-test capability, or <see langword="null"/> when its Helper does not implement one.
     /// </summary>
-    public static ILinkHitTestable? HitTarget(this IWorkflowLinkViewModel link)
+    public static ILinkHitTestable? HitTarget(this ILinkComponent link)
         => link.GetHelper() as ILinkHitTestable;
 
     /// <summary>
@@ -39,7 +39,7 @@ public static class LinkHitTestEx
     /// <code>
     /// link.PublishCurve(LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, pullMinimum), this);
     /// </code>
-    public static void PublishCurve(this IWorkflowLinkViewModel link, LinkCurve? curve, object? visual = null)
+    public static void PublishCurve(this ILinkComponent link, LinkCurve? curve, object? visual = null)
         => link.HitTarget()?.SetCurve(curve, visual);
 
     /// <summary>
@@ -51,7 +51,7 @@ public static class LinkHitTestEx
     /// the endpoints were measured instead would answer for the model, not for the drawing — and at least one
     /// platform derives its port positions from the model and never writes a slot anchor at all.
     /// </summary>
-    public static bool HitTest(this IWorkflowLinkViewModel link, double x, double y, double radius = DefaultHitRadius)
+    public static bool HitTest(this ILinkComponent link, double x, double y, double radius = DefaultHitRadius)
     {
         if (!link.IsVisible) return false;
         return link.HitTarget()?.Contains(x, y, radius) ?? false;
@@ -73,8 +73,8 @@ public static class LinkHitTestEx
     /// <param name="x">Point x, in the same space the links published their curves in.</param>
     /// <param name="y">Point y, same space.</param>
     /// <param name="radius">Reach either side of the drawn line; <see cref="DefaultHitRadius"/> by default.</param>
-    public static IWorkflowLinkViewModel? HitTestVisibleLinks(
-        this IWorkflowTreeViewModel tree, double x, double y, double radius = DefaultHitRadius)
+    public static ILinkComponent? HitTestVisibleLinks(
+        this ITreeComponent tree, double x, double y, double radius = DefaultHitRadius)
     {
         var items = tree.GetHelper()?.VisibleItems;
         if (items is null) return null;
@@ -82,7 +82,7 @@ public static class LinkHitTestEx
         var dragPreview = tree.VirtualLink;
         for (var i = items.Count - 1; i >= 0; i--)
         {
-            if (items[i] is not IWorkflowLinkViewModel link) continue;
+            if (items[i] is not ILinkComponent link) continue;
             if (ReferenceEquals(link, dragPreview)) continue;
             if (!link.HitTest(x, y, radius)) continue;
             if (IsCoveredByANode(items, link, x, y, radius)) continue;
@@ -102,7 +102,7 @@ public static class LinkHitTestEx
     /// covered: ports are drawn on the card's edge, and stopping on one is still aiming at this link.
     /// </remarks>
     private static bool IsCoveredByANode(
-        IList<IWorkflowViewModel> items, IWorkflowLinkViewModel link, double x, double y, double radius)
+        IList<IWorkflowComponent> items, ILinkComponent link, double x, double y, double radius)
     {
         if (NearOwnPort(link, x, y, radius))
         {
@@ -111,7 +111,7 @@ public static class LinkHitTestEx
 
         for (var i = items.Count - 1; i >= 0; i--)
         {
-            if (items[i] is not IWorkflowNodeViewModel node)
+            if (items[i] is not INodeComponent node)
             {
                 continue;
             }
@@ -127,10 +127,10 @@ public static class LinkHitTestEx
         return false;
     }
 
-    private static bool NearOwnPort(IWorkflowLinkViewModel link, double x, double y, double radius)
+    private static bool NearOwnPort(ILinkComponent link, double x, double y, double radius)
         => Within(link.Sender, x, y, radius) || Within(link.Receiver, x, y, radius);
 
-    private static bool Within(IWorkflowSlotViewModel? slot, double x, double y, double radius)
+    private static bool Within(ISlotComponent? slot, double x, double y, double radius)
     {
         if (slot is null) return false;
 

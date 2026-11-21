@@ -457,13 +457,13 @@ internal sealed class WorkflowInspectorPanel : UserControl
 
         switch (entry.Element)
         {
-            case IWorkflowNodeViewModel node:
+            case INodeComponent node:
                 node.Locate();
                 break;
-            case IWorkflowSlotViewModel slot:
+            case ISlotComponent slot:
                 slot.Locate();
                 break;
-            case IWorkflowLinkViewModel link:
+            case ILinkComponent link:
                 link.Locate();
                 break;
         }
@@ -475,13 +475,13 @@ internal sealed class WorkflowInspectorPanel : UserControl
 
         switch (entry.Element)
         {
-            case IWorkflowNodeViewModel node:
+            case INodeComponent node:
                 node.GetHelper().Delete();
                 break;
-            case IWorkflowSlotViewModel slot:
+            case ISlotComponent slot:
                 slot.GetHelper().Delete();
                 break;
-            case IWorkflowLinkViewModel link:
+            case ILinkComponent link:
                 link.GetHelper().Delete();
                 break;
         }

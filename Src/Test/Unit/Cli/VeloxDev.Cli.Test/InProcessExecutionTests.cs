@@ -36,12 +36,12 @@ public class InProcessExecutionTests
 
     private static string WriteChain(TestArchive fixture, int count, bool flakyTail = false)
     {
-        var tree = new TreeDefaultViewModel();
-        var nodes = new List<IWorkflowNodeViewModel>();
+        var tree = new TreeDefaultComponent();
+        var nodes = new List<INodeComponent>();
 
         for (var index = 0; index < count; index++)
         {
-            IWorkflowNodeViewModel node = flakyTail && index == count - 1
+            INodeComponent node = flakyTail && index == count - 1
                 ? new FlakyNodeViewModel()
                 : new SlowNodeViewModel();
             tree.GetHelper().CreateNode(node);

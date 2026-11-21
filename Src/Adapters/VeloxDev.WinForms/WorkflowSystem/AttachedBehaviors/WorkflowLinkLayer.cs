@@ -37,7 +37,7 @@ public static class WorkflowLinkLayer
 
     /// <summary>The tree whose visible links are drawn; resolved from the surface when unset.</summary>
     public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.RegisterAttached(
-        "WorkflowTree", typeof(IWorkflowTreeViewModel), typeof(WorkflowLinkLayer),
+        "WorkflowTree", typeof(ITreeComponent), typeof(WorkflowLinkLayer),
         new PropertyMetadata(null, OnConfigurationChanged));
 
     /// <summary>Colour of a resting link.</summary>
@@ -120,11 +120,11 @@ public static class WorkflowLinkLayer
     public static void SetIsEnabled(Control element, bool value) => SetRequired(element, IsEnabledProperty, value);
 
     /// <summary>Gets the explicit tree, or <see langword="null"/> to resolve the surface's tree.</summary>
-    public static IWorkflowTreeViewModel? GetWorkflowTree(Control element)
-        => (IWorkflowTreeViewModel?)GetRequired(element, WorkflowTreeProperty);
+    public static ITreeComponent? GetWorkflowTree(Control element)
+        => (ITreeComponent?)GetRequired(element, WorkflowTreeProperty);
 
     /// <summary>Sets the explicit tree.</summary>
-    public static void SetWorkflowTree(Control element, IWorkflowTreeViewModel? value)
+    public static void SetWorkflowTree(Control element, ITreeComponent? value)
         => SetRequired(element, WorkflowTreeProperty, value);
 
     /// <summary>Gets the resting link colour.</summary>
@@ -241,16 +241,16 @@ public static class WorkflowLinkLayer
     private sealed class LayerState
     {
         private readonly Control canvas;
-        private readonly Dictionary<IWorkflowLinkViewModel, PropertyChangedEventHandler> linkHandlers = [];
-        private readonly HashSet<IWorkflowSlotViewModel> slotViews = new(ReferenceEqualityComparer.Instance);
-        private readonly HashSet<IWorkflowNodeViewModel> nodeViews = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<ILinkComponent, PropertyChangedEventHandler> linkHandlers = [];
+        private readonly HashSet<ISlotComponent> slotViews = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<INodeComponent> nodeViews = new(ReferenceEqualityComparer.Instance);
         private readonly Pen pen = new(Color.White);
         private readonly Pen flowPen = new(Color.White);
         private readonly GraphicsPath path = new();
         private readonly List<LinkEntry> entries = [];
-        private readonly Dictionary<IWorkflowSlotViewModel, SlotProjection> projections = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<ISlotComponent, SlotProjection> projections = new(ReferenceEqualityComparer.Instance);
         private bool geometryDirty = true;
-        private IWorkflowTreeViewModel? tree;
+        private ITreeComponent? tree;
         private INotifyCollectionChanged? visibleItems;
         private bool enabled;
 
@@ -342,10 +342,10 @@ public static class WorkflowLinkLayer
                 return;
             }
 
-            var live = new HashSet<IWorkflowLinkViewModel>(ReferenceEqualityComparer.Instance);
+            var live = new HashSet<ILinkComponent>(ReferenceEqualityComparer.Instance);
             foreach (var item in tree.GetHelper().VisibleItems)
             {
-                if (item is not IWorkflowLinkViewModel link)
+                if (item is not ILinkComponent link)
                 {
                     continue;
                 }
@@ -367,7 +367,7 @@ public static class WorkflowLinkLayer
                 }
             }
 
-            var stale = new List<IWorkflowLinkViewModel>();
+            var stale = new List<ILinkComponent>();
             foreach (var pair in linkHandlers)
             {
                 if (!live.Contains(pair.Key))
@@ -382,7 +382,7 @@ public static class WorkflowLinkLayer
             }
         }
 
-        private void SubscribeSlot(IWorkflowSlotViewModel? slot)
+        private void SubscribeSlot(ISlotComponent? slot)
         {
             if (slot is null || !slotViews.Add(slot))
             {
@@ -405,7 +405,7 @@ public static class WorkflowLinkLayer
                 visibleItems = null;
             }
 
-            foreach (var link in new List<IWorkflowLinkViewModel>(linkHandlers.Keys))
+            foreach (var link in new List<ILinkComponent>(linkHandlers.Keys))
             {
                 UnsubscribeLink(link);
             }
@@ -431,7 +431,7 @@ public static class WorkflowLinkLayer
             tree = null;
         }
 
-        private void UnsubscribeLink(IWorkflowLinkViewModel link)
+        private void UnsubscribeLink(ILinkComponent link)
         {
             // 离开可见集/换树时撤掉已发布的曲线，别让一条不在画的线还回答命中。
             link.PublishCurve(null);
@@ -456,10 +456,10 @@ public static class WorkflowLinkLayer
             if (link.Receiver?.Parent is { } receiverNode && !AnyLinkReferencesNode(receiverNode)) UnsubscribeNode(receiverNode);
         }
 
-        private bool AnyLinkReferences(IWorkflowSlotViewModel slot)
+        private bool AnyLinkReferences(ISlotComponent slot)
             => linkHandlers.Keys.Any(link => ReferenceEquals(link.Sender, slot) || ReferenceEquals(link.Receiver, slot));
 
-        private void UnsubscribeSlot(IWorkflowSlotViewModel slot)
+        private void UnsubscribeSlot(ISlotComponent slot)
         {
             if (!slotViews.Remove(slot)) return;
             if (slot is INotifyPropertyChanged notifier)
@@ -468,7 +468,7 @@ public static class WorkflowLinkLayer
             }
         }
 
-        private void SubscribeNode(IWorkflowNodeViewModel? node)
+        private void SubscribeNode(INodeComponent? node)
         {
             if (node is null || !nodeViews.Add(node)) return;
             if (node is INotifyPropertyChanged notifier)
@@ -477,11 +477,11 @@ public static class WorkflowLinkLayer
             }
         }
 
-        private bool AnyLinkReferencesNode(IWorkflowNodeViewModel node)
+        private bool AnyLinkReferencesNode(INodeComponent node)
             => linkHandlers.Keys.Any(link =>
                 ReferenceEquals(link.Sender?.Parent, node) || ReferenceEquals(link.Receiver?.Parent, node));
 
-        private void UnsubscribeNode(IWorkflowNodeViewModel node)
+        private void UnsubscribeNode(INodeComponent node)
         {
             if (!nodeViews.Remove(node)) return;
             if (node is INotifyPropertyChanged notifier)
@@ -502,7 +502,7 @@ public static class WorkflowLinkLayer
             {
                 foreach (var item in e.OldItems)
                 {
-                    if (item is IWorkflowLinkViewModel link)
+                    if (item is ILinkComponent link)
                     {
                         link.PublishCurve(null);
                     }
@@ -522,7 +522,7 @@ public static class WorkflowLinkLayer
             path.Dispose();
         }
 
-        private IWorkflowTreeViewModel? ResolveTree()
+        private ITreeComponent? ResolveTree()
         {
             var explicitTree = GetWorkflowTree(canvas);
             if (explicitTree is not null)
@@ -682,7 +682,7 @@ public static class WorkflowLinkLayer
 
             foreach (var item in tree.GetHelper().VisibleItems)
             {
-                if (item is not IWorkflowLinkViewModel link || !link.IsVisible)
+                if (item is not ILinkComponent link || !link.IsVisible)
                 {
                     continue;
                 }
@@ -729,7 +729,7 @@ public static class WorkflowLinkLayer
         }
 
         private readonly record struct LinkEntry(
-            IWorkflowLinkViewModel Link,
+            ILinkComponent Link,
             PointF[] Points,
             LinkCurve Curve,
             bool IsVirtual,
@@ -745,7 +745,7 @@ public static class WorkflowLinkLayer
         // 有父节点时缓存的是「端点在节点内的局部偏移」，模型坐标 = 当前 node.Anchor + 局部偏移；
         // 无父节点的占位端点才缓存绝对模型坐标。锚点没变就不重算，节点平移仍会跟随。
         private (double X, double Y) ResolveModel(
-            IWorkflowSlotViewModel slot, IWorkflowNodeViewModel? node, double ox, double oy)
+            ISlotComponent slot, INodeComponent? node, double ox, double oy)
         {
             // 首选节点内的局部位置：它只随布局/缩放变，和画布平移无关，也不受测量滞后影响。
             if (node is not null && WorkflowSlotLayoutBehavior.TryGetLocalAnchor(slot, out var lx, out var ly))
@@ -863,22 +863,22 @@ public static class WorkflowLinkLayer
     }
 
     private sealed class ReferenceEqualityComparer
-        : IEqualityComparer<IWorkflowLinkViewModel>,
-          IEqualityComparer<IWorkflowSlotViewModel>,
-          IEqualityComparer<IWorkflowNodeViewModel>
+        : IEqualityComparer<ILinkComponent>,
+          IEqualityComparer<ISlotComponent>,
+          IEqualityComparer<INodeComponent>
     {
         public static readonly ReferenceEqualityComparer Instance = new();
 
-        public bool Equals(IWorkflowLinkViewModel? x, IWorkflowLinkViewModel? y) => ReferenceEquals(x, y);
+        public bool Equals(ILinkComponent? x, ILinkComponent? y) => ReferenceEquals(x, y);
 
-        public int GetHashCode(IWorkflowLinkViewModel obj) => RuntimeHelpers.GetHashCode(obj);
+        public int GetHashCode(ILinkComponent obj) => RuntimeHelpers.GetHashCode(obj);
 
-        public bool Equals(IWorkflowSlotViewModel? x, IWorkflowSlotViewModel? y) => ReferenceEquals(x, y);
+        public bool Equals(ISlotComponent? x, ISlotComponent? y) => ReferenceEquals(x, y);
 
-        public int GetHashCode(IWorkflowSlotViewModel obj) => RuntimeHelpers.GetHashCode(obj);
+        public int GetHashCode(ISlotComponent obj) => RuntimeHelpers.GetHashCode(obj);
 
-        public bool Equals(IWorkflowNodeViewModel? x, IWorkflowNodeViewModel? y) => ReferenceEquals(x, y);
+        public bool Equals(INodeComponent? x, INodeComponent? y) => ReferenceEquals(x, y);
 
-        public int GetHashCode(IWorkflowNodeViewModel obj) => RuntimeHelpers.GetHashCode(obj);
+        public int GetHashCode(INodeComponent obj) => RuntimeHelpers.GetHashCode(obj);
     }
 }

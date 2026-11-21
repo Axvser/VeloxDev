@@ -114,7 +114,7 @@ public sealed class WorkflowLinkAttachment
     private readonly Control target;
     private readonly ModelChangeRelay relay;
 
-    private IWorkflowLinkViewModel? link;
+    private ILinkComponent? link;
     private bool canRender = true;
     private bool isVirtual;
     private Color lineColor = Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF);
@@ -194,7 +194,7 @@ public sealed class WorkflowLinkAttachment
     public event EventHandler<Wf.KeyUpEventArgs>? KeyUp;
 
     /// <summary>The link this control currently draws, or <see langword="null"/> before the first bind.</summary>
-    public IWorkflowLinkViewModel? Link => link;
+    public ILinkComponent? Link => link;
 
     /// <summary>
     /// The four Bézier control points of the curve, in this control's own coordinates — what <see cref="Paint"/>
@@ -262,7 +262,7 @@ public sealed class WorkflowLinkAttachment
     /// is not pooled.
     /// </summary>
     /// <param name="link">The link, or <see langword="null"/> to detach.</param>
-    public void Bind(IWorkflowLinkViewModel? link)
+    public void Bind(ILinkComponent? link)
     {
         if (ReferenceEquals(this.link, link))
         {
@@ -380,7 +380,7 @@ public sealed class WorkflowLinkAttachment
     public static Color ParseColor(string hex) => WorkflowSurfaceColors.Parse(hex);
 
     // 换绑就是换订阅：这条线的四个指针事件跟着走，池化控件因此不需要视图自己记一份。
-    private void HookInput(IWorkflowLinkViewModel? previous, IWorkflowLinkViewModel? next)
+    private void HookInput(ILinkComponent? previous, ILinkComponent? next)
     {
         if (previous?.GetHelper() is Wf.IInputEvents old)
         {
@@ -479,7 +479,7 @@ public sealed class WorkflowLinkAttachment
 
     /// <summary>Re-reads the bound link and re-carves the window. Called on bind and on recycle.</summary>
     /// <param name="link">The link.</param>
-    public void Sync(IWorkflowLinkViewModel? link)
+    public void Sync(ILinkComponent? link)
     {
         if (link is null) return;
 
@@ -692,7 +692,7 @@ public sealed class WorkflowLinkAttachment
     // 起点、两个控制点、终点 —— AddBezier 要的那四个点。
     // 每个控制点沿**自己那个口**所在边的外法线拉（Core 的 LinkCurve.LinkCurvePoints 给的），
     // 所以口在上/下边时竖直出线、反向连线也不会把控制点戳进自己节点；拖拽预览退回房规。
-    private PointF[] BuildCurve(IWorkflowLinkViewModel link, IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    private PointF[] BuildCurve(ILinkComponent link, ISlotComponent sender, ISlotComponent receiver)
     {
         // 端点是**画布系**，而 LinkCurvePoints 按 node.Anchor / node.Size（**模型系**）判每个口贴哪条边 ——
         // 两系差一个表面投影。所以先把端点搬进模型系让它判，再把算出的四个点搬回画布系（画与命中都在这个系）。

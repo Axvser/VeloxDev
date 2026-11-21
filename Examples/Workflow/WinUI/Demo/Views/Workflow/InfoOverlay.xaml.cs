@@ -18,7 +18,7 @@ namespace Demo.Views;
 public sealed partial class InfoOverlay : UserControl
 {
     public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.Register(
-        nameof(WorkflowTree), typeof(IWorkflowTreeViewModel), typeof(InfoOverlay), new PropertyMetadata(null, OnTreeChanged));
+        nameof(WorkflowTree), typeof(ITreeComponent), typeof(InfoOverlay), new PropertyMetadata(null, OnTreeChanged));
 
     public static readonly DependencyProperty ScrollOffsetXProperty = DependencyProperty.Register(
         nameof(ScrollOffsetX), typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
@@ -33,7 +33,7 @@ public sealed partial class InfoOverlay : UserControl
     public static readonly DependencyProperty ViewportHeightProperty = DependencyProperty.Register(
         nameof(ViewportHeight), typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
 
-    public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
+    public ITreeComponent? WorkflowTree { get => (ITreeComponent?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
 
     public double ScrollOffsetX { get => (double)GetValue(ScrollOffsetXProperty); set => SetValue(ScrollOffsetXProperty, value); }
     public double ScrollOffsetY { get => (double)GetValue(ScrollOffsetYProperty); set => SetValue(ScrollOffsetYProperty, value); }
@@ -42,7 +42,7 @@ public sealed partial class InfoOverlay : UserControl
     public double ViewportWidth { get => (double)GetValue(ViewportWidthProperty); set => SetValue(ViewportWidthProperty, value); }
     public double ViewportHeight { get => (double)GetValue(ViewportHeightProperty); set => SetValue(ViewportHeightProperty, value); }
 
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private string _copyText = "";
 
     public InfoOverlay()
@@ -66,7 +66,7 @@ public sealed partial class InfoOverlay : UserControl
         }
 
         overlay.UnsubscribeTree();
-        overlay._tree = (IWorkflowTreeViewModel?)e.NewValue;
+        overlay._tree = (ITreeComponent?)e.NewValue;
         overlay.SubscribeTree();
         overlay.Refresh();
     }
@@ -142,11 +142,11 @@ public sealed partial class InfoOverlay : UserControl
         var virtualLink = _tree.VirtualLink;
         foreach (var item in _tree.GetHelper().VisibleItems)
         {
-            if (item is IWorkflowNodeViewModel)
+            if (item is INodeComponent)
             {
                 visibleNodes++;
             }
-            else if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, virtualLink))
+            else if (item is ILinkComponent link && !ReferenceEquals(link, virtualLink))
             {
                 visibleLinks++;
             }

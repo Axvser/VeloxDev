@@ -207,11 +207,11 @@ public partial class BezierCurveView : Control
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
-    private IWorkflowLinkViewModel? _inputLink;
+    private ILinkComponent? _inputLink;
 
     private void ResubscribeInput()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (ReferenceEquals(link, _inputLink)) return;
 
         UnsubscribeInput();
@@ -248,7 +248,7 @@ public partial class BezierCurveView : Control
         if (change.Property == DataContextProperty)
         {
             // 池化改绑：旧链接不能留着一条指向本视图的曲线，否则它的命中会答在一个已经画着别人的控件上。
-            if (change.OldValue is IWorkflowLinkViewModel old && !ReferenceEquals(old, change.NewValue))
+            if (change.OldValue is ILinkComponent old && !ReferenceEquals(old, change.NewValue))
             {
                 old.PublishCurve(null);
             }
@@ -311,7 +311,7 @@ public partial class BezierCurveView : Control
     // 曲线由 Core 构建一次并发布给命中契约；绘制仍用同一条公式画平滑贝塞尔（与 LinkCurve 同一拉出量）。
     private void RefreshGeometry()
     {
-        _curve = LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+        _curve = LinkCurve.BuildLinkCubic(DataContext as ILinkComponent, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         PublishCurve();
     }
 
@@ -320,7 +320,7 @@ public partial class BezierCurveView : Control
     // Visual，菜单等事件的 sender 必须落在真正被看到的那个控件上，否则菜单会挂在隐藏控件上。
     private void PublishCurve()
     {
-        if (!IsVisible || DataContext is not IWorkflowLinkViewModel link)
+        if (!IsVisible || DataContext is not ILinkComponent link)
         {
             return;
         }
@@ -334,7 +334,7 @@ public partial class BezierCurveView : Control
     private (Point C1, Point C2) Controls()
     {
         var points = LinkCurve.LinkCurvePoints(
-            DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
+            DataContext as ILinkComponent, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         return (new Point(points[1].X, points[1].Y), new Point(points[2].X, points[2].Y));
     }
 

@@ -50,7 +50,7 @@
 | # | 宿主必须做 | 依据 |
 |---|---|---|
 | 1 | 把 tree-view 产物的 `UserControl` 放进窗口（`<views:MainView />` → `<local:TreeView />`） | `Demo/MainWindow.jalxaml` 的 `<views:MainView />`、`Demo/Views/MainView.jalxaml` 的根 |
-| 2 | 备一个 `IWorkflowTreeViewModel` 并设成 `DataContext`（表面从 `DataContext` 取树，`WorkflowSurfaceBehavior.BindTree`） | `MainView.jalxaml.cs` 的 `DataContext = tree`、`WorkflowSurfaceBehavior.cs` 的 `BindTree` |
+| 2 | 备一个 `ITreeComponent` 并设成 `DataContext`（表面从 `DataContext` 取树，`WorkflowSurfaceBehavior.BindTree`） | `MainView.jalxaml.cs` 的 `DataContext = tree`、`WorkflowSurfaceBehavior.cs` 的 `BindTree` |
 | 3 | **其余全部在标记里**：具名部件、`ViewPool.ItemsSource`/`TemplateSelector`、`MinimapOverlay` 的 `ScrollViewerName`、`LinkMenuKey` —— 都不用宿主写代码 | `Demo/Views/Workflow/TreeView.jalxaml` 根上的 `WorkflowSurfaceBehavior.*`、`PART_Canvas` 的 `ViewPool.*`、`MinimapOverlay` |
 
 ⇒ 宿主只做上面三条，其余全在标记里。漏了 DataContext 只会让 `BindTree` 空转（什么都不显示）。

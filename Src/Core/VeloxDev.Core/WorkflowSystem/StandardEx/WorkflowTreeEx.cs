@@ -8,10 +8,10 @@ namespace VeloxDev.WorkflowSystem.StandardEx;
 /// <summary>Standard operations for a workflow tree: commands, node and link lifecycle, connection building, undo/redo and degree queries.</summary>
 public static class WorkflowTreeEx
 {
-    private static readonly ConditionalWeakTable<IWorkflowTreeViewModel, TreeCache> _cache = new();
+    private static readonly ConditionalWeakTable<ITreeComponent, TreeCache> _cache = new();
 
     /// <summary>Returns the standard commands a tree helper drives.</summary>
-    public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands(this IWorkflowTreeViewModel component)
+    public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands(this ITreeComponent component)
         =>
         [
             component.CreateNodeCommand,
@@ -25,7 +25,7 @@ public static class WorkflowTreeEx
         ];
 
     /// <summary>Creates <paramref name="node"/> in the tree, detaching it from any previous tree first.</summary>
-    public static void StandardCreateNode(this IWorkflowTreeViewModel component, IWorkflowNodeViewModel node)
+    public static void StandardCreateNode(this ITreeComponent component, INodeComponent node)
     {
         var oldParent = node.Parent;
         var newParent = component;
@@ -35,13 +35,13 @@ public static class WorkflowTreeEx
         {
             node.GetHelper().Delete();
         }
-        component.StandardSubmit(new WorkflowActionPair(
+        component.StandardSubmit(new ActionPair(
             () => CreateNodeRedo(component, node, newParent),
             () => CreateNodeUndo(component, node, oldParent)));
     }
 
     /// <summary>Moves the virtual link's receiver to <paramref name="anchor"/>, keeping the sender's layer.</summary>
-    public static void StandardSetPointer(this IWorkflowTreeViewModel component, Anchor anchor)
+    public static void StandardSetPointer(this ITreeComponent component, Anchor anchor)
     {
         // 指针只带得动位置：这一端落在哪一层，由这条虚拟连线**起点那一端**决定 —— 起点是
         // `StandardSendConnection` 从真实插槽整个拷过来的（含图层）。这样各家适配器交给这里的锚
@@ -59,7 +59,7 @@ public static class WorkflowTreeEx
     }
 
     /// <summary>Closes the tree and every node, slot and link under it.</summary>
-    public static async Task StandardCloseAsync(this IWorkflowTreeViewModel component)
+    public static async Task StandardCloseAsync(this ITreeComponent component)
     {
         component.GetHelper().Closing();
 
@@ -108,7 +108,7 @@ public static class WorkflowTreeEx
     #region Connection Manager Extensions
 
     /// <summary>Starts building a connection from <paramref name="slot"/>.</summary>
-    public static void StandardSendConnection(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel slot)
+    public static void StandardSendConnection(this ITreeComponent component, ISlotComponent slot)
     {
         var cache = GetCache(component);
 
@@ -159,7 +159,7 @@ public static class WorkflowTreeEx
     /// changes. Call <see cref="StandardRefreshConnectionPreview"/> to force a re-check of the current candidate.
     /// </remarks>
     public static void StandardSetPreviewReceiver(
-        this IWorkflowTreeViewModel component, IWorkflowSlotViewModel? slot)
+        this ITreeComponent component, ISlotComponent? slot)
         => SetPreviewReceiver(component, slot, force: false);
 
     /// <summary>
@@ -170,7 +170,7 @@ public static class WorkflowTreeEx
     /// The entry for asynchronous host validation: start the work from <see cref="WorkflowInput.PreviewValidating"/>,
     /// then call this when the verdict lands. The method is a no-op when no connection drag is in progress.
     /// </remarks>
-    public static void StandardRefreshConnectionPreview(this IWorkflowTreeViewModel component)
+    public static void StandardRefreshConnectionPreview(this ITreeComponent component)
     {
         if (component is null) return;
 
@@ -189,7 +189,7 @@ public static class WorkflowTreeEx
     /// <paramref name="receiver"/>. Pure: no events, no state changes.
     /// </summary>
     /// <param name="component">The tree that owns both slots; its helper's
-    /// <see cref="IWorkflowTreeViewModelHelper.ValidateConnection"/> is the final rule.</param>
+    /// <see cref="ITreeHelper.ValidateConnection"/> is the final rule.</param>
     /// <param name="sender">The port the connection would leave.</param>
     /// <param name="receiver">The port the connection would enter.</param>
     /// <returns>
@@ -199,14 +199,14 @@ public static class WorkflowTreeEx
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     /// <remarks>
     /// This is the same rule set the preview uses, so a caller can ask "would this connect?" before a drag starts.
-    /// It deliberately does not raise <see cref="IWorkflowTreeEvents.Connecting"/>; that event is a per-attempt
+    /// It deliberately does not raise <see cref="ITreeEvents.Connecting"/>; that event is a per-attempt
     /// veto raised only when a connection is actually completed. The release path assumes the sender was validated
     /// when the drag started, while this method re-checks it so it can also be used outside a drag.
     /// </remarks>
     public static ConnectionCheck StandardCheckConnection(
-        this IWorkflowTreeViewModel component,
-        IWorkflowSlotViewModel sender,
-        IWorkflowSlotViewModel receiver)
+        this ITreeComponent component,
+        ISlotComponent sender,
+        ISlotComponent receiver)
     {
         if (component is null) throw new ArgumentNullException(nameof(component));
         if (sender is null) throw new ArgumentNullException(nameof(sender));
@@ -227,7 +227,7 @@ public static class WorkflowTreeEx
     }
 
     private static void SetPreviewReceiver(
-        IWorkflowTreeViewModel component, IWorkflowSlotViewModel? slot, bool force)
+        ITreeComponent component, ISlotComponent? slot, bool force)
     {
         if (component is null) return;
 
@@ -261,7 +261,7 @@ public static class WorkflowTreeEx
     }
 
     /// <summary>Completes a connection at <paramref name="slot"/>.</summary>
-    public static void StandardReceiveConnection(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel slot)
+    public static void StandardReceiveConnection(this ITreeComponent component, ISlotComponent slot)
     {
         var cache = GetCache(component);
         if (cache.CurrentSender == null) return;
@@ -276,7 +276,7 @@ public static class WorkflowTreeEx
 
         // 事件先问（可逐次否决），校验器再问（Helper 的规则）：两者任一说不，这次连接就不成立。
         var helper = component.GetHelper();
-        var events = helper as IWorkflowTreeEvents;
+        var events = helper as ITreeEvents;
         var handle = events?.RaiseConnecting(cache.CurrentSender, slot) ?? new WorkflowEventHandle();
         if (handle.PreventDefault)
         {
@@ -318,7 +318,7 @@ public static class WorkflowTreeEx
     }
 
     /// <summary>Clears the virtual link and its preview state.</summary>
-    public static void StandardResetVirtualLink(this IWorkflowTreeViewModel component)
+    public static void StandardResetVirtualLink(this ITreeComponent component)
     {
         var cache = GetCache(component);
 
@@ -343,7 +343,7 @@ public static class WorkflowTreeEx
 
     #region Redo & Undo Extensions
     /// <summary>Redoes the last undone action.</summary>
-    public static void StandardRedo(this IWorkflowTreeViewModel component)
+    public static void StandardRedo(this ITreeComponent component)
     {
         var cache = GetCache(component);
         if (cache.RedoStack.TryPop(out var pair))
@@ -361,7 +361,7 @@ public static class WorkflowTreeEx
     }
 
     /// <summary>Applies <paramref name="actionPair"/> and pushes it onto the undo history.</summary>
-    public static void StandardSubmit(this IWorkflowTreeViewModel component, IWorkflowActionPair actionPair)
+    public static void StandardSubmit(this ITreeComponent component, IActionPair actionPair)
     {
         var cache = GetCache(component);
         try
@@ -376,7 +376,7 @@ public static class WorkflowTreeEx
     }
 
     /// <summary>Undoes the last action.</summary>
-    public static void StandardUndo(this IWorkflowTreeViewModel component)
+    public static void StandardUndo(this ITreeComponent component)
     {
         var cache = GetCache(component);
         if (cache.UndoStack.TryPop(out var pair))
@@ -394,7 +394,7 @@ public static class WorkflowTreeEx
     }
 
     /// <summary>Clears the undo and redo histories.</summary>
-    public static void StandardClearHistory(this IWorkflowTreeViewModel component)
+    public static void StandardClearHistory(this ITreeComponent component)
     {
         var cache = GetCache(component);
         cache.RedoStack.Clear();
@@ -403,24 +403,24 @@ public static class WorkflowTreeEx
     #endregion
 
     #region Private Helper Methods
-    private static void CreateNodeRedo(IWorkflowTreeViewModel component, IWorkflowNodeViewModel node, IWorkflowTreeViewModel newParent)
+    private static void CreateNodeRedo(ITreeComponent component, INodeComponent node, ITreeComponent newParent)
     {
         node.Parent = newParent;
         component.Nodes.Add(node);
     }
 
-    private static void CreateNodeUndo(IWorkflowTreeViewModel component, IWorkflowNodeViewModel node, IWorkflowTreeViewModel? oldParent)
+    private static void CreateNodeUndo(ITreeComponent component, INodeComponent node, ITreeComponent? oldParent)
     {
         component.Nodes.Remove(node);
         node.Parent = oldParent;
     }
 
-    private static void StandardSmartCleanupSenderConnections(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel sender)
+    private static void StandardSmartCleanupSenderConnections(this ITreeComponent component, ISlotComponent sender)
     {
         if (component == null) return;
 
         // Collect all connections that need to be removed
-        var connectionsToRemove = new List<(IWorkflowSlotViewModel, IWorkflowSlotViewModel, IWorkflowLinkViewModel)>();
+        var connectionsToRemove = new List<(ISlotComponent, ISlotComponent, ILinkComponent)>();
 
         // 1. Remove connections where the sender is the source (connections sent to targets)
         if (component.LinksMap.TryGetValue(sender, out var targetLinks))
@@ -453,12 +453,12 @@ public static class WorkflowTreeEx
         }
     }
 
-    private static void StandardSmartCleanupReceiverConnections(this IWorkflowTreeViewModel component, IWorkflowSlotViewModel receiver)
+    private static void StandardSmartCleanupReceiverConnections(this ITreeComponent component, ISlotComponent receiver)
     {
         if (component == null) return;
 
         // Collect all connections that need to be removed
-        var connectionsToRemove = new List<(IWorkflowSlotViewModel, IWorkflowSlotViewModel, IWorkflowLinkViewModel)>();
+        var connectionsToRemove = new List<(ISlotComponent, ISlotComponent, ILinkComponent)>();
 
         // 1. Remove connections where the receiver is the target (connections received from other slots)
         foreach (var senderDict in component.LinksMap)
@@ -491,8 +491,8 @@ public static class WorkflowTreeEx
         }
     }
 
-    private static void StandardCleanupSameDirectionConnections(this IWorkflowTreeViewModel component,
-        IWorkflowSlotViewModel newSender, IWorkflowSlotViewModel newReceiver)
+    private static void StandardCleanupSameDirectionConnections(this ITreeComponent component,
+        ISlotComponent newSender, ISlotComponent newReceiver)
     {
         if (component == null || newSender.Parent == null || newReceiver.Parent == null) return;
 
@@ -500,7 +500,7 @@ public static class WorkflowTreeEx
         var receiverNode = newReceiver.Parent;
 
         // Collect same-direction connections that need to be removed
-        var sameDirectionConnections = new List<(IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver, IWorkflowLinkViewModel Link)>();
+        var sameDirectionConnections = new List<(ISlotComponent Sender, ISlotComponent Receiver, ILinkComponent Link)>();
 
         // Find all connections from senderNode to receiverNode
         foreach (var potentialSender in senderNode.Slots)
@@ -528,8 +528,8 @@ public static class WorkflowTreeEx
         }
     }
 
-    private static void StandardCreateNewConnection(this IWorkflowTreeViewModel component,
-        IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    private static void StandardCreateNewConnection(this ITreeComponent component,
+        ISlotComponent sender, ISlotComponent receiver)
     {
         if (component is null || sender is null || receiver is null) return;
 
@@ -543,7 +543,7 @@ public static class WorkflowTreeEx
         var newLink = component.GetHelper().CreateLink(sender, receiver);
         newLink.IsVisible = true;
 
-        component.StandardSubmit(new WorkflowActionPair(
+        component.StandardSubmit(new ActionPair(
             () =>
             {
                 if (!component.LinksMap.ContainsKey(sender))
@@ -583,8 +583,8 @@ public static class WorkflowTreeEx
         ));
     }
 
-    private static void StandardRemoveConnections(this IWorkflowTreeViewModel component,
-        List<(IWorkflowSlotViewModel Sender, IWorkflowSlotViewModel Receiver, IWorkflowLinkViewModel Link)> connectionsToRemove)
+    private static void StandardRemoveConnections(this ITreeComponent component,
+        List<(ISlotComponent Sender, ISlotComponent Receiver, ILinkComponent Link)> connectionsToRemove)
     {
         if (component is null || connectionsToRemove.Count == 0)
             return;
@@ -593,7 +593,7 @@ public static class WorkflowTreeEx
         var undoActions = new List<Action>();
 
         // Collect all affected slots for unified state updates
-        var affectedSlots = new HashSet<IWorkflowSlotViewModel>();
+        var affectedSlots = new HashSet<ISlotComponent>();
 
         foreach (var (sender, receiver, link) in connectionsToRemove)
         {
@@ -674,7 +674,7 @@ public static class WorkflowTreeEx
         });
 
         // Build the complete action pair
-        var actionPair = new WorkflowActionPair(
+        var actionPair = new ActionPair(
             () => { foreach (var action in redoActions) action(); },
             () => { foreach (var action in undoActions) action(); }
         );
@@ -718,7 +718,7 @@ public static class WorkflowTreeEx
     /// <summary>
     /// Returns the in-degree (number of incoming connections) for the node at the given index.
     /// </summary>
-    public static int GetNodeInDegree(this IWorkflowTreeViewModel tree, int nodeIndex)
+    public static int GetNodeInDegree(this ITreeComponent tree, int nodeIndex)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
         if (nodeIndex < 0 || nodeIndex >= tree.Nodes.Count)
@@ -734,7 +734,7 @@ public static class WorkflowTreeEx
     /// <summary>
     /// Returns the out-degree (number of outgoing connections) for the node at the given index.
     /// </summary>
-    public static int GetNodeOutDegree(this IWorkflowTreeViewModel tree, int nodeIndex)
+    public static int GetNodeOutDegree(this ITreeComponent tree, int nodeIndex)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
         if (nodeIndex < 0 || nodeIndex >= tree.Nodes.Count)
@@ -751,7 +751,7 @@ public static class WorkflowTreeEx
     /// Finds all entry nodes (in-degree = 0) in the tree. These are natural starting
     /// points for forward traversal.
     /// </summary>
-    public static IReadOnlyList<int> FindEntryNodeIndices(this IWorkflowTreeViewModel tree)
+    public static IReadOnlyList<int> FindEntryNodeIndices(this ITreeComponent tree)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
@@ -766,7 +766,7 @@ public static class WorkflowTreeEx
     /// Finds all exit nodes (out-degree = 0) in the tree. These are natural ending
     /// points for forward traversal, or starting points for reverse traversal.
     /// </summary>
-    public static IReadOnlyList<int> FindExitNodeIndices(this IWorkflowTreeViewModel tree)
+    public static IReadOnlyList<int> FindExitNodeIndices(this ITreeComponent tree)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
@@ -780,7 +780,7 @@ public static class WorkflowTreeEx
     /// <summary>
     /// Finds all nodes whose in-degree equals the specified value.
     /// </summary>
-    public static IReadOnlyList<int> FindNodesByInDegree(this IWorkflowTreeViewModel tree, int degree)
+    public static IReadOnlyList<int> FindNodesByInDegree(this ITreeComponent tree, int degree)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
@@ -794,7 +794,7 @@ public static class WorkflowTreeEx
     /// <summary>
     /// Finds all nodes whose out-degree equals the specified value.
     /// </summary>
-    public static IReadOnlyList<int> FindNodesByOutDegree(this IWorkflowTreeViewModel tree, int degree)
+    public static IReadOnlyList<int> FindNodesByOutDegree(this ITreeComponent tree, int degree)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
@@ -810,12 +810,12 @@ public static class WorkflowTreeEx
     #region Cache Management
     private class TreeCache
     {
-        public IWorkflowSlotViewModel? CurrentSender { get; set; }
-        public ConcurrentStack<IWorkflowActionPair> RedoStack { get; } = new();
-        public ConcurrentStack<IWorkflowActionPair> UndoStack { get; } = new();
+        public ISlotComponent? CurrentSender { get; set; }
+        public ConcurrentStack<IActionPair> RedoStack { get; } = new();
+        public ConcurrentStack<IActionPair> UndoStack { get; } = new();
     }
 
-    private static TreeCache GetCache(IWorkflowTreeViewModel component)
+    private static TreeCache GetCache(ITreeComponent component)
     {
         return _cache.GetValue(component, _ => new TreeCache());
     }

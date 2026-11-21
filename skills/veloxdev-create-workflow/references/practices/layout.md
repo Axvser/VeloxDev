@@ -44,7 +44,7 @@ The default solver is a fixed composition:
 2. **Plan.** An `IWorkflowLayoutPlanner` chooses the stages for this problem.
 3. **Solve.** `WorkflowLayoutPipeline` runs the stages against a mutable `WorkflowLayoutState` (`X` / `Y` arrays plus the reserved `Rank` / `Order` / `RouteX` / `RouteY` arrays), then copies pinned positions back.
 4. **Measure.** An `IWorkflowLayoutCost` scores the solved arrays.
-5. **Apply.** `WorkflowLayoutApplier` writes the changed anchors through `StandardSetAnchor` as one `WorkflowActionPair`. One Undo restores every original position.
+5. **Apply.** `WorkflowLayoutApplier` writes the changed anchors through `StandardSetAnchor` as one `ActionPair`. One Undo restores every original position.
 
 `DryRun` stops after measurement: no anchor changes. `PreviewLayout` sets it; `ArrangeLayout` leaves it off.
 
@@ -54,7 +54,7 @@ The default solver is a fixed composition:
 
 - `Nodes` — `WorkflowLayoutNode`: index, world rectangle, layer and `IsPinned`.
 - `Edges` — `WorkflowLayoutEdge`: sender index → receiver index.
-- `Sources` — the original `IWorkflowNodeViewModel` for each participating index.
+- `Sources` — the original `INodeComponent` for each participating index.
 - `SkippedIndices` — original indices omitted because their geometry was `NaN` or infinite.
 
 The options are carried by `WorkflowLayoutState.Options`, not by the problem.
@@ -118,7 +118,7 @@ An `IWorkflowLayoutCost` measures the immutable problem and the solved arrays. I
 
 ### A complete solver
 
-A full `IWorkflowLayoutSolver` owns the whole composition: snapshot → solve → apply. Honour `WorkflowLayoutOptions.DryRun` and keep the one-undo contract — write all moves as one `WorkflowActionPair`.
+A full `IWorkflowLayoutSolver` owns the whole composition: snapshot → solve → apply. Honour `WorkflowLayoutOptions.DryRun` and keep the one-undo contract — write all moves as one `ActionPair`.
 
 ## Host and Agent
 

@@ -15,8 +15,8 @@ internal sealed class NodePairBoundsProvider : ISpatialBoundsProvider, IDisposab
 {
     private static readonly PropertyChangedEventArgs BoundsChangedEventArgs = new(nameof(Bounds));
 
-    private readonly IWorkflowNodeViewModel _nodeA;
-    private readonly IWorkflowNodeViewModel _nodeB;
+    private readonly INodeComponent _nodeA;
+    private readonly INodeComponent _nodeB;
     private readonly ISpatialBoundsProvider _providerA;
     private readonly ISpatialBoundsProvider _providerB;
     private Viewport _cachedBounds;
@@ -25,13 +25,13 @@ internal sealed class NodePairBoundsProvider : ISpatialBoundsProvider, IDisposab
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>Gets the first endpoint node.</summary>
-    internal IWorkflowNodeViewModel NodeA => _nodeA;
+    internal INodeComponent NodeA => _nodeA;
 
     /// <summary>Gets the second endpoint node.</summary>
-    internal IWorkflowNodeViewModel NodeB => _nodeB;
+    internal INodeComponent NodeB => _nodeB;
 
     internal NodePairBoundsProvider(
-        IWorkflowNodeViewModel nodeA, IWorkflowNodeViewModel nodeB,
+        INodeComponent nodeA, INodeComponent nodeB,
         ISpatialBoundsProvider providerA, ISpatialBoundsProvider providerB)
     {
         _nodeA = nodeA ?? throw new ArgumentNullException(nameof(nodeA));

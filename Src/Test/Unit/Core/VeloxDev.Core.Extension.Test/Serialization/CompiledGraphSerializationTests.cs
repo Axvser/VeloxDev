@@ -27,16 +27,16 @@ public partial class ProbeRouterNode : ICompileTimeRouter
     public ProbeRouterNode() => InitializeWorkflow();
 
     /// <summary>Where each grade routes.</summary>
-    public IWorkflowNodeViewModel? LowBranch { get; set; }
-    public IWorkflowNodeViewModel? HighBranch { get; set; }
+    public INodeComponent? LowBranch { get; set; }
+    public INodeComponent? HighBranch { get; set; }
 
     /// <summary>The grade resolved at run time.</summary>
     public ProbeGrade Resolved { get; set; } = ProbeGrade.High;
 
     /// <inheritdoc />
-    public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
-        => Task.FromResult<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>>(
-            new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>
+    public Task<IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>>> GetRouteTable()
+        => Task.FromResult<IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>>>(
+            new Dictionary<object, IReadOnlyList<INodeComponent>>
             {
                 [ProbeGrade.Low] = LowBranch is null ? [] : [LowBranch],
                 [ProbeGrade.High] = HighBranch is null ? [] : [HighBranch],
@@ -168,7 +168,7 @@ public class CompiledGraphSerializationTests
     public async Task ARestoredGraph_DynamicallyRoutesOnItsEnumKey()
     {
         var router = new ProbeRouterNode { Resolved = ProbeGrade.Low };
-        router.LowBranch = new NodeDefaultViewModel();
+        router.LowBranch = new NodeDefaultComponent();
         router.HighBranch = new TestEnumNode();
 
         var graphs = await new CompilerViewModel().CompileAsync(router, CompileRole.Root);
@@ -184,7 +184,7 @@ public class CompiledGraphSerializationTests
 
         Assert.AreEqual("Completed", session.Status);
         Assert.IsFalse(session.EndedWithError);
-        Assert.IsTrue(session.Logs.Any(l => l.Contains(nameof(NodeDefaultViewModel))),
+        Assert.IsTrue(session.Logs.Any(l => l.Contains(nameof(NodeDefaultComponent))),
             $"the Low branch must have been driven; logs were: {string.Join(" | ", session.Logs)}");
         Assert.IsFalse(session.Logs.Any(l => l.Contains(nameof(TestEnumNode))),
             "the High branch must not have been driven");
@@ -233,8 +233,8 @@ public class CompiledGraphSerializationTests
         Assert.IsNull(restoredNode.Parent,
             "a snapshot drops the back-pointer — the restored node is not attached to any tree");
         Assert.AreNotEqual(
-            ((IWorkflowIdentifiable)liveNode).RuntimeId,
-            ((IWorkflowIdentifiable)restoredNode).RuntimeId,
+            ((IRuntimeIdentifiable)liveNode).RuntimeId,
+            ((IRuntimeIdentifiable)restoredNode).RuntimeId,
             "RuntimeId is a get-only member, so a restored node gets a fresh one");
     }
 
@@ -316,7 +316,7 @@ public class CompiledGraphSerializationTests
         }
     }
 
-    private static IWorkflowNodeViewModel FirstNode(CompiledGraph graph)
+    private static INodeComponent FirstNode(CompiledGraph graph)
     {
         foreach (var entry in graph.Entries)
         {

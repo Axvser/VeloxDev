@@ -58,13 +58,13 @@ public class LinkHitTestExTests : WorkflowInputTestBase
     public void HitTestVisibleLinks_IgnoresALinkThatNeverPublishedACurve()
     {
         // 端点还没测量 ⇒ 视图一次都没画过 ⇒ 没有曲线 ⇒ 那里没有东西可点中。
-        var a = new NodeDefaultViewModel();
-        var b = new NodeDefaultViewModel();
-        var sa = new SlotDefaultViewModel { Parent = a };
-        var sb = new SlotDefaultViewModel { Parent = b };
+        var a = new NodeDefaultComponent();
+        var b = new NodeDefaultComponent();
+        var sa = new SlotDefaultComponent { Parent = a };
+        var sb = new SlotDefaultComponent { Parent = b };
         a.Slots.Add(sa);
         b.Slots.Add(sb);
-        var link = new LinkDefaultViewModel { Sender = sa, Receiver = sb, IsVisible = true };
+        var link = new LinkDefaultComponent { Sender = sa, Receiver = sb, IsVisible = true };
 
         Assert.IsNull(TreeWith(link).HitTestVisibleLinks(50, 0, Radius));
     }

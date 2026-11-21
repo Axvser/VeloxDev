@@ -16,16 +16,16 @@ internal static class ViewPoolTemplate
     {
         switch (item)
         {
-            case IWorkflowNodeViewModel node:
+            case INodeComponent node:
                 RenderNode(builder, node);
                 break;
-            case IWorkflowLinkViewModel link:
+            case ILinkComponent link:
                 RenderLink(builder, link);
                 break;
         }
     };
 
-    private static void RenderNode(RenderTreeBuilder builder, IWorkflowNodeViewModel node)
+    private static void RenderNode(RenderTreeBuilder builder, INodeComponent node)
     {
         builder.OpenElement(0, "div");
         builder.AddAttribute(1, "class", "veloxdev-wf-node");
@@ -45,7 +45,7 @@ internal static class ViewPoolTemplate
         builder.CloseElement();
     }
 
-    private static void RenderLink(RenderTreeBuilder builder, IWorkflowLinkViewModel link)
+    private static void RenderLink(RenderTreeBuilder builder, ILinkComponent link)
     {
         builder.OpenElement(0, "div");
         builder.AddAttribute(1, "class", "veloxdev-wf-link");

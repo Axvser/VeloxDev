@@ -178,7 +178,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
     private static void RequestSync(UserControl control, bool force)
     {
         if (control.GetValue(StateProperty) is null
-            || control.DataContext is not IWorkflowNodeViewModel node)
+            || control.DataContext is not INodeComponent node)
         {
             return;
         }
@@ -203,11 +203,11 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
 
     private static void CancelSync(UserControl control)
     {
-        object owner = control.DataContext is IWorkflowNodeViewModel { Parent: { } tree } ? tree : control;
+        object owner = control.DataContext is INodeComponent { Parent: { } tree } ? tree : control;
         WorkflowLayoutBatch.For(owner).Cancel(control);
     }
 
-    private static object OwnerOf(UserControl control, IWorkflowNodeViewModel node)
+    private static object OwnerOf(UserControl control, INodeComponent node)
         => node.Parent ?? (object)control;
 
     private static bool PostToUiThread(Action flush)
@@ -248,7 +248,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         if (state.Syncing)
             return;
 
-        if (control.DataContext is not IWorkflowNodeViewModel node)
+        if (control.DataContext is not INodeComponent node)
             return;
 
         state.Syncing = true;
@@ -261,8 +261,8 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
 
             // 重建「变化时该触发同步」的属性名集合。
             state.SlotPropertyNames.Clear();
-            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
-            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
+            state.SlotPropertyNames.Add(nameof(INodeComponent.Anchor));
+            state.SlotPropertyNames.Add(nameof(INodeComponent.Size));
             // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
             // OnPropertyChanged("OutputSlots") 才匹配得上。
             foreach (var name in slotNames)
@@ -294,7 +294,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         }
     }
 
-    private static void SyncNamedSlot(UserControl parentHost, UserControl host, Control? coordinateHost, IWorkflowNodeViewModel node, string? controlName)
+    private static void SyncNamedSlot(UserControl parentHost, UserControl host, Control? coordinateHost, INodeComponent node, string? controlName)
     {
         if (string.IsNullOrWhiteSpace(controlName))
             return;
@@ -304,7 +304,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             SyncSlot(host, coordinateHost, slotControl, node);
     }
 
-    private static void SyncSlotEnumerator(UserControl parentHost, UserControl host, Control? coordinateHost, IWorkflowNodeViewModel node, string enumeratorName)
+    private static void SyncSlotEnumerator(UserControl parentHost, UserControl host, Control? coordinateHost, INodeComponent node, string enumeratorName)
     {
         var itemsControl = parentHost.FindControl<ItemsControl>(enumeratorName);
         if (itemsControl is null || itemsControl.ItemCount == 0)
@@ -313,15 +313,15 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         for (int i = 0; i < itemsControl.ItemCount; i++)
         {
             var container = itemsControl.ContainerFromIndex(i);
-            var slotView = container?.GetVisualDescendants().OfType<Control>().FirstOrDefault(static x => x.DataContext is IWorkflowSlotViewModel);
+            var slotView = container?.GetVisualDescendants().OfType<Control>().FirstOrDefault(static x => x.DataContext is ISlotComponent);
             if (slotView is not null)
                 SyncSlot(host, coordinateHost, slotView, node);
         }
     }
 
-    private static void SyncSlot(UserControl host, Control? coordinateHost, Control control, IWorkflowNodeViewModel node)
+    private static void SyncSlot(UserControl host, Control? coordinateHost, Control control, INodeComponent node)
     {
-        if (control.DataContext is not IWorkflowSlotViewModel slot || control.Bounds.Width <= 0 || control.Bounds.Height <= 0)
+        if (control.DataContext is not ISlotComponent slot || control.Bounds.Width <= 0 || control.Bounds.Height <= 0)
             return;
 
         if (coordinateHost is not null)

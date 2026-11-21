@@ -191,7 +191,7 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
             }
         }
 
-        static IEnumerable<IWorkflowNodeViewModel> NodesOf(CompiledGraph graph)
+        static IEnumerable<INodeComponent> NodesOf(CompiledGraph graph)
         {
             foreach (var entry in graph.Entries)
             {

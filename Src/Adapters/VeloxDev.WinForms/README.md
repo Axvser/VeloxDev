@@ -118,8 +118,8 @@ public sealed class TreeView : WorkflowTreeView
         SurfaceBorderBrush = ParseColor("#33FFFFFF");
     }
 
-    protected override Control CreateNodeView(IWorkflowNodeViewModel node) => new NodeView { ViewModel = node };
-    protected override Control CreateLinkView(IWorkflowLinkViewModel link) => new LinkView { ViewModel = link };
+    protected override Control CreateNodeView(INodeComponent node) => new NodeView { ViewModel = node };
+    protected override Control CreateLinkView(ILinkComponent link) => new LinkView { ViewModel = link };
 }
 ```
 
@@ -138,7 +138,7 @@ public sealed class TreeView : WorkflowTreeView
 | Behavior | Attach to | Purpose |
 |----------|-----------|---------|
 | [`WorkflowSurfaceBehavior`](#workflowsurfacebehavior) | The host canvas (`Panel`/`ScrollableControl`) | Scroll/viewport bookkeeping, pan trigger, pushes offsets into decorator & minimap |
-| [`WorkflowNodeDragBehavior`](#workflownodedragbehavior) | A node card | Translates drag deltas into `IWorkflowNodeViewModel.MoveCommand` |
+| [`WorkflowNodeDragBehavior`](#workflownodedragbehavior) | A node card | Translates drag deltas into `INodeComponent.MoveCommand` |
 | [`WorkflowSlotConnectionBehavior`](#workflowslotconnectionbehavior) | A slot control | Drives the `SendConnection`/`SetPointer`/`ReceiveConnection` gesture |
 | [`WorkflowSlotLayoutBehavior`](#workflowslotlayoutbehavior) | A node host | Measures slot controls and writes each `slot.Anchor` in canvas coordinates |
 | [`ViewPool`](#viewpool) | A container | Materializes pooled views from an `INotifyCollectionChanged` source |
@@ -165,7 +165,7 @@ WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(canvas, tree);
 | `Get/SetIsEnabled(Control)` | Master switch. |
 | `Get/SetScrollViewer` · `Get/SetCanvas` | Element wiring — you hand over the **control itself**, not a name to be looked up in the host subtree. |
 | `Get/SetGridDecorator` · `Get/SetMinimapOverlay` | The control should implement `IWorkflowGridDecorator`/`IWorkflowMinimapOverlay`; offsets are pushed on every refresh. |
-| `Get/SetWorkflowTree(Control, IWorkflowTreeViewModel?)` | Explicit tree binding (the WinForms analogue of setting `DataContext`). |
+| `Get/SetWorkflowTree(Control, ITreeComponent?)` | Explicit tree binding (the WinForms analogue of setting `DataContext`). |
 | `Refresh(Control host)` | **Manual pull**: updates the tree viewport, pushes scroll/content offsets into the decorator & minimap, applies the canvas transform, then `PerformLayout` + `Invalidate`. |
 
 **Tree resolution order:** `SetWorkflowTree` → ancestor walk reading `ViewModel`, `DataContext`,
@@ -203,7 +203,7 @@ The behavior **recursively hooks the control tree** and keeps hooks in sync via
 the coordinate host's client space, and executes `MoveCommand`. `TextBoxBase`, `ComboBox`,
 `ButtonBase`, `CheckBox`, and slot controls are excluded as drag handles.
 
-**Node resolution:** the control's `Tag` (`IWorkflowNodeViewModel`) or a
+**Node resolution:** the control's `Tag` (`INodeComponent`) or a
 `ViewModel`/`DataContext`/`BindingContext` property on itself or an ancestor.
 
 ---
@@ -224,7 +224,7 @@ WinForms equivalent of `Mouse.Capture`/document-level listeners. Releasing over 
 slot resolves the target and executes its `ReceiveConnectionCommand`; releasing on blank space
 resets the virtual link. The gesture is cancelled if the sender is disposed.
 
-**Slot resolution:** the control's `Tag` (`IWorkflowSlotViewModel`) or a
+**Slot resolution:** the control's `Tag` (`ISlotComponent`) or a
 `ViewModel`/`DataContext`/`BindingContext` property.
 
 ---

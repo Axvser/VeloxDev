@@ -260,8 +260,8 @@ public class SubAgentHierarchyTests
     [TestMethod]
     public async Task TheSubAgentTools_ArriveOnlyWithTheSubsystem()
     {
-        var tree = new VeloxDev.WorkflowSystem.TreeDefaultViewModel();
-        tree.GetHelper().CreateNode(new VeloxDev.WorkflowSystem.NodeDefaultViewModel());
+        var tree = new VeloxDev.WorkflowSystem.TreeDefaultComponent();
+        tree.GetHelper().CreateNode(new VeloxDev.WorkflowSystem.NodeDefaultComponent());
 
         var bare = new WorkflowAgentScope(tree);
         Assert.AreEqual(0, bare.CreateContextProviders().OfType<SubAgentAgentContextProvider>().Count(),

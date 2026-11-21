@@ -16,7 +16,7 @@ public partial class ElementListView : UserControl
 {
     public static readonly DependencyProperty TreeProperty = DependencyProperty.Register(
         nameof(Tree),
-        typeof(IWorkflowTreeViewModel),
+        typeof(ITreeComponent),
         typeof(ElementListView),
         new PropertyMetadata(null, OnTreeChanged));
 
@@ -36,9 +36,9 @@ public partial class ElementListView : UserControl
     }
 
     /// <summary>The tree whose elements are listed.</summary>
-    public IWorkflowTreeViewModel? Tree
+    public ITreeComponent? Tree
     {
-        get => (IWorkflowTreeViewModel?)GetValue(TreeProperty);
+        get => (ITreeComponent?)GetValue(TreeProperty);
         set => SetValue(TreeProperty, value);
     }
 
@@ -48,7 +48,7 @@ public partial class ElementListView : UserControl
         if (view._boundTree is not null) view._boundTree.PropertyChanged -= view.OnTreePropertyChanged;
         view._boundTree = e.NewValue as TreeViewModel;
         if (view._boundTree is not null) view._boundTree.PropertyChanged += view.OnTreePropertyChanged;
-        view._catalog.SetTree(e.NewValue as IWorkflowTreeViewModel);
+        view._catalog.SetTree(e.NewValue as ITreeComponent);
         view.SyncSelection();
     }
 

@@ -17,7 +17,7 @@ namespace VeloxDev.WorkflowSystem;
 public static class WorkflowSlotUpdateGate
 {
     /// <summary>Whether the link is renderable: both endpoint anchors are in place.</summary>
-    public static bool IsLinkRenderReady(IWorkflowLinkViewModel link)
+    public static bool IsLinkRenderReady(ILinkComponent link)
         => EndpointReady(link.Sender) && EndpointReady(link.Receiver);
 
     /// <summary>
@@ -25,7 +25,7 @@ public static class WorkflowSlotUpdateGate
     /// virtual-link placeholder endpoint) has no layout to wait for → ready; otherwise the anchor's
     /// horizontal/vertical coordinates are both non-NaN (real values written by GUI measurement) → ready.
     /// </summary>
-    private static bool EndpointReady(IWorkflowSlotViewModel? slot)
+    private static bool EndpointReady(ISlotComponent? slot)
     {
         if (slot is null || slot.Parent is null) return true;
         var anchor = slot.Anchor;

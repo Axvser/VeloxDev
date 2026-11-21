@@ -14,9 +14,9 @@ public class WorkflowTreeExTests
     // ── Helpers ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Creates and adds a slot to the given node, returning it via IWorkflowSlotViewModel.
+    /// Creates and adds a slot to the given node, returning it via ISlotComponent.
     /// </summary>
-    private static IWorkflowSlotViewModel MakeSlot(IWorkflowNodeViewModel owner)
+    private static ISlotComponent MakeSlot(INodeComponent owner)
     {
         var slot = new StubSlot { Parent = owner };
         owner.Slots.Add(slot);
@@ -26,7 +26,7 @@ public class WorkflowTreeExTests
     /// <summary>
     /// Connects sender.Targets → receiver and receiver.Sources → sender.
     /// </summary>
-    private static void Connect(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    private static void Connect(ISlotComponent sender, ISlotComponent receiver)
     {
         sender.Targets.Add(receiver);
         receiver.Sources.Add(sender);
@@ -82,7 +82,7 @@ public class WorkflowTreeExTests
     [TestMethod]
     public void GetNodeInDegree_NullTree_Throws()
     {
-        IWorkflowTreeViewModel? tree = null;
+        ITreeComponent? tree = null;
         Assert.ThrowsExactly<ArgumentNullException>(() => tree!.GetNodeInDegree(0));
     }
 
@@ -148,7 +148,7 @@ public class WorkflowTreeExTests
     [TestMethod]
     public void GetNodeOutDegree_NullTree_Throws()
     {
-        IWorkflowTreeViewModel? tree = null;
+        ITreeComponent? tree = null;
         Assert.ThrowsExactly<ArgumentNullException>(() => tree!.GetNodeOutDegree(0));
     }
 
@@ -206,7 +206,7 @@ public class WorkflowTreeExTests
     [TestMethod]
     public void FindNodesByInDegree_NullTree_Throws()
     {
-        IWorkflowTreeViewModel? tree = null;
+        ITreeComponent? tree = null;
         Assert.ThrowsExactly<ArgumentNullException>(() => tree!.FindNodesByInDegree(0));
     }
 
@@ -258,7 +258,7 @@ public class WorkflowTreeExTests
     [TestMethod]
     public void FindNodesByOutDegree_NullTree_Throws()
     {
-        IWorkflowTreeViewModel? tree = null;
+        ITreeComponent? tree = null;
         Assert.ThrowsExactly<ArgumentNullException>(() => tree!.FindNodesByOutDegree(0));
     }
 

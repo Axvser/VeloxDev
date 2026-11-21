@@ -9,7 +9,7 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// Recycled views stay in the host's children. Hiding and unbinding are cheaper in MAUI than removing
 /// and re-inserting the view, so <see cref="Detach"/> is intentionally empty.
 /// </remarks>
-public sealed class ViewContainer : IViewContainer<Layout, View, IWorkflowViewModel>
+public sealed class ViewContainer : IViewContainer<Layout, View, IWorkflowComponent>
 {
     private readonly HashSet<View> _attached = new(ViewReferenceComparer.Instance);
     private readonly ViewArranger? _arranger;
@@ -42,7 +42,7 @@ public sealed class ViewContainer : IViewContainer<Layout, View, IWorkflowViewMo
     }
 
     /// <inheritdoc />
-    public void Activate(View view, IWorkflowViewModel item)
+    public void Activate(View view, IWorkflowComponent item)
     {
         view.BindingContext = item;
         view.IsVisible = true;

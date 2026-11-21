@@ -11,7 +11,7 @@ namespace VeloxDev.Adapters.Benchmarks.Headed;
 // 刻意做小：一张边框 + 一段文字；锚点与尺寸走真实的 DataContext 通知。
 internal sealed class JaliumBenchmarkNodeView : Border
 {
-    private IWorkflowNodeViewModel? _node;
+    private INodeComponent? _node;
 
     public JaliumBenchmarkNodeView()
     {
@@ -32,12 +32,12 @@ internal sealed class JaliumBenchmarkNodeView : Border
     }
 
     private void OnDataContextChanged(object? sender, DependencyPropertyChangedEventArgs e)
-        => Bind(DataContext as IWorkflowNodeViewModel);
+        => Bind(DataContext as INodeComponent);
 
     private void OnUnloaded(object? sender, RoutedEventArgs e)
         => Bind(null);
 
-    private void Bind(IWorkflowNodeViewModel? node)
+    private void Bind(INodeComponent? node)
     {
         if (ReferenceEquals(_node, node))
         {
@@ -60,7 +60,7 @@ internal sealed class JaliumBenchmarkNodeView : Border
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
         {
             Apply();
         }
@@ -99,7 +99,7 @@ internal sealed class JaliumBenchmarkTemplateSelector : DataTemplateSelector
     private readonly DataTemplate _link = CreateTemplate(static () => new JaliumBenchmarkLinkView());
 
     public override DataTemplate SelectTemplate(object? item, DependencyObject container)
-        => item is IWorkflowNodeViewModel ? _node : _link;
+        => item is INodeComponent ? _node : _link;
 
     private static DataTemplate CreateTemplate(Func<FrameworkElement> factory)
     {

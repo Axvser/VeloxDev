@@ -22,7 +22,7 @@ namespace VeloxDev.AI.Workflow.Functions;
 
 /// <summary>
 /// Provides MAF-compatible <see cref="AITool"/> instances that give an Agent
-/// full operational control over a single <see cref="IWorkflowTreeViewModel"/>.
+/// full operational control over a single <see cref="ITreeComponent"/>.
 /// All JSON output uses <see cref="VeloxJsonFormat.Compact"/> to minimize token consumption.
 /// </summary>
 public sealed class WorkflowAgentToolkit
@@ -30,7 +30,7 @@ public sealed class WorkflowAgentToolkit
     private readonly WorkflowAgentScope _scope;
     private readonly WorkflowStateTracker _tracker;
     private readonly ToolCallLedger _ledger;
-    private IWorkflowTreeViewModel Tree => _scope.Tree;
+    private ITreeComponent Tree => _scope.Tree;
 
     // 最近一次编译的产物：GetCompileStatus 不重新编译，编译身份从这张图上读。
     private CompiledGraph? _lastCompiledGraph;
@@ -672,7 +672,7 @@ public sealed class WorkflowAgentToolkit
         return BuildNodeDetailJson(node, index);
     }
 
-    private string BuildNodeDetailJson(IWorkflowNodeViewModel node, int nodeIndex)
+    private string BuildNodeDetailJson(INodeComponent node, int nodeIndex)
     {
         var world = WorldAnchor(node);
         var size = WorldSize(node);
@@ -745,7 +745,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Number of matching links to skip. Default 0.")] int offset = 0,
         [Description("Maximum links to return. 0 = all.")] int maxLinks = 0)
     {
-        IWorkflowNodeViewModel? node = null;
+        INodeComponent? node = null;
         if (nodeIndex.HasValue && !TryGetNode(nodeIndex.Value, out node, out var nodeError))
             return nodeError;
 
@@ -753,7 +753,7 @@ public sealed class WorkflowAgentToolkit
         if (dir is not ("out" or "in" or "any"))
             return Error("direction must be 'out', 'in' or 'any'.");
 
-        var matched = new List<IWorkflowLinkViewModel>();
+        var matched = new List<ILinkComponent>();
         foreach (var link in Tree.Links)
         {
             if (!link.IsVisible) continue;
@@ -830,7 +830,7 @@ public sealed class WorkflowAgentToolkit
     private string LocateLink(
         [Description("Link runtime ID.")] string linkId)
     {
-        if (FindComponentById(linkId) is not IWorkflowLinkViewModel link)
+        if (FindComponentById(linkId) is not ILinkComponent link)
             return Error($"Link '{linkId}' not found.");
         return link.Locate()
             ? Ok($"Link '{linkId}' centered in the viewport.")
@@ -964,8 +964,8 @@ public sealed class WorkflowAgentToolkit
         [Description("Runtime ID of the receiver slot.")] string receiverSlotId,
         CancellationToken cancellationToken = default)
     {
-        if (FindComponentById(senderSlotId) is not IWorkflowSlotViewModel sender) return Error($"Sender slot '{senderSlotId}' not found.");
-        if (FindComponentById(receiverSlotId) is not IWorkflowSlotViewModel receiver) return Error($"Receiver slot '{receiverSlotId}' not found.");
+        if (FindComponentById(senderSlotId) is not ISlotComponent sender) return Error($"Sender slot '{senderSlotId}' not found.");
+        if (FindComponentById(receiverSlotId) is not ISlotComponent receiver) return Error($"Receiver slot '{receiverSlotId}' not found.");
 
         // Preflight: resolve property names for richer diagnostics
         var senderPropHint = sender.Parent != null ? (BuildSlotPropertyMap(sender.Parent).TryGetValue(sender, out var sp) ? sp : null) : null;
@@ -1112,7 +1112,7 @@ public sealed class WorkflowAgentToolkit
         var component = FindComponentById(runtimeId);
         if (component == null) return Error($"Component '{runtimeId}' not found.");
         var result = ComponentPatcher.ApplyPatch(component, jsonPatch);
-        if (component is IWorkflowNodeViewModel patchedNode)
+        if (component is INodeComponent patchedNode)
             RefreshSlotAnchorsIfEnumSlotNode(patchedNode);
         return result;
     }
@@ -1293,7 +1293,7 @@ public sealed class WorkflowAgentToolkit
         if (component == null)
             return Error($"Component '{runtimeId}' not found.");
         var result = CommandInvoker.Invoke(component, commandName, jsonParameter);
-        if (component is IWorkflowNodeViewModel cmdNode)
+        if (component is INodeComponent cmdNode)
             RefreshSlotAnchorsIfEnumSlotNode(cmdNode);
         return result;
     }
@@ -1309,8 +1309,8 @@ public sealed class WorkflowAgentToolkit
         var type = TypeIntrospector.ResolveType(fullTypeName);
         if (type == null)
             return Error($"Type '{fullTypeName}' not found.");
-        if (!typeof(IWorkflowNodeViewModel).IsAssignableFrom(type))
-            return Error($"'{fullTypeName}' does not implement IWorkflowNodeViewModel.");
+        if (!typeof(INodeComponent).IsAssignableFrom(type))
+            return Error($"'{fullTypeName}' does not implement INodeComponent.");
 
         var nodeAccessor = AIContextTreeRegistry.FindAccessor(type.FullName ?? type.Name);
         if (nodeAccessor is null) return Error($"Type '{fullTypeName}' is not in the agent context tree.");
@@ -1320,10 +1320,10 @@ public sealed class WorkflowAgentToolkit
         // Resolve a non-zero size: the caller's explicit value wins; otherwise read the node's real
         // default baked into the field initializer by the generator ([DefaultSize]), which survives
         // construction. Only fall back to the deterministic 300×260 if the type declares no default at all.
-        IWorkflowNodeViewModel node;
+        INodeComponent node;
         try
         {
-            node = (IWorkflowNodeViewModel)nodeAccessor.Create();
+            node = (INodeComponent)nodeAccessor.Create();
             if (width <= 0) width = node.Size.Width > 0 ? node.Size.Width : 300;
             if (height <= 0) height = node.Size.Height > 0 ? node.Size.Height : 260;
         }
@@ -1433,8 +1433,8 @@ public sealed class WorkflowAgentToolkit
         var type = TypeIntrospector.ResolveType(fullSlotTypeName);
         if (type == null)
             return Error($"Type '{fullSlotTypeName}' not found.");
-        if (!typeof(IWorkflowSlotViewModel).IsAssignableFrom(type))
-            return Error($"'{fullSlotTypeName}' does not implement IWorkflowSlotViewModel.");
+        if (!typeof(ISlotComponent).IsAssignableFrom(type))
+            return Error($"'{fullSlotTypeName}' does not implement ISlotComponent.");
 
         var slotAccessor = AIContextTreeRegistry.FindAccessor(type.FullName ?? type.Name);
         if (slotAccessor is null) return Error($"Type '{fullSlotTypeName}' is not in the agent context tree.");
@@ -1443,7 +1443,7 @@ public sealed class WorkflowAgentToolkit
 
         try
         {
-            var slot = (IWorkflowSlotViewModel)slotAccessor.Create();
+            var slot = (ISlotComponent)slotAccessor.Create();
             if (Enum.TryParse<SlotChannel>(channel, true, out var ch))
                 slot.Channel = ch;
             node.CreateSlotCommand.Execute(slot);
@@ -1506,7 +1506,7 @@ public sealed class WorkflowAgentToolkit
 
             if (prop.HoldsASingleSlot(node))
             {
-                var slot = prop.Get(node) as IWorkflowSlotViewModel;
+                var slot = prop.Get(node) as ISlotComponent;
                 result.Add(new VeloxJsonObject
                 {
                     ["name"] = prop.Name,
@@ -1523,7 +1523,7 @@ public sealed class WorkflowAgentToolkit
                 {
                     foreach (var item in col)
                     {
-                        if (item is IWorkflowSlotViewModel s)
+                        if (item is ISlotComponent s)
                             ids.Add(GetComponentId(s));
                     }
                 }
@@ -1541,7 +1541,7 @@ public sealed class WorkflowAgentToolkit
         return result.ToJson();
     }
 
-    [Description("Adds a new slot to a collection property on a node (e.g. OutputSlots). The slot is created via the node's CreateWorkflowSlot infrastructure and registered through the node's CreateSlotCommand (the native slot-mount path).")]
+    [Description("Adds a new slot to a collection property on a node (e.g. OutputSlots). The slot is created via the node's CreateSlotComponent infrastructure and registered through the node's CreateSlotCommand (the native slot-mount path).")]
     private string AddSlotToCollection(
         [Description("Node index.")] int nodeIndex,
         [Description("Name of the slot collection property, e.g. 'OutputSlots'.")] string propertyName,
@@ -1562,8 +1562,8 @@ public sealed class WorkflowAgentToolkit
 
         var slotType = TypeIntrospector.ResolveType(fullSlotTypeName);
         if (slotType == null) return Error($"Type '{fullSlotTypeName}' not found.");
-        if (!typeof(IWorkflowSlotViewModel).IsAssignableFrom(slotType))
-            return Error($"'{fullSlotTypeName}' does not implement IWorkflowSlotViewModel.");
+        if (!typeof(ISlotComponent).IsAssignableFrom(slotType))
+            return Error($"'{fullSlotTypeName}' does not implement ISlotComponent.");
 
         var slotAccessor = AIContextTreeRegistry.FindAccessor(slotType.FullName ?? slotType.Name);
         if (slotAccessor is null) return Error($"Type '{fullSlotTypeName}' is not in the agent context tree.");
@@ -1572,7 +1572,7 @@ public sealed class WorkflowAgentToolkit
 
         try
         {
-            var slot = (IWorkflowSlotViewModel)slotAccessor.Create();
+            var slot = (ISlotComponent)slotAccessor.Create();
             if (Enum.TryParse<SlotChannel>(channel, true, out var ch))
                 slot.Channel = ch;
 
@@ -1614,7 +1614,7 @@ public sealed class WorkflowAgentToolkit
 
         for (int i = 0; i < col.Count; i++)
         {
-            if (col[i] is IWorkflowSlotViewModel slot && GetComponentId(slot) == slotRuntimeId)
+            if (col[i] is ISlotComponent slot && GetComponentId(slot) == slotRuntimeId)
             {
                 var capturedSlot = slot;
                 capturedSlot.DeleteCommand.Execute(null);
@@ -1677,7 +1677,7 @@ public sealed class WorkflowAgentToolkit
                 if (!IsEnumeratorInstalled(enumerator, node)) return Error($"SlotEnumerator '{propertyName}' is not installed on node {nodeIndex} — mount the node first, then retry.");
 
                 // SetSelector captures the previous state and submits its own undoable
-                // WorkflowActionPair internally. Do NOT wrap it in another Submit here —
+                // ActionPair internally. Do NOT wrap it in another Submit here —
                 // that would create nested undo entries and break Ctrl+Z semantics.
                 try
                 {
@@ -1714,7 +1714,7 @@ public sealed class WorkflowAgentToolkit
             if (!IsEnumeratorInstalled(enumerator, node)) return Error($"SlotEnumerator '{propertyName}' is not installed on node {nodeIndex} — mount the node first, then retry.");
 
             // SetSelector captures the previous state (including old slots/links) and submits
-            // its own undoable WorkflowActionPair internally. Call it directly — wrapping it in
+            // its own undoable ActionPair internally. Call it directly — wrapping it in
             // another Submit created nested undo entries and required an anchor-refresh workaround.
             try
             {
@@ -1769,9 +1769,9 @@ public sealed class WorkflowAgentToolkit
     /// <summary>
     /// Builds a reverse map
     /// </summary>
-    private static Dictionary<IWorkflowSlotViewModel, string> BuildSlotPropertyMap(IWorkflowNodeViewModel node)
+    private static Dictionary<ISlotComponent, string> BuildSlotPropertyMap(INodeComponent node)
     {
-        var map = new Dictionary<IWorkflowSlotViewModel, string>();
+        var map = new Dictionary<ISlotComponent, string>();
 
         foreach (var prop in PropertiesOf(node))
         {
@@ -1779,7 +1779,7 @@ public sealed class WorkflowAgentToolkit
 
             if (prop.HoldsASingleSlot(node))
             {
-                if (prop.Get(node) is IWorkflowSlotViewModel slot)
+                if (prop.Get(node) is ISlotComponent slot)
                     map[slot] = prop.Name;
             }
             else if (prop.IsSlotEnumerator)
@@ -1797,7 +1797,7 @@ public sealed class WorkflowAgentToolkit
                 {
                     for (int i = 0; i < col.Count; i++)
                     {
-                        if (col[i] is IWorkflowSlotViewModel s)
+                        if (col[i] is ISlotComponent s)
                             map[s] = $"{prop.Name}[{i}]";
                     }
                 }
@@ -1815,7 +1815,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Max BFS depth. 0 = unlimited.")] int maxDepth = 0)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        Func<IWorkflowNodeViewModel, bool>? predicate = null;
+        Func<INodeComponent, bool>? predicate = null;
         if (!string.IsNullOrEmpty(typeName))
             predicate = n => n.GetType().Name.IndexOf(typeName, StringComparison.OrdinalIgnoreCase) >= 0;
         var found = node.SearchForwardNodes(predicate, maxDepth);
@@ -1829,7 +1829,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Max BFS depth. 0 = unlimited.")] int maxDepth = 0)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        Func<IWorkflowNodeViewModel, bool>? predicate = null;
+        Func<INodeComponent, bool>? predicate = null;
         if (!string.IsNullOrEmpty(typeName))
             predicate = n => n.GetType().Name.IndexOf(typeName, StringComparison.OrdinalIgnoreCase) >= 0;
         var found = node.SearchReverseNodes(predicate, maxDepth);
@@ -1843,7 +1843,7 @@ public sealed class WorkflowAgentToolkit
         [Description("Max BFS depth. 0 = unlimited.")] int maxDepth = 0)
     {
         if (!TryGetNode(nodeIndex, out var node, out var error)) return error;
-        Func<IWorkflowNodeViewModel, bool>? predicate = null;
+        Func<INodeComponent, bool>? predicate = null;
         if (!string.IsNullOrEmpty(typeName))
             predicate = n => n.GetType().Name.IndexOf(typeName, StringComparison.OrdinalIgnoreCase) >= 0;
         var found = node.SearchAllRelativeNodes(predicate, maxDepth);
@@ -1883,8 +1883,8 @@ public sealed class WorkflowAgentToolkit
         if (!TryGetNode(targetNodeIndex, out var tgtNode, out error)) return error;
 
         // BFS to find shortest path
-        var visited = new Dictionary<IWorkflowNodeViewModel, IWorkflowNodeViewModel?>();
-        var queue = new Queue<IWorkflowNodeViewModel>();
+        var visited = new Dictionary<INodeComponent, INodeComponent?>();
+        var queue = new Queue<INodeComponent>();
         visited[srcNode!] = null;
         queue.Enqueue(srcNode!);
         bool found = false;
@@ -1926,7 +1926,7 @@ public sealed class WorkflowAgentToolkit
         return new VeloxJsonObject { ["status"] = "ok", ["found"] = true, ["length"] = path.Count, ["path"] = VeloxJsonValue.From(path) }.ToJson();
     }
 
-    private string BuildNodeListResult(IEnumerable<IWorkflowNodeViewModel> nodes)
+    private string BuildNodeListResult(IEnumerable<INodeComponent> nodes)
     {
         var arr = new VeloxJsonArray();
         foreach (var n in nodes)
@@ -1972,8 +1972,8 @@ public sealed class WorkflowAgentToolkit
         [Description("Runtime ID of the receiver slot.")] string receiverSlotId,
         CancellationToken cancellationToken = default)
     {
-        if (FindComponentById(senderSlotId) is not IWorkflowSlotViewModel sender) return Error($"Sender slot '{senderSlotId}' not found.");
-        if (FindComponentById(receiverSlotId) is not IWorkflowSlotViewModel receiver) return Error($"Receiver slot '{receiverSlotId}' not found.");
+        if (FindComponentById(senderSlotId) is not ISlotComponent sender) return Error($"Sender slot '{senderSlotId}' not found.");
+        if (FindComponentById(receiverSlotId) is not ISlotComponent receiver) return Error($"Receiver slot '{receiverSlotId}' not found.");
 
         if (Tree.LinksMap.TryGetValue(sender, out var dic) && dic.TryGetValue(receiver, out var link))
         {
@@ -2019,7 +2019,7 @@ public sealed class WorkflowAgentToolkit
 
         // 按标签匹配，而不是把名字解析成枚举值再查表：每个条目自己就带着它的选择器值，
         // 而把它从字符串变回枚举需要 `Enum.Parse(Type, …)` —— 那正是这里要绕开的反射。
-        IWorkflowSlotViewModel? slot = null;
+        ISlotComponent? slot = null;
         foreach (var item in enumerator.Slots)
         {
             if (item.Value is null) continue;
@@ -2056,12 +2056,12 @@ public sealed class WorkflowAgentToolkit
 
         var slotId = (parsed["slotId"] as VeloxJsonScalar)?.Text;
         if (string.IsNullOrEmpty(slotId)) return Error("No slotId returned");
-        if (slotId is null || FindComponentById(slotId) is not IWorkflowSlotViewModel slot) return Error($"Slot '{slotId}' not found");
+        if (slotId is null || FindComponentById(slotId) is not ISlotComponent slot) return Error($"Slot '{slotId}' not found");
         if (!Enum.TryParse<SlotChannel>(channel, true, out var ch))
             return Error($"Invalid channel '{channel}'");
 
         slot.SetChannelCommand.Execute(ch);
-        RefreshSlotAnchorsIfEnumSlotNode((IWorkflowNodeViewModel)Tree.Nodes[nodeIndex]);
+        RefreshSlotAnchorsIfEnumSlotNode((INodeComponent)Tree.Nodes[nodeIndex]);
         return Ok($"Slot '{conditionValue}' in {propertyName}[{nodeIndex}] channel set to {ch}");
     }
 
@@ -2081,10 +2081,10 @@ public sealed class WorkflowAgentToolkit
 
         var senderSlotId = (senderParsed["slotId"] as VeloxJsonScalar)?.Text;
         if (string.IsNullOrEmpty(senderSlotId)) return Error("No sender slotId");
-        if (senderSlotId is null || FindComponentById(senderSlotId) is not IWorkflowSlotViewModel sender) return Error($"Sender '{senderSlotId}' not found");
+        if (senderSlotId is null || FindComponentById(senderSlotId) is not ISlotComponent sender) return Error($"Sender '{senderSlotId}' not found");
 
         if (!TryGetNode(receiverNodeIndex, out var receiverNode, out var error)) return error;
-        IWorkflowSlotViewModel? receiver;
+        ISlotComponent? receiver;
 
         if (!string.IsNullOrEmpty(receiverCondition))
         {
@@ -2094,7 +2094,7 @@ public sealed class WorkflowAgentToolkit
             if ((receiverParsed["ok"] as VeloxJsonScalar)?.AsBoolean() != true) return receiverResult;
             var receiverSlotId = (receiverParsed["slotId"] as VeloxJsonScalar)?.Text;
             if (string.IsNullOrEmpty(receiverSlotId)) return Error("No receiver slotId");
-            if (receiverSlotId is null || FindComponentById(receiverSlotId) is not IWorkflowSlotViewModel enumReceiver)
+            if (receiverSlotId is null || FindComponentById(receiverSlotId) is not ISlotComponent enumReceiver)
                 return Error($"Receiver '{receiverSlotId}' not found");
             receiver = enumReceiver;
         }
@@ -2109,7 +2109,7 @@ public sealed class WorkflowAgentToolkit
                 return Error(prop is not null && prop.Value.IsSlotEnumerator
                     ? $"'{receiverSlot}' is a SlotEnumerator on node [{receiverNodeIndex}] — pick one of its slots by passing receiverCondition (the port or member name), not the property itself."
                     : $"'{receiverSlot}' not a slot on node [{receiverNodeIndex}]");
-            receiver = prop.Value.Get(receiverNode!) as IWorkflowSlotViewModel;
+            receiver = prop.Value.Get(receiverNode!) as ISlotComponent;
             if (receiver == null) return Error($"Slot '{receiverSlot}' is null");
         }
 
@@ -2130,7 +2130,7 @@ public sealed class WorkflowAgentToolkit
     private string GetLinkDetail(
         [Description("Runtime ID of the link.")] string linkId)
     {
-        if (FindComponentById(linkId) is not IWorkflowLinkViewModel component) return Error($"Link '{linkId}' not found.");
+        if (FindComponentById(linkId) is not ILinkComponent component) return Error($"Link '{linkId}' not found.");
 
         var obj = new VeloxJsonObject
         {
@@ -2307,7 +2307,7 @@ public sealed class WorkflowAgentToolkit
     /// the host registered with <c>WithSessionConfiguration</c>, then the two things these tools need — and each
     /// of those only fills in what is still unset, so a capability the host configured is never overwritten.
     /// </summary>
-    private RuntimeContext NewSession(object? seed, IWorkflowNodeViewModel? target, CompiledRun run)
+    private RuntimeContext NewSession(object? seed, INodeComponent? target, CompiledRun run)
     {
         var context = new RuntimeContext
         {
@@ -2775,7 +2775,7 @@ public sealed class WorkflowAgentToolkit
                 return Error($"Invalid pinnedNodeIndicesJson: {ex.Message}");
             }
 
-            var pinned = new HashSet<IWorkflowNodeViewModel>();
+            var pinned = new HashSet<INodeComponent>();
             foreach (var pinnedIndex in indices)
             {
                 if (!TryGetNode(pinnedIndex, out var node, out var error)) return error;
@@ -3266,7 +3266,7 @@ public sealed class WorkflowAgentToolkit
         }
     }
 
-    [Description("Replaces the current workflow tree with a graph restored from a document produced by SerializeWorkflow. The host must rebind its surface to the restored tree; this scope's tools follow it immediately. Uses the host's registered workflow loader, or TreeDefaultViewModel when none was registered.")]
+    [Description("Replaces the current workflow tree with a graph restored from a document produced by SerializeWorkflow. The host must rebind its surface to the restored tree; this scope's tools follow it immediately. Uses the host's registered workflow loader, or TreeDefaultComponent when none was registered.")]
     private string LoadWorkflow(
         [Description("The graph document produced by SerializeWorkflow.")] string json)
     {
@@ -3429,7 +3429,7 @@ public sealed class WorkflowAgentToolkit
     // [NotNullWhen] 是这套索引工具的地基：调用点清一色写 `if (!TryGetNode(...)) return ...;`，
     // 标了它之后 node 在那条守卫之后就是非空，25 处 `node` 才退得掉。netstandard2.0 没有这个
     // 特性，所以本程序集自带一份 —— 见 Compat/NotNullWhenAttribute.cs。
-    private bool TryGetNode(int index, [NotNullWhen(true)] out IWorkflowNodeViewModel? node, out string error)
+    private bool TryGetNode(int index, [NotNullWhen(true)] out INodeComponent? node, out string error)
     {
         node = null;
         error = string.Empty;
@@ -3442,7 +3442,7 @@ public sealed class WorkflowAgentToolkit
         return true;
     }
 
-    private bool TryGetSlot(int nodeIndex, int slotIndex, [NotNullWhen(true)] out IWorkflowSlotViewModel? slot, out string error)
+    private bool TryGetSlot(int nodeIndex, int slotIndex, [NotNullWhen(true)] out ISlotComponent? slot, out string error)
     {
         slot = null;
         if (!TryGetNode(nodeIndex, out var node, out error)) return false;
@@ -3455,14 +3455,14 @@ public sealed class WorkflowAgentToolkit
         return true;
     }
 
-    private int IndexOfNode(IWorkflowNodeViewModel node)
+    private int IndexOfNode(INodeComponent node)
     {
         for (int i = 0; i < Tree.Nodes.Count; i++)
             if (ReferenceEquals(Tree.Nodes[i], node)) return i;
         return -1;
     }
 
-    private (IWorkflowNodeViewModel? node, int index) FindNodeById(string runtimeId)
+    private (INodeComponent? node, int index) FindNodeById(string runtimeId)
     {
         // Resolve IDs the same way every other tool does (GetComponentId: the component's RuntimeId,
         // provided by its Helper) so an ID returned by ListNodes/GetNodeDetail always round-trips
@@ -3502,13 +3502,13 @@ public sealed class WorkflowAgentToolkit
     private static string GetComponentId(object component)
     {
         // Convention: every workflow component's Helper provides a stable RuntimeId (all default
-        // templates implement IWorkflowIdentifiable). Falling back to GetHashCode would yield a value
+        // templates implement IRuntimeIdentifiable). Falling back to GetHashCode would yield a value
         // that is neither stable across runs nor meaningful to the Agent — so a missing RuntimeId is
         // an error, not something to paper over.
-        if (component is IWorkflowIdentifiable identifiable)
+        if (component is IRuntimeIdentifiable identifiable)
             return identifiable.RuntimeId;
         throw new InvalidOperationException(
-            $"'{component.GetType().Name}' does not implement IWorkflowIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
+            $"'{component.GetType().Name}' does not implement IRuntimeIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
     }
 
     /// <summary>
@@ -3543,12 +3543,12 @@ public sealed class WorkflowAgentToolkit
         /// connect tools) silently skips it.
         /// </para>
         /// <para>
-        /// The value cannot lie about this: a property holding an <see cref="IWorkflowSlotViewModel"/> holds a
+        /// The value cannot lie about this: a property holding an <see cref="ISlotComponent"/> holds a
         /// slot. Reading it costs one cast, and it is what keeps the tools working for a consumer whose generator
         /// predates the flag.
         /// </para>
         /// </remarks>
-        internal bool HoldsASingleSlot(object target) => IsSingleSlot || Get(target) is IWorkflowSlotViewModel;
+        internal bool HoldsASingleSlot(object target) => IsSingleSlot || Get(target) is ISlotComponent;
 
         /// <summary>The declared type, from the accessor's <c>typeof</c> literal.</summary>
         internal Type? Type => accessor.MemberType(name);
@@ -3661,16 +3661,16 @@ public sealed class WorkflowAgentToolkit
     /// Multiplying back by the live scale answers in the frame the caller is already working in.
     /// </para>
     /// </remarks>
-    private static Anchor WorldAnchor(IWorkflowNodeViewModel node) => WorldFrame(node, node.Anchor);
+    private static Anchor WorldAnchor(INodeComponent node) => WorldFrame(node, node.Anchor);
 
     /// <summary>A node's size in the <b>world</b> frame — as <see cref="WorldAnchor"/> is for its position.</summary>
-    private static Size WorldSize(IWorkflowNodeViewModel node) => WorldFrame(node, node.Size);
+    private static Size WorldSize(INodeComponent node) => WorldFrame(node, node.Size);
 
     /// <summary>
     /// Converts a world length to the collapsed frame the spatial index reads. <c>1</c> when the tree has no
     /// scale or a zero scale, matching <c>Anchor.Collapse</c> / <c>Size.Collapse</c>.
     /// </summary>
-    private static (double X, double Y) CollapsedFactors(IWorkflowTreeViewModel tree)
+    private static (double X, double Y) CollapsedFactors(ITreeComponent tree)
     {
         var scale = tree.Layout?.Scale;
         return (
@@ -3678,7 +3678,7 @@ public sealed class WorkflowAgentToolkit
             scale is null || scale.Vertical == 0d ? 1d : scale.Vertical);
     }
 
-    private static Anchor WorldFrame(IWorkflowNodeViewModel node, Anchor collapsed)
+    private static Anchor WorldFrame(INodeComponent node, Anchor collapsed)
     {
         var scale = node.Parent?.Layout?.Scale;
         if (scale is null || scale.Horizontal == 0d || scale.Vertical == 0d) return collapsed;
@@ -3687,7 +3687,7 @@ public sealed class WorkflowAgentToolkit
         return new Anchor(collapsed.Horizontal * scale.Horizontal, collapsed.Vertical * scale.Vertical, collapsed.Layer);
     }
 
-    private static Size WorldFrame(IWorkflowNodeViewModel node, Size collapsed)
+    private static Size WorldFrame(INodeComponent node, Size collapsed)
     {
         var scale = node.Parent?.Layout?.Scale;
         if (scale is null || scale.Horizontal == 0d || scale.Vertical == 0d) return collapsed;
@@ -3827,7 +3827,7 @@ public sealed class WorkflowAgentToolkit
 
         if (prop.Value.HoldsASingleSlot(node))
         {
-            if (prop.Value.Get(node) is not IWorkflowSlotViewModel slot) return Error($"Slot property '{propertyName}' is null.");
+            if (prop.Value.Get(node) is not ISlotComponent slot) return Error($"Slot property '{propertyName}' is null.");
             return new VeloxJsonObject { ["status"] = "ok", ["id"] = GetComponentId(slot), ["prop"] = propertyName }.ToJson();
         }
         else if (prop.Value.IsSlotEnumerator)
@@ -3852,7 +3852,7 @@ public sealed class WorkflowAgentToolkit
         {
             if (prop.Value.Get(node) is not IList col || collectionIndex < 0 || collectionIndex >= col.Count)
                 return Error($"Collection property '{propertyName}' index {collectionIndex} out of range or null.");
-            if (col[collectionIndex] is not IWorkflowSlotViewModel slot2)
+            if (col[collectionIndex] is not ISlotComponent slot2)
                 return Error($"Element at [{collectionIndex}] is not a slot.");
             return new VeloxJsonObject { ["status"] = "ok", ["id"] = GetComponentId(slot2), ["prop"] = propertyName, ["index"] = collectionIndex }.ToJson();
         }
@@ -3959,14 +3959,14 @@ public sealed class WorkflowAgentToolkit
     /// For SlotEnumerator properties <paramref name="collectionIndex"/> selects the slot by Items[i].Slot.
     /// Returns null if not found.
     /// </summary>
-    private IWorkflowSlotViewModel? ResolveSlotFromProperty(int nodeIndex, string propertyName, int collectionIndex = 0)
+    private ISlotComponent? ResolveSlotFromProperty(int nodeIndex, string propertyName, int collectionIndex = 0)
     {
         if (!TryGetNode(nodeIndex, out var node, out _) || node == null) return null;
         var prop = FindProperty(node, propertyName);
         if (prop is null || !prop.Value.CanRead) return null;
 
         if (prop.Value.HoldsASingleSlot(node))
-            return prop.Value.Get(node) as IWorkflowSlotViewModel;
+            return prop.Value.Get(node) as ISlotComponent;
 
         if (prop.Value.IsSlotEnumerator)
         {
@@ -3980,7 +3980,7 @@ public sealed class WorkflowAgentToolkit
         {
             if (prop.Value.Get(node) is not IList col || collectionIndex < 0 || collectionIndex >= col.Count)
                 return null;
-            return col[collectionIndex] as IWorkflowSlotViewModel;
+            return col[collectionIndex] as ISlotComponent;
         }
         return null;
     }
@@ -3991,13 +3991,13 @@ public sealed class WorkflowAgentToolkit
     /// <see cref="SlotEnumerator{TSlot}"/> properties. Unlike the old ±0.5px move nudge, this is
     /// non-mutating: it produces NO undo entries and leaves the node geometry untouched.
     /// </summary>
-    private static void RefreshSlotAnchors(IWorkflowNodeViewModel node)
+    private static void RefreshSlotAnchors(INodeComponent node)
     {
         node.OnPropertyChanged(nameof(node.Anchor));
         node.OnPropertyChanged(nameof(node.Size));
     }
 
-    private static bool HasSlotEnumerator(IWorkflowNodeViewModel node)
+    private static bool HasSlotEnumerator(INodeComponent node)
         => PropertiesOf(node).Any(static p => p.IsSlotEnumerator);
 
     /// <summary>
@@ -4005,7 +4005,7 @@ public sealed class WorkflowAgentToolkit
     /// Uninstalled enumerators make <c>SetSelector</c> a silent no-op, so we surface it as an
     /// explicit error instead (matching the framework's no-silent-failures contract).
     /// </summary>
-    private static bool IsEnumeratorInstalled(object enumerator, IWorkflowNodeViewModel node)
+    private static bool IsEnumeratorInstalled(object enumerator, INodeComponent node)
         => enumerator is IConditionalSlotProvider provider && ReferenceEquals(provider.Parent, node);
 
     /// <summary>
@@ -4024,7 +4024,7 @@ public sealed class WorkflowAgentToolkit
         provider.SetSelector(selector);
     }
 
-    private static void RefreshSlotAnchorsIfEnumSlotNode(IWorkflowNodeViewModel node)
+    private static void RefreshSlotAnchorsIfEnumSlotNode(INodeComponent node)
     {
         if (HasSlotEnumerator(node))
             RefreshSlotAnchors(node);
@@ -4032,11 +4032,11 @@ public sealed class WorkflowAgentToolkit
 
     /// <summary>
     /// Checks whether a connection was actually established between two slots
-    /// by verifying the link exists in <see cref="IWorkflowTreeViewModel.LinksMap"/>.
+    /// by verifying the link exists in <see cref="ITreeComponent.LinksMap"/>.
     /// The framework may silently reject connections due to channel incompatibility,
     /// same-node constraint, or developer-overridden <c>ValidateConnection</c>.
     /// </summary>
-    private bool VerifyConnection(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
+    private bool VerifyConnection(ISlotComponent sender, ISlotComponent receiver)
     {
         return Tree.LinksMap.TryGetValue(sender, out var dic) && dic.ContainsKey(receiver);
     }
@@ -4046,7 +4046,7 @@ public sealed class WorkflowAgentToolkit
     /// including diagnostic hints about the likely rejection reason.
     /// </summary>
     private string ConnectionRejected(
-        IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver,
+        ISlotComponent sender, ISlotComponent receiver,
         string senderLabel, string receiverLabel)
     {
         var reasons = new List<string>();
@@ -4129,7 +4129,7 @@ public sealed class WorkflowAgentToolkit
     /// Dispatches the tree's Send then Receive connection commands and awaits both completions, so a
     /// connection tool returns only after the connection is actually created.
     /// </summary>
-    private async Task SendReceiveAsync(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, CancellationToken ct)
+    private async Task SendReceiveAsync(ISlotComponent sender, ISlotComponent receiver, CancellationToken ct)
         => await Task.WhenAll(
             Tree.SendConnectionCommand.ExecuteAndWaitAsync(sender, ct),
             Tree.ReceiveConnectionCommand.ExecuteAndWaitAsync(receiver, ct)).ConfigureAwait(false);

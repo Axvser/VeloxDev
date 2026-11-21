@@ -110,7 +110,7 @@ internal sealed class TestTemplateSelector : TemplateSelector
     private static readonly DataTemplate LinkTemplate = new(() => new NativePanel { Width = 12, Height = 12 });
 
     public override DataTemplate? SelectTemplate(object? item)
-        => item is IWorkflowNodeViewModel ? NodeTemplate : LinkTemplate;
+        => item is INodeComponent ? NodeTemplate : LinkTemplate;
 }
 
 // Simple-name resolution uses the surface's own namespace, so the typed views sit next to it.

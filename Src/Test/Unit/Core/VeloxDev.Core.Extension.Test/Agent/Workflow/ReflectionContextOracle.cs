@@ -324,5 +324,5 @@ internal static class ReflectionContextOracle
     }
 
     private static bool IsSingleSlotType(Type type)
-        => typeof(IWorkflowSlotViewModel).IsAssignableFrom(type);
+        => typeof(ISlotComponent).IsAssignableFrom(type);
 }

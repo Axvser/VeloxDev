@@ -226,7 +226,7 @@ public sealed class WorkflowNodeDragBehavior
             return;
         }
 
-        if (state.OwnerView is null || ResolveNode(state.OwnerView) is not IWorkflowNodeViewModel node)
+        if (state.OwnerView is null || ResolveNode(state.OwnerView) is not INodeComponent node)
         {
             return;
         }
@@ -332,7 +332,7 @@ public sealed class WorkflowNodeDragBehavior
                     IsDraggingNode = true;
                 }
 
-                if (ResolveNode(view) is not IWorkflowNodeViewModel node)
+                if (ResolveNode(view) is not INodeComponent node)
                 {
                     return;
                 }
@@ -440,12 +440,12 @@ public sealed class WorkflowNodeDragBehavior
         return null;
     }
 
-    private static IWorkflowNodeViewModel? ResolveNode(Element element)
+    private static INodeComponent? ResolveNode(Element element)
     {
         var current = element;
         while (current is not null)
         {
-            if (current.BindingContext is IWorkflowNodeViewModel node)
+            if (current.BindingContext is INodeComponent node)
             {
                 return node;
             }

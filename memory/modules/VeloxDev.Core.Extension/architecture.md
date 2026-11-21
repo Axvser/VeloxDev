@@ -11,7 +11,7 @@
 
 ## 一、这个模块是什么，不解决什么
 
-**是什么。** 把一棵工作流树（`IWorkflowTreeViewModel`）包成一个 **MAF agent 可读可写、且被宿主节制的工具面**。三件事：
+**是什么。** 把一棵工作流树（`ITreeComponent`）包成一个 **MAF agent 可读可写、且被宿主节制的工具面**。三件事：
 
 1. **统一的追踪包装** —— 任意来源的工具（内置的、`WithTools` 注册的、技能贡献的、MCP 服务器贡献的、子代理子系统贡献的）都会被同一个包装器接管，于是「编组到宿主线程 / 计预算 / 触发回调 / 标脏」只有一处实现（`Agent/Workflow/Functions/WorkflowAgentToolkit.cs` 的 `WrapTool`）。
 2. **上下文渲染** —— 每轮把「框架有哪些类型 / 图现在长什么样 / 有哪些技能与 MCP 服务器 / 名册上有哪些子代理」渲染成提示，按 `Version` 缓存。
@@ -137,9 +137,9 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 **全局这一道看到的 `result` 往往是 `JsonElement`，不是 `string`**：`AIFunctionFactory` 把字符串返回值包成 `JsonElement`，`TrackedAIFunction.CapResult` 必须同时量两种形态的长度。只认 `string` 时这道闸对全部内置工具静默失效（实测：200 字符上限下 `ListNodes` 仍返回 10251 字符）。
 
-**一树一个写者**：`WorkflowAgentScope.MutationGate` 是 `ConditionalWeakTable<IWorkflowTreeViewModel, SemaphoreSlim>` 里的每树一把锁，`TrackedAIFunction` 只对 `Edit` / `Execute` 类别取它（`Read` 不取）。同一棵树上两个 scope 的编辑因此串行，父子 scope 也一样。它防的是交错写，不是 lost update（没有版本检查）。
+**一树一个写者**：`WorkflowAgentScope.MutationGate` 是 `ConditionalWeakTable<ITreeComponent, SemaphoreSlim>` 里的每树一把锁，`TrackedAIFunction` 只对 `Edit` / `Execute` 类别取它（`Read` 不取）。同一棵树上两个 scope 的编辑因此串行，父子 scope 也一样。它防的是交错写，不是 lost update（没有版本检查）。
 
-**图的保存/恢复在工具面上**：`SerializeWorkflow` 默认 `mode=full` 返回 `Tree.Serialize()`；`skeleton` 只给节点位置/类型/槽数与链接，`summary` 只给计数/类型分布/槽位统计，两者都走 `CapText(maxChars)` 的截断信封。`LoadWorkflow` 走 `WorkflowAgentScope.WithWorkflowLoader`（默认 `TreeDefaultViewModel` 反序列化）**换掉 scope 的 `Tree`**，并触发 `TreeChanged` —— 宿主必须把画布重新绑到新树，否则界面还连着旧树。
+**图的保存/恢复在工具面上**：`SerializeWorkflow` 默认 `mode=full` 返回 `Tree.Serialize()`；`skeleton` 只给节点位置/类型/槽数与链接，`summary` 只给计数/类型分布/槽位统计，两者都走 `CapText(maxChars)` 的截断信封。`LoadWorkflow` 走 `WorkflowAgentScope.WithWorkflowLoader`（默认 `TreeDefaultComponent` 反序列化）**换掉 scope 的 `Tree`**，并触发 `TreeChanged` —— 宿主必须把画布重新绑到新树，否则界面还连着旧树。
 
 **token 预算**：`WithMaxTokens` + `WorkflowAgentScope.TokenUsageStage`（pipeline 阶段）把 `AgentTurnCompleted.Usage` 与 `AgentUsageReported` 都累加进 `Input/Output/TotalTokens`；`ResetTokenUsage` 清账。流式路径的用量是独立事件，不累加它就等于流式回合不花钱。
 
@@ -340,11 +340,11 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 `ReadValue` 落到 `ReadObjectValue`，而容器类型不会有生成条目，于是抛
 `'…' has no registered JSON reader`。
 
-**症状是「带连接的树存下来读不回去」**：`IWorkflowTreeViewModel.LinksMap` 是
-`Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>>`
+**症状是「带连接的树存下来读不回去」**：`ITreeComponent.LinksMap` 是
+`Dictionary<ISlotComponent, Dictionary<ISlotComponent, ILinkComponent>>`
 （`WorkflowTreeEx` 那一片都在读写它）。`TryDeserialize` 会把这个异常吞成 `false`，所以七个 demo 的
 「加载工作流」看起来只是按钮没反应。**框架树和 demo 树同病** —— 两边生成的是同一句
-`ReadMap(reader, map, typeof(…IWorkflowSlotViewModel), typeof(Dictionary<…>), interfaceKeys: true)`。
+`ReadMap(reader, map, typeof(…ISlotComponent), typeof(Dictionary<…>), interfaceKeys: true)`。
 
 **修法：登记构造，不登记 reader。** 生成器为它见过的每个嵌容器组合发一句
 `VeloxJsonRegistry.RegisterContainerFactory(typeof(闭容器), () => new …())`；读侧 `ReadValue` 命中就先造实例、

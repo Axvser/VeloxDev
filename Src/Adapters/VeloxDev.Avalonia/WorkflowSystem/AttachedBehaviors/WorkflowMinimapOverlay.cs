@@ -39,8 +39,8 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(ContentOffsetY));
 
     /// <summary>The workflow tree view model to visualize.</summary>
-    public static readonly StyledProperty<IWorkflowTreeViewModel?> WorkflowTreeProperty =
-        AvaloniaProperty.Register<WorkflowMinimapOverlay, IWorkflowTreeViewModel?>(nameof(WorkflowTree));
+    public static readonly StyledProperty<ITreeComponent?> WorkflowTreeProperty =
+        AvaloniaProperty.Register<WorkflowMinimapOverlay, ITreeComponent?>(nameof(WorkflowTree));
 
     /// <summary>The visible container width (for viewport computation).</summary>
     public static readonly StyledProperty<double> ViewportWidthProperty =
@@ -135,7 +135,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     public double ContentOffsetY { get => GetValue(ContentOffsetYProperty); set => SetValue(ContentOffsetYProperty, value); }
     /// <inheritdoc />
     public double RulerBand => 0;
-    public IWorkflowTreeViewModel? WorkflowTree { get => GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
+    public ITreeComponent? WorkflowTree { get => GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
     public double ViewportWidth { get => GetValue(ViewportWidthProperty); set => SetValue(ViewportWidthProperty, value); }
     public double ViewportHeight { get => GetValue(ViewportHeightProperty); set => SetValue(ViewportHeightProperty, value); }
     public bool IsMinimapVisible { get => GetValue(IsMinimapVisibleProperty); set => SetValue(IsMinimapVisibleProperty, value); }
@@ -237,7 +237,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         base.OnPropertyChanged(change);
 
         if (change.Property == WorkflowTreeProperty)
-            SubscribeToTree(change.NewValue as IWorkflowTreeViewModel);
+            SubscribeToTree(change.NewValue as ITreeComponent);
 
         if (change.Property == WorkflowTreeProperty ||
             change.Property == ScrollOffsetXProperty ||
@@ -254,13 +254,13 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 
     // ── 节点与插槽变更跟踪（实时更新）──────────────────────────────────────
 
-    private IWorkflowTreeViewModel? _subscribedTree;
+    private ITreeComponent? _subscribedTree;
     // 记录插槽锚点的订阅，解绑时才能正确退订；按链接逐条管理。
-    private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
-    private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
+    private readonly HashSet<ILinkComponent> _subscribedLinks = [];
+    private readonly HashSet<INodeComponent> _subscribedNodes = [];
     private ScrollViewer? _scrollViewer;
 
-    private void SubscribeToTree(IWorkflowTreeViewModel? tree)
+    private void SubscribeToTree(ITreeComponent? tree)
     {
         UnsubscribeFromTree();
         _subscribedTree = tree;
@@ -300,20 +300,20 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         _subscribedTree = null;
     }
 
-    private void SubscribeNodeEvents(IWorkflowNodeViewModel node)
+    private void SubscribeNodeEvents(INodeComponent node)
     {
         if (!_subscribedNodes.Add(node)) return;
         if (node is INotifyPropertyChanged npc)
             npc.PropertyChanged += OnNodePropertyChanged;
     }
 
-    private void UnsubscribeNodeEvents(IWorkflowNodeViewModel node)
+    private void UnsubscribeNodeEvents(INodeComponent node)
     {
         if (_subscribedNodes.Remove(node) && node is INotifyPropertyChanged npc)
             npc.PropertyChanged -= OnNodePropertyChanged;
     }
 
-    private void SubscribeLinkSlotEvents(IWorkflowLinkViewModel link)
+    private void SubscribeLinkSlotEvents(ILinkComponent link)
     {
         if (!_subscribedLinks.Add(link)) return;
         if (link.Sender is INotifyPropertyChanged snpc)
@@ -322,7 +322,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
             rnpc.PropertyChanged += OnSlotPropertyChanged;
     }
 
-    private void UnsubscribeLinkSlotEvents(IWorkflowLinkViewModel link)
+    private void UnsubscribeLinkSlotEvents(ILinkComponent link)
     {
         if (_subscribedLinks.Remove(link))
         {
@@ -337,11 +337,11 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     {
         if (e.NewItems is not null)
             foreach (var item in e.NewItems)
-                if (item is IWorkflowNodeViewModel node)
+                if (item is INodeComponent node)
                     SubscribeNodeEvents(node);
         if (e.OldItems is not null)
             foreach (var item in e.OldItems)
-                if (item is IWorkflowNodeViewModel node)
+                if (item is INodeComponent node)
                     UnsubscribeNodeEvents(node);
         InstanceMarkDirty();
     }
@@ -350,24 +350,24 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     {
         if (e.NewItems is not null)
             foreach (var item in e.NewItems)
-                if (item is IWorkflowLinkViewModel link)
+                if (item is ILinkComponent link)
                     SubscribeLinkSlotEvents(link);
         if (e.OldItems is not null)
             foreach (var item in e.OldItems)
-                if (item is IWorkflowLinkViewModel link)
+                if (item is ILinkComponent link)
                     UnsubscribeLinkSlotEvents(link);
         InstanceMarkDirty();
     }
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
             InstanceMarkDirty();
     }
 
     private void OnSlotPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.Anchor))
+        if (e.PropertyName is nameof(ISlotComponent.Anchor))
             InstanceMarkDirty();
     }
 

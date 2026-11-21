@@ -215,10 +215,10 @@ internal sealed class WorkflowSession : IAsyncDisposable
 
         var rootType = ResolveRootType(request.RootType ?? archive.ManifestRootType);
 
-        IWorkflowTreeViewModel tree;
+        ITreeComponent tree;
         try
         {
-            tree = VeloxJsonSerializer.Deserialize(archive.Json, rootType) as IWorkflowTreeViewModel
+            tree = VeloxJsonSerializer.Deserialize(archive.Json, rootType) as ITreeComponent
                 ?? throw new InvalidDataException(
                     $"The document did not deserialize to a tree of type '{rootType.FullName}'.");
         }
@@ -522,7 +522,7 @@ internal sealed class WorkflowSession : IAsyncDisposable
             },
             // Two separate assemblies: the host bundles both, and a plugin may drift from either. The old
             // single coreVersion read the Extension assembly, which made a Core-only mismatch look fine.
-            coreVersion = typeof(VeloxDev.WorkflowSystem.IWorkflowTreeViewModel).Assembly.GetName().Version?.ToString(),
+            coreVersion = typeof(VeloxDev.WorkflowSystem.ITreeComponent).Assembly.GetName().Version?.ToString(),
             extensionVersion = typeof(WorkflowAgentScope).Assembly.GetName().Version?.ToString(),
         });
 
@@ -563,7 +563,7 @@ internal sealed class WorkflowSession : IAsyncDisposable
     private static Type ResolveRootType(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return typeof(TreeDefaultViewModel);
+            return typeof(TreeDefaultComponent);
 
         // The registry's names are the ones the document itself carries ("Full.Type.Name, Assembly"), so a
         // plugin type loaded a moment ago is found here before any reflection fallback.
@@ -588,8 +588,8 @@ internal sealed class WorkflowSession : IAsyncDisposable
                 $"Root type '{name}' was not found. If it lives in a dependency, load that assembly with --assembly " +
                 "or list it in the archive manifest.");
 
-        if (!typeof(IWorkflowTreeViewModel).IsAssignableFrom(type))
-            throw new InvalidDataException($"Root type '{name}' does not implement IWorkflowTreeViewModel.");
+        if (!typeof(ITreeComponent).IsAssignableFrom(type))
+            throw new InvalidDataException($"Root type '{name}' does not implement ITreeComponent.");
 
         return type;
     }

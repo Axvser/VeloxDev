@@ -14,7 +14,7 @@ namespace Demo.Controls;
 /// </summary>
 public partial class InfoOverlay : ContentView
 {
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private string _copyText = "";
 
     public InfoOverlay()
@@ -23,7 +23,7 @@ public partial class InfoOverlay : ContentView
         BindingContextChanged += (_, _) =>
         {
             UnsubscribeTree();
-            _tree = BindingContext as IWorkflowTreeViewModel;
+            _tree = BindingContext as ITreeComponent;
             SubscribeTree();
             Update();
         };
@@ -100,11 +100,11 @@ public partial class InfoOverlay : ContentView
         var virtualLink = _tree.VirtualLink;
         foreach (var item in _tree.GetHelper().VisibleItems)
         {
-            if (item is IWorkflowNodeViewModel)
+            if (item is INodeComponent)
             {
                 visibleNodes++;
             }
-            else if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, virtualLink))
+            else if (item is ILinkComponent link && !ReferenceEquals(link, virtualLink))
             {
                 visibleLinks++;
             }

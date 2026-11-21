@@ -15,7 +15,7 @@
 ## Quick start: Workflow Agent
 
 ```csharp
-var scope = tree.AsAgentScope()                       // tree: IWorkflowTreeViewModel
+var scope = tree.AsAgentScope()                       // tree: ITreeComponent
     .WithPromptLanguage(AgentLanguages.English)
     .WithOutputLanguage(AgentLanguages.Chinese)
     .WithAutoDiscovery(assemblyName: "MyLib")         // auto-discover components/enums/interfaces

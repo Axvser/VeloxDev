@@ -7,14 +7,14 @@ public static class WorkflowLinkEx
 {
     /// <summary>Returns the standard commands a link helper drives.</summary>
     public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands
-        (this IWorkflowLinkViewModel component)
+        (this ILinkComponent component)
         =>
         [
             component.DeleteCommand
         ];
 
     /// <summary>Deletes the link as one undoable step.</summary>
-    public static void StandardDelete(this IWorkflowLinkViewModel component)
+    public static void StandardDelete(this ILinkComponent component)
     {
         if (component.Sender?.Parent?.Parent is null)
         {
@@ -27,13 +27,13 @@ public static class WorkflowLinkEx
             dic.TryGetValue(component.Receiver, out var link) &&
             link == component)
         {
-            tree.GetHelper().Submit(new WorkflowActionPair(
+            tree.GetHelper().Submit(new ActionPair(
                 () => RemoveLinkFromTree(tree, component),
                 () => RestoreLinkToTree(tree, component)));
         }
     }
 
-    internal static void RemoveLinkFromTree(IWorkflowTreeViewModel tree, IWorkflowLinkViewModel component)
+    internal static void RemoveLinkFromTree(ITreeComponent tree, ILinkComponent component)
     {
         var sender = component.Sender;
         var receiver = component.Receiver;
@@ -50,7 +50,7 @@ public static class WorkflowLinkEx
         receiver.GetHelper().UpdateState();
     }
 
-    internal static void RestoreLinkToTree(IWorkflowTreeViewModel tree, IWorkflowLinkViewModel component)
+    internal static void RestoreLinkToTree(ITreeComponent tree, ILinkComponent component)
     {
         var sender = component.Sender;
         var receiver = component.Receiver;

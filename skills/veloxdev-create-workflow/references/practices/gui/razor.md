@@ -23,7 +23,7 @@ There is no canvas control and no attached properties — the surface is a **Bla
 | `CanvasId` | `id` of the canvas element |
 | `GridDecorator` / `Minimap` | `RenderFragment<SurfaceViewport>` for the two decorator roles |
 | `ChildContent` | `RenderFragment<SurfaceCanvas>` — the node/slot content |
-| `LinkMenu` | `RenderFragment<IWorkflowLinkViewModel>` — the link context menu's entries; the surface renders the chrome and wires it |
+| `LinkMenu` | `RenderFragment<ILinkComponent>` — the link context menu's entries; the surface renders the chrome and wires it |
 | `Background` / `GridColor` / `MajorGridColor` / `AxisColor` | surface visuals |
 | `GridSpacing` / `MajorLineEvery` / `RulerThickness` | grid and ruler geometry |
 

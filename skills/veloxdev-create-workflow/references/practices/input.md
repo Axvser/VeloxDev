@@ -83,7 +83,7 @@ Every `PointerEventArgs` carries:
 
 ⚙ **`IsSuspended` serves popups.** Set it while a popup is open; events still route, and only the hover bookkeeping pauses, so moving onto the popup does not clear the link the popup is about.
 
-⚙ **The preview tightens the framework's verdict.** `PreviewValidating` fires once per candidate — call `StandardRefreshConnectionPreview` after an async check to ask again. The release-time `IWorkflowTreeEvents.Connecting` and `ValidateConnection` remain the verdict.
+⚙ **The preview tightens the framework's verdict.** `PreviewValidating` fires once per candidate — call `StandardRefreshConnectionPreview` after an async check to ask again. The release-time `ITreeEvents.Connecting` and `ValidateConnection` remain the verdict.
 
 ## What each side owns
 
@@ -147,13 +147,13 @@ WorkflowInput.For(tree).PreviewValidating += (_, e) =>
 The tree is the last element of every route, so a subscription on its helper hears every key — whether the pointer is over a node, a link, or empty canvas.
 
 ```csharp
-private IWorkflowTreeViewModel? _tree;
+private ITreeComponent? _tree;
 private IInputEvents? _input;
 
 // Call whenever the surface is handed a tree: DataContextChanged on WPF/Avalonia,
 // BindingContextChanged on MAUI, OnParametersSet on Blazor,
 // WorkflowSurfaceBehavior.SetWorkflowTree on WinForms, the tree attached property on Jalium.
-private void BindTree(IWorkflowTreeViewModel? tree)
+private void BindTree(ITreeComponent? tree)
 {
     if (_input is not null) _input.Input.KeyDown -= OnKeyDown;
 
@@ -193,7 +193,7 @@ private void OnKeyDown(object? sender, KeyDownEventArgs e)
 
 ⚙ **Text editors inside a node keep their own Ctrl+Z.** The adapter routes what reaches the surface; WPF's surface does not steal focus from a `TextBoxBase` on press, and a key the editor already handled never reaches the surface handler. For a locally owned chord, set `StopPropagation` in a subscriber nearer the target.
 
-⚙ **Dragging is runtime state.** `Move` / `SetAnchor` / `SetSize` are high-frequency geometry and do not push. `Ctrl+Z` undoes the last structural change (create, connect, delete, `SetSelector`); to make a drag undoable, submit your own `WorkflowActionPair` through `tree.GetHelper().Submit`.
+⚙ **Dragging is runtime state.** `Move` / `SetAnchor` / `SetSize` are high-frequency geometry and do not push. `Ctrl+Z` undoes the last structural change (create, connect, delete, `SetSelector`); to make a drag undoable, submit your own `ActionPair` through `tree.GetHelper().Submit`.
 
 ⚙ **Unwire when the surface is handed another tree.** The subscription belongs to the tree instance, not to the view.
 

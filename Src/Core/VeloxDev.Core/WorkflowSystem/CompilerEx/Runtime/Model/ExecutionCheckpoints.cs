@@ -54,9 +54,9 @@ public sealed class ExecutionCheckpoint
 
     // 图里的节点，按引擎驱动的顺序，各自带上检查点给它归档的键。
     // 顺序即遍历顺序：链按次序、分支先路由器再依次下钻每个选项的子图、扇出按分支序。
-    internal static IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)> NodesOf(CompiledGraph graph)
+    internal static IReadOnlyList<(INodeComponent Node, string Key)> NodesOf(CompiledGraph graph)
     {
-        var nodes = new List<(IWorkflowNodeViewModel, string)>();
+        var nodes = new List<(INodeComponent, string)>();
         if (graph is null) return nodes;
 
         Walk(graph, nodes);
@@ -75,8 +75,8 @@ public sealed class ExecutionCheckpoint
     // 或者对没有身份的节点用「类型名#序号」。
     // 后果要记住：序列化往返过的图 RuntimeId 全是新的 ⇒ 它的指纹对不上、恢复会被拒 —— 这正是想要的，
     // 那些确实是不同的节点对象，把旧产物喂过去就是猜。
-    private static string KeyOf(IWorkflowNodeViewModel node, int index)
-        => node is IWorkflowIdentifiable identifiable && !string.IsNullOrEmpty(identifiable.RuntimeId)
+    private static string KeyOf(INodeComponent node, int index)
+        => node is IRuntimeIdentifiable identifiable && !string.IsNullOrEmpty(identifiable.RuntimeId)
             ? identifiable.RuntimeId
             : $"{node.GetType().Name}#{index}";
 
@@ -93,7 +93,7 @@ public sealed class ExecutionCheckpoint
     /// </exception>
     /// <remarks>
     /// <para>
-    /// <b>Why it exists.</b> A checkpoint is filed by <see cref="IWorkflowIdentifiable.RuntimeId"/>, and a graph
+    /// <b>Why it exists.</b> A checkpoint is filed by <see cref="IRuntimeIdentifiable.RuntimeId"/>, and a graph
     /// that came back from serialization has fresh ones — so resuming onto it is refused by
     /// <see cref="RuntimeEngine.RunAsync"/>. That refusal is right: those really are different node objects. This
     /// is the host's opt-in that says <i>I know they are, and here is the mapping</i> — positional, because the
@@ -160,7 +160,7 @@ public sealed class ExecutionCheckpoint
     }
 
     // 深度优先：分支先记路由器、再按选项顺序下钻子图；扇出按分支序。
-    private static void Walk(CompiledGraph graph, List<(IWorkflowNodeViewModel, string)> nodes)
+    private static void Walk(CompiledGraph graph, List<(INodeComponent, string)> nodes)
     {
         foreach (var entry in graph.Entries)
         {

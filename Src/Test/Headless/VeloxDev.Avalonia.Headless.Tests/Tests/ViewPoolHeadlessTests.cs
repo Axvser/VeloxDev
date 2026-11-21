@@ -33,9 +33,9 @@ public sealed class ViewPoolHeadlessTests
         {
             var graph = TestGraph.Create();
             var panel = new Canvas();
-            var source = new ObservableCollection<IWorkflowViewModel>();
+            var source = new ObservableCollection<IWorkflowComponent>();
             Behaviors.ViewPool.SetTemplateSelector(
-                panel, new FuncDataTemplate<IWorkflowViewModel>((_, _) => new Border()));
+                panel, new FuncDataTemplate<IWorkflowComponent>((_, _) => new Border()));
             Behaviors.ViewPool.SetItemsSource(panel, source);
 
             source.Add(graph.Left);
@@ -62,8 +62,8 @@ public sealed class ViewPoolHeadlessTests
         {
             var graph = TestGraph.Create();
             var panel = new Canvas();
-            panel.DataTemplates.Add(new FuncDataTemplate<IWorkflowViewModel>((_, _) => new Border()));
-            var source = new ObservableCollection<IWorkflowViewModel> { graph.Left };
+            panel.DataTemplates.Add(new FuncDataTemplate<IWorkflowComponent>((_, _) => new Border()));
+            var source = new ObservableCollection<IWorkflowComponent> { graph.Left };
             Behaviors.ViewPool.SetItemsSource(panel, source);
             Dispatcher.UIThread.RunJobs();
 
@@ -76,12 +76,12 @@ public sealed class ViewPoolHeadlessTests
         => _session.Dispatch(() =>
         {
             var panel = new Canvas();
-            Behaviors.ViewPool.SetItemsSource(panel, new ObservableCollection<IWorkflowViewModel>());
+            Behaviors.ViewPool.SetItemsSource(panel, new ObservableCollection<IWorkflowComponent>());
 
             for (var i = 0; i < 5; i++)
             {
                 Behaviors.ViewPool.SetTemplateSelector(
-                    panel, new FuncDataTemplate<IWorkflowViewModel>((_, _) => new Border()));
+                    panel, new FuncDataTemplate<IWorkflowComponent>((_, _) => new Border()));
             }
 
             Assert.AreEqual(1, CountViewPoolDetachHandlers(panel));

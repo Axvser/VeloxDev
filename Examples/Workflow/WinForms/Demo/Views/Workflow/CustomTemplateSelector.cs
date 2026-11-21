@@ -16,10 +16,10 @@ public sealed class CustomTemplateSelector : TemplateSelector
 
     public override DataTemplate? SelectTemplate(object? item) => item switch
     {
-        IWorkflowLinkViewModel => LinkTemplate,
-        IWorkflowSlotViewModel => SlotTemplate,
-        IWorkflowNodeViewModel => NodeTemplate,
-        IWorkflowTreeViewModel => TreeTemplate,
+        ILinkComponent => LinkTemplate,
+        ISlotComponent => SlotTemplate,
+        INodeComponent => NodeTemplate,
+        ITreeComponent => TreeTemplate,
         _ => null,
     };
 }

@@ -170,6 +170,6 @@ public sealed class WorkflowBaseControlsHeadlessTests
     {
         [System.ComponentModel.Browsable(false)]
         [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-        public IWorkflowSlotViewModel? ViewModel { get; set; }
+        public ISlotComponent? ViewModel { get; set; }
     }
 }

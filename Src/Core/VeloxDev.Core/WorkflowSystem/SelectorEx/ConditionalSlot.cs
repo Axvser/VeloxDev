@@ -18,17 +18,17 @@ public interface IConditionalSlot
     public object? Value { get; }
 
     /// <summary>The slot created for this entry.</summary>
-    public IWorkflowSlotViewModel Slot { get; }
+    public ISlotComponent Slot { get; }
 }
 
 /// <summary>One entry of a conditional slot provider: the selector value it answers to and the slot built for it.</summary>
 public partial class ConditionalSlot<TSlot> : IConditionalSlot
-    where TSlot : IWorkflowSlotViewModel, new()
+    where TSlot : ISlotComponent, new()
 {
     [VeloxProperty] private string _name = string.Empty;
     [VeloxProperty] private object? _value;
     [VeloxProperty] private TSlot _slot = new();
 
-    // 提升出来的 Slot 是 TSlot，接口要的是 IWorkflowSlotViewModel —— 属性类型不协变，只能显式实现。
-    IWorkflowSlotViewModel IConditionalSlot.Slot => _slot;
+    // 提升出来的 Slot 是 TSlot，接口要的是 ISlotComponent —— 属性类型不协变，只能显式实现。
+    ISlotComponent IConditionalSlot.Slot => _slot;
 }

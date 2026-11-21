@@ -94,7 +94,7 @@ WorkflowLayoutEx.Arrange(node, options)                 ← 从 Parent 找 tree 
 `WorkflowLayoutApplier`：
 - 跳过 `IsPinned` 与 `Placement.Moved == false` 的节点；
 - 用 `StandardSetAnchor` 写**世界坐标**（`new Anchor(placement.X, placement.Y, node.Layer)`，图层保留）；
-- 全部移动包成**一个** `WorkflowActionPair` 走 `tree.GetHelper().Submit(...)`，Undo 一次恢复全部；`Redo` 同理重放全部；
+- 全部移动包成**一个** `ActionPair` 走 `tree.GetHelper().Submit(...)`，Undo 一次恢复全部；`Redo` 同理重放全部；
 - 结束后只 `MarkDirty()` **一次**；
 - 没有任何移动时不 `Submit`（不制造空 undo 项）。
 - **快照之后模型被改过就跳过**：`WorkflowLayoutApplier.Apply` 对每个要移动的节点核对「当前世界 anchor（getter × 当前 scale）、layer、父树」是否仍等于快照；不等就跳过，计入 `WorkflowLayoutResult.SkippedCount`，绝不拿旧 `From` 覆盖。因此 Solve 与 Apply 之间可以有并发编辑；仍建议同一线程紧接执行。
@@ -153,4 +153,4 @@ WorkflowLayoutEx.Arrange(node, options)                 ← 从 Parent 找 tree 
 - `.../HierarchyAlignmentTests.cs`：单子边居中并放到父右侧、链式传递列与中心、扇入取父组包围盒中心（含不等高）并放到最右父右侧、扇出后再扇入仍对齐组中心与列、容差内保留、容差按轴独立、pinned 不动。
 - `.../ScopedLayoutTests.cs`：从起点只动下游、上游/下游边界、未选节点作为固定障碍、起点固定、外来起点被拒绝、`node.Arrange` 走 helper 上注册的 solver、脱离树的节点抛 `ArgumentException`。
 - `.../LayoutPipelineTests.cs`：串行/并行逐位一致、`DryRun` 不写模型、一次 Undo 恢复全部、交叉数随 solved 位置变化且忽略已发布曲线（该用例把所有节点 pin 住，避免对齐段改变几何）、非有限几何被跳过且 `Sources` 下标对齐、500 节点 / 200 边的大图代价走网格、Apply 跳过 Solve 后被并发改动的节点。
-- 建树用 `TreeDefaultViewModel` + `NodeDefaultViewModel`/`SlotDefaultViewModel`/`LinkDefaultViewModel`（`LayoutTestKit`），不依赖任何适配器。
+- 建树用 `TreeDefaultComponent` + `NodeDefaultComponent`/`SlotDefaultComponent`/`LinkDefaultComponent`（`LayoutTestKit`），不依赖任何适配器。

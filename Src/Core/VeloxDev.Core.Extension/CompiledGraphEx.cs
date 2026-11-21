@@ -50,8 +50,8 @@ public static class CompiledGraphEx
     /// </summary>
     private static readonly Type[] SnapshotExclusions =
     [
-        typeof(IWorkflowTreeViewModel),
-        typeof(ObservableCollection<IWorkflowSlotViewModel>),
+        typeof(ITreeComponent),
+        typeof(ObservableCollection<ISlotComponent>),
     ];
 
     /// <summary>Serializes <paramref name="graph"/> as a snapshot — see the type's remarks for what that keeps.</summary>

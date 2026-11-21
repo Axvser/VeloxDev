@@ -26,7 +26,7 @@ public sealed class PointerWheelEventArgs : PointerEventArgs
     /// <param name="deltaY">Vertical wheel movement, positive away from the user.</param>
     /// <param name="handle">The handle for this action.</param>
     public PointerWheelEventArgs(
-        Anchor position, InputModifiers modifiers, object? source, IWorkflowViewModel? target,
+        Anchor position, InputModifiers modifiers, object? source, IWorkflowComponent? target,
         double deltaX, double deltaY, WorkflowEventHandle handle)
         : base(position, modifiers, source, target, handle)
     {

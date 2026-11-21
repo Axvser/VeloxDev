@@ -16,12 +16,12 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 public class NodeGeometryToolTests
 {
     /// <summary>Two mounted nodes — one to move with the tool, one to move by hand for comparison.</summary>
-    private static (TreeDefaultViewModel Tree, WorkflowAgentScope Scope) TwoNodes()
+    private static (TreeDefaultComponent Tree, WorkflowAgentScope Scope) TwoNodes()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var helper = tree.GetHelper();
-        helper.CreateNode(new NodeDefaultViewModel());
-        helper.CreateNode(new NodeDefaultViewModel());
+        helper.CreateNode(new NodeDefaultComponent());
+        helper.CreateNode(new NodeDefaultComponent());
         return (tree, new WorkflowAgentScope(tree));
     }
 
@@ -111,11 +111,11 @@ public class NodeGeometryToolTests
         raised.Clear();
 
         WorkflowToolInvoker.Invoke(scope, "SetNodePosition", ("nodeIndex", 0), ("left", 50.0), ("top", 50.0));
-        CollectionAssert.Contains(raised, nameof(IWorkflowNodeViewModel.Anchor));
+        CollectionAssert.Contains(raised, nameof(INodeComponent.Anchor));
 
         raised.Clear();
         WorkflowToolInvoker.Invoke(scope, "ResizeNode", ("nodeIndex", 0), ("width", 321.0), ("height", 123.0));
-        CollectionAssert.Contains(raised, nameof(IWorkflowNodeViewModel.Size));
+        CollectionAssert.Contains(raised, nameof(INodeComponent.Size));
     }
 
     /// <summary>
@@ -159,16 +159,16 @@ public class NodeGeometryToolTests
     [TestMethod]
     public void CreateNode_AvoidsOverlapAtANonUnitScale()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var helper = tree.GetHelper();
-        helper.CreateNode(new NodeDefaultViewModel());
+        helper.CreateNode(new NodeDefaultComponent());
         tree.Nodes[0].SetAnchorCommand.Execute(new Anchor(1000, 1000, 0));
         tree.Nodes[0].SetSizeCommand.Execute(new Size(200, 100));
         tree.Layout.Scale = new Scale(0.5, 0.5);
         var scope = new WorkflowAgentScope(tree);
 
         var created = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!),
+            ("fullTypeName", typeof(NodeDefaultComponent).FullName!),
             ("left", 1000d), ("top", 1000d), ("width", 200d), ("height", 100d)));
 
         Assert.AreEqual("ok", created["status"]?.Value<string>());

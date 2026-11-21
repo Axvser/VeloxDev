@@ -10,7 +10,7 @@ namespace VeloxDev.Jalium.Headless.Tests.Tests;
 [TestClass]
 public sealed class WorkflowEventsHeadlessTests
 {
-    private sealed class Sink : IWorkflowNodeEventSink
+    private sealed class Sink : INodeEventSink
     {
         public int Moving;
         public int Moved;

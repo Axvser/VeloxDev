@@ -10,7 +10,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// shared context (UID / sequence / logs / shared variables) plus execution position and decision
 /// state (maintained by the engine, bound to UI progress).
 /// Inherits <see cref="ITaskContext"/>: the compiler passes this session object directly into
-/// <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/> and writes <see cref="Data"/> per node.
+/// <see cref="INodeHelper.ReceiveAsync"/> and writes <see cref="Data"/> per node.
 /// <see cref="IRuntimeAware"/> is only an optional extra notification of that same object.
 /// </summary>
 public sealed partial class RuntimeContext : IRuntimeContext
@@ -19,7 +19,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
     public bool IsCompilePhase => false;
 
     /// <summary>Optional target node the caller wants this run to reach (result/terminal runs).</summary>
-    public IWorkflowNodeViewModel? Target { get; set; }
+    public INodeComponent? Target { get; set; }
 
     /// <summary>Whether <see cref="Target"/> was actually driven this run (false = condition not satisfied / branch not taken).</summary>
     public bool TargetReached { get; set; }
@@ -45,8 +45,8 @@ public sealed partial class RuntimeContext : IRuntimeContext
 
     // ── Data-flow payload (injected per node by the compiler while driving; exposed as ITaskContext) ──
     [VeloxProperty] private object? _data;
-    [VeloxProperty] private IWorkflowSlotViewModel? _sender;
-    [VeloxProperty] private IWorkflowSlotViewModel? _receiver;
+    [VeloxProperty] private ISlotComponent? _sender;
+    [VeloxProperty] private ISlotComponent? _receiver;
 
     // Shared variables (blackboard): readable/writable by nodes, the engine, and the UI; not directly
     // UI-bound, accessed through methods
@@ -55,8 +55,8 @@ public sealed partial class RuntimeContext : IRuntimeContext
     // Output registry (Key = source Node reference identity, Value = the output registered this pass + pass stamp):
     // the engine registers after driving each node, and join points aggregate per input group; the pass stamp
     // distinguishes "actually ran this pass" from "old outputs skipped on a re-run".
-    private readonly Dictionary<IWorkflowNodeViewModel, (int Attempt, object? Value)> _outputs =
-        new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+    private readonly Dictionary<INodeComponent, (int Attempt, object? Value)> _outputs =
+        new(WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
 
     // 这次驱动报了什么级别：null = 干净返回，Warning = Warn()，Error = Error() 或抛异常。
     // 引擎按它决定停不停 —— Warning 完全不影响控制流（值照常传下去），Error 在没有处理者时结束整轮。
@@ -64,9 +64,9 @@ public sealed partial class RuntimeContext : IRuntimeContext
 
     // 本次运行的编译绑定，RunAsync 开头从根图取一份写进来。引擎的主路径把绑定当参数往下传（宿主自带
     // IRuntimeContext 时也拿得到），这里只服务具体类自己的两个方法：节点报错时取 Order、汇合聚合判保留前缀。
-    internal IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo>? CompileBindings { get; set; }
+    internal IReadOnlyDictionary<INodeComponent, NodeCompileInfo>? CompileBindings { get; set; }
 
-    internal bool TryGetCompileInfo(IWorkflowNodeViewModel? node, out NodeCompileInfo? info)
+    internal bool TryGetCompileInfo(INodeComponent? node, out NodeCompileInfo? info)
     {
         if (node is not null && CompileBindings is { } bindings && bindings.TryGetValue(node, out info))
             return true;
@@ -182,7 +182,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// does. The run's existing 50-redirect cap still applies.
     /// </para>
     /// </remarks>
-    public Func<IRuntimeContext, IWorkflowNodeViewModel, IWorkflowNodeViewModel?>? HostRedirect { get; set; }
+    public Func<IRuntimeContext, INodeComponent, INodeComponent?>? HostRedirect { get; set; }
 
     /// <summary>
     /// Told about the nodes a run that ends badly already drove, most recent first; <c>null</c> (the default) tells
@@ -207,13 +207,13 @@ public sealed partial class RuntimeContext : IRuntimeContext
     // 本轮成功驱动的节点及其产物，按驱动序，补偿按它逆序走。
     // 有次序（_outputs 没有），且每个节点只占一条：重定向会重跑，重跑过的节点移到末尾，而不是记两条、补偿两次。
     // 只有 ResetOutputs 清它，绝不按趟清 —— 于是重定向跳过的前缀（第一趟驱动过、之后再不驱动）也仍在这一轮该负责的范围内。
-    private readonly List<(IWorkflowNodeViewModel Node, object? Output)> _completed = [];
+    private readonly List<(INodeComponent Node, object? Output)> _completed = [];
 
     // 本轮的成功列表（含产物），补偿器按它逆序回调。
-    internal IReadOnlyList<(IWorkflowNodeViewModel Node, object? Output)> CompletedThisRun => [.. _completed];
+    internal IReadOnlyList<(INodeComponent Node, object? Output)> CompletedThisRun => [.. _completed];
 
     // 检查点用：这次运行那张图的「节点 → 键」有序表，RunAsync 开头算一次。形状与键都从它来。
-    internal IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)>? CheckpointNodes { get; set; }
+    internal IReadOnlyList<(INodeComponent Node, string Key)>? CheckpointNodes { get; set; }
 
     // 把当前状态打成一份检查点：本 pass 的产物 + 重定向保留的前缀，外加运行自身的状态（Attempt / 跳过的目标 / 载荷）。
     internal ExecutionCheckpoint Snapshot()
@@ -243,7 +243,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
     }
 
     private static bool TryKeyOf(
-        IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)> nodes, IWorkflowNodeViewModel node, out string key)
+        IReadOnlyList<(INodeComponent Node, string Key)> nodes, INodeComponent node, out string key)
     {
         for (int i = 0; i < nodes.Count; i++)
         {
@@ -257,7 +257,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
 
     // 汇合载荷是按「节点引用」键的字典 ⇒ 写进检查点前必须换成节点键：引用写不进文件，而序列化会顺着它把
     // 整棵树拖进去（与 CompiledGraphEx 排除 Parent 同一个坑）。运行中的对象不动，只换快照里这一份。
-    private static object? Normalize(object? value, IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)>? nodes)
+    private static object? Normalize(object? value, IReadOnlyList<(INodeComponent Node, string Key)>? nodes)
     {
         if (value is not IGroupData group || nodes is null) return value;
         var map = new Dictionary<string, object?>();
@@ -357,12 +357,12 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// The engine writes it on whichever context it is driving with, so a fan-out's branches keep their own — see
     /// <see cref="BranchRuntimeContext.CurrentNode"/>, and the same reason <see cref="Data"/> is branch-local.
     /// </remarks>
-    internal IWorkflowNodeViewModel? CurrentNode { get; set; }
+    internal INodeComponent? CurrentNode { get; set; }
 
     // 把节点自己报的这条交给宿主的 sink。node 由调用方给出，不查会话 —— 扇出里门面自带当前节点，
     // 问会话要会被交错的分支互相覆盖。报告不得失败：sink 抛异常只换回一行日志（同 NotifyErrorAsync）。
     // 令牌恒为 None：这是记录而不是可打断的工作，且这条调用发生在节点帧里、拿不到运行令牌。
-    internal async Task ReportNodeAsync(IWorkflowNodeViewModel? node, ExecutionReportLevel level, string message)
+    internal async Task ReportNodeAsync(INodeComponent? node, ExecutionReportLevel level, string message)
     {
         if (ErrorSink is not { } sink) return;
         var order = TryGetCompileInfo(node, out var info) ? info!.Order : -1;
@@ -388,7 +388,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
     public bool TryGet(string key, out object? value) => _variables.TryGetValue(key, out value);
 
     /// <summary>Registers the node's output for this run (written by the engine after DriveAsync drives it), stamped with the current pass.</summary>
-    public void RegisterOutput(IWorkflowNodeViewModel node, object? value)
+    public void RegisterOutput(INodeComponent node, object? value)
     {
         if (node is null) return;
         _outputs[node] = (Attempt, value);
@@ -412,7 +412,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
 
     // 重定向那一趟会跳过目标之前的节点，但它们的产物仍是这一趟的输入。按驱动顺序把这些产物补回 Data，
     // 目标才拿得到与上一趟相同的载荷；这里刻意不套「本趟 / 保留前缀」的过滤 —— 要取的正是上一趟的条目。
-    internal bool TryGetRegisteredOutput(IWorkflowNodeViewModel node, out object? value)
+    internal bool TryGetRegisteredOutput(INodeComponent node, out object? value)
     {
         if (_outputs.TryGetValue(node, out var entry))
         {
@@ -431,19 +431,19 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// prefix before the redirect target (source Order &lt; ActiveRedirectTarget; the resume contract assumes its result
     /// did not change). Capacity is pre-sized by the input-source count, zero reallocations.
     /// </summary>
-    public IReadOnlyDictionary<IWorkflowNodeViewModel, object?> CollectGroupedInputs(
-        IEnumerable<IWorkflowNodeViewModel> inputNodes)
+    public IReadOnlyDictionary<INodeComponent, object?> CollectGroupedInputs(
+        IEnumerable<INodeComponent> inputNodes)
     {
-        var capacity = inputNodes is IReadOnlyCollection<IWorkflowNodeViewModel> rc ? rc.Count : 0;
-        var result = new Dictionary<IWorkflowNodeViewModel, object?>(capacity,
-            WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        var capacity = inputNodes is IReadOnlyCollection<INodeComponent> rc ? rc.Count : 0;
+        var result = new Dictionary<INodeComponent, object?>(capacity,
+            WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
         if (inputNodes is not null)
         {
             foreach (var n in inputNodes)
                 if (n is not null && _outputs.TryGetValue(n, out var entry) && IsCurrentPassOrPreserved(n, entry))
                     result[n] = entry.Value;
         }
-        return new ReadOnlyDictionary<IWorkflowNodeViewModel, object?>(result);
+        return new ReadOnlyDictionary<INodeComponent, object?>(result);
     }
 
     /// <summary>
@@ -451,7 +451,7 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// or the source is before the redirect target and belongs to the contract-preserved prefix (skipped without
     /// re-driving, but its result did not change).
     /// </summary>
-    private bool IsCurrentPassOrPreserved(IWorkflowNodeViewModel source, (int Attempt, object? Value) entry)
+    private bool IsCurrentPassOrPreserved(INodeComponent source, (int Attempt, object? Value) entry)
         => entry.Attempt == Attempt
            || (ActiveRedirectTarget is int t
                && TryGetCompileInfo(source, out var info) && info!.Order < t);

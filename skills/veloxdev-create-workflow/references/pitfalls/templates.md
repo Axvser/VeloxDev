@@ -54,7 +54,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** the slot stays in one colour while connections are made.
 
-**Cause:** the view bound `Slot.State` instead of the slot's own `State`, or the style trigger reads the wrong property. The binding source must be the `IWorkflowSlotViewModel`.
+**Cause:** the view bound `Slot.State` instead of the slot's own `State`, or the style trigger reads the wrong property. The binding source must be the `ISlotComponent`.
 
 **Fix:** bind the slot control's `DataContext`/`BindingContext` to the slot and read `State` from it. Both `PreviewSender`/`PreviewReceiver` and `Sender`/`Receiver` are flags; test with `HasFlag`.
 

@@ -9,7 +9,7 @@ namespace VeloxDev.Core.Test.WorkflowSystem.Layout;
 [TestClass]
 public class ScopedLayoutTests
 {
-    private static WorkflowLayoutOptions Options(IWorkflowNodeViewModel start, WorkflowLayoutTraversal traversal)
+    private static WorkflowLayoutOptions Options(INodeComponent start, WorkflowLayoutTraversal traversal)
         => new()
         {
             StartNode = start,
@@ -24,7 +24,7 @@ public class ScopedLayoutTests
     [TestMethod]
     public void DownstreamScopeMovesTheChild_ButNotTheStartOrAnUnrelatedNode()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var start = LayoutTestKit.AddNode(tree, 0, 0);
         var child = LayoutTestKit.AddNode(tree, 0, 0);
         var unrelated = LayoutTestKit.AddNode(tree, 5000, 0);
@@ -47,7 +47,7 @@ public class ScopedLayoutTests
     [TestMethod]
     public void UpstreamScope_MovesTheParent_AndLeavesTheDownstreamChildAlone()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var parent = LayoutTestKit.AddNode(tree, 0, 0);
         var start = LayoutTestKit.AddNode(tree, 0, 0);
         var downstream = LayoutTestKit.AddNode(tree, 0, 0);
@@ -68,10 +68,10 @@ public class ScopedLayoutTests
     {
         private readonly DefaultWorkflowLayoutSolver _inner = new();
 
-        public IWorkflowTreeViewModel? Tree { get; private set; }
+        public ITreeComponent? Tree { get; private set; }
         public WorkflowLayoutOptions? Options { get; private set; }
 
-        public WorkflowLayoutResult Arrange(IWorkflowTreeViewModel tree, WorkflowLayoutOptions options)
+        public WorkflowLayoutResult Arrange(ITreeComponent tree, WorkflowLayoutOptions options)
         {
             Tree = tree;
             Options = options;
@@ -82,7 +82,7 @@ public class ScopedLayoutTests
     [TestMethod]
     public void NodeArrangeUsesTheSolverRegisteredOnTheTreeHelper()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var start = LayoutTestKit.AddNode(tree, 0, 0);
         var child = LayoutTestKit.AddNode(tree, 0, 0);
         LayoutTestKit.AddLink(tree, start, child);
@@ -106,7 +106,7 @@ public class ScopedLayoutTests
     [TestMethod]
     public void NodeArrangeWithoutATreeThrows()
     {
-        var detached = new NodeDefaultViewModel();
+        var detached = new NodeDefaultComponent();
 
         try
         {
@@ -121,9 +121,9 @@ public class ScopedLayoutTests
     [TestMethod]
     public void StartNodeMustBelongToTheTree()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         LayoutTestKit.AddNode(tree, 0, 0);
-        var foreign = LayoutTestKit.AddNode(new TreeDefaultViewModel(), 0, 0);
+        var foreign = LayoutTestKit.AddNode(new TreeDefaultComponent(), 0, 0);
 
         try
         {

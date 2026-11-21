@@ -7,12 +7,12 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>A workflow node: the geometry, slots and dataflow commands of one node.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Node组件接口，维护节点的空间信息、Slot集合以及广播行为")]
 [AgentContext(AgentLanguages.English, "Workflow Node component interface, maintaining node geometry, slot collection, and broadcast behaviors")]
-public interface IWorkflowNodeViewModel : IWorkflowViewModel
+public interface INodeComponent : IWorkflowComponent
 {
-    /// <summary>The parent <see cref="IWorkflowTreeViewModel"/> this node lives in.</summary>
+    /// <summary>The parent <see cref="ITreeComponent"/> this node lives in.</summary>
     [AgentContext(AgentLanguages.Chinese, "所属的Tree组件")]
     [AgentContext(AgentLanguages.English, "The parent Tree component")]
-    public IWorkflowTreeViewModel? Parent { get; set; }
+    public ITreeComponent? Parent { get; set; }
 
     /// <summary>The node's anchor position on the canvas.</summary>
     [AgentContext(AgentLanguages.Chinese, "当前Node在画布中的锚点坐标")]
@@ -27,7 +27,7 @@ public interface IWorkflowNodeViewModel : IWorkflowViewModel
     /// <summary>The slots owned by this node.</summary>
     [AgentContext(AgentLanguages.Chinese, "当前Node包含的所有Slot组件")]
     [AgentContext(AgentLanguages.English, "All Slot components owned by the current node")]
-    public ObservableCollection<IWorkflowSlotViewModel> Slots { get; set; }
+    public ObservableCollection<ISlotComponent> Slots { get; set; }
 
     /// <summary>Moves the node by an <see cref="Offset"/>.</summary>
     [AgentContext(AgentLanguages.Chinese, "移动节点，参数为Offset")]
@@ -47,10 +47,10 @@ public interface IWorkflowNodeViewModel : IWorkflowViewModel
     [AgentCommandParameter(typeof(Size))]
     public IVeloxCommand SetSizeCommand { get; }
 
-    /// <summary>Creates a slot; the parameter is an <see cref="IWorkflowSlotViewModel"/>.</summary>
-    [AgentContext(AgentLanguages.Chinese, "创建Slot，参数为IWorkflowSlotViewModel")]
-    [AgentContext(AgentLanguages.English, "Create slot command, parameter is IWorkflowSlotViewModel")]
-    [AgentCommandParameter(typeof(IWorkflowSlotViewModel))]
+    /// <summary>Creates a slot; the parameter is an <see cref="ISlotComponent"/>.</summary>
+    [AgentContext(AgentLanguages.Chinese, "创建Slot，参数为ISlotComponent")]
+    [AgentContext(AgentLanguages.English, "Create slot command, parameter is ISlotComponent")]
+    [AgentCommandParameter(typeof(ISlotComponent))]
     public IVeloxCommand CreateSlotCommand { get; }
 
     /// <summary>Deletes this node along with its slots and links.</summary>
@@ -78,30 +78,30 @@ public interface IWorkflowNodeViewModel : IWorkflowViewModel
     public IVeloxCommand ReverseBroadcastCommand { get; }
 
     /// <summary>Gets the helper that carries this node's behaviour.</summary>
-    public IWorkflowNodeViewModelHelper GetHelper();
+    public INodeHelper GetHelper();
 
     /// <summary>Sets the helper that carries this node's behaviour.</summary>
     /// <param name="helper">The helper to install.</param>
-    public void SetHelper(IWorkflowNodeViewModelHelper helper);
+    public void SetHelper(INodeHelper helper);
 }
 
-/// <summary>The behaviour behind an <see cref="IWorkflowNodeViewModel"/>.</summary>
-public interface IWorkflowNodeViewModelHelper : IWorkflowHelper
+/// <summary>The behaviour behind an <see cref="INodeComponent"/>.</summary>
+public interface INodeHelper : IWorkflowHelper
 {
     /// <summary>Raised after a slot is added to the node.</summary>
-    public event EventHandler<IWorkflowSlotViewModel>? SlotAdded;
+    public event EventHandler<ISlotComponent>? SlotAdded;
 
     /// <summary>Raised after a slot is removed from the node.</summary>
-    public event EventHandler<IWorkflowSlotViewModel>? SlotRemoved;
+    public event EventHandler<ISlotComponent>? SlotRemoved;
 
     /// <summary>Attaches this helper to <paramref name="node"/>.</summary>
-    public void Install(IWorkflowNodeViewModel node);
+    public void Install(INodeComponent node);
 
     /// <summary>Detaches this helper from <paramref name="node"/>.</summary>
-    public void Uninstall(IWorkflowNodeViewModel node);
+    public void Uninstall(INodeComponent node);
 
     /// <summary>Adds <paramref name="slot"/> to the node.</summary>
-    public void CreateSlot(IWorkflowSlotViewModel slot);
+    public void CreateSlot(ISlotComponent slot);
 
     /// <summary>Moves the node by <paramref name="offset"/>.</summary>
     public void Move(Offset offset);

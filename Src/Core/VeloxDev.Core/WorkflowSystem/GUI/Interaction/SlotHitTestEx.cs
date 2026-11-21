@@ -21,19 +21,19 @@ public static class SlotHitTestEx
 
     /// <summary>Finds the nearest measured slot within <paramref name="radius"/> of the pointer.</summary>
     /// <param name="tree">The tree whose slots are tested.</param>
-    /// <param name="x">Pointer x, in the same collapsed frame as <see cref="IWorkflowSlotViewModel.Anchor"/>.</param>
-    /// <param name="y">Pointer y, in the same collapsed frame as <see cref="IWorkflowSlotViewModel.Anchor"/>.</param>
+    /// <param name="x">Pointer x, in the same collapsed frame as <see cref="ISlotComponent.Anchor"/>.</param>
+    /// <param name="y">Pointer y, in the same collapsed frame as <see cref="ISlotComponent.Anchor"/>.</param>
     /// <param name="radius">Hit radius; <see cref="DefaultHitRadius"/> when omitted.</param>
     /// <returns>The nearest slot, or <see langword="null"/> when none is within the radius.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
-    public static IWorkflowSlotViewModel? HitTest(
-        IWorkflowTreeViewModel tree, double x, double y, double radius = DefaultHitRadius)
+    public static ISlotComponent? HitTest(
+        ITreeComponent tree, double x, double y, double radius = DefaultHitRadius)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
         var radiusSquared = radius * radius;
         var bestDistance = radiusSquared;
-        IWorkflowSlotViewModel? best = null;
+        ISlotComponent? best = null;
 
         foreach (var node in tree.Nodes)
         {

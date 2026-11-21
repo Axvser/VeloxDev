@@ -4,15 +4,15 @@ using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
-/// <summary>The default implementation of <see cref="IWorkflowSlotViewModel"/>.</summary>
+/// <summary>The default implementation of <see cref="ISlotComponent"/>.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Slot组件接口的默认实现类")]
 [AgentContext(AgentLanguages.English, "The default implementation class of the workflow Slot component interface")]
-public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel, IWorkflowIdentifiable
+public sealed partial class SlotDefaultComponent : ISlotComponent, IRuntimeIdentifiable
 {
-    private IWorkflowSlotViewModelHelper helper = new SlotHelper();
+    private ISlotHelper helper = new SlotHelper();
 
     /// <summary>The helper that carries this component's behaviour.</summary>
-    public IWorkflowSlotViewModelHelper Helper
+    public ISlotHelper Helper
     {
         get => helper;
         private set
@@ -28,11 +28,11 @@ public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel, IWork
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>Creates the component and installs its default helper.</summary>
-    public SlotDefaultViewModel() { InitializeWorkflow(); }
+    public SlotDefaultComponent() { InitializeWorkflow(); }
 
-    [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> targets = [];
-    [VeloxProperty] private ObservableCollection<IWorkflowSlotViewModel> sources = [];
-    [VeloxProperty] private IWorkflowNodeViewModel? parent = null;
+    [VeloxProperty] private ObservableCollection<ISlotComponent> targets = [];
+    [VeloxProperty] private ObservableCollection<ISlotComponent> sources = [];
+    [VeloxProperty] private INodeComponent? parent = null;
     [VeloxProperty] private SlotChannel channel = SlotChannel.OneBoth;
     [VeloxProperty] private SlotState state = SlotState.StandBy;
     [VeloxProperty] private Anchor anchor = new(double.NaN, double.NaN, 0);
@@ -69,14 +69,14 @@ public sealed partial class SlotDefaultViewModel : IWorkflowSlotViewModel, IWork
     }
 
     /// <inheritdoc />
-    public IWorkflowSlotViewModelHelper GetHelper() => Helper;
+    public ISlotHelper GetHelper() => Helper;
     /// <inheritdoc />
     public void InitializeWorkflow()
     {
         Helper.Install(this);
     }
     /// <inheritdoc />
-    public void SetHelper(IWorkflowSlotViewModelHelper helper)
+    public void SetHelper(ISlotHelper helper)
     {
         if (ReferenceEquals(Helper, helper)) return;
         Helper.Uninstall(this);

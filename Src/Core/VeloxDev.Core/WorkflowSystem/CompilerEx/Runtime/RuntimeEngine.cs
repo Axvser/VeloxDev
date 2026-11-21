@@ -23,7 +23,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// status -1. A router or a redirect contract that throws ends it too, for the same reason: there is no answer left
 /// to give.
 /// </para>
-/// The session is always the parameter <see cref="IWorkflowNodeViewModelHelper.ReceiveAsync"/> receives;
+/// The session is always the parameter <see cref="INodeHelper.ReceiveAsync"/> receives;
 /// <see cref="IRuntimeAware"/> is only an optional extra notification of the same object. Compile identity comes
 /// from the graph's binding table (<see cref="CompiledGraph.TryGetCompileInfo"/>), never from the node, so a node
 /// that implements neither interface still takes part in joins and redirects.
@@ -144,8 +144,8 @@ public sealed class RuntimeEngine
     /// <summary>Drives every entry of a graph. Returns true when the run ends here (terminal branch or error termination).</summary>
     private async Task<bool> RunGraphAsync(
         CompiledGraph? graph, IRuntimeContext? context,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings,
-        CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings,
+        CancellationToken ct, int? redirectTarget, HashSet<INodeComponent>? done)
     {
         if (graph is null || context is null) return false;
         foreach (var entry in graph.Entries)
@@ -185,8 +185,8 @@ public sealed class RuntimeEngine
     /// </summary>
     private async Task<bool> RunExecuteAsync(
         ChainSegment exec, IRuntimeContext context,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings,
-        CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings,
+        CancellationToken ct, int? redirectTarget, HashSet<INodeComponent>? done)
     {
         var session = Session(context);
         for (int i = 0; i < exec.Nodes.Count; i++)
@@ -238,7 +238,7 @@ public sealed class RuntimeEngine
             {
                 if (session?.HostRedirect is { } hostPolicy)
                 {
-                    IWorkflowNodeViewModel? hostTarget;
+                    INodeComponent? hostTarget;
                     try
                     {
                         hostTarget = hostPolicy(context, node);
@@ -281,7 +281,7 @@ public sealed class RuntimeEngine
 
             // With IRedirectable → its answer is the upstream node to fall back to. The engine owns the
             // order mapping, so an implementer never has to know a compile-time execution number.
-            IWorkflowNodeViewModel? target;
+            INodeComponent? target;
             try
             {
                 target = await redirectable.ResolveRedirectAsync(context, ct);
@@ -327,8 +327,8 @@ public sealed class RuntimeEngine
     /// </summary>
     private async Task<bool> RunBranchAsync(
         BranchSegment branch, IRuntimeContext context,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings,
-        CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings,
+        CancellationToken ct, int? redirectTarget, HashSet<INodeComponent>? done)
     {
         if (branch.Router is null) return false;
         var session = Session(context);
@@ -412,8 +412,8 @@ public sealed class RuntimeEngine
     /// </summary>
     private async Task<bool> RunParallelAsync(
         ParallelSegment parallel, IRuntimeContext context,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings,
-        CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done)
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings,
+        CancellationToken ct, int? redirectTarget, HashSet<INodeComponent>? done)
     {
         var sourceData = context.Data;   // the fan-out source's output, broadcast to every branch
         var branches = parallel.Branches;
@@ -475,8 +475,8 @@ public sealed class RuntimeEngine
     /// </summary>
     private async Task<bool> RunOneBranchAsync(
         CompiledGraph branch, BranchRuntimeContext branchContext,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings,
-        int index, CancellationToken ct, int? redirectTarget, HashSet<IWorkflowNodeViewModel>? done, SemaphoreSlim? gate)
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings,
+        int index, CancellationToken ct, int? redirectTarget, HashSet<INodeComponent>? done, SemaphoreSlim? gate)
     {
         if (gate is not null) await gate.WaitAsync(ct);
         try
@@ -493,20 +493,20 @@ public sealed class RuntimeEngine
     // 编译序只认绑定表：节点上的 ICompileTimeAware 是通知副本，改它不该能改运行行为。
     // 不在图里的节点（别的编译产物 / 未编译）一律 -1。
     private static int NodeOrder(
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings, IWorkflowNodeViewModel node)
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings, INodeComponent node)
         => bindings.TryGetValue(node, out var info) ? info.Order : -1;
 
     // 沿 Sources 反向可达即上游。用它而不是 Order 比较：分属两支的节点 Order 可以一大一小，
     // 但它们之间并没有可回退的先后关系。
-    private static bool IsUpstreamOf(IWorkflowNodeViewModel node, IWorkflowNodeViewModel target)
+    private static bool IsUpstreamOf(INodeComponent node, INodeComponent target)
         => node.SearchReverseNodes().Any(candidate => ReferenceEquals(candidate, target));
 
     // 驱动一个节点：注入 IRuntimeContext、经 ReceiveAsync 执行、把返回值写回 Data 供下游链式传递。
     // 抛异常照旧记 Error 再抛（RunExecuteAsync 决定谁来安排下一步）—— 除非配了重试策略并愿意再给一次机会。
     // 报了错或抛异常的驱动记成「返回 null」交给下游；只是警告的，值照传（提醒不该吃掉结果）。
     private static async Task DriveAsync(
-        IWorkflowNodeViewModel node, IRuntimeContext context,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings, CancellationToken ct)
+        INodeComponent node, IRuntimeContext context,
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings, CancellationToken ct)
     {
         if (node is null || context is null) return;
         var session = Session(context);
@@ -615,7 +615,7 @@ public sealed class RuntimeEngine
     // 只有抛出的异常会被问，而且节点自己请求过重定向时不问 —— Error()/Warn() 是节点选择的控制流，不是待重试的失败。
     // 策略自己抛异常当作「不再试」：宿主的 bug 不该顶替节点本来的失败。
     private static async Task<TimeSpan?> NextRetryAsync(
-        RuntimeContext? session, IRuntimeContext context, IWorkflowNodeViewModel node, Exception error, int failures,
+        RuntimeContext? session, IRuntimeContext context, INodeComponent node, Exception error, int failures,
         TimeSpan elapsed, CancellationToken ct)
     {
         if (context.RedirectRequested) return null;
@@ -639,8 +639,8 @@ public sealed class RuntimeEngine
     // 按引擎原有方式记一次失败（一行日志），并把同一条失败交给可选的 sink。
     private static async Task ReportErrorAsync(
         RuntimeContext? session, IRuntimeContext context,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings,
-        ExecutionFailurePhase phase, IWorkflowNodeViewModel? node,
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings,
+        ExecutionFailurePhase phase, INodeComponent? node,
         string message, Exception? error, CancellationToken ct)
     {
         context.Error(message);
@@ -650,8 +650,8 @@ public sealed class RuntimeEngine
     // 只交给 sink、不写日志：日志里已经有这条失败，或者本就不该有（宿主主动取消不是错误）。
     private static async Task NotifyErrorAsync(
         RuntimeContext? session, IRuntimeContext context,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings,
-        ExecutionFailurePhase phase, IWorkflowNodeViewModel? node,
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings,
+        ExecutionFailurePhase phase, INodeComponent? node,
         string message, Exception? error, CancellationToken ct)
     {
         if (session?.ErrorSink is not { } sink) return;
@@ -670,7 +670,7 @@ public sealed class RuntimeEngine
     // 引擎自己什么都不回滚：一个节点的副作用是什么、哪些可逆，只有宿主知道。
     private static async Task CompensateAsync(
         RuntimeContext? session, IRuntimeContext context,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, NodeCompileInfo> bindings, RunOutcome outcome)
+        IReadOnlyDictionary<INodeComponent, NodeCompileInfo> bindings, RunOutcome outcome)
     {
         if (session?.Compensation is not { } compensation) return;
         if (outcome is not (RunOutcome.Failed or RunOutcome.Cancelled)) return;
@@ -695,7 +695,7 @@ public sealed class RuntimeEngine
     // 发一条观察给可选的观察者，它拿它做什么都不影响运行：抛异常只换回一行日志。
     // 与日志写入器的契约正好相反（那边失败本身就是证据，必须上报），观察不是证据。
     private static async Task ObserveAsync(
-        RuntimeContext? session, IRuntimeContext context, ExecutionObservationKind kind, IWorkflowNodeViewModel? node,
+        RuntimeContext? session, IRuntimeContext context, ExecutionObservationKind kind, INodeComponent? node,
         string? detail, TimeSpan elapsed, CancellationToken ct)
     {
         if (session?.Observer is not { } observer) return;
@@ -722,7 +722,7 @@ public sealed class RuntimeEngine
         };
 
     // 形状不符就明确拒绝：恢复要驱动的是「同一个图的同一些节点」，形状对不上时继续下去只会拿别人的产物喂错节点。
-    private static void RequireSameShape(IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)> nodes, ExecutionCheckpoint checkpoint)
+    private static void RequireSameShape(IReadOnlyList<(INodeComponent Node, string Key)> nodes, ExecutionCheckpoint checkpoint)
     {
         var limit = Math.Min(nodes.Count, checkpoint.Shape.Count);
         for (var i = 0; i < limit; i++)
@@ -741,14 +741,14 @@ public sealed class RuntimeEngine
 
     // 把检查点铺回会话：运行状态 + 产物表，并交出「已经做完的节点」集合。
     // 产物按节点键还原（RuntimeId，或没有身份时的类型#位置）—— 键不能是节点引用，那东西过不了序列化。
-    private static HashSet<IWorkflowNodeViewModel> Restore(
-        IRuntimeContext context, IReadOnlyList<(IWorkflowNodeViewModel Node, string Key)> nodes, ExecutionCheckpoint checkpoint)
+    private static HashSet<INodeComponent> Restore(
+        IRuntimeContext context, IReadOnlyList<(INodeComponent Node, string Key)> nodes, ExecutionCheckpoint checkpoint)
     {
         context.Attempt = checkpoint.Attempt;
         context.ActiveRedirectTarget = checkpoint.ActiveRedirectTarget;
         context.Data = checkpoint.Data;
 
-        var done = new HashSet<IWorkflowNodeViewModel>(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        var done = new HashSet<INodeComponent>(WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
         if (checkpoint.Outputs.Count == 0) return done;
 
         foreach (var (node, key) in nodes)

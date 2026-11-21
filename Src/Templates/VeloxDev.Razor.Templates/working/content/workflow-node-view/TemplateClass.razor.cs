@@ -17,11 +17,11 @@ public partial class TemplateClass : ComponentBase, IDisposable
 {
     /// <summary>Gets or sets the node rendered by this view.</summary>
     [Parameter]
-    public IWorkflowNodeViewModel? Node { get; set; }
+    public INodeComponent? Node { get; set; }
 
     /// <summary>Gets or sets the workflow tree that owns connection gestures.</summary>
     [Parameter]
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     /// <summary>Gets or sets type-specific body content (inputs, labels, etc.).</summary>
     [Parameter]
@@ -162,7 +162,7 @@ public partial class TemplateClass : ComponentBase, IDisposable
     }
 
     /// <summary>
-    /// Reads the display title from the node. <see cref="IWorkflowNodeViewModel"/> does not
+    /// Reads the display title from the node. <see cref="INodeComponent"/> does not
     /// expose a name, so look up a <c>Name</c> or <c>Title</c> property reflectively
     /// (works with any node view-model, including the built-in VeloxDev samples).
     /// </summary>

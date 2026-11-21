@@ -11,9 +11,9 @@ namespace VeloxDev.AI.Workflow;
 /// diffs between snapshots, enabling the Agent to track changes with
 /// minimal context instead of re-reading the full state each turn.
 /// </summary>
-public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
+public sealed class WorkflowStateTracker(ITreeComponent tree)
 {
-    private readonly IWorkflowTreeViewModel _tree = tree ?? throw new ArgumentNullException(nameof(tree));
+    private readonly ITreeComponent _tree = tree ?? throw new ArgumentNullException(nameof(tree));
     private VeloxJsonObject? _lastSnapshot;
     private long _version;
 
@@ -223,13 +223,13 @@ public sealed class WorkflowStateTracker(IWorkflowTreeViewModel tree)
     private static string GetRuntimeId(object component)
     {
         // Convention: every workflow component's Helper provides a stable RuntimeId (the source
-        // generator implements IWorkflowIdentifiable on all workflow components). Falling back to
+        // generator implements IRuntimeIdentifiable on all workflow components). Falling back to
         // GetHashCode would yield a value that is neither stable across runs nor meaningful — so a
         // missing RuntimeId is an error, not something to paper over.
-        if (component is IWorkflowIdentifiable identifiable)
+        if (component is IRuntimeIdentifiable identifiable)
             return identifiable.RuntimeId;
         throw new InvalidOperationException(
-            $"'{AgentTypeNames.SimpleOf(component)}' does not implement IWorkflowIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
+            $"'{AgentTypeNames.SimpleOf(component)}' does not implement IRuntimeIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
     }
 
     /// <summary>

@@ -28,5 +28,5 @@ public interface IRedirectable
     /// <param name="context">The session driving the node.</param>
     /// <param name="ct">The run's cancellation token.</param>
     /// <returns>An upstream node of this one, or <see langword="null"/>.</returns>
-    Task<IWorkflowNodeViewModel?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct);
+    Task<INodeComponent?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct);
 }

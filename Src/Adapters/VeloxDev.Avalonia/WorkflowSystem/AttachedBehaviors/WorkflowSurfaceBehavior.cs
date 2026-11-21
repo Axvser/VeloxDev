@@ -37,7 +37,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public EventHandler<PlatformInput.PointerWheelEventArgs>? ZoomHandler { get; set; }
 
         // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
-        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
+        public ITreeComponent? LastRestoreTree { get; set; }
         public bool HasPendingRestore { get; set; }
         public bool RestoreQueued { get; set; }
         public double PendingRestoreX { get; set; }
@@ -51,7 +51,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuProperty），订阅、定位、弹出、挂起都在这里。
         public ContextMenu? LinkMenu { get; set; }
-        public IWorkflowLinkViewModel? MenuLink { get; set; }
+        public ILinkComponent? MenuLink { get; set; }
 
         // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
         public WorkflowInput? Input { get; set; }
@@ -60,7 +60,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public IWorkflowSurfaceScroller? Scroller { get; set; }
 
         public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
-        public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
+        public EventHandler<ILinkComponent>? MenuLinkRemoved { get; set; }
         public EventHandler<RoutedEventArgs>? MenuOpened { get; set; }
         public EventHandler<RoutedEventArgs>? MenuClosed { get; set; }
     }
@@ -197,7 +197,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             }
         }
 
-        var input = host.DataContext is IWorkflowTreeViewModel tree ? WorkflowInput.For(tree) : null;
+        var input = host.DataContext is ITreeComponent tree ? WorkflowInput.For(tree) : null;
         if (ReferenceEquals(input, state.Input))
         {
             return;
@@ -209,7 +209,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         }
 
         state.Input = input;
-        if (input is null || host.DataContext is not IWorkflowTreeViewModel bound)
+        if (input is null || host.DataContext is not ITreeComponent bound)
         {
             return;
         }
@@ -278,9 +278,9 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     {
         // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
         if (e.Button != Wf.MouseButton.Right) return;
-        if (e.Target is not IWorkflowLinkViewModel link) return;
+        if (e.Target is not ILinkComponent link) return;
         if (state.LinkMenu is null || state.Canvas is null) return;
-        if (host.DataContext is not IWorkflowTreeViewModel tree) return;
+        if (host.DataContext is not ITreeComponent tree) return;
 
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
         if (e.Handle.PreventDefault) return;
@@ -309,9 +309,9 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     // 平移、拖动、连线、缩放都在路由之后才决定动不动。丢掉句柄，订阅者的否决就没有任何人会读。
     private static WorkflowEventHandle? RoutePointer(
         UserControl host, SurfaceState state, PlatformInput.PointerEventArgs e,
-        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
+        Func<Anchor, IWorkflowComponent?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.Canvas is null)
+        if (host.DataContext is not ITreeComponent viewModel || state.Canvas is null)
             return null;
 
         var point = e.GetPosition(state.Canvas);
@@ -329,8 +329,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     // 指针底下是什么，由适配器回答 —— 节点和插槽也是答案的一部分。只认连线的话，路由的 Target 就永远
     // 只是「连线或空白」，`WorkflowInput.Chain` 里 slot → node → tree 那条链于是永远走不到，组件自己的
     // InputRelay 收不到指针，使用方也就没有任何办法在节点的输入上做文章。
-    private static IWorkflowViewModel? ResolveTarget(
-        object? source, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    private static IWorkflowComponent? ResolveTarget(
+        object? source, ITreeComponent tree, double x, double y, double radius)
     {
         if (source is Visual visual)
         {
@@ -338,9 +338,9 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             {
                 switch (candidate)
                 {
-                    case StyledElement { DataContext: IWorkflowNodeViewModel node }:
+                    case StyledElement { DataContext: INodeComponent node }:
                         return node;
-                    case StyledElement { DataContext: IWorkflowSlotViewModel slot }:
+                    case StyledElement { DataContext: ISlotComponent slot }:
                         return slot;
                 }
             }
@@ -422,7 +422,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     // 必须在 UpdateVisibleRegion 之前 —— 那一步会拿控件当前（还没滚过去的）位置覆盖 ViewportOffset。
     private static void CaptureViewportRestore(UserControl host, SurfaceState state)
     {
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+        if (host.DataContext is not ITreeComponent viewModel) return;
         if (ReferenceEquals(viewModel, state.LastRestoreTree)) return;
 
         state.LastRestoreTree = viewModel;
@@ -679,7 +679,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         }
 
         var host = source.GetVisualAncestors().OfType<UserControl>().FirstOrDefault(GetIsEnabled);
-        if (host is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (host is null || host.DataContext is not ITreeComponent viewModel)
         {
             return;
         }
@@ -771,7 +771,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
 
-        if (host.DataContext is not IWorkflowTreeViewModel || state.Canvas is null)
+        if (host.DataContext is not ITreeComponent || state.Canvas is null)
             return;
 
         // Source 仍是「输入来自哪个视图」：原来那个冒泡处理器收到的 sender 就是按下源，这里保持同一个值。
@@ -918,7 +918,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             var maxV = GetVerticalScrollMaximum(viewer);
 
             var host = state.Host;
-            if (host is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+            if (host is null || host.DataContext is not ITreeComponent viewModel)
             {
                 // 拿不到布局时退回旧的「到边即停」，至少不越界。
                 viewer.Offset = new Vector(
@@ -959,7 +959,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public void CenterOn(double worldX, double worldY)
         {
             if (state.ScrollViewer is not { } viewer) return;
-            if (state.Host is not { } host || host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+            if (state.Host is not { } host || host.DataContext is not ITreeComponent viewModel) return;
 
             var layout = viewModel.Layout;
             var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
@@ -1044,7 +1044,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (state.IsPanning)
             return;
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.Canvas is null)
+        if (host.DataContext is not ITreeComponent viewModel || state.Canvas is null)
             return;
 
         var point = e.GetPosition(state.Canvas);
@@ -1078,7 +1078,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (host.DataContext is not ITreeComponent viewModel)
             return;
 
         var input = WorkflowInput.For(viewModel);
@@ -1103,7 +1103,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (sender is not UserControl host || host.GetValue(StateProperty) is not SurfaceState state)
             return;
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (host.DataContext is not ITreeComponent viewModel)
             return;
 
         var input = WorkflowInput.For(viewModel);
@@ -1136,7 +1136,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
             return;
         }
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (host.DataContext is not ITreeComponent viewModel)
             return;
 
         viewModel.VirtualLink.Sender.State &= ~SlotState.PreviewSender;
@@ -1192,7 +1192,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
     private static void OnCanvasPanMoved(UserControl host, SurfaceState state, PlatformInput.PointerEventArgs e)
     {
-        if (!state.IsPanning || state.ScrollViewer is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (!state.IsPanning || state.ScrollViewer is null || host.DataContext is not ITreeComponent viewModel)
             return;
 
         if (!IsPanStillActive(host, e))
@@ -1237,7 +1237,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
     private static void ApplyLayout(UserControl host, SurfaceState state)
     {
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.Canvas is null)
+        if (host.DataContext is not ITreeComponent viewModel || state.Canvas is null)
             return;
 
         state.Canvas.RenderTransformOrigin = new RelativePoint(0, 0, RelativeUnit.Relative);
@@ -1258,7 +1258,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
     private static void UpdateVisibleRegion(UserControl host, SurfaceState state)
     {
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.ScrollViewer is null)
+        if (host.DataContext is not ITreeComponent viewModel || state.ScrollViewer is null)
             return;
 
         UpdateGridDecorator(viewModel, state);
@@ -1274,7 +1274,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
     }
 
-    private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)
+    private static void UpdateGridDecorator(ITreeComponent viewModel, SurfaceState state)
     {
         if (state.GridDecorator is not IWorkflowGridDecorator decorator || state.ScrollViewer is null)
             return;
@@ -1288,7 +1288,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
     }
 
-    private static void UpdateMinimapOverlay(IWorkflowTreeViewModel viewModel, SurfaceState state)
+    private static void UpdateMinimapOverlay(ITreeComponent viewModel, SurfaceState state)
     {
         if (state.MinimapOverlay is not IWorkflowMinimapOverlay minimap || state.ScrollViewer is null)
             return;
@@ -1348,11 +1348,11 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     }
 
     private static bool IsWorkflowNodeOrSlotVisual(Visual source)
-        => source is StyledElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel };
+        => source is StyledElement { DataContext: INodeComponent or ISlotComponent };
 
     private static bool IsWorkflowLinkVisual(Visual source)
         => source is StyledElement element
-            && (element.DataContext is IWorkflowLinkViewModel
+            && (element.DataContext is ILinkComponent
                 || string.Equals(element.GetType().Name, "BezierCurveView", StringComparison.Ordinal)
                 || string.Equals(element.GetType().Name, "PolylineCurveView", StringComparison.Ordinal));
 

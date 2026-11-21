@@ -11,7 +11,7 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// <param name="RetryNumber">Which retry this decision is about — <c>1</c> for the first.</param>
 /// <param name="Elapsed">How long the failed attempt took.</param>
 public readonly record struct NodeFailure(
-    IWorkflowNodeViewModel Node,
+    INodeComponent Node,
     Exception Error,
     int RetryNumber,
     TimeSpan Elapsed);

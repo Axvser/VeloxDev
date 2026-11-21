@@ -18,11 +18,11 @@ public partial class WorkflowSlotConnectionBehavior : ComponentBase, IAsyncDispo
 
     /// <summary>Gets or sets the slot that initiates and receives connections.</summary>
     [Parameter]
-    public IWorkflowSlotViewModel? Slot { get; set; }
+    public ISlotComponent? Slot { get; set; }
 
     /// <summary>Gets or sets the workflow tree that owns the connection gesture.</summary>
     [Parameter]
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     /// <summary>Gets or sets whether slot connection dragging is enabled.</summary>
     [Parameter]
@@ -124,7 +124,7 @@ public partial class WorkflowSlotConnectionBehavior : ComponentBase, IAsyncDispo
             return;
         }
 
-        if (WorkflowRuntimeIds.TryFind<IWorkflowSlotViewModel>(targetSlotId, out var target)
+        if (WorkflowRuntimeIds.TryFind<ISlotComponent>(targetSlotId, out var target)
             && target is not null
             && !ReferenceEquals(target, Slot))
         {

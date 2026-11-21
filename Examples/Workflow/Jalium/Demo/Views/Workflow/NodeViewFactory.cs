@@ -7,7 +7,7 @@ namespace Demo.Views.Workflow;
 /// other FULL demos). Falls back to the generic <see cref="NodeView"/>.</summary>
 internal static class NodeViewFactory
 {
-    public static NodeViewBase Create(IWorkflowNodeViewModel node) => node switch
+    public static NodeViewBase Create(INodeComponent node) => node switch
     {
         ControllerViewModel => new ControllerView(),
         TimerNodeViewModel => new TimerNodeView(),

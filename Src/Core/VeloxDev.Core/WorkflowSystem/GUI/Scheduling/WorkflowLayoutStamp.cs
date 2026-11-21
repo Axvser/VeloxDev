@@ -52,7 +52,7 @@ public readonly struct WorkflowLayoutStamp : IEquatable<WorkflowLayoutStamp>
     /// <param name="slotCount">The number of slot controls the template currently exposes.</param>
     /// <exception cref="ArgumentNullException"><paramref name="node"/> is <see langword="null"/>.</exception>
     public static WorkflowLayoutStamp Capture(
-        IWorkflowNodeViewModel node,
+        INodeComponent node,
         double measuredWidth,
         double measuredHeight,
         int slotCount)

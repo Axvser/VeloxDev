@@ -11,7 +11,7 @@ public partial class WorkflowPythonNodeView : ComponentBase, IDisposable
     public PythonScriptNodeViewModel? Selector { get; set; }
 
     [Parameter]
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     private string _script = "";
 

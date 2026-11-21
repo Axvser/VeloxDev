@@ -37,7 +37,7 @@
 | 只写了中文，指望英文界面也能看到 | **英文无处可退**：`language == English` 时直接返回命中集（可能为空） | 同上；测试 `..._EnglishRequestNeverFallsBack` |
 | 写 `[AgentContext("说明")]` | **编译不过**：位置参数第一位是 `AgentLanguages` | `AgentContextAttribute.cs` 的构造签名 |
 
-**官方**：命令的说明与参数类型标在**接口**上（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Components/IWorkflowTreeViewModel.cs` 的 `CreateNodeCommand` 那一族是范本）；其它成员标在**声明它的那个类**上。想支持几种语言就写几条 —— 但**不必为回退而写**：整目标缺该语言时会自动退回英文。
+**官方**：命令的说明与参数类型标在**接口**上（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Components/ITreeComponent.cs` 的 `CreateNodeCommand` 那一族是范本）；其它成员标在**声明它的那个类**上。想支持几种语言就写几条 —— 但**不必为回退而写**：整目标缺该语言时会自动退回英文。
 
 ### 2. 暴露一个命令
 
@@ -115,10 +115,10 @@
 | 为「选中」加一个新工具 | 选中集是**每轮都该在系统提示词里**的宿主状态，不需要模型主动查询；用户明确要求不加工具 | `Agent/Workflow/WorkflowAgentSelectionExtensions.cs`；`WorkflowAgentScope.RenderEnvelope` → `AppendAgentSelection` |
 | 在选中变化时 `BumpVersion()` | `Version` 同时驱动 `BuildDynamicTools`，会让工具集重建；选中只该改上下文 | `WorkflowAgentScope.ContextKey` 的 remarks；`BuildDynamicTools` 只按 `Version` 复用 |
 | 以为 `SelectForAgent` 会替换选中集 | 它是**并集**：已在集合里的节点不重复、不计数；要替换先 `ClearAgentSelection` 再注册 | `WorkflowAgentSelectionExtensions.SelectForAgent` / `WorkflowAgentSelection.Add` |
-| 以为无效输入会抛异常 | 注册/释放全程静默：单节点返回 `bool`、集合返回实际新增/移除数、内部异常返回 `-1`；null / 未挂载 / 不在 `Nodes` / 无 `RuntimeId` 一律跳过 | `WorkflowAgentSelectionExtensions` 的 `try/catch` 与 `IsMounted` / `IWorkflowIdentifiable` 检查 |
+| 以为无效输入会抛异常 | 注册/释放全程静默：单节点返回 `bool`、集合返回实际新增/移除数、内部异常返回 `-1`；null / 未挂载 / 不在 `Nodes` / 无 `RuntimeId` 一律跳过 | `WorkflowAgentSelectionExtensions` 的 `try/catch` 与 `IsMounted` / `IRuntimeIdentifiable` 检查 |
 | 只为了移除一个节点就重新注册整个集合 | 并集不会移除已有的；要移除用 `DeselectForAgent`，节点自己释放即可，其余节点与顺序原样保留 | `WorkflowAgentSelectionExtensions.DeselectForAgent` |
-| 以为删除/重父后必须手动 `DeselectForAgent` | 选中时已订阅三条变更：`Parent` 的 `PropertyChanged`、父树 `Nodes.CollectionChanged`、helper 的 `IWorkflowNodeEvents.Deleted`；任一命中都会自动移除。`Nodes.Clear()` 与整条 `Nodes` 属性被替换也会清空。显式调用只用于宿主自己的取消选中 | `WorkflowAgentSelection.SyncSubscriptions` / `Observe` / `Unobserve` |
-| 在选中时写工作流上下文（加字段、改状态、改事件） | 选中只**观察**工作流，不写模型，也不改 `IWorkflow*ViewModel` 或 Core | 同上；`TreeObserver` 只持树的弱引用 |
+| 以为删除/重父后必须手动 `DeselectForAgent` | 选中时已订阅三条变更：`Parent` 的 `PropertyChanged`、父树 `Nodes.CollectionChanged`、helper 的 `INodeEvents.Deleted`；任一命中都会自动移除。`Nodes.Clear()` 与整条 `Nodes` 属性被替换也会清空。显式调用只用于宿主自己的取消选中 | `WorkflowAgentSelection.SyncSubscriptions` / `Observe` / `Unobserve` |
+| 在选中时写工作流上下文（加字段、改状态、改事件） | 选中只**观察**工作流，不写模型，也不改 `I*Component` 或 Core | 同上；`TreeObserver` 只持树的弱引用 |
 | 用 `node.Parent` 找树来移除 | 节点删除后 `Parent` 已经是 null；移除走反向表（节点 → 树的弱引用），所以删除后仍能自释放 | `WorkflowAgentSelection.Owners` / `Remove` |
 | 渲染时读 `node.Anchor` / 遍历 `tree.Nodes` | 上下文渲染可能跑在 agent 线程；遍历 UI 的 `ObservableCollection` 会与宿主编辑竞争。选中集在调用时取快照 | `WorkflowAgentSelection.cs` 的 `Set` / `Render` |
 | 把选中集做成全局单例 | 每个树一份；`ConditionalWeakTable` 随树释放 | `WorkflowAgentSelection.States` |
@@ -162,7 +162,7 @@
 
 ### F. 让选中的节点成为 Agent 的工作集
 
-1. 宿主在选中变化时调 `node.SelectForAgent()`（单选）或 `nodes.SelectForAgent()`（多选，传 `IReadOnlyCollection<IWorkflowNodeViewModel>`）；这是**并集**，重复注册不计数。要替换选中集，先 `tree.ClearAgentSelection()` 再注册。
+1. 宿主在选中变化时调 `node.SelectForAgent()`（单选）或 `nodes.SelectForAgent()`（多选，传 `IReadOnlyCollection<INodeComponent>`）；这是**并集**，重复注册不计数。要替换选中集，先 `tree.ClearAgentSelection()` 再注册。
 2. 释放单个/多个节点用 `node.DeselectForAgent()` / `nodes.DeselectForAgent()`；回到全图用 `tree.ClearAgentSelection()`；读当前选中集用 `tree.GetAgentSelection()`。删除、重父、从 `Nodes` 移除、`Nodes.Clear()`、整条 `Nodes` 替换、helper 的 `Deleted` 都会自动释放，不需要宿主补调。
 3. 返回值按 HashSet 语义：单节点 `bool`，集合 `int`（实际新增/移除数），内部异常 `-1`；不要期待无效输入抛异常。
 4. 不加工具、不 `BumpVersion`、不在渲染期读活模型、不为选中改工作流上下文 —— 见 §二·8。

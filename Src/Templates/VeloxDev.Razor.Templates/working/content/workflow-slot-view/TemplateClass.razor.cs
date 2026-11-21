@@ -21,11 +21,11 @@ public partial class TemplateClass : ComponentBase, IDisposable
 
     /// <summary>Gets or sets the slot rendered by this view.</summary>
     [Parameter]
-    public IWorkflowSlotViewModel? Slot { get; set; }
+    public ISlotComponent? Slot { get; set; }
 
     /// <summary>Gets or sets the workflow tree that owns connection gestures.</summary>
     [Parameter]
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     /// <summary>Gets or sets extra styles for the connection-behavior wrapper.</summary>
     [Parameter]
@@ -108,7 +108,7 @@ public partial class TemplateClass : ComponentBase, IDisposable
 
     private void OnSlotChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.State) or null or "")
+        if (e.PropertyName is nameof(ISlotComponent.State) or null or "")
         {
             InvokeAsync(StateHasChanged);
         }

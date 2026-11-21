@@ -17,7 +17,7 @@ public sealed class NodeResizeEventArgs : EventArgs
     /// <param name="from">Its current size.</param>
     /// <param name="to">The size it is going to.</param>
     /// <param name="handle">The handle for this action — the same instance the other phase carries.</param>
-    public NodeResizeEventArgs(IWorkflowNodeViewModel node, Size from, Size to, WorkflowEventHandle handle)
+    public NodeResizeEventArgs(INodeComponent node, Size from, Size to, WorkflowEventHandle handle)
     {
         Node = node;
         From = from;
@@ -26,7 +26,7 @@ public sealed class NodeResizeEventArgs : EventArgs
     }
 
     /// <summary>The node being resized.</summary>
-    public IWorkflowNodeViewModel Node { get; }
+    public INodeComponent Node { get; }
 
     /// <summary>Its current size.</summary>
     public Size From { get; }

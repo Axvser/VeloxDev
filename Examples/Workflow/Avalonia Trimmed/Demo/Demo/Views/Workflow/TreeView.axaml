@@ -26,7 +26,7 @@
 		</DataTemplate>
 
 		<!-- Link template -->
-		<DataTemplate x:Key="LinkTemplate" DataType="framework:IWorkflowLinkViewModel">
+		<DataTemplate x:Key="LinkTemplate" DataType="framework:ILinkComponent">
 			<local:LinkView StartLeft="{Binding Sender.Anchor.Horizontal}" StartTop="{Binding Sender.Anchor.Vertical}"
 							EndLeft="{Binding Receiver.Anchor.Horizontal}" EndTop="{Binding Receiver.Anchor.Vertical}"
 							ZIndex="-1"

@@ -10,5 +10,5 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// </summary>
 public sealed partial class ChainSegment : CompileSegment
 {
-    [VeloxProperty] private ObservableCollection<IWorkflowNodeViewModel> _nodes = [];
+    [VeloxProperty] private ObservableCollection<INodeComponent> _nodes = [];
 }

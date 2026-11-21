@@ -39,7 +39,7 @@ An adapter package brings `VeloxDev.Core` in transitively. Versions are delibera
 - Every component is a `partial` class split in two: a **ViewModel** holding identity, state and geometry, and a **Helper** holding behaviour. `[WorkflowBuilder.Node<MyNodeHelper>]` generates the ViewModel half; you write the helper.
 - **A slot channel says how many connections it accepts** — `OneTarget` / `OneSource` / `MultipleBoth` / … Validation happens on the **receiver** side only.
 - **A connection drag has a live preview.** `WorkflowInput.For(tree)` carries `ConnectionSender`, `PreviewReceiver`, `PreviewState` and `PreviewCheck`; the adapters feed the candidate slot on every pointer move, and the tree's `VirtualLink` (as `IConnectionPreviewLink`) publishes the stage a link view paints. `StandardCheckConnection(sender, receiver)` is the pure rule set behind it. `PreviewValidating` may tighten the framework's verdict for one drag: a host can turn a green candidate red, and the release-time decision stays unchanged.
-- **Every structural mutation is an undoable command** — create, connect, disconnect, delete and `SetSelector` build a `WorkflowActionPair` and go through `Submit`. That is how the undo stack and the GUI stay in step, and how an AI agent sees the same changes a mouse does.
+- **Every structural mutation is an undoable command** — create, connect, disconnect, delete and `SetSelector` build a `ActionPair` and go through `Submit`. That is how the undo stack and the GUI stay in step, and how an AI agent sees the same changes a mouse does.
 - **Anchor and Size getters return `Scale`-collapsed coordinates.** The fields store world coordinates; the getters return `world ÷ Scale`. This single fact explains most of the geometry traps in [references/pitfalls/geometry-and-viewport.md](references/pitfalls/geometry-and-viewport.md).
 - **A compiled fan-out runs concurrently.** The engine drives each branch with `Task.WhenAll`; each branch gets its own `BranchRuntimeContext` facade. Branches interleave at await points on the host's synchronization context, and `RuntimeContext.MaxParallelBranches` caps a group. [References/practices/execution.md](references/practices/execution.md#fan-out) carries the full model.
 
@@ -88,7 +88,7 @@ Open your GUI's reference alongside whichever of the above you are reading — i
 
 ⚙ **Send structural mutations through `Submit`.** `tree.SubmitCommand.Execute(pair)` or `tree.GetHelper().Submit(pair)` is what records an undo entry and notifies the tree's observers.
 
-⚙ **Treat `PreviewValidating` as advisory.** It runs for candidates the framework already accepts; `e.Reject(message)` reddens that candidate for this drag. The release-time `IWorkflowTreeEvents.Connecting` veto and `ValidateConnection` are the final decision.
+⚙ **Treat `PreviewValidating` as advisory.** It runs for candidates the framework already accepts; `e.Reject(message)` reddens that candidate for this drag. The release-time `ITreeEvents.Connecting` veto and `ValidateConnection` are the final decision.
 
 ⚙ **Turn virtualization on with `TreeHelper(cellSize)`.** The parameterless `TreeHelper` keeps virtualization off; the `cellSize` overload enables the spatial map and starts the `"TreeHelper"` tick loop.
 

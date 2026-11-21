@@ -49,7 +49,7 @@ public sealed class WorkflowLayoutBatch
     /// Gets the batch shared by everything that passes the same <paramref name="owner"/>, creating it on first use.
     /// </summary>
     /// <param name="owner">
-    /// The scope requests merge within — the <see cref="IWorkflowTreeViewModel"/> whose nodes share a UI thread, so a
+    /// The scope requests merge within — the <see cref="ITreeComponent"/> whose nodes share a UI thread, so a
     /// canvas' nodes all land in one batch. A view may pass itself when it has no tree yet; it then only merges with
     /// its own requests.
     /// </param>

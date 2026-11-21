@@ -30,7 +30,7 @@ public class CapabilityEnvelopeTests
     private static string Envelope(WorkflowAgentScope scope)
         => new WorkflowAgentContextProvider(scope).BuildContext().Instructions!;
 
-    private static WorkflowAgentScope Scope() => new(new TreeDefaultViewModel());
+    private static WorkflowAgentScope Scope() => new(new TreeDefaultComponent());
 
     /// <summary>Calls a tool by the name it reaches the model under, the way a host's run would.</summary>
     private static string Invoke(WorkflowAgentScope scope, string toolName, params (string Name, object? Value)[] args)
@@ -212,13 +212,13 @@ public class CapabilityEnvelopeTests
             + "any means — and the sanctioned route is the one the host built the tool for");
         StringAssert.Contains(boundaries, "going around", "while the thing it does forbid is the way round it");
 
-        var chinese = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var chinese = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithPromptLanguage(AgentLanguages.Chinese)
             .ProvideProgressiveContextPrompt();
         StringAssert.Contains(chinese, "宿主边界",
             "both corpora carry it, or half the hosts keep the policy that said nothing about this");
 
-        var planning = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var planning = new WorkflowAgentScope(new TreeDefaultComponent())
             .WithPermissionMode(AgentPermissionMode.Plan)
             .ProvideProgressiveContextPrompt();
         StringAssert.Contains(planning, "Host Boundaries",

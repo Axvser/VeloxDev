@@ -383,7 +383,7 @@ namespace VeloxDev.Generators.Writers
             var baseProvidesWorkflowMethods =
                 HasWorkflowAttributeInHierarchy(symbol.BaseType) ||
                 (symbol.BaseType != null &&
-                 ImplementsInterface(symbol.BaseType, "global::VeloxDev.WorkflowSystem.IWorkflowViewModel"));
+                 ImplementsInterface(symbol.BaseType, "global::VeloxDev.WorkflowSystem.IWorkflowComponent"));
             var requiresPublicWorkflowMethods = IsWorkflowComponent && !baseProvidesWorkflowMethods;
 
             _propertyChangingMethodDeclaration = BuildNotificationMethodDeclaration(
@@ -430,7 +430,7 @@ namespace VeloxDev.Generators.Writers
                         return string.Empty;
 
                     return
-                        $"void {NAMESPACE_VELOX_IWORKFLOW}.IWorkflowViewModel.{methodName}(string propertyName) => {methodName}(propertyName);";
+                        $"void {NAMESPACE_VELOX_IWORKFLOW}.IWorkflowComponent.{methodName}(string propertyName) => {methodName}(propertyName);";
                 }
 
                 if (stringMethod?.DeclaredAccessibility == Accessibility.Public)
@@ -697,7 +697,7 @@ namespace VeloxDev.Generators.Writers
             if (Symbol == null)
                 return false;
 
-            var slotBaseSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.SlotDefaultViewModel");
+            var slotBaseSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.SlotDefaultComponent");
             if (slotBaseSymbol == null)
                 return false;
 
@@ -774,10 +774,10 @@ namespace VeloxDev.Generators.Writers
 
             if (Symbol != null)
             {
-                treeInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowTreeViewModel");
-                nodeInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowNodeViewModel");
-                slotInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel");
-                linkInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowLinkViewModel");
+                treeInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.ITreeComponent");
+                nodeInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.INodeComponent");
+                slotInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.ISlotComponent");
+                linkInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.ILinkComponent");
             }
 
             var comparer = SymbolEqualityComparer.Default;
@@ -813,11 +813,11 @@ namespace VeloxDev.Generators.Writers
                 // 1) 显式 Node 特性
                 if (HasWorkflowNodeAttribute(current)) return true;
 
-                // 2) 检查当前类型是否直接实现 IWorkflowNodeViewModel（接口名或符号匹配）
+                // 2) 检查当前类型是否直接实现 INodeComponent（接口名或符号匹配）
                 foreach (var iface in current.Interfaces)
                 {
                     var ifaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    if (ifaceName.EndsWith("IWorkflowNodeViewModel") || iface.Name == "IWorkflowNodeViewModel")
+                    if (ifaceName.EndsWith("INodeComponent") || iface.Name == "INodeComponent")
                         return true;
                 }
 
@@ -825,7 +825,7 @@ namespace VeloxDev.Generators.Writers
                 foreach (var iface in current.AllInterfaces)
                 {
                     var ifaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                    if (ifaceName.EndsWith("IWorkflowNodeViewModel") || iface.Name == "IWorkflowNodeViewModel")
+                    if (ifaceName.EndsWith("INodeComponent") || iface.Name == "INodeComponent")
                         return true;
                 }
 
@@ -892,11 +892,11 @@ namespace VeloxDev.Generators.Writers
                 }
             }
 
-            // 2) 检查它是否实现 IWorkflowSlotViewModel 接口（先做符号比较）
+            // 2) 检查它是否实现 ISlotComponent 接口（先做符号比较）
             INamedTypeSymbol? slotInterface = null;
             if (Symbol != null)
             {
-                slotInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.IWorkflowSlotViewModel");
+                slotInterface = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.ISlotComponent");
             }
 
             if (slotInterface != null)
@@ -907,10 +907,10 @@ namespace VeloxDev.Generators.Writers
             else
             {
                 var fullName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                if (fullName == NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowSlotViewModel")
+                if (fullName == NAMESPACE_VELOX_IWORKFLOW + ".ISlotComponent")
                     return true;
 
-                if (typeSymbol.AllInterfaces.Any(i => i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_IWORKFLOW + ".IWorkflowSlotViewModel"))
+                if (typeSymbol.AllInterfaces.Any(i => i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == NAMESPACE_VELOX_IWORKFLOW + ".ISlotComponent"))
                     return true;
             }
 
@@ -969,9 +969,9 @@ namespace VeloxDev.Generators.Writers
         private bool HasWorkflowSlotInfrastructureMethods(INamedTypeSymbol symbol)
         {
             var methods = symbol.GetMembers().OfType<IMethodSymbol>().ToList();
-            return methods.Any(m => m.Name == "OnWorkflowSlotAdded" && !m.IsStatic && m.Parameters.Length == 1) &&
-                   methods.Any(m => m.Name == "OnWorkflowSlotRemoved" && !m.IsStatic && m.Parameters.Length == 1) &&
-                   methods.Any(m => m.Name == "CreateWorkflowSlot" && !m.IsStatic && m.IsGenericMethod);
+            return methods.Any(m => m.Name == "OnSlotComponentAdded" && !m.IsStatic && m.Parameters.Length == 1) &&
+                   methods.Any(m => m.Name == "OnSlotComponentRemoved" && !m.IsStatic && m.Parameters.Length == 1) &&
+                   methods.Any(m => m.Name == "CreateSlotComponent" && !m.IsStatic && m.IsGenericMethod);
         }
 
         private bool HasCollectionInfrastructureMethods(INamedTypeSymbol symbol)
@@ -1044,7 +1044,7 @@ namespace VeloxDev.Generators.Writers
                 string methodModifier = isSealed ? "" : "virtual ";
 
                 builder.AppendLine($$"""
-                        public {{methodModifier}}T CreateWorkflowSlot<T>() where T : class, {{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel
+                        public {{methodModifier}}T CreateSlotComponent<T>() where T : class, {{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent
                         {
                             try
                             {
@@ -1056,13 +1056,13 @@ namespace VeloxDev.Generators.Writers
                             catch
                             {
                             }
-                            return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotDefaultViewModel();
+                            return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotDefaultComponent();
                         }
-                        protected {{methodModifier}}void OnWorkflowSlotAdded({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot)
+                        protected {{methodModifier}}void OnSlotComponentAdded({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent slot)
                         {
                             CreateSlotCommand.Execute(slot);
                         }
-                        protected {{methodModifier}}void OnWorkflowSlotRemoved({{NAMESPACE_VELOX_IWORKFLOW}}.IWorkflowSlotViewModel slot)
+                        protected {{methodModifier}}void OnSlotComponentRemoved({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent slot)
                         {
                             slot?.DeleteCommand.Execute(null);
                         }

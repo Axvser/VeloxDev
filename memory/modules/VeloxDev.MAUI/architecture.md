@@ -23,7 +23,7 @@
 
 三条轴各自占用 Core 那一条命名空间：`VeloxDev.TransitionSystem`、`VeloxDev.WorkflowSystem.AttachedBehaviors`、`VeloxDev.DynamicTheme`。采样器是唯一例外，在 `VeloxDev.Adapters.NativeSamplers`。
 
-**`VeloxDev.WorkflowSystem.AttachedBehaviors` 嵌套在 Core 的 `VeloxDev.WorkflowSystem` 里面**，于是这些文件不写 `using VeloxDev.WorkflowSystem;` 也能直接用 `IWorkflowTreeViewModel`、`Viewport`、`WorkflowSurfaceMath`（全都声明在 `VeloxDev.WorkflowSystem`）。证据是 `WorkflowMinimapOverlay.cs`：它声明 `IWorkflowMinimapOverlay` 实现、`WorkflowTreeProperty` 的 `typeof(IWorkflowTreeViewModel)`、`WorkflowTree` 属性的 `IWorkflowTreeViewModel?`，**三处都是裸名**，而该文件的 using 里**根本没有 `using VeloxDev.WorkflowSystem;` 那一行** —— 它只有输入家族要求的两个别名（`Wf`、`WfAnchor`，见 [input-alias-specifications.md](../../specifications/input-alias-specifications.md)）。别名不引入命名空间，所以那几个裸名确实是靠命名空间嵌套解析的。
+**`VeloxDev.WorkflowSystem.AttachedBehaviors` 嵌套在 Core 的 `VeloxDev.WorkflowSystem` 里面**，于是这些文件不写 `using VeloxDev.WorkflowSystem;` 也能直接用 `ITreeComponent`、`Viewport`、`WorkflowSurfaceMath`（全都声明在 `VeloxDev.WorkflowSystem`）。证据是 `WorkflowMinimapOverlay.cs`：它声明 `IWorkflowMinimapOverlay` 实现、`WorkflowTreeProperty` 的 `typeof(ITreeComponent)`、`WorkflowTree` 属性的 `ITreeComponent?`，**三处都是裸名**，而该文件的 using 里**根本没有 `using VeloxDev.WorkflowSystem;` 那一行** —— 它只有输入家族要求的两个别名（`Wf`、`WfAnchor`，见 [input-alias-specifications.md](../../specifications/input-alias-specifications.md)）。别名不引入命名空间，所以那几个裸名确实是靠命名空间嵌套解析的。
 
 推论：
 

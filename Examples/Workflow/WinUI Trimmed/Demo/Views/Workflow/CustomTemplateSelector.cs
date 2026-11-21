@@ -22,13 +22,13 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
     protected override DataTemplate SelectTemplateCore(object item)
         => item switch
         {
-            IWorkflowLinkViewModel => LinkTemplate
+            ILinkComponent => LinkTemplate
                 ?? throw new InvalidOperationException("LinkTemplate is not set."),
-            IWorkflowSlotViewModel => SlotTemplate
+            ISlotComponent => SlotTemplate
                 ?? throw new InvalidOperationException("SlotTemplate is not set."),
-            IWorkflowNodeViewModel => NodeTemplate
+            INodeComponent => NodeTemplate
                 ?? throw new InvalidOperationException("NodeTemplate is not set."),
-            IWorkflowTreeViewModel => TreeTemplate
+            ITreeComponent => TreeTemplate
                 ?? throw new InvalidOperationException("TreeTemplate is not set."),
             _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")
         };

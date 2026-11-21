@@ -398,7 +398,7 @@ public sealed class WorkflowNodeRowsBehavior
             WorkflowSlotLayoutBehavior.Refresh(card);
         }
 
-        private Control CreateSlotView(IWorkflowSlotViewModel slot)
+        private Control CreateSlotView(ISlotComponent slot)
         {
             var view = SlotViewFactory?.Invoke() ?? InstantiateSlotView() ?? new Panel();
 
@@ -413,7 +413,7 @@ public sealed class WorkflowNodeRowsBehavior
             return view;
         }
 
-        private static bool TrySetSlotViewModel(Control view, IWorkflowSlotViewModel slot)
+        private static bool TrySetSlotViewModel(Control view, ISlotComponent slot)
         {
             var property = view.GetType().GetProperty("ViewModel", BindingFlags.Instance | BindingFlags.Public);
             if (property is null || !property.CanWrite || !property.PropertyType.IsInstanceOfType(slot))

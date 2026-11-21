@@ -10,8 +10,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <summary>
 /// Blazor analogue of the XAML adapters' <c>WorkflowNodeDragBehavior</c> attached property.
 /// Renders the wrapped node content as an absolutely-positioned element whose left/top/z-index
-/// track <see cref="IWorkflowNodeViewModel.Anchor"/>, and translates pointer drags into
-/// <see cref="IWorkflowNodeViewModel.MoveCommand"/> executions (world deltas), mirroring the
+/// track <see cref="INodeComponent.Anchor"/>, and translates pointer drags into
+/// <see cref="INodeComponent.MoveCommand"/> executions (world deltas), mirroring the
 /// WinForms implementation.
 /// </summary>
 public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
@@ -21,7 +21,7 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
 
     /// <summary>Gets or sets the node to render and move while dragging.</summary>
     [Parameter]
-    public IWorkflowNodeViewModel? Node { get; set; }
+    public INodeComponent? Node { get; set; }
 
     /// <summary>Gets or sets whether node dragging is enabled.</summary>
     [Parameter]
@@ -42,7 +42,7 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
     private IJSObjectReference? _module;
     private DotNetObjectReference<WorkflowNodeDragBehavior>? _dotNetRef;
     private IJSObjectReference? _handle;
-    private IWorkflowNodeViewModel? _subscribedNode;
+    private INodeComponent? _subscribedNode;
 
     // 指针拖拽本节点期间为真。拖拽中包装元素位置归 JS（即时、利于合成器），所以 Anchor 的 PropertyChanged 处理器在拖拽中不能重新定位或重渲染 —— 那会每帧把节点弹回陈旧的 .NET 值。
     private bool _isDragging;
@@ -88,7 +88,7 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor))
+        if (e.PropertyName is nameof(INodeComponent.Anchor))
         {
             // 缩放时每个节点的折叠由表面的 applyZoomSurface 同步盖章（与滚动/平移原子）；这里让位，避免逐节点 setNodePosition 抢先到浏览器、画出错位的包装元素。
             if (WorkflowGeometryScope.IsZooming)
@@ -102,7 +102,7 @@ public partial class WorkflowNodeDragBehavior : ComponentBase, IAsyncDisposable
                 SyncPosition();
             }
         }
-        else if (e.PropertyName is nameof(IWorkflowNodeViewModel.Size))
+        else if (e.PropertyName is nameof(INodeComponent.Size))
         {
             // 缩放中 JS 已重新盖章折叠后的卡片变换；这里再重渲染会用舍入不同的字节跟它打架。
             if (WorkflowGeometryScope.IsZooming)

@@ -151,7 +151,7 @@ public partial class LinkView : Control
         // The curve follows the endpoints, and the control is pooled: a rebound control must retract the old
         // link's curve before it publishes its own, or the old link answers the pointer at the new control.
         if (change.Property == DataContextProperty
-            && change.OldValue is IWorkflowLinkViewModel old && !ReferenceEquals(old, change.NewValue))
+            && change.OldValue is ILinkComponent old && !ReferenceEquals(old, change.NewValue))
         {
             old.PublishCurve(null);
         }
@@ -167,11 +167,11 @@ public partial class LinkView : Control
 
     // VeloxDev customization: 悬停高亮是本 demo 的。订**这条线自己的** Helper 就够了 —— 路由会告诉它指针
     // 什么时候进来、什么时候离开，这里不必再去比 target 是谁。视图比树活得短，改绑与摘树都要退订。
-    private IWorkflowLinkViewModel? _inputLink;
+    private ILinkComponent? _inputLink;
 
     private void ResubscribeInput()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         if (ReferenceEquals(link, _inputLink)) return;
 
         UnsubscribeInput();
@@ -202,14 +202,14 @@ public partial class LinkView : Control
     {
         if (e.Key != InputKey.Delete) return;
         if (e.Handle.PreventDefault) return;
-        if ((DataContext as IWorkflowLinkViewModel) is { } link && link.DeleteCommand.CanExecute(null)) link.DeleteCommand.Execute(null);
+        if ((DataContext as ILinkComponent) is { } link && link.DeleteCommand.CanExecute(null)) link.DeleteCommand.Execute(null);
     }
 
     // The one geometry build: it feeds both the drawn curve and the published hit-test curve, so the two can
     // never describe different shapes.
     private void RefreshGeometry()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         _curve = LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         link?.PublishCurve(_curve, this);
     }
@@ -228,7 +228,7 @@ public partial class LinkView : Control
             ? new Pen(brush, thickness) { DashStyle = new DashStyle([4.0, 2.0], 0) }
             : new Pen(brush, thickness);
 
-        var geometry = BuildCurve(DataContext as IWorkflowLinkViewModel);
+        var geometry = BuildCurve(DataContext as ILinkComponent);
 
         // Extension point: the halo painted under the line while highlighted. Widen or fade the pen here.
         if (IsHighlighted)
@@ -242,7 +242,7 @@ public partial class LinkView : Control
 
     // Extension point: the control points set the curve's shape. Core derives them from each port's own edge
     // (LinkCurve.LinkCurvePoints) — keep that source if you replace the drawing.
-    private StreamGeometry BuildCurve(IWorkflowLinkViewModel? link)
+    private StreamGeometry BuildCurve(ILinkComponent? link)
     {
         var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         var geometry = new StreamGeometry();
@@ -260,7 +260,7 @@ public partial class LinkView : Control
 
     private bool IsVirtualLink
         => IsVirtual
-            || DataContext is IWorkflowLinkViewModel
+            || DataContext is ILinkComponent
             {
                 Sender.Parent: null,
                 Receiver.Parent: null

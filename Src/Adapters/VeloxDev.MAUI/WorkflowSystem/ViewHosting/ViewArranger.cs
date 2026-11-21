@@ -18,7 +18,7 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// per-link view draws.
 /// </para>
 /// </remarks>
-public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, View>, IDisposable
+public sealed class ViewArranger : IViewArranger<IWorkflowComponent, View>, IDisposable
 {
     private readonly Layout _host;
     private readonly Dictionary<View, Arrangement> _arrangements = new(ViewReferenceComparer.Instance);
@@ -32,7 +32,7 @@ public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, View>, IDis
     }
 
     /// <inheritdoc />
-    public void Arrange(View view, IWorkflowViewModel item)
+    public void Arrange(View view, IWorkflowComponent item)
     {
         if (!_arrangements.TryGetValue(view, out var arrangement))
         {
@@ -74,7 +74,7 @@ public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, View>, IDis
         }
     }
 
-    private void Apply(View view, IWorkflowViewModel item)
+    private void Apply(View view, IWorkflowComponent item)
     {
         if (_host is not AbsoluteLayout)
         {
@@ -83,7 +83,7 @@ public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, View>, IDis
 
         switch (item)
         {
-            case IWorkflowNodeViewModel node:
+            case INodeComponent node:
                 AbsoluteLayout.SetLayoutFlags(view, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
                 AbsoluteLayout.SetLayoutBounds(view, new Rect(
                     node.Anchor.Horizontal,
@@ -92,7 +92,7 @@ public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, View>, IDis
                     Math.Max(1, node.Size.Height)));
                 break;
 
-            case IWorkflowLinkViewModel:
+            case ILinkComponent:
                 // 连线盒子归链接层/每线视图；这里写回会覆盖它，画布局部坐标为负时几何会被整段裁掉。
                 break;
 
@@ -107,12 +107,12 @@ public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, View>, IDis
         }
     }
 
-    private static bool AffectsLayout(IWorkflowViewModel item, string? propertyName)
+    private static bool AffectsLayout(IWorkflowComponent item, string? propertyName)
         => item switch
         {
-            IWorkflowNodeViewModel => propertyName is nameof(IWorkflowNodeViewModel.Anchor)
-                or nameof(IWorkflowNodeViewModel.Size),
-            IWorkflowSlotViewModel => propertyName is nameof(IWorkflowSlotViewModel.Anchor),
+            INodeComponent => propertyName is nameof(INodeComponent.Anchor)
+                or nameof(INodeComponent.Size),
+            ISlotComponent => propertyName is nameof(ISlotComponent.Anchor),
             _ => false,
         };
 
@@ -137,11 +137,11 @@ public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, View>, IDis
             _view = view;
         }
 
-        public IWorkflowViewModel? Item { get; private set; }
+        public IWorkflowComponent? Item { get; private set; }
 
         public bool LayoutQueued { get; set; }
 
-        public void Bind(IWorkflowViewModel item)
+        public void Bind(IWorkflowComponent item)
         {
             if (ReferenceEquals(Item, item))
             {

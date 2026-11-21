@@ -7,7 +7,7 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>
 /// [ Component Helper ] Provide standard supports for Node Component
 /// </summary>
-public class NodeHelper : NodeHelper<IWorkflowNodeViewModel>
+public class NodeHelper : NodeHelper<INodeComponent>
 {
 
 }
@@ -16,8 +16,8 @@ public class NodeHelper : NodeHelper<IWorkflowNodeViewModel>
 /// [ Component Helper ] Provide standard supports for Node Component
 /// </summary>
 /// <typeparam name="T"> The type of the Node ViewModel that this helper is designed for. </typeparam>
-public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, IInputEvents, IConditionalSlotProviders
-    where T : class, IWorkflowNodeViewModel
+public class NodeHelper<T> : INodeHelper, INodeEvents, IInputEvents, IConditionalSlotProviders
+    where T : class, INodeComponent
 {
     /// <summary>The node this helper is installed on, when it matches <typeparamref name="T"/>.</summary>
     public T? Component { get; protected set; }
@@ -30,19 +30,19 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, 
     public IList<IConditionalSlotProvider> Providers { get; } = [];
 
     /// <inheritdoc />
-    public event EventHandler<IWorkflowSlotViewModel>? SlotAdded;
+    public event EventHandler<ISlotComponent>? SlotAdded;
     /// <inheritdoc />
-    public event EventHandler<IWorkflowSlotViewModel>? SlotRemoved;
+    public event EventHandler<ISlotComponent>? SlotRemoved;
 
     /// <inheritdoc />
-    public virtual void Install(IWorkflowNodeViewModel node)
+    public virtual void Install(INodeComponent node)
     {
         Component = node as T;
         commands = node.GetStandardCommands();
         node.Slots.CollectionChanged += OnSlotsChanged;
     }
     /// <inheritdoc />
-    public virtual void Uninstall(IWorkflowNodeViewModel node)
+    public virtual void Uninstall(INodeComponent node)
     {
         Component = null;
         commands = [];
@@ -55,7 +55,7 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, 
     /// <inheritdoc />
     public virtual void Closed() => commands.StandardClosed();
     /// <inheritdoc />
-    public virtual void CreateSlot(IWorkflowSlotViewModel slot) => Component?.StandardCreateSlot(slot);
+    public virtual void CreateSlot(ISlotComponent slot) => Component?.StandardCreateSlot(slot);
 
     /// <inheritdoc />
     public virtual async Task BroadcastAsync(
@@ -194,7 +194,7 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, 
                 if (e.NewItems is null) return;
                 foreach (var item in e.NewItems)
                 {
-                    if (item is IWorkflowSlotViewModel slot)
+                    if (item is ISlotComponent slot)
                     {
                         OnSlotAdded(slot);
                     }
@@ -204,7 +204,7 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, 
                 if (e.OldItems is null) return;
                 foreach (var item in e.OldItems)
                 {
-                    if (item is IWorkflowSlotViewModel slot)
+                    if (item is ISlotComponent slot)
                     {
                         OnSlotRemoved(slot);
                     }
@@ -213,7 +213,7 @@ public class NodeHelper<T> : IWorkflowNodeViewModelHelper, IWorkflowNodeEvents, 
         }
     }
     /// <summary>Raises <see cref="SlotAdded"/>.</summary>
-    protected virtual void OnSlotAdded(IWorkflowSlotViewModel slot) => SlotAdded?.Invoke(Component, slot);
+    protected virtual void OnSlotAdded(ISlotComponent slot) => SlotAdded?.Invoke(Component, slot);
     /// <summary>Raises <see cref="SlotRemoved"/>.</summary>
-    protected virtual void OnSlotRemoved(IWorkflowSlotViewModel slot) => SlotRemoved?.Invoke(Component, slot);
+    protected virtual void OnSlotRemoved(ISlotComponent slot) => SlotRemoved?.Invoke(Component, slot);
 }

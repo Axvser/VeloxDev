@@ -30,7 +30,7 @@ public abstract class KeyEventArgs : EventArgs
     /// <param name="handle">The handle for this action, shared with the whole route.</param>
     protected KeyEventArgs(
         InputKey key, int rawKeyCode, InputModifiers modifiers, bool isRepeat,
-        object? source, IWorkflowViewModel? target, WorkflowEventHandle handle)
+        object? source, IWorkflowComponent? target, WorkflowEventHandle handle)
     {
         Key = key;
         RawKeyCode = rawKeyCode;
@@ -67,7 +67,7 @@ public abstract class KeyEventArgs : EventArgs
     public object? Source { get; }
 
     /// <summary>The component the adapter applies this key to, or <see langword="null"/> when none applies.</summary>
-    public IWorkflowViewModel? Target { get; }
+    public IWorkflowComponent? Target { get; }
 
     /// <summary>
     /// The handle for this action. <see cref="WorkflowEventHandle.PreventDefault"/> suppresses the framework's own

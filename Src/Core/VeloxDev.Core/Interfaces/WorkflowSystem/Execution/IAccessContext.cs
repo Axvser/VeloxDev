@@ -4,7 +4,7 @@ namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
 /// The dedicated contract for the dataflow access context — the parameter of
-/// <see cref="IWorkflowNodeViewModelHelper.AccessAsync"/>, describing one dataflow access from "sender → receiver"
+/// <see cref="INodeHelper.AccessAsync"/>, describing one dataflow access from "sender → receiver"
 /// (a directed data edge and its phase). The payload <see cref="IContext.Data"/> is inherited from the root
 /// contract (always null at compile-time). Both the compile phase
 /// (<see cref="VeloxDev.Core.WorkflowSystem.CompilerEx.ICompileContext"/>) and the runtime phase
@@ -24,10 +24,10 @@ public interface IAccessContext : IContext
     /// <summary>Sender output slot (upstream), nullable.</summary>
     [AgentContext(AgentLanguages.Chinese, "发送端输出槽（上游），可为空")]
     [AgentContext(AgentLanguages.English, "Sender output slot (upstream), nullable")]
-    IWorkflowSlotViewModel? Sender { get; }
+    ISlotComponent? Sender { get; }
 
     /// <summary>Receiver input slot (downstream), nullable.</summary>
     [AgentContext(AgentLanguages.Chinese, "接收端输入槽（下游），可为空")]
     [AgentContext(AgentLanguages.English, "Receiver input slot (downstream), nullable")]
-    IWorkflowSlotViewModel? Receiver { get; }
+    ISlotComponent? Receiver { get; }
 }

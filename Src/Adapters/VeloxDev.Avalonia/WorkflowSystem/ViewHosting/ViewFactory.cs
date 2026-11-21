@@ -8,7 +8,7 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Resolves an Avalonia view for one workflow item and caches the template by runtime type.</summary>
-public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, Control>
+public sealed class ViewFactory : IViewFactory<IWorkflowComponent, Control>
 {
     private readonly Panel _panel;
     private readonly IDataTemplate? _templateSelector;
@@ -25,10 +25,10 @@ public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, Control>
     }
 
     /// <inheritdoc />
-    public bool WantsItem(IWorkflowViewModel item) => true;
+    public bool WantsItem(IWorkflowComponent item) => true;
 
     /// <inheritdoc />
-    public Control? CreateView(IWorkflowViewModel item)
+    public Control? CreateView(IWorkflowComponent item)
     {
         if (!FindTemplate(item, out var template))
         {

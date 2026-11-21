@@ -101,7 +101,7 @@ The archive is exactly what the library's serializer produced. Dependencies are 
 
 - `rootType` is needed when the document was serialized through a derived tree's own type. The serializer
   writes `$type` only when the runtime type differs from the declared one, so `treeViewModel.Serialize()` leaves
-  no root marker; without this field the CLI reads the graph into `TreeDefaultViewModel`. `--root-type` overrides
+  no root marker; without this field the CLI reads the graph into `TreeDefaultComponent`. `--root-type` overrides
   the manifest. A derived tree's constructor still runs — a tree that expects a host service (an agent, a UI) is
   not automatically headless-ready.
 - Assembly paths are resolved relative to the manifest and may not escape its directory.
@@ -270,5 +270,5 @@ the worker can agree on.
   reported as warnings, not isolated. There is no per-plugin `AssemblyLoadContext` and no signature check.
 - **A derived tree brings its constructor.** If the root type builds services in its constructor — the demo
   `TreeViewModel` installs an `AgentHelper` — those services and their assemblies must be in the archive's
-  dependency closure, and they must be able to run headless. A plain `TreeDefaultViewModel` archive does not
+  dependency closure, and they must be able to run headless. A plain `TreeDefaultComponent` archive does not
   have this constraint.

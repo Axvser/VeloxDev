@@ -14,9 +14,9 @@ namespace VeloxDev.Core.Test.WorkflowSystem;
 [TestClass]
 public sealed class ModelEventTests
 {
-    private static IWorkflowNodeViewModel NodeIn(TreeHolder holder, double x = 0, double y = 0, int layer = 0)
+    private static INodeComponent NodeIn(TreeHolder holder, double x = 0, double y = 0, int layer = 0)
     {
-        var node = new NodeDefaultViewModel { Parent = holder.Tree, Anchor = new Anchor(x, y, layer) };
+        var node = new NodeDefaultComponent { Parent = holder.Tree, Anchor = new Anchor(x, y, layer) };
         holder.Tree.Nodes.Add(node);
         return node;
     }
@@ -28,7 +28,7 @@ public sealed class ModelEventTests
     {
         var holder = new TreeHolder();
         var node = NodeIn(holder, 10, 20);
-        ((IWorkflowNodeEvents)node.GetHelper()).Moving += (_, e) => e.Handle.PreventDefault = true;
+        ((INodeEvents)node.GetHelper()).Moving += (_, e) => e.Handle.PreventDefault = true;
 
         node.MoveCommand.Execute(new Offset(5, 5));
 
@@ -44,8 +44,8 @@ public sealed class ModelEventTests
         var node = NodeIn(holder, 10, 20, layer: 7);
         NodeMoveEventArgs? moving = null;
         NodeMoveEventArgs? moved = null;
-        ((IWorkflowNodeEvents)node.GetHelper()).Moving += (_, e) => moving = e;
-        ((IWorkflowNodeEvents)node.GetHelper()).Moved += (_, e) => moved = e;
+        ((INodeEvents)node.GetHelper()).Moving += (_, e) => moving = e;
+        ((INodeEvents)node.GetHelper()).Moved += (_, e) => moved = e;
 
         node.MoveCommand.Execute(new Offset(5, -3));
 
@@ -69,8 +69,8 @@ public sealed class ModelEventTests
         var holder = new TreeHolder();
         var node = NodeIn(holder, 10, 20);
         var moved = 0;
-        ((IWorkflowNodeEvents)node.GetHelper()).Moving += (_, e) => e.Handle.StopPropagation = true;
-        ((IWorkflowNodeEvents)node.GetHelper()).Moved += (_, _) => moved++;
+        ((INodeEvents)node.GetHelper()).Moving += (_, e) => e.Handle.StopPropagation = true;
+        ((INodeEvents)node.GetHelper()).Moved += (_, _) => moved++;
 
         node.MoveCommand.Execute(new Offset(5, 5));
 
@@ -87,7 +87,7 @@ public sealed class ModelEventTests
         var node = NodeIn(holder);
         node.Size = new Size { Width = 100, Height = 50 };
         NodeResizeEventArgs? resizing = null;
-        ((IWorkflowNodeEvents)node.GetHelper()).Resizing += (_, e) =>
+        ((INodeEvents)node.GetHelper()).Resizing += (_, e) =>
         {
             resizing = e;
             e.Handle.PreventDefault = true;
@@ -108,7 +108,7 @@ public sealed class ModelEventTests
     {
         var holder = new TreeHolder();
         var node = NodeIn(holder);
-        ((IWorkflowNodeEvents)node.GetHelper()).Deleting += (_, e) => e.Handle.PreventDefault = true;
+        ((INodeEvents)node.GetHelper()).Deleting += (_, e) => e.Handle.PreventDefault = true;
 
         node.DeleteCommand.Execute(null);
 
@@ -121,7 +121,7 @@ public sealed class ModelEventTests
         var holder = new TreeHolder();
         var node = NodeIn(holder);
         var deleted = 0;
-        ((IWorkflowNodeEvents)node.GetHelper()).Deleted += (_, _) => deleted++;
+        ((INodeEvents)node.GetHelper()).Deleted += (_, _) => deleted++;
 
         node.DeleteCommand.Execute(null);
 
@@ -136,11 +136,11 @@ public sealed class ModelEventTests
     {
         var holder = new TreeHolder();
         var node = NodeIn(holder);
-        var slot = new SlotDefaultViewModel { Parent = node };
+        var slot = new SlotDefaultComponent { Parent = node };
         node.Slots.Add(slot);
         var before = slot.Channel;
         SlotChannelEventArgs? changing = null;
-        ((IWorkflowSlotEvents)slot.GetHelper()).ChannelChanging += (_, e) =>
+        ((ISlotEvents)slot.GetHelper()).ChannelChanging += (_, e) =>
         {
             changing = e;
             e.Handle.PreventDefault = true;
@@ -162,13 +162,13 @@ public sealed class ModelEventTests
         var holder = new TreeHolder();
         var a = NodeIn(holder);
         var b = NodeIn(holder, 200, 0);
-        var sa = new SlotDefaultViewModel { Parent = a };
-        var sb = new SlotDefaultViewModel { Parent = b };
+        var sa = new SlotDefaultComponent { Parent = a };
+        var sb = new SlotDefaultComponent { Parent = b };
         a.Slots.Add(sa);
         b.Slots.Add(sb);
 
         ConnectionEventArgs? connecting = null;
-        ((IWorkflowTreeEvents)holder.Tree.GetHelper()).Connecting += (_, e) =>
+        ((ITreeEvents)holder.Tree.GetHelper()).Connecting += (_, e) =>
         {
             connecting = e;
             e.Handle.PreventDefault = true;
@@ -189,12 +189,12 @@ public sealed class ModelEventTests
         var holder = new TreeHolder();
         var a = NodeIn(holder);
         var b = NodeIn(holder, 200, 0);
-        var sa = new SlotDefaultViewModel { Parent = a };
-        var sb = new SlotDefaultViewModel { Parent = b };
+        var sa = new SlotDefaultComponent { Parent = a };
+        var sb = new SlotDefaultComponent { Parent = b };
         a.Slots.Add(sa);
         b.Slots.Add(sb);
         var connected = 0;
-        ((IWorkflowTreeEvents)holder.Tree.GetHelper()).Connected += (_, _) => connected++;
+        ((ITreeEvents)holder.Tree.GetHelper()).Connected += (_, _) => connected++;
 
         holder.Tree.GetHelper().SendConnection(sa);
         holder.Tree.GetHelper().ReceiveConnection(sb);
@@ -206,6 +206,6 @@ public sealed class ModelEventTests
     // 一颗树，用于把节点挂上去（节点的 Parent 就是它）。
     private sealed class TreeHolder
     {
-        public TreeDefaultViewModel Tree { get; } = new();
+        public TreeDefaultComponent Tree { get; } = new();
     }
 }

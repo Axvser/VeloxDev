@@ -16,7 +16,7 @@ public sealed class PointerReleasedEventArgs : PointerEventArgs
     /// <param name="clickCount">How many clicks the gesture that just ended had.</param>
     /// <param name="handle">The handle for this action.</param>
     public PointerReleasedEventArgs(
-        Anchor position, InputModifiers modifiers, object? source, IWorkflowViewModel? target,
+        Anchor position, InputModifiers modifiers, object? source, IWorkflowComponent? target,
         MouseButton button, int clickCount, WorkflowEventHandle handle)
         : base(position, modifiers, source, target, handle)
     {

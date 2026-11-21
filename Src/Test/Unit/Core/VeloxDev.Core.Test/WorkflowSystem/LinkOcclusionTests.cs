@@ -26,7 +26,7 @@ public sealed class LinkOcclusionTests
     public void MovingTheCardAway_GivesTheHitBack()
     {
         var (tree, link) = Scene();
-        var card = (IWorkflowNodeViewModel)tree.GetHelper().VisibleItems[0];
+        var card = (INodeComponent)tree.GetHelper().VisibleItems[0];
 
         card.Anchor = new Anchor(0, -400, 0);
 
@@ -55,19 +55,19 @@ public sealed class LinkOcclusionTests
     }
 
     // 场景：一条从 (0,0) 到 (100,0) 的线，两端各一张卡；左边那张卡**盖住线的前半段**。
-    private static (IWorkflowTreeViewModel Tree, IWorkflowLinkViewModel Link) Scene()
+    private static (ITreeComponent Tree, ILinkComponent Link) Scene()
     {
-        var left = new NodeDefaultViewModel { Anchor = new Anchor(0, 0, 0), Size = new Size { Width = 60, Height = 40 } };
-        var right = new NodeDefaultViewModel { Anchor = new Anchor(100, 0, 0), Size = new Size { Width = 60, Height = 40 } };
-        var sender = new SlotDefaultViewModel { Parent = left, Anchor = new Anchor(0, 0, 0) };
-        var receiver = new SlotDefaultViewModel { Parent = right, Anchor = new Anchor(100, 0, 0) };
+        var left = new NodeDefaultComponent { Anchor = new Anchor(0, 0, 0), Size = new Size { Width = 60, Height = 40 } };
+        var right = new NodeDefaultComponent { Anchor = new Anchor(100, 0, 0), Size = new Size { Width = 60, Height = 40 } };
+        var sender = new SlotDefaultComponent { Parent = left, Anchor = new Anchor(0, 0, 0) };
+        var receiver = new SlotDefaultComponent { Parent = right, Anchor = new Anchor(100, 0, 0) };
         left.Slots.Add(sender);
         right.Slots.Add(receiver);
 
-        var link = new LinkDefaultViewModel { Sender = sender, Receiver = receiver, IsVisible = true };
+        var link = new LinkDefaultComponent { Sender = sender, Receiver = receiver, IsVisible = true };
         link.PublishCurve(LinkCurve.BuildCubic(0, 0, 100, 0, 40));
 
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var visible = tree.GetHelper().VisibleItems;
         visible.Clear();
         visible.Add(left);

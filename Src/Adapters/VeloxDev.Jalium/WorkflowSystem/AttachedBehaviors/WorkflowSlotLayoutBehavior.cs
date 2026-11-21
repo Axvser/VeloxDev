@@ -15,7 +15,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is where a slot's <see cref="IWorkflowSlotViewModel.Anchor"/> comes from. The template names the controls
+/// This is where a slot's <see cref="ISlotComponent.Anchor"/> comes from. The template names the controls
 /// that hold slots — one name per control in <see cref="SlotNamesProperty"/>, one per
 /// <see cref="ItemsControl"/> in <see cref="SlotEnumeratorNamesProperty"/> — and this behavior finds them, reads
 /// the slot each one is bound to from its <see cref="FrameworkElement.DataContext"/>, measures its centre and
@@ -280,7 +280,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     private static void RequestSync(FrameworkElement control)
     {
         if (control.GetValue(StateProperty) is null
-            || control.DataContext is not IWorkflowNodeViewModel node)
+            || control.DataContext is not INodeComponent node)
         {
             return;
         }
@@ -298,11 +298,11 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
     private static void CancelSync(FrameworkElement control)
     {
-        object owner = control.DataContext is IWorkflowNodeViewModel { Parent: { } tree } ? tree : control;
+        object owner = control.DataContext is INodeComponent { Parent: { } tree } ? tree : control;
         WorkflowLayoutBatch.For(owner).Cancel(control);
     }
 
-    private static object OwnerOf(FrameworkElement control, IWorkflowNodeViewModel node)
+    private static object OwnerOf(FrameworkElement control, INodeComponent node)
         => node.Parent ?? (object)control;
 
     private static void Sync(FrameworkElement host)
@@ -312,7 +312,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             return;
         }
 
-        if (host.DataContext is not IWorkflowNodeViewModel node)
+        if (host.DataContext is not INodeComponent node)
         {
             return;
         }
@@ -350,8 +350,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     private static void RebuildWatchedNames(LayoutState state, IEnumerable<string> slotNames, IEnumerable<string> enumeratorNames)
     {
         state.SlotPropertyNames.Clear();
-        state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
-        state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
+        state.SlotPropertyNames.Add(nameof(INodeComponent.Anchor));
+        state.SlotPropertyNames.Add(nameof(INodeComponent.Size));
 
         foreach (var name in slotNames)
         {
@@ -379,7 +379,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     private static void SyncSlotEnumerator(
         FrameworkElement host,
         FrameworkElement? coordinateHost,
-        IWorkflowNodeViewModel node,
+        INodeComponent node,
         string enumeratorName)
     {
         if (host.FindName(enumeratorName) is not ItemsControl itemsControl || itemsControl.Items.Count == 0)
@@ -405,9 +405,9 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         FrameworkElement host,
         FrameworkElement? coordinateHost,
         FrameworkElement control,
-        IWorkflowNodeViewModel node)
+        INodeComponent node)
     {
-        if (control.DataContext is not IWorkflowSlotViewModel slot)
+        if (control.DataContext is not ISlotComponent slot)
         {
             return;
         }
@@ -518,7 +518,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
                 continue;
             }
 
-            if (child is FrameworkElement { DataContext: IWorkflowSlotViewModel } element)
+            if (child is FrameworkElement { DataContext: ISlotComponent } element)
             {
                 return element;
             }

@@ -28,7 +28,7 @@ public interface IWorkflowTreeValidator
     /// Returns the issues found in <paramref name="tree"/>. An empty sequence means the domain checks passed.
     /// </summary>
     /// <param name="tree">The live tree; read only.</param>
-    IEnumerable<WorkflowValidationIssue> Validate(IWorkflowTreeViewModel tree);
+    IEnumerable<WorkflowValidationIssue> Validate(ITreeComponent tree);
 }
 
 /// <summary>One domain validation finding, reported beside the toolkit's structural records.</summary>

@@ -16,8 +16,8 @@ internal sealed class ViewLayoutTracker
 
     internal void Track(
         FrameworkElement view,
-        IWorkflowViewModel item,
-        Action<FrameworkElement, IWorkflowViewModel> arrange)
+        IWorkflowComponent item,
+        Action<FrameworkElement, IWorkflowComponent> arrange)
     {
         Release(view);
         if (item is not INotifyPropertyChanged notify)
@@ -62,11 +62,11 @@ internal sealed class ViewLayoutTracker
     }
 
     private static bool IsLayoutProperty(string? propertyName)
-        => propertyName is nameof(IWorkflowNodeViewModel.Anchor)
-            or nameof(IWorkflowNodeViewModel.Size)
-            or nameof(IWorkflowLinkViewModel.Sender)
-            or nameof(IWorkflowLinkViewModel.Receiver)
-            or nameof(IWorkflowSlotViewModel.Anchor);
+        => propertyName is nameof(INodeComponent.Anchor)
+            or nameof(INodeComponent.Size)
+            or nameof(ILinkComponent.Sender)
+            or nameof(ILinkComponent.Receiver)
+            or nameof(ISlotComponent.Anchor);
 
     private sealed record Entry(INotifyPropertyChanged Source, PropertyChangedEventHandler Handler);
 

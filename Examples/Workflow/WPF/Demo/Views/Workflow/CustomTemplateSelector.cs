@@ -22,7 +22,7 @@ namespace Demo.Views.Workflow
                 EnumSelectorNodeViewModel => EnumSelector ?? throw new ArgumentNullException($"Failed to find the [ {EnumSelector} ] template"),
                 TimerNodeViewModel => Timer ?? throw new ArgumentNullException($"Failed to find the [ {Timer} ] template"),
                 PythonScriptNodeViewModel => Python ?? throw new ArgumentNullException($"Failed to find the [ {Python} ] template"),
-                IWorkflowLinkViewModel => Link ?? throw new ArgumentNullException($"Failed to find the [ {Link} ] template"),
+                ILinkComponent => Link ?? throw new ArgumentNullException($"Failed to find the [ {Link} ] template"),
                 _ => Simulator ?? throw new ArgumentNullException($"Failed to find the [ {Simulator} ] template")
             };
         }

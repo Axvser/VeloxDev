@@ -17,7 +17,7 @@ public readonly record struct CompiledOutlineRow(
     int Depth,
     string Kind,
     string Label,
-    IReadOnlyList<IWorkflowNodeViewModel> Nodes);
+    IReadOnlyList<INodeComponent> Nodes);
 
 /// <summary>
 /// Flattens a compiled graph into a list anyone can bind.
@@ -91,7 +91,7 @@ public static class CompiledOutline
             : $"'{option.Label}' → {Summarize(option.Graph)}";
 
     /// <summary>A branch line names its router; the options name their own keys.</summary>
-    private static IReadOnlyList<IWorkflowNodeViewModel> Named(BranchSegment branch)
+    private static IReadOnlyList<INodeComponent> Named(BranchSegment branch)
         => branch.Router is null ? [] : [branch.Router];
 
     private static string Summarize(CompiledGraph? graph)
@@ -104,7 +104,7 @@ public static class CompiledOutline
         return $"{graph.Entries.Count} segments";
     }
 
-    private static IEnumerable<string> NamesOf(IReadOnlyList<IWorkflowNodeViewModel> nodes)
+    private static IEnumerable<string> NamesOf(IReadOnlyList<INodeComponent> nodes)
     {
         for (int i = 0; i < nodes.Count; i++) yield return nodes[i].GetType().Name;
     }

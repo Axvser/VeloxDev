@@ -41,7 +41,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <see cref="InteractionSource"/> — a view that is already on the surface's input path — and the hit test is
 /// geometric, walking each drawn curve's sample table: a link was never a view, so no platform hit test can
 /// see it, and the drawn body is the only thing that answers. <c>Delete</c> removes the hovered link through
-/// <see cref="IWorkflowLinkViewModel.DeleteCommand"/>, and a right press — or, off Windows, a long press —
+/// <see cref="ILinkComponent.DeleteCommand"/>, and a right press — or, off Windows, a long press —
 /// is forwarded to the input route so the host surface can open its own menu.
 /// </para>
 /// <para>
@@ -58,7 +58,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private static readonly Color DefaultWhite = Color.FromArgb("#DDFFFFFF");
 
     public static readonly BindableProperty WorkflowTreeProperty = BindableProperty.Create(
-        nameof(WorkflowTree), typeof(IWorkflowTreeViewModel), typeof(WorkflowLinkOverlay), null,
+        nameof(WorkflowTree), typeof(ITreeComponent), typeof(WorkflowLinkOverlay), null,
         propertyChanged: OnWorkflowTreeChanged);
 
     public static readonly BindableProperty ScrollOffsetXProperty = BindableProperty.Create(
@@ -105,10 +105,10 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     public static readonly BindableProperty InteractionSourceProperty = BindableProperty.Create(
         nameof(InteractionSource), typeof(View), typeof(WorkflowLinkOverlay), null, propertyChanged: OnInteractionSourceChanged);
 
-    private IWorkflowTreeViewModel? _tree;
-    private IWorkflowLinkViewModel? _virtualLink;
-    private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
-    private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
+    private ITreeComponent? _tree;
+    private ILinkComponent? _virtualLink;
+    private readonly HashSet<INodeComponent> _subscribedNodes = [];
+    private readonly HashSet<ILinkComponent> _subscribedLinks = [];
     private bool _invalidatePending;
 
     private double _bandCentre;
@@ -181,7 +181,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         };
     }
 
-    public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
+    public ITreeComponent? WorkflowTree { get => (ITreeComponent?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
     public double ScrollOffsetX { get => (double)GetValue(ScrollOffsetXProperty); set => SetValue(ScrollOffsetXProperty, value); }
     public double ScrollOffsetY { get => (double)GetValue(ScrollOffsetYProperty); set => SetValue(ScrollOffsetYProperty, value); }
     public double ContentOffsetX { get => (double)GetValue(ContentOffsetXProperty); set => SetValue(ContentOffsetXProperty, value); }
@@ -661,7 +661,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     // 指针进来时统一在这里翻译：被指到的线由共享的曲线命中判出来，事件交给输入路由。
     // 返回这一笔的句柄 —— 订阅者说「这一次不要框架那一手」的地方；丢掉句柄，否决就没人读。
     private WorkflowEventHandle RoutePointer(
-        Point point, Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
+        Point point, Func<Anchor, IWorkflowComponent?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         var handle = new WorkflowEventHandle();
         if (_input is not { } input) return handle;
@@ -1163,7 +1163,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     {
         if (bindable is WorkflowLinkOverlay overlay)
         {
-            overlay.AttachTree(newValue as IWorkflowTreeViewModel);
+            overlay.AttachTree(newValue as ITreeComponent);
             overlay.ScheduleInvalidate();
         }
     }
@@ -1178,7 +1178,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     // ── 模型订阅（沿用已被取代的 LinkLayerView 模式）───────────────────────
 
-    private void AttachTree(IWorkflowTreeViewModel? tree)
+    private void AttachTree(ITreeComponent? tree)
     {
         if (ReferenceEquals(_tree, tree))
         {
@@ -1200,7 +1200,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     // 交互归 Core：本层只做两件平台的事 —— 把原生指针/按键翻译成标准输入事件转发进去，
     // 再把裁决结果画出来。命中的算法不在这家。
-    private void AttachInteraction(IWorkflowTreeViewModel tree)
+    private void AttachInteraction(ITreeComponent tree)
     {
         // 输入路由按树取用，同树同实例（别家也走这个调用，不再各自发明取用方式）。
         // 删除是宿主的（订 KeyDown 自己执行命令）—— 本家不订它；
@@ -1210,7 +1210,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void DetachInteraction() => _input = null;
 
-    private void Subscribe(IWorkflowTreeViewModel tree)
+    private void Subscribe(ITreeComponent tree)
     {
         if (tree is INotifyPropertyChanged npc)
         {
@@ -1280,7 +1280,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         _tree = null;
     }
 
-    private void SubscribeNode(IWorkflowNodeViewModel node)
+    private void SubscribeNode(INodeComponent node)
     {
         if (_subscribedNodes.Add(node) && node is INotifyPropertyChanged npc)
         {
@@ -1288,7 +1288,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
     }
 
-    private void SubscribeLink(IWorkflowLinkViewModel link)
+    private void SubscribeLink(ILinkComponent link)
     {
         if (!_subscribedLinks.Add(link))
         {
@@ -1311,7 +1311,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
     }
 
-    private void UnsubscribeLink(IWorkflowLinkViewModel link)
+    private void UnsubscribeLink(ILinkComponent link)
     {
         if (link is INotifyPropertyChanged npc)
         {
@@ -1331,7 +1331,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         _subscribedLinks.Remove(link);
     }
 
-    private void SubscribeVirtualLink(IWorkflowLinkViewModel? link)
+    private void SubscribeVirtualLink(ILinkComponent? link)
     {
         if (ReferenceEquals(_virtualLink, link))
         {
@@ -1352,7 +1352,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowTreeViewModel.VirtualLink) && _tree is not null)
+        if (e.PropertyName is nameof(ITreeComponent.VirtualLink) && _tree is not null)
         {
             SubscribeVirtualLink(_tree.VirtualLink);
             ScheduleInvalidate();
@@ -1365,7 +1365,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         {
             foreach (var i in e.NewItems)
             {
-                if (i is IWorkflowNodeViewModel n)
+                if (i is INodeComponent n)
                 {
                     SubscribeNode(n);
                 }
@@ -1376,7 +1376,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         {
             foreach (var i in e.OldItems)
             {
-                if (i is IWorkflowNodeViewModel n && _subscribedNodes.Remove(n) && n is INotifyPropertyChanged npc)
+                if (i is INodeComponent n && _subscribedNodes.Remove(n) && n is INotifyPropertyChanged npc)
                 {
                     npc.PropertyChanged -= OnNodePropertyChanged;
                 }
@@ -1392,7 +1392,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         {
             foreach (var i in e.NewItems)
             {
-                if (i is IWorkflowLinkViewModel l)
+                if (i is ILinkComponent l)
                 {
                     SubscribeLink(l);
                 }
@@ -1403,7 +1403,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         {
             foreach (var i in e.OldItems)
             {
-                if (i is IWorkflowLinkViewModel l)
+                if (i is ILinkComponent l)
                 {
                     UnsubscribeLink(l);
                 }
@@ -1415,7 +1415,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
         {
             ScheduleInvalidate();
         }
@@ -1423,7 +1423,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void OnLinkPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowLinkViewModel.IsVisible))
+        if (e.PropertyName is nameof(ILinkComponent.IsVisible))
         {
             ScheduleInvalidate();
             return;
@@ -1436,8 +1436,8 @@ public sealed class WorkflowLinkOverlay : GraphicsView
             return;
         }
 
-        if (e.PropertyName is nameof(IWorkflowLinkViewModel.Sender) or nameof(IWorkflowLinkViewModel.Receiver)
-            && sender is IWorkflowLinkViewModel link && _subscribedLinks.Contains(link))
+        if (e.PropertyName is nameof(ILinkComponent.Sender) or nameof(ILinkComponent.Receiver)
+            && sender is ILinkComponent link && _subscribedLinks.Contains(link))
         {
             // 端点已改接 —— 重新订阅新插槽的锚点。
             if (link.Sender is INotifyPropertyChanged sp)
@@ -1458,7 +1458,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     private void OnSlotPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.Anchor))
+        if (e.PropertyName is nameof(ISlotComponent.Anchor))
         {
             ScheduleInvalidate();
         }
@@ -1490,14 +1490,14 @@ public sealed class WorkflowLinkOverlay : GraphicsView
 
     // 枚举源是 Core 的虚拟化可见集，不是全量的 tree.Links —— 每帧代价是 O(可见) 而不是 O(全部)。
     // 按可见集裁剪不会漏画：曲线恒在两端节点包围盒的并集内（NodePairBoundsProvider），并集不与视口相交时它也不可能可见。
-    private static IEnumerable<IWorkflowLinkViewModel> EnumerateVisibleLinks(IWorkflowTreeViewModel tree)
+    private static IEnumerable<ILinkComponent> EnumerateVisibleLinks(ITreeComponent tree)
     {
         var virtualLink = tree.VirtualLink;
 
         foreach (var item in tree.GetHelper().VisibleItems)
         {
             // 可见集里也带着当前虚拟连线（Virtualize 把它放在首位）；它由下面单独补在最后 —— 橡皮筋要压在实连线之上
-            if (item is IWorkflowLinkViewModel link && link.IsVisible && !ReferenceEquals(link, virtualLink))
+            if (item is ILinkComponent link && link.IsVisible && !ReferenceEquals(link, virtualLink))
             {
                 yield return link;
             }
@@ -1509,7 +1509,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         }
     }
 
-    private static bool TryGetEndpoints(IWorkflowLinkViewModel link, out float startX, out float startY, out float endX, out float endY)
+    private static bool TryGetEndpoints(ILinkComponent link, out float startX, out float startY, out float endX, out float endY)
     {
         startX = (float)link.Sender.Anchor.Horizontal;
         startY = (float)link.Sender.Anchor.Vertical;
@@ -1519,11 +1519,11 @@ public sealed class WorkflowLinkOverlay : GraphicsView
         return !float.IsNaN(startX) && !float.IsNaN(startY) && !float.IsNaN(endX) && !float.IsNaN(endY);
     }
 
-    private static bool IsVirtualLink(IWorkflowLinkViewModel link)
+    private static bool IsVirtualLink(ILinkComponent link)
         => link.Sender.Parent is null || link.Receiver.Parent is null;
 
     // 阶段色由宿主给：没有赋值就用 VirtualLineColor，适配器不替宿主发明交互反馈。
-    private Color? VirtualColorFor(IWorkflowLinkViewModel link, Color? fallback)
+    private Color? VirtualColorFor(ILinkComponent link, Color? fallback)
     {
         if (link is not IConnectionPreviewLink preview)
         {

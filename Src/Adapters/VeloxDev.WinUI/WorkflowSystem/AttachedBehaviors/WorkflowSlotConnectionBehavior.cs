@@ -36,7 +36,7 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
 
     private static void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot } control)
+        if (sender is not Control { DataContext: ISlotComponent slot } control)
         {
             return;
         }
@@ -57,7 +57,7 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
 
     private static void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot })
+        if (sender is not Control { DataContext: ISlotComponent slot })
         {
             return;
         }

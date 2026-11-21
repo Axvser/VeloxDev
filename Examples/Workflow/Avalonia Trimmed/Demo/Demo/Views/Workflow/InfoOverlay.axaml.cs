@@ -11,14 +11,14 @@ namespace Demo;
 /// <summary>
 /// Realtime floating-text info layer for the node-editor surface: canvas actual size, the visible
 /// viewport (canvas + world), zoom/origin and the visible node/link elements materialized by the Core
-/// virtualization. Model-driven: it reads <see cref="IWorkflowTreeViewModelHelper.Viewport"/> (kept
+/// virtualization. Model-driven: it reads <see cref="ITreeHelper.Viewport"/> (kept
 /// current by the surface behavior) plus <see cref="CanvasLayout"/> and the helper VisibleItems, and
 /// refreshes from the model events + the TreeView host's scroll changes. The 复制 button copies the
 /// current multi-line info to the clipboard.
 /// </summary>
 public partial class InfoOverlay : UserControl
 {
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private string _copyText = "";
 
     public InfoOverlay()
@@ -27,7 +27,7 @@ public partial class InfoOverlay : UserControl
         DataContextChanged += (_, _) =>
         {
             UnsubscribeTree();
-            _tree = DataContext as IWorkflowTreeViewModel;
+            _tree = DataContext as ITreeComponent;
             SubscribeTree();
             Refresh();
         };
@@ -104,11 +104,11 @@ public partial class InfoOverlay : UserControl
         var virtualLink = _tree.VirtualLink;
         foreach (var item in _tree.GetHelper().VisibleItems)
         {
-            if (item is IWorkflowNodeViewModel)
+            if (item is INodeComponent)
             {
                 visibleNodes++;
             }
-            else if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, virtualLink))
+            else if (item is ILinkComponent link && !ReferenceEquals(link, virtualLink))
             {
                 visibleLinks++;
             }

@@ -29,7 +29,7 @@ public class TypeIntrospectorTests
     [TestMethod]
     public void AComponentSchemaCarriesItsPropertiesWithFriendlyTypeNames()
     {
-        var schema = JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(TreeDefaultViewModel)))!;
+        var schema = JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(TreeDefaultComponent)))!;
 
         Assert.AreEqual("class", schema["kind"]?.GetValue<string>());
 
@@ -39,7 +39,7 @@ public class TypeIntrospectorTests
 
         var nodes = properties.First(p => p!["name"]!.GetValue<string>() == "Nodes")!;
         Assert.AreEqual(
-            "ObservableCollection<VeloxDev.WorkflowSystem.IWorkflowNodeViewModel>",
+            "ObservableCollection<VeloxDev.WorkflowSystem.INodeComponent>",
             nodes["type"]?.GetValue<string>(),
             "only the special types are spelled short; a type argument keeps its full name");
         Assert.IsTrue(nodes["canRead"]!.GetValue<bool>());
@@ -77,7 +77,7 @@ public class TypeIntrospectorTests
     [TestMethod]
     public void ResolveTypeIsClosedWorld()
     {
-        Assert.AreEqual(typeof(TreeDefaultViewModel), TypeIntrospector.ResolveType(typeof(TreeDefaultViewModel).FullName!));
+        Assert.AreEqual(typeof(TreeDefaultComponent), TypeIntrospector.ResolveType(typeof(TreeDefaultComponent).FullName!));
         Assert.IsNull(TypeIntrospector.ResolveType("System.String"), "the tree carries no entry for a BCL type");
     }
 

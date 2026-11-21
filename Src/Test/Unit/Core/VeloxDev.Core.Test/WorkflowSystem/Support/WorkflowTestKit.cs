@@ -41,11 +41,11 @@ internal sealed class StubCommand : IVeloxCommand
     public Task ChangeSemaphoreAsync(int semaphore) => Task.CompletedTask;
 }
 
-internal sealed class StubSlot : IWorkflowSlotViewModel
+internal sealed class StubSlot : ISlotComponent
 {
-    public ObservableCollection<IWorkflowSlotViewModel> Targets { get; set; } = [];
-    public ObservableCollection<IWorkflowSlotViewModel> Sources { get; set; } = [];
-    public IWorkflowNodeViewModel? Parent { get; set; }
+    public ObservableCollection<ISlotComponent> Targets { get; set; } = [];
+    public ObservableCollection<ISlotComponent> Sources { get; set; } = [];
+    public INodeComponent? Parent { get; set; }
     public SlotChannel Channel { get; set; }
     public SlotState State { get; set; }
     public Anchor Anchor { get; set; } = new();
@@ -59,16 +59,16 @@ internal sealed class StubSlot : IWorkflowSlotViewModel
     public void InitializeWorkflow() { }
     public void OnPropertyChanging(string p) => PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(p));
     public void OnPropertyChanged(string p) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
-    public IWorkflowSlotViewModelHelper GetHelper() => throw new NotSupportedException();
-    public void SetHelper(IWorkflowSlotViewModelHelper helper) { }
+    public ISlotHelper GetHelper() => throw new NotSupportedException();
+    public void SetHelper(ISlotHelper helper) { }
 }
 
-internal sealed class StubNode : IWorkflowNodeViewModel
+internal sealed class StubNode : INodeComponent
 {
-    public IWorkflowTreeViewModel? Parent { get; set; }
+    public ITreeComponent? Parent { get; set; }
     public Anchor Anchor { get; set; } = new();
     public Size Size { get; set; } = new();
-    public ObservableCollection<IWorkflowSlotViewModel> Slots { get; set; } = [];
+    public ObservableCollection<ISlotComponent> Slots { get; set; } = [];
 
     public IVeloxCommand MoveCommand { get; } = new StubCommand();
     public IVeloxCommand SetAnchorCommand { get; } = new StubCommand();
@@ -85,17 +85,17 @@ internal sealed class StubNode : IWorkflowNodeViewModel
     public void InitializeWorkflow() { }
     public void OnPropertyChanging(string p) => PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(p));
     public void OnPropertyChanged(string p) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
-    public IWorkflowNodeViewModelHelper GetHelper() => throw new NotSupportedException();
-    public void SetHelper(IWorkflowNodeViewModelHelper helper) { }
+    public INodeHelper GetHelper() => throw new NotSupportedException();
+    public void SetHelper(INodeHelper helper) { }
 }
 
-internal sealed class StubTree : IWorkflowTreeViewModel
+internal sealed class StubTree : ITreeComponent
 {
     public CanvasLayout Layout { get; set; } = new();
-    public IWorkflowLinkViewModel VirtualLink { get; set; } = null!;
-    public ObservableCollection<IWorkflowNodeViewModel> Nodes { get; set; } = [];
-    public ObservableCollection<IWorkflowLinkViewModel> Links { get; set; } = [];
-    public Dictionary<IWorkflowSlotViewModel, Dictionary<IWorkflowSlotViewModel, IWorkflowLinkViewModel>> LinksMap { get; set; } = [];
+    public ILinkComponent VirtualLink { get; set; } = null!;
+    public ObservableCollection<INodeComponent> Nodes { get; set; } = [];
+    public ObservableCollection<ILinkComponent> Links { get; set; } = [];
+    public Dictionary<ISlotComponent, Dictionary<ISlotComponent, ILinkComponent>> LinksMap { get; set; } = [];
     public IVeloxCommand CreateNodeCommand { get; } = new StubCommand();
     public IVeloxCommand SetPointerCommand { get; } = new StubCommand();
     public IVeloxCommand ResetVirtualLinkCommand { get; } = new StubCommand();
@@ -110,6 +110,6 @@ internal sealed class StubTree : IWorkflowTreeViewModel
     public void InitializeWorkflow() { }
     public void OnPropertyChanging(string p) => PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(p));
     public void OnPropertyChanged(string p) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
-    public IWorkflowTreeViewModelHelper GetHelper() => throw new NotSupportedException();
-    public void SetHelper(IWorkflowTreeViewModelHelper helper) { }
+    public ITreeHelper GetHelper() => throw new NotSupportedException();
+    public void SetHelper(ITreeHelper helper) { }
 }

@@ -11,7 +11,7 @@ namespace VeloxDev.Adapters.Benchmarks.Headed;
 // 刻意做小：一张边框 + 一段文字，但订阅是真实的 Anchor/Size。
 internal sealed class AvaloniaBenchmarkNodeView : Border
 {
-    private IWorkflowNodeViewModel? _node;
+    private INodeComponent? _node;
 
     public AvaloniaBenchmarkNodeView()
     {
@@ -32,12 +32,12 @@ internal sealed class AvaloniaBenchmarkNodeView : Border
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
-        => Bind(DataContext as IWorkflowNodeViewModel);
+        => Bind(DataContext as INodeComponent);
 
     private void OnDetachedFromVisualTree(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
         => Bind(null);
 
-    private void Bind(IWorkflowNodeViewModel? node)
+    private void Bind(INodeComponent? node)
     {
         if (ReferenceEquals(_node, node))
         {
@@ -60,7 +60,7 @@ internal sealed class AvaloniaBenchmarkNodeView : Border
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
         {
             Apply();
         }
@@ -95,6 +95,6 @@ internal sealed class AvaloniaBenchmarkLinkView : Border
 internal static class AvaloniaBenchmarkTemplates
 {
     internal static IDataTemplate Create()
-        => new FuncDataTemplate<IWorkflowViewModel>((item, _) =>
-            item is IWorkflowNodeViewModel ? new AvaloniaBenchmarkNodeView() : new AvaloniaBenchmarkLinkView());
+        => new FuncDataTemplate<IWorkflowComponent>((item, _) =>
+            item is INodeComponent ? new AvaloniaBenchmarkNodeView() : new AvaloniaBenchmarkLinkView());
 }

@@ -14,7 +14,7 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 /// Three tools resolve a slot from a property name — <c>ListSlotProperties</c> to list them, <c>ResolveSlotId</c>
 /// to turn a name into a runtime id, and the connect family to aim a link at one. All three keyed off
 /// <c>AIContextFlags.IsSingleSlot</c>, and the context-tree generator could not compute that flag for a type
-/// declared <c>[WorkflowBuilder.Slot&lt;T&gt;]</c>: the <c>IWorkflowSlotViewModel</c> interface is injected by
+/// declared <c>[WorkflowBuilder.Slot&lt;T&gt;]</c>: the <c>ISlotComponent</c> interface is injected by
 /// <i>another</i> generator, in the same pass, and generators cannot see each other's output.
 /// </para>
 /// <para>
@@ -34,8 +34,8 @@ public class SlotPropertyResolutionTests
 {
     private static WorkflowAgentScope ScopeWith(params object[] nodes)
     {
-        var tree = new TreeDefaultViewModel();
-        foreach (var node in nodes) tree.GetHelper().CreateNode((IWorkflowNodeViewModel)node);
+        var tree = new TreeDefaultComponent();
+        foreach (var node in nodes) tree.GetHelper().CreateNode((INodeComponent)node);
         return new WorkflowAgentScope(tree);
     }
 
@@ -68,7 +68,7 @@ public class SlotPropertyResolutionTests
             ("nodeIndex", 0), ("propertyName", "InputSlot")));
 
         Assert.AreEqual("ok", resolved["status"]?.Value<string>(), resolved.ToString());
-        Assert.AreEqual(((IWorkflowIdentifiable)node.InputSlot).RuntimeId, resolved["id"]?.Value<string>(),
+        Assert.AreEqual(((IRuntimeIdentifiable)node.InputSlot).RuntimeId, resolved["id"]?.Value<string>(),
             "and the id it hands back is the slot's own");
     }
 
@@ -97,7 +97,7 @@ public class SlotPropertyResolutionTests
             ("nodeIndex", 0), ("propertyName", "InputSlots"), ("collectionIndex", 1)));
 
         Assert.AreEqual("ok", resolved["status"]?.Value<string>(), resolved.ToString());
-        Assert.AreEqual(((IWorkflowIdentifiable)node.InputSlots.Items[1].Slot).RuntimeId,
+        Assert.AreEqual(((IRuntimeIdentifiable)node.InputSlots.Items[1].Slot).RuntimeId,
             resolved["id"]?.Value<string>());
         Assert.AreEqual("dist", resolved["label"]?.Value<string>(), "and it says which port it picked");
     }
@@ -120,11 +120,11 @@ public class SlotPropertyResolutionTests
     [TestMethod]
     public void ConnectByProperty_ResolvesTheSingleSlot()
     {
-        var producer = new NodeDefaultViewModel();
+        var producer = new NodeDefaultComponent();
         var consumer = new EnumSelectorNodeViewModel();
-        var senderSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
+        var senderSlot = new SlotDefaultComponent { Channel = SlotChannel.OneTarget };
 
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         tree.GetHelper().CreateNode(producer);
         tree.GetHelper().CreateNode(consumer);
         producer.GetHelper().CreateSlot(senderSlot);
@@ -154,7 +154,7 @@ public class SlotPropertyResolutionTests
 
         var refused = Json(WorkflowToolInvoker.Invoke(scope, "AddSlotToCollection",
             ("nodeIndex", 0), ("propertyName", "InputSlots"),
-            ("fullSlotTypeName", typeof(SlotDefaultViewModel).FullName!), ("channel", "OneBoth")));
+            ("fullSlotTypeName", typeof(SlotDefaultComponent).FullName!), ("channel", "OneBoth")));
 
         Assert.AreEqual("error", refused["status"]?.Value<string>(), refused.ToString());
         StringAssert.Contains(refused["message"]!.Value<string>()!, "SetEnumSlotCollection",

@@ -327,7 +327,7 @@ internal sealed class PluginLoader
 
     private void CheckVersionsUnsafe(Assembly assembly, string path)
     {
-        var core = typeof(VeloxDev.WorkflowSystem.IWorkflowTreeViewModel).Assembly.GetName();
+        var core = typeof(VeloxDev.WorkflowSystem.ITreeComponent).Assembly.GetName();
         var extension = typeof(VeloxDev.AI.Workflow.WorkflowAgentScope).Assembly.GetName();
 
         foreach (var reference in assembly.GetReferencedAssemblies())

@@ -17,18 +17,18 @@ internal sealed class EnumSelectorNodeView : NodeViewBase
 
     protected override Color Accent => CardPalette.AccentEnum;
 
-    protected override string InitialExecOrder(IWorkflowNodeViewModel node)
+    protected override string InitialExecOrder(INodeComponent node)
         => node is EnumSelectorNodeViewModel { HasExecutionOrder: true } vm ? vm.ExecutionOrderText : string.Empty;
 
     // 设计里这张卡的路由结果是一颗紫色加粗的胶囊，与标题行那条色条同色
-    protected override string InitialStatus(IWorkflowNodeViewModel node)
+    protected override string InitialStatus(INodeComponent node)
         => (node as EnumSelectorNodeViewModel)?.LastRouted ?? string.Empty;
 
     protected override bool StatusBold => true;
 
     protected override Color StatusTextColor => CardPalette.AccentEnum;
 
-    protected override void Build(IWorkflowNodeViewModel node, Grid content)
+    protected override void Build(INodeComponent node, Grid content)
     {
         var vm = (EnumSelectorNodeViewModel)node;
 

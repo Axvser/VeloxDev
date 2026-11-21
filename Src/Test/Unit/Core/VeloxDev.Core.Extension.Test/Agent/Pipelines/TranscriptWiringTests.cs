@@ -18,7 +18,7 @@ public class TranscriptWiringTests
     [TestMethod]
     public async Task AttachingTheTranscriptAfterASubsystem_StillFeedsIt()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
         var transcript = new AgentTranscript();
 
         // A subsystem is attached first, and wiring it reads the pipeline.
@@ -35,7 +35,7 @@ public class TranscriptWiringTests
     [TestMethod]
     public async Task AttachingTheTranscriptFirst_FeedsItToo()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
         var transcript = new AgentTranscript();
 
         scope.WithTranscript(transcript);
@@ -49,7 +49,7 @@ public class TranscriptWiringTests
     [TestMethod]
     public async Task ToolEvents_ReachTheTranscript_RegardlessOfAttachOrder()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
         var transcript = new AgentTranscript();
 
         _ = scope.Pipeline;                       // compose before the transcript exists

@@ -88,7 +88,7 @@
 Jalium 适配器对外提供：过渡轴的 `Transition<T>`、整套工作流附着行为（表面/槽布局/节点拖拽/连接手势/模型事件/自盒化助手 + 视图池两件套 + 小地图）。宿主接线**全是标记**（Trimmed demo 的 `MainWindow.jalxaml` + `Views/MainView.jalxaml.cs` 里没有一行接线 —— 那个文件只干两件事：`LoadTree` 造三个示例节点并配槽位选择器，然后把树交给 `DataContext`）：
 
 1. **表面**：把 tree-view 条目的 `UserControl` 放进窗口，根上写 `behaviors:WorkflowSurfaceBehavior.*`。**`CanvasName` / `TemplateSelector` 缺一，池里就什么也不出**（`ViewPool` 两个 DP 要都非空）。
-2. **池化自动完成**：`PART_Canvas` 上写 `behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"` 与 `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`，树由 `DataContext` 进来（表面行为 `BindTree` 里 `host.DataContext as IWorkflowTreeViewModel`）。**没有 `AttachScrollViewer` / `SetTree` 这些宿主调用了。**
+2. **池化自动完成**：`PART_Canvas` 上写 `behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"` 与 `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`，树由 `DataContext` 进来（表面行为 `BindTree` 里 `host.DataContext as ITreeComponent`）。**没有 `AttachScrollViewer` / `SetTree` 这些宿主调用了。**
 3. **小地图**：`MinimapOverlay` 写在标记里，`ScrollViewerName="PART_ScrollViewer"` —— `ResolveScrollViewer()` 自己 `FindName` 接上（`WorkflowMinimapOverlay.ScrollViewerName` / `ResolveScrollViewer`），不必宿主赋 `ScrollViewer`。
 4. **缩放与视口全归表面**：`ZoomEnabled="True"` 之后 Ctrl+滚轮由 `WorkflowSurfaceBehavior.OnZoomPreviewMouseWheel` 处理，`ZoomPin`（250ms）与 `NotifyZoomCommitted` 都在表面内部。**宿主零调用者。**
 

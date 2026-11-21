@@ -83,7 +83,7 @@ Node 侧接口按方向分：
 
 ## 七、测试在哪、什么没测
 
-- 引擎子集在 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`：**全部用手写探针**（`ProbeNodeBase` 只有拓扑与调用记录；`ProbeNode` 加 `ICompileTimeAware` / `IRuntimeAware`；`PlainNode` 两者都不实现；`RedirectableNode : ProbeNode` 实现 `IRedirectable`），**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`**。`CompileIdentityOwnershipTests` 用 `PlainNode` 钉住「不实现通知接口时汇合/重定向/状态码仍正确」。
+- 引擎子集在 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`：**全部用手写探针**（`ProbeNodeBase` 只有拓扑与调用记录；`ProbeNode` 加 `ICompileTimeAware` / `IRuntimeAware`；`PlainNode` 两者都不实现；`RedirectableNode : ProbeNode` 实现 `IRedirectable`），**从不针对真实的 `NodeDefaultComponent`/`TreeDefaultComponent`**。`CompileIdentityOwnershipTests` 用 `PlainNode` 钉住「不实现通知接口时汇合/重定向/状态码仍正确」。
 - 并发契约由 `ParallelExecutionTests` 钉住（其中 `FanOut_CompilesToAParallelSegment` 是前置确认）：时间窗相交、上限为 1 时串行、分支只看得到扇出源载荷、**日志按真实时序**（因果交错：A 先记一行、等 B 记完再记第二行 → 断言 `A1 < B1 < A2`，成块合并必然读成 `A1, A2, B1`）、重定向取分支序最先。其中有的在串行引擎下必然失败（时间窗不相交 / `s0.Calls == 2`）。
 - 日志 sink 与上限另由 `CompilerLogWriterTests`（`Core.Test`）钉住：writer 与 `Logs` 逐行同序、上限只裁内存（`0` = 只落 writer）、**writer 抛异常不改变运行**（吞掉并报 `LogWriteFailed`）、分支的 `Warn` 不置会话的 `RedirectRequested`；Agent 路径那条在 `Core.Extension.Test` 的 `WorkflowLifecycleFidelityTests.WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink`。
 - **没测**：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 这几个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值。（重定向上限 50 次那条路由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 钉住。）
@@ -94,7 +94,7 @@ Node 侧接口按方向分：
 
 **两处实测约束：**
 
-1. **一个节点就能把整棵树拖进 payload**：节点的 `Parent` 是可写的 `IWorkflowTreeViewModel`，以图为根加载还会得到**第二棵孤儿树**作为节点的 Parent；slot 的 `Targets`/`Sources` 同理会把**整个连通分量**拖进来。⇒ 快照模式按**声明类型**排除这两类（`typeof(IWorkflowTreeViewModel)`、`typeof(ObservableCollection<IWorkflowSlotViewModel>)`），经 `SerializationOptions.WithExcludedPropertyTypes` 落到既有的 `WritablePropertiesOnlyResolver` 上（默认空 ⇒ 树的往返逐字不变）。**按名排除会误伤**：`Parent` 在 slot 上指的是它的**节点**，那是前向需要的。
+1. **一个节点就能把整棵树拖进 payload**：节点的 `Parent` 是可写的 `ITreeComponent`，以图为根加载还会得到**第二棵孤儿树**作为节点的 Parent；slot 的 `Targets`/`Sources` 同理会把**整个连通分量**拖进来。⇒ 快照模式按**声明类型**排除这两类（`typeof(ITreeComponent)`、`typeof(ObservableCollection<ISlotComponent>)`），经 `SerializationOptions.WithExcludedPropertyTypes` 落到既有的 `WritablePropertiesOnlyResolver` 上（默认空 ⇒ 树的往返逐字不变）。**按名排除会误伤**：`Parent` 在 slot 上指的是它的**节点**，那是前向需要的。
 2. **枚举键会退化成 `long`**：实测钉在 `ComponentModelExTests.AnEnumInAnObjectMember_ComesBackAsItsNumber`，且 `TypeNameHandling.All` **也救不回来**。静态分支靠两边都退化相等；**动态分支在运行期重新解析出真枚举、与还原出的 `long` 永不相等** ⇒ 那条分支会像「没有下游」一样结束。⇒ `BranchSegment`/`BranchOption` 各带一个「键的类型名」侧信道（**只在键是枚举时**记录），在 `[OnDeserialized]` 里用 `CompileKeyNormalizer` 归一化。用 `[OnDeserialized]` 而不是生成的 setter：后者在编译器赋值时就会触发，加载时也可能早于类型名成员被读到。越界数字保持为未定义枚举值、类型名解析不到就原样保留，都不抛。
 
 **两种模式的代价**：默认**快照** = 段结构 + 每个节点自身的状态，**不可回灌**（还原节点无 `Parent` ⇒ 几何不再按缩放坍缩、移动不再标脏）；`includeTree: true` = 保留外向引用、可回灌，但 payload ≈ 整棵树 + 连通分量。两种模式下**还原节点的 `RuntimeId` 都是新的，还原图也没有绑定表**（绑定表是运行期状态，不进归档）⇒ `TryGetCompileInfo` 对所有还原节点返回 false、Order = -1。
@@ -154,7 +154,7 @@ Node 侧接口按方向分：
 - **跳过按节点、不按 Order**：`RunGraphAsync` 多带一个「已完成节点集合」。用 Order 阈值在扇出里是错的 —— 几个分支的 Order 交错，一个阈值会连带跳过没跑过的兄弟（这与重定向的按 Order 跳过不同：那是「契约保留前缀」，一刀切本来就是它的语义）。该集合只作用于恢复的那一轮，一旦发生重定向就交回按 Order 的旧规则。
 - **恢复的那一轮原样沿用检查点里的 `Attempt`，不是加一**：产物表按 `Attempt` 盖戳，加一等于把铺回去的产物降级成陈旧产物，汇合点立刻读不到它们（`Resuming_SkipsWhatTheCheckpointRecords_...` 钉住）。此后的重定向照旧一轮加一。
 - **形状不符直接拒**，而且在动会话之前抛 `InvalidOperationException`（`Status` 仍停在 `Idle`，不是谎称在跑）—— `RequireSameShape`。
-- **节点键**是 `RuntimeId`（节点实现 `IWorkflowIdentifiable` 时），否则 `类型名#序号`。后者让测试探针也能用。**序列化往返过的图**（还原节点的 `RuntimeId` 全是新的）默认被拒 —— 那些确实是不同的节点对象，把旧产物喂给它们就是猜；**要接上就显式迁移**：`ExecutionCheckpoint.Rekey(place, graph)` 按**位置**重新归档（先核结构：节点数与**节点类型**的驱动序都要一致，`Types` 是为此新加的成员），返回一份新的检查点，引擎的形状核对随之通过。这就是崩溃恢复的形状（存盘 → 重载图 → 接着跑），`Core.Extension.Test/Serialization/ExecutionCheckpointMigrationTests.cs` 钉住：原样传被拒、re-key 后通过且已完成节点不再驱动。
+- **节点键**是 `RuntimeId`（节点实现 `IRuntimeIdentifiable` 时），否则 `类型名#序号`。后者让测试探针也能用。**序列化往返过的图**（还原节点的 `RuntimeId` 全是新的）默认被拒 —— 那些确实是不同的节点对象，把旧产物喂给它们就是猜；**要接上就显式迁移**：`ExecutionCheckpoint.Rekey(place, graph)` 按**位置**重新归档（先核结构：节点数与**节点类型**的驱动序都要一致，`Types` 是为此新加的成员），返回一份新的检查点，引擎的形状核对随之通过。这就是崩溃恢复的形状（存盘 → 重载图 → 接着跑），`Core.Extension.Test/Serialization/ExecutionCheckpointMigrationTests.cs` 钉住：原样传被拒、re-key 后通过且已完成节点不再驱动。
 - **`IGroupData` 归一化**：`Snapshot()` 把载荷与产物里的 `IGroupData` 换成**以节点键为键的普通字典**。节点引用写不进文件，而且序列化会顺着它把整棵树拖进去（与 `CompiledGraphEx` 排除 `Parent` 同一个坑）。运行中的对象不动，只换快照里那一份。
 - **数字不保类型（实测）**：载荷是 `object`，归档格式按设计把 primitive 写成裸 JSON 值、把 enum 写成底层整数 ⇒ `int` 回来是 `long`、`float` 是 `double`，没有设置能救（`CheckpointEx` 的 remarks 写明这是格式的形状，不是缺陷）。引擎自己的字段精确；`InMemoryCheckpointStore` 没有这个缺口。三个 TFM 里 `KeyValuePair` 也没有 `Deconstruct`，遍历产物表要显式取 `Key`/`Value`。
 - DTO 是**纯数据**，所以不走 `ViewModelSerializer` 的公开序列化面（那一面约束在 `INotifyPropertyChanged`，是为 VM 写的）：它用 `[Archivable]` 加入归档格式，再由 `VeloxJsonSerializer` 直接读写（`CheckpointEx.cs` 的 `SerializeCheckpoint` / `DeserializeCheckpoint`）。

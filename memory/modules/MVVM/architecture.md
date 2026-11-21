@@ -146,7 +146,7 @@ OnExecutionCompletedAsync(item)
 - **命名是功能性判据，不是风格判据。** 只写字段时不要求下划线：`name` → `Name` 是良构的，**不报警**。按风格严查会在仓库自己的代码里炸出大量告警（写作时的口径，现树无法按同一口径复核，**不可复核**）。
 - **不做特性复制/投射/去重。** 生成器只新增代码，改不了用户已写的源文件；两半上的特性各留原位。MVVM 路径下所有 `GetAttributes()` 都是**探测**用途，产物里不含任何特性。
 - **没有「View 只透传、不发通知」这条路径** —— `grep IsView\|GenerateProxy Src/Generators/` 现无命中。`MVVMPropertyFactory.Generate()`（`Base/Analizer.cs`）是唯一出口，**所有** `[VeloxProperty]` 都按 ViewModel 形态生成通知。
-- **`CanWrite()` 里含 `IsWorkflowComponent`**（`MVVMWriter.CanWrite`）⇒ 一个 `[Node]` / `[Tree]` 类即使零个 `[VeloxProperty]` 也会拿到一份 MVVM 产物，但里面**不是**槽位三件套：`MVVMWriter.GenerateBody` 里那段的条件是 `!_hasBaseWorkflowSlotInfrastructure && !IsWorkflowComponent && 任一属性 UseWorkflowSlotLifecycle`，**把 workflow 组件本身排除了**，它只服务「非组件、但继承链上有带槽位属性的类」这一种情况。workflow 组件本身的 `CreateWorkflowSlot<T>` / `OnWorkflowSlotAdded` / `OnWorkflowSlotRemoved` 由 `Writers/WorkflowWriter.cs` 写。这是与 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/` 的耦合点。
+- **`CanWrite()` 里含 `IsWorkflowComponent`**（`MVVMWriter.CanWrite`）⇒ 一个 `[Node]` / `[Tree]` 类即使零个 `[VeloxProperty]` 也会拿到一份 MVVM 产物，但里面**不是**槽位三件套：`MVVMWriter.GenerateBody` 里那段的条件是 `!_hasBaseWorkflowSlotInfrastructure && !IsWorkflowComponent && 任一属性 UseWorkflowSlotLifecycle`，**把 workflow 组件本身排除了**，它只服务「非组件、但继承链上有带槽位属性的类」这一种情况。workflow 组件本身的 `CreateSlotComponent<T>` / `OnSlotComponentAdded` / `OnSlotComponentRemoved` 由 `Writers/WorkflowWriter.cs` 写。这是与 `Src/Core/VeloxDev.Core/WorkflowSystem/Templates/` 的耦合点。
 
 **`[VeloxCommand]` 的方法签名决定它可不可取消**：判定在 `CommandWriter.BuildSpec`，返回类型决定「值怎么变成 Task」，形参决定「走哪个构造入口」与「属性强不强类型」。入口枚举 `CommandConstruction`：
 
@@ -170,7 +170,7 @@ OnExecutionCompletedAsync(item)
 **判据必须按符号身份，不能按名字**：`class Vm<T> { Task M<T>(T x) }` 里方法的 `T` 遮蔽了类的 `T`，按名字判会错生成情形 1。四条实测结论（Roslyn 4.3.1 实编）：
 
 1. **派生接口给不了编译期检查。** `IVeloxCommand<TParam, TResult> : IVeloxCommand` 时 `c.Execute(42)` 仍然编译通过（基接口的 `object?` 重载始终可达），加 `new` 隐藏也照样通过。强类型买到的是**类型信息**，不是保证 —— 这一点写在 `IVeloxCommand{TParam,TResult}.cs` 的 XML 注释里。
-2. **属性类型改成强类型会打断接口实现。** `IWorkflow{Node,Slot,Tree,Link}ViewModel` 里一组命令属性声明为非强类型 `IVeloxCommand`，派生接口类型**不会**隐式实现它（CS0738）。所以 `DeclaredCommandPropertyTypeInHierarchy`（`CommandWriter`）命中时只把**属性类型**退回声明的那个类型（`ForcedPropertyTypeName`），缓冲字段与构造保持强类型，getter 上转。
+2. **属性类型改成强类型会打断接口实现。** `I{Node,Slot,Tree,Link}Component` 里一组命令属性声明为非强类型 `IVeloxCommand`，派生接口类型**不会**隐式实现它（CS0738）。所以 `DeclaredCommandPropertyTypeInHierarchy`（`CommandWriter`）命中时只把**属性类型**退回声明的那个类型（`ForcedPropertyTypeName`），缓冲字段与构造保持强类型，getter 上转。
 3. **强类型成员上不能加 `new`** —— CS0109（形参类型是类型参数，`Execute(T)` 与 `Execute(object)` 是两个不同重载，谈不上隐藏）。
 4. **`_isCtsNeeded` 走构造参数**，不是对象初始化器 —— 管道泛型化之后 `private` 字段跨闭合类型不可写，而且构造里本来就有这个参数。
 

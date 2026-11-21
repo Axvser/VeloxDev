@@ -72,11 +72,11 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
     [TestMethod]
     public void Route_BubblesFromASlotThroughItsNodeToTheTree()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel { Parent = tree };
-        var a = new NodeDefaultViewModel { Parent = tree };
-        var slot = new SlotDefaultViewModel { Parent = node };
-        var other = new SlotDefaultViewModel { Parent = a };
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent { Parent = tree };
+        var a = new NodeDefaultComponent { Parent = tree };
+        var slot = new SlotDefaultComponent { Parent = node };
+        var other = new SlotDefaultComponent { Parent = a };
         node.Slots.Add(slot);
         a.Slots.Add(other);
         tree.Nodes.Add(node);
@@ -98,7 +98,7 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
         // 冒泡传的是同一个 args：祖先看到的 target 是「谁被指到了」，不是它自己。
         var link = ReadyLink(0, 0, 100, 0);
         var tree = TreeWith(link);
-        IWorkflowViewModel? seen = null;
+        IWorkflowComponent? seen = null;
         Events(tree).Input.PointerPressed += (_, e) => seen = e.Target;
 
         WorkflowInput.For(tree).Route(Press(50, 0, MouseButton.Right, link));

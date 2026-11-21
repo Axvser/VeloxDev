@@ -11,7 +11,7 @@ namespace Demo.Views.Workflow;
 /// minimap overlay, but a passive HUD): a translucent rounded panel, anchored bottom-left by the
 /// composing window, showing canvas actual size, the current visible viewport (canvas + world),
 /// zoom/origin and the visible node/link elements materialized by the Core virtualization
-/// (<see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>). It repaints from the Core model
+/// (<see cref="ITreeHelper.VisibleItems"/>). It repaints from the Core model
 /// (Layout / helper VisibleItems / Nodes / Links) plus the scroll/viewport numbers the window pushes
 /// on every scroll or surface change (same feed as the minimap). The small <c>复制</c> button in the
 /// bottom-right corner copies the current multi-line info to the clipboard for debugging.
@@ -25,7 +25,7 @@ public sealed class InfoOverlay : Border
     private static readonly SolidColorBrush s_btnFg = new(Color.FromRgb(0x7E, 0xC8, 0xFF));
 
     public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.Register(
-        "WorkflowTree", typeof(IWorkflowTreeViewModel), typeof(InfoOverlay), new PropertyMetadata(null, OnTreeChanged));
+        "WorkflowTree", typeof(ITreeComponent), typeof(InfoOverlay), new PropertyMetadata(null, OnTreeChanged));
 
     // 与小地图同一组滚动/内容偏移/视口喂数：窗口在滚动或表面变化时推入，平移缩放时数值不会过期
     public static readonly DependencyProperty ScrollOffsetXProperty = DependencyProperty.Register(
@@ -41,7 +41,7 @@ public sealed class InfoOverlay : Border
     public static readonly DependencyProperty ViewportHeightProperty = DependencyProperty.Register(
         "ViewportHeight", typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
 
-    public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
+    public ITreeComponent? WorkflowTree { get => (ITreeComponent?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
 
     public double ScrollOffsetX { get => (double)(GetValue(ScrollOffsetXProperty) ?? 0.0); set => SetValue(ScrollOffsetXProperty, value); }
     public double ScrollOffsetY { get => (double)(GetValue(ScrollOffsetYProperty) ?? 0.0); set => SetValue(ScrollOffsetYProperty, value); }
@@ -50,7 +50,7 @@ public sealed class InfoOverlay : Border
     public double ViewportWidth { get => (double)(GetValue(ViewportWidthProperty) ?? 0.0); set => SetValue(ViewportWidthProperty, value); }
     public double ViewportHeight { get => (double)(GetValue(ViewportHeightProperty) ?? 0.0); set => SetValue(ViewportHeightProperty, value); }
 
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private readonly TextBlock[] _lineText = new TextBlock[LineCount];
     private readonly Button _copyButton;
     private string _copyText = "";
@@ -117,7 +117,7 @@ public sealed class InfoOverlay : Border
         }
 
         overlay.UnsubscribeTree();
-        overlay._tree = (IWorkflowTreeViewModel?)e.NewValue;
+        overlay._tree = (ITreeComponent?)e.NewValue;
         overlay.SubscribeTree();
         overlay.Refresh();
     }
@@ -204,11 +204,11 @@ public sealed class InfoOverlay : Border
         var virtualLink = _tree.VirtualLink;
         foreach (var item in _tree.GetHelper().VisibleItems)
         {
-            if (item is IWorkflowNodeViewModel)
+            if (item is INodeComponent)
             {
                 visibleNodes++;
             }
-            else if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, virtualLink))
+            else if (item is ILinkComponent link && !ReferenceEquals(link, virtualLink))
             {
                 visibleLinks++;
             }

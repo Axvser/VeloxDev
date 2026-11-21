@@ -45,7 +45,7 @@ public class McpDisposeTests
 
         Assert.AreEqual(0, client.Disposed, "precondition: the connection is live");
 
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
         await scope.DisposeAsync();
 
         Assert.AreEqual(1, client.Disposed, "the scope owns the connection and must tear it down");
@@ -60,7 +60,7 @@ public class McpDisposeTests
             ConnectOverride = (_, _, _) => Task.FromResult(new McpConnection(client, [])),
         };
         await mcp.LoadAsync([Config()]);
-        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
 
         await scope.DisposeAsync();
         await scope.DisposeAsync();

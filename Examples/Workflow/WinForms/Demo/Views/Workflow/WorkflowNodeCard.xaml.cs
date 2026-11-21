@@ -37,9 +37,9 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
     /// Supplies this card's node context menu. The card receives nodes from the surface's view pool, so the
     /// per-node menu has to be rebuilt on every rebind rather than at construction.
     /// </summary>
-    internal static Func<IWorkflowNodeViewModel, ContextMenuStrip?>? MenuBuilder { get; set; }
+    internal static Func<INodeComponent, ContextMenuStrip?>? MenuBuilder { get; set; }
 
-    private IWorkflowNodeViewModel? _menuNode;
+    private INodeComponent? _menuNode;
 
     // ── Layout ──────────────────────────────────────────────────────────────────
     // _rootLayout is the generated field from WorkflowNodeCard.xaml.
@@ -57,7 +57,7 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
     private bool _applyingScale;
 
     // ── ViewModel subscription ────────────────────────────────────────────────────
-    private IWorkflowNodeViewModel? _node;
+    private INodeComponent? _node;
     private INotifyPropertyChanged? _nodeNotifier;
     private bool _updatingFromVm;
 
@@ -153,14 +153,14 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
     /// <summary>Gets or sets the node this card renders. The view pool binds through the attachment.</summary>
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public IWorkflowNodeViewModel? ViewModel
+    public INodeComponent? ViewModel
     {
         get => _attachment.Node;
         set => Bind(value);
     }
 
     /// <summary>Binds the card to a new node view model.</summary>
-    internal void Bind(IWorkflowNodeViewModel? node)
+    internal void Bind(INodeComponent? node)
     {
         if (ReferenceEquals(_attachment.Node, node)) return;
         _attachment.Node = node;
@@ -208,7 +208,7 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
         UpdateMenu(node);
     }
 
-    private void UpdateMenu(IWorkflowNodeViewModel? node)
+    private void UpdateMenu(INodeComponent? node)
     {
         if (ReferenceEquals(_menuNode, node) && ContextMenuStrip is not null)
         {
@@ -235,7 +235,7 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
     }
 
     /// <summary>Refreshes all displayed values from the view model (without rebuilding the layout).</summary>
-    internal void Refresh(IWorkflowNodeViewModel node)
+    internal void Refresh(INodeComponent node)
     {
         ArgumentNullException.ThrowIfNull(node);
         _updatingFromVm = true;
@@ -298,7 +298,7 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
 
     }
 
-    private void OnAgentSelectionChanged(IWorkflowNodeViewModel node)
+    private void OnAgentSelectionChanged(INodeComponent node)
     {
         if (ReferenceEquals(node, _node))
         {
@@ -358,7 +358,7 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
     /// box the canvas gives it (a stale copy of this table is exactly how this card ended up 220×340 for a
     /// 230×170 node, and its buttons clipped).
     /// </summary>
-    private void SetDesignSize(IWorkflowNodeViewModel node)
+    private void SetDesignSize(INodeComponent node)
     {
         var attribute = node.GetType()
             .GetCustomAttribute<DefaultSizeAttribute>(inherit: false);
@@ -579,7 +579,7 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
 
     // ── Slot button management ──────────────────────────────────────────────────────────
 
-    private SlotView AddSlotButton(IWorkflowSlotViewModel? slot, int designSize)
+    private SlotView AddSlotButton(ISlotComponent? slot, int designSize)
     {
         var btn = new SlotView { DesignSize = designSize };
         btn.ViewModel = slot;
@@ -638,7 +638,7 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
 
     // ── Layout building ──────────────────────────────────────────────────────────────
 
-    private void BuildLayout(IWorkflowNodeViewModel node)
+    private void BuildLayout(INodeComponent node)
     {
         ClearSlotButtons();
         ResetRefs();
@@ -1115,7 +1115,7 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
     // ── Layout: fallback ───────────────────────────────────────────────────────────
     /// <summary>
     /// The fallback card, for a node type this demo ships no view of its own for — the reference's
-    /// <c>NodeView</c>. Bare on purpose: the framework's <see cref="IWorkflowNodeViewModel"/> carries geometry
+    /// <c>NodeView</c>. Bare on purpose: the framework's <see cref="INodeComponent"/> carries geometry
     /// and slots and no display name, so this card cannot honestly label a node it knows nothing else about, and
     /// the accent is the neutral slate because there is no type here to give it a colour.
     /// </summary>
@@ -1208,10 +1208,10 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
         if (_inputSlotsLayout is null || _outputSlotsLayout is null) return;
 
         var inputs = p.InputSlots?.Items
-            .Select((item, i) => (Name: string.IsNullOrWhiteSpace(item.Name) ? $"In {i + 1}" : item.Name, Slot: (IWorkflowSlotViewModel?)item.Slot))
+            .Select((item, i) => (Name: string.IsNullOrWhiteSpace(item.Name) ? $"In {i + 1}" : item.Name, Slot: (ISlotComponent?)item.Slot))
             .ToArray() ?? [];
         var outputs = p.OutputSlots?.Items
-            .Select((item, i) => (Name: string.IsNullOrWhiteSpace(item.Name) ? $"Out {i + 1}" : item.Name, Slot: (IWorkflowSlotViewModel?)item.Slot))
+            .Select((item, i) => (Name: string.IsNullOrWhiteSpace(item.Name) ? $"Out {i + 1}" : item.Name, Slot: (ISlotComponent?)item.Slot))
             .ToArray() ?? [];
 
         if (_pythonSlotRows.Count == inputs.Length + outputs.Length)
@@ -1272,13 +1272,13 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
         var entries = items
             .Select((item, i) => (
                 Name: string.IsNullOrWhiteSpace(item.Name) ? $"Output {i + 1}" : item.Name,
-                Slot: (IWorkflowSlotViewModel?)item.Slot))
+                Slot: (ISlotComponent?)item.Slot))
             .ToArray();
 
         RebuildDynamicSlots(entries!, CardTheme.AccentEnum);
     }
 
-    private void RebuildDynamicSlots(IReadOnlyList<(string Name, IWorkflowSlotViewModel? Slot)> entries, Color labelColor)
+    private void RebuildDynamicSlots(IReadOnlyList<(string Name, ISlotComponent? Slot)> entries, Color labelColor)
     {
         if (_outputSlotsLayout is null) return;
 

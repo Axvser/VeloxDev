@@ -7,12 +7,12 @@ namespace VeloxDev.WorkflowSystem;
 /// before the framework acts.
 /// </summary>
 /// <remarks>
-/// The capability is not a member of <see cref="IWorkflowNodeViewModelHelper"/>: adding members there would break
+/// The capability is not a member of <see cref="INodeHelper"/>: adding members there would break
 /// every existing implementer, and a helper that does not want events should not have to answer for them. A helper
 /// that derives from <c>NodeHelper&lt;T&gt;</c> gets this for free.
 /// </remarks>
 /// <seealso cref="WorkflowEventHandle"/>
-public interface IWorkflowNodeEvents
+public interface INodeEvents
 {
     /// <summary>
     /// Raised before the node is placed somewhere new. Refusing here (see <see cref="WorkflowEventHandle"/>) holds

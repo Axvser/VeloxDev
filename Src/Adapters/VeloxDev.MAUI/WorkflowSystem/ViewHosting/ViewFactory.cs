@@ -15,7 +15,7 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// the pool's per-item failure isolation, because it describes one item instead of the whole type.
 /// </para>
 /// </remarks>
-public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, View>
+public sealed class ViewFactory : IViewFactory<IWorkflowComponent, View>
 {
     private readonly Layout _host;
     private readonly DataTemplateSelector? _selector;
@@ -33,10 +33,10 @@ public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, View>
     }
 
     /// <inheritdoc />
-    public bool WantsItem(IWorkflowViewModel item) => true;
+    public bool WantsItem(IWorkflowComponent item) => true;
 
     /// <inheritdoc />
-    public View? CreateView(IWorkflowViewModel item)
+    public View? CreateView(IWorkflowComponent item)
     {
         var itemType = item.GetType();
         if (_unsupportedTypes.Contains(itemType))
@@ -62,7 +62,7 @@ public sealed class ViewFactory : IViewFactory<IWorkflowViewModel, View>
                 $"DataTemplate returned no View for {item.GetType().FullName}.");
     }
 
-    private DataTemplate? SelectTemplate(IWorkflowViewModel item)
+    private DataTemplate? SelectTemplate(IWorkflowComponent item)
     {
         if (_selector is null)
         {

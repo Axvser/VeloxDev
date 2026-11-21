@@ -1,7 +1,7 @@
 ﻿namespace VeloxDev.WorkflowSystem
 {
     /// <summary>An undo/redo pair of actions.</summary>
-    public interface IWorkflowActionPair
+    public interface IActionPair
     {
         /// <summary>Redoes the action.</summary>
         public Action Redo { get; }

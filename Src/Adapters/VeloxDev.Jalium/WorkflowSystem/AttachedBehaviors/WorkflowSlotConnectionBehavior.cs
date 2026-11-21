@@ -10,8 +10,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
 /// Attached behavior that turns a slot view into the two ends of a connection gesture: a left-press starts one
-/// (<see cref="IWorkflowSlotViewModel.SendConnectionCommand"/>) and the matching release finishes one
-/// (<see cref="IWorkflowSlotViewModel.ReceiveConnectionCommand"/>).
+/// (<see cref="ISlotComponent.SendConnectionCommand"/>) and the matching release finishes one
+/// (<see cref="ISlotComponent.ReceiveConnectionCommand"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -42,7 +42,7 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
     // 这一次手势是从哪个口发起的。按控件存，松手时用它判断「松回自己身上」。
     private sealed class ConnectionState
     {
-        public IWorkflowSlotViewModel? Sender;
+        public ISlotComponent? Sender;
     }
 
     private static readonly ConditionalWeakTable<Control, ConnectionState> States = new();
@@ -74,7 +74,7 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
 
     private static void OnPointerPressed(object? sender, MouseButtonEventArgs e)
     {
-        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot } control)
+        if (sender is not Control { DataContext: ISlotComponent slot } control)
         {
             return;
         }
@@ -107,7 +107,7 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
 
     private static void OnPointerReleased(object? sender, MouseButtonEventArgs e)
     {
-        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot } control)
+        if (sender is not Control { DataContext: ISlotComponent slot } control)
         {
             return;
         }

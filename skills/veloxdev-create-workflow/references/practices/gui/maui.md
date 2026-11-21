@@ -65,7 +65,7 @@ private void ApplyScale(double width)
 
 ⚙ A `PinchGestureRecognizer` for touch, plus a `#if WINDOWS` platform wheel hook. **Keep the Windows `ScrollViewer`'s `ManipulationMode` as the adapter sets it** — the adapter demotes it to a passive container with `TranslateX | TranslateY | Scale`; `None` breaks MAUI's own gestures.
 
-⚙ The platform element has no `DataContext`. A platform-level handler recovers the tree from the host in a closure (`host.BindingContext as IWorkflowTreeViewModel`).
+⚙ The platform element has no `DataContext`. A platform-level handler recovers the tree from the host in a closure (`host.BindingContext as ITreeComponent`).
 
 ## The connection preview and the wheel
 

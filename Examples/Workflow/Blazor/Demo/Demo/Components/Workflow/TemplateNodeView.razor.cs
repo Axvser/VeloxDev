@@ -26,11 +26,11 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
 {
     /// <summary>Gets or sets the node rendered by this view.</summary>
     [Parameter]
-    public IWorkflowNodeViewModel? Node { get; set; }
+    public INodeComponent? Node { get; set; }
 
     /// <summary>Gets or sets the workflow tree that owns connection gestures.</summary>
     [Parameter]
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     /// <summary>Gets or sets type-specific body content (inputs, labels, etc.).</summary>
     [Parameter]
@@ -127,7 +127,7 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
     // XAML Viewbox). The design size is single-sourced from the type's [DefaultSize] attribute;
     // node types without a DefaultSize (e.g. the generic catch-all card) fall back to their live
     // Size, which is the raw size at scale 1.
-    private IWorkflowNodeViewModel? _designNode;
+    private INodeComponent? _designNode;
     private (double Width, double Height) _design = (260, 180);
 
     /// <summary>The type accent, or the neutral slate when the card declares no type.</summary>
@@ -268,7 +268,7 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
         AgentSelection.Changed += OnAgentSelectionChanged;
     }
 
-    private void OnAgentSelectionChanged(IWorkflowNodeViewModel node)
+    private void OnAgentSelectionChanged(INodeComponent node)
     {
         if (ReferenceEquals(node, Node))
             _ = InvokeAsync(StateHasChanged);
@@ -282,7 +282,7 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
         // on zoom collapse, and the card must re-render to refresh its design-canvas CSS scale.
         // Everything else re-renders so the execution state (IsRunning, LastExecutionOrder,
         // RunCount/WaitCount) drives the step badge and running highlight live during a run.
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor))
+        if (e.PropertyName is nameof(INodeComponent.Anchor))
         {
             return;
         }
@@ -341,7 +341,7 @@ public partial class TemplateNodeView : ComponentBase, IDisposable
         => Read(property)?.ToString() ?? "";
 
     /// <summary>
-    /// Reads the display title from the node. <see cref="IWorkflowNodeViewModel"/> does not
+    /// Reads the display title from the node. <see cref="INodeComponent"/> does not
     /// expose a name, so look up a <c>Name</c> or <c>Title</c> property reflectively
     /// (works with any node view-model, including the built-in VeloxDev samples).
     /// </summary>

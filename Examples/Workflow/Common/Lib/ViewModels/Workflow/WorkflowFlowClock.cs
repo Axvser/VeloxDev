@@ -42,7 +42,7 @@ public sealed class WorkflowFlowClock
     // 静态方法不在它的目录里，正好避开。
     private static Func<WorkflowFlowClock, IWorkflowFlowDriver>? _driverFactory;
 
-    private static readonly ConditionalWeakTable<IWorkflowTreeViewModel, WorkflowFlowClock> Clocks = new();
+    private static readonly ConditionalWeakTable<ITreeComponent, WorkflowFlowClock> Clocks = new();
 
     // 一次周期里每帧到达的时刻：两个标量都已写入之后才通知订户，所以订户只重画一次。
     private readonly EventHandler<TransitionEventArgs> _lateUpdate;
@@ -95,7 +95,7 @@ public sealed class WorkflowFlowClock
     }
 
     /// <summary>Gets the clock shared by <paramref name="tree"/>.</summary>
-    public static WorkflowFlowClock For(IWorkflowTreeViewModel tree)
+    public static WorkflowFlowClock For(ITreeComponent tree)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
@@ -106,10 +106,10 @@ public sealed class WorkflowFlowClock
     /// Gets the clock of <paramref name="link"/>'s tree, or <see langword="null"/> when the link is detached
     /// from a tree.
     /// </summary>
-    public static WorkflowFlowClock? ForLink(IWorkflowLinkViewModel? link)
+    public static WorkflowFlowClock? ForLink(ILinkComponent? link)
     {
-        var tree = link?.Sender?.Parent?.Parent as IWorkflowTreeViewModel
-            ?? link?.Receiver?.Parent?.Parent as IWorkflowTreeViewModel;
+        var tree = link?.Sender?.Parent?.Parent as ITreeComponent
+            ?? link?.Receiver?.Parent?.Parent as ITreeComponent;
 
         return tree is null ? null : For(tree);
     }

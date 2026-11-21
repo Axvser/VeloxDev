@@ -62,14 +62,14 @@ public static class WorkflowPresentation
     /// also carries a source flag, so the target flags are what separate the right-edge
     /// output slots from the single left-edge input slot.
     /// </summary>
-    public static IEnumerable<IWorkflowSlotViewModel> InputSlotsOf(IWorkflowNodeViewModel node)
+    public static IEnumerable<ISlotComponent> InputSlotsOf(INodeComponent node)
         => node.Slots.Where(s => (s.Channel.HasFlag(SlotChannel.OneSource)
                                   || s.Channel.HasFlag(SlotChannel.MultipleSources))
                                  && !s.Channel.HasFlag(SlotChannel.OneTarget)
                                  && !s.Channel.HasFlag(SlotChannel.MultipleTargets));
 
     /// <summary>Output slots are the link-targets rendered on the node's right edge.</summary>
-    public static IEnumerable<IWorkflowSlotViewModel> OutputSlotsOf(IWorkflowNodeViewModel node)
+    public static IEnumerable<ISlotComponent> OutputSlotsOf(INodeComponent node)
         => node.Slots.Where(s => s.Channel.HasFlag(SlotChannel.OneTarget)
                                   || s.Channel.HasFlag(SlotChannel.MultipleTargets));
 
@@ -82,9 +82,9 @@ public static class WorkflowPresentation
     /// through <see cref="IConditionalSlotProviders"/>, so this reads them instead of reflecting over the node's
     /// properties by name.
     /// </remarks>
-    public static Dictionary<IWorkflowSlotViewModel, string> SlotNamesOf(IWorkflowNodeViewModel node)
+    public static Dictionary<ISlotComponent, string> SlotNamesOf(INodeComponent node)
     {
-        var map = new Dictionary<IWorkflowSlotViewModel, string>();
+        var map = new Dictionary<ISlotComponent, string>();
         if (node?.GetHelper() is not IConditionalSlotProviders providers) return map;
 
         foreach (var provider in providers.Providers)

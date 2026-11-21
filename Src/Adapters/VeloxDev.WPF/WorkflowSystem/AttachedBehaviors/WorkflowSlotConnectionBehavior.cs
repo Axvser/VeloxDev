@@ -38,7 +38,7 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
 
     private static void OnPointerPressed(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot } control)
+        if (sender is not Control { DataContext: ISlotComponent slot } control)
         {
             return;
         }
@@ -47,7 +47,7 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
         // 订阅者在插槽自己的 InputRelay 上置 PreventDefault 就是「这一次别连」；不读它，
         // 插槽上就没有任何可定制的地方。
         //
-        // 传的是控件而不是 slot：slot 是 IWorkflowSlotViewModel，一个不派生自 DependencyObject 的
+        // 传的是控件而不是 slot：slot 是 ISlotComponent，一个不派生自 DependencyObject 的
         // 模型对象，`slot as DependencyObject` 恒为 null —— 那样写这道检查会静默地永不生效。
         if (WorkflowSurfaceBehavior.GetPressHandle(control)?.PreventDefault == true)
         {
@@ -60,7 +60,7 @@ public sealed class WorkflowSlotConnectionBehavior : DependencyObject
 
     private static void OnPointerReleased(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not Control { DataContext: IWorkflowSlotViewModel slot })
+        if (sender is not Control { DataContext: ISlotComponent slot })
         {
             return;
         }

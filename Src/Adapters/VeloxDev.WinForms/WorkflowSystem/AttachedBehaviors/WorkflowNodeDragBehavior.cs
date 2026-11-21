@@ -483,9 +483,9 @@ public sealed class WorkflowNodeDragBehavior
         return null;
     }
 
-    private static IWorkflowSlotViewModel? ResolveSlot(Control control)
+    private static ISlotComponent? ResolveSlot(Control control)
     {
-        if (control.Tag is IWorkflowSlotViewModel taggedSlot)
+        if (control.Tag is ISlotComponent taggedSlot)
         {
             return taggedSlot;
         }
@@ -499,7 +499,7 @@ public sealed class WorkflowNodeDragBehavior
                 continue;
             }
 
-            if (property.GetValue(control) is IWorkflowSlotViewModel slot)
+            if (property.GetValue(control) is ISlotComponent slot)
             {
                 return slot;
             }
@@ -508,7 +508,7 @@ public sealed class WorkflowNodeDragBehavior
         return null;
     }
 
-    private static IWorkflowNodeViewModel? ResolveNode(Control control)
+    private static INodeComponent? ResolveNode(Control control)
     {
         var current = control;
         while (current is not null)
@@ -525,9 +525,9 @@ public sealed class WorkflowNodeDragBehavior
         return null;
     }
 
-    private static IWorkflowNodeViewModel? ResolveNodeFromControl(Control control)
+    private static INodeComponent? ResolveNodeFromControl(Control control)
     {
-        if (control.Tag is IWorkflowNodeViewModel taggedNode)
+        if (control.Tag is INodeComponent taggedNode)
         {
             return taggedNode;
         }
@@ -541,7 +541,7 @@ public sealed class WorkflowNodeDragBehavior
                 continue;
             }
 
-            if (property.GetValue(control) is IWorkflowNodeViewModel node)
+            if (property.GetValue(control) is INodeComponent node)
             {
                 return node;
             }

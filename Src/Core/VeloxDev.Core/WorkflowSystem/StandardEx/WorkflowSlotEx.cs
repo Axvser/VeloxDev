@@ -7,7 +7,7 @@ public static class WorkflowSlotEx
 {
     /// <summary>Returns the standard commands a slot helper drives.</summary>
     public static IReadOnlyCollection<IVeloxCommand> GetStandardCommands
-        (this IWorkflowSlotViewModel component)
+        (this ISlotComponent component)
         =>
         [
             component.SendConnectionCommand,
@@ -16,7 +16,7 @@ public static class WorkflowSlotEx
         ];
 
     /// <summary>Sets the slot's channel to <paramref name="channel"/>, tearing down the connections the new channel disallows.</summary>
-    public static void StandardSetChannel(this IWorkflowSlotViewModel component, SlotChannel channel)
+    public static void StandardSetChannel(this ISlotComponent component, SlotChannel channel)
     {
         if (component.Parent?.Parent is null)
         {
@@ -24,13 +24,13 @@ public static class WorkflowSlotEx
             return;
         }
         var from = component.Channel;
-        var events = component.GetHelper() as IWorkflowSlotEvents;
+        var events = component.GetHelper() as ISlotEvents;
         var handle = events?.RaiseChannelChanging(from, channel) ?? new WorkflowEventHandle();
         if (handle.PreventDefault) return;
 
         var tree = component.Parent.Parent;
-        List<IWorkflowLinkViewModel> links_asSource = [];
-        List<IWorkflowLinkViewModel> links_asTarget = [];
+        List<ILinkComponent> links_asSource = [];
+        List<ILinkComponent> links_asTarget = [];
         foreach (var target in component.Targets)
         {
             if (tree.LinksMap.TryGetValue(component, out var pair) &&
@@ -90,7 +90,7 @@ public static class WorkflowSlotEx
 
     /// <summary>Recomputes the slot's connection state from its targets and sources.</summary>
     /// <remarks>The two preview bits are owned by an in-progress drag, not by the connection lists; they survive the recompute.</remarks>
-    public static void StandardUpdateState(this IWorkflowSlotViewModel component)
+    public static void StandardUpdateState(this ISlotComponent component)
     {
         bool hasOutgoingConnections = component.Targets.Count > 0;
         bool hasIncomingConnections = component.Sources.Count > 0;
@@ -106,7 +106,7 @@ public static class WorkflowSlotEx
     }
 
     /// <summary>Starts a connection from the slot through its tree.</summary>
-    public static void StandardApplyConnection(this IWorkflowSlotViewModel component)
+    public static void StandardApplyConnection(this ISlotComponent component)
     {
         var tree = component.Parent?.Parent;
         if (tree is null)
@@ -117,7 +117,7 @@ public static class WorkflowSlotEx
         tree.GetHelper()?.SendConnection(component);
     }
     /// <summary>Completes a connection at the slot through its tree.</summary>
-    public static void StandardReceiveConnection(this IWorkflowSlotViewModel component)
+    public static void StandardReceiveConnection(this ISlotComponent component)
     {
         var tree = component.Parent?.Parent;
         if (tree is null)
@@ -129,7 +129,7 @@ public static class WorkflowSlotEx
     }
 
     /// <summary>Deletes the slot and its links as one undoable step.</summary>
-    public static void StandardDelete(this IWorkflowSlotViewModel component)
+    public static void StandardDelete(this ISlotComponent component)
     {
         if (component.Parent is null)
         {
@@ -137,7 +137,7 @@ public static class WorkflowSlotEx
             return;
         }
 
-        HashSet<IWorkflowLinkViewModel> links = [];
+        HashSet<ILinkComponent> links = [];
 
         foreach (var target in component.Targets)
         {
@@ -170,7 +170,7 @@ public static class WorkflowSlotEx
         var tree = component.Parent.Parent;
         var oldParent = component.Parent;
 
-        tree.GetHelper().Submit(new WorkflowActionPair(
+        tree.GetHelper().Submit(new ActionPair(
             () =>
             {
                 foreach (var link in links)
@@ -192,14 +192,14 @@ public static class WorkflowSlotEx
     }
 
     /// <summary>Whether the slot's channel allows it to send.</summary>
-    public static bool StandardCanBeSender(this IWorkflowSlotViewModel component)
+    public static bool StandardCanBeSender(this ISlotComponent component)
         => component.Channel.HasFlag(SlotChannel.OneTarget) ||
            component.Channel.HasFlag(SlotChannel.MultipleTargets) ||
            component.Channel.HasFlag(SlotChannel.OneBoth) ||
            component.Channel.HasFlag(SlotChannel.MultipleBoth);
 
     /// <summary>Whether the slot's channel allows it to receive.</summary>
-    public static bool StandardCanBeReceiver(this IWorkflowSlotViewModel component)
+    public static bool StandardCanBeReceiver(this ISlotComponent component)
         => component.Channel.HasFlag(SlotChannel.OneSource) ||
            component.Channel.HasFlag(SlotChannel.MultipleSources) ||
            component.Channel.HasFlag(SlotChannel.OneBoth) ||

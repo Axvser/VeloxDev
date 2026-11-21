@@ -4,12 +4,12 @@ namespace VeloxDev.WorkflowSystem;
 /// What a host implements to receive the tree's model events — the connections made between two of its ports.
 /// </summary>
 /// <remarks>
-/// Same shape as <see cref="IWorkflowNodeEventSink"/>: the argument carries the handle, so
+/// Same shape as <see cref="INodeEventSink"/>: the argument carries the handle, so
 /// <see cref="OnConnecting"/> can refuse that one drag. It composes with
-/// <see cref="IWorkflowTreeViewModelHelper.ValidateConnection"/> — the connection happens only when neither
+/// <see cref="ITreeHelper.ValidateConnection"/> — the connection happens only when neither
 /// refuses. See <see cref="WorkflowEventRelay"/> for how a platform hooks this up.
 /// </remarks>
-public interface IWorkflowTreeEventSink
+public interface ITreeEventSink
 {
     /// <summary>Called before a connection is made; refuse via the argument's handle to cancel that drag.</summary>
     /// <param name="e">The two ports the connection would join.</param>

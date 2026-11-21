@@ -129,7 +129,7 @@ public partial class TemplateClass : Control
         // The curve follows the endpoints, and the control is pooled: a rebound control must retract the old
         // link's curve before it publishes its own, or the old link answers the pointer at the new control.
         if (change.Property == DataContextProperty
-            && change.OldValue is IWorkflowLinkViewModel old && !ReferenceEquals(old, change.NewValue))
+            && change.OldValue is ILinkComponent old && !ReferenceEquals(old, change.NewValue))
         {
             old.PublishCurve(null);
         }
@@ -146,7 +146,7 @@ public partial class TemplateClass : Control
     // hit-test curve, so the two can never describe different shapes.
     private void RefreshGeometry()
     {
-        var link = DataContext as IWorkflowLinkViewModel;
+        var link = DataContext as ILinkComponent;
         _curve = LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         link?.PublishCurve(_curve, this);
     }
@@ -163,14 +163,14 @@ public partial class TemplateClass : Control
             ? new Pen(brush, LineThickness) { DashStyle = new DashStyle([4.0, 2.0], 0) }
             : new Pen(brush, LineThickness);
 
-        var geometry = BuildCurve(DataContext as IWorkflowLinkViewModel);
+        var geometry = BuildCurve(DataContext as ILinkComponent);
 
         context.DrawGeometry(null, pen, geometry);
     }
 
     // Extension point: the control points set the curve's shape. Core derives them from each port's own edge
     // (LinkCurve.LinkCurvePoints) — keep that source if you replace the drawing.
-    private StreamGeometry BuildCurve(IWorkflowLinkViewModel? link)
+    private StreamGeometry BuildCurve(ILinkComponent? link)
     {
         var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, PullMinimum);
         var geometry = new StreamGeometry();
@@ -188,7 +188,7 @@ public partial class TemplateClass : Control
 
     private bool IsVirtualLink
         => IsVirtual
-            || DataContext is IWorkflowLinkViewModel
+            || DataContext is ILinkComponent
             {
                 Sender.Parent: null,
                 Receiver.Parent: null

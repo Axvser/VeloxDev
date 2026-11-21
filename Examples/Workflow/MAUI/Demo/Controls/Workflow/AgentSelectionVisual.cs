@@ -27,7 +27,7 @@ public static class AgentSelectionVisual
 
     private sealed class Attachment(ContentView view)
     {
-        private IWorkflowNodeViewModel? _node;
+        private INodeComponent? _node;
         private Border? _card;
         private Brush? _originalStroke;
         private double _originalThickness;
@@ -36,7 +36,7 @@ public static class AgentSelectionVisual
 
         internal void Bind()
         {
-            if (view.BindingContext is not IWorkflowNodeViewModel node)
+            if (view.BindingContext is not INodeComponent node)
             {
                 DetachNode();
                 Apply(false);
@@ -67,7 +67,7 @@ public static class AgentSelectionVisual
             _node = null;
         }
 
-        private void OnSelectionChanged(IWorkflowNodeViewModel node)
+        private void OnSelectionChanged(INodeComponent node)
         {
             if (ReferenceEquals(node, _node))
                 Apply(AgentSelection.IsSelected(node));

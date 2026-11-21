@@ -10,8 +10,8 @@ namespace VeloxDev.WorkflowSystem;
 /// a node, slot or link without knowing the platform's scroll API.
 /// </para>
 /// <para>
-/// Coordinates use the same frame as <see cref="IWorkflowNodeViewModel.Anchor"/> and
-/// <see cref="IWorkflowTreeViewModelHelper.Viewport"/>; <see cref="StandardEx.WorkflowNavigationEx"/> produces
+/// Coordinates use the same frame as <see cref="INodeComponent.Anchor"/> and
+/// <see cref="ITreeHelper.Viewport"/>; <see cref="StandardEx.WorkflowNavigationEx"/> produces
 /// them from an element. A target outside the current scrollable extent may grow the surface (the adapter
 /// decides — six of the seven surfaces extend it, the same way their wheel overscroll does; WinForms has no
 /// extent ceiling because its pan engine accepts signed targets). An implementation that cannot grow clamps

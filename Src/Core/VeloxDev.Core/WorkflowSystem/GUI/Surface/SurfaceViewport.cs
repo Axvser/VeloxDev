@@ -12,7 +12,7 @@ namespace VeloxDev.WorkflowSystem;
 [AgentContext(AgentLanguages.Chinese, "工作流画布表面状态的不可变快照：滚动偏移 + 视口尺寸 + 内容偏移")]
 [AgentContext(AgentLanguages.English, "Immutable snapshot of the workflow surface state: scroll offsets + viewport size + content offsets")]
 public sealed record SurfaceViewport(
-    IWorkflowTreeViewModel Tree,
+    ITreeComponent Tree,
     double ScrollLeft,
     double ScrollTop,
     double ViewportWidth,

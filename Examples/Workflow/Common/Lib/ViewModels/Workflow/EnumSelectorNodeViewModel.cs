@@ -245,9 +245,9 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
 
     /// <summary>Compile-time route table (changes with mode): Static contains only the currently selected branch; Dynamic contains all branches (preserving 1:N fan-out).</summary>
     /// <inheritdoc/>
-    public Task<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>> GetRouteTable()
+    public Task<IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>>> GetRouteTable()
     {
-        var dict = new Dictionary<object, List<IWorkflowNodeViewModel>>();
+        var dict = new Dictionary<object, List<INodeComponent>>();
         if (OutputSlots is null)
             return Task.FromResult(EmptyRouteTable());
 
@@ -288,12 +288,12 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
             }
         }
 
-        return Task.FromResult<IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>>(
-            dict.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<IWorkflowNodeViewModel>)kv.Value.AsReadOnly()));
+        return Task.FromResult<IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>>>(
+            dict.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<INodeComponent>)kv.Value.AsReadOnly()));
     }
 
-    private static void AddTarget(Dictionary<object, List<IWorkflowNodeViewModel>> dict, object key,
-        IWorkflowNodeViewModel target)
+    private static void AddTarget(Dictionary<object, List<INodeComponent>> dict, object key,
+        INodeComponent target)
     {
         if (!dict.TryGetValue(key, out var list))
             dict[key] = list = [];
@@ -301,6 +301,6 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
             list.Add(target);
     }
 
-    private static IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> EmptyRouteTable()
-        => new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
+    private static IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>> EmptyRouteTable()
+        => new Dictionary<object, IReadOnlyList<INodeComponent>>();
 }

@@ -15,13 +15,13 @@ internal sealed class PythonNodeView : NodeViewBase
 {
     protected override Color Accent => CardPalette.AccentTimerPython;
 
-    protected override string InitialExecOrder(IWorkflowNodeViewModel node)
+    protected override string InitialExecOrder(INodeComponent node)
         => node is PythonScriptNodeViewModel { HasExecutionOrder: true } vm ? vm.ExecutionOrderText : string.Empty;
 
-    protected override string InitialStatus(IWorkflowNodeViewModel node)
+    protected override string InitialStatus(INodeComponent node)
         => (node as PythonScriptNodeViewModel)?.LastStatus ?? string.Empty;
 
-    protected override void Build(IWorkflowNodeViewModel node, Grid content)
+    protected override void Build(INodeComponent node, Grid content)
     {
         var vm = (PythonScriptNodeViewModel)node;
 

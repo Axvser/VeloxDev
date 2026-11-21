@@ -186,7 +186,7 @@ public sealed class SizeProxy
 
 public sealed class HelperProxy
 {
-    public IEnumerable<IWorkflowNodeViewModel> VisibleItems { get; } = System.Array.Empty<IWorkflowNodeViewModel>();
+    public IEnumerable<INodeComponent> VisibleItems { get; } = System.Array.Empty<INodeComponent>();
 }
 '@
         }

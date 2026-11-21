@@ -39,8 +39,8 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
             new PropertyMetadata(0d, OnPropChanged));
 
     public static readonly DependencyProperty WorkflowTreeProperty =
-        DependencyProperty.Register(nameof(WorkflowTree), typeof(IWorkflowTreeViewModel), typeof(WorkflowMinimapOverlay),
-            new PropertyMetadata(null, (d, e) => ((WorkflowMinimapOverlay)d).OnTreeChanged((IWorkflowTreeViewModel?)e.NewValue)));
+        DependencyProperty.Register(nameof(WorkflowTree), typeof(ITreeComponent), typeof(WorkflowMinimapOverlay),
+            new PropertyMetadata(null, (d, e) => ((WorkflowMinimapOverlay)d).OnTreeChanged((ITreeComponent?)e.NewValue)));
 
     public static readonly DependencyProperty ViewportWidthProperty =
         DependencyProperty.Register(nameof(ViewportWidth), typeof(double), typeof(WorkflowMinimapOverlay),
@@ -128,7 +128,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     public double ContentOffsetY { get => (double)GetValue(ContentOffsetYProperty); set => SetValue(ContentOffsetYProperty, value); }
     /// <inheritdoc />
     public double RulerBand => 0;
-    public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
+    public ITreeComponent? WorkflowTree { get => (ITreeComponent?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
     public double ViewportWidth { get => (double)GetValue(ViewportWidthProperty); set => SetValue(ViewportWidthProperty, value); }
     public double ViewportHeight { get => (double)GetValue(ViewportHeightProperty); set => SetValue(ViewportHeightProperty, value); }
     public bool IsMinimapVisible { get => (bool)GetValue(IsMinimapVisibleProperty); set => SetValue(IsMinimapVisibleProperty, value); }
@@ -158,9 +158,9 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
     private bool _pendingRefresh = true;
     private bool _isUnloaded;
     private bool _isDragging;
-    private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
-    private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
-    private IWorkflowTreeViewModel? _subscribedTree;
+    private readonly HashSet<INodeComponent> _subscribedNodes = [];
+    private readonly HashSet<ILinkComponent> _subscribedLinks = [];
+    private ITreeComponent? _subscribedTree;
     private ScrollViewer? _scrollViewer;
 
     // 形状池
@@ -240,7 +240,7 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
     // ── 树管理 ──────────────────────────────────────────────────────────────
 
-    private void OnTreeChanged(IWorkflowTreeViewModel? newTree)
+    private void OnTreeChanged(ITreeComponent? newTree)
     {
         UnsubscribeFromTree();
         _subscribedTree = newTree;
@@ -277,13 +277,13 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         _subscribedTree = null;
     }
 
-    private void SubscribeNode(IWorkflowNodeViewModel n)
+    private void SubscribeNode(INodeComponent n)
     {
         if (_subscribedNodes.Add(n) && n is INotifyPropertyChanged npc)
             npc.PropertyChanged += OnNodePropChanged;
     }
 
-    private void SubscribeLink(IWorkflowLinkViewModel l)
+    private void SubscribeLink(ILinkComponent l)
     {
         if (!_subscribedLinks.Add(l)) return;
         if (l.Sender is INotifyPropertyChanged sp) sp.PropertyChanged += OnSlotPropChanged;
@@ -292,15 +292,15 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
     private void OnNodesChanged(object? s, NotifyCollectionChangedEventArgs e)
     {
-        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is IWorkflowNodeViewModel n) SubscribeNode(n);
-        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is IWorkflowNodeViewModel n && _subscribedNodes.Remove(n) && n is INotifyPropertyChanged npc) npc.PropertyChanged -= OnNodePropChanged;
+        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is INodeComponent n) SubscribeNode(n);
+        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is INodeComponent n && _subscribedNodes.Remove(n) && n is INotifyPropertyChanged npc) npc.PropertyChanged -= OnNodePropChanged;
         MarkDirty();
     }
 
     private void OnLinksChanged(object? s, NotifyCollectionChangedEventArgs e)
     {
-        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is IWorkflowLinkViewModel l) SubscribeLink(l);
-        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is IWorkflowLinkViewModel l && _subscribedLinks.Remove(l))
+        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is ILinkComponent l) SubscribeLink(l);
+        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is ILinkComponent l && _subscribedLinks.Remove(l))
             {
                 if (l.Sender is INotifyPropertyChanged sp) sp.PropertyChanged -= OnSlotPropChanged;
                 if (l.Receiver is INotifyPropertyChanged rp) rp.PropertyChanged -= OnSlotPropChanged;
@@ -310,13 +310,13 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
     private void OnNodePropChanged(object? s, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
             MarkDirty();
     }
 
     private void OnSlotPropChanged(object? s, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.Anchor))
+        if (e.PropertyName is nameof(ISlotComponent.Anchor))
             MarkDirty();
     }
 

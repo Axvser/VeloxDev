@@ -14,17 +14,17 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 [TestClass]
 public class LayoutToolTests
 {
-    private static (TreeDefaultViewModel Tree, NodeDefaultViewModel Parent, NodeDefaultViewModel Child)
+    private static (TreeDefaultComponent Tree, NodeDefaultComponent Parent, NodeDefaultComponent Child)
         ParentAndChild()
     {
-        var tree = new TreeDefaultViewModel();
-        var parent = new NodeDefaultViewModel
+        var tree = new TreeDefaultComponent();
+        var parent = new NodeDefaultComponent
         {
             Parent = tree,
             Anchor = new Anchor(0, 0, 0),
             Size = new Size(100, 40),
         };
-        var child = new NodeDefaultViewModel
+        var child = new NodeDefaultComponent
         {
             Parent = tree,
             Anchor = new Anchor(300, 200, 0),
@@ -32,10 +32,10 @@ public class LayoutToolTests
         };
         tree.Nodes.Add(parent);
         tree.Nodes.Add(child);
-        tree.Links.Add(new LinkDefaultViewModel
+        tree.Links.Add(new LinkDefaultComponent
         {
-            Sender = new SlotDefaultViewModel { Parent = parent },
-            Receiver = new SlotDefaultViewModel { Parent = child },
+            Sender = new SlotDefaultComponent { Parent = parent },
+            Receiver = new SlotDefaultComponent { Parent = child },
         });
         return (tree, parent, child);
     }
@@ -153,7 +153,7 @@ public class LayoutToolTests
         public bool Called { get; private set; }
         public WorkflowLayoutOptions? Options { get; private set; }
 
-        public WorkflowLayoutResult Arrange(IWorkflowTreeViewModel tree, WorkflowLayoutOptions options)
+        public WorkflowLayoutResult Arrange(ITreeComponent tree, WorkflowLayoutOptions options)
         {
             Called = true;
             Options = options;

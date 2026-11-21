@@ -42,7 +42,7 @@ public partial class SlotView : UserControl
 
     private void OnPointerPressed(object sender, MouseButtonEventArgs e)
     {
-        if (DataContext is not IWorkflowSlotViewModel context) return;
+        if (DataContext is not ISlotComponent context) return;
 
         context.SendConnectionCommand.Execute(null);
 
@@ -51,7 +51,7 @@ public partial class SlotView : UserControl
 
     private void OnPointerReleased(object sender, MouseButtonEventArgs e)
     {
-        if (DataContext is not IWorkflowSlotViewModel context) return;
+        if (DataContext is not ISlotComponent context) return;
 
         context.ReceiveConnectionCommand.Execute(null);
 

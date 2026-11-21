@@ -19,11 +19,11 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 public sealed partial class CompilerViewModel
 {
     private sealed class ConeInfo(
-        ISet<IWorkflowNodeViewModel> nodes,
-        IReadOnlyDictionary<IWorkflowNodeViewModel, IReadOnlyList<IWorkflowNodeViewModel>> inConePredecessors)
+        ISet<INodeComponent> nodes,
+        IReadOnlyDictionary<INodeComponent, IReadOnlyList<INodeComponent>> inConePredecessors)
     {
-        public ISet<IWorkflowNodeViewModel> Nodes { get; } = nodes;
-        public IReadOnlyDictionary<IWorkflowNodeViewModel, IReadOnlyList<IWorkflowNodeViewModel>> InConePredecessors { get; } = inConePredecessors;
+        public ISet<INodeComponent> Nodes { get; } = nodes;
+        public IReadOnlyDictionary<INodeComponent, IReadOnlyList<INodeComponent>> InConePredecessors { get; } = inConePredecessors;
     }
 
     /// <summary>
@@ -31,13 +31,13 @@ public sealed partial class CompilerViewModel
     /// accepts them (same "unconnected when rejected" rule the forward compiler applies). Returns the ancestor cone
     /// plus, per node, its in-cone predecessors (distinct source nodes).
     /// </summary>
-    private async Task<ConeInfo> BuildAncestorConeAsync(IWorkflowNodeViewModel target, CancellationToken ct)
+    private async Task<ConeInfo> BuildAncestorConeAsync(INodeComponent target, CancellationToken ct)
     {
-        var comparer = WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance;
-        var cone = new HashSet<IWorkflowNodeViewModel>(comparer);
-        var predecessors = new Dictionary<IWorkflowNodeViewModel, IReadOnlyList<IWorkflowNodeViewModel>>(comparer);
-        var predSets = new Dictionary<IWorkflowNodeViewModel, List<IWorkflowNodeViewModel>>(comparer);
-        var queue = new Queue<IWorkflowNodeViewModel>();
+        var comparer = WorkflowReferenceEqualityComparer<INodeComponent>.Instance;
+        var cone = new HashSet<INodeComponent>(comparer);
+        var predecessors = new Dictionary<INodeComponent, IReadOnlyList<INodeComponent>>(comparer);
+        var predSets = new Dictionary<INodeComponent, List<INodeComponent>>(comparer);
+        var queue = new Queue<INodeComponent>();
         cone.Add(target);
         queue.Enqueue(target);
 
@@ -50,7 +50,7 @@ public sealed partial class CompilerViewModel
                 foreach (var source in slot!.Sources ?? [])
                 {
                     ct.ThrowIfCancellationRequested();
-                    if (source.Parent is not IWorkflowNodeViewModel sender) continue;
+                    if (source.Parent is not INodeComponent sender) continue;
 
                     var helper = sender.GetHelper();
                     if (helper is null) continue;   // mirrors the forward walk: no helper ⇒ treated as unconnected
@@ -81,7 +81,7 @@ public sealed partial class CompilerViewModel
     /// (the cone's funnel point, usually the target) continues as a normal chain.
     /// </summary>
     private async Task<CompiledGraph> CompileConeAsync(
-        IWorkflowNodeViewModel target, ConeInfo info, CancellationToken ct)
+        INodeComponent target, ConeInfo info, CancellationToken ct)
     {
         var state = new CompileState { Cone = info.Nodes };
 
@@ -98,7 +98,7 @@ public sealed partial class CompilerViewModel
         // Multiple independent producers funnel into the target. Each entry compiles up to the shared funnel join;
         // after all of them the common join (its inputs span several entries) is driven as one continuation.
         var branches = new List<CompiledGraph>();
-        var exits = new List<IWorkflowNodeViewModel?>();
+        var exits = new List<INodeComponent?>();
         foreach (var entry in entries)
         {
             var sub = await CompileGraphAsync(entry, state, ct);
@@ -116,8 +116,8 @@ public sealed partial class CompilerViewModel
         }
 
         var distinctExits = exits.Where(e => e is not null)
-            .Cast<IWorkflowNodeViewModel>()
-            .Distinct(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance)
+            .Cast<INodeComponent>()
+            .Distinct(WorkflowReferenceEqualityComparer<INodeComponent>.Instance)
             .ToList();
         if (distinctExits.Count > 1)
             state.JoinInputs[common] = distinctExits;

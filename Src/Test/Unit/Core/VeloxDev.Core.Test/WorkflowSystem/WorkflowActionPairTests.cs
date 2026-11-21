@@ -9,7 +9,7 @@ public class WorkflowActionPairTests
     public void Constructor_StoresActions()
     {
         int counter = 0;
-        var pair = new WorkflowActionPair(() => counter++, () => counter--);
+        var pair = new ActionPair(() => counter++, () => counter--);
 
         pair.Redo();
         Assert.AreEqual(1, counter);
@@ -22,7 +22,7 @@ public class WorkflowActionPairTests
     public void Redo_And_Undo_CanBeCalledMultipleTimes()
     {
         int counter = 0;
-        var pair = new WorkflowActionPair(() => counter += 10, () => counter -= 10);
+        var pair = new ActionPair(() => counter += 10, () => counter -= 10);
 
         pair.Redo();
         pair.Redo();

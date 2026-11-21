@@ -8,7 +8,7 @@ namespace Demo.Views.Workflow;
 
 public sealed partial class SlotView : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
-    private IWorkflowSlotViewModel? slot;
+    private ISlotComponent? slot;
     private INotifyPropertyChanged? notifier;
 
     public SlotView()
@@ -19,7 +19,7 @@ public sealed partial class SlotView : VeloxDev.WinForms.Xaml.Controls.UserContr
 
     [System.ComponentModel.Browsable(false)]
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public IWorkflowSlotViewModel? ViewModel
+    public ISlotComponent? ViewModel
     {
         get => slot;
         set
@@ -58,7 +58,7 @@ public sealed partial class SlotView : VeloxDev.WinForms.Xaml.Controls.UserContr
 
     private void OnSlotPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.State) or null)
+        if (e.PropertyName is nameof(ISlotComponent.State) or null)
         {
             UpdateGlyph();
         }

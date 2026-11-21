@@ -224,11 +224,11 @@ public sealed class WorkflowNodeDragBehavior : DependencyObject
         return null;
     }
 
-    private static IWorkflowNodeViewModel? ResolveNode(DependencyObject source)
+    private static INodeComponent? ResolveNode(DependencyObject source)
     {
         foreach (var candidate in EnumerateSelfAndAncestors(source).OfType<FrameworkElement>())
         {
-            if (candidate.DataContext is IWorkflowNodeViewModel node)
+            if (candidate.DataContext is INodeComponent node)
             {
                 return node;
             }

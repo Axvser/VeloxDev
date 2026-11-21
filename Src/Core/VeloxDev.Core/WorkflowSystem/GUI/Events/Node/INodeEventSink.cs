@@ -17,7 +17,7 @@ namespace VeloxDev.WorkflowSystem;
 /// </para>
 /// </remarks>
 /// <seealso cref="WorkflowEventRelay"/>
-public interface IWorkflowNodeEventSink
+public interface INodeEventSink
 {
     /// <summary>Called before the node is placed somewhere new; refuse via the argument's handle to pin it.</summary>
     /// <param name="e">The placement, both anchors complete (layer included).</param>

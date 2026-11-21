@@ -29,7 +29,7 @@ public class CompileDecompositionTests
         var chain = ProbeGraph.AsChain(graph.Entries[0]);
         Assert.IsNotNull(chain, "the single entry should be a ChainSegment");
         CollectionAssert.AreEqual(
-            new IWorkflowNodeViewModel[] { a, b, c },
+            new INodeComponent[] { a, b, c },
             chain!.Nodes.ToArray(),
             "chain should contain the three nodes in topological order");
 
@@ -64,10 +64,10 @@ public class CompileDecompositionTests
         Assert.IsNotNull(optionA.Graph, "branch A should carry a sub-graph");
         Assert.IsNotNull(optionB.Graph);
         CollectionAssert.AreEqual(
-            new IWorkflowNodeViewModel[] { a },
+            new INodeComponent[] { a },
             ProbeGraph.AsChain(optionA.Graph!.Entries[0])!.Nodes.ToArray());
         CollectionAssert.AreEqual(
-            new IWorkflowNodeViewModel[] { b },
+            new INodeComponent[] { b },
             ProbeGraph.AsChain(optionB.Graph!.Entries[0])!.Nodes.ToArray());
 
         // 全局 Order 单调连续:router=0, a=1, b=2。
@@ -122,19 +122,19 @@ public class CompileDecompositionTests
 
         var headChain = ProbeGraph.AsChain(graph.Entries[0]);
         Assert.IsNotNull(headChain);
-        CollectionAssert.AreEqual(new IWorkflowNodeViewModel[] { p }, headChain!.Nodes.ToArray());
+        CollectionAssert.AreEqual(new INodeComponent[] { p }, headChain!.Nodes.ToArray());
 
         var parallel = ProbeGraph.AsParallel(graph.Entries[1]);
         Assert.IsNotNull(parallel, "plain multi-target fan-out must compile into a ParallelSegment");
         Assert.HasCount(2, parallel!.Branches, "two downstream branches");
-        CollectionAssert.AreEqual(new IWorkflowNodeViewModel[] { a },
+        CollectionAssert.AreEqual(new INodeComponent[] { a },
             ProbeGraph.AsChain(parallel.Branches[0].Entries[0])!.Nodes.ToArray());
-        CollectionAssert.AreEqual(new IWorkflowNodeViewModel[] { b },
+        CollectionAssert.AreEqual(new INodeComponent[] { b },
             ProbeGraph.AsChain(parallel.Branches[1].Entries[0])!.Nodes.ToArray());
 
         var tailChain = ProbeGraph.AsChain(graph.Entries[2]);
         Assert.IsNotNull(tailChain, "the common downstream of both fan-out branches continues as a chain");
-        CollectionAssert.AreEqual(new IWorkflowNodeViewModel[] { join }, tailChain!.Nodes.ToArray());
+        CollectionAssert.AreEqual(new INodeComponent[] { join }, tailChain!.Nodes.ToArray());
 
         // 汇合点编译身份登记了多分支出口(运行期据此聚合 GroupData)。
         Assert.IsNotNull(join.CompileContext, "join node must receive a compile identity");
@@ -162,19 +162,19 @@ public class CompileDecompositionTests
         Assert.HasCount(1, graph.Entries, "with one invalid edge the graph degrades to a single linear chain");
         var chain = ProbeGraph.AsChain(graph.Entries[0]);
         Assert.IsNotNull(chain);
-        CollectionAssert.AreEqual(new IWorkflowNodeViewModel[] { p, a }, chain!.Nodes.ToArray());
+        CollectionAssert.AreEqual(new INodeComponent[] { p, a }, chain!.Nodes.ToArray());
 
         Assert.IsNull(b.CompileContext, "pruned node should not even be reached by the compiler");
     }
 
-    private static IEnumerable<IWorkflowNodeViewModel> AllNodes(CompiledGraph graph)
+    private static IEnumerable<INodeComponent> AllNodes(CompiledGraph graph)
     {
         foreach (var e in graph.Entries)
             foreach (var n in SegmentNodes(e))
                 yield return n;
     }
 
-    private static IEnumerable<IWorkflowNodeViewModel> SegmentNodes(CompileSegment entry) => entry switch
+    private static IEnumerable<INodeComponent> SegmentNodes(CompileSegment entry) => entry switch
     {
         ChainSegment c => c.Nodes,
         BranchSegment b => b.Options.SelectMany(o => o.Graph is null ? [] : AllNodes(o.Graph)),

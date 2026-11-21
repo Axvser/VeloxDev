@@ -29,7 +29,7 @@ public class MenuDismissTests : WorkflowInputTestBase
         var tree = DeletableTree(out var link);
         var other = ReadyLink(0, 200, 100, 200);
         tree.Links.Add(other);
-        var left = new List<IWorkflowLinkViewModel>();
+        var left = new List<ILinkComponent>();
         (tree.GetHelper()).LinkRemoved += (_, removed) => left.Add(removed);
 
         // 走集合这条路：谁离开就报谁，另一条不在名单里。

@@ -27,12 +27,12 @@ public enum ConnectionPreviewState
 /// snapshot.
 /// </para>
 /// <para>
-/// The capability is kept off <see cref="IWorkflowLinkViewModel"/> for the same reason as the other optional event
-/// interfaces: adding a member there would break every implementer. <see cref="LinkDefaultViewModel"/> implements it;
+/// The capability is kept off <see cref="ILinkComponent"/> for the same reason as the other optional event
+/// interfaces: adding a member there would break every implementer. <see cref="LinkDefaultComponent"/> implements it;
 /// a custom virtual link may implement it too.
 /// </para>
 /// </remarks>
-public interface IConnectionPreviewLink : IWorkflowLinkViewModel
+public interface IConnectionPreviewLink : ILinkComponent
 {
     /// <summary>The current stage of the connection drag.</summary>
     ConnectionPreviewState Preview { get; }

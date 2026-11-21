@@ -17,7 +17,7 @@ public partial class TickerNode
 {
     public TickerNode() => InitializeWorkflow();
 
-    [VeloxProperty] public partial SlotDefaultViewModel OutputSlot { get; set; }
+    [VeloxProperty] public partial SlotDefaultComponent OutputSlot { get; set; }
 }
 
 public class TickerHelper : NodeHelper<TickerNode>
@@ -29,11 +29,11 @@ public class TickerHelper : NodeHelper<TickerNode>
 
 `workSemaphore` is the concurrency capacity of the node's receive command; `1` matches the demo nodes.
 
-⚙ **Every generic parameter is the Helper type, constrained `where T : IWorkflowXxxHelper, new()`.** There is no non-generic form of any of the four attributes.
+⚙ **Every generic parameter is the Helper type, constrained `where T : I<Kind>Helper, new()`.** There is no non-generic form of any of the four attributes.
 
 ⚙ **The class is `partial`, carries the attribute, and calls `InitializeWorkflow()` from its own constructor.** The generator emits no constructor.
 
-Optional attribute arguments: `Tree(…, virtualLinkType, virtualSlotType)` overrides the transient drag link and its slots — both default to Core's `LinkDefaultViewModel` / `SlotDefaultViewModel`. `Link(slotType)` overrides the type of the `Sender`/`Receiver` the link creates.
+Optional attribute arguments: `Tree(…, virtualLinkType, virtualSlotType)` overrides the transient drag link and its slots — both default to Core's `LinkDefaultComponent` / `SlotDefaultComponent`. `Link(slotType)` overrides the type of the `Sender`/`Receiver` the link creates.
 
 Geometry defaults for a node come from `[DefaultAnchor(h, v, layer)]` / `[DefaultSize(w, h)]` on the class.
 
@@ -42,18 +42,18 @@ Geometry defaults for a node come from `[DefaultAnchor(h, v, layer)]` / `[Defaul
 Into `{ClassName}.g.cs`, for any of the four kinds:
 
 ```csharp
-private IWorkflowXxxHelper workflowHelper = new <T>();
-public virtual IWorkflowXxxHelper Helper { get; protected set; }
+private I<Kind>Helper workflowHelper = new <T>();
+public virtual I<Kind>Helper Helper { get; protected set; }
 public string RuntimeId { get; protected set; } = Guid.NewGuid().ToString("N");
 
-protected virtual void EnsureWorkflowHelper() { … }     // swap in a different helper type
+protected virtual void EnsureComponentHelper() { … }     // swap in a different helper type
 protected virtual void InitializeWorkflowCore() { … }   // per-kind state
-public virtual IWorkflowXxxHelper GetHelper() => Helper;
+public virtual I<Kind>Helper GetHelper() => Helper;
 public virtual void InitializeWorkflow() { … }          // idempotent; three guard flags
-public virtual void SetHelper(IWorkflowXxxHelper helper) { … }  // uninstalls the old helper
+public virtual void SetHelper(I<Kind>Helper helper) { … }  // uninstalls the old helper
 ```
 
-⚙ The generated class implements `IWorkflowNodeViewModel` (or the Tree/Slot/Link interface) and `IWorkflowIdentifiable`. Those members are generated.
+⚙ The generated class implements `INodeComponent` (or the Tree/Slot/Link interface) and `IRuntimeIdentifiable`. Those members are generated.
 
 ⚙ **`InitializeWorkflow()` is idempotent** — calling it from both a base and a derived constructor is safe.
 
@@ -68,7 +68,7 @@ Commands are generated lazily, one cached field per command:
 | Slot | `SetChannelCommand`, `SendConnectionCommand`, `ReceiveConnectionCommand`, `DeleteCommand`, `CloseCommand` |
 | Link | `DeleteCommand`, `CloseCommand` |
 
-⚙ **`CloseCommand` is on all four, and it comes from `IWorkflowViewModel`.** It terminates that component's in-flight tasks and is what a view's closing path runs.
+⚙ **`CloseCommand` is on all four, and it comes from `IWorkflowComponent`.** It terminates that component's in-flight tasks and is what a view's closing path runs.
 
 Each command forwards to a `protected virtual Task Xxx(object?, CancellationToken)` handler you may override; the default forwards to the helper.
 
@@ -79,13 +79,13 @@ Each command forwards to a `protected virtual Task Xxx(object?, CancellationToke
 Two shapes, and the compiler tells you which is which:
 
 ```csharp
-[VeloxProperty] public partial SlotDefaultViewModel InputSlot { get; set; }              // one slot
-[VeloxProperty] public partial SlotEnumerator<SlotDefaultViewModel> OutputSlots { get; set; }  // a fan-out set
+[VeloxProperty] public partial SlotDefaultComponent InputSlot { get; set; }              // one slot
+[VeloxProperty] public partial SlotEnumerator<SlotDefaultComponent> OutputSlots { get; set; }  // a fan-out set
 ```
 
 ⚙ **A slot property is written as `[VeloxProperty] public partial T X { get; set; }`.** The generator synthesises the backing field as `_camelCase` and `InitializeWorkflowCore` references that exact name.
 
-⚙ The setter carries the lifecycle: assigning a slot runs `OnWorkflowSlotRemoved(old)` / `OnWorkflowSlotAdded(value)`, and assigning a `SlotEnumerator` uninstalls the old one and installs the new one against the node.
+⚙ The setter carries the lifecycle: assigning a slot runs `OnSlotComponentRemoved(old)` / `OnSlotComponentAdded(value)`, and assigning a `SlotEnumerator` uninstalls the old one and installs the new one against the node.
 
 `InitializeWorkflowCore` registers each slot property against the node by its **backing field**, because the node is not in a tree yet.
 
@@ -112,7 +112,7 @@ Two shapes, and the compiler tells you which is which:
 
 *Target* counts outgoing connections from this slot, *Source* incoming ones. Per direction the rule is `Multiple > One > None`.
 
-⚙ **The two default slot implementations differ.** A generator-created slot body defaults to `SlotChannel.MultipleBoth`; the shipped `SlotDefaultViewModel` defaults to `SlotChannel.OneBoth`. A node type inherits the default of the slot class it declares.
+⚙ **The two default slot implementations differ.** A generator-created slot body defaults to `SlotChannel.MultipleBoth`; the shipped `SlotDefaultComponent` defaults to `SlotChannel.OneBoth`. A node type inherits the default of the slot class it declares.
 
 ⚙ **`One*` channels clean up on connect.** Connecting to a slot whose channel is `OneTarget`/`OneSource`/`OneBoth` removes the conflicting existing links first; `Multiple*` keeps them. The "clean the opposite direction too" case is gated on `HasFlag(OneBoth)`.
 
@@ -127,7 +127,7 @@ tree.GetHelper().ReceiveConnection(receiverSlot);
 
 Two phases, and the whole connection is submitted as one undoable action.
 
-⚙ **All validation is on the receiver.** `SendConnection` checks that the slot may send and cleans up its own capacity. `ReceiveConnection` runs, in order: can this slot receive → `IWorkflowTreeEvents.Connecting` (the per-drag host veto) → `tree.GetHelper().ValidateConnection(sender, receiver)` → reject same-node → clean up same-direction duplicates → clean up receiver capacity → create the link.
+⚙ **All validation is on the receiver.** `SendConnection` checks that the slot may send and cleans up its own capacity. `ReceiveConnection` runs, in order: can this slot receive → `ITreeEvents.Connecting` (the per-drag host veto) → `tree.GetHelper().ValidateConnection(sender, receiver)` → reject same-node → clean up same-direction duplicates → clean up receiver capacity → create the link.
 
 ⚙ **`TreeHelper.ValidateConnection` is virtual and returns `true`.** It is the single user-supplied connection predicate — override it for connection rules. `tree.StandardCheckConnection(sender, receiver)` is the pure form of the whole rule set (direction, same-node, then this predicate); use it to ask "would this connect?" before a drag starts.
 
@@ -142,7 +142,7 @@ The drag preview runs the same rule set the completed connection will run, so th
 | `ConnectionCheck` | `readonly struct`: `IsValid`, `Reason` (`ConnectionRejectReason`), `Message`; `ConnectionCheck.Valid`, `ConnectionCheck.Rejected(reason, message)` |
 | `ConnectionRejectReason` | `None`, `SenderCannotSend`, `ReceiverCannotReceive`, `SameNode`, `RejectedByRule`, `RejectedByHost` |
 | `ConnectionPreviewState` | `None`, `Started`, `ValidTarget`, `InvalidTarget` |
-| `IConnectionPreviewLink` | optional capability of the virtual link: `Preview` and `SetPreview(state)`; `LinkDefaultViewModel` implements it |
+| `IConnectionPreviewLink` | optional capability of the virtual link: `Preview` and `SetPreview(state)`; `LinkDefaultComponent` implements it |
 
 ```csharp
 // Pure: no events, no state changes. Direction, same-node, then the helper's rule.
@@ -203,7 +203,7 @@ if (DataContext is IConnectionPreviewLink link)
 }
 ```
 
-⚙ **The stage is published on the tree's `VirtualLink`.** `LinkDefaultViewModel` implements `IConnectionPreviewLink` and raises `PropertyChanged` for `Preview`; a custom virtual link may implement the same interface. Subscribe the link's `INotifyPropertyChanged` (what the demos do) or `WorkflowInput.PreviewChanged`; both describe the same snapshot. A link view reads the component it is bound to, because pooled views are rebound.
+⚙ **The stage is published on the tree's `VirtualLink`.** `LinkDefaultComponent` implements `IConnectionPreviewLink` and raises `PropertyChanged` for `Preview`; a custom virtual link may implement the same interface. Subscribe the link's `INotifyPropertyChanged` (what the demos do) or `WorkflowInput.PreviewChanged`; both describe the same snapshot. A link view reads the component it is bound to, because pooled views are rebound.
 
 ### Conditional slot sets
 
@@ -212,7 +212,7 @@ For a node with a variable number of ports (a python worker whose ports depend o
 ```csharp
 [VeloxProperty]
 [SlotSelectors(typeof(MyPortProvider))]   // your own ISlotProvider — declare it on your side
-public partial SlotEnumerator<SlotDefaultViewModel> InputSlots { get; set; }
+public partial SlotEnumerator<SlotDefaultComponent> InputSlots { get; set; }
 ```
 
 `SlotEnumerator<TSlot>` holds `Items` (`ConditionalSlot<TSlot>` — a name, a value and a slot), a `SelectorType` and a `CurrentValue`. `SetSelector` (the model-side method; the Agent tool that reaches it is `SetEnumSlotCollection`) accepts three shapes: an `enum` or `bool` `Type`, a fully-qualified type-name `string`, or an `ISlotProvider` returning named `SlotDefinition`s.
@@ -239,8 +239,8 @@ public class MyPortProvider : ISlotProvider { … }
 
 ```csharp
 // The factory you override to use your own Link ViewModel:
-public virtual IWorkflowLinkViewModel CreateLink(IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver)
-    => new LinkDefaultViewModel() { Sender = sender, Receiver = receiver };
+public virtual ILinkComponent CreateLink(ISlotComponent sender, ISlotComponent receiver)
+    => new LinkDefaultComponent() { Sender = sender, Receiver = receiver };
 ```
 
 ⚙ **Connecting uses the two-phase `SendConnection` / `ReceiveConnection` protocol.** It is also what the GUI drag uses.
@@ -276,7 +276,7 @@ public TreeHelper(double cellSize) { useVirtualization = true; … }  // ON, and
 ## Undo and redo
 
 ```csharp
-public readonly struct WorkflowActionPair(Action redo, Action undo)
+public readonly struct ActionPair(Action redo, Action undo)
 ```
 
 ⚠ **Redo comes first.** This is the field order; a reversed pair produces an undo stack that does the opposite of what it says.

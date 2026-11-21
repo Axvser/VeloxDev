@@ -25,15 +25,15 @@ public class WorkflowNavigationExTests
         }
     }
 
-    private static TreeDefaultViewModel TreeWithNavigator(out RecordingNavigator navigator)
+    private static TreeDefaultComponent TreeWithNavigator(out RecordingNavigator navigator)
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         navigator = new RecordingNavigator();
         WorkflowInput.For(tree).Navigator = navigator;
         return tree;
     }
 
-    private static NodeDefaultViewModel Node(TreeDefaultViewModel tree, double left, double top, double width = 40d, double height = 20d)
+    private static NodeDefaultComponent Node(TreeDefaultComponent tree, double left, double top, double width = 40d, double height = 20d)
         => new()
         {
             Parent = tree,
@@ -60,7 +60,7 @@ public class WorkflowNavigationExTests
     {
         var tree = TreeWithNavigator(out var navigator);
         var node = Node(tree, 100, 200);
-        var slot = new SlotDefaultViewModel { Parent = node, Anchor = new Anchor(110, 205, 0) };
+        var slot = new SlotDefaultComponent { Parent = node, Anchor = new Anchor(110, 205, 0) };
         node.Slots.Add(slot);
 
         Assert.IsTrue(slot.Locate());
@@ -76,9 +76,9 @@ public class WorkflowNavigationExTests
         var tree = TreeWithNavigator(out var navigator);
         var senderNode = Node(tree, 0, 0);        // center (20, 10)
         var receiverNode = Node(tree, 300, 300);  // center (320, 310)
-        var sender = new SlotDefaultViewModel { Parent = senderNode, Anchor = new Anchor(0, 0, 0) };
-        var receiver = new SlotDefaultViewModel { Parent = receiverNode, Anchor = new Anchor(100, 100, 0) };
-        var link = new LinkDefaultViewModel { Sender = sender, Receiver = receiver };
+        var sender = new SlotDefaultComponent { Parent = senderNode, Anchor = new Anchor(0, 0, 0) };
+        var receiver = new SlotDefaultComponent { Parent = receiverNode, Anchor = new Anchor(100, 100, 0) };
+        var link = new LinkDefaultComponent { Sender = sender, Receiver = receiver };
         ((ILinkHitTestable)link.GetHelper()).SetCurve(
             LinkCurve.FromPoints([0d, 100d], [0d, 100d]));
 
@@ -92,7 +92,7 @@ public class WorkflowNavigationExTests
     [TestMethod]
     public void WithoutANavigatorNothingMoves()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var node = Node(tree, 100, 200);
 
         Assert.IsFalse(node.Locate());
@@ -103,7 +103,7 @@ public class WorkflowNavigationExTests
     {
         var tree = TreeWithNavigator(out var navigator);
         var node = Node(tree, 100, 200);
-        var slot = new SlotDefaultViewModel { Parent = node };   // anchor still NaN
+        var slot = new SlotDefaultComponent { Parent = node };   // anchor still NaN
 
         Assert.IsTrue(slot.Locate());
 

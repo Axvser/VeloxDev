@@ -36,7 +36,7 @@ public static class WorkflowLayoutDemo
     /// <param name="tolerance">The per-axis tolerance passed to the solver.</param>
     /// <returns>The apply result, ready for <see cref="Describe"/>.</returns>
     public static WorkflowLayoutResult Arrange(
-        IWorkflowNodeViewModel node, WorkflowLayoutTraversal traversal, double tolerance)
+        INodeComponent node, WorkflowLayoutTraversal traversal, double tolerance)
         => node.Arrange(new WorkflowLayoutOptions
         {
             Traversal = traversal,

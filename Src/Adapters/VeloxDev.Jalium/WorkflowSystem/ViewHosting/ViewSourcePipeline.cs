@@ -10,7 +10,7 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 public sealed class ViewSourcePipeline : ViewSourcePipelineCore<
     Panel,
     FrameworkElement,
-    IWorkflowViewModel,
+    IWorkflowComponent,
     DispatcherPriority,
     ViewFactory,
     ViewContainer,

@@ -111,7 +111,7 @@ public sealed class WorkflowLayoutProblem
     public WorkflowLayoutProblem(
         IReadOnlyList<WorkflowLayoutNode> nodes,
         IReadOnlyList<WorkflowLayoutEdge> edges,
-        IReadOnlyList<IWorkflowNodeViewModel> sources,
+        IReadOnlyList<INodeComponent> sources,
         IReadOnlyList<int>? skippedIndices = null)
     {
         if (nodes is null) throw new ArgumentNullException(nameof(nodes));
@@ -134,7 +134,7 @@ public sealed class WorkflowLayoutProblem
             edgeArray[i] = edges[i];
         }
 
-        var sourceArray = new IWorkflowNodeViewModel[sources.Count];
+        var sourceArray = new INodeComponent[sources.Count];
         for (var i = 0; i < sources.Count; i++)
         {
             sourceArray[i] = sources[i];
@@ -161,7 +161,7 @@ public sealed class WorkflowLayoutProblem
     public IReadOnlyList<WorkflowLayoutEdge> Edges { get; }
 
     /// <summary>The live nodes, position for position with <see cref="Nodes"/>; for the applier only.</summary>
-    public IReadOnlyList<IWorkflowNodeViewModel> Sources { get; }
+    public IReadOnlyList<INodeComponent> Sources { get; }
 
     /// <summary>Indices in the original node enumeration that were skipped for non-finite geometry.</summary>
     public IReadOnlyList<int> SkippedIndices { get; }

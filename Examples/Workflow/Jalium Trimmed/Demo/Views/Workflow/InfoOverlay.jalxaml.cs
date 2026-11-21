@@ -10,7 +10,7 @@ namespace Demo.Views.Workflow;
 /// Realtime floating-text info layer for the node-editor surface (a "decorator layer" like the minimap
 /// overlay, but a passive HUD): a translucent rounded panel showing canvas actual size, the current visible
 /// viewport (canvas + world), zoom/origin and the visible node/link elements materialized by the Core
-/// virtualization (<see cref="IWorkflowTreeViewModelHelper.VisibleItems"/>).
+/// virtualization (<see cref="ITreeHelper.VisibleItems"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -26,7 +26,7 @@ public sealed partial class InfoOverlay : Border
 {
     /// <summary>The tree this HUD reports on.</summary>
     public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.Register(
-        "WorkflowTree", typeof(IWorkflowTreeViewModel), typeof(InfoOverlay), new PropertyMetadata(null, OnTreeChanged));
+        "WorkflowTree", typeof(ITreeComponent), typeof(InfoOverlay), new PropertyMetadata(null, OnTreeChanged));
 
     /// <summary>The surface scroll viewer's horizontal offset.</summary>
     public static readonly DependencyProperty ScrollOffsetXProperty = DependencyProperty.Register(
@@ -53,7 +53,7 @@ public sealed partial class InfoOverlay : Border
         "ViewportHeight", typeof(double), typeof(InfoOverlay), new PropertyMetadata(0.0, OnVisualChanged));
 
     /// <summary>The tree this HUD reports on.</summary>
-    public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
+    public ITreeComponent? WorkflowTree { get => (ITreeComponent?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
 
     /// <summary>The surface scroll viewer's horizontal offset.</summary>
     public double ScrollOffsetX { get => (double)(GetValue(ScrollOffsetXProperty) ?? 0.0); set => SetValue(ScrollOffsetXProperty, value); }
@@ -73,7 +73,7 @@ public sealed partial class InfoOverlay : Border
     /// <summary>The measured viewport height.</summary>
     public double ViewportHeight { get => (double)(GetValue(ViewportHeightProperty) ?? 0.0); set => SetValue(ViewportHeightProperty, value); }
 
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private string _copyText = "";
 
     public InfoOverlay()
@@ -106,7 +106,7 @@ public sealed partial class InfoOverlay : Border
         }
 
         overlay.UnsubscribeTree();
-        overlay._tree = (IWorkflowTreeViewModel?)e.NewValue;
+        overlay._tree = (ITreeComponent?)e.NewValue;
         overlay.SubscribeTree();
         overlay.Refresh();
     }
@@ -186,11 +186,11 @@ public sealed partial class InfoOverlay : Border
         var virtualLink = _tree.VirtualLink;
         foreach (var item in _tree.GetHelper().VisibleItems)
         {
-            if (item is IWorkflowNodeViewModel)
+            if (item is INodeComponent)
             {
                 visibleNodes++;
             }
-            else if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, virtualLink))
+            else if (item is ILinkComponent link && !ReferenceEquals(link, virtualLink))
             {
                 visibleLinks++;
             }

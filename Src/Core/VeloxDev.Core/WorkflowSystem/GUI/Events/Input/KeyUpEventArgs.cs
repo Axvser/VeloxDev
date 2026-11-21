@@ -15,7 +15,7 @@ public sealed class KeyUpEventArgs : KeyEventArgs
     /// <param name="handle">The handle for this action.</param>
     public KeyUpEventArgs(
         InputKey key, int rawKeyCode, InputModifiers modifiers, bool isRepeat,
-        object? source, IWorkflowViewModel? target, WorkflowEventHandle handle)
+        object? source, IWorkflowComponent? target, WorkflowEventHandle handle)
         : base(key, rawKeyCode, modifiers, isRepeat, source, target, handle)
     {
     }

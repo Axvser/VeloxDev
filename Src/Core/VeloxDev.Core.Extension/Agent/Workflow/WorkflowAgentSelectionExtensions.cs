@@ -26,7 +26,7 @@ namespace VeloxDev.AI.Workflow;
 /// The calls are silent: no exception escapes. A single-node call returns <see langword="bool"/>; a
 /// collection call returns the number of nodes actually added or removed; <c>-1</c> reports an internal
 /// error. A node that is null, unattached, missing from its tree's
-/// <see cref="IWorkflowTreeViewModel.Nodes"/>, or without a stable runtime id is skipped, not thrown.
+/// <see cref="ITreeComponent.Nodes"/>, or without a stable runtime id is skipped, not thrown.
 /// </para>
 /// <para>
 /// The selection is captured as an identity snapshot (stable runtime id plus type name) at call time.
@@ -35,8 +35,8 @@ namespace VeloxDev.AI.Workflow;
 /// </para>
 /// <para>
 /// The selection only <i>observes</i> the workflow: selecting subscribes to the node's
-/// <see cref="IWorkflowNodeViewModel.Parent"/> change, the parent tree's node-collection changes, and the
-/// node helper's <see cref="IWorkflowNodeEvents.Deleted"/> event. Nothing is written back to the model. A
+/// <see cref="INodeComponent.Parent"/> change, the parent tree's node-collection changes, and the
+/// node helper's <see cref="INodeEvents.Deleted"/> event. Nothing is written back to the model. A
 /// node that is deleted, reparented, or removed from its tree is dropped from the selection immediately, so
 /// the next prompt no longer names it.
 /// </para>
@@ -62,14 +62,14 @@ public static class WorkflowAgentSelectionExtensions
     /// <see langword="true"/> when the node was newly added; <see langword="false"/> when it was already
     /// selected, could not be registered, or an internal error occurred.
     /// </returns>
-    public static bool SelectForAgent(this IWorkflowNodeViewModel node)
+    public static bool SelectForAgent(this INodeComponent node)
     {
         try
         {
             if (node is null) return false;
             if (node.Parent is not { } tree) return false;
             if (!IsMounted(tree, node)) return false;
-            if (node is not IWorkflowIdentifiable) return false;
+            if (node is not IRuntimeIdentifiable) return false;
 
             return WorkflowAgentSelection.Add(tree, new[] { node }) == 1;
         }
@@ -88,26 +88,26 @@ public static class WorkflowAgentSelectionExtensions
     /// The number of nodes newly added; <c>0</c> when nothing changed or the input is unusable; <c>-1</c>
     /// when an internal error occurred.
     /// </returns>
-    public static int SelectForAgent(this IReadOnlyCollection<IWorkflowNodeViewModel> nodes)
+    public static int SelectForAgent(this IReadOnlyCollection<INodeComponent> nodes)
     {
         try
         {
             if (nodes is null) return 0;
             if (nodes.Count == 0) return 0;
 
-            var groups = new List<(IWorkflowTreeViewModel Tree, List<IWorkflowNodeViewModel> Nodes)>();
+            var groups = new List<(ITreeComponent Tree, List<INodeComponent> Nodes)>();
 
             foreach (var node in nodes)
             {
                 if (node is null) continue;
                 if (node.Parent is not { } tree) continue;
                 if (!IsMounted(tree, node)) continue;
-                if (node is not IWorkflowIdentifiable) continue;
+                if (node is not IRuntimeIdentifiable) continue;
 
                 var group = FindGroup(groups, tree);
                 if (group is null)
                 {
-                    group = new List<IWorkflowNodeViewModel>();
+                    group = new List<INodeComponent>();
                     groups.Add((tree, group));
                 }
 
@@ -132,7 +132,7 @@ public static class WorkflowAgentSelectionExtensions
     /// <see langword="true"/> when the node was removed; <see langword="false"/> when it was not selected or
     /// an internal error occurred.
     /// </returns>
-    public static bool DeselectForAgent(this IWorkflowNodeViewModel node)
+    public static bool DeselectForAgent(this INodeComponent node)
     {
         try
         {
@@ -155,14 +155,14 @@ public static class WorkflowAgentSelectionExtensions
     /// The number of nodes actually removed; <c>0</c> when none were selected or the input is unusable;
     /// <c>-1</c> when an internal error occurred.
     /// </returns>
-    public static int DeselectForAgent(this IReadOnlyCollection<IWorkflowNodeViewModel> nodes)
+    public static int DeselectForAgent(this IReadOnlyCollection<INodeComponent> nodes)
     {
         try
         {
             if (nodes is null) return 0;
             if (nodes.Count == 0) return 0;
 
-            var valid = new List<IWorkflowNodeViewModel>(nodes.Count);
+            var valid = new List<INodeComponent>(nodes.Count);
             foreach (var node in nodes)
                 if (node is not null) valid.Add(node);
 
@@ -180,7 +180,7 @@ public static class WorkflowAgentSelectionExtensions
     /// The number of nodes released; <c>0</c> when nothing was selected or <paramref name="tree"/> is
     /// <see langword="null"/>; <c>-1</c> when an internal error occurred.
     /// </returns>
-    public static int ClearAgentSelection(this IWorkflowTreeViewModel tree)
+    public static int ClearAgentSelection(this ITreeComponent tree)
     {
         try
         {
@@ -201,14 +201,14 @@ public static class WorkflowAgentSelectionExtensions
     /// not follow later selections.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<IWorkflowNodeViewModel> GetAgentSelection(this IWorkflowTreeViewModel tree)
+    public static IReadOnlyList<INodeComponent> GetAgentSelection(this ITreeComponent tree)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
         return WorkflowAgentSelection.Get(tree);
     }
 
-    private static bool IsMounted(IWorkflowTreeViewModel tree, IWorkflowNodeViewModel node)
+    private static bool IsMounted(ITreeComponent tree, INodeComponent node)
     {
         foreach (var candidate in tree.Nodes)
             if (ReferenceEquals(candidate, node)) return true;
@@ -216,9 +216,9 @@ public static class WorkflowAgentSelectionExtensions
         return false;
     }
 
-    private static List<IWorkflowNodeViewModel>? FindGroup(
-        List<(IWorkflowTreeViewModel Tree, List<IWorkflowNodeViewModel> Nodes)> groups,
-        IWorkflowTreeViewModel tree)
+    private static List<INodeComponent>? FindGroup(
+        List<(ITreeComponent Tree, List<INodeComponent> Nodes)> groups,
+        ITreeComponent tree)
     {
         foreach (var group in groups)
             if (ReferenceEquals(group.Tree, tree)) return group.Nodes;
@@ -226,7 +226,7 @@ public static class WorkflowAgentSelectionExtensions
         return null;
     }
 
-    private static bool ContainsReference(List<IWorkflowNodeViewModel> nodes, IWorkflowNodeViewModel node)
+    private static bool ContainsReference(List<INodeComponent> nodes, INodeComponent node)
     {
         foreach (var candidate in nodes)
             if (ReferenceEquals(candidate, node)) return true;

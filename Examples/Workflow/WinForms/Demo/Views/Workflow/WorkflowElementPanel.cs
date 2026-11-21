@@ -114,7 +114,7 @@ internal sealed class WorkflowElementPanel : UserControl
     // 侧栏要列的树；换树时目录会退订旧树、重建三张表。不是可设计属性，序列化器不必知道它。
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IWorkflowTreeViewModel? Tree
+    public ITreeComponent? Tree
     {
         set
         {

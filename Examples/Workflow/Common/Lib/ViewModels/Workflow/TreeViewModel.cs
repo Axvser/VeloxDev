@@ -63,10 +63,10 @@ public partial class TreeViewModel
         => OnPropertyChanged(nameof(HasSelectedElement));
 
     /// <summary>Raised when an element's details changed — a compile identity, a run status — not on every property.</summary>
-    internal event Action<IWorkflowNodeViewModel?>? ElementDetailsInvalidated;
+    internal event Action<INodeComponent?>? ElementDetailsInvalidated;
 
     /// <summary>Asks every inspector to re-read one node's details, or all of them when <paramref name="node"/> is null.</summary>
-    internal void RefreshElementDetails(IWorkflowNodeViewModel? node = null)
+    internal void RefreshElementDetails(INodeComponent? node = null)
         => ElementDetailsInvalidated?.Invoke(node);
 
     [VeloxProperty] private bool useStreamingAgentResponse = true;
@@ -422,7 +422,7 @@ public partial class TreeViewModel
             if (Helper?.VisibleItems is not { } items) return 0;
             var count = 0;
             foreach (var item in items)
-                if (item is IWorkflowNodeViewModel) count++;
+                if (item is INodeComponent) count++;
             return count;
         }
     }
@@ -435,7 +435,7 @@ public partial class TreeViewModel
             if (Helper?.VisibleItems is not { } items) return 0;
             var count = 0;
             foreach (var item in items)
-                if (item is IWorkflowLinkViewModel link && !ReferenceEquals(link, VirtualLink)) count++;
+                if (item is ILinkComponent link && !ReferenceEquals(link, VirtualLink)) count++;
             return count;
         }
     }

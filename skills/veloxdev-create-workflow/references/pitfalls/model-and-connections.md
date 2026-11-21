@@ -8,7 +8,7 @@ These are failures the repository has actually hit. Each entry names the symptom
 
 **Cause:** the receiver was never attached to a tree, the sender/receiver directions disagree with the channel, or a `Connecting` subscriber vetoed the release. `StandardCheckConnection` can pass and the release-time veto still refuse; see [the connection preview](../practices/model.md#the-connection-preview).
 
-**Fix:** confirm both slots have a parent node in a tree; check `sender.Channel` / `receiver.Channel`; subscribe `IWorkflowTreeEvents.Connecting` and log `Handle.PreventDefault`; check `tree.StandardCheckConnection(sender, receiver).Reason`.
+**Fix:** confirm both slots have a parent node in a tree; check `sender.Channel` / `receiver.Channel`; subscribe `ITreeEvents.Connecting` and log `Handle.PreventDefault`; check `tree.StandardCheckConnection(sender, receiver).Reason`.
 
 ## A same-direction connection silently replaces the previous link
 
@@ -24,7 +24,7 @@ These are failures the repository has actually hit. Each entry names the symptom
 
 **Cause:** the mutation was a direct collection edit (`tree.Nodes.Add(...)`, `slot.Targets.Add(...)`) or a direct property write. Only `Submit` records history. Position, size, `SetAnchor`, `SetPointer`, `ResetVirtualLink` and `SetChannel` are runtime state and intentionally have no undo entry.
 
-**Fix:** perform structural changes through the generated commands or `tree.GetHelper().Submit(new WorkflowActionPair(redo, undo))`. Undo a slot-channel change by writing the previous channel yourself.
+**Fix:** perform structural changes through the generated commands or `tree.GetHelper().Submit(new ActionPair(redo, undo))`. Undo a slot-channel change by writing the previous channel yourself.
 
 ## Ghost undo entries after assigning a slot
 

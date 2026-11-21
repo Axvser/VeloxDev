@@ -32,7 +32,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     public static readonly DependencyProperty IsMinimapVisibleProperty = DependencyProperty.Register(
         "IsMinimapVisible", typeof(bool), typeof(WorkflowMinimapOverlay), new PropertyMetadata(true, OnVisualChanged));
     public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.Register(
-        "WorkflowTree", typeof(IWorkflowTreeViewModel), typeof(WorkflowMinimapOverlay), new PropertyMetadata(null, OnTreeChanged));
+        "WorkflowTree", typeof(ITreeComponent), typeof(WorkflowMinimapOverlay), new PropertyMetadata(null, OnTreeChanged));
 
     public double ScrollOffsetX { get => Read(ScrollOffsetXProperty, 0.0); set => SetValue(ScrollOffsetXProperty, value); }
     public double ScrollOffsetY { get => Read(ScrollOffsetYProperty, 0.0); set => SetValue(ScrollOffsetYProperty, value); }
@@ -43,7 +43,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     public double ViewportWidth { get => Read(ViewportWidthProperty, 0.0); set => SetValue(ViewportWidthProperty, value); }
     public double ViewportHeight { get => Read(ViewportHeightProperty, 0.0); set => SetValue(ViewportHeightProperty, value); }
     public bool IsMinimapVisible { get => Read(IsMinimapVisibleProperty, true); set => SetValue(IsMinimapVisibleProperty, value); }
-    public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
+    public ITreeComponent? WorkflowTree { get => (ITreeComponent?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
 
     // 值类型的附着属性都注册了非 null 默认值，所以取回来必是那个类型。`GetValue` 的返回类型是 `object?`，
     // 直接强转会让编译器报「取消装箱可能为 null」—— 与其到处写 `!`，不如把那个默认值在这里写出来，
@@ -194,7 +194,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     private bool _pendingRefresh = true;
     private double _cachedScaleX = double.NaN;
     private double _cachedScaleY = double.NaN;
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private bool _dragging;
 
     public WorkflowMinimapOverlay()
@@ -238,7 +238,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         }
 
         overlay.UnsubscribeTree();
-        overlay._tree = (IWorkflowTreeViewModel?)e.NewValue;
+        overlay._tree = (ITreeComponent?)e.NewValue;
         overlay.SubscribeTree();
         overlay.MarkContentDirty();
     }
@@ -273,7 +273,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         }
     }
 
-    private void SubscribeNode(IWorkflowNodeViewModel node)
+    private void SubscribeNode(INodeComponent node)
     {
         if (node is INotifyPropertyChanged notify)
         {
@@ -281,7 +281,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         }
     }
 
-    private void UnsubscribeNode(IWorkflowNodeViewModel node)
+    private void UnsubscribeNode(INodeComponent node)
     {
         if (node is INotifyPropertyChanged notify)
         {
@@ -295,7 +295,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         {
             foreach (var item in e.OldItems)
             {
-                if (item is IWorkflowNodeViewModel node)
+                if (item is INodeComponent node)
                 {
                     UnsubscribeNode(node);
                 }
@@ -306,7 +306,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         {
             foreach (var item in e.NewItems)
             {
-                if (item is IWorkflowNodeViewModel node)
+                if (item is INodeComponent node)
                 {
                     SubscribeNode(node);
                 }
@@ -321,7 +321,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     private void OnNodeChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
         {
             MarkContentDirty();
         }

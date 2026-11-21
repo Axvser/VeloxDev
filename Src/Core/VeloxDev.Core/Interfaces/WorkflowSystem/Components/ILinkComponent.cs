@@ -6,17 +6,17 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>A workflow link: the connection between a sender and a receiver slot.</summary>
 [AgentContext(AgentLanguages.Chinese, "工作流Link组件接口，维护Slot之间的连接关系")]
 [AgentContext(AgentLanguages.English, "Workflow Link component interface, maintaining connections between Slots")]
-public interface IWorkflowLinkViewModel : IWorkflowViewModel
+public interface ILinkComponent : IWorkflowComponent
 {
     /// <summary>The sender of the connection.</summary>
     [AgentContext(AgentLanguages.Chinese, "连接发起方")]
     [AgentContext(AgentLanguages.English, "The sender of the connection")]
-    public IWorkflowSlotViewModel Sender { get; set; }
+    public ISlotComponent Sender { get; set; }
 
     /// <summary>The receiver of the connection.</summary>
     [AgentContext(AgentLanguages.Chinese, "连接接收方")]
     [AgentContext(AgentLanguages.English, "The receiver of the connection")]
-    public IWorkflowSlotViewModel Receiver { get; set; }
+    public ISlotComponent Receiver { get; set; }
 
     /// <summary>Whether the link is visible.</summary>
     [AgentContext(AgentLanguages.Chinese, "连接是否可见")]
@@ -30,21 +30,21 @@ public interface IWorkflowLinkViewModel : IWorkflowViewModel
     public IVeloxCommand DeleteCommand { get; }
 
     /// <summary>Gets the helper that carries this link's behaviour.</summary>
-    public IWorkflowLinkViewModelHelper GetHelper();
+    public ILinkHelper GetHelper();
 
     /// <summary>Sets the helper that carries this link's behaviour.</summary>
     /// <param name="helper">The helper to install.</param>
-    public void SetHelper(IWorkflowLinkViewModelHelper helper);
+    public void SetHelper(ILinkHelper helper);
 }
 
-/// <summary>The behaviour behind an <see cref="IWorkflowLinkViewModel"/>.</summary>
-public interface IWorkflowLinkViewModelHelper : IWorkflowHelper
+/// <summary>The behaviour behind an <see cref="ILinkComponent"/>.</summary>
+public interface ILinkHelper : IWorkflowHelper
 {
     /// <summary>Attaches this helper to <paramref name="link"/>.</summary>
-    public void Install(IWorkflowLinkViewModel link);
+    public void Install(ILinkComponent link);
 
     /// <summary>Detaches this helper from <paramref name="link"/>.</summary>
-    public void Uninstall(IWorkflowLinkViewModel link);
+    public void Uninstall(ILinkComponent link);
 
     /// <summary>Deletes this link.</summary>
     public void Delete();

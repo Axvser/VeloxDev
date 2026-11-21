@@ -76,7 +76,7 @@
 
 **错在哪（两层）**：
 
-1. 那些文件**靠命名空间嵌套**白拿 Core 的类型（`architecture.md` §1.1）。挪走会一次性打断对 `IWorkflowTreeViewModel`、`Viewport`、`WorkflowSurfaceMath` 的全部引用，报错是一整串「找不到类型」，看不出是命名空间的事。
+1. 那些文件**靠命名空间嵌套**白拿 Core 的类型（`architecture.md` §1.1）。挪走会一次性打断对 `ITreeComponent`、`Viewport`、`WorkflowSurfaceMath` 的全部引用，报错是一整串「找不到类型」，看不出是命名空间的事。
 2. 宿主的 XAML `assembly=VeloxDev.MAUI` 与这个命名空间是**一对**约定，七家共享。只改一家 = 七家不再同形。
 
 **官方做法**：CS0433 是**已知代价**，用别名/反射绕（`Src/Test/AutoTest/Samplers/MauiEntries.cs` 的 `Entry<TValue>`）。

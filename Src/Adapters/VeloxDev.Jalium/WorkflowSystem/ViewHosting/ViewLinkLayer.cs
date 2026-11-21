@@ -5,16 +5,16 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Declines to own links; Jalium materializes one pooled view per link.</summary>
-public sealed class ViewLinkLayer : IViewLinkLayer<Panel, IWorkflowViewModel>
+public sealed class ViewLinkLayer : IViewLinkLayer<Panel, IWorkflowComponent>
 {
     /// <inheritdoc />
     public bool IsActive => false;
 
     /// <inheritdoc />
-    public bool Handles(IWorkflowViewModel item) => false;
+    public bool Handles(IWorkflowComponent item) => false;
 
     /// <inheritdoc />
-    public void Render(Panel host, IReadOnlyList<IWorkflowViewModel> items)
+    public void Render(Panel host, IReadOnlyList<IWorkflowComponent> items)
     {
     }
 }

@@ -11,8 +11,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The value is an <see cref="IWorkflowNodeEventSink"/> / <see cref="IWorkflowSlotEventSink"/> /
-/// <see cref="IWorkflowTreeEventSink"/> — one object with a method per event, rather than one attached property
+/// The value is an <see cref="INodeEventSink"/> / <see cref="ISlotEventSink"/> /
+/// <see cref="ITreeEventSink"/> — one object with a method per event, rather than one attached property
 /// per event. The forwarding itself is <see cref="WorkflowEventRelay"/>, so all seven platforms share it and none
 /// of them can drift.
 /// </para>
@@ -30,47 +30,47 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <seealso cref="WorkflowEventRelay"/>
 public static class WorkflowEvents
 {
-    /// <summary>The <see cref="IWorkflowNodeEventSink"/> for the node this element is showing.</summary>
+    /// <summary>The <see cref="INodeEventSink"/> for the node this element is showing.</summary>
     public static readonly BindableProperty NodeProperty = BindableProperty.CreateAttached(
-        "Node", typeof(IWorkflowNodeEventSink), typeof(WorkflowEvents), null, propertyChanged: OnSinkChanged);
+        "Node", typeof(INodeEventSink), typeof(WorkflowEvents), null, propertyChanged: OnSinkChanged);
 
-    /// <summary>The <see cref="IWorkflowSlotEventSink"/> for the slot this element is showing.</summary>
+    /// <summary>The <see cref="ISlotEventSink"/> for the slot this element is showing.</summary>
     public static readonly BindableProperty SlotProperty = BindableProperty.CreateAttached(
-        "Slot", typeof(IWorkflowSlotEventSink), typeof(WorkflowEvents), null, propertyChanged: OnSinkChanged);
+        "Slot", typeof(ISlotEventSink), typeof(WorkflowEvents), null, propertyChanged: OnSinkChanged);
 
-    /// <summary>The <see cref="IWorkflowTreeEventSink"/> for the tree this element is showing.</summary>
+    /// <summary>The <see cref="ITreeEventSink"/> for the tree this element is showing.</summary>
     public static readonly BindableProperty TreeProperty = BindableProperty.CreateAttached(
-        "Tree", typeof(IWorkflowTreeEventSink), typeof(WorkflowEvents), null, propertyChanged: OnSinkChanged);
+        "Tree", typeof(ITreeEventSink), typeof(WorkflowEvents), null, propertyChanged: OnSinkChanged);
 
-    /// <summary>Sets the <see cref="IWorkflowNodeEventSink"/> that handles <paramref name="element"/>'s node events.</summary>
+    /// <summary>Sets the <see cref="INodeEventSink"/> that handles <paramref name="element"/>'s node events.</summary>
     /// <param name="element">The view that shows the node.</param>
     /// <param name="value">The host's handler, or <see langword="null"/> to detach.</param>
-    public static void SetNode(BindableObject element, IWorkflowNodeEventSink? value) => element.SetValue(NodeProperty, value);
+    public static void SetNode(BindableObject element, INodeEventSink? value) => element.SetValue(NodeProperty, value);
 
-    /// <summary>Gets the <see cref="IWorkflowNodeEventSink"/> that handles <paramref name="element"/>'s node events.</summary>
+    /// <summary>Gets the <see cref="INodeEventSink"/> that handles <paramref name="element"/>'s node events.</summary>
     /// <param name="element">The view that shows the node.</param>
     /// <returns>The host's handler, or <see langword="null"/> when none is attached.</returns>
-    public static IWorkflowNodeEventSink? GetNode(BindableObject element) => (IWorkflowNodeEventSink?)element.GetValue(NodeProperty);
+    public static INodeEventSink? GetNode(BindableObject element) => (INodeEventSink?)element.GetValue(NodeProperty);
 
-    /// <summary>Sets the <see cref="IWorkflowSlotEventSink"/> that handles <paramref name="element"/>'s slot events.</summary>
+    /// <summary>Sets the <see cref="ISlotEventSink"/> that handles <paramref name="element"/>'s slot events.</summary>
     /// <param name="element">The view that shows the slot.</param>
     /// <param name="value">The host's handler, or <see langword="null"/> to detach.</param>
-    public static void SetSlot(BindableObject element, IWorkflowSlotEventSink? value) => element.SetValue(SlotProperty, value);
+    public static void SetSlot(BindableObject element, ISlotEventSink? value) => element.SetValue(SlotProperty, value);
 
-    /// <summary>Gets the <see cref="IWorkflowSlotEventSink"/> that handles <paramref name="element"/>'s slot events.</summary>
+    /// <summary>Gets the <see cref="ISlotEventSink"/> that handles <paramref name="element"/>'s slot events.</summary>
     /// <param name="element">The view that shows the slot.</param>
     /// <returns>The host's handler, or <see langword="null"/> when none is attached.</returns>
-    public static IWorkflowSlotEventSink? GetSlot(BindableObject element) => (IWorkflowSlotEventSink?)element.GetValue(SlotProperty);
+    public static ISlotEventSink? GetSlot(BindableObject element) => (ISlotEventSink?)element.GetValue(SlotProperty);
 
-    /// <summary>Sets the <see cref="IWorkflowTreeEventSink"/> that handles <paramref name="element"/>'s tree events.</summary>
+    /// <summary>Sets the <see cref="ITreeEventSink"/> that handles <paramref name="element"/>'s tree events.</summary>
     /// <param name="element">The view that shows the tree.</param>
     /// <param name="value">The host's handler, or <see langword="null"/> to detach.</param>
-    public static void SetTree(BindableObject element, IWorkflowTreeEventSink? value) => element.SetValue(TreeProperty, value);
+    public static void SetTree(BindableObject element, ITreeEventSink? value) => element.SetValue(TreeProperty, value);
 
-    /// <summary>Gets the <see cref="IWorkflowTreeEventSink"/> that handles <paramref name="element"/>'s tree events.</summary>
+    /// <summary>Gets the <see cref="ITreeEventSink"/> that handles <paramref name="element"/>'s tree events.</summary>
     /// <param name="element">The view that shows the tree.</param>
     /// <returns>The host's handler, or <see langword="null"/> when none is attached.</returns>
-    public static IWorkflowTreeEventSink? GetTree(BindableObject element) => (IWorkflowTreeEventSink?)element.GetValue(TreeProperty);
+    public static ITreeEventSink? GetTree(BindableObject element) => (ITreeEventSink?)element.GetValue(TreeProperty);
 
     // 每个元素一份订阅：值变了、或它换了个 BindingContext（池化视图就是这样），都要重新接。
     private static readonly ConditionalWeakTable<VisualElement, Attachment> Attachments = new();
@@ -103,17 +103,17 @@ public static class WorkflowEvents
             Disconnect();
 
             var context = _element.BindingContext;
-            if (GetNode(_element) is { } nodeSink && context is IWorkflowNodeViewModel node)
+            if (GetNode(_element) is { } nodeSink && context is INodeComponent node)
             {
                 _node = WorkflowEventRelay.Attach(node, nodeSink);
             }
 
-            if (GetSlot(_element) is { } slotSink && context is IWorkflowSlotViewModel slot)
+            if (GetSlot(_element) is { } slotSink && context is ISlotComponent slot)
             {
                 _slot = WorkflowEventRelay.Attach(slot, slotSink);
             }
 
-            if (GetTree(_element) is { } treeSink && context is IWorkflowTreeViewModel tree)
+            if (GetTree(_element) is { } treeSink && context is ITreeComponent tree)
             {
                 _tree = WorkflowEventRelay.Attach(tree, treeSink);
             }

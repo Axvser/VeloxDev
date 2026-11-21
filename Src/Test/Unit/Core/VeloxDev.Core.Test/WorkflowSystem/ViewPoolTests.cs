@@ -11,7 +11,7 @@ public sealed class ViewPoolTests
     [TestMethod]
     public void MaterializesInBatches()
     {
-        var source = new ObservableCollection<IWorkflowViewModel>
+        var source = new ObservableCollection<IWorkflowComponent>
         {
             new FakeItemA(),
             new FakeItemA(),
@@ -36,7 +36,7 @@ public sealed class ViewPoolTests
     public void RemovedViewIsReusedForTheNextItemOfTheSameType()
     {
         var first = new FakeItemA();
-        var source = new ObservableCollection<IWorkflowViewModel> { first };
+        var source = new ObservableCollection<IWorkflowComponent> { first };
         using var scene = new FakeScene(source);
         scene.Scheduler.RunAll();
 
@@ -59,7 +59,7 @@ public sealed class ViewPoolTests
     [TestMethod]
     public void ResetRecyclesEverythingAndRebuildsFromTheCurrentItems()
     {
-        var source = new ObservableCollection<IWorkflowViewModel>
+        var source = new ObservableCollection<IWorkflowComponent>
         {
             new FakeItemA(),
             new FakeItemB(),
@@ -82,7 +82,7 @@ public sealed class ViewPoolTests
     [TestMethod]
     public void MissingTemplateSkipsTheTypeAndDoesNotRetry()
     {
-        var source = new ObservableCollection<IWorkflowViewModel>
+        var source = new ObservableCollection<IWorkflowComponent>
         {
             new FakeItemB(),
             new FakeItemB(),
@@ -100,7 +100,7 @@ public sealed class ViewPoolTests
     [TestMethod]
     public void OneFailingItemDoesNotStopTheRestOfTheBatch()
     {
-        var source = new ObservableCollection<IWorkflowViewModel>
+        var source = new ObservableCollection<IWorkflowComponent>
         {
             new FakeItemA(),
             new FakeItemB(),
@@ -119,7 +119,7 @@ public sealed class ViewPoolTests
     [TestMethod]
     public void DisposeReleasesActiveViewsAndStopsTracking()
     {
-        var source = new ObservableCollection<IWorkflowViewModel> { new FakeItemA() };
+        var source = new ObservableCollection<IWorkflowComponent> { new FakeItemA() };
         var scene = new FakeScene(source);
         scene.Scheduler.RunAll();
 
@@ -138,7 +138,7 @@ public sealed class ViewPoolTests
     [TestMethod]
     public void RefusedScheduleRetriesOnTheNextVisibleSetChange()
     {
-        var source = new ObservableCollection<IWorkflowViewModel> { new FakeItemA() };
+        var source = new ObservableCollection<IWorkflowComponent> { new FakeItemA() };
         using var scene = new FakeScene(source, scheduleAccepted: false);
 
         Assert.AreEqual(1, scene.Pool.PendingViewCount);
@@ -157,7 +157,7 @@ public sealed class ViewPoolTests
     [TestMethod]
     public void LinkLayerOwnsItsItemsAndTheMainPoolSkipsThem()
     {
-        var source = new ObservableCollection<IWorkflowViewModel>
+        var source = new ObservableCollection<IWorkflowComponent>
         {
             new FakeItemA(),
             new FakeItemB(),
@@ -176,7 +176,7 @@ public sealed class ViewPoolTests
     [TestMethod]
     public void LayerPolicyAndMeasureHostRunAfterArrangement()
     {
-        var source = new ObservableCollection<IWorkflowViewModel> { new FakeItemA() };
+        var source = new ObservableCollection<IWorkflowComponent> { new FakeItemA() };
         using var scene = new FakeScene(source, zOrder: 7);
 
         scene.Scheduler.RunAll();
@@ -190,7 +190,7 @@ public sealed class ViewPoolTests
     {
         var first = new FakeItemA();
         var second = new FakeItemA();
-        var source = new ObservableCollection<IWorkflowViewModel> { first, second };
+        var source = new ObservableCollection<IWorkflowComponent> { first, second };
         using var scene = new FakeScene(source, batchSize: 4, maxRecycledViewsPerType: 1);
         scene.Scheduler.RunAll();
 
@@ -203,12 +203,12 @@ public sealed class ViewPoolTests
 
     private sealed class FakeView
     {
-        public IWorkflowViewModel? Context { get; set; }
+        public IWorkflowComponent? Context { get; set; }
         public bool Visible { get; set; }
         public int ArrangeCount { get; set; }
     }
 
-    private class FakeItemBase : IWorkflowViewModel
+    private class FakeItemBase : IWorkflowComponent
     {
         public IVeloxCommand CloseCommand { get; } = new StubCommand();
 
@@ -250,20 +250,20 @@ public sealed class ViewPoolTests
         public Exception? Exception { get; }
     }
 
-    private sealed class FakeFactory : IViewFactory<IWorkflowViewModel, FakeView>
+    private sealed class FakeFactory : IViewFactory<IWorkflowComponent, FakeView>
     {
         private readonly Dictionary<Type, int> _createAttempts = [];
 
-        public Func<IWorkflowViewModel, bool> ShouldCreate { get; set; } = _ => true;
+        public Func<IWorkflowComponent, bool> ShouldCreate { get; set; } = _ => true;
         public Type? ThrowFor { get; set; }
         public List<FakeView> CreatedViews { get; } = [];
 
         public int CreateAttemptsFor(Type type)
             => _createAttempts.TryGetValue(type, out var count) ? count : 0;
 
-        public bool WantsItem(IWorkflowViewModel item) => true;
+        public bool WantsItem(IWorkflowComponent item) => true;
 
-        public FakeView? CreateView(IWorkflowViewModel item)
+        public FakeView? CreateView(IWorkflowComponent item)
         {
             _createAttempts[item.GetType()] = CreateAttemptsFor(item.GetType()) + 1;
             if (ThrowFor == item.GetType())
@@ -282,7 +282,7 @@ public sealed class ViewPoolTests
         }
     }
 
-    private sealed class FakeContainer : IViewContainer<object, FakeView, IWorkflowViewModel>
+    private sealed class FakeContainer : IViewContainer<object, FakeView, IWorkflowComponent>
     {
         public int LastZOrder { get; private set; }
 
@@ -296,7 +296,7 @@ public sealed class ViewPoolTests
         {
         }
 
-        public void Activate(FakeView view, IWorkflowViewModel item)
+        public void Activate(FakeView view, IWorkflowComponent item)
         {
             view.Context = item;
             view.Visible = true;
@@ -332,38 +332,38 @@ public sealed class ViewPoolTests
         public double FrameBudgetMilliseconds { get; }
     }
 
-    private sealed class FakeLayerPolicy : IViewLayerPolicy<IWorkflowViewModel>
+    private sealed class FakeLayerPolicy : IViewLayerPolicy<IWorkflowComponent>
     {
         private readonly int _zOrder;
 
         public FakeLayerPolicy(int zOrder = 0) => _zOrder = zOrder;
 
-        public int GetZOrder(IWorkflowViewModel item) => _zOrder;
+        public int GetZOrder(IWorkflowComponent item) => _zOrder;
     }
 
-    private sealed class FakeLinkLayer : IViewLinkLayer<object, IWorkflowViewModel>
+    private sealed class FakeLinkLayer : IViewLinkLayer<object, IWorkflowComponent>
     {
-        public Func<IWorkflowViewModel, bool> HandledPredicate { get; set; } = _ => false;
+        public Func<IWorkflowComponent, bool> HandledPredicate { get; set; } = _ => false;
 
-        public List<IReadOnlyList<IWorkflowViewModel>> Renders { get; } = [];
+        public List<IReadOnlyList<IWorkflowComponent>> Renders { get; } = [];
 
         public bool IsActive { get; set; }
 
-        public bool Handles(IWorkflowViewModel item) => HandledPredicate(item);
+        public bool Handles(IWorkflowComponent item) => HandledPredicate(item);
 
-        public void Render(object host, IReadOnlyList<IWorkflowViewModel> items) => Renders.Add(items);
+        public void Render(object host, IReadOnlyList<IWorkflowComponent> items) => Renders.Add(items);
     }
 
-    private sealed class FakeMeasureHost : IViewMeasureHost<object, FakeView, IWorkflowViewModel>
+    private sealed class FakeMeasureHost : IViewMeasureHost<object, FakeView, IWorkflowComponent>
     {
         public int MeasureCount { get; private set; }
 
-        public void Measure(object host, FakeView view, IWorkflowViewModel item) => MeasureCount++;
+        public void Measure(object host, FakeView view, IWorkflowComponent item) => MeasureCount++;
     }
 
-    private sealed class FakeArranger : IViewArranger<IWorkflowViewModel, FakeView>
+    private sealed class FakeArranger : IViewArranger<IWorkflowComponent, FakeView>
     {
-        public void Arrange(FakeView view, IWorkflowViewModel item)
+        public void Arrange(FakeView view, IWorkflowComponent item)
             => view.ArrangeCount++;
     }
 
@@ -403,22 +403,22 @@ public sealed class ViewPoolTests
         }
     }
 
-    private sealed class FakeDiagnostics : IViewDiagnostics<IWorkflowViewModel>
+    private sealed class FakeDiagnostics : IViewDiagnostics<IWorkflowComponent>
     {
         public List<Failure> Failures { get; } = [];
 
-        public void Failed(IWorkflowViewModel? item, ViewStage stage, Exception? exception)
+        public void Failed(IWorkflowComponent? item, ViewStage stage, Exception? exception)
             => Failures.Add(new Failure(item?.GetType() ?? typeof(object), stage, exception));
     }
 
     private sealed class FakeScene : IDisposable
     {
         public FakeScene(
-            ObservableCollection<IWorkflowViewModel> source,
+            ObservableCollection<IWorkflowComponent> source,
             int batchSize = 2,
             bool scheduleAccepted = true,
             int maxRecycledViewsPerType = 0,
-            Func<IWorkflowViewModel, bool>? handlesLinks = null,
+            Func<IWorkflowComponent, bool>? handlesLinks = null,
             int zOrder = 0)
         {
             Factory = new FakeFactory();
@@ -437,7 +437,7 @@ public sealed class ViewPoolTests
             System = new ViewSourcePipelineCore<
                 object,
                 FakeView,
-                IWorkflowViewModel,
+                IWorkflowComponent,
                 int,
                 FakeFactory,
                 FakeContainer,
@@ -478,7 +478,7 @@ public sealed class ViewPoolTests
         public ViewSourcePipelineCore<
             object,
             FakeView,
-            IWorkflowViewModel,
+            IWorkflowComponent,
             int,
             FakeFactory,
             FakeContainer,
@@ -486,7 +486,7 @@ public sealed class ViewPoolTests
             FakeScheduler,
             FakeDiagnostics> System { get; }
 
-        public ViewPool<object, FakeView, IWorkflowViewModel, int> Pool => System.Pool;
+        public ViewPool<object, FakeView, IWorkflowComponent, int> Pool => System.Pool;
 
         public void Dispose() => System.Dispose();
     }

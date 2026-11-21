@@ -9,10 +9,10 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// changes. The pool asks once more after the view is in the tree because a recycled view can be rebound while it
 /// is already a child, so no parent-change event will run that pass.
 /// </remarks>
-public sealed class ViewArranger : IViewArranger<IWorkflowViewModel, Control>
+public sealed class ViewArranger : IViewArranger<IWorkflowComponent, Control>
 {
     /// <inheritdoc />
-    public void Arrange(Control view, IWorkflowViewModel item)
+    public void Arrange(Control view, IWorkflowComponent item)
     {
         WorkflowNodeAttachment.For(view)?.ApplyPosition();
     }

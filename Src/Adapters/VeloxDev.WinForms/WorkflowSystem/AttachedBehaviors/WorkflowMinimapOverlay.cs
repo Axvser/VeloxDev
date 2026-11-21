@@ -137,7 +137,7 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
     /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IWorkflowTreeViewModel? WorkflowTree { get; set; }
+    public ITreeComponent? WorkflowTree { get; set; }
 
     /// <inheritdoc />
     [Browsable(false)]

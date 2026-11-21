@@ -76,22 +76,22 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     /// <summary>Raised after any model/view change so overlays (minimap) can redraw.</summary>
     public Action? Changed;
 
-    private IWorkflowTreeViewModel? _tree;
+    private ITreeComponent? _tree;
     private INotifyPropertyChanged? _virtualNotifier;
     private double _nodeLayoutTolerance = 8d;
-    private readonly Dictionary<IWorkflowNodeViewModel, NodeViewBase> _cards = new();
-    private readonly HashSet<IWorkflowNodeViewModel> _nodeSubs = new();
-    private readonly HashSet<IWorkflowSlotViewModel> _slotSubs = new();
+    private readonly Dictionary<INodeComponent, NodeViewBase> _cards = new();
+    private readonly HashSet<INodeComponent> _nodeSubs = new();
+    private readonly HashSet<ISlotComponent> _slotSubs = new();
     private ScrollViewer? _scrollViewer;
 
     // 指针搭在哪颗端口上。端口是表面画的，所以悬停反馈也只能由表面自己记 ——
     // 没有端口控件可以替它答「指针在我身上吗」
-    private IWorkflowSlotViewModel? _hoverSlot;
+    private ISlotComponent? _hoverSlot;
 
     // 当前被点亮的连线。链接和端口一样是表面画的，没有控件能担任这个角色；
     // 悬停即点亮（与其它六家一致），它只决定绘制时给哪条上高亮色。
     // 由输入路由的指针事件驱动（见 RoutePointer），表面自己不再判命中；Delete 键转发给路由，由表面按命中结果执行
-    private IWorkflowLinkViewModel? _selectedLink;
+    private ILinkComponent? _selectedLink;
 
     // 连线的命中与输入裁决归 Core（见 WorkflowInput）：表面只负责把指针/按键翻译成标准输入事件转发进去，
     // 并订阅结果（选中上色、右键菜单）；删除是表面自己执行的（见 OnKeyDown）。命中的算法不在这家
@@ -102,14 +102,14 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     private ContextMenu? _linkMenu;
 
     // 这份菜单指着的那条线。树报某条线离场（LinkRemoved）时带着那条线来，比对上才收 —— 同刻只会开一份菜单，但判定照守。
-    private IWorkflowLinkViewModel? _menuLink;
+    private ILinkComponent? _menuLink;
 
     private enum DragKind { None, Node, Link, Pan }
     private DragKind _dragKind;
-    private IWorkflowNodeViewModel? _dragNode;
+    private INodeComponent? _dragNode;
     private double _dragOffsetX, _dragOffsetY;
-    private (IWorkflowNodeViewModel Node, int OutputIndex)? _dragFrom;
-    private (IWorkflowNodeViewModel Node, int InputIndex)? _dropTarget;
+    private (INodeComponent Node, int OutputIndex)? _dragFrom;
+    private (INodeComponent Node, int InputIndex)? _dropTarget;
     private Point _lastPanMouse;
 
     public NodeEditorSurface()
@@ -183,7 +183,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // 宿主侧的删除（窗口级 Delete、菜单项）：走连线自己的命令，删完把指向它的选中清掉。
     // 表面自己的 KeyDown 不走这里 —— 它把键转发给路由，再由这里自己执行命令，
     // 集合变更后再由 PruneCurves 收拾选中
-    private void DeleteLink(IWorkflowLinkViewModel? link)
+    private void DeleteLink(ILinkComponent? link)
     {
         if (link is null)
         {
@@ -274,7 +274,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // 指针位置就是表面自己的坐标（= ToCanvas 的画布系），与发布给 Core 的曲线用的是同一个系。
     // 命中由共享的曲线判定器回答（这家一个表面画完所有线），事件交给输入路由。
     // 菜单开着时那几帧指针在弹层上，转发进去的移动会被路由按挂起忽略。
-    private void ForwardPointer(Point canvasPos, IWorkflowLinkViewModel? link = null)
+    private void ForwardPointer(Point canvasPos, ILinkComponent? link = null)
     {
         if (_input is not { } input)
         {
@@ -310,7 +310,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         // 框架这一笔的拖拽/连线手势不启动；节点自己的卡会收到 IsAgentSelected 通知并重画。
         if (e.Button == Wf.MouseButton.Left
             && e.Modifiers.HasFlag(Wf.InputModifiers.Control)
-            && e.Target is IWorkflowNodeViewModel node)
+            && e.Target is INodeComponent node)
         {
             Demo.Workflow.AgentSelection.Toggle(node);
             e.Handle.PreventDefault = true;
@@ -318,7 +318,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         }
 
         if (e.Button != Wf.MouseButton.Right) return;
-        if (e.Target is not IWorkflowLinkViewModel link) return;
+        if (e.Target is not ILinkComponent link) return;
         if (_linkMenu?.IsOpen == true) return;
 
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
@@ -344,7 +344,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     }
 
     // 菜单指着的那条线已经不在树上：收起这份菜单（树报的是离场的那条，本家只认自己这份）。
-    private void OnLinkRemoved(object? sender, IWorkflowLinkViewModel link)
+    private void OnLinkRemoved(object? sender, ILinkComponent link)
     {
         if (!ReferenceEquals(_menuLink, link)) return;
         _linkMenu?.Close();
@@ -380,7 +380,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     }
 
     /// <summary>Demo-only: the node's own right-click menu, built from the shared layout presets.</summary>
-    private void ShowNodeLayoutMenu(IWorkflowNodeViewModel node, Wf.Anchor worldPosition)
+    private void ShowNodeLayoutMenu(INodeComponent node, Wf.Anchor worldPosition)
     {
         var menu = new ContextMenu();
 
@@ -405,7 +405,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         menu.Open(ToMenuPosition(worldPosition));
     }
 
-    private void ApplyNodeLayout(IWorkflowNodeViewModel node, WorkflowLayoutTraversal traversal)
+    private void ApplyNodeLayout(INodeComponent node, WorkflowLayoutTraversal traversal)
     {
         try
         {
@@ -419,7 +419,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
     // 条目在这里增删。与 WorkflowTreeView 基类的 OnBuildLinkMenu 同一角色：这块画布是自绘的 Canvas、
     // 不是 WorkflowTreeView，拿不到那个 protected 钩子，所以自带一份同形的扩展点（条目与 Trimmed demo 一致）。
-    private void OnBuildLinkMenu(ContextMenu menu, IWorkflowLinkViewModel link)
+    private void OnBuildLinkMenu(ContextMenu menu, ILinkComponent link)
     {
         var item = new MenuItem { Header = "Delete" };
         item.Click += (_, _) =>
@@ -502,7 +502,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
             vw, vh);
     }
 
-    public void SetTree(IWorkflowTreeViewModel? tree)
+    public void SetTree(ITreeComponent? tree)
     {
         UnsubscribeTree();
         _tree = tree;
@@ -650,7 +650,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // Port world centers are the DESIGN local centers scaled by the collapse factor
     // (node.Size/DesignSize) — matching the card RenderTransform, so links and hit-testing land
     // exactly on the scaled port dots when the workspace zooms.
-    private Point ScaledCenter(IWorkflowNodeViewModel node, Point designLocal)
+    private Point ScaledCenter(INodeComponent node, Point designLocal)
     {
         _cards.TryGetValue(node, out var card);
         var sx = card is null || card.DesignWidth == 0 ? 1 : node.Size.Width / card.DesignWidth;
@@ -658,14 +658,14 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return new Point(node.Anchor.Horizontal + designLocal.X * sx, node.Anchor.Vertical + designLocal.Y * sy);
     }
 
-    private Point InputPortCenter(IWorkflowNodeViewModel node, int inputIndex = 0)
+    private Point InputPortCenter(INodeComponent node, int inputIndex = 0)
     {
         _cards.TryGetValue(node, out var card);
         var designHeight = card?.DesignHeight ?? node.Size.Height;
         return ScaledCenter(node, NodePorts.InputCenterLocalDesign(node, inputIndex, designHeight));
     }
 
-    private Point GetOutputPortCenter(IWorkflowNodeViewModel node, int i)
+    private Point GetOutputPortCenter(INodeComponent node, int i)
     {
         _cards.TryGetValue(node, out var card);
         var designWidth = card?.DesignWidth ?? node.Size.Width;
@@ -673,7 +673,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return ScaledCenter(node, NodePorts.OutputCenterLocalDesign(node, i, designWidth, designHeight));
     }
 
-    private Point GetSlotPortCenter(IWorkflowSlotViewModel slot)
+    private Point GetSlotPortCenter(ISlotComponent slot)
     {
         var node = slot.Parent;
         if (node is null)
@@ -692,12 +692,12 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return default;
     }
 
-    private Point GetPortCenter(IWorkflowNodeViewModel node, int outputIndex)
+    private Point GetPortCenter(INodeComponent node, int outputIndex)
         => GetOutputPortCenter(node, outputIndex);
 
     // ── Card management ─────────────────────────────────────────────────────
 
-    private void AddCard(IWorkflowNodeViewModel node)
+    private void AddCard(INodeComponent node)
     {
         if (_tree is null)
         {
@@ -723,7 +723,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         SubscribeNode(node);
     }
 
-    private void RemoveCard(IWorkflowNodeViewModel node)
+    private void RemoveCard(INodeComponent node)
     {
         if (_cards.Remove(node, out var card))
         {
@@ -733,7 +733,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         UnsubscribeNode(node);
     }
 
-    private void SubscribeNode(IWorkflowNodeViewModel node)
+    private void SubscribeNode(INodeComponent node)
     {
         if (_nodeSubs.Add(node) && node is INotifyPropertyChanged notify)
         {
@@ -746,7 +746,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         }
     }
 
-    private void UnsubscribeNode(IWorkflowNodeViewModel node)
+    private void UnsubscribeNode(INodeComponent node)
     {
         if (_nodeSubs.Remove(node) && node is INotifyPropertyChanged notify)
         {
@@ -754,7 +754,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         }
     }
 
-    private void SubscribeSlot(IWorkflowSlotViewModel slot)
+    private void SubscribeSlot(ISlotComponent slot)
     {
         if (_slotSubs.Add(slot) && slot is INotifyPropertyChanged notify)
         {
@@ -762,7 +762,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         }
     }
 
-    private void UnsubscribeSlot(IWorkflowSlotViewModel slot)
+    private void UnsubscribeSlot(ISlotComponent slot)
     {
         if (_slotSubs.Remove(slot) && slot is INotifyPropertyChanged notify)
         {
@@ -776,7 +776,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         {
             foreach (var item in e.OldItems)
             {
-                if (item is IWorkflowNodeViewModel node)
+                if (item is INodeComponent node)
                 {
                     RemoveCard(node);
                 }
@@ -787,7 +787,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         {
             foreach (var item in e.NewItems)
             {
-                if (item is IWorkflowNodeViewModel node)
+                if (item is INodeComponent node)
                 {
                     AddCard(node);
                 }
@@ -814,7 +814,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
             return;
         }
 
-        var alive = new HashSet<IWorkflowLinkViewModel>(_tree.Links);
+        var alive = new HashSet<ILinkComponent>(_tree.Links);
 
         // 悬停的那条也可能已经不在了：删除不止表面这一条路（Agent、Undo 都会删连线）。
         // 选中由输入路由驱动，所以要清的是路由的指针目标 —— 发一次 Exited 让它把选中一起带走，
@@ -840,9 +840,9 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
             return;
         }
 
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
         {
-            if (sender is IWorkflowNodeViewModel node && _cards.TryGetValue(node, out var card))
+            if (sender is INodeComponent node && _cards.TryGetValue(node, out var card))
             {
                 card.Width = node.Size.Width;
                 card.Height = node.Size.Height;
@@ -862,7 +862,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     private void OnSlotChanged(object? sender, PropertyChangedEventArgs e)
     {
         // 端口的状态颜色现在每次绘制现算，所以这两个属性只需催一次重绘（Channel 决定波纹朝哪边走）
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.State) or nameof(IWorkflowSlotViewModel.Channel))
+        if (e.PropertyName is nameof(ISlotComponent.State) or nameof(ISlotComponent.Channel))
         {
             InvalidateVisual();
         }
@@ -872,7 +872,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
     public double OriginX => _tree?.Layout.ActualOffset.Horizontal ?? 0;
     public double OriginY => _tree?.Layout.ActualOffset.Vertical ?? 0;
-    public IWorkflowTreeViewModel? Tree => _tree;
+    public ITreeComponent? Tree => _tree;
 
     private Point ToCanvas(double wx, double wy) => new(wx + OriginX, wy + OriginY);
 
@@ -1083,7 +1083,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
     // 端口名：行内那颗小字，居中在它那口的行上，往卡里缩 inset 设计单位。
     private static void DrawSlotName(DrawingContext dc, string name, Point center, double scale, double inset,
-        bool input, IWorkflowNodeViewModel node)
+        bool input, INodeComponent node)
     {
         var text = new FormattedText(name, "Segoe UI", CardPalette.SlotNameSize * scale)
         {
@@ -1103,7 +1103,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     private static readonly SolidColorBrush s_slotNameController = new(CardPalette.AccentController);
     private static readonly SolidColorBrush s_slotNameFallback = new(CardPalette.AccentFallback);
 
-    private static Brush AccentBrushOf(IWorkflowNodeViewModel node) => node switch
+    private static Brush AccentBrushOf(INodeComponent node) => node switch
     {
         PythonScriptNodeViewModel or TimerNodeViewModel => s_slotNameTimerPython,
         EnumSelectorNodeViewModel => s_slotNameEnum,
@@ -1112,7 +1112,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     };
 
     // 卡片当前被缩放的比例：Viewbox 是等比缩放的，取两轴的较小者才与它一致。
-    private static double PortScale(IWorkflowNodeViewModel node, NodeViewBase card)
+    private static double PortScale(INodeComponent node, NodeViewBase card)
     {
         double sx = card.DesignWidth <= 0 ? 1 : node.Size.Width / card.DesignWidth;
         double sy = card.DesignHeight <= 0 ? 1 : node.Size.Height / card.DesignHeight;
@@ -1121,7 +1121,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
     // 视口粗筛。端口画在表面自己的坐标里，不受「子元素布局盒」那套剔除影响，但逐个画整棵树的端口在
     // 缩到很远时是白费力气 —— 卡片在视口之外就整块跳过（留一点余量给外溢的那半个口）。
-    private bool NearViewport(IWorkflowNodeViewModel node, NodeViewBase card)
+    private bool NearViewport(INodeComponent node, NodeViewBase card)
     {
         if (_scrollViewer is not { } viewer)
         {
@@ -1291,7 +1291,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // 缓存只为省下每帧的采样与切段开销，判据就是建曲线时的那两个端点。
     // Curve 是画布系（画用），ModelCurve 是模型系（发布给 Core 做命中），两者只差一个 Origin 平移；
     // Body 是 Curve 的整条折线几何，只随 Curve 换（彗星不进这里，它每帧都要沿弧长重新切）
-    private readonly Dictionary<IWorkflowLinkViewModel, (Point From, Point To, LinkCurve Curve, LinkCurve ModelCurve, PathGeometry Body)> _curves = new();
+    private readonly Dictionary<ILinkComponent, (Point From, Point To, LinkCurve Curve, LinkCurve ModelCurve, PathGeometry Body)> _curves = new();
 
     // 虚拟连线（指针下那根橡皮筋）也有自己的一条曲线：同时只会有一根，端点一变就重算
     private (Point From, Point To, LinkCurve Curve)? _virtualPreview;
@@ -1302,7 +1302,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         => LinkCurve.BuildCubic(from.X, from.Y, to.X, to.Y, PullMinimum, LinkCurve.DefaultSampleCount);
 
     // 同时给出模型系的那一份（hitCurve）：发布给 Core 的是它，而不是画用的这一条，理由见 ForwardPointer。
-    private LinkCurve CurveFor(IWorkflowLinkViewModel link, Point from, Point to, out LinkCurve hitCurve, out PathGeometry body)
+    private LinkCurve CurveFor(ILinkComponent link, Point from, Point to, out LinkCurve hitCurve, out PathGeometry body)
     {
         if (_curves.TryGetValue(link, out var entry) && entry.From == from && entry.To == to)
         {
@@ -1620,14 +1620,14 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // 端口的抓取半径（画布单位）：跟着字形一起被缩放 —— 口本身就是按设计尺寸画的，
     // 缩到很远时还按固定像素去抓，就会出现「看得见的口抓不住、看不见的地方抓着空」。
     // 输出口给得比输入口小一点：拉线从输出口起，误抓一颗粒代价比多试一次大。
-    private double PortHitRadius(IWorkflowNodeViewModel node, double factor)
+    private double PortHitRadius(INodeComponent node, double factor)
     {
         _cards.TryGetValue(node, out var card);
         double scale = card is null ? 1 : PortScale(node, card);
         return Math.Max(6, (NodePorts.PortBoxSize(node) / 2) * scale * factor);
     }
 
-    private (IWorkflowNodeViewModel Node, int OutputIndex)? HitTestOutputPort(Point pos)
+    private (INodeComponent Node, int OutputIndex)? HitTestOutputPort(Point pos)
     {
         if (_tree is null) return null;
         for (int n = _tree.Nodes.Count - 1; n >= 0; n--)
@@ -1649,7 +1649,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return null;
     }
 
-    private (IWorkflowNodeViewModel Node, int InputIndex)? HitTestInputPort(Point pos)
+    private (INodeComponent Node, int InputIndex)? HitTestInputPort(Point pos)
     {
         if (_tree is null) return null;
         for (int n = _tree.Nodes.Count - 1; n >= 0; n--)
@@ -1671,7 +1671,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return null;
     }
 
-    private IWorkflowNodeViewModel? HitTestTitleBar(Point pos)
+    private INodeComponent? HitTestTitleBar(Point pos)
     {
         if (_tree is null) return null;
         for (int n = _tree.Nodes.Count - 1; n >= 0; n--)
@@ -1689,7 +1689,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 
     private bool HitTestCard(Point pos) => HitTestNode(pos) is not null;
 
-    private IWorkflowNodeViewModel? HitTestNode(Point pos)
+    private INodeComponent? HitTestNode(Point pos)
     {
         if (_tree is null) return null;
 
@@ -1905,7 +1905,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         }
 
         var world = new Point(canvasPos.X - OriginX, canvasPos.Y - OriginY);
-        IWorkflowSlotViewModel? hovered = null;
+        ISlotComponent? hovered = null;
 
         if (HitTestOutputPort(world) is { } output)
         {
@@ -2020,7 +2020,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
     // 预览刻意不写成 Sender/Receiver：那两个是「已经连上了」的语义（Tomato / Lime），
     // 而正在拉的那一头在 Avalonia 那套设计里是保持白色的 —— 它的反馈在呼吸与波纹上，不在颜色上。
 
-    private SlotState OutputPortState(IWorkflowNodeViewModel node, int outputIndex)
+    private SlotState OutputPortState(INodeComponent node, int outputIndex)
     {
         var state = SlotState.StandBy;
         if (_dragFrom is { } f && f.Node == node && f.OutputIndex == outputIndex)
@@ -2036,7 +2036,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return state;
     }
 
-    private SlotState InputPortState(IWorkflowNodeViewModel node, int inputIndex)
+    private SlotState InputPortState(INodeComponent node, int inputIndex)
     {
         var state = SlotState.StandBy;
         if (_dropTarget is { } t && t.Node == node && t.InputIndex == inputIndex)
@@ -2052,7 +2052,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return state;
     }
 
-    private bool IsSenderPort(IWorkflowNodeViewModel node, int outputIndex)
+    private bool IsSenderPort(INodeComponent node, int outputIndex)
     {
         if (_tree is null)
         {
@@ -2076,7 +2076,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
         return false;
     }
 
-    private bool IsReceiverPort(IWorkflowNodeViewModel node, int inputIndex)
+    private bool IsReceiverPort(INodeComponent node, int inputIndex)
     {
         if (_tree is null)
         {

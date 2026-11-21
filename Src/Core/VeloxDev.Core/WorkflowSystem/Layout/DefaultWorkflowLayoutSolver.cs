@@ -22,7 +22,7 @@ public sealed class DefaultWorkflowLayoutSolver : IWorkflowLayoutSolver
     }
 
     /// <inheritdoc />
-    public WorkflowLayoutResult Arrange(IWorkflowTreeViewModel tree, WorkflowLayoutOptions options)
+    public WorkflowLayoutResult Arrange(ITreeComponent tree, WorkflowLayoutOptions options)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
         options ??= new WorkflowLayoutOptions();

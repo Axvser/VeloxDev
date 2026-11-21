@@ -37,11 +37,11 @@ public sealed partial class CompilerViewModel
     /// </summary>
     public async Task<IReadOnlyList<CompiledGraph>> CompileAsync<T>(
         T component, CompileRole role, CancellationToken ct = default)
-        where T : IWorkflowViewModel
+        where T : IWorkflowComponent
     {
-        if (component is not IWorkflowNodeViewModel node)
+        if (component is not INodeComponent node)
             throw new ArgumentException(
-                $"CompileAsync requires an IWorkflowNodeViewModel as the {role} node; received {component?.GetType().Name}.");
+                $"CompileAsync requires an INodeComponent as the {role} node; received {component?.GetType().Name}.");
 
         CompiledGraph graph = role switch
         {
@@ -58,10 +58,10 @@ public sealed partial class CompilerViewModel
     }
 
     private async Task<CompiledGraph> CompileGraphAsync(
-        IWorkflowNodeViewModel start, CompileState state, CancellationToken ct)
+        INodeComponent start, CompileState state, CancellationToken ct)
     {
         var entries = new List<CompileSegment>();
-        var chain = new List<IWorkflowNodeViewModel>();
+        var chain = new List<INodeComponent>();
         var offset = state.Counter;
         var node = start;
         var resumedAfterBranch = false;   // Whether the current node was just resumed from a branch join point (should be treated as a new chain start)
@@ -95,7 +95,7 @@ public sealed partial class CompilerViewModel
                 var currentKey = await router.ResolveRouteKey(null);   // compile-time payload = null
                 var isDynamic = currentKey is null;
                 var options = new ObservableCollection<BranchOption>();
-                var exits = new List<IWorkflowNodeViewModel?>();
+                var exits = new List<INodeComponent?>();
 
                 // Generic route compilation: each key's sub-graph may be a single path or a fan-out (ParallelSegment).
                 // No downstream → terminal branch; single target → normal sub-graph; multiple targets → fan-out
@@ -132,7 +132,7 @@ public sealed partial class CompilerViewModel
                     }
                     // Multiple targets → fan-out: compile each sub-graph into a ParallelSegment.
                     var branches = new List<CompiledGraph>();
-                    var subExits = new List<IWorkflowNodeViewModel?>();
+                    var subExits = new List<INodeComponent?>();
                     foreach (var t in kv.Value)
                     {
                         if (t is null) continue;
@@ -164,7 +164,7 @@ public sealed partial class CompilerViewModel
                 // there is nothing to reset.
                 if (!isDynamic && state.Cone is null)
                 {
-                    var liveTargets = new HashSet<IWorkflowNodeViewModel>(
+                    var liveTargets = new HashSet<INodeComponent>(
                         routeTable.Values.Where(v => v is not null).SelectMany(v => v!)
                             .Where(t => t is not null));
                     foreach (var target in AllTargets(node))
@@ -195,8 +195,8 @@ public sealed partial class CompilerViewModel
                     // compile identity can backfill InputNodes, and the runtime aggregates them into a GroupData
                     // injected as Data. Single-input joins keep bare Data chaining semantics.
                     var distinctExits = exits.Where(e => e is not null)
-                        .Cast<IWorkflowNodeViewModel>()
-                        .Distinct(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance)
+                        .Cast<INodeComponent>()
+                        .Distinct(WorkflowReferenceEqualityComparer<INodeComponent>.Instance)
                         .ToList();
                     if (distinctExits.Count > 1)
                         state.JoinInputs[node] = distinctExits;
@@ -219,7 +219,7 @@ public sealed partial class CompilerViewModel
                 if (validTargets.Count > 1)
                 {
                     var branches = new List<CompiledGraph>();
-                    var exits = new List<IWorkflowNodeViewModel?>();
+                    var exits = new List<INodeComponent?>();
                     foreach (var t in validTargets)
                     {
                         var sub = await CompileGraphAsync(t, state, ct);
@@ -232,8 +232,8 @@ public sealed partial class CompilerViewModel
                     if (node is not null)
                     {
                         var distinctExits = exits.Where(e => e is not null)
-                            .Cast<IWorkflowNodeViewModel>()
-                            .Distinct(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance)
+                            .Cast<INodeComponent>()
+                            .Distinct(WorkflowReferenceEqualityComparer<INodeComponent>.Instance)
                             .ToList();
                         if (distinctExits.Count > 1)
                             state.JoinInputs[node] = distinctExits;
@@ -255,18 +255,18 @@ public sealed partial class CompilerViewModel
     }
 
     /// <summary>Flushes the current linear chain into an ChainSegment and assigns each node in the chain a compile identity.</summary>
-    private static void FlushChain(List<CompileSegment> entries, List<IWorkflowNodeViewModel> chain,
+    private static void FlushChain(List<CompileSegment> entries, List<INodeComponent> chain,
         CompileState state, int offset)
     {
         if (chain.Count == 0) return;
         for (int i = 0; i < chain.Count; i++)
             AssignCompileIdentity(chain[i], state.Counter + i, i, offset, state);
         state.Counter += chain.Count;
-        entries.Add(new ChainSegment { Nodes = new ObservableCollection<IWorkflowNodeViewModel>(chain) });
+        entries.Add(new ChainSegment { Nodes = new ObservableCollection<INodeComponent>(chain) });
         chain.Clear();
     }
 
-    private static void AssignCompileIdentity(IWorkflowNodeViewModel node, int order, int chainIndex, int offset,
+    private static void AssignCompileIdentity(INodeComponent node, int order, int chainIndex, int offset,
         CompileState state)
     {
         var info = new NodeCompileInfo(
@@ -303,9 +303,9 @@ public sealed partial class CompilerViewModel
     /// (Order = -1). Stops at a join point (multi-input, part of the main line) or an already active node; nodes are
     /// added to visited so the main line does not process them again.
     /// </summary>
-    private static void MarkStoppedBranch(IWorkflowNodeViewModel start, CompileState state)
+    private static void MarkStoppedBranch(INodeComponent start, CompileState state)
     {
-        var queue = new Queue<IWorkflowNodeViewModel>();
+        var queue = new Queue<INodeComponent>();
         queue.Enqueue(start);
         while (queue.Count > 0)
         {
@@ -325,12 +325,12 @@ public sealed partial class CompilerViewModel
     /// route keys reach the cone, the target could only be produced by running several branches of the same router
     /// in one run, which forward semantics cannot do; that cone is refused rather than guessed.
     /// </summary>
-    private static IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> RestrictRouteToCone(
-        IWorkflowNodeViewModel router,
-        IReadOnlyDictionary<object, IReadOnlyList<IWorkflowNodeViewModel>> routeTable,
-        ISet<IWorkflowNodeViewModel> cone)
+    private static IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>> RestrictRouteToCone(
+        INodeComponent router,
+        IReadOnlyDictionary<object, IReadOnlyList<INodeComponent>> routeTable,
+        ISet<INodeComponent> cone)
     {
-        var coneBranches = new Dictionary<object, IReadOnlyList<IWorkflowNodeViewModel>>();
+        var coneBranches = new Dictionary<object, IReadOnlyList<INodeComponent>>();
         foreach (var kv in routeTable)
         {
             if (kv.Value is null) continue;
@@ -350,14 +350,14 @@ public sealed partial class CompilerViewModel
     }
 
     /// <summary>All of the node's downstream targets (the Targets of its output slots, deduplicated).</summary>
-    private static IEnumerable<IWorkflowNodeViewModel> AllTargets(IWorkflowNodeViewModel node)
+    private static IEnumerable<INodeComponent> AllTargets(INodeComponent node)
         => node.Slots.Where(s => s is not null)
             .SelectMany(s => s!.Targets ?? [])
             .Select(t => t.Parent)
-            .OfType<IWorkflowNodeViewModel>()
+            .OfType<INodeComponent>()
             .Distinct();
 
-    private static IWorkflowNodeViewModel? LastNode(CompiledGraph? graph)
+    private static INodeComponent? LastNode(CompiledGraph? graph)
     {
         if (graph is null) return null;
         for (int i = graph.Entries.Count - 1; i >= 0; i--)
@@ -368,7 +368,7 @@ public sealed partial class CompilerViewModel
         return null;
     }
 
-    private static IWorkflowNodeViewModel? LastNode(CompileSegment entry) => entry switch
+    private static INodeComponent? LastNode(CompileSegment entry) => entry switch
     {
         ChainSegment exec when exec.Nodes.Count > 0 => exec.Nodes[exec.Nodes.Count - 1],
         BranchSegment branch when branch.Options.Count > 0 => LastNode(branch.Options[branch.Options.Count - 1].Graph),
@@ -377,10 +377,10 @@ public sealed partial class CompilerViewModel
     };
 
     /// <summary>The common downstream (join point) of all branch exits; returns null when there is no common downstream (each branch ends on its own).</summary>
-    private static IWorkflowNodeViewModel? CommonNext(
-        List<IWorkflowNodeViewModel?> exits, ISet<IWorkflowNodeViewModel>? cone = null)
+    private static INodeComponent? CommonNext(
+        List<INodeComponent?> exits, ISet<INodeComponent>? cone = null)
     {
-        IWorkflowNodeViewModel? common = null;
+        INodeComponent? common = null;
         var first = true;
         foreach (var exit in exits)
         {
@@ -396,21 +396,21 @@ public sealed partial class CompilerViewModel
     /// Whether the node has &gt;= 2 distinct input sources. Under a reverse cone (CompileRole.Terminal) only sources that
     /// also live in the cone count — edges out of the cone are not executed and must not force a join boundary.
     /// </summary>
-    private static bool HasMultipleInputs(IWorkflowNodeViewModel node, ISet<IWorkflowNodeViewModel>? cone = null)
+    private static bool HasMultipleInputs(INodeComponent node, ISet<INodeComponent>? cone = null)
         => node.Slots.Where(s => s is not null)
             .SelectMany(s => s!.Sources ?? [])
             .Select(s => s.Parent)
-            .OfType<IWorkflowNodeViewModel>()
+            .OfType<INodeComponent>()
             .Distinct()
             .Count(n => cone is null || cone.Contains(n)) >= 2;
 
-    private static IWorkflowNodeViewModel? SingleTarget(
-        IWorkflowNodeViewModel node, ISet<IWorkflowNodeViewModel>? cone = null)
+    private static INodeComponent? SingleTarget(
+        INodeComponent node, ISet<INodeComponent>? cone = null)
     {
         var targets = node.Slots.Where(s => s is not null)
             .SelectMany(s => s!.Targets ?? [])
             .Select(s => s.Parent)
-            .OfType<IWorkflowNodeViewModel>()
+            .OfType<INodeComponent>()
             .Distinct()
             .Where(n => cone is null || cone.Contains(n))
             .ToList();
@@ -420,12 +420,12 @@ public sealed partial class CompilerViewModel
     /// <summary>
     /// The "validity-aware" variant of <see cref="SingleTarget"/> for chain continuation: returns the downstream
     /// node uniquely reachable through valid output edges (exactly one after deduplication); otherwise null. Every
-    /// output edge runs <see cref="IWorkflowNodeViewModelHelper.AccessAsync"/> static validation at compile-time
+    /// output edge runs <see cref="INodeHelper.AccessAsync"/> static validation at compile-time
     /// with an <see cref="ICompileContext"/> — invalid edges are skipped per the runtime broadcast semantics
     /// (treated as unconnected) and do not enter the compiled graph.
     /// </summary>
-    private async Task<IWorkflowNodeViewModel?> SingleTargetValidAsync(
-        IWorkflowNodeViewModel node, CompileState state, CancellationToken ct)
+    private async Task<INodeComponent?> SingleTargetValidAsync(
+        INodeComponent node, CompileState state, CancellationToken ct)
     {
         var distinct = await GetValidTargetsAsync(node, state, ct);
         return distinct.Count == 1 ? distinct[0] : null;
@@ -436,16 +436,16 @@ public sealed partial class CompilerViewModel
     /// <see cref="ICompileContext"/>; invalid edges are skipped per the runtime broadcast semantics).
     /// Returns 0 for a leaf node, 1 for a linear chain, &gt;1 for a plain-node fan-out.
     /// </summary>
-    private async Task<List<IWorkflowNodeViewModel>> GetValidTargetsAsync(
-        IWorkflowNodeViewModel node, CompileState state, CancellationToken ct)
+    private async Task<List<INodeComponent>> GetValidTargetsAsync(
+        INodeComponent node, CompileState state, CancellationToken ct)
     {
-        var validTargets = new List<IWorkflowNodeViewModel>();
+        var validTargets = new List<INodeComponent>();
         foreach (var sender in node.Slots.Where(s => s is not null))
         {
             foreach (var receiver in sender!.Targets ?? [])
             {
                 ct.ThrowIfCancellationRequested();
-                var target = receiver.Parent as IWorkflowNodeViewModel;
+                var target = receiver.Parent as INodeComponent;
                 if (target is null) continue;
 
                 var helper = node.GetHelper();
@@ -475,23 +475,23 @@ public sealed partial class CompilerViewModel
     private sealed class CompileState
     {
         public int Counter;
-        public readonly HashSet<IWorkflowNodeViewModel> Visited = [];
+        public readonly HashSet<INodeComponent> Visited = [];
 
         /// <summary>
         /// Reverse compilation (CompileRole.Terminal) restricts the walk to this ancestor cone: only nodes in the set are
         /// continued into, and joins/nexts are computed over cone edges only. Null for the plain forward compile.
         /// </summary>
-        public ISet<IWorkflowNodeViewModel>? Cone;
+        public ISet<INodeComponent>? Cone;
 
         /// <summary>Join point → input source node list (registered from each branch exit at compile-time, so the join point's compile identity can backfill InputNodes).</summary>
-        public readonly Dictionary<IWorkflowNodeViewModel, IReadOnlyList<IWorkflowNodeViewModel>> JoinInputs =
-            new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        public readonly Dictionary<INodeComponent, IReadOnlyList<INodeComponent>> JoinInputs =
+            new(WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
 
         /// <summary>
         /// Node → compile identity for this whole compile. Every graph produced by it shares this instance, so the
         /// runtime has one table to read from the root graph.
         /// </summary>
-        public readonly Dictionary<IWorkflowNodeViewModel, NodeCompileInfo> Bindings =
-            new(WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        public readonly Dictionary<INodeComponent, NodeCompileInfo> Bindings =
+            new(WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
     }
 }

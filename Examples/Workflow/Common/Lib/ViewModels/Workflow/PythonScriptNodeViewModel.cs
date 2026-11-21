@@ -122,21 +122,21 @@ public partial class PythonScriptNodeViewModel : ICompileTimeAware, IRuntimeAwar
 
     /// <inheritdoc />
     /// <returns>The named upstream node, or <c>null</c> when the name is empty or points outside this node's upstream.</returns>
-    public Task<IWorkflowNodeViewModel?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
+    public Task<INodeComponent?> ResolveRedirectAsync(IRuntimeContext context, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(RedirectTo)) return Task.FromResult<IWorkflowNodeViewModel?>(null);
+        if (string.IsNullOrEmpty(RedirectTo)) return Task.FromResult<INodeComponent?>(null);
 
         // 脚本只认识标题，而回退只可能落在上游：直接走标准扩展的反向查询，找到的就是合法目标。
         // 走图而不是走编译期的上游锥：ICompileContext.InputNodes 只在汇合点（Count > 1）上填，
         // 单输入节点恒为 null，顺着它往上找第一步就断了。
         var target = this.SearchReverseNodes(
             node => string.Equals(TitleOf(node), RedirectTo, StringComparison.Ordinal)).FirstOrDefault();
-        return Task.FromResult<IWorkflowNodeViewModel?>(target);
+        return Task.FromResult<INodeComponent?>(target);
     }
 
     // 演示图里能被脚本点名的节点类型。脚本要的是一个「从哪儿重跑」的落点，而落点未必是 python 节点
     // —— 演示的失败门就指向那个定时器（整条管线从头再跑一趟）。
-    private static string? TitleOf(IWorkflowNodeViewModel node) => node switch
+    private static string? TitleOf(INodeComponent node) => node switch
     {
         PythonScriptNodeViewModel python => python.Title,
         TimerNodeViewModel timer => timer.Title,

@@ -104,7 +104,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     public double ViewportHeight { get; set; }
 
     /// <inheritdoc />
-    public IWorkflowTreeViewModel? WorkflowTree { get; set; }
+    public ITreeComponent? WorkflowTree { get; set; }
 
     /// <inheritdoc />
     public bool IsMinimapVisible { get; set; } = true;
@@ -127,9 +127,9 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     private double _lastHeight;
 
     // 事件驱动的内容跟踪：只在节点增/删/移动时（去抖地）重算映射/节点矩形，与 XAML 几家的 MarkDirty + 16ms 定时器一致。
-    private IWorkflowTreeViewModel? _subscribedTree;
+    private ITreeComponent? _subscribedTree;
     private INotifyCollectionChanged? _nodesNotifier;
-    private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
+    private readonly HashSet<INodeComponent> _subscribedNodes = [];
     private readonly object _rebuildLock = new();
     private bool _rebuildScheduled;
     private CancellationTokenSource? _throttleCts;
@@ -203,7 +203,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
     // ── 内容跟踪（事件驱动，与 XAML 几家一致）─────────────────────────────
 
-    private void ResubscribeTree(IWorkflowTreeViewModel? tree)
+    private void ResubscribeTree(ITreeComponent? tree)
     {
         if (_nodesNotifier is not null)
         {
@@ -247,7 +247,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         {
             foreach (var item in e.NewItems)
             {
-                if (item is IWorkflowNodeViewModel node && node is INotifyPropertyChanged npc)
+                if (item is INodeComponent node && node is INotifyPropertyChanged npc)
                 {
                     npc.PropertyChanged += OnNodePropertyChanged;
                     _subscribedNodes.Add(node);
@@ -259,7 +259,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         {
             foreach (var item in e.OldItems)
             {
-                if (item is IWorkflowNodeViewModel node
+                if (item is INodeComponent node
                     && _subscribedNodes.Remove(node)
                     && node is INotifyPropertyChanged npc)
                 {
@@ -273,7 +273,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
     private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size))
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
         {
             MarkDirty();
         }
@@ -337,7 +337,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             return;
         }
 
-        var nodes = tree.Nodes?.ToArray() ?? Array.Empty<IWorkflowNodeViewModel>();
+        var nodes = tree.Nodes?.ToArray() ?? Array.Empty<INodeComponent>();
         if (nodes.Length == 0)
         {
             MappedNodes = Array.Empty<Mapped>();

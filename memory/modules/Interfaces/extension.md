@@ -30,8 +30,8 @@
 | 上面那个的非泛型宽版 | **`I<名词>Core`**（`Core` 是后缀，不是前缀） | `ITransitionEffectCore`（`ITransitionEffect.cs`）、`ITransitionSchedulerCore`（`ITransitionScheduler.cs`） |
 | 只做继承收窄、不加成员的空接口 | `I<名词>` 或 `I<名词>Core`，**成员一个都不加** | `ITransitionScheduler : ITransitionSchedulerCore`（`ITransitionScheduler.cs`）、`ITaskContext : IAccessContext`（`ITaskContext.cs`） |
 | 约束载体（不关心成员，只用于 `where`） | `I<名词>`，空体 | `IAspectOriented`、`ITheme` |
-| 视图模型 | `I<名词>ViewModel`，**继承 `INotifyPropertyChanging, INotifyPropertyChanged`** | 4 族：`IWorkflow{Tree,Node,Slot,Link}ViewModel` |
-| ViewModel 的配套工具 | `I<名词>Helper` | `IWorkflowHelper` 与各族的 `I<族>ViewModelHelper`（`IWorkflowTreeViewModel` 的 `GetHelper()` 返回 `IWorkflowTreeViewModelHelper`） |
+| 组件 | `I<名词>Component`，**继承 `IWorkflowComponent`**（属性通知由基接口带） | 4 族：`I{Tree,Node,Slot,Link}Component` |
+| 组件的配套工具 | `I<名词>Helper` | `IWorkflowHelper`（基）与 `I{Tree,Node,Slot,Link}Helper`（`ITreeComponent` 的 `GetHelper()` 返回 `ITreeHelper`） |
 | 提供者（给一个集合/映射） | `I<名词>Provider` | `ISlotProvider`、`IConditionalSlotProvider<TSlot>`、`ISpatialBoundsProvider` |
 | 平台要实现的「数据交换」契约 | `I<名词>Decorator` / `I<名词>Overlay` | `IWorkflowGridDecorator`、`IWorkflowMinimapOverlay` |
 | 异步通知/回执 | 接口 `I<名词>Notifier`，**与 `Agent<名词>EventArgs` 同文件** | `Src/Core/VeloxDev.Core/AI/AgentSelectionEventArgs.cs` 的 `IAgentSelectionNotifier` |
@@ -44,7 +44,7 @@
 | `ITransitionEffect.cs` 的 `InvokeCancled` | 拼写错（`Canceled` 事件是对的，`InvokeCancled` 少一个 `c`）。**改名是破坏性变更**：`Src/Core/VeloxDev.Core/TransitionSystem/Effects/TransitionEffect.cs` 的私有字段也叫 `_cancled`。新契约别复制这个拼写 |
 | `IVeloxCommand`（`IVeloxCommand.cs`） | 它 `: System.Windows.Input.ICommand` —— 契约直接继承了一个 BCL 接口，于是实现方必须同时满足两边。只在「所有实现方本来就都要实现 BCL 接口」时才这么做 |
 | `Interfaces/Tickable/ITickable.cs` | **当心不可见字符**：Cf 类字符能让编译器忽略，所以能编译，但裸路径打不开、`grep -l` 漏、文档生成器可能崩 —— 代码评审看不出来（见 architecture.md §六·9） |
-| `IWorkflowTreeViewModel.cs` | 单个文件里声明多个接口（`ITransitionScheduler.cs`、四族 VM 文件都是这样）是既有做法，但代价是**按文件名找接口会失效**；新契约优先一文件一接口 |
+| `ITreeComponent.cs` | 单个文件里声明多个接口（`ITransitionScheduler.cs`、四族 VM 文件都是这样）是既有做法，但代价是**按文件名找接口会失效**；新契约优先一文件一接口 |
 
 ---
 
@@ -52,9 +52,9 @@
 
 | 你的契约要表达 | 用 | 别用 | 仓内依据 |
 |---|---|---|---|
-| 一组可读（可能可写）的状态 | **属性袋**（`{ get; set; }` 一批） | 一个个 `GetX()`/`SetX()` | `IWorkflowTreeViewModel`（画布状态、集合、连接映射全是属性） |
+| 一组可读（可能可写）的状态 | **属性袋**（`{ get; set; }` 一批） | 一个个 `GetX()`/`SetX()` | `ITreeComponent`（画布状态、集合、连接映射全是属性） |
 | 有前置条件/可能失败的数据访问 | **方法 + 返回值**（`bool`、`TryX(out …)`） | 抛异常的属性 | `ITransitionProperty`：`SetValue(object target, object? value)` 返回 `bool`，注释明说读不到时返回 `null` |
-| 需要由**外部**触发的状态迁移 | **方法**（`InitializeWorkflow()`、`OnPropertyChanged(string)`） | 可写属性 | `IWorkflowViewModel` 的 `InitializeWorkflow()`/`OnPropertyChanging(string)`/`OnPropertyChanged(string)` |
+| 需要由**外部**触发的状态迁移 | **方法**（`InitializeWorkflow()`、`OnPropertyChanged(string)`） | 可写属性 | `IWorkflowComponent` 的 `InitializeWorkflow()`/`OnPropertyChanging(string)`/`OnPropertyChanged(string)` |
 | 由提供方主动通知使用方 | **事件**（`event …EventHandler`） | 轮询属性 | `ITransitionEffectCore` 的 `Canceled` 事件、`IVeloxCommand`（一组 `CommandEventHandler` 事件） |
 | 嵌套/开放的配置数据 | **嵌套字典属性袋** | 强类型 DTO | `IThemeObject` 的 `GetStaticThemeCache()`/`GetActiveThemeCache()`：`Dictionary<string, Dictionary<PropertyInfo, Dictionary<Type, object?>>>` 三层嵌套缓存 |
 | 一份契约的输入输出**类型已知且稳定** | 具体类型入参 | `object` | `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` 全用具体类型 |
@@ -69,7 +69,7 @@
 [AgentContext(AgentLanguages.English, "Canvas layout context, recording canvas size and offset information")]
 ```
 
-方法入参另标 `[AgentCommandParameter(typeof(Offset))]`（`IWorkflowNodeViewModel` 的 `MoveCommand`），参数类型不明显时可以裸写 `[AgentCommandParameter]`（`IWorkflowLinkViewModel` 的 `DeleteCommand`）。语义与读取规则在 `memory/modules/AI/`。
+方法入参另标 `[AgentCommandParameter(typeof(Offset))]`（`INodeComponent` 的 `MoveCommand`），参数类型不明显时可以裸写 `[AgentCommandParameter]`（`ILinkComponent` 的 `DeleteCommand`）。语义与读取规则在 `memory/modules/AI/`。
 
 ---
 
@@ -110,7 +110,7 @@
 
 ### 5. 异步成员：官方是「换行 + 取消参数放最后」，别自己造 `AsyncResult`
 
-`IVeloxCommand` 的 `ExecuteAsync`/`LockAsync`/`UnlockAsync`/`ClearAsync`/`InterruptAsync`/`ContinueAsync`/`ChangeSemaphoreAsync` 等多个 `Task` 成员，取消参数的习惯是**放最后、有默认值就写 `= default`**（`ITimeSource.WaitWhileStalledAsync`、`ITransitionScheduler` 两个 `Execute` 重载的 `externCts`），也有明确不给默认值、要求调用方显式传的（WorkflowSystem 的 `ReceiveAsync`/`BroadcastAsync`/`ReverseBroadcastAsync`/`AccessAsync`，`IWorkflowNodeViewModelHelper`）。新增时**跟同子目录的邻居保持一致**，别发明第三种。
+`IVeloxCommand` 的 `ExecuteAsync`/`LockAsync`/`UnlockAsync`/`ClearAsync`/`InterruptAsync`/`ContinueAsync`/`ChangeSemaphoreAsync` 等多个 `Task` 成员，取消参数的习惯是**放最后、有默认值就写 `= default`**（`ITimeSource.WaitWhileStalledAsync`、`ITransitionScheduler` 两个 `Execute` 重载的 `externCts`），也有明确不给默认值、要求调用方显式传的（WorkflowSystem 的 `ReceiveAsync`/`BroadcastAsync`/`ReverseBroadcastAsync`/`AccessAsync`，`INodeHelper`）。新增时**跟同子目录的邻居保持一致**，别发明第三种。
 
 ### 6. 别把实现细节写进契约的 XML
 
@@ -124,7 +124,7 @@
 |---|---|---|
 | 1 | `Src/Generators/VeloxDev.Core.Generator/` 里的**字符串全名**（`Theme.cs`、`AopSurface.cs`、`Writers/{TickWriter,CommandWriter,WorkflowWriter}.cs`） | 改名后静默不生成，症状远离病因 |
 | 2 | 七家适配器 `Src/Adapters/<平台>/TransitionSystem/`（`UIThreadInspector` / `Samplers/` / `ThemeValueConverters` / `WorkflowSystem/AttachedBehaviors/*`） | 编译失败（好情况）或漏一家（见 §五·1 的规模差异） |
-| 3 | Core 侧的**默认实现**：`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/*DefaultViewModel.cs`、`TransitionSystem/{Runtime/TransitionInterpreter,Runtime/TransitionScheduler,Effects/TransitionEffect,Binding/TransitionProperty}.cs` | 编译失败 |
+| 3 | Core 侧的**默认实现**：`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/*DefaultComponent.cs`、`TransitionSystem/{Runtime/TransitionInterpreter,Runtime/TransitionScheduler,Effects/TransitionEffect,Binding/TransitionProperty}.cs` | 编译失败 |
 | 4 | `Src/Templates/*/working/content/<契约名>/` 与 `Examples/`（`IWorkflowGridDecorator` 不在适配器本体的那几家在这里补；`IWorkflowMinimapOverlay` 现已七家全在适配器本体） | 该平台的示例/模板缺能力 |
 | 5 | 若是注册表键：`TimerCore.RegisterTimeSource<…>` 的所有调用点（`Src/Core/VeloxDev.Core/Timing/TimerCore.cs` 定义，`TransitionSystem/Sampling/SamplerSet.cs` 的 `Run`、`TransitionSystem/Effects/Transition.cs` 的 `TimerCore.CreateTimeSource<ITimeSourceControl>()` 调用） | 运行期抛「未注册」，编译期无感 |
 | 6 | `Tests`：`Src/Test/Unit/Core/VeloxDev.Core.Test/` 下的手写实现（`DynamicTheme/ThemeTransitionTests.cs` 的 `Subject`、`TimeLine/TickableBusTests.cs` 的 `PushCounter` 是 `IThemeObject`/`ITickable` 仅存的手写实现） | 测试编译失败 |

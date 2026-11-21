@@ -43,13 +43,13 @@
 
 @code {
     // VeloxDev customization: swap this template for your own; keep the wrapper non-interactive.
-    private static RenderFragment<IWorkflowLinkViewModel> RenderGenericLink(SurfaceCanvas canvas)
+    private static RenderFragment<ILinkComponent> RenderGenericLink(SurfaceCanvas canvas)
         => link => @<div style="display:contents;pointer-events:none;">
                         <LinkView Link="link" CanvasWidth="@canvas.Width" CanvasHeight="@canvas.Height" />
                     </div>;
 
     /// <summary>Default node template used when the caller does not supply <see cref="TemplateClass.NodeTemplate"/>.</summary>
-    private RenderFragment<IWorkflowNodeViewModel> RenderGenericNode => node => @<text>
+    private RenderFragment<INodeComponent> RenderGenericNode => node => @<text>
         @{ var names = WorkflowPresentation.SlotNamesOf(node); }
         <NodeView Node="node" Tree="Tree" AllowOverflow="true">
             <InputSlots>

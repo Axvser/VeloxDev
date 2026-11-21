@@ -46,7 +46,7 @@ public sealed class WorkflowSurfaceBehavior
         public double PanAnchorTotalY { get; set; }
         public bool HasPendingScrollRestore { get; set; }
         // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
-        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
+        public ITreeComponent? LastRestoreTree { get; set; }
         public bool IsRefreshing { get; set; }
         public bool IsVisibleRegionUpdateQueued { get; set; }
         // MAUI 的 ScrollViewHandler.ViewChanged 先写 VerticalOffset 再写 HorizontalOffset，各发一次 Scrolled。
@@ -79,12 +79,12 @@ public sealed class WorkflowSurfaceBehavior
 
         // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuKeyProperty），订阅、定位、弹出、挂起都在这里。
         public MenuFlyout? LinkMenu { get; set; }
-        public IWorkflowLinkViewModel? MenuLink { get; set; }
+        public ILinkComponent? MenuLink { get; set; }
 
         // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
         public WorkflowInput? Input { get; set; }
         public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
-        public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
+        public EventHandler<ILinkComponent>? MenuLinkRemoved { get; set; }
 
 #if WINDOWS
         /// <summary>The press source's platform element with the native pointer handlers attached.</summary>
@@ -329,7 +329,7 @@ public sealed class WorkflowSurfaceBehavior
     }
 
     // 条目自带 Command 就用它（绑定上下文是那条连线，弹出前设好）；没有就落到默认动作：删掉这条连线。
-    private static void RunItem(MenuFlyoutItem item, IWorkflowLinkViewModel link)
+    private static void RunItem(MenuFlyoutItem item, ILinkComponent link)
     {
         if (item.Command is { } command)
         {
@@ -374,7 +374,7 @@ public sealed class WorkflowSurfaceBehavior
     {
         // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
         if (e.Button != Wf.MouseButton.Right) return;
-        if (e.Target is not IWorkflowLinkViewModel link) return;
+        if (e.Target is not ILinkComponent link) return;
 
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
         if (e.Handle.PreventDefault) return;
@@ -407,7 +407,7 @@ public sealed class WorkflowSurfaceBehavior
     }
 
     // MAUI 没有能在指定点弹出的跨平台菜单；只有 Windows 的原生 MenuFlyout 能做到，所以把声明的条目翻成它。
-    private static Microsoft.UI.Xaml.Controls.MenuFlyout BuildPlatformMenu(MenuFlyout declared, IWorkflowLinkViewModel link)
+    private static Microsoft.UI.Xaml.Controls.MenuFlyout BuildPlatformMenu(MenuFlyout declared, ILinkComponent link)
     {
         var flyout = new Microsoft.UI.Xaml.Controls.MenuFlyout();
         foreach (var element in declared)
@@ -442,7 +442,7 @@ public sealed class WorkflowSurfaceBehavior
     {
         // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
         if (e.Button != Wf.MouseButton.Right) return;
-        if (e.Target is not IWorkflowLinkViewModel link) return;
+        if (e.Target is not ILinkComponent link) return;
 
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
         if (e.Handle.PreventDefault) return;
@@ -1857,7 +1857,7 @@ public sealed class WorkflowSurfaceBehavior
     // 表面自己那一笔输入的落点：指针在画布元素里的坐标 —— 画布就摆在 Ruler + ContentOffset −
     // ScrollOffset 处（见链接层的类文档），所以这就是链接层那个 canvas-local 帧，两条路的句柄才指着
     // 同一处。量不到画布元素或树时返回 null：把这一笔让给链接层（它挂得更外，照样会转发）。
-    private static (IWorkflowTreeViewModel Tree, VisualElement Canvas, Point Point)? ResolveSurfaceInput(
+    private static (ITreeComponent Tree, VisualElement Canvas, Point Point)? ResolveSurfaceInput(
         SurfaceState state, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
         if (state.Host is not { } host
@@ -2039,12 +2039,12 @@ public sealed class WorkflowSurfaceBehavior
         return modelMax;
     }
 
-    private static IWorkflowTreeViewModel? ResolveTreeViewModel(ContentView host, SurfaceState state)
-        => host.BindingContext as IWorkflowTreeViewModel
-            ?? state.Canvas?.BindingContext as IWorkflowTreeViewModel
-            ?? state.ScrollViewer?.BindingContext as IWorkflowTreeViewModel
-            ?? state.GridDecorator?.BindingContext as IWorkflowTreeViewModel
-            ?? state.PointerPressSource?.BindingContext as IWorkflowTreeViewModel;
+    private static ITreeComponent? ResolveTreeViewModel(ContentView host, SurfaceState state)
+        => host.BindingContext as ITreeComponent
+            ?? state.Canvas?.BindingContext as ITreeComponent
+            ?? state.ScrollViewer?.BindingContext as ITreeComponent
+            ?? state.GridDecorator?.BindingContext as ITreeComponent
+            ?? state.PointerPressSource?.BindingContext as ITreeComponent;
 
     private static void UpdateVisibleRegion(ContentView host, SurfaceState state)
     {
@@ -2127,7 +2127,7 @@ public sealed class WorkflowSurfaceBehavior
         return (double.IsNaN(x) ? 0 : x, double.IsNaN(y) ? 0 : y);
     }
 
-    private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state, double scrollX, double scrollY)
+    private static void UpdateGridDecorator(ITreeComponent viewModel, SurfaceState state, double scrollX, double scrollY)
     {
         if (state.GridDecorator is not IWorkflowGridDecorator decorator)
         {
@@ -2143,7 +2143,7 @@ public sealed class WorkflowSurfaceBehavior
         viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
     }
 
-    private static void UpdateMinimapOverlay(IWorkflowTreeViewModel viewModel, SurfaceState state, double scrollX, double scrollY)
+    private static void UpdateMinimapOverlay(ITreeComponent viewModel, SurfaceState state, double scrollX, double scrollY)
     {
         if (state.MinimapOverlay is not IWorkflowMinimapOverlay minimap || state.ScrollViewer is null)
         {
@@ -2216,7 +2216,7 @@ public sealed class WorkflowSurfaceBehavior
     // 交互源上的钩子更早跑（平台事件从命中元素往上冒泡，越深越早），所以句柄只能由先到者那次路由产出。
     // 同一笔再让后到者转发一次，宿主就会一笔听见两次，还会多收一对 Entered/Exited。
     // 按下的登记留到转发松手时才作废（平移在 Started 与第一帧读的是同一条），滚轮的由后到者读走。
-    private static IWorkflowTreeViewModel? RoutedPressTree;
+    private static ITreeComponent? RoutedPressTree;
     private static WorkflowEventHandle? RoutedPressHandle;
     // 滚轮的登记按**事件对象**认，不按树：一次物理滚轮必然是新实例，所以没有谁需要负责收尾，也漏不到
     // 下一笔。按树登记时，普通滚轮只有链接层一条来者，登记没人消费就留到下一笔上，那笔会被判成「已经
@@ -2253,7 +2253,7 @@ public sealed class WorkflowSurfaceBehavior
 
     // 一笔按下只转发一次：已经转发过（登记在案）就读现成的，否则自己转发并登记。链接层与平移都用它 ——
     // 两者谁先跑到由平台的钩子顺序决定，先到的那条转发，后到的那条只是读。
-    internal static WorkflowEventHandle RoutePressOnce(IWorkflowTreeViewModel tree, Func<WorkflowEventHandle> route)
+    internal static WorkflowEventHandle RoutePressOnce(ITreeComponent tree, Func<WorkflowEventHandle> route)
     {
         if (ReferenceEquals(RoutedPressTree, tree) && RoutedPressHandle is { } routed)
         {
@@ -2268,11 +2268,11 @@ public sealed class WorkflowSurfaceBehavior
 
     // 只读这一笔按下的句柄（不转发、不登记）：非 Windows 的平移手势读的就是它 —— 那一笔由链接层
     // 转发过（PanUpdated 不给位置，手势自己转发不出来）。
-    internal static WorkflowEventHandle? PeekRoutedPress(IWorkflowTreeViewModel tree)
+    internal static WorkflowEventHandle? PeekRoutedPress(ITreeComponent tree)
         => ReferenceEquals(RoutedPressTree, tree) ? RoutedPressHandle : null;
 
     // 松手：这一笔按下的登记作废，下一次按下重新开始记。
-    internal static void ClearRoutedPress(IWorkflowTreeViewModel tree)
+    internal static void ClearRoutedPress(ITreeComponent tree)
     {
         if (!ReferenceEquals(RoutedPressTree, tree))
         {
@@ -2303,16 +2303,16 @@ public sealed class WorkflowSurfaceBehavior
 
     // 指针底下是什么：沿命中视图及其可视祖先找 BindingContext 是节点/插槽的那个（含自身），找不到
     // 再回退到共享的曲线判定。只认连线的话，路由的 Target 就永远只是「连线或空白」。
-    internal static IWorkflowViewModel? ResolveTarget(
-        Element? hit, IWorkflowTreeViewModel tree, Point? pointerInCanvas, double radius)
+    internal static IWorkflowComponent? ResolveTarget(
+        Element? hit, ITreeComponent tree, Point? pointerInCanvas, double radius)
     {
         for (var current = hit; current is not null; current = current.Parent)
         {
             switch (current.BindingContext)
             {
-                case IWorkflowNodeViewModel node:
+                case INodeComponent node:
                     return node;
-                case IWorkflowSlotViewModel slot:
+                case ISlotComponent slot:
                     return slot;
             }
         }
@@ -2323,7 +2323,7 @@ public sealed class WorkflowSurfaceBehavior
     }
 
     // 转发用的锚点：量到指针就用指针（画布坐标系，与插槽布局、平移同一条），量不到就用组件自己的。
-    private static Anchor AnchorFor(IWorkflowViewModel? target, Point? pointerInCanvas)
+    private static Anchor AnchorFor(IWorkflowComponent? target, Point? pointerInCanvas)
     {
         if (pointerInCanvas is { } point)
         {
@@ -2332,8 +2332,8 @@ public sealed class WorkflowSurfaceBehavior
 
         return target switch
         {
-            IWorkflowNodeViewModel node => node.Anchor,
-            IWorkflowSlotViewModel slot => slot.Anchor,
+            INodeComponent node => node.Anchor,
+            ISlotComponent slot => slot.Anchor,
             _ => new Anchor(),
         };
     }

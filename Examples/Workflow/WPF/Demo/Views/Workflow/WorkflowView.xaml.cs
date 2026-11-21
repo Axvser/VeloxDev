@@ -465,7 +465,7 @@ public partial class WorkflowView : UserControl
         {
             if (e.Modifiers.HasFlag(InputModifiers.Control))
             {
-                if (e.Target is IWorkflowNodeViewModel node) AgentSelection.Toggle(node);
+                if (e.Target is INodeComponent node) AgentSelection.Toggle(node);
                 e.Handle.PreventDefault = true;
             }
             else if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))
@@ -484,7 +484,7 @@ public partial class WorkflowView : UserControl
         if (IsInsideTextInput(e.OriginalSource as DependencyObject)) return;
 
         var element = FindNodeElement(e.OriginalSource as DependencyObject);
-        if (element?.DataContext is not IWorkflowNodeViewModel node) return;
+        if (element?.DataContext is not INodeComponent node) return;
 
         ShowNodeLayoutMenu(node, element);
         e.Handled = true;
@@ -505,7 +505,7 @@ public partial class WorkflowView : UserControl
     {
         for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
         {
-            if (current is FrameworkElement element && element.DataContext is IWorkflowNodeViewModel)
+            if (current is FrameworkElement element && element.DataContext is INodeComponent)
             {
                 return element;
             }
@@ -517,7 +517,7 @@ public partial class WorkflowView : UserControl
     }
 
     /// <summary>Demo-only: the node's own right-click menu, built from the shared layout presets.</summary>
-    private void ShowNodeLayoutMenu(IWorkflowNodeViewModel node, UIElement? source)
+    private void ShowNodeLayoutMenu(INodeComponent node, UIElement? source)
     {
         var menu = new ContextMenu();
 
@@ -550,7 +550,7 @@ public partial class WorkflowView : UserControl
         menu.IsOpen = true;
     }
 
-    private void ApplyNodeLayout(IWorkflowNodeViewModel node, WorkflowLayoutTraversal traversal)
+    private void ApplyNodeLayout(INodeComponent node, WorkflowLayoutTraversal traversal)
     {
         try
         {
@@ -963,14 +963,14 @@ public partial class WorkflowView : UserControl
 
     // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
     // 删不删由这里写（与悬停高亮同一条路）。
-    private void HookLinkKeys(IWorkflowTreeViewModel tree)
+    private void HookLinkKeys(ITreeComponent tree)
     {
         if (tree.GetHelper() is not Wf.IInputEvents events) return;
 
         events.Input.KeyDown += (_, e) =>
         {
             if (e.Key != Wf.InputKey.Delete || e.Handle.PreventDefault) return;
-            if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
+            if (e.Target is not ILinkComponent link || !link.DeleteCommand.CanExecute(null)) return;
 
             link.DeleteCommand.Execute(null);
         };

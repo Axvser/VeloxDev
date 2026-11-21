@@ -9,7 +9,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <summary>
 /// Blazor analogue of the XAML adapters' <c>WorkflowSlotLayoutBehavior</c> attached property.
 /// Measures the on-screen centers of the wrapped slot elements (which expose <c>data-slot-id</c>)
-/// and writes them back to each slot's <see cref="IWorkflowSlotViewModel.Anchor"/> in canvas
+/// and writes them back to each slot's <see cref="ISlotComponent.Anchor"/> in canvas
 /// (world) coordinates.
 /// </summary>
 public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposable
@@ -19,7 +19,7 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
 
     /// <summary>Gets or sets the node whose slots should be synchronized.</summary>
     [Parameter]
-    public IWorkflowNodeViewModel? Node { get; set; }
+    public INodeComponent? Node { get; set; }
 
     /// <summary>Gets or sets whether slot layout synchronization is enabled.</summary>
     [Parameter]
@@ -75,7 +75,7 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
                 continue;
             }
 
-            if (!WorkflowRuntimeIds.TryFind<IWorkflowSlotViewModel>(id, out var slot) || slot is null)
+            if (!WorkflowRuntimeIds.TryFind<ISlotComponent>(id, out var slot) || slot is null)
             {
                 continue;
             }
@@ -87,7 +87,7 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
         // 通知节点其插槽布局变了。消费者按插槽锚点渲染连线，所以这让它们在实时拖拽中立刻重画，而不是等节点自身 Anchor 再变一次。
         if (anyChanged)
         {
-            Node.OnPropertyChanged(nameof(IWorkflowNodeViewModel.Anchor));
+            Node.OnPropertyChanged(nameof(INodeComponent.Anchor));
         }
     }
 

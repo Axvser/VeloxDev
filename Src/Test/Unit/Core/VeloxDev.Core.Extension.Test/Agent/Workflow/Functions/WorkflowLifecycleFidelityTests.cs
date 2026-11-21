@@ -49,8 +49,8 @@ public partial class WorkflowLifecycleFidelityTests
     [TestMethod]
     public void AddSlotToCollection_RegistersSlotInNodeSlots_AndIsUndoable()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node); // synchronous mount (helper path, mirrors CreateNodeCommand)
         var scope = new WorkflowAgentScope(tree);
 
@@ -59,7 +59,7 @@ public partial class WorkflowLifecycleFidelityTests
         var result = InvokeTool(scope, "AddSlotToCollection",
             ("nodeIndex", 0),
             ("propertyName", "Slots"),
-            ("fullSlotTypeName", typeof(SlotDefaultViewModel).FullName!),
+            ("fullSlotTypeName", typeof(SlotDefaultComponent).FullName!),
             ("channel", "OneBoth"));
 
         var json = JObject.Parse(result);
@@ -85,8 +85,8 @@ public partial class WorkflowLifecycleFidelityTests
     [TestMethod]
     public void ExecuteNode_WaitsForCommandCompletion()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node); // synchronous mount
         var scope = new WorkflowAgentScope(tree).WithAllowNodeExecution(true);
 
@@ -101,8 +101,8 @@ public partial class WorkflowLifecycleFidelityTests
     [TestMethod]
     public void CompileNodeResult_SingleNodeTree_ProducesTerminalCompilePlan()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
         var scope = new WorkflowAgentScope(tree);
 
@@ -117,8 +117,8 @@ public partial class WorkflowLifecycleFidelityTests
     [TestMethod]
     public void GetNodeResult_WithoutAllowNodeExecution_IsRejectedByPolicy()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
         var scope = new WorkflowAgentScope(tree); // node execution off by default
 
@@ -133,8 +133,8 @@ public partial class WorkflowLifecycleFidelityTests
     [TestMethod]
     public void GetNodeResult_SingleNodeTree_RunsToCompletionWithTerminalRole()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
         var scope = new WorkflowAgentScope(tree).WithAllowNodeExecution(true);
 
@@ -158,8 +158,8 @@ public partial class WorkflowLifecycleFidelityTests
     [TestMethod]
     public void WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
         var lines = new List<string>();
         var scope = new WorkflowAgentScope(tree)
@@ -170,15 +170,15 @@ public partial class WorkflowLifecycleFidelityTests
 
         Assert.AreEqual("ok", JObject.Parse(result)["status"]?.Value<string>());
         Assert.IsTrue(lines.Count > 0, "the run's lines must reach the writer the host registered");
-        Assert.IsTrue(lines.Any(l => l.Contains(nameof(NodeDefaultViewModel))),
+        Assert.IsTrue(lines.Any(l => l.Contains(nameof(NodeDefaultComponent))),
             $"the engine's per-node line should be among them; got: {string.Join(" | ", lines)}");
     }
 
     [TestMethod]
     public void SlotEnumerator_RoundTripsSelectorType()
     {
-        var node = new NodeDefaultViewModel();
-        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
+        var node = new NodeDefaultComponent();
+        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
         enumerator.Install(node, "OutputSlots");
         enumerator.SetSelector(typeof(SlotChannel));
 
@@ -196,8 +196,8 @@ public partial class WorkflowLifecycleFidelityTests
     [TestMethod]
     public async Task MoveNode_ReplaysGuiDragSemantics_AndIsNonUndoable()
     {
-        var tree = new TreeDefaultViewModel();
-        var node = new NodeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
+        var node = new NodeDefaultComponent();
         tree.GetHelper().CreateNode(node);
         node.Anchor = new Anchor(10, 20, 0);
         var scope = new WorkflowAgentScope(tree);
@@ -233,7 +233,7 @@ public partial class WorkflowLifecycleFidelityTests
     [TestMethod]
     public void WithSynchronizationContext_MarshalsToolCallsToContext()
     {
-        var tree = new TreeDefaultViewModel();
+        var tree = new TreeDefaultComponent();
         var sync = new TestSynchronizationContext();
         var scope = new WorkflowAgentScope(tree)
             .WithSynchronizationContext(sync)
@@ -267,7 +267,7 @@ public partial class WorkflowLifecycleFidelityTests
     /// </summary>
     internal sealed partial class SlotEnumeratorHolder
     {
-        [VeloxProperty] private SlotEnumerator<SlotDefaultViewModel>? enumerator;
+        [VeloxProperty] private SlotEnumerator<SlotDefaultComponent>? enumerator;
     }
 
     private sealed class TestSynchronizationContext : SynchronizationContext

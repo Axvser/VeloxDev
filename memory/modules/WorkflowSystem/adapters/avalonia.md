@@ -120,7 +120,7 @@ Avalonia 与 WPF 同族 → **同步写在 Avalonia 上成立的理由是 WPF �
 
 - 按下：**路由**在隧道相（`control.AddHandler(InputElement.PointerPressedEvent, OnPressRoute, RoutingStrategies.Tunnel)`，`Attach`），句柄存 `state.PressHandle`；**起平移**的仍是冒泡相注册的 `state.PointerPressSource.PointerPressed += OnPointerPressed;`（`Attach`），它先读 `state.PressHandle?.PreventDefault`（`OnPointerPressed`）—— 四个手势怎么读这份句柄见 §二.10。WPF 同族：`state.PointerPressSource.PreviewMouseDown += OnPointerPressed`（WPF `WorkflowSurfaceBehavior.cs`，隧道路由）。
 - 释放：`OnPointerReleased`。先处理平移收尾，然后**无条件**执行 `viewModel.VirtualLink.Sender.State &= ~SlotState.PreviewSender;` 与 `viewModel.ResetVirtualLinkCommand.Execute(null)`。WPF 的同位置有两道门：`!viewModel.VirtualLink.IsVisible` 直接返回、且必须 `IsSurfaceBlankInteraction(originalSource, state)` 为真（WPF `WorkflowSurfaceBehavior.cs` 的释放处理）。
-- 这一对的后果是**互补的**：路由只报「谁被指到」、从不筛来源，「起不起手势」的判定因此留在 `ShouldStartPan` → `IsSurfaceBlankInteraction`：先排 `DataContext is IWorkflowNodeViewModel or IWorkflowSlotViewModel` 的视觉元素及其祖先，再把连线视觉当成合法空白，最后按引用匹配 `Canvas` / `ScrollViewer` / `PointerPressSource` / `GridDecorator`，并额外认类名 `"ScrollContentPresenter"`。
+- 这一对的后果是**互补的**：路由只报「谁被指到」、从不筛来源，「起不起手势」的判定因此留在 `ShouldStartPan` → `IsSurfaceBlankInteraction`：先排 `DataContext is INodeComponent or ISlotComponent` 的视觉元素及其祖先，再把连线视觉当成合法空白，最后按引用匹配 `Canvas` / `ScrollViewer` / `PointerPressSource` / `GridDecorator`，并额外认类名 `"ScrollContentPresenter"`。
 - **未验证**：释放时无条件 `ResetVirtualLinkCommand` 是否会在「连线进行中于空白处松开」之外造成可观察的副作用（只按代码读出，未跑起来验证）。
 
 ### 3. 插槽连接：按下后**主动释放指针捕获**，且两个处理器都**不置 `Handled`**
@@ -169,7 +169,7 @@ WPF 的 `ViewFactory.FindTemplate` 第三级是**扫 `Application.Current.Resour
 
 ### 8. Core 视图系统：`ViewPool` + 九项
 
-- `ViewPool`（`ViewPool.cs`，附着属性 `ItemsSource` / `TemplateSelector`）只负责重建/销毁 `ViewSourcePipeline`；后者在 `WorkflowSystem/ViewHosting/` 继承 Core 的 `ViewSourcePipelineCore<Panel,Control,IWorkflowViewModel,DispatcherPriority,…>`，组合全部层与策略。
+- `ViewPool`（`ViewPool.cs`，附着属性 `ItemsSource` / `TemplateSelector`）只负责重建/销毁 `ViewSourcePipeline`；后者在 `WorkflowSystem/ViewHosting/` 继承 Core 的 `ViewSourcePipelineCore<Panel,Control,IWorkflowComponent,DispatcherPriority,…>`，组合全部层与策略。
 - **五个必选层**（`WorkflowSystem/ViewHosting/`）：
   - `ViewFactory`：选择器 → 面板 `DataTemplates` → 父链 → `Application.DataTemplates`，按类型缓存；
   - `ViewContainer`：用 `HashSet<Control>`（引用比较）做 O(1) 去重挂载；`Activate` 设 `DataContext` + 可见，`Deactivate` 置空 + 隐藏，`Detach` 不摘树，`SetZOrder` 空实现（模板绑 z），`Destroy` 摘树并移出集合；
@@ -264,12 +264,12 @@ WPF 的 `ViewFactory.FindTemplate` 第三级是**扫 `Application.Current.Resour
 
 两个自绘连线视图各有一份，**都要改** —— demo 的 `WorkflowView.axaml` 按 `LinkViewModel.UsePolyline`（默认 `true`，字段在 `Examples/Workflow/Common/Lib/ViewModels/Workflow/LinkViewModel.cs` 的 `UsePolyline`）在两者之间切换，不是死代码。**默认显示的是 `PolylineCurveView`**（带流动光带那个），`BezierCurveView` 是关掉光带的对照。
 
-**这两个视图都不碰指针命中、也不自己转发指针事件**：命中的几何由 Core 的 `LinkHitTestEx` / `LinkCurve` 判，事件由 Core 的 `WorkflowInput` 路由（用 `WorkflowInput.For(tree)` 取，一棵树一个），视图只做两件事 —— 画，以及把画出来的曲线发布给命中契约（另订自己 helper 的 `Input` 决定亮不亮，见下表）。两者都把 `LinkCurve.BuildLinkCubic(DataContext as IWorkflowLinkViewModel, StartLeft, StartTop, EndLeft, EndTop, PullMinimum)` 交给 `link.PublishCurve(_curve, this)`（`PolylineCurveView.axaml.cs`、`BezierCurveView.axaml.cs` 的 `RefreshGeometry`；`PullMinimum = 40`），发布出去的那条就是命中用的唯一几何。**区别只在有没有流动光带，不在曲线形状**：`BezierCurveView` 绘制时另用一份 `Controls()` 拉控制点，那一份也来自 Core 的 `LinkCurve.LinkCurvePoints` —— 两处若各推一遍几何，弯的地方命中就会对不上指针（`PolylineCurveView` 直接画 `_curve` 的采样，没有第二份）。控制点沿每个口自己那条边的外法线拉，不是写死水平，理由见 [`architecture.md` §3.4](../architecture.md)。
+**这两个视图都不碰指针命中、也不自己转发指针事件**：命中的几何由 Core 的 `LinkHitTestEx` / `LinkCurve` 判，事件由 Core 的 `WorkflowInput` 路由（用 `WorkflowInput.For(tree)` 取，一棵树一个），视图只做两件事 —— 画，以及把画出来的曲线发布给命中契约（另订自己 helper 的 `Input` 决定亮不亮，见下表）。两者都把 `LinkCurve.BuildLinkCubic(DataContext as ILinkComponent, StartLeft, StartTop, EndLeft, EndTop, PullMinimum)` 交给 `link.PublishCurve(_curve, this)`（`PolylineCurveView.axaml.cs`、`BezierCurveView.axaml.cs` 的 `RefreshGeometry`；`PullMinimum = 40`），发布出去的那条就是命中用的唯一几何。**区别只在有没有流动光带，不在曲线形状**：`BezierCurveView` 绘制时另用一份 `Controls()` 拉控制点，那一份也来自 Core 的 `LinkCurve.LinkCurvePoints` —— 两处若各推一遍几何，弯的地方命中就会对不上指针（`PolylineCurveView` 直接画 `_curve` 的采样，没有第二份）。控制点沿每个口自己那条边的外法线拉，不是写死水平，理由见 [`architecture.md` §3.4](../architecture.md)。
 
 | 事 | 现在归谁 | 锚点 |
 |---|---|---|
 | 命中 | Core：沿发布曲线的采样段逐段判点到线段距离，`DefaultHitRadius = 6d` | `LinkHitTestEx` 的 `DefaultHitRadius`、`LinkCurve` 的 `HitTest`、`LinkHelper.cs` 的命中转发；`HitTestVisibleLinks` 从 `VisibleItems` **末尾往前**、跳过 `VirtualLink`、被节点卡盖住的不算 |
-| 右键菜单 | **适配器**订树 helper 的 `Input.PointerPressed`，只有右键落在连线上才弹（自己判 `e.Button == Right` 与 `e.Target is IWorkflowLinkViewModel`），按宿主根元素上的 `LinkMenuKey` 取出声明的菜单实例、定位并弹出；菜单指着的那条线离树时树 helper 的 `LinkRemoved` 报到适配器，适配器只收自己那份弹窗 | 适配器 `WorkflowSurfaceBehavior.cs` 的 `WireLinkMenu` / `ShowLinkMenu`；模板与两个 demo 的 code-behind 都不含这段 |
+| 右键菜单 | **适配器**订树 helper 的 `Input.PointerPressed`，只有右键落在连线上才弹（自己判 `e.Button == Right` 与 `e.Target is ILinkComponent`），按宿主根元素上的 `LinkMenuKey` 取出声明的菜单实例、定位并弹出；菜单指着的那条线离树时树 helper 的 `LinkRemoved` 报到适配器，适配器只收自己那份弹窗 | 适配器 `WorkflowSurfaceBehavior.cs` 的 `WireLinkMenu` / `ShowLinkMenu`；模板与两个 demo 的 code-behind 都不含这段 |
 | 悬停高亮 / 取焦点 | 高亮是这本 demo 自己的：连线视图订**自己** helper 的 `Input.PointerEntered/Exited`，写自己的 `IsHighlighted`；适配器 `FocusHoveredLink` 把键盘焦点交给画线的控件，不可聚焦时退回宿主 | `PolylineCurveView.axaml.cs` 的 `OnPointerEntered` / `OnPointerExited`；`WorkflowSurfaceBehavior.cs` 的 `FocusHoveredLink`（宿主 `Focusable = true` 在 `Attach`） |
 | 删除 | 归宿主：**demo 的 code-behind** 订树 helper 的 `Input.KeyDown`，`Delete` 落在指针停着的那条线上就执行 `link.DeleteCommand`；菜单项绑的也是它 | `WorkflowView.axaml.cs` 里订 `Input.KeyDown` 的处理器；`WorkflowView.axaml` 的 `<MenuItem Header="Delete" …>` |
 

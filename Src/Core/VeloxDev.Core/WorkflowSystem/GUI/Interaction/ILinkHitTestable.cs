@@ -17,7 +17,7 @@ namespace VeloxDev.WorkflowSystem;
 /// in the view model is deliberate — the shape is a view/template strategy, and Core must not assume one.
 /// </summary>
 /// <remarks>
-/// The capability is not a member of <see cref="IWorkflowLinkViewModelHelper"/>: adding members to that
+/// The capability is not a member of <see cref="ILinkHelper"/>: adding members to that
 /// interface would break every existing implementer, and most links never need it.
 /// </remarks>
 /// <seealso cref="LinkHitTestEx"/>

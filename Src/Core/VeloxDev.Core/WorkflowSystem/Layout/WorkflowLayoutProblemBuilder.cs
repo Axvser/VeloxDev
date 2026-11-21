@@ -23,7 +23,7 @@ public static class WorkflowLayoutProblemBuilder
     /// <returns>The immutable snapshot.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static WorkflowLayoutProblem Build(
-        IWorkflowTreeViewModel tree, WorkflowLayoutOptions? options = null)
+        ITreeComponent tree, WorkflowLayoutOptions? options = null)
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
@@ -36,10 +36,10 @@ public static class WorkflowLayoutProblemBuilder
         var scaleY = scale is null || scale.Vertical == 0d ? 1d : scale.Vertical;
 
         var nodes = new List<WorkflowLayoutNode>();
-        var sources = new List<IWorkflowNodeViewModel>();
+        var sources = new List<INodeComponent>();
         var skipped = new List<int>();
-        var indexOf = new Dictionary<IWorkflowNodeViewModel, int>(
-            WorkflowReferenceEqualityComparer<IWorkflowNodeViewModel>.Instance);
+        var indexOf = new Dictionary<INodeComponent, int>(
+            WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
         var links = new List<(int Sender, int Receiver)>();
 
         if (tree.Nodes is not null)

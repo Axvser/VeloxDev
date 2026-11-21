@@ -101,7 +101,7 @@
 										RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 		</DataTemplate>
 		<!-- Any remaining workflow node (no dedicated view) falls back to the generic node card. -->
-		<DataTemplate DataType="workflow:IWorkflowNodeViewModel">
+		<DataTemplate DataType="workflow:INodeComponent">
 			<local:NodeView Width="{Binding Size.Width}"
 							Height="{Binding Size.Height}"
 							Canvas.Left="{Binding Anchor.Horizontal}"
@@ -132,7 +132,7 @@
 										 RenderTransform="{Binding $parent[local:WorkflowView].(behaviors:WorkflowCanvasTransformBehavior.Transform)}"/>
 			</Panel>
 		</DataTemplate>
-		<DataTemplate DataType="workflow:IWorkflowLinkViewModel">
+		<DataTemplate DataType="workflow:ILinkComponent">
 			<local:BezierCurveView StartLeft="{Binding Sender.Anchor.Horizontal}"
 								   StartTop="{Binding Sender.Anchor.Vertical}"
 								   EndLeft="{Binding Receiver.Anchor.Horizontal}"

@@ -24,7 +24,7 @@ internal sealed class CliOptions
           --no-run-csv           Do not write execution results to tasks/<task>/runs/<timestamp>.csv.
                                  The CSV export is on by default.
           --root-type <name>     Concrete tree type the document was serialized from, when it was not
-                                 TreeDefaultViewModel (e.g. Demo.ViewModels.TreeViewModel). The manifest may
+                                 TreeDefaultComponent (e.g. Demo.ViewModels.TreeViewModel). The manifest may
                                  carry the same value as "rootType".
           --allow-execution      Expose the tools that run node business code (mcp mode only).
           --in-process-execution Run node code inside the MCP server instead of a child process. Faster and

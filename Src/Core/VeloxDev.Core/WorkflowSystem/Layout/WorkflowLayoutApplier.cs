@@ -6,18 +6,18 @@ namespace VeloxDev.WorkflowSystem;
 /// <remarks>
 /// <para>Pinned and unmoved nodes are skipped. Each changed node receives its solved world anchor through
 /// <see cref="WorkflowNodeEx.StandardSetAnchor"/>, preserving the node layer, and all writes are wrapped in
-/// a single <see cref="IWorkflowActionPair"/> so one <c>Undo</c> restores every original anchor.</para>
+/// a single <see cref="IActionPair"/> so one <c>Undo</c> restores every original anchor.</para>
 /// <para>The tree is marked dirty once, after the submit, rather than once per node.</para>
 /// </remarks>
 public sealed class WorkflowLayoutApplier : IWorkflowLayoutApplier
 {
     private const double Epsilon = 1e-6d;
-    private readonly IWorkflowTreeViewModel _tree;
+    private readonly ITreeComponent _tree;
 
     /// <summary>Creates an applier for <paramref name="tree"/>.</summary>
     /// <param name="tree">The tree that owns the snapshot nodes.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
-    public WorkflowLayoutApplier(IWorkflowTreeViewModel tree)
+    public WorkflowLayoutApplier(ITreeComponent tree)
     {
         _tree = tree ?? throw new ArgumentNullException(nameof(tree));
     }
@@ -68,7 +68,7 @@ public sealed class WorkflowLayoutApplier : IWorkflowLayoutApplier
         }
 
         var helper = _tree.GetHelper();
-        helper.Submit(new WorkflowActionPair(
+        helper.Submit(new ActionPair(
             () =>
             {
                 foreach (var move in moves) move.Node.StandardSetAnchor(move.To);
@@ -105,14 +105,14 @@ public sealed class WorkflowLayoutApplier : IWorkflowLayoutApplier
 
     private readonly struct NodeMove
     {
-        public NodeMove(IWorkflowNodeViewModel node, Anchor from, Anchor to)
+        public NodeMove(INodeComponent node, Anchor from, Anchor to)
         {
             Node = node;
             From = from;
             To = to;
         }
 
-        public IWorkflowNodeViewModel Node { get; }
+        public INodeComponent Node { get; }
         public Anchor From { get; }
         public Anchor To { get; }
     }

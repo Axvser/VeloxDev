@@ -194,7 +194,7 @@ public class WorkflowLayoutBatchTests
         Assert.AreNotSame(WorkflowLayoutBatch.For(owner), WorkflowLayoutBatch.For(new object()));
     }
 
-    private static NodeDefaultViewModel Node(double anchorX, double size)
+    private static NodeDefaultComponent Node(double anchorX, double size)
         => new()
         {
             Anchor = new Anchor(anchorX, 0d, 0),

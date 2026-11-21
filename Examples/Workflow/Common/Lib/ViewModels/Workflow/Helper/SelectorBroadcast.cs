@@ -13,7 +13,7 @@ internal static class SelectorBroadcast
     /// Delivers the data only to <paramref name="slot"/>'s downstream targets (each passes the owner's AccessAsync
     /// gate, consistent with <c>StandardBroadcastAsync</c>). A null slot does nothing.
     /// </summary>
-    public static async Task ToSlotAsync(IWorkflowNodeViewModel owner, IWorkflowSlotViewModel? slot, object? data, CancellationToken ct)
+    public static async Task ToSlotAsync(INodeComponent owner, ISlotComponent? slot, object? data, CancellationToken ct)
     {
         if (slot is null) return;
 

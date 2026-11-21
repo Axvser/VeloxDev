@@ -11,7 +11,7 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// Recycled views stay in <see cref="Panel.Children"/>; <see cref="Deactivate"/> hides them and clears
 /// <see cref="FrameworkElement.DataContext"/>, and only <see cref="Destroy"/> removes them.
 /// </remarks>
-public sealed class ViewContainer : IViewContainer<Panel, FrameworkElement, IWorkflowViewModel>
+public sealed class ViewContainer : IViewContainer<Panel, FrameworkElement, IWorkflowComponent>
 {
     private readonly HashSet<FrameworkElement> _attached = new(ElementReferenceComparer.Instance);
 
@@ -31,7 +31,7 @@ public sealed class ViewContainer : IViewContainer<Panel, FrameworkElement, IWor
     }
 
     /// <inheritdoc />
-    public void Activate(FrameworkElement view, IWorkflowViewModel item)
+    public void Activate(FrameworkElement view, IWorkflowComponent item)
     {
         view.DataContext = item;
         view.Visibility = Visibility.Visible;

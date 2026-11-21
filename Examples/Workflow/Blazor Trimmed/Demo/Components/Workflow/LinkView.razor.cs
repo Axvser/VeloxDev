@@ -21,7 +21,7 @@ public partial class LinkView : ComponentBase, IDisposable
 
     /// <summary>Gets or sets the link rendered by this view.</summary>
     [Parameter]
-    public IWorkflowLinkViewModel? Link { get; set; }
+    public ILinkComponent? Link { get; set; }
 
     /// <summary>Gets or sets the canvas size the link spans.</summary>
     [Parameter]
@@ -43,7 +43,7 @@ public partial class LinkView : ComponentBase, IDisposable
     [Parameter]
     public bool? IsVirtualOverride { get; set; }
 
-    /// <summary>Gets or sets an explicit visibility override (defaults to <see cref="IWorkflowLinkViewModel.IsVisible"/>).</summary>
+    /// <summary>Gets or sets an explicit visibility override (defaults to <see cref="ILinkComponent.IsVisible"/>).</summary>
     [Parameter]
     public bool? CanRenderOverride { get; set; }
 
@@ -164,7 +164,7 @@ public partial class LinkView : ComponentBase, IDisposable
         Sync(Link);
     }
 
-    private void Sync(IWorkflowLinkViewModel? link)
+    private void Sync(ILinkComponent? link)
     {
         if (link is null) return;
 
@@ -201,13 +201,13 @@ public partial class LinkView : ComponentBase, IDisposable
 
     private void OnLinkChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowLinkViewModel.IsVisible) or null or "")
+        if (e.PropertyName is nameof(ILinkComponent.IsVisible) or null or "")
         {
             CanRender = Link?.IsVisible == true;
         }
 
-        if (e.PropertyName is nameof(IWorkflowLinkViewModel.Sender)
-            or nameof(IWorkflowLinkViewModel.Receiver)
+        if (e.PropertyName is nameof(ILinkComponent.Sender)
+            or nameof(ILinkComponent.Receiver)
             or null or "")
         {
             IsVirtual = IsVirtualLink(Link);
@@ -228,13 +228,13 @@ public partial class LinkView : ComponentBase, IDisposable
 
     private void OnEndpointChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.Anchor) or null or "")
+        if (e.PropertyName is nameof(ISlotComponent.Anchor) or null or "")
         {
             InvokeAsync(StateHasChanged);
         }
     }
 
-    private bool IsVirtualLink(IWorkflowLinkViewModel? link)
+    private bool IsVirtualLink(ILinkComponent? link)
         => link is null || (link.Sender?.Parent is null && link.Receiver?.Parent is null);
 
     // Extension point: the control points set the curve's shape. Both are pulled horizontally by

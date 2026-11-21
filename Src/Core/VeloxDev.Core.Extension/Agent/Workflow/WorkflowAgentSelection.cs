@@ -35,16 +35,16 @@ internal static class WorkflowAgentSelection
     private sealed class Snapshot
     {
         internal static readonly Snapshot Empty =
-            new(Array.Empty<IWorkflowNodeViewModel>(), Array.Empty<Entry>(), 0L);
+            new(Array.Empty<INodeComponent>(), Array.Empty<Entry>(), 0L);
 
-        internal Snapshot(IWorkflowNodeViewModel[] nodes, Entry[] entries, long revision)
+        internal Snapshot(INodeComponent[] nodes, Entry[] entries, long revision)
         {
             Nodes = nodes;
             Entries = entries;
             Revision = revision;
         }
 
-        internal IWorkflowNodeViewModel[] Nodes { get; }
+        internal INodeComponent[] Nodes { get; }
 
         internal Entry[] Entries { get; }
 
@@ -63,40 +63,40 @@ internal static class WorkflowAgentSelection
     }
 
     // 每棵树一份；树被回收时条目一起消失。
-    private static readonly ConditionalWeakTable<IWorkflowTreeViewModel, State> States = new();
+    private static readonly ConditionalWeakTable<ITreeComponent, State> States = new();
 
     // 节点 → 它当前所在选中集的那棵树。ConditionalWeakTable 在 netstandard2.0 上不可枚举，
     // 而节点删除后 Parent 已经是 null —— 这张反向表让「节点自己释放自己」仍能找到那棵树。
     // 值里放弱引用，避免节点活得比树久时把树拽住。
     private sealed class NodeOwner
     {
-        internal WeakReference<IWorkflowTreeViewModel>? Tree;
+        internal WeakReference<ITreeComponent>? Tree;
     }
 
-    private static readonly ConditionalWeakTable<IWorkflowNodeViewModel, NodeOwner> Owners = new();
+    private static readonly ConditionalWeakTable<INodeComponent, NodeOwner> Owners = new();
     private static readonly object OwnersGate = new();
 
     // 从未选过时为 0。
-    internal static long RevisionFor(IWorkflowTreeViewModel tree)
+    internal static long RevisionFor(ITreeComponent tree)
         => States.TryGetValue(tree, out var state) ? Volatile.Read(ref state.Snapshot).Revision : 0L;
 
     // 返回副本；调用方拿不到内部数组。
-    internal static IReadOnlyList<IWorkflowNodeViewModel> Get(IWorkflowTreeViewModel tree)
+    internal static IReadOnlyList<INodeComponent> Get(ITreeComponent tree)
     {
         if (!States.TryGetValue(tree, out var state))
-            return Array.Empty<IWorkflowNodeViewModel>();
+            return Array.Empty<INodeComponent>();
 
         var snapshot = Volatile.Read(ref state.Snapshot);
         if (snapshot.Nodes.Length == 0)
-            return Array.Empty<IWorkflowNodeViewModel>();
+            return Array.Empty<INodeComponent>();
 
-        var copy = new IWorkflowNodeViewModel[snapshot.Nodes.Length];
+        var copy = new INodeComponent[snapshot.Nodes.Length];
         Array.Copy(snapshot.Nodes, copy, copy.Length);
         return copy;
     }
 
     // 并集语义：已在选中集里的节点不重复、不计数；返回本次新增的节点数。
-    internal static int Add(IWorkflowTreeViewModel tree, IReadOnlyList<IWorkflowNodeViewModel> nodes)
+    internal static int Add(ITreeComponent tree, IReadOnlyList<INodeComponent> nodes)
     {
         if (nodes.Count == 0) return 0;
 
@@ -106,7 +106,7 @@ internal static class WorkflowAgentSelection
         {
             var current = state.Snapshot;
 
-            var combined = new List<IWorkflowNodeViewModel>(current.Nodes.Length + nodes.Count);
+            var combined = new List<INodeComponent>(current.Nodes.Length + nodes.Count);
             var entries = new List<Entry>(current.Nodes.Length + nodes.Count);
             combined.AddRange(current.Nodes);
             entries.AddRange(current.Entries);
@@ -117,7 +117,7 @@ internal static class WorkflowAgentSelection
                 var node = nodes[i];
                 if (node is null) continue;
                 if (ContainsReference(combined, node)) continue;
-                if (node is not IWorkflowIdentifiable) continue;
+                if (node is not IRuntimeIdentifiable) continue;
 
                 combined.Add(node);
                 entries.Add(EntryOf(node));
@@ -135,7 +135,7 @@ internal static class WorkflowAgentSelection
     }
 
     // 清空该树的选中集；返回释放的节点数。没有选中集时返回 0，不推进 revision。
-    internal static int Clear(IWorkflowTreeViewModel tree)
+    internal static int Clear(ITreeComponent tree)
     {
         if (!States.TryGetValue(tree, out var state)) return 0;
 
@@ -145,7 +145,7 @@ internal static class WorkflowAgentSelection
             if (current.Nodes.Length == 0) return 0;
 
             var count = current.Nodes.Length;
-            var next = Array.Empty<IWorkflowNodeViewModel>();
+            var next = Array.Empty<INodeComponent>();
 
             Volatile.Write(ref state.Snapshot,
                 new Snapshot(next, Array.Empty<Entry>(), current.Revision + 1));
@@ -157,9 +157,9 @@ internal static class WorkflowAgentSelection
 
     // 接在快照替换之后；锁顺序是 state → OwnersGate，Remove 不会同时持有两者。
     private static void UpdateOwners(
-        IWorkflowTreeViewModel tree,
-        IWorkflowNodeViewModel[] previous,
-        IWorkflowNodeViewModel[] next)
+        ITreeComponent tree,
+        INodeComponent[] previous,
+        INodeComponent[] next)
     {
         lock (OwnersGate)
         {
@@ -169,7 +169,7 @@ internal static class WorkflowAgentSelection
             for (var i = 0; i < next.Length; i++)
             {
                 var owner = Owners.GetValue(next[i], static _ => new NodeOwner());
-                owner.Tree = new WeakReference<IWorkflowTreeViewModel>(tree);
+                owner.Tree = new WeakReference<ITreeComponent>(tree);
             }
         }
     }
@@ -178,10 +178,10 @@ internal static class WorkflowAgentSelection
     // Deleted 是第三条语义事件；标准删除路径三者都会经过，Remove 幂等。
     // 这些订阅只观察工作流，不修改它。
     private static void SyncSubscriptions(
-        IWorkflowTreeViewModel tree,
+        ITreeComponent tree,
         State state,
-        IWorkflowNodeViewModel[] previous,
-        IWorkflowNodeViewModel[] next)
+        INodeComponent[] previous,
+        INodeComponent[] next)
     {
         for (var i = 0; i < previous.Length; i++)
             if (!ContainsReference(next, previous[i])) Unobserve(previous[i]);
@@ -204,22 +204,22 @@ internal static class WorkflowAgentSelection
         }
     }
 
-    private static void Observe(IWorkflowNodeViewModel node)
+    private static void Observe(INodeComponent node)
     {
         node.PropertyChanged += OnNodePropertyChanged;
-        if (node.GetHelper() is IWorkflowNodeEvents events) events.Deleted += OnNodeDeleted;
+        if (node.GetHelper() is INodeEvents events) events.Deleted += OnNodeDeleted;
     }
 
-    private static void Unobserve(IWorkflowNodeViewModel node)
+    private static void Unobserve(INodeComponent node)
     {
         node.PropertyChanged -= OnNodePropertyChanged;
-        if (node.GetHelper() is IWorkflowNodeEvents events) events.Deleted -= OnNodeDeleted;
+        if (node.GetHelper() is INodeEvents events) events.Deleted -= OnNodeDeleted;
     }
 
     private static void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(IWorkflowNodeViewModel.Parent)
-            && sender is IWorkflowNodeViewModel node)
+        if (e.PropertyName == nameof(INodeComponent.Parent)
+            && sender is INodeComponent node)
         {
             Remove(new[] { node });
         }
@@ -232,19 +232,19 @@ internal static class WorkflowAgentSelection
     // 只持弱引用，避免「树 → 集合 → 观察者 → 树」把树拽住。
     private sealed class TreeObserver
     {
-        private readonly WeakReference<IWorkflowTreeViewModel> _tree;
-        private ObservableCollection<IWorkflowNodeViewModel>? _nodes;
+        private readonly WeakReference<ITreeComponent> _tree;
+        private ObservableCollection<INodeComponent>? _nodes;
 
-        internal TreeObserver(IWorkflowTreeViewModel tree) => _tree = new WeakReference<IWorkflowTreeViewModel>(tree);
+        internal TreeObserver(ITreeComponent tree) => _tree = new WeakReference<ITreeComponent>(tree);
 
-        internal void Attach(IWorkflowTreeViewModel tree)
+        internal void Attach(ITreeComponent tree)
         {
             _nodes = tree.Nodes;
             _nodes.CollectionChanged += OnNodesChanged;
             tree.PropertyChanged += OnTreePropertyChanged;
         }
 
-        internal void Detach(IWorkflowTreeViewModel tree)
+        internal void Detach(ITreeComponent tree)
         {
             if (_nodes is not null)
             {
@@ -257,7 +257,7 @@ internal static class WorkflowAgentSelection
 
         private void OnTreePropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName != nameof(IWorkflowTreeViewModel.Nodes)) return;
+            if (e.PropertyName != nameof(ITreeComponent.Nodes)) return;
             if (!_tree.TryGetTarget(out var tree)) return;
 
             if (_nodes is not null) _nodes.CollectionChanged -= OnNodesChanged;
@@ -277,9 +277,9 @@ internal static class WorkflowAgentSelection
                 case NotifyCollectionChangedAction.Replace:
                     if (e.OldItems is null) return;
 
-                    var removed = new List<IWorkflowNodeViewModel>(e.OldItems.Count);
+                    var removed = new List<INodeComponent>(e.OldItems.Count);
                     foreach (var item in e.OldItems)
-                        if (item is IWorkflowNodeViewModel node) removed.Add(node);
+                        if (item is INodeComponent node) removed.Add(node);
 
                     if (removed.Count > 0) Remove(removed);
                     break;
@@ -293,12 +293,12 @@ internal static class WorkflowAgentSelection
 
     // 从反向表找到每棵树，再按引用从该树的快照里滤掉这些节点。节点已经删除（Parent 为 null）
     // 也能释放；返回实际移除的节点数，没有任何快照命中时不推进 revision。
-    internal static int Remove(IReadOnlyCollection<IWorkflowNodeViewModel> nodes)
+    internal static int Remove(IReadOnlyCollection<INodeComponent> nodes)
     {
         if (nodes.Count == 0) return 0;
 
-        var groups = new List<(IWorkflowTreeViewModel Tree, List<IWorkflowNodeViewModel> Nodes)>();
-        var touched = new List<(IWorkflowNodeViewModel Node, IWorkflowTreeViewModel Tree)>();
+        var groups = new List<(ITreeComponent Tree, List<INodeComponent> Nodes)>();
+        var touched = new List<(INodeComponent Node, ITreeComponent Tree)>();
 
         // 只在这里持 OwnersGate 做分组，随后立刻释放；state 锁在下一段里单独拿。
         lock (OwnersGate)
@@ -312,7 +312,7 @@ internal static class WorkflowAgentSelection
                 var group = FindGroup(groups, tree);
                 if (group is null)
                 {
-                    group = new List<IWorkflowNodeViewModel>();
+                    group = new List<INodeComponent>();
                     groups.Add((tree, group));
                 }
 
@@ -346,8 +346,8 @@ internal static class WorkflowAgentSelection
     }
 
     private static int RemoveFromTree(
-        IWorkflowTreeViewModel tree,
-        IReadOnlyCollection<IWorkflowNodeViewModel> nodes)
+        ITreeComponent tree,
+        IReadOnlyCollection<INodeComponent> nodes)
     {
         if (!States.TryGetValue(tree, out var state)) return 0;
 
@@ -356,7 +356,7 @@ internal static class WorkflowAgentSelection
             var current = state.Snapshot;
             if (current.Nodes.Length == 0) return 0;
 
-            var keptNodes = new List<IWorkflowNodeViewModel>(current.Nodes.Length);
+            var keptNodes = new List<INodeComponent>(current.Nodes.Length);
             var keptEntries = new List<Entry>(current.Nodes.Length);
 
             for (var i = 0; i < current.Nodes.Length; i++)
@@ -378,9 +378,9 @@ internal static class WorkflowAgentSelection
         }
     }
 
-    private static List<IWorkflowNodeViewModel>? FindGroup(
-        List<(IWorkflowTreeViewModel Tree, List<IWorkflowNodeViewModel> Nodes)> groups,
-        IWorkflowTreeViewModel tree)
+    private static List<INodeComponent>? FindGroup(
+        List<(ITreeComponent Tree, List<INodeComponent> Nodes)> groups,
+        ITreeComponent tree)
     {
         foreach (var group in groups)
             if (ReferenceEquals(group.Tree, tree)) return group.Nodes;
@@ -389,7 +389,7 @@ internal static class WorkflowAgentSelection
     }
 
     // 返回 Markdown 段；没有选中集时返回空串。标题与指令随提示词语言切换。
-    internal static string Render(IWorkflowTreeViewModel tree, AgentLanguages language)
+    internal static string Render(ITreeComponent tree, AgentLanguages language)
     {
         if (!States.TryGetValue(tree, out var state))
             return string.Empty;
@@ -429,12 +429,12 @@ internal static class WorkflowAgentSelection
     }
 
     // 工具按 RuntimeId 定位组件；没有稳定 ID 的节点只会生成模型无法执行的行，所以这里直接拒绝。
-    private static Entry EntryOf(IWorkflowNodeViewModel node)
+    private static Entry EntryOf(INodeComponent node)
     {
-        if (node is not IWorkflowIdentifiable identifiable)
+        if (node is not IRuntimeIdentifiable identifiable)
         {
             throw new InvalidOperationException(
-                $"'{node.GetType().Name}' does not implement IWorkflowIdentifiable — a stable RuntimeId "
+                $"'{node.GetType().Name}' does not implement IRuntimeIdentifiable — a stable RuntimeId "
                 + "(provided by the component Helper) is required for the Agent selection.");
         }
 
@@ -443,7 +443,7 @@ internal static class WorkflowAgentSelection
         return new Entry(identifiable.RuntimeId, typeName);
     }
 
-    private static bool ContainsReference(IReadOnlyCollection<IWorkflowNodeViewModel> nodes, IWorkflowNodeViewModel node)
+    private static bool ContainsReference(IReadOnlyCollection<INodeComponent> nodes, INodeComponent node)
     {
         foreach (var candidate in nodes)
             if (ReferenceEquals(candidate, node)) return true;

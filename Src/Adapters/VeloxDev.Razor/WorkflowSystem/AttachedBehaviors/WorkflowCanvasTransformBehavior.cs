@@ -13,7 +13,7 @@ public static class WorkflowCanvasTransformBehavior
     /// <summary>
     /// Gets the current content translate offset for the workflow tree (its <see cref="CanvasLayout.ActualOffset"/>).
     /// </summary>
-    public static Offset GetOffset(IWorkflowTreeViewModel tree)
+    public static Offset GetOffset(ITreeComponent tree)
         => tree.Layout?.ActualOffset ?? new Offset();
 
     /// <summary>
@@ -30,6 +30,6 @@ public static class WorkflowCanvasTransformBehavior
     /// <summary>
     /// Renders the workflow tree's content translate offset as a CSS <c>transform</c> value.
     /// </summary>
-    public static string GetTransformStyle(IWorkflowTreeViewModel tree)
+    public static string GetTransformStyle(ITreeComponent tree)
         => ToCss(GetOffset(tree));
 }

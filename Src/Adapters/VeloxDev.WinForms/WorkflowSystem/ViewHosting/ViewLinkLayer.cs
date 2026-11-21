@@ -10,16 +10,16 @@ namespace VeloxDev.WorkflowSystem.ViewHosting;
 /// to the surface canvas, so the pool only materializes nodes and the canvas paints every visible link itself.
 /// <see cref="Render"/> only invalidates the canvas; the paint pass enumerates the visible links.
 /// </remarks>
-public sealed class ViewLinkLayer : IViewLinkLayer<Control, IWorkflowViewModel>
+public sealed class ViewLinkLayer : IViewLinkLayer<Control, IWorkflowComponent>
 {
     /// <inheritdoc />
     public bool IsActive => true;
 
     /// <inheritdoc />
-    public bool Handles(IWorkflowViewModel item) => item is IWorkflowLinkViewModel;
+    public bool Handles(IWorkflowComponent item) => item is ILinkComponent;
 
     /// <inheritdoc />
-    public void Render(Control host, IReadOnlyList<IWorkflowViewModel> items)
+    public void Render(Control host, IReadOnlyList<IWorkflowComponent> items)
     {
         if (!host.IsDisposed)
         {

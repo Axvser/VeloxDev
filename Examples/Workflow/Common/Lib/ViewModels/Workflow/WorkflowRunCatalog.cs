@@ -58,7 +58,7 @@ public sealed class WorkflowRunTaskViewModel : INotifyPropertyChanged
 {
     private readonly SynchronizationContext? _ui;
     private readonly Action<WorkflowRunTaskViewModel, string>? _lineSink;
-    private readonly Action<IWorkflowNodeViewModel?>? _nodeObserved;
+    private readonly Action<INodeComponent?>? _nodeObserved;
 
     private WorkflowRunState _state = WorkflowRunState.Compiled;
     private bool _isPaused;
@@ -79,7 +79,7 @@ public sealed class WorkflowRunTaskViewModel : INotifyPropertyChanged
         int segments,
         SynchronizationContext? ui,
         Action<WorkflowRunTaskViewModel, string>? lineSink,
-        Action<IWorkflowNodeViewModel?>? nodeObserved)
+        Action<INodeComponent?>? nodeObserved)
     {
         Source = source;
         RootLabel = rootLabel;
@@ -368,7 +368,7 @@ public sealed class WorkflowRunTaskViewModel : INotifyPropertyChanged
         => elapsed.TotalSeconds < 60 ? $"{elapsed.TotalSeconds:0.0} s" : $"{(int)elapsed.TotalMinutes}:{elapsed.Seconds:00}";
 
     // 节点在页面上叫它自己的标题；没有标题的类型退回类型名，去掉 ViewModel 后缀。
-    private static string NodeRef(IWorkflowNodeViewModel? node)
+    private static string NodeRef(INodeComponent? node)
     {
         if (node is null) return "运行";
 
@@ -425,7 +425,7 @@ public sealed class WorkflowRunCatalog : INotifyPropertyChanged
     public ObservableCollection<WorkflowRunTaskViewModel> Tasks { get; } = [];
 
     /// <summary>The tree the manager belongs to; used to name the root of an Agent compile.</summary>
-    public IWorkflowTreeViewModel? Tree { get; set; }
+    public ITreeComponent? Tree { get; set; }
 
     /// <summary>The row the output page follows.</summary>
     public WorkflowRunTaskViewModel? Selected
@@ -656,7 +656,7 @@ public sealed class WorkflowRunCatalog : INotifyPropertyChanged
     }
 
     // 被驱动的节点可能在属性页上正被描述；只让这一行重读，而不是让每一行都收到通知。
-    private void ObserveNode(IWorkflowNodeViewModel? node)
+    private void ObserveNode(INodeComponent? node)
         => (Tree as TreeViewModel)?.RefreshElementDetails(node);
 
     private void Mirror()

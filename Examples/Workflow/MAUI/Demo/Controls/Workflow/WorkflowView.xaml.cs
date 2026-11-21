@@ -955,7 +955,7 @@ public partial class WorkflowView : ContentView
             _linkInput = null;
         }
 
-        if (BindingContext is IWorkflowTreeViewModel tree && tree.GetHelper() is IInputEvents events)
+        if (BindingContext is ITreeComponent tree && tree.GetHelper() is IInputEvents events)
         {
             _linkInput = events;
         }
@@ -963,14 +963,14 @@ public partial class WorkflowView : ContentView
 
     // VeloxDev customization: Delete 归宿主 —— 库只把按键路由过来（target 就是指针停着的那条线），
     // 删不删由这里写（与悬停高亮同一条路）。
-    private void HookLinkKeys(IWorkflowTreeViewModel tree)
+    private void HookLinkKeys(ITreeComponent tree)
     {
         if (tree.GetHelper() is not IInputEvents events) return;
 
         events.Input.KeyDown += (_, e) =>
         {
             if (e.Key != InputKey.Delete || e.Handle.PreventDefault) return;
-            if (e.Target is not IWorkflowLinkViewModel link || !link.DeleteCommand.CanExecute(null)) return;
+            if (e.Target is not ILinkComponent link || !link.DeleteCommand.CanExecute(null)) return;
 
             link.DeleteCommand.Execute(null);
         };
@@ -996,7 +996,7 @@ public partial class WorkflowView : ContentView
         {
             if (e.Modifiers.HasFlag(InputModifiers.Control))
             {
-                if (e.Target is IWorkflowNodeViewModel node) AgentSelection.Toggle(node);
+                if (e.Target is INodeComponent node) AgentSelection.Toggle(node);
                 e.Handle.PreventDefault = true;
             }
             else if (e.Target is null && e.Modifiers.HasFlag(InputModifiers.Shift))

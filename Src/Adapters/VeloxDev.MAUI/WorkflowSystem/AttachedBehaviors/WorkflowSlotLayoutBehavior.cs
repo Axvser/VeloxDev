@@ -293,7 +293,7 @@ public sealed class WorkflowSlotLayoutBehavior
     private static void RequestSync(ContentView control, bool force)
     {
         if (control.GetValue(StateProperty) is null
-            || control.BindingContext is not IWorkflowNodeViewModel node)
+            || control.BindingContext is not INodeComponent node)
         {
             return;
         }
@@ -327,11 +327,11 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static void CancelSync(ContentView control)
     {
-        object owner = control.BindingContext is IWorkflowNodeViewModel { Parent: { } tree } ? tree : control;
+        object owner = control.BindingContext is INodeComponent { Parent: { } tree } ? tree : control;
         WorkflowLayoutBatch.For(owner).Cancel(control);
     }
 
-    private static object OwnerOf(ContentView control, IWorkflowNodeViewModel node)
+    private static object OwnerOf(ContentView control, INodeComponent node)
         => node.Parent ?? (object)control;
 
     private static bool PostToUiThread(IDispatcher dispatcher, Action flush)
@@ -385,7 +385,7 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static void Sync(ContentView control)
     {
-        if (control.BindingContext is not IWorkflowNodeViewModel node)
+        if (control.BindingContext is not INodeComponent node)
         {
             return;
         }
@@ -399,8 +399,8 @@ public sealed class WorkflowSlotLayoutBehavior
         if (control.GetValue(StateProperty) is LayoutState state)
         {
             state.SlotPropertyNames.Clear();
-            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Anchor));
-            state.SlotPropertyNames.Add(nameof(IWorkflowNodeViewModel.Size));
+            state.SlotPropertyNames.Add(nameof(INodeComponent.Anchor));
+            state.SlotPropertyNames.Add(nameof(INodeComponent.Size));
             // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
             // OnPropertyChanged("OutputSlots") 才匹配得上。
             foreach (var name in slotNames)
@@ -432,7 +432,7 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private static void SyncNamedSlot(ContentView parentHost, ContentView host, VisualElement? coordinateHost, IWorkflowNodeViewModel node, string? controlName)
+    private static void SyncNamedSlot(ContentView parentHost, ContentView host, VisualElement? coordinateHost, INodeComponent node, string? controlName)
     {
         if (string.IsNullOrWhiteSpace(controlName))
         {
@@ -445,22 +445,22 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private static void SyncSlotEnumerator(ContentView parentHost, ContentView host, VisualElement? coordinateHost, IWorkflowNodeViewModel node, string enumeratorName)
+    private static void SyncSlotEnumerator(ContentView parentHost, ContentView host, VisualElement? coordinateHost, INodeComponent node, string enumeratorName)
     {
         if (parentHost.FindByName<Layout>(enumeratorName) is not Layout itemsLayout)
         {
             return;
         }
 
-        foreach (var slotView in FindDescendants<VisualElement>(itemsLayout).Where(static x => x.BindingContext is IWorkflowSlotViewModel))
+        foreach (var slotView in FindDescendants<VisualElement>(itemsLayout).Where(static x => x.BindingContext is ISlotComponent))
         {
             SyncSlot(host, coordinateHost, slotView, node);
         }
     }
 
-    private static void SyncSlot(ContentView host, VisualElement? coordinateHost, VisualElement control, IWorkflowNodeViewModel node)
+    private static void SyncSlot(ContentView host, VisualElement? coordinateHost, VisualElement control, INodeComponent node)
     {
-        if (control.BindingContext is not IWorkflowSlotViewModel slot || control.Width <= 0 || control.Height <= 0)
+        if (control.BindingContext is not ISlotComponent slot || control.Width <= 0 || control.Height <= 0)
         {
             return;
         }

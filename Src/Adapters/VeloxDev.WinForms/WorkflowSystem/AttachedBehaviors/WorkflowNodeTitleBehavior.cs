@@ -356,7 +356,7 @@ public sealed class WorkflowNodeTitleBehavior
         }
 
         // 标题不是端口：节点视图不知道模型类型时，用最常见的两个成员名兜底；两者都不存在就没有标题。
-        private static string ReadDefaultTitle(IWorkflowNodeViewModel node)
+        private static string ReadDefaultTitle(INodeComponent node)
         {
             foreach (var name in new[] { "Name", "Title" })
             {

@@ -12,7 +12,7 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
 {
     // 与 LinkView relay 同一组偏移：曲线是 canvas-local 的，这一层是视口大小的，所以要过同一次平移。
     public static readonly BindableProperty TreeProperty = BindableProperty.Create(
-        nameof(Tree), typeof(IWorkflowTreeViewModel), typeof(LinkHighlightLayer), null, propertyChanged: OnTreeChanged);
+        nameof(Tree), typeof(ITreeComponent), typeof(LinkHighlightLayer), null, propertyChanged: OnTreeChanged);
     public static readonly BindableProperty ScrollOffsetXProperty = BindableProperty.Create(
         nameof(ScrollOffsetX), typeof(double), typeof(LinkHighlightLayer), 0d);
     public static readonly BindableProperty ScrollOffsetYProperty = BindableProperty.Create(
@@ -27,8 +27,8 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
         nameof(GlowColor), typeof(Color), typeof(LinkHighlightLayer), Color.FromArgb("#FFFFFFFF"));
 
     private IInputEvents? _input;
-    private IWorkflowTreeViewModelHelper? _treeHelper;
-    private IWorkflowLinkViewModel? _lit;
+    private ITreeHelper? _treeHelper;
+    private ILinkComponent? _lit;
 
     public LinkHighlightLayer()
     {
@@ -38,7 +38,7 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
     }
 
     /// <summary>Gets or sets the tree whose pointer events drive the highlight.</summary>
-    public IWorkflowTreeViewModel? Tree { get => (IWorkflowTreeViewModel?)GetValue(TreeProperty); set => SetValue(TreeProperty, value); }
+    public ITreeComponent? Tree { get => (ITreeComponent?)GetValue(TreeProperty); set => SetValue(TreeProperty, value); }
 
     public double ScrollOffsetX { get => (double)GetValue(ScrollOffsetXProperty); set => SetValue(ScrollOffsetXProperty, value); }
     public double ScrollOffsetY { get => (double)GetValue(ScrollOffsetYProperty); set => SetValue(ScrollOffsetYProperty, value); }
@@ -74,10 +74,10 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
     }
 
     private static void OnTreeChanged(BindableObject bindable, object oldValue, object newValue)
-        => ((LinkHighlightLayer)bindable).HookInput(newValue as IWorkflowTreeViewModel);
+        => ((LinkHighlightLayer)bindable).HookInput(newValue as ITreeComponent);
 
     // 换树就换订阅：本层比树活得短，摘钩子时也退订。
-    private void HookInput(IWorkflowTreeViewModel? tree)
+    private void HookInput(ITreeComponent? tree)
     {
         UnhookInput();
         if (tree?.GetHelper() is not IInputEvents events) return;
@@ -109,7 +109,7 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
         }
     }
 
-    private void OnLinkRemoved(object? sender, IWorkflowLinkViewModel link)
+    private void OnLinkRemoved(object? sender, ILinkComponent link)
     {
         if (!ReferenceEquals(_lit, link)) return;
 
@@ -119,7 +119,7 @@ public sealed class LinkHighlightLayer : GraphicsView, IDrawable
 
     private void OnPointerEntered(object? sender, PointerEnteredEventArgs e)
     {
-        _lit = e.Target as IWorkflowLinkViewModel;
+        _lit = e.Target as ILinkComponent;
         Invalidate();
     }
 

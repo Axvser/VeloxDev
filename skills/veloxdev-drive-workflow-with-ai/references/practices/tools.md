@@ -118,7 +118,7 @@ Registered under `WorkflowToolCategory.Layout`. `PreviewLayout` and `ArrangeLayo
 |---|---|
 | `GetLayoutInfo()` **R** | solver type, whether the helper hosts a custom solver, node count, and the default option values |
 | `PreviewLayout(...)` **R** | solves with `DryRun` and returns every placement, cost and diagnostic without writing anchors |
-| `ArrangeLayout(...)` **M** | solves and applies in one undoable `WorkflowActionPair`; returns the same shape plus applied/skipped counts |
+| `ArrangeLayout(...)` **M** | solves and applies in one undoable `ActionPair`; returns the same shape plus applied/skipped counts |
 
 Shared parameters: `nodeIndex?` (omit for the whole tree; when set, only the reachable subgraph moves and the start node is pinned by default), `traversal` (`Downstream` / `Upstream` / `Both`), `maxDepth` (0 = unlimited), `pinStartNode`, `positionTolerance` (0 = strict canonical), `columnGap`, `rowGap`, `maxSweeps`, `tileSize`, `measureCost`, and `pinnedNodeIndicesJson` (a JSON array such as `"[0,2]"`). The result is `{status, mode, applied, dryRun, appliedCount, skipped, cost, bounds, placements, diagnostics}`.
 

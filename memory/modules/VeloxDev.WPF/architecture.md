@@ -70,7 +70,7 @@ Avalonia 那边是一行 `ThreadRef.From(Dispatcher.UIThread)`（`Src/Adapters/V
 
 | 角色 | 怎么挂上去 | 宿主类型门槛 | 每元素状态存哪 | 需要谁的 `DataContext` |
 |---|---|---|---|---|
-| 画布宿主 `WorkflowSurfaceBehavior` | `IsEnabled="True"` + `ZoomEnabled` + 若干 `*Name` + `LinkMenuKey` | **`UserControl`**（`OnIsEnabledChanged` 里 `d is not UserControl` 即返回） | 私有附着 DP `State`，装 `SurfaceState` | **宿主自己**的 DC 必须是 `IWorkflowTreeViewModel`（各处都是 `host.DataContext is not IWorkflowTreeViewModel` 即返回） |
+| 画布宿主 `WorkflowSurfaceBehavior` | `IsEnabled="True"` + `ZoomEnabled` + 若干 `*Name` + `LinkMenuKey` | **`UserControl`**（`OnIsEnabledChanged` 里 `d is not UserControl` 即返回） | 私有附着 DP `State`，装 `SurfaceState` | **宿主自己**的 DC 必须是 `ITreeComponent`（各处都是 `host.DataContext is not ITreeComponent` 即返回） |
 | 插槽布局 `WorkflowSlotLayoutBehavior` | `IsEnabled="True"` + `SlotNames`/`SlotEnumeratorNames`/`CoordinateHost*` | **`UserControl`**（`OnIsEnabledChanged` 里 `d is not UserControl` 即返回） | 私有附着 DP `State` | **被挂的那个 UserControl** 自己的 DC 是 node VM |
 | 节点拖拽 `WorkflowNodeDragBehavior` | `IsEnabled="True"` + `CoordinateHostName/Type` | **`UIElement`**（`OnIsEnabledChanged` 里 `d is not UIElement` 即返回）——最宽 | 私有附着 DP `State` | 自己或**任一祖先**（`ResolveNode`） |
 | 插槽连接 `WorkflowSlotConnectionBehavior` | `IsEnabled="True"` | **`Control`**（`OnIsEnabledChanged` 里 `d is not Control` 即返回） | 无 | **必须是自己**，不找祖先 |
@@ -136,7 +136,7 @@ Avalonia 那边是一行 `ThreadRef.From(Dispatcher.UIThread)`（`Src/Adapters/V
 
 ## 五、陷阱（带依据）
 
-1. **小地图根本不画连线，但它的连线订阅是活的。** 类文档写着 "a thumbnail overview of all nodes, **links**, and the visible viewport"（`WorkflowMinimapOverlay` 的类文档），而 `OnRender` 只画节点矩形与视口框；`LinkBrush` 与 `LinkStrokeThickness` **全模块从不被读**（grep 只有声明与访问器命中）。同时 `_subscribedLinks` 那一套是完整的：`SubscribeLink`、`OnLinksChanged`、`UnsubscribeFromTree` 里的退订都在，`IWorkflowLinkViewModel` 的 Sender/Receiver 变更也会 `MarkDirty`。⇒ 想「让连线出现在小地图里」要自己补 `OnRender` 的分支，别以为订阅没接上。**以代码为准，注释说反了。**
+1. **小地图根本不画连线，但它的连线订阅是活的。** 类文档写着 "a thumbnail overview of all nodes, **links**, and the visible viewport"（`WorkflowMinimapOverlay` 的类文档），而 `OnRender` 只画节点矩形与视口框；`LinkBrush` 与 `LinkStrokeThickness` **全模块从不被读**（grep 只有声明与访问器命中）。同时 `_subscribedLinks` 那一套是完整的：`SubscribeLink`、`OnLinksChanged`、`UnsubscribeFromTree` 里的退订都在，`ILinkComponent` 的 Sender/Receiver 变更也会 `MarkDirty`。⇒ 想「让连线出现在小地图里」要自己补 `OnRender` 的分支，别以为订阅没接上。**以代码为准，注释说反了。**
 2. **`NoWarn` 是一条 `1573;1591`，`1573` 已生效。** 不要在 `.csproj` 里把它拆成两条 —— MSBuild 按序求值，拆成 `1573` 与 `1591` 两条时只有后一条生效。
 3. **`ThemeValueConverters.cs` 里若干类名与 WPF 自带类型撞名**：`BrushConverter`、`ColorConverter`、`ThicknessConverter`、`CornerRadiusConverter` 在 `System.Windows.Media`/`System.Windows` 里都有。所以文件里凡要用 WPF 自己那个必须全限定：`new System.Windows.Media.BrushConverter()`（`BrushConverter`/`ObjectConverter` 里的三处）。⇒ 在这个命名空间下新写转换器时，写短名会解析到**本项目**这一个，且不报错（同名不同类型，转换结果只是悄悄不对）。
 4. **`ObjectConverter` 有两处直接碰 `Application.Current`，只有一处有守卫**：`ThemeResourceLookup.TryFindResource` 先判 `Application.Current is null` 再找，而 `ObjectConverter` 里的 `Application.Current.TryFindResource(strValue)` 没有。无 `Application` 的进程（控制台探针、单测）走到那条分支会抛 `NullReferenceException`，被紧随其后的 `catch { return null; }` 吞掉。⇒ 症状是**静默拿到 null**，不是异常。转换器遍地 `catch { return null; }` 是刻意姿态，与 DynamicTheme「异常不逃逸」一致。

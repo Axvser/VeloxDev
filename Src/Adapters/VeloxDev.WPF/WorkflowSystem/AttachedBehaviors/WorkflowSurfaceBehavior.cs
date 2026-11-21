@@ -36,7 +36,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         // 连线右键菜单：菜单由模板声明（条目归用户，见 LinkMenuKeyProperty），订阅、定位、弹出、挂起都在这里。
         public ContextMenu? LinkMenu { get; set; }
-        public IWorkflowLinkViewModel? MenuLink { get; set; }
+        public ILinkComponent? MenuLink { get; set; }
 
         // 这棵树的输入路由：菜单开着时由它挂起指针跟踪，接线的那两个订阅也从它来。
         public WorkflowInput? Input { get; set; }
@@ -48,12 +48,12 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         // 现成 —— 组件行为读它就知道订阅者有没有否决这一笔。每次按下都会重写，不会拿到上一笔的。
         public WorkflowEventHandle? PressHandle { get; set; }
         public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
-        public EventHandler<IWorkflowLinkViewModel>? MenuLinkRemoved { get; set; }
+        public EventHandler<ILinkComponent>? MenuLinkRemoved { get; set; }
         public RoutedEventHandler? MenuOpened { get; set; }
         public RoutedEventHandler? MenuClosed { get; set; }
 
         // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
-        public IWorkflowTreeViewModel? LastRestoreTree { get; set; }
+        public ITreeComponent? LastRestoreTree { get; set; }
         public bool HasPendingRestore { get; set; }
         public bool RestoreQueued { get; set; }
         public double PendingRestoreX { get; set; }
@@ -204,7 +204,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             }
         }
 
-        var input = host.DataContext is IWorkflowTreeViewModel tree ? WorkflowInput.For(tree) : null;
+        var input = host.DataContext is ITreeComponent tree ? WorkflowInput.For(tree) : null;
         if (ReferenceEquals(input, state.Input))
         {
             return;
@@ -216,7 +216,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         state.Input = input;
-        if (input is null || host.DataContext is not IWorkflowTreeViewModel bound)
+        if (input is null || host.DataContext is not ITreeComponent bound)
         {
             return;
         }
@@ -285,9 +285,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     {
         // 只有右键、且落在连线上才弹：空白画布没有可操作的对象。
         if (e.Button != Wf.MouseButton.Right) return;
-        if (e.Target is not IWorkflowLinkViewModel link) return;
+        if (e.Target is not ILinkComponent link) return;
         if (state.LinkMenu is null || state.Canvas is null) return;
-        if (host.DataContext is not IWorkflowTreeViewModel tree) return;
+        if (host.DataContext is not ITreeComponent tree) return;
 
         // 链上更靠前的一级（连线自己）可以否决这次按下 —— 它说不给菜单，这里就不给。
         if (e.Handle.PreventDefault) return;
@@ -323,7 +323,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     // 必须在 UpdateVisibleRegion 之前 —— 那一步会拿控件当前（还没滚过去的）位置覆盖 ViewportOffset。
     private static void CaptureViewportRestore(UserControl host, SurfaceState state)
     {
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+        if (host.DataContext is not ITreeComponent viewModel) return;
         if (ReferenceEquals(viewModel, state.LastRestoreTree)) return;
 
         state.LastRestoreTree = viewModel;
@@ -569,7 +569,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         var host = EnumerateVisualAncestors(source).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
-        if (host is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (host is null || host.DataContext is not ITreeComponent viewModel)
         {
             return;
         }
@@ -712,7 +712,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel || !viewModel.VirtualLink.IsVisible)
+        if (host.DataContext is not ITreeComponent viewModel || !viewModel.VirtualLink.IsVisible)
         {
             return;
         }
@@ -744,7 +744,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.Canvas is null)
+        if (host.DataContext is not ITreeComponent viewModel || state.Canvas is null)
         {
             return;
         }
@@ -775,7 +775,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         if (state.Canvas is null
-            || host.DataContext is not IWorkflowTreeViewModel viewModel
+            || host.DataContext is not ITreeComponent viewModel
             || viewModel.VirtualLink.IsVisible)
         {
             return;
@@ -793,7 +793,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (host.DataContext is not ITreeComponent viewModel)
         {
             return;
         }
@@ -813,7 +813,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         if (state.Canvas is null
-            || host.DataContext is not IWorkflowTreeViewModel viewModel)
+            || host.DataContext is not ITreeComponent viewModel)
         {
             return;
         }
@@ -857,7 +857,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         if (state.Canvas is null
-            || host.DataContext is not IWorkflowTreeViewModel viewModel)
+            || host.DataContext is not ITreeComponent viewModel)
         {
             return;
         }
@@ -885,7 +885,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
 
         if (state.Canvas is null
-            || host.DataContext is not IWorkflowTreeViewModel viewModel
+            || host.DataContext is not ITreeComponent viewModel
             || Keyboard.Modifiers == ModifierKeys.Control)
         {
             return;
@@ -955,7 +955,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             var maxV = GetVerticalScrollMaximum(viewer);
 
             var host = state.Host;
-            if (host?.DataContext is not IWorkflowTreeViewModel viewModel)
+            if (host?.DataContext is not ITreeComponent viewModel)
             {
                 // 拿不到布局时退回旧的「到边即停」，至少不越界。
                 if (dx != 0d) viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH));
@@ -995,7 +995,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public void CenterOn(double worldX, double worldY)
         {
             if (state.ScrollViewer is not { } viewer) return;
-            if (state.Host is not { } host || host.DataContext is not IWorkflowTreeViewModel viewModel) return;
+            if (state.Host is not { } host || host.DataContext is not ITreeComponent viewModel) return;
 
             var layout = viewModel.Layout;
             var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
@@ -1027,8 +1027,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     // 指针进来时统一在这里翻译：Anchor 带上来源视图所在图层当 Z，被指到的那条线由 Core 那条共享的曲线命中判出来 ——
     // 表面一个人画完所有线、没有「每线的可视对象」，所以命中只能对着发布出去的曲线做。
     private static WorkflowEventHandle RoutePointer(
-        SurfaceState state, IWorkflowTreeViewModel tree, Point point, FrameworkElement source, DependencyObject? hit,
-        Func<Anchor, IWorkflowViewModel?, WorkflowEventHandle, Wf.PointerEventArgs> args)
+        SurfaceState state, ITreeComponent tree, Point point, FrameworkElement source, DependencyObject? hit,
+        Func<Anchor, IWorkflowComponent?, WorkflowEventHandle, Wf.PointerEventArgs> args)
     {
         var anchor = WorkflowSurfaceMath.ToWorldAnchor(point.X, point.Y, Panel.GetZIndex(source), tree.Layout);
         var input = WorkflowInput.For(tree);
@@ -1085,8 +1085,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
     }
 
-    private static IWorkflowViewModel? ResolveTarget(
-        DependencyObject? hit, IWorkflowTreeViewModel tree, double x, double y, double radius)
+    private static IWorkflowComponent? ResolveTarget(
+        DependencyObject? hit, ITreeComponent tree, double x, double y, double radius)
     {
         if (hit is not null)
         {
@@ -1095,9 +1095,9 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             {
                 switch (candidate)
                 {
-                    case FrameworkElement { DataContext: IWorkflowNodeViewModel node }:
+                    case FrameworkElement { DataContext: INodeComponent node }:
                         return node;
-                    case FrameworkElement { DataContext: IWorkflowSlotViewModel slot }:
+                    case FrameworkElement { DataContext: ISlotComponent slot }:
                         return slot;
                 }
             }
@@ -1206,7 +1206,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (host.DataContext is not ITreeComponent viewModel)
         {
             return;
         }
@@ -1234,7 +1234,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
             return;
         }
 
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (host.DataContext is not ITreeComponent viewModel)
         {
             return;
         }
@@ -1281,7 +1281,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     private static void OnCanvasPanMoved(UserControl host, SurfaceState state, MouseEventArgs e)
     {
-        if (!state.IsPanning || state.ScrollViewer is null || host.DataContext is not IWorkflowTreeViewModel viewModel)
+        if (!state.IsPanning || state.ScrollViewer is null || host.DataContext is not ITreeComponent viewModel)
         {
             return;
         }
@@ -1339,7 +1339,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     private static void ApplyLayout(UserControl host, SurfaceState state)
     {
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.Canvas is null)
+        if (host.DataContext is not ITreeComponent viewModel || state.Canvas is null)
         {
             return;
         }
@@ -1356,7 +1356,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     private static void UpdateVisibleRegion(UserControl host, SurfaceState state)
     {
-        if (host.DataContext is not IWorkflowTreeViewModel viewModel || state.ScrollViewer is null)
+        if (host.DataContext is not ITreeComponent viewModel || state.ScrollViewer is null)
         {
             return;
         }
@@ -1374,7 +1374,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
     }
 
-    private static void UpdateGridDecorator(IWorkflowTreeViewModel viewModel, SurfaceState state)
+    private static void UpdateGridDecorator(ITreeComponent viewModel, SurfaceState state)
     {
         if (state.GridDecorator is null || state.ScrollViewer is null)
         {
@@ -1393,7 +1393,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         }
     }
 
-    private static void UpdateMinimapOverlay(IWorkflowTreeViewModel viewModel, SurfaceState state)
+    private static void UpdateMinimapOverlay(ITreeComponent viewModel, SurfaceState state)
     {
         if (state.MinimapOverlay is not IWorkflowMinimapOverlay minimap || state.ScrollViewer is null)
         {
@@ -1452,11 +1452,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     }
 
     private static bool IsWorkflowNodeOrSlotVisual(DependencyObject source)
-        => source is FrameworkElement { DataContext: IWorkflowNodeViewModel or IWorkflowSlotViewModel };
+        => source is FrameworkElement { DataContext: INodeComponent or ISlotComponent };
 
     private static bool IsWorkflowLinkVisual(DependencyObject source)
         => source is FrameworkElement element
-            && (element.DataContext is IWorkflowLinkViewModel
+            && (element.DataContext is ILinkComponent
                 || string.Equals(element.GetType().Name, "BezierCurveView", StringComparison.Ordinal)
                 || string.Equals(element.GetType().Name, "PolylineCurveView", StringComparison.Ordinal));
 

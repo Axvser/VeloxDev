@@ -9,7 +9,7 @@ namespace VeloxDev.Core.Extension.Test.Serialization;
 /// The demo's own tree type survives a round trip.
 /// </summary>
 /// <remarks>
-/// The frozen documents cover the framework's <c>TreeDefaultViewModel</c>; the demo's <c>TreeViewModel</c> is a
+/// The frozen documents cover the framework's <c>TreeDefaultComponent</c>; the demo's <c>TreeViewModel</c> is a
 /// different type with its own members, and the seven demos save and load it through
 /// <c>Serialize()</c> / <c>TryDeserialize&lt;TreeViewModel&gt;</c>. A failure here is silent in the app — the load
 /// path is <c>if (success &amp;&amp; result is not null)</c>, so a refusal looks like the button doing nothing.

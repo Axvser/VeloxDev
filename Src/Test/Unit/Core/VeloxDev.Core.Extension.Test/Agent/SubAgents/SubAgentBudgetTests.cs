@@ -334,8 +334,8 @@ public class SubAgentBudgetTests
         // The regression that matters: a host that never attaches this subsystem must be unable to tell the
         // shared pot was added. No outer ledger means the root is this scope, which is the old behaviour
         // reached by the new code path.
-        var tree = new TreeDefaultViewModel();
-        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
+        var tree = new TreeDefaultComponent();
+        tree.GetHelper().CreateNode(new NodeDefaultComponent());
         var scope = new WorkflowAgentScope(tree).WithMaxToolCalls(3);
 
         Assert.AreEqual(0, Spent(scope));

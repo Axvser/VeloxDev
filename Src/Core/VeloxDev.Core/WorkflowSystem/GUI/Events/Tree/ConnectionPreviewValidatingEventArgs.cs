@@ -14,8 +14,8 @@ namespace VeloxDev.WorkflowSystem;
 /// never relax them.
 /// </para>
 /// <para>
-/// The final decision still belongs to <see cref="IWorkflowTreeEvents.Connecting"/> and
-/// <see cref="IWorkflowTreeViewModelHelper.ValidateConnection"/> on release. This event is advisory.
+/// The final decision still belongs to <see cref="ITreeEvents.Connecting"/> and
+/// <see cref="ITreeHelper.ValidateConnection"/> on release. This event is advisory.
 /// </para>
 /// </remarks>
 public sealed class ConnectionPreviewValidatingEventArgs : EventArgs
@@ -25,7 +25,7 @@ public sealed class ConnectionPreviewValidatingEventArgs : EventArgs
     /// <param name="receiver">The candidate port under the pointer.</param>
     /// <param name="check">The framework's check for the pair.</param>
     public ConnectionPreviewValidatingEventArgs(
-        IWorkflowSlotViewModel sender, IWorkflowSlotViewModel receiver, ConnectionCheck check)
+        ISlotComponent sender, ISlotComponent receiver, ConnectionCheck check)
     {
         Sender = sender;
         Receiver = receiver;
@@ -33,10 +33,10 @@ public sealed class ConnectionPreviewValidatingEventArgs : EventArgs
     }
 
     /// <summary>The port the drag started from.</summary>
-    public IWorkflowSlotViewModel Sender { get; }
+    public ISlotComponent Sender { get; }
 
     /// <summary>The candidate port under the pointer.</summary>
-    public IWorkflowSlotViewModel Receiver { get; }
+    public ISlotComponent Receiver { get; }
 
     /// <summary>
     /// The current check. It starts as the framework's verdict; <see cref="Reject"/> replaces it with

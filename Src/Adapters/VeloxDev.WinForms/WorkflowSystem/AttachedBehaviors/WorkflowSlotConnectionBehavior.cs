@@ -18,8 +18,8 @@ public sealed class WorkflowSlotConnectionBehavior
     {
         public Control SenderControl { get; set; } = null!;
         public Control SurfaceControl { get; set; } = null!;
-        public IWorkflowSlotViewModel SenderSlot { get; set; } = null!;
-        public IWorkflowTreeViewModel Tree { get; set; } = null!;
+        public ISlotComponent SenderSlot { get; set; } = null!;
+        public ITreeComponent Tree { get; set; } = null!;
         public Point StartScreenPoint { get; set; }
         public Anchor StartAnchor { get; set; } = new Anchor();
     }
@@ -125,7 +125,7 @@ public sealed class WorkflowSlotConnectionBehavior
             return;
         }
 
-        if (slot.Parent?.Parent is not IWorkflowTreeViewModel tree)
+        if (slot.Parent?.Parent is not ITreeComponent tree)
         {
             return;
         }
@@ -179,7 +179,7 @@ public sealed class WorkflowSlotConnectionBehavior
         }
     }
 
-    private static void TryCompleteConnection(Control control, IWorkflowSlotViewModel slot)
+    private static void TryCompleteConnection(Control control, ISlotComponent slot)
     {
         var activeConnection = _activeConnection;
         if (activeConnection is null)
@@ -324,7 +324,7 @@ public sealed class WorkflowSlotConnectionBehavior
         }
     }
 
-    private static IWorkflowSlotViewModel? ResolveSlot(Control control)
+    private static ISlotComponent? ResolveSlot(Control control)
     {
         if (control is null)
         {
@@ -334,7 +334,7 @@ public sealed class WorkflowSlotConnectionBehavior
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         for (var current = control; current is not null; current = current.Parent)
         {
-            if (current.Tag is IWorkflowSlotViewModel taggedSlot)
+            if (current.Tag is ISlotComponent taggedSlot)
             {
                 return taggedSlot;
             }
@@ -347,7 +347,7 @@ public sealed class WorkflowSlotConnectionBehavior
                     continue;
                 }
 
-                if (property.GetValue(current) is IWorkflowSlotViewModel slot)
+                if (property.GetValue(current) is ISlotComponent slot)
                 {
                     return slot;
                 }

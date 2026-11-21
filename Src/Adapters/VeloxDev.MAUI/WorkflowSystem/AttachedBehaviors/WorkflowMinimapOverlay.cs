@@ -50,8 +50,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     public static readonly BindableProperty MinimapMinSizeProperty = BindableProperty.Create(nameof(MinimapMinSize), typeof(double), typeof(WorkflowMinimapOverlay), 20.0, propertyChanged: OnVisualProp);
     public static readonly BindableProperty ScrollViewerNameProperty = BindableProperty.Create(nameof(ScrollViewerName), typeof(string), typeof(WorkflowMinimapOverlay));
 
-    public static readonly BindableProperty WorkflowTreeProperty = BindableProperty.Create(nameof(WorkflowTree), typeof(IWorkflowTreeViewModel), typeof(WorkflowMinimapOverlay), null,
-        propertyChanged: (b, o, n) => ((WorkflowMinimapOverlay)b).OnTreeChanged((IWorkflowTreeViewModel?)n));
+    public static readonly BindableProperty WorkflowTreeProperty = BindableProperty.Create(nameof(WorkflowTree), typeof(ITreeComponent), typeof(WorkflowMinimapOverlay), null,
+        propertyChanged: (b, o, n) => ((WorkflowMinimapOverlay)b).OnTreeChanged((ITreeComponent?)n));
 
     // ── CLR 访问器 ───────────────────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     public double ContentOffsetY { get => (double)GetValue(ContentOffsetYProperty); set => SetValue(ContentOffsetYProperty, value); }
     /// <inheritdoc />
     public double RulerBand => 0;
-    public IWorkflowTreeViewModel? WorkflowTree { get => (IWorkflowTreeViewModel?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
+    public ITreeComponent? WorkflowTree { get => (ITreeComponent?)GetValue(WorkflowTreeProperty); set => SetValue(WorkflowTreeProperty, value); }
     public double ViewportWidth { get => (double)GetValue(ViewportWidthProperty); set => SetValue(ViewportWidthProperty, value); }
     public double ViewportHeight { get => (double)GetValue(ViewportHeightProperty); set => SetValue(ViewportHeightProperty, value); }
     public bool IsMinimapVisible { get => (bool)GetValue(IsMinimapVisibleProperty); set => SetValue(IsMinimapVisibleProperty, value); }
@@ -112,9 +112,9 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 #endif
 
     private PointerGestureRecognizer? _parentPointerRecognizer;
-    private readonly HashSet<IWorkflowNodeViewModel> _subscribedNodes = [];
-    private readonly HashSet<IWorkflowLinkViewModel> _subscribedLinks = [];
-    private IWorkflowTreeViewModel? _subscribedTree;
+    private readonly HashSet<INodeComponent> _subscribedNodes = [];
+    private readonly HashSet<ILinkComponent> _subscribedLinks = [];
+    private ITreeComponent? _subscribedTree;
     private ScrollView? _scrollView;
 
     // 绘制的中间量（MAUI ICanvas 用 float）
@@ -298,7 +298,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     // ── 树管理 ──────────────────────────────────────────────────────────────
 
-    private void OnTreeChanged(IWorkflowTreeViewModel? newTree)
+    private void OnTreeChanged(ITreeComponent? newTree)
     {
         UnsubscribeFromTree();
         _subscribedTree = newTree;
@@ -333,12 +333,12 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         _subscribedTree = null;
     }
 
-    private void SubscribeNode(IWorkflowNodeViewModel n)
+    private void SubscribeNode(INodeComponent n)
     {
         if (_subscribedNodes.Add(n) && n is INotifyPropertyChanged npc) npc.PropertyChanged += OnNodePropChanged;
     }
 
-    private void SubscribeLink(IWorkflowLinkViewModel l)
+    private void SubscribeLink(ILinkComponent l)
     {
         if (!_subscribedLinks.Add(l)) return;
         if (l.Sender is INotifyPropertyChanged sp) sp.PropertyChanged += OnSlotPropChanged;
@@ -347,15 +347,15 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     private void OnNodesChanged(object? s, NotifyCollectionChangedEventArgs e)
     {
-        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is IWorkflowNodeViewModel n) SubscribeNode(n);
-        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is IWorkflowNodeViewModel n && _subscribedNodes.Remove(n) && n is INotifyPropertyChanged npc) npc.PropertyChanged -= OnNodePropChanged;
+        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is INodeComponent n) SubscribeNode(n);
+        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is INodeComponent n && _subscribedNodes.Remove(n) && n is INotifyPropertyChanged npc) npc.PropertyChanged -= OnNodePropChanged;
         MarkDirty();
     }
 
     private void OnLinksChanged(object? s, NotifyCollectionChangedEventArgs e)
     {
-        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is IWorkflowLinkViewModel l) SubscribeLink(l);
-        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is IWorkflowLinkViewModel l && _subscribedLinks.Remove(l))
+        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is ILinkComponent l) SubscribeLink(l);
+        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is ILinkComponent l && _subscribedLinks.Remove(l))
             {
                 if (l.Sender is INotifyPropertyChanged sp) sp.PropertyChanged -= OnSlotPropChanged;
                 if (l.Receiver is INotifyPropertyChanged rp) rp.PropertyChanged -= OnSlotPropChanged;
@@ -365,12 +365,12 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     private void OnNodePropChanged(object? s, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowNodeViewModel.Anchor) or nameof(IWorkflowNodeViewModel.Size)) MarkDirty();
+        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size)) MarkDirty();
     }
 
     private void OnSlotPropChanged(object? s, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IWorkflowSlotViewModel.Anchor)) MarkDirty();
+        if (e.PropertyName is nameof(ISlotComponent.Anchor)) MarkDirty();
     }
 
     private bool _invalidatePending;
