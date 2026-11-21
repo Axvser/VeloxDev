@@ -106,7 +106,7 @@ public static class WorkflowSlotEx
     }
 
     /// <summary>Starts a connection from the slot through its tree.</summary>
-    public static void StandardApplyConnection(this ISlotComponent component)
+    public static void StandardSendConnection(this ISlotComponent component)
     {
         var tree = component.Parent?.Parent;
         if (tree is null)

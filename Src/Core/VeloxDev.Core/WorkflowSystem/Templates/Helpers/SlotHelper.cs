@@ -66,7 +66,7 @@ public class SlotHelper<T> : ISlotHelper, ISlotEvents, IInputEvents
     public virtual void UpdateState() => Component?.StandardUpdateState();
 
     /// <inheritdoc />
-    public virtual void SendConnection() => Component?.StandardApplyConnection();
+    public virtual void SendConnection() => Component?.StandardSendConnection();
     /// <inheritdoc />
     public virtual void ReceiveConnection() => Component?.StandardReceiveConnection();
 

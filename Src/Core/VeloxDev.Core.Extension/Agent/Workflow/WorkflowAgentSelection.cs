@@ -435,7 +435,7 @@ internal static class WorkflowAgentSelection
         {
             throw new InvalidOperationException(
                 $"'{node.GetType().Name}' does not implement IRuntimeIdentifiable — a stable RuntimeId "
-                + "(provided by the component Helper) is required for the Agent selection.");
+                + "(declared on every workflow component; the generator emits it) is required for the Agent selection.");
         }
 
         var typeName = AgentTypeNames.SimpleOf(node);

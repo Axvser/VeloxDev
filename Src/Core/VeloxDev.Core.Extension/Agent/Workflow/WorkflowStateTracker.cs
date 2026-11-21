@@ -229,7 +229,7 @@ public sealed class WorkflowStateTracker(ITreeComponent tree)
         if (component is IRuntimeIdentifiable identifiable)
             return identifiable.RuntimeId;
         throw new InvalidOperationException(
-            $"'{AgentTypeNames.SimpleOf(component)}' does not implement IRuntimeIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
+            $"'{AgentTypeNames.SimpleOf(component)}' does not implement IRuntimeIdentifiable — a stable RuntimeId (declared on every workflow component; the generator emits it) is required.");
     }
 
     /// <summary>

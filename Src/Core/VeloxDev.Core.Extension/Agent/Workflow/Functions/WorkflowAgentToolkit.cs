@@ -3510,7 +3510,7 @@ public sealed class WorkflowAgentToolkit
         if (component is IRuntimeIdentifiable identifiable)
             return identifiable.RuntimeId;
         throw new InvalidOperationException(
-            $"'{component.GetType().Name}' does not implement IRuntimeIdentifiable — a stable RuntimeId (provided by the component Helper) is required.");
+            $"'{component.GetType().Name}' does not implement IRuntimeIdentifiable — a stable RuntimeId (declared on every workflow component; the generator emits it) is required.");
     }
 
     /// <summary>

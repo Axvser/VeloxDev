@@ -390,14 +390,3 @@ public static class WorkflowSpatialEx
         public double Bottom;
     }
 }
-
-/// <summary>Reference-identity equality comparer (node VMs do not override Equals; join registries / output tables key by reference identity).</summary>
-internal sealed class WorkflowReferenceEqualityComparer<T> : IEqualityComparer<T>
-    where T : class
-{
-    public static readonly WorkflowReferenceEqualityComparer<T> Instance = new();
-
-    public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
-
-    public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
-}

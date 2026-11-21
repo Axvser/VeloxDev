@@ -22,13 +22,7 @@ public static class WorkflowLayoutEx
     {
         if (tree is null) throw new ArgumentNullException(nameof(tree));
 
-        var helper = tree.GetHelper();
-        if (helper is IWorkflowLayoutHost host)
-        {
-            return host.Arrange(start: null, options);
-        }
-
-        return new DefaultWorkflowLayoutSolver().Arrange(tree, options ?? new WorkflowLayoutOptions());
+        return ArrangeCore(tree, start: null, options);
     }
 
     /// <summary>Arranges the subgraph reachable from <paramref name="node"/> through its tree's helper.</summary>
@@ -53,12 +47,21 @@ public static class WorkflowLayoutEx
         options ??= new WorkflowLayoutOptions();
         options.StartNode = node;
 
+        return ArrangeCore(tree, node, options);
+    }
+
+    // 两个入口只差 start：宿主在就用宿主的 solver，不在才退回默认实现。
+    private static WorkflowLayoutResult ArrangeCore(
+        ITreeComponent tree, INodeComponent? start, WorkflowLayoutOptions? options)
+    {
         var helper = tree.GetHelper();
         if (helper is IWorkflowLayoutHost host)
         {
-            return host.Arrange(node, options);
+            return host.Arrange(start, options);
         }
 
+        options ??= new WorkflowLayoutOptions();
+        if (start is not null) options.StartNode = start;
         return new DefaultWorkflowLayoutSolver().Arrange(tree, options);
     }
 }
