@@ -31,6 +31,10 @@
   <!-- analyzer 路径只喂合法 XAML：诊断用的坏 XAML 全部走 driver 的 AdditionalText，不能进构建。 -->
   <ItemGroup>
     <AdditionalFiles Include="Fixtures\GeneratedView.xaml" />
+    <AdditionalFiles Include="Fixtures\ExtendedView.xaml" />
+    <AdditionalFiles Include="Fixtures\BatchOneView.xaml" />
+    <AdditionalFiles Include="Fixtures\CommandView.xaml" />
+    <AdditionalFiles Include="Fixtures\ChromeView.xaml" />
   </ItemGroup>
 
   <ItemGroup>

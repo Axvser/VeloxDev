@@ -41,19 +41,19 @@ public class ProgressBar : Control
         typeof(ProgressBar),
         new PropertyMetadata(false, OnIndeterminatePropertyChanged));
 
-    /// <summary>The colour of the filled part; a blue by default.</summary>
+    /// <summary>The brush of the filled part; a blue by default.</summary>
     public static readonly DependencyProperty BarBrushProperty = DependencyProperty.Register(
         nameof(BarBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(ProgressBar),
-        new PropertyMetadata(Color.FromArgb(0xFF, 0x4C, 0x8B, 0xF5), OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0xFF, 0x4C, 0x8B, 0xF5)), OnVisualPropertyChanged));
 
-    /// <summary>The colour of the empty track; a light grey by default.</summary>
+    /// <summary>The brush of the empty track; a light grey by default.</summary>
     public static readonly DependencyProperty TrackBrushProperty = DependencyProperty.Register(
         nameof(TrackBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(ProgressBar),
-        new PropertyMetadata(Color.FromArgb(0x33, 0x80, 0x80, 0x80), OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0x33, 0x80, 0x80, 0x80)), OnVisualPropertyChanged));
 
     /// <summary>The corner radius in pixels; three by default.</summary>
     public static readonly DependencyProperty CornerRadiusProperty = DependencyProperty.Register(
@@ -109,17 +109,17 @@ public class ProgressBar : Control
         set => SetValue(IsIndeterminateProperty, value);
     }
 
-    /// <summary>Gets or sets the colour of the filled part.</summary>
-    public Color BarBrush
+    /// <summary>Gets or sets the brush of the filled part.</summary>
+    public Brush? BarBrush
     {
-        get => (Color)GetValue(BarBrushProperty)!;
+        get => GetValue(BarBrushProperty) as Brush;
         set => SetValue(BarBrushProperty, value);
     }
 
-    /// <summary>Gets or sets the colour of the empty track.</summary>
-    public Color TrackBrush
+    /// <summary>Gets or sets the brush of the empty track.</summary>
+    public Brush? TrackBrush
     {
-        get => (Color)GetValue(TrackBrushProperty)!;
+        get => GetValue(TrackBrushProperty) as Brush;
         set => SetValue(TrackBrushProperty, value);
     }
 
@@ -147,12 +147,14 @@ public class ProgressBar : Control
 
         e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         using var trackPath = XamlDrawing.RoundedRectangle(bounds, CornerRadius);
-        using (var trackBrush = new SolidBrush(TrackBrush))
+        var trackBrush = TrackBrush;
+        if (trackBrush is { } track && track.ApproximateColor.A > 0)
         {
-            e.Graphics.FillPath(trackBrush, trackPath);
+            track.FillPath(e.Graphics, trackPath);
         }
 
-        if (TrackBrush.A <= 0 && BarBrush.A <= 0)
+        var barBrush = BarBrush;
+        if ((trackBrush?.ApproximateColor.A ?? 0) <= 0 && (barBrush?.ApproximateColor.A ?? 0) <= 0)
         {
             return;
         }
@@ -172,8 +174,10 @@ public class ProgressBar : Control
         }
 
         using var fillPath = XamlDrawing.RoundedRectangle(clipped, Math.Min(CornerRadius, clipped.Height / 2f));
-        using var barBrush = new SolidBrush(BarBrush);
-        e.Graphics.FillPath(barBrush, fillPath);
+        if (barBrush is { } bar && bar.ApproximateColor.A > 0)
+        {
+            bar.FillPath(e.Graphics, fillPath);
+        }
     }
 
     /// <inheritdoc />

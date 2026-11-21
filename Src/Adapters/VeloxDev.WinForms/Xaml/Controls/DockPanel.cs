@@ -84,9 +84,11 @@ public class DockPanel : Control
             }
         }
 
-        return new Size(
-            width + (int)Math.Ceiling(Padding.Horizontal),
-            height + (int)Math.Ceiling(Padding.Vertical));
+        return ConstrainSize(
+            new Size(
+                width + (int)Math.Ceiling(Padding.Horizontal),
+                height + (int)Math.Ceiling(Padding.Vertical)),
+            availableSize);
     }
 
     /// <inheritdoc />

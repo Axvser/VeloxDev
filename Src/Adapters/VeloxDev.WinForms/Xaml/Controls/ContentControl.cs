@@ -34,6 +34,13 @@ public class ContentControl : Control
         typeof(ContentControl),
         new PropertyMetadata(null, OnContentTemplatePropertyChanged));
 
+    /// <summary>Chooses a template from the content object; a non-null result wins over <see cref="ContentTemplate"/>.</summary>
+    public static readonly DependencyProperty ContentTemplateSelectorProperty = DependencyProperty.Register(
+        nameof(ContentTemplateSelector),
+        typeof(TemplateSelector),
+        typeof(ContentControl),
+        new PropertyMetadata(null, OnContentTemplateSelectorPropertyChanged));
+
     /// <summary>How the content is placed horizontally inside the padding.</summary>
     public static readonly DependencyProperty HorizontalContentAlignmentProperty = DependencyProperty.Register(
         nameof(HorizontalContentAlignment),
@@ -72,6 +79,14 @@ public class ContentControl : Control
     {
         get => (DataTemplate?)GetValue(ContentTemplateProperty);
         set => SetValue(ContentTemplateProperty, value);
+    }
+
+    /// <summary>Gets or sets the per-content template selector.</summary>
+    /// <remarks>A selector that returns a template for the content overrides <see cref="ContentTemplate"/>.</remarks>
+    public TemplateSelector? ContentTemplateSelector
+    {
+        get => (TemplateSelector?)GetValue(ContentTemplateSelectorProperty);
+        set => SetValue(ContentTemplateSelectorProperty, value);
     }
 
     /// <summary>Gets or sets how the content is placed horizontally inside the padding.</summary>
@@ -130,7 +145,12 @@ public class ContentControl : Control
         var content = XamlLayout.ContentBounds(this);
         if (ContentVisual is { } visual)
         {
-            if (visual.Bounds != content)
+            // 内容控件的孩子同样要遵守对齐/显式尺寸，不能一律撑满内容区。
+            if (visual is Control xaml)
+            {
+                XamlLayout.Arrange(xaml, content);
+            }
+            else if (visual.Bounds != content)
             {
                 visual.Bounds = content;
             }
@@ -197,6 +217,14 @@ public class ContentControl : Control
         }
     }
 
+    private static void OnContentTemplateSelectorPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is ContentControl control && !control.IsDisposed)
+        {
+            control.RebuildTemplate();
+        }
+    }
+
     private static void OnContentLayoutPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
     {
         if (target is Control control && !control.IsDisposed)
@@ -245,12 +273,13 @@ public class ContentControl : Control
     private void RebuildTemplate()
     {
         RemoveTemplateContent();
-        if (Content is System.Windows.Forms.Control || ContentTemplate is not { } template)
+        var template = ContentTemplateSelector?.SelectTemplate(Content) ?? ContentTemplate;
+        if (Content is System.Windows.Forms.Control || template is not { } selected)
         {
             return;
         }
 
-        _templateContent = template.CreateContent();
+        _templateContent = selected.CreateContent();
 
         // DataTemplate 的工厂是消费者提供的；返回 null 时不能落进下面的分支再解引用。
         if (_templateContent is null)

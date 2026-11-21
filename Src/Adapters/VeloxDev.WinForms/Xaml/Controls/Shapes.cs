@@ -15,19 +15,19 @@ using VeloxDev.WinForms.Xaml.Controls;
 /// </remarks>
 public abstract class Shape : Control
 {
-    /// <summary>The interior colour; transparent by default.</summary>
+    /// <summary>The interior brush; transparent by default.</summary>
     public static readonly DependencyProperty FillProperty = DependencyProperty.Register(
         nameof(Fill),
-        typeof(Color),
+        typeof(Brush),
         typeof(Shape),
-        new PropertyMetadata(Color.Transparent, OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.Transparent), OnVisualPropertyChanged));
 
-    /// <summary>The outline colour; black by default.</summary>
+    /// <summary>The outline brush; black by default.</summary>
     public static readonly DependencyProperty StrokeProperty = DependencyProperty.Register(
         nameof(Stroke),
-        typeof(Color),
+        typeof(Brush),
         typeof(Shape),
-        new PropertyMetadata(Color.Black, OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.Black), OnVisualPropertyChanged));
 
     /// <summary>The outline width in pixels; one by default.</summary>
     public static readonly DependencyProperty StrokeThicknessProperty = DependencyProperty.Register(
@@ -36,17 +36,18 @@ public abstract class Shape : Control
         typeof(Shape),
         new PropertyMetadata(1f, OnVisualPropertyChanged));
 
-    /// <summary>Gets or sets the interior colour.</summary>
-    public Color Fill
+    /// <summary>Gets or sets the interior brush.</summary>
+    public Brush? Fill
     {
-        get => (Color)GetValue(FillProperty)!;
+        get => GetValue(FillProperty) as Brush;
         set => SetValue(FillProperty, value);
     }
 
-    /// <summary>Gets or sets the outline colour.</summary>
-    public Color Stroke
+    /// <summary>Gets or sets the outline brush.</summary>
+    /// <remarks>GDI+ pens are solid, so a gradient outline is flattened to its <see cref="Brush.ApproximateColor"/>.</remarks>
+    public Brush? Stroke
     {
-        get => (Color)GetValue(StrokeProperty)!;
+        get => GetValue(StrokeProperty) as Brush;
         set => SetValue(StrokeProperty, value);
     }
 
@@ -80,16 +81,15 @@ public abstract class Shape : Control
     protected void PaintPath(Graphics graphics, GraphicsPath path, bool closed)
     {
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        if (closed && Fill.A > 0)
+        if (closed && Fill is { } fill && fill.ApproximateColor.A > 0)
         {
-            using var brush = new SolidBrush(Fill);
-            graphics.FillPath(brush, path);
+            fill.FillPath(graphics, path);
         }
 
-        if (Stroke.A > 0 && StrokeThickness > 0f)
+        if (Stroke is { } stroke && stroke.ApproximateColor.A > 0 && StrokeThickness > 0f)
         {
-            using var pen = new Pen(Stroke, StrokeThickness);
-            graphics.DrawPath(pen, path);
+            using var pen = new Pen(stroke, StrokeThickness);
+            pen.Draw(graphics, path);
         }
     }
 
@@ -219,6 +219,83 @@ public class Line : Shape
     }
 }
 
+/// <summary>A closed polygon built from a list of points in the control's own pixels.</summary>
+public class Polygon : Shape
+{
+    /// <summary>The vertices, connected and closed in order.</summary>
+    public static readonly DependencyProperty PointsProperty = DependencyProperty.Register(
+        nameof(Points),
+        typeof(PointF[]),
+        typeof(Polygon),
+        new PropertyMetadata(Array.Empty<PointF>(), OnPointsChanged));
+
+    /// <summary>Gets or sets the vertices, connected and closed in order.</summary>
+    public PointF[] Points
+    {
+        get => GetValue(PointsProperty) as PointF[] ?? Array.Empty<PointF>();
+        set => SetValue(PointsProperty, value ?? Array.Empty<PointF>());
+    }
+
+    /// <inheritdoc />
+    protected override GraphicsPath CreatePath(RectangleF bounds)
+    {
+        var path = new GraphicsPath();
+        if (Points.Length >= 2)
+        {
+            path.AddPolygon(Points);
+        }
+
+        return path;
+    }
+
+    private static void OnPointsChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Control control && !control.IsDisposed)
+        {
+            control.Invalidate();
+        }
+    }
+}
+
+/// <summary>An open series of connected line segments in the control's own pixels.</summary>
+/// <remarks>The stroke follows the segments as written; the fill closes the implied shape.</remarks>
+public class Polyline : Shape
+{
+    /// <summary>The vertices, connected in order without closing the figure.</summary>
+    public static readonly DependencyProperty PointsProperty = DependencyProperty.Register(
+        nameof(Points),
+        typeof(PointF[]),
+        typeof(Polyline),
+        new PropertyMetadata(Array.Empty<PointF>(), OnPointsChanged));
+
+    /// <summary>Gets or sets the vertices, connected in order without closing the figure.</summary>
+    public PointF[] Points
+    {
+        get => GetValue(PointsProperty) as PointF[] ?? Array.Empty<PointF>();
+        set => SetValue(PointsProperty, value ?? Array.Empty<PointF>());
+    }
+
+    /// <inheritdoc />
+    protected override GraphicsPath CreatePath(RectangleF bounds)
+    {
+        var path = new GraphicsPath();
+        if (Points.Length >= 2)
+        {
+            path.AddLines(Points);
+        }
+
+        return path;
+    }
+
+    private static void OnPointsChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Control control && !control.IsDisposed)
+        {
+            control.Invalidate();
+        }
+    }
+}
+
 /// <summary>
 /// A vector path written in the common SVG path syntax.
 /// </summary>
@@ -260,7 +337,7 @@ public class Path : Shape
     /// <inheritdoc />
     protected override GraphicsPath CreatePath(RectangleF bounds)
     {
-        var path = PathGeometry.Parse(Data);
+        var path = SvgPathParser.Parse(Data);
         if (Stretch == Stretch.None || path.PointCount == 0 || bounds.Width <= 0f || bounds.Height <= 0f)
         {
             return path;
@@ -298,7 +375,7 @@ public class Path : Shape
     /// <inheritdoc />
     public override Size GetPreferredSize(Size proposedSize)
     {
-        using var path = PathGeometry.Parse(Data);
+        using var path = SvgPathParser.Parse(Data);
         var bounds = path.GetBounds();
         return new Size(
             (int)Math.Ceiling(bounds.Right + StrokeThickness),

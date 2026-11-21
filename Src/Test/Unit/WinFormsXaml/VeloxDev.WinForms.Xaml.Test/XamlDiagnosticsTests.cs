@@ -54,7 +54,7 @@ public sealed class XamlDiagnosticsTests
     public void AnUnknownMember_IsXaml002()
     {
         var diagnostic = AssertSingle(Wrap("<Button Bogus=\"1\" />"), "VELOX_XAML002");
-        Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         StringAssert.Contains(diagnostic.GetMessage(), "Bogus");
     }
 

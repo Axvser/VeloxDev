@@ -79,9 +79,9 @@ public sealed class ScrollBarTests
     {
         using var bar = new XamlScrollBar();
 
-        Assert.AreEqual(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF), bar.TrackBrush);
-        Assert.AreEqual(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF), bar.ThumbBrush);
-        Assert.AreEqual(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF), bar.ThumbHoverBrush);
+        Assert.AreEqual(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF), bar.TrackBrush?.ApproximateColor);
+        Assert.AreEqual(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF), bar.ThumbBrush?.ApproximateColor);
+        Assert.AreEqual(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF), bar.ThumbHoverBrush?.ApproximateColor);
         Assert.AreEqual(12, bar.BarThickness);
     }
 
@@ -128,10 +128,60 @@ public sealed class ScrollBarTests
         Assert.IsNotNull(viewer.VerticalScrollBar);
         Assert.AreEqual(ScrollBarOrientation.Horizontal, viewer.HorizontalScrollBar.Orientation);
         Assert.AreEqual(ScrollBarOrientation.Vertical, viewer.VerticalScrollBar.Orientation);
-        Assert.AreEqual(Color.FromArgb(0x30, 1, 2, 3), viewer.HorizontalScrollBar.TrackBrush);
+        Assert.AreEqual(Color.FromArgb(0x30, 1, 2, 3), viewer.HorizontalScrollBar.TrackBrush?.ApproximateColor);
         Assert.AreEqual(14, viewer.HorizontalScrollBar.BarThickness);
-        Assert.AreEqual(Color.FromArgb(0x40, 4, 5, 6), viewer.VerticalScrollBar.TrackBrush);
+        Assert.AreEqual(Color.FromArgb(0x40, 4, 5, 6), viewer.VerticalScrollBar.TrackBrush?.ApproximateColor);
         Assert.AreEqual(16, viewer.VerticalScrollBar.BarThickness);
+    }
+
+    [TestMethod]
+    public void ScrollViewer_MouseWheelMovesTheVerticalOffset()
+    {
+        using var viewer = new WheelViewer
+        {
+            Size = new Size(200, 100),
+            ExtentHeight = 1000,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+        };
+        viewer.PerformLayout();
+
+        Assert.AreEqual(0, viewer.ScrollOffset.Y);
+
+        viewer.Wheel(-360);
+
+        Assert.IsGreaterThan(0, viewer.ScrollOffset.Y, "a wheel-down notch moves the offset down");
+        Assert.IsLessThanOrEqualTo(900, viewer.ScrollOffset.Y, "the offset stays inside the extent");
+    }
+
+    [TestMethod]
+    public void ScrollViewer_BarValueChangeRaisesViewChanged()
+    {
+        using var viewer = new WheelViewer
+        {
+            Size = new Size(200, 100),
+            ExtentHeight = 1000,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Visible,
+        };
+        viewer.PerformLayout();
+
+        var raised = 0;
+        viewer.ViewChanged += (_, _) => raised++;
+
+        viewer.VerticalScrollBar.Value = 300;
+
+        Assert.AreEqual(300, viewer.ScrollOffset.Y);
+        Assert.IsGreaterThan(0, raised, "a thumb move must notify virtualized hosts");
+    }
+
+    private sealed class WheelViewer : ScrollViewer
+    {
+        public void Wheel(int delta)
+            => OnMouseWheel(new System.Windows.Forms.MouseEventArgs(
+                System.Windows.Forms.MouseButtons.None,
+                0,
+                0,
+                0,
+                delta));
     }
 
     private static Style BarStyle(Color track, int barThickness)

@@ -87,9 +87,11 @@ public class StackPanel : Control
 
         var width = Orientation == Orientation.Vertical ? cross : main;
         var height = Orientation == Orientation.Vertical ? main : cross;
-        return new Size(
-            width + (int)Math.Ceiling(Padding.Horizontal),
-            height + (int)Math.Ceiling(Padding.Vertical));
+        return ConstrainSize(
+            new Size(
+                width + (int)Math.Ceiling(Padding.Horizontal),
+                height + (int)Math.Ceiling(Padding.Vertical)),
+            availableSize);
     }
 
     /// <inheritdoc />

@@ -185,7 +185,7 @@ public sealed class WorkflowNodeViewBehavior
             }
 
             var border = FindBorder();
-            var body = border?.Background ?? Color.Empty;
+            var body = border?.Background?.ApproximateColor ?? Color.Empty;
             var effective = Blend(body, backdrop);
             if (card.BackColor != effective)
             {

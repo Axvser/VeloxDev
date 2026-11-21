@@ -119,7 +119,7 @@ public sealed class AttachedAndTriggerDiagnosticsTests
             Wrap(TriggerCard("<v:Trigger Property=\"Bogus\" Value=\"True\" />")),
             "VELOX_XAML002");
 
-        Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         StringAssert.Contains(diagnostic.GetMessage(), "Bogus");
     }
 
@@ -136,7 +136,7 @@ public sealed class AttachedAndTriggerDiagnosticsTests
                 """)),
             "VELOX_XAML002");
 
-        Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         StringAssert.Contains(diagnostic.GetMessage(), "Bogus");
     }
 

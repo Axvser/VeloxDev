@@ -67,7 +67,9 @@ internal sealed class XamlCompiler
 
     private CodeBuilder _current;
     private INamedTypeSymbol _owner = null!;
+    private XElement? _rootElement;
     private string? _rootScope;
+    private string? _scopeExpression;
     private int _variableCounter;
     private int _templateDepth;
 
@@ -104,6 +106,8 @@ internal sealed class XamlCompiler
         {
             return;
         }
+
+        _rootElement = root;
 
         var classAttribute = root.Attribute(XName.Get("Class", SyntaxHelpers.XamlNamespace));
         if (classAttribute is null || string.IsNullOrWhiteSpace(classAttribute.Value))
@@ -184,6 +188,11 @@ internal sealed class XamlCompiler
         _rootScope = host;
 
         _current.Line("this.SuspendLayout();");
+        if (host is not null)
+        {
+            _current.Line("this.NameScope = new global::VeloxDev.WinForms.Xaml.NameScope();");
+            _scopeExpression = "this.NameScope";
+        }
 
         foreach (var element in root.Elements())
         {
@@ -233,7 +242,15 @@ internal sealed class XamlCompiler
 
             if (!SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.ControlMetadataName))
             {
-                Report(Diagnostics.UnknownType, child, child.Name.LocalName);
+                var collection = FindItemsCollection(elementType);
+                if (collection is null)
+                {
+                    Report(Diagnostics.UnknownType, child, child.Name.LocalName);
+                    continue;
+                }
+
+                var objectExpression = EmitXamlObject(child, type, hostExpression);
+                _current.Line($"{elementExpression}.{collection.Name}.Add({objectExpression});");
                 continue;
             }
 
@@ -279,9 +296,23 @@ internal sealed class XamlCompiler
         }
 
         _current.Line($"var {expression} = new {SyntaxHelpers.TypeName(type)}();");
+        if (IsXamlControl(type) && _scopeExpression is not null)
+        {
+            // 让每个控件都记得自己所属的作用域：Popup.Child 这类未挂进树的控件也能解析 ElementName。
+            _current.Line($"{expression}.NameScope = {_scopeExpression};");
+        }
+
         if (!inTemplate && !string.IsNullOrEmpty(name) && expression == name)
         {
             _current.Line($"this.{name} = {expression};");
+        }
+
+        if (!string.IsNullOrEmpty(name)
+            && _scopeExpression is not null
+            && (inTemplate || expression == name))
+        {
+            _current.Line(
+                $"{SyntaxHelpers.Fqn("XamlRuntime")}.RegisterName({_scopeExpression}, {SyntaxHelpers.Quote(name!)}, {expression});");
         }
 
         foreach (var child in element.Elements())
@@ -297,6 +328,154 @@ internal sealed class XamlCompiler
         ProcessChildren(element, type, expression, childHost);
         EmitTextContent(element, type, expression);
         return expression;
+    }
+
+    private string EmitXamlObject(XElement element, ITypeSymbol type, string? hostExpression)
+    {
+        if (SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.ControlMetadataName))
+        {
+            return EmitControl(element, type, hostExpression);
+        }
+
+        if (type.IsAbstract
+            || type is not INamedTypeSymbol named
+            || named.IsGenericType
+            || !HasPublicParameterlessConstructor(named))
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                element,
+                $"'{type.Name}' needs a public parameterless constructor to be declared in XAML.");
+            return NextVariable();
+        }
+
+        var variable = NextVariable();
+        _current.Line($"var {variable} = new {SyntaxHelpers.TypeName(type)}();");
+        ApplyAttributes(element, type, variable, hostExpression);
+
+        foreach (var child in element.Elements())
+        {
+            if (IsPropertyElement(child))
+            {
+                EmitObjectPropertyElement(child, type, variable, hostExpression);
+                continue;
+            }
+
+            var childType = ResolveElementType(child);
+            if (childType is null)
+            {
+                if (!IsAmbiguous(child))
+                {
+                    Report(Diagnostics.UnknownType, child, child.Name.LocalName);
+                }
+
+                continue;
+            }
+
+            var collection = FindItemsCollection(type);
+            if (collection is null)
+            {
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    child,
+                    $"'{type.Name}' has no item collection to receive '{child.Name.LocalName}'.");
+                continue;
+            }
+
+            var childExpression = EmitXamlObject(child, childType, hostExpression);
+            _current.Line($"{variable}.{collection.Name}.Add({childExpression});");
+        }
+
+        EmitTextContent(element, type, variable);
+        return variable;
+    }
+
+    private void EmitObjectPropertyElement(
+        XElement propertyElement,
+        ITypeSymbol ownerType,
+        string ownerExpression,
+        string? hostExpression)
+    {
+        var fullName = propertyElement.Name.LocalName;
+        var memberName = fullName.Substring(fullName.LastIndexOf('.') + 1);
+        var property = FindProperty(ownerType, memberName);
+        if (property is null)
+        {
+            Report(Diagnostics.UnknownMember, propertyElement, ownerType.Name, memberName);
+            return;
+        }
+
+        if (IsCollection(property.Type))
+        {
+            var children = propertyElement.Elements().ToArray();
+            if (children.Length == 0)
+            {
+                return;
+            }
+
+            foreach (var child in children)
+            {
+                if (IsPropertyElement(child))
+                {
+                    continue;
+                }
+
+                var childType = ResolveElementType(child);
+                if (childType is null)
+                {
+                    if (!IsAmbiguous(child))
+                    {
+                        Report(Diagnostics.UnknownType, child, child.Name.LocalName);
+                    }
+
+                    continue;
+                }
+
+                var childExpression = EmitXamlObject(child, childType, hostExpression);
+                _current.Line($"{ownerExpression}.{property.Name}.Add({childExpression});");
+            }
+
+            return;
+        }
+
+        var content = propertyElement.Elements().FirstOrDefault(child => !IsPropertyElement(child));
+        if (content is not null)
+        {
+            var contentType = ResolveElementType(content);
+            if (contentType is null)
+            {
+                if (!IsAmbiguous(content))
+                {
+                    Report(Diagnostics.UnknownType, content, content.Name.LocalName);
+                }
+
+                return;
+            }
+
+            var contentExpression = EmitXamlObject(content, contentType, hostExpression);
+            _current.Line($"{ownerExpression}.{property.Name} = {contentExpression};");
+            return;
+        }
+
+        var literal = CreateLiteralExpression(property.Type, propertyElement.Value, propertyElement);
+        if (literal is not null)
+        {
+            _current.Line($"{ownerExpression}.{property.Name} = {literal};");
+        }
+    }
+
+    private static IPropertySymbol? FindItemsCollection(ITypeSymbol type)
+    {
+        foreach (var name in new[] { "Items", "DropDownItems" })
+        {
+            var property = FindProperty(type, name);
+            if (property is not null && IsCollection(property.Type))
+            {
+                return property;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -359,11 +538,27 @@ internal sealed class XamlCompiler
 
             if (memberName.IndexOf('.') >= 0)
             {
+                if (!SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.ControlMetadataName))
+                {
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        attribute,
+                        $"'{type.Name}' is not a System.Windows.Forms.Control and cannot receive attached properties.");
+                    continue;
+                }
+
                 EmitAttachedAttribute(attribute, targetExpression, hostExpression);
                 continue;
             }
 
             var property = FindProperty(type, memberName);
+            if (memberName == "ContextMenu"
+                && !IsXamlControl(type)
+                && SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.ControlMetadataName))
+            {
+                property = FindProperty(type, "ContextMenuStrip") ?? property;
+            }
+
             if (property is not null)
             {
                 EmitPropertyValue(attribute, targetExpression, property, attribute.Value, hostExpression);
@@ -521,8 +716,28 @@ internal sealed class XamlCompiler
                     EmitBinding(source, targetExpression, property, arguments, positional, hostExpression);
                     return;
 
+                case "TemplateBinding":
+                    EmitBinding(source, targetExpression, property, arguments, positional, hostExpression, templateBinding: true);
+                    return;
+
                 case "StaticResource":
                     EmitStaticResource(source, targetExpression, property, arguments, positional, hostExpression);
+                    return;
+
+                case "DynamicResource":
+                case "x:DynamicResource":
+                    EmitDynamicResourceProperty(source, targetExpression, property, arguments, positional, hostExpression);
+                    return;
+
+                case "x:Static":
+                    var staticExpression = CreateStaticExpression(
+                        source,
+                        positional ?? (arguments.TryGetValue("Member", out var staticMember) ? staticMember : null));
+                    if (staticExpression is not null)
+                    {
+                        _current.Line($"{targetExpression}.{property.Name} = {staticExpression};");
+                    }
+
                     return;
 
                 default:
@@ -531,13 +746,55 @@ internal sealed class XamlCompiler
             }
         }
 
-        if (!LiteralFactory.TryCreate(property.Type, rawValue, out var expression, out _))
+        var expression = CreateLiteralExpression(property.Type, rawValue, source);
+        if (expression is null)
         {
-            Report(Diagnostics.UnsupportedValue, source, rawValue, property.Type.ToDisplayString());
             return;
         }
 
         _current.Line($"{targetExpression}.{property.Name} = {expression};");
+    }
+
+    private string? CreateLiteralExpression(ITypeSymbol type, string rawValue, XObject source)
+    {
+        if (LiteralFactory.TryCreate(type, rawValue, out var expression, out _))
+        {
+            return expression;
+        }
+
+        if (type.SpecialType is SpecialType.System_Object or SpecialType.System_String)
+        {
+            return SyntaxHelpers.Quote(UnescapeMarkup(rawValue));
+        }
+
+        if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T })
+        {
+            return SyntaxHelpers.Quote(UnescapeMarkup(rawValue));
+        }
+
+        // 媒体原语由运行时统一解析（颜色/渐变/路径/点列表），生成器不需要认识每一种字面量。
+        if (IsRuntimeConvertedType(type))
+        {
+            var runtimeType = RuntimeTypeName(type);
+            return $"({SyntaxHelpers.TypeName(type)}){SyntaxHelpers.Fqn("XamlRuntime")}.ConvertValue("
+                + $"{SyntaxHelpers.Quote(UnescapeMarkup(rawValue))}, typeof({runtimeType}))";
+        }
+
+        Report(Diagnostics.UnsupportedValue, source, rawValue, type.ToDisplayString());
+        return $"{SyntaxHelpers.Fqn("XamlRuntime")}.ConvertValue({SyntaxHelpers.Quote(UnescapeMarkup(rawValue))}, typeof({SyntaxHelpers.TypeName(type)}))";
+    }
+
+    private static string RuntimeTypeName(ITypeSymbol type)
+        => SyntaxHelpers.TypeName(type.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
+
+    private static bool IsRuntimeConvertedType(ITypeSymbol type)
+    {
+        // 可空引用类型的 ToDisplayString 会带 '?'（Brush?），先去掉注解再比较。
+        var normalized = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        return normalized.ToDisplayString() == "System.Drawing.PointF[]"
+            || SyntaxHelpers.DerivesFrom(normalized, "VeloxDev.WinForms.Xaml.Brush")
+            || SyntaxHelpers.DerivesFrom(normalized, "VeloxDev.WinForms.Xaml.Geometry")
+            || SyntaxHelpers.DerivesFrom(normalized, "VeloxDev.WinForms.Xaml.ImageSource");
     }
 
     private void EmitBinding(
@@ -546,26 +803,42 @@ internal sealed class XamlCompiler
         IPropertySymbol property,
         Dictionary<string, string> arguments,
         string? positional,
-        string? hostExpression)
+        string? hostExpression,
+        bool templateBinding = false)
     {
-        var path = arguments.TryGetValue("Path", out var explicitPath) ? explicitPath : positional ?? string.Empty;
-        var mode = arguments.TryGetValue("Mode", out var explicitMode) ? explicitMode : "OneWay";
-
-        if (mode is not ("OneWay" or "TwoWay" or "OneTime"))
+        var bindingExpression = BuildBindingExpression(
+            source,
+            property.Type,
+            arguments,
+            positional,
+            templateBinding,
+            allowTwoWay: true);
+        if (bindingExpression is null)
         {
-            Report(Diagnostics.UnsupportedValue, source, mode, property.Type.ToDisplayString());
             return;
-        }
-
-        var bindingExpression = $"new {SyntaxHelpers.Fqn("Binding")}({SyntaxHelpers.Quote(path)})";
-        if (mode != "OneWay")
-        {
-            bindingExpression += $" {{ Mode = {SyntaxHelpers.Fqn("BindingMode")}.{mode} }}";
         }
 
         if (TryGetDependencyPropertyReference(property, out var dependencyProperty))
         {
             _current.Line($"{targetExpression}.SetBinding({dependencyProperty}, {bindingExpression});");
+            return;
+        }
+
+        // 非 Control 对象（KeyBinding / MouseBinding / 自定义动作）没有 DP 管线，走宿主 DataContext 的 CLR 属性绑定。
+        if (!SyntaxHelpers.DerivesFrom(property.ContainingType, SyntaxHelpers.ControlMetadataName))
+        {
+            if (hostExpression is null)
+            {
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    source,
+                    $"A binding on '{property.ContainingType.Name}.{property.Name}' needs a Control to host its data context.");
+                return;
+            }
+
+            _current.Line(
+                $"{SyntaxHelpers.Fqn("XamlRuntime")}.SetObjectBinding({hostExpression}, {targetExpression}, "
+                + $"{SyntaxHelpers.Quote(property.Name)}, {bindingExpression});");
             return;
         }
 
@@ -581,6 +854,324 @@ internal sealed class XamlCompiler
         _current.Line(
             $"{hostExpression}.SetNativeBinding({targetExpression}, {SyntaxHelpers.Quote(property.Name)}, {bindingExpression});");
     }
+
+    private string? BuildBindingExpression(
+        XObject source,
+        ITypeSymbol? targetType,
+        Dictionary<string, string> arguments,
+        string? positional,
+        bool templateBinding,
+        bool allowTwoWay)
+    {
+        var path = arguments.TryGetValue("Path", out var explicitPath) ? explicitPath : positional ?? string.Empty;
+        var mode = arguments.TryGetValue("Mode", out var explicitMode) ? explicitMode : "OneWay";
+
+        if (mode is not ("OneWay" or "TwoWay" or "OneTime"))
+        {
+            Report(Diagnostics.UnsupportedValue, source, mode, targetType?.ToDisplayString() ?? "binding");
+            return null;
+        }
+
+        if (!allowTwoWay && mode == "TwoWay")
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                source,
+                "TwoWay is not supported for attached values on native controls; the binding behaves as OneWay.");
+            mode = "OneWay";
+        }
+
+        var initializers = new List<string>();
+        if (mode != "OneWay")
+        {
+            initializers.Add($"Mode = {SyntaxHelpers.Fqn("BindingMode")}.{mode}");
+        }
+
+        if (arguments.TryGetValue("ElementName", out var elementName) && !string.IsNullOrEmpty(elementName))
+        {
+            initializers.Add($"ElementName = {SyntaxHelpers.Quote(elementName)}");
+        }
+
+        if (arguments.TryGetValue("RelativeSource", out var relativeSource))
+        {
+            var relativeExpression = CreateRelativeSourceExpression(source, relativeSource);
+            if (relativeExpression is null)
+            {
+                return null;
+            }
+
+            initializers.Add($"RelativeSource = {relativeExpression}");
+        }
+
+        if (arguments.TryGetValue("Source", out var sourceValue))
+        {
+            var sourceExpression = CreateBindingValueExpression(source, sourceValue);
+            if (sourceExpression is null)
+            {
+                return null;
+            }
+
+            initializers.Add($"Source = {sourceExpression}");
+        }
+
+        if (arguments.TryGetValue("Converter", out var converterValue))
+        {
+            var converterExpression = CreateBindingValueExpression(source, converterValue);
+            if (converterExpression is null)
+            {
+                return null;
+            }
+
+            initializers.Add($"Converter = ({SyntaxHelpers.Fqn("IValueConverter")}){converterExpression}");
+        }
+
+        if (arguments.TryGetValue("ConverterParameter", out var converterParameter))
+        {
+            var parameterExpression = CreateBindingValueExpression(source, converterParameter);
+            if (parameterExpression is null)
+            {
+                return null;
+            }
+
+            initializers.Add($"ConverterParameter = {parameterExpression}");
+        }
+
+        if (arguments.TryGetValue("StringFormat", out var stringFormat))
+        {
+            // XAML 的 "{}" 前缀是转义：只有格式串自己要以 "{" 开头时才写它，不能原样交给 string.Format。
+            initializers.Add($"StringFormat = {SyntaxHelpers.Quote(UnescapeMarkup(stringFormat))}");
+        }
+
+        if (arguments.TryGetValue("FallbackValue", out var fallbackValue))
+        {
+            var fallbackExpression = CreateBindingValueExpression(source, fallbackValue);
+            if (fallbackExpression is null)
+            {
+                return null;
+            }
+
+            initializers.Add($"FallbackValue = {fallbackExpression}");
+        }
+
+        if (arguments.TryGetValue("TargetNullValue", out var targetNullValue))
+        {
+            var targetNullExpression = CreateBindingValueExpression(source, targetNullValue);
+            if (targetNullExpression is null)
+            {
+                return null;
+            }
+
+            initializers.Add($"TargetNullValue = {targetNullExpression}");
+        }
+
+        if (arguments.TryGetValue("UpdateSourceTrigger", out var updateTrigger))
+        {
+            if (updateTrigger is not ("Default" or "PropertyChanged" or "LostFocus" or "Explicit"))
+            {
+                Report(Diagnostics.UnsupportedValue, source, updateTrigger, "UpdateSourceTrigger");
+                return null;
+            }
+
+            initializers.Add($"UpdateSourceTrigger = {SyntaxHelpers.Fqn("UpdateSourceTrigger")}.{updateTrigger}");
+        }
+
+        var typeName = templateBinding ? SyntaxHelpers.Fqn("TemplateBinding") : SyntaxHelpers.Fqn("Binding");
+        var expression = $"new {typeName}({SyntaxHelpers.Quote(path)})";
+        if (initializers.Count > 0)
+        {
+            expression += $" {{ {string.Join(", ", initializers)} }}";
+        }
+
+        return expression;
+    }
+
+    private string? CreateBindingValueExpression(XObject source, string rawValue)
+    {
+        if (TryParseMarkup(rawValue, out var extension, out var arguments, out var positional))
+        {
+            switch (extension)
+            {
+                case "x:Null":
+                case "Null":
+                    return "null";
+
+                case "StaticResource":
+                    var key = arguments.TryGetValue("Key", out var explicitKey) ? explicitKey : positional;
+                    if (string.IsNullOrEmpty(key))
+                    {
+                        Report(Diagnostics.UnsupportedResource, source, "A StaticResource reference needs a key.");
+                        return null;
+                    }
+
+                    if (_rootScope is null)
+                    {
+                        Report(Diagnostics.UnsupportedConstruct, source, "A StaticResource reference needs a Control scope.");
+                        return null;
+                    }
+
+                    return $"{SyntaxHelpers.Fqn("XamlRuntime")}.GetResource<object>({_rootScope}, {SyntaxHelpers.Quote(key!)})";
+
+                case "x:Static":
+                    var memberPath = positional
+                        ?? (arguments.TryGetValue("Member", out var member) ? member : null);
+                    return CreateStaticExpression(source, memberPath);
+
+                default:
+                    Report(Diagnostics.UnsupportedConstruct, source, $"Markup extension '{extension}' is not supported in a binding value.");
+                    return null;
+            }
+        }
+
+        return SyntaxHelpers.Quote(UnescapeMarkup(rawValue));
+    }
+
+    private string? CreateStaticExpression(XObject source, string? memberPath)
+    {
+        if (string.IsNullOrWhiteSpace(memberPath))
+        {
+            Report(Diagnostics.UnsupportedValue, source, memberPath ?? string.Empty, "x:Static member");
+            return null;
+        }
+
+        var text = memberPath!.Trim();
+        for (var dot = text.LastIndexOf('.'); dot > 0; dot = text.LastIndexOf('.', dot - 1))
+        {
+            var typeName = text.Substring(0, dot);
+            var memberName = text.Substring(dot + 1);
+            var type = ResolveTypeReference(typeName, GetContextElement(source));
+            if (type is null)
+            {
+                continue;
+            }
+
+            var member = FindStaticMember(type, memberName);
+            if (member is null)
+            {
+                Report(Diagnostics.UnknownMember, source, type.Name, memberName);
+                return null;
+            }
+
+            return $"{SyntaxHelpers.TypeName(type)}.{member}";
+        }
+
+        Report(Diagnostics.UnknownType, source, text);
+        return null;
+    }
+
+    private static string? FindStaticMember(ITypeSymbol type, string memberName)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers(memberName))
+            {
+                if (member is IFieldSymbol field && field.IsStatic && !field.IsImplicitlyDeclared)
+                {
+                    return field.Name;
+                }
+
+                if (member is IPropertySymbol property && property.IsStatic && property.GetMethod is not null)
+                {
+                    return property.Name;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private string? CreateRelativeSourceExpression(XObject source, string rawValue)
+    {
+        var text = rawValue.Trim();
+        string mode;
+        Dictionary<string, string> arguments = new(StringComparer.OrdinalIgnoreCase);
+        string? positional;
+
+        if (TryParseMarkup(text, out var extension, out var parsedArguments, out var parsedPositional))
+        {
+            if (extension is not ("RelativeSource" or "x:RelativeSource"))
+            {
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    source,
+                    "RelativeSource supports only {RelativeSource Self}, {RelativeSource TemplatedParent} or {RelativeSource FindAncestor, AncestorType=...}.");
+                return null;
+            }
+
+            arguments = parsedArguments;
+            positional = parsedPositional;
+            mode = positional ?? (arguments.TryGetValue("Mode", out var explicitMode) ? explicitMode : "Self");
+        }
+        else
+        {
+            positional = text;
+            mode = text;
+        }
+
+        if (string.Equals(mode, "Self", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{SyntaxHelpers.Fqn("RelativeSource")}.Self";
+        }
+
+        if (string.Equals(mode, "TemplatedParent", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{SyntaxHelpers.Fqn("RelativeSource")}.TemplatedParent";
+        }
+
+        if (!string.Equals(mode, "FindAncestor", StringComparison.OrdinalIgnoreCase))
+        {
+            Report(Diagnostics.UnsupportedValue, source, mode, "RelativeSourceMode");
+            return null;
+        }
+
+        if (!arguments.TryGetValue("AncestorType", out var ancestorTypeText))
+        {
+            Report(Diagnostics.UnsupportedConstruct, source, "A FindAncestor RelativeSource needs an AncestorType.");
+            return null;
+        }
+
+        var ancestorType = ResolveTypeFromMarkup(source, ancestorTypeText);
+        if (ancestorType is null)
+        {
+            return null;
+        }
+
+        var level = 1;
+        if (arguments.TryGetValue("AncestorLevel", out var levelText)
+            && !int.TryParse(levelText, NumberStyles.Integer, CultureInfo.InvariantCulture, out level))
+        {
+            Report(Diagnostics.UnsupportedValue, source, levelText, "System.Int32");
+            return null;
+        }
+
+        return $"new {SyntaxHelpers.Fqn("RelativeSource")}({SyntaxHelpers.Fqn("RelativeSourceMode")}.FindAncestor) "
+            + $"{{ AncestorType = typeof({SyntaxHelpers.TypeName(ancestorType)}), AncestorLevel = {Math.Max(1, level)} }}";
+    }
+
+    private ITypeSymbol? ResolveTypeFromMarkup(XObject source, string rawValue)
+    {
+        var text = rawValue.Trim();
+        if (TryParseMarkup(text, out var extension, out var arguments, out var positional))
+        {
+            if (extension is not ("x:Type" or "Type"))
+            {
+                Report(Diagnostics.UnsupportedValue, source, text, "Type");
+                return null;
+            }
+
+            text = arguments.TryGetValue("TypeName", out var explicitType) ? explicitType : positional ?? string.Empty;
+        }
+
+        var type = ResolveTypeReference(text, GetContextElement(source));
+        if (type is null)
+        {
+            Report(Diagnostics.UnknownType, source, text);
+        }
+
+        return type;
+    }
+
+    private XElement GetContextElement(XObject source)
+        => source as XElement ?? (source as XAttribute)?.Parent ?? _rootElement!;
 
     private void EmitStaticResource(
         XObject source,
@@ -611,6 +1202,41 @@ internal sealed class XamlCompiler
 
         _current.Line(
             $"{targetExpression}.{property.Name} = {SyntaxHelpers.Fqn("XamlRuntime")}.GetResource<{SyntaxHelpers.TypeName(property.Type)}>({_rootScope}, {SyntaxHelpers.Quote(key!)});");
+    }
+
+    private void EmitDynamicResourceProperty(
+        XObject source,
+        string targetExpression,
+        IPropertySymbol property,
+        Dictionary<string, string> arguments,
+        string? positional,
+        string? hostExpression)
+    {
+        var key = arguments.TryGetValue("Key", out var explicitKey) ? explicitKey : positional;
+        if (string.IsNullOrEmpty(key))
+        {
+            Report(Diagnostics.UnsupportedResource, source, "A DynamicResource reference needs a key.");
+            return;
+        }
+
+        if (hostExpression is null)
+        {
+            Report(Diagnostics.UnsupportedConstruct, source, "A DynamicResource reference needs a Control scope.");
+            return;
+        }
+
+        if (!TryGetDependencyPropertyReference(property, out var dependencyProperty))
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                source,
+                $"A DynamicResource reference needs a dependency property; '{property.ContainingType.Name}.{property.Name}' is a CLR property.");
+            return;
+        }
+
+        _current.Line(
+            $"{SyntaxHelpers.Fqn("XamlRuntime")}.SetDynamicResource({hostExpression}, {targetExpression}, "
+            + $"{dependencyProperty}, {SyntaxHelpers.Quote(key!)});");
     }
 
     private void EmitAttachedAttribute(XAttribute attribute, string targetExpression, string? hostExpression)
@@ -678,6 +1304,23 @@ internal sealed class XamlCompiler
                     EmitAttachedStaticResource(attribute, targetExpression, dependencyProperty, arguments, positional);
                     return;
 
+                case "DynamicResource":
+                case "x:DynamicResource":
+                    EmitAttachedDynamicResource(attribute, targetExpression, dependencyProperty, arguments, positional, hostExpression);
+                    return;
+
+                case "x:Static":
+                    var attachedStatic = CreateStaticExpression(
+                        attribute,
+                        positional ?? (arguments.TryGetValue("Member", out var attachedMember) ? attachedMember : null));
+                    if (attachedStatic is not null)
+                    {
+                        _current.Line(
+                            $"{SyntaxHelpers.Fqn("XamlRuntime")}.SetAttachedValue({targetExpression}, {dependencyProperty}, {attachedStatic});");
+                    }
+
+                    return;
+
                 default:
                     Report(
                         Diagnostics.UnsupportedConstruct,
@@ -702,24 +1345,6 @@ internal sealed class XamlCompiler
         string? positional,
         string? hostExpression)
     {
-        var path = arguments.TryGetValue("Path", out var explicitPath) ? explicitPath : positional ?? string.Empty;
-        var mode = arguments.TryGetValue("Mode", out var explicitMode) ? explicitMode : "OneWay";
-
-        if (mode is not ("OneWay" or "TwoWay" or "OneTime"))
-        {
-            Report(Diagnostics.UnsupportedValue, source, mode, "BindingMode");
-            return;
-        }
-
-        if (mode == "TwoWay")
-        {
-            Report(
-                Diagnostics.UnsupportedConstruct,
-                source,
-                "TwoWay is not supported for attached values on native controls; the binding behaves as OneWay.");
-            mode = "OneWay";
-        }
-
         if (hostExpression is null)
         {
             Report(
@@ -729,10 +1354,16 @@ internal sealed class XamlCompiler
             return;
         }
 
-        var bindingExpression = $"new {SyntaxHelpers.Fqn("Binding")}({SyntaxHelpers.Quote(path)})";
-        if (mode != "OneWay")
+        var bindingExpression = BuildBindingExpression(
+            source,
+            targetType: null,
+            arguments,
+            positional,
+            templateBinding: false,
+            allowTwoWay: false);
+        if (bindingExpression is null)
         {
-            bindingExpression += $" {{ Mode = {SyntaxHelpers.Fqn("BindingMode")}.{mode} }}";
+            return;
         }
 
         _current.Line(
@@ -762,6 +1393,32 @@ internal sealed class XamlCompiler
         _current.Line(
             $"{SyntaxHelpers.Fqn("XamlRuntime")}.SetAttachedValue({targetExpression}, {dependencyProperty}, "
             + $"{SyntaxHelpers.Fqn("XamlRuntime")}.GetResource<object>({_rootScope}, {SyntaxHelpers.Quote(key!)}));");
+    }
+
+    private void EmitAttachedDynamicResource(
+        XObject source,
+        string targetExpression,
+        string dependencyProperty,
+        Dictionary<string, string> arguments,
+        string? positional,
+        string? hostExpression)
+    {
+        var key = arguments.TryGetValue("Key", out var explicitKey) ? explicitKey : positional;
+        if (string.IsNullOrEmpty(key))
+        {
+            Report(Diagnostics.UnsupportedResource, source, "A DynamicResource reference needs a key.");
+            return;
+        }
+
+        if (hostExpression is null)
+        {
+            Report(Diagnostics.UnsupportedConstruct, source, "A DynamicResource reference needs a Control scope.");
+            return;
+        }
+
+        _current.Line(
+            $"{SyntaxHelpers.Fqn("XamlRuntime")}.SetDynamicResource({hostExpression}, {targetExpression}, "
+            + $"{dependencyProperty}, {SyntaxHelpers.Quote(key!)});");
     }
 
     private void EmitTriggers(XElement triggersElement, ITypeSymbol ownerType, string ownerExpression)
@@ -1032,65 +1689,220 @@ internal sealed class XamlCompiler
             return;
         }
 
-        if (!TryResolveControlProperty(ownerType, propertyPath!.Trim(), setterElement, out var dependencyProperty, out var valueType))
+        // 模板触发器的 Setter 指向命名部件时，Property 属于部件的类型，不属于模板的 TargetType。
+        var propertyOwner = ownerType;
+        var targetTypeAttribute = setterElement.Attribute("TargetType");
+        if (targetTypeAttribute is not null)
+        {
+            propertyOwner = ResolveTypeFromMarkup(targetTypeAttribute, targetTypeAttribute.Value);
+            if (propertyOwner is null)
+            {
+                return;
+            }
+        }
+
+        if (!TryResolveControlProperty(propertyOwner, propertyPath!.Trim(), setterElement, out var dependencyProperty, out var valueType))
         {
             return;
         }
 
         var valueAttribute = setterElement.Attribute("Value");
-        var valueExpression = valueAttribute is null
-            ? "null"
-            : CreatePropertyValueExpression(valueAttribute, dependencyProperty, valueType, valueAttribute.Value);
+        if (valueAttribute is null)
+        {
+            _current.Line(
+                $"{setterCollectionExpression}.Add({WithTargetName($"new {SyntaxHelpers.Fqn("Setter")}({dependencyProperty}, null)", setterElement)});");
+            return;
+        }
 
+        if (TryParseMarkup(valueAttribute.Value, out var extension, out var arguments, out var positional))
+        {
+            if (extension is "Binding" or "TemplateBinding")
+            {
+                var bindingExpression = BuildBindingExpression(
+                    valueAttribute,
+                    valueType,
+                    arguments,
+                    positional,
+                    templateBinding: extension == "TemplateBinding",
+                    allowTwoWay: true);
+                if (bindingExpression is null)
+                {
+                    return;
+                }
+
+                _current.Line(
+                    $"{setterCollectionExpression}.Add({WithTargetName($"new {SyntaxHelpers.Fqn("Setter")}({dependencyProperty}) {{ Binding = {bindingExpression} }}", setterElement)});");
+                return;
+            }
+
+            if (extension == "StaticResource")
+            {
+                var key = arguments.TryGetValue("Key", out var explicitKey) ? explicitKey : positional;
+                if (string.IsNullOrEmpty(key))
+                {
+                    Report(Diagnostics.UnsupportedResource, setterElement, "A StaticResource reference needs a key.");
+                    return;
+                }
+
+                if (_rootScope is null)
+                {
+                    Report(Diagnostics.UnsupportedConstruct, setterElement, "A StaticResource reference needs a Control scope.");
+                    return;
+                }
+
+                _current.Line(
+                    $"{setterCollectionExpression}.Add({WithTargetName($"new {SyntaxHelpers.Fqn("Setter")}({dependencyProperty}, " + $"{SyntaxHelpers.Fqn("XamlRuntime")}.GetResource<object>({_rootScope}, {SyntaxHelpers.Quote(key!)}))", setterElement)});");
+                return;
+            }
+
+            if (extension is "DynamicResource" or "x:DynamicResource")
+            {
+                var key = arguments.TryGetValue("Key", out var explicitKey) ? explicitKey : positional;
+                if (string.IsNullOrEmpty(key))
+                {
+                    Report(Diagnostics.UnsupportedResource, setterElement, "A DynamicResource reference needs a key.");
+                    return;
+                }
+
+                if (_rootScope is null)
+                {
+                    Report(Diagnostics.UnsupportedConstruct, setterElement, "A DynamicResource reference needs a Control scope.");
+                    return;
+                }
+
+                // Setter 本身是数据对象，拿不到活动控件；把它变成对资源源的绑定，由既有 setter-binding 通道跟随替换。
+                var provider = $"{SyntaxHelpers.Fqn("XamlRuntime")}.CreateDynamicResourceProvider({_rootScope}, {SyntaxHelpers.Quote(key!)})";
+                var dynamicSetter =
+                    $"new {SyntaxHelpers.Fqn("Setter")}({dependencyProperty}, new {SyntaxHelpers.Fqn("Binding")}({SyntaxHelpers.Quote("Value")}) "
+                    + $"{{ Source = {provider} }})";
+                _current.Line($"{setterCollectionExpression}.Add({WithTargetName(dynamicSetter, setterElement)});");
+                return;
+            }
+
+            if (extension is "x:Null" or "Null")
+            {
+                _current.Line(
+                    $"{setterCollectionExpression}.Add({WithTargetName($"new {SyntaxHelpers.Fqn("Setter")}({dependencyProperty}, null)", setterElement)});");
+                return;
+            }
+
+            if (extension == "x:Static")
+            {
+                var staticExpression = CreateStaticExpression(
+                    valueAttribute,
+                    positional ?? (arguments.TryGetValue("Member", out var member) ? member : null));
+                if (staticExpression is null)
+                {
+                    return;
+                }
+
+                _current.Line(
+                    $"{setterCollectionExpression}.Add({WithTargetName($"new {SyntaxHelpers.Fqn("Setter")}({dependencyProperty}, {staticExpression})", setterElement)});");
+                return;
+            }
+
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                valueAttribute,
+                $"Markup extension '{extension}' is not supported in a Setter value.");
+            return;
+        }
+
+        var valueExpression = CreatePropertyValueExpression(valueAttribute, dependencyProperty, valueType, valueAttribute.Value);
         if (valueExpression is null)
         {
             return;
         }
 
         _current.Line(
-            $"{setterCollectionExpression}.Add(new {SyntaxHelpers.Fqn("Setter")}({dependencyProperty}, {valueExpression}));");
+            $"{setterCollectionExpression}.Add({WithTargetName($"new {SyntaxHelpers.Fqn("Setter")}({dependencyProperty}, {valueExpression})", setterElement)});");
+    }
+
+    private static string WithTargetName(string setterExpression, XElement setterElement)
+    {
+        var targetName = setterElement.Attribute("TargetName")?.Value;
+        if (string.IsNullOrWhiteSpace(targetName))
+        {
+            return setterExpression;
+        }
+
+        var assignment = $"TargetName = {SyntaxHelpers.Quote(targetName!)}";
+        return setterExpression.EndsWith(" }", StringComparison.Ordinal)
+            ? setterExpression.Substring(0, setterExpression.Length - 2) + $", {assignment} }}"
+            : setterExpression + $" {{ {assignment} }}";
     }
 
     private void EmitTriggerAction(XElement actionElement, ITypeSymbol ownerType, string triggerVariable, bool isEnter)
     {
         var actions = actionElement.Elements().ToArray();
-        if (actions.Length != 1)
+        if (actions.Length == 0)
         {
             Report(
                 Diagnostics.UnsupportedConstruct,
                 actionElement,
-                "An EnterAction or ExitAction needs exactly one action element.");
+                "An EnterAction or ExitAction needs at least one action element.");
             return;
         }
 
-        var action = actions[0];
+        var variables = new List<string>();
+        foreach (var action in actions)
+        {
+            var variable = EmitActionElement(action, ownerType);
+            if (variable is not null)
+            {
+                variables.Add(variable);
+            }
+        }
+
+        if (variables.Count == 0)
+        {
+            return;
+        }
+
+        var member = isEnter ? "EnterAction" : "ExitAction";
+        if (variables.Count == 1)
+        {
+            _current.Line($"{triggerVariable}.{member} = {variables[0]};");
+            return;
+        }
+
+        var groupVariable = NextVariable();
+        _current.Line($"var {groupVariable} = new {SyntaxHelpers.Fqn("TriggerActionGroup")}();");
+        foreach (var variable in variables)
+        {
+            _current.Line($"{groupVariable}.Actions.Add({variable});");
+        }
+
+        _current.Line($"{triggerVariable}.{member} = {groupVariable};");
+    }
+
+    private string? EmitActionElement(XElement action, ITypeSymbol ownerType)
+    {
         if (action.Name.LocalName == "TransitionAction")
         {
-            EmitTransitionAction(action, ownerType, triggerVariable, isEnter);
-            return;
+            return EmitTransitionAction(action, ownerType);
         }
 
         if (action.Name.LocalName == "KeyFrameAnimation")
         {
-            EmitKeyFrameAnimation(action, ownerType, triggerVariable, isEnter);
-            return;
+            return EmitKeyFrameAnimation(action, ownerType);
         }
 
-        EmitCustomTriggerAction(action, triggerVariable, isEnter);
+        return EmitCustomTriggerAction(action);
     }
 
-    private void EmitTransitionAction(XElement action, ITypeSymbol ownerType, string triggerVariable, bool isEnter)
+    private string? EmitTransitionAction(XElement action, ITypeSymbol ownerType)
     {
         var propertyPath = action.Attribute("Property")?.Value;
         if (string.IsNullOrWhiteSpace(propertyPath))
         {
             Report(Diagnostics.UnsupportedConstruct, action, "A TransitionAction needs a Property attribute.");
-            return;
+            return null;
         }
 
         if (!TryResolveControlProperty(ownerType, propertyPath!.Trim(), action, out var dependencyProperty, out var valueType))
         {
-            return;
+            return null;
         }
 
         var toAttribute = action.Attribute("To");
@@ -1100,7 +1912,7 @@ internal sealed class XamlCompiler
 
         if (toExpression is null)
         {
-            return;
+            return null;
         }
 
         var effectParts = new List<string>();
@@ -1114,7 +1926,7 @@ internal sealed class XamlCompiler
                     durationAttribute,
                     durationAttribute.Value,
                     "System.TimeSpan");
-                return;
+                return null;
             }
 
             var duration = $"global::System.TimeSpan.Parse({SyntaxHelpers.Quote(durationAttribute.Value)}, global::System.Globalization.CultureInfo.InvariantCulture)";
@@ -1134,28 +1946,53 @@ internal sealed class XamlCompiler
             }
         }
 
+        var loopAttribute = action.Attribute("LoopTime");
+        if (loopAttribute is not null)
+        {
+            if (!int.TryParse(loopAttribute.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var loop))
+            {
+                Report(Diagnostics.UnsupportedValue, loopAttribute, loopAttribute.Value, "System.Int32");
+                return null;
+            }
+
+            effectParts.Add($"LoopTime = {loop}");
+        }
+
+        var reverseAttribute = action.Attribute("IsAutoReverse");
+        if (reverseAttribute is not null)
+        {
+            if (!bool.TryParse(reverseAttribute.Value, out var reverse))
+            {
+                Report(Diagnostics.UnsupportedValue, reverseAttribute, reverseAttribute.Value, "System.Boolean");
+                return null;
+            }
+
+            effectParts.Add($"IsAutoReverse = {(reverse ? "true" : "false")}");
+        }
+
         var effect = effectParts.Count > 0
             ? $" Effect = new global::VeloxDev.TransitionSystem.TransitionEffect {{ {string.Join(", ", effectParts)} }},"
             : string.Empty;
 
-        var member = isEnter ? "EnterAction" : "ExitAction";
+        var actionVariable = NextVariable();
         _current.Line(
-            $"{triggerVariable}.{member} = new {SyntaxHelpers.Fqn("TransitionAction")} "
+            $"var {actionVariable} = new {SyntaxHelpers.Fqn("TransitionAction")} "
             + $"{{ Property = {dependencyProperty}, To = {toExpression},{effect} }};");
+        return actionVariable;
     }
 
-    private void EmitKeyFrameAnimation(XElement action, ITypeSymbol ownerType, string triggerVariable, bool isEnter)
+    private string? EmitKeyFrameAnimation(XElement action, ITypeSymbol ownerType)
     {
         var propertyPath = action.Attribute("Property")?.Value;
         if (string.IsNullOrWhiteSpace(propertyPath))
         {
             Report(Diagnostics.UnsupportedConstruct, action, "A KeyFrameAnimation needs a Property attribute.");
-            return;
+            return null;
         }
 
         if (!TryResolveControlProperty(ownerType, propertyPath!.Trim(), action, out var dependencyProperty, out var valueType))
         {
-            return;
+            return null;
         }
 
         var effectParts = new List<string>();
@@ -1165,7 +2002,7 @@ internal sealed class XamlCompiler
             if (!TimeSpan.TryParse(durationAttribute.Value, CultureInfo.InvariantCulture, out _))
             {
                 Report(Diagnostics.UnsupportedValue, durationAttribute, durationAttribute.Value, "System.TimeSpan");
-                return;
+                return null;
             }
 
             effectParts.Add(
@@ -1182,11 +2019,35 @@ internal sealed class XamlCompiler
             Report(Diagnostics.UnsupportedValue, easeAttribute, easeAttribute.Value, "Ease");
         }
 
+        var loopAttribute = action.Attribute("LoopTime");
+        if (loopAttribute is not null)
+        {
+            if (!int.TryParse(loopAttribute.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var loop))
+            {
+                Report(Diagnostics.UnsupportedValue, loopAttribute, loopAttribute.Value, "System.Int32");
+                return null;
+            }
+
+            effectParts.Add($"LoopTime = {loop}");
+        }
+
+        var reverseAttribute = action.Attribute("IsAutoReverse");
+        if (reverseAttribute is not null)
+        {
+            if (!bool.TryParse(reverseAttribute.Value, out var reverse))
+            {
+                Report(Diagnostics.UnsupportedValue, reverseAttribute, reverseAttribute.Value, "System.Boolean");
+                return null;
+            }
+
+            effectParts.Add($"IsAutoReverse = {(reverse ? "true" : "false")}");
+        }
+
         var frames = action.Elements().Where(child => child.Name.LocalName == "KeyFrame").ToArray();
         if (frames.Length == 0)
         {
             Report(Diagnostics.UnsupportedConstruct, action, "A KeyFrameAnimation needs at least one KeyFrame element.");
-            return;
+            return null;
         }
 
         var actionVariable = NextVariable();
@@ -1238,12 +2099,11 @@ internal sealed class XamlCompiler
                 + $"{{ Offset = {offset.ToString("R", CultureInfo.InvariantCulture)}D, Value = {valueExpression} }});");
         }
 
-        var member = isEnter ? "EnterAction" : "ExitAction";
-        _current.Line($"{triggerVariable}.{member} = {actionVariable};");
+        return actionVariable;
     }
 
 
-    private void EmitCustomTriggerAction(XElement action, string triggerVariable, bool isEnter)
+    private string? EmitCustomTriggerAction(XElement action)
     {
         var type = ResolveElementType(action);
         if (type is null)
@@ -1253,7 +2113,7 @@ internal sealed class XamlCompiler
                 Report(Diagnostics.UnknownType, action, action.Name.LocalName);
             }
 
-            return;
+            return null;
         }
 
         if (!SyntaxHelpers.DerivesFrom(type, "VeloxDev.WinForms.Xaml.TriggerAction"))
@@ -1262,7 +2122,7 @@ internal sealed class XamlCompiler
                 Diagnostics.UnsupportedConstruct,
                 action,
                 $"'{type.Name}' does not derive from VeloxDev.WinForms.Xaml.TriggerAction.");
-            return;
+            return null;
         }
 
         if (type is not INamedTypeSymbol namedType || namedType.IsGenericType)
@@ -1271,7 +2131,7 @@ internal sealed class XamlCompiler
                 Diagnostics.UnsupportedConstruct,
                 action,
                 $"'{type.Name}' is not a usable trigger action type.");
-            return;
+            return null;
         }
 
         if (type.IsAbstract || !HasPublicParameterlessConstructor(namedType))
@@ -1280,7 +2140,7 @@ internal sealed class XamlCompiler
                 Diagnostics.UnsupportedConstruct,
                 action,
                 $"'{type.Name}' needs a public parameterless constructor.");
-            return;
+            return null;
         }
 
         if (action.HasElements)
@@ -1289,7 +2149,7 @@ internal sealed class XamlCompiler
                 Diagnostics.UnsupportedConstruct,
                 action,
                 "Nested content is not supported in a trigger action.");
-            return;
+            return null;
         }
 
         var actionVariable = NextVariable();
@@ -1333,8 +2193,7 @@ internal sealed class XamlCompiler
             EmitCustomActionProperty(actionVariable, property, attribute);
         }
 
-        var member = isEnter ? "EnterAction" : "ExitAction";
-        _current.Line($"{triggerVariable}.{member} = {actionVariable};");
+        return actionVariable;
     }
 
     private void EmitCustomActionProperty(string actionVariable, IPropertySymbol property, XAttribute attribute)
@@ -1379,6 +2238,16 @@ internal sealed class XamlCompiler
                 return;
             }
 
+            if (extension is "DynamicResource" or "x:DynamicResource")
+            {
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    attribute,
+                    $"A DynamicResource reference cannot be applied to the trigger action property "
+                    + $"'{property.ContainingType.Name}.{property.Name}'; it needs a dependency property.");
+                return;
+            }
+
             Report(
                 Diagnostics.UnsupportedConstruct,
                 attribute,
@@ -1390,7 +2259,7 @@ internal sealed class XamlCompiler
         {
             Report(Diagnostics.UnsupportedValue, attribute, raw, property.Type.ToDisplayString());
             valueExpression =
-                $"({SyntaxHelpers.TypeName(property.Type)}){SyntaxHelpers.Fqn("XamlRuntime")}.ConvertValue({SyntaxHelpers.Quote(raw)}, typeof({SyntaxHelpers.TypeName(property.Type)}))!";
+                $"({SyntaxHelpers.TypeName(property.Type)}){SyntaxHelpers.Fqn("XamlRuntime")}.ConvertValue({SyntaxHelpers.Quote(raw)}, typeof({RuntimeTypeName(property.Type)}))!";
         }
 
         _current.Line($"{actionVariable}.{property.Name} = {valueExpression};");
@@ -1490,6 +2359,12 @@ internal sealed class XamlCompiler
         }
 
         var ownerName = propertyPath.Substring(0, dot);
+        var prefix = ownerName.LastIndexOf(':');
+        if (prefix >= 0)
+        {
+            ownerName = ownerName.Substring(prefix + 1);
+        }
+
         var propertyName = propertyPath.Substring(dot + 1);
         if (ownerName.Length == 0 || propertyName.Length == 0)
         {
@@ -1532,12 +2407,22 @@ internal sealed class XamlCompiler
             rawValue = rawValue.Substring(2);
         }
 
+        if (TryParseMarkup(rawValue, out var dynamicExtension, out _, out _)
+            && dynamicExtension is "DynamicResource" or "x:DynamicResource")
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                source,
+                "A DynamicResource reference is not supported in this position; it needs a dependency-property target.");
+            return null;
+        }
+
         if (valueType is not null && LiteralFactory.TryCreate(valueType, rawValue, out var typed, out _))
         {
             return typed;
         }
 
-        if (valueType is not null)
+        if (valueType is not null && !IsRuntimeConvertedType(valueType))
         {
             Report(Diagnostics.UnsupportedValue, source, rawValue, valueType.ToDisplayString());
         }
@@ -1864,6 +2749,13 @@ internal sealed class XamlCompiler
         }
 
         var property = FindProperty(ownerType, memberName);
+        if (memberName == "ContextMenu"
+            && !IsXamlControl(ownerType)
+            && SyntaxHelpers.DerivesFrom(ownerType, SyntaxHelpers.ControlMetadataName))
+        {
+            property = FindProperty(ownerType, "ContextMenuStrip") ?? property;
+        }
+
         if (property is null)
         {
             Report(Diagnostics.UnknownMember, propertyElement, ownerType.Name, memberName);
@@ -1896,7 +2788,7 @@ internal sealed class XamlCompiler
                     continue;
                 }
 
-                var childExpression = EmitControl(child, childType, hostExpression);
+                var childExpression = EmitXamlObject(child, childType, hostExpression);
                 _current.Line($"{ownerExpression}.{property.Name}.Add({childExpression});");
             }
 
@@ -1917,24 +2809,16 @@ internal sealed class XamlCompiler
                 return;
             }
 
-            if (!SyntaxHelpers.DerivesFrom(contentType, SyntaxHelpers.ControlMetadataName))
-            {
-                Report(Diagnostics.UnknownType, content, content.Name.LocalName);
-                return;
-            }
-
-            var contentExpression = EmitControl(content, contentType, hostExpression);
+            var contentExpression = EmitXamlObject(content, contentType, hostExpression);
             _current.Line($"{ownerExpression}.{property.Name} = {contentExpression};");
             return;
         }
 
-        if (!LiteralFactory.TryCreate(property.Type, propertyElement.Value, out var literal, out _))
+        var literal = CreateLiteralExpression(property.Type, propertyElement.Value, propertyElement);
+        if (literal is not null)
         {
-            Report(Diagnostics.UnsupportedValue, propertyElement, propertyElement.Value, property.Type.ToDisplayString());
-            return;
+            _current.Line($"{ownerExpression}.{property.Name} = {literal};");
         }
-
-        _current.Line($"{ownerExpression}.{property.Name} = {literal};");
     }
 
     private void EmitResources(XElement propertyElement, string ownerExpression, ITypeSymbol ownerType)
@@ -2217,10 +3101,58 @@ internal sealed class XamlCompiler
         {
             valueExpression = "null";
         }
+        else if (TryParseMarkup(valueAttribute.Value, out var extension, out var arguments, out var positional))
+        {
+            switch (extension)
+            {
+                case "x:Null":
+                case "Null":
+                    valueExpression = "null";
+                    break;
+
+                case "StaticResource":
+                    var key = arguments.TryGetValue("Key", out var explicitKey) ? explicitKey : positional;
+                    if (string.IsNullOrEmpty(key) || _rootScope is null)
+                    {
+                        Report(Diagnostics.UnsupportedResource, valueAttribute, "A StaticResource reference needs a key and a Control scope.");
+                        return;
+                    }
+
+                    valueExpression = $"{SyntaxHelpers.Fqn("XamlRuntime")}.GetResource<object>({_rootScope}, {SyntaxHelpers.Quote(key!)})";
+                    break;
+
+                case "DynamicResource":
+                case "x:DynamicResource":
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        valueAttribute,
+                        $"A DynamicResource reference cannot be applied to the native CLR property '{propertyName}'; use a dependency property.");
+                    return;
+
+                case "x:Static":
+                    var staticExpression = CreateStaticExpression(
+                        valueAttribute,
+                        positional ?? (arguments.TryGetValue("Member", out var member) ? member : null));
+                    if (staticExpression is null)
+                    {
+                        return;
+                    }
+
+                    valueExpression = staticExpression;
+                    break;
+
+                default:
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        valueAttribute,
+                        "A native-control style setter supports literal, {StaticResource} and {x:Static} values only.");
+                    return;
+            }
+        }
         else if (!LiteralFactory.TryCreate(property.Type, valueAttribute.Value, out valueExpression, out _))
         {
             valueExpression =
-                $"{SyntaxHelpers.Fqn("XamlRuntime")}.ConvertValue({SyntaxHelpers.Quote(valueAttribute.Value)}, typeof({SyntaxHelpers.TypeName(property.Type)}))";
+                $"{SyntaxHelpers.Fqn("XamlRuntime")}.ConvertValue({SyntaxHelpers.Quote(valueAttribute.Value)}, typeof({RuntimeTypeName(property.Type)}))";
         }
 
         _current.Line(
@@ -2429,8 +3361,17 @@ internal sealed class XamlCompiler
 
         if (resource.HasElements)
         {
-            Report(Diagnostics.UnsupportedResource, resource, "Resource values must be scalar text in this subset.");
-            return false;
+            if (SyntaxHelpers.DerivesFrom(resourceType, SyntaxHelpers.ControlMetadataName))
+            {
+                Report(
+                    Diagnostics.UnsupportedResource,
+                    resource,
+                    "A Control resource must be empty; declare its content where the resource is used.");
+                return false;
+            }
+
+            expression = EmitXamlObject(resource, resourceType, null);
+            return true;
         }
 
         if (LiteralFactory.TryCreate(resourceType, resource.Value, out expression, out _))
@@ -2496,16 +3437,22 @@ internal sealed class XamlCompiler
 
         _helpers.Open($"private global::System.Windows.Forms.Control {methodName}()");
         var previous = _current;
+        var previousScope = _scopeExpression;
+        const string scopeVariable = "__xamlScope";
         _current = _helpers;
         _templateDepth++;
+        _helpers.Line($"var {scopeVariable} = new global::VeloxDev.WinForms.Xaml.NameScope();");
+        _scopeExpression = scopeVariable;
         string expression;
         try
         {
             expression = EmitControl(content, type, null);
+            _helpers.Line($"{expression}.NameScope = {scopeVariable};");
         }
         finally
         {
             _templateDepth--;
+            _scopeExpression = previousScope;
             _current = previous;
         }
 
@@ -2553,6 +3500,17 @@ internal sealed class XamlCompiler
             return false;
         }
 
+        var targetTypeAttribute = template.Attribute("TargetType");
+        ITypeSymbol? targetType = _owner;
+        if (targetTypeAttribute is not null)
+        {
+            targetType = ResolveTypeFromMarkup(targetTypeAttribute, targetTypeAttribute.Value);
+            if (targetType is null)
+            {
+                return false;
+            }
+        }
+
         var methodName = "CreateControlTemplate_" + SyntaxHelpers.SanitizeIdentifier(key);
         if (!_templateNames.Add(methodName))
         {
@@ -2562,24 +3520,73 @@ internal sealed class XamlCompiler
 
         _helpers.Open($"private global::System.Windows.Forms.Control {methodName}()");
         var previous = _current;
+        var previousScope = _scopeExpression;
+        const string scopeVariable = "__xamlScope";
         _current = _helpers;
         _templateDepth++;
+        _helpers.Line($"var {scopeVariable} = new global::VeloxDev.WinForms.Xaml.NameScope();");
+        _scopeExpression = scopeVariable;
         string expression;
         try
         {
             expression = EmitControl(content, type, null);
+            _helpers.Line($"{expression}.NameScope = {scopeVariable};");
         }
         finally
         {
             _templateDepth--;
+            _scopeExpression = previousScope;
             _current = previous;
         }
 
         _helpers.Line($"return {expression};");
         _helpers.Close();
 
+        var templateVariable = NextVariable();
         _current.Line(
-            $"{ownerExpression}.Resources[{SyntaxHelpers.Quote(key)}] = new {SyntaxHelpers.Fqn("ControlTemplate")}(this.{methodName});");
+            $"var {templateVariable} = new {SyntaxHelpers.Fqn("ControlTemplate")}(this.{methodName});");
+        if (targetTypeAttribute is not null && targetType is not null)
+        {
+            _current.Line($"{templateVariable}.TargetType = typeof({SyntaxHelpers.TypeName(targetType)});");
+        }
+
+        foreach (var child in template.Elements().Where(IsPropertyElement))
+        {
+            if (ChildMemberName(child) == "Triggers")
+            {
+                if (targetType is null)
+                {
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        child,
+                        "A ControlTemplate with triggers needs a TargetType.");
+                    continue;
+                }
+
+                foreach (var trigger in child.Elements())
+                {
+                    if (!IsTriggerElement(trigger))
+                    {
+                        Report(
+                            Diagnostics.UnsupportedConstruct,
+                            trigger,
+                            "The template Triggers collection only accepts Trigger, DataTrigger or MultiTrigger elements.");
+                        continue;
+                    }
+
+                    EmitTrigger(trigger, targetType, templateVariable);
+                }
+
+                continue;
+            }
+
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                child,
+                $"'{child.Name.LocalName}' is not a supported ControlTemplate member.");
+        }
+
+        _current.Line($"{ownerExpression}.Resources[{SyntaxHelpers.Quote(key)}] = {templateVariable};");
         return true;
     }
 
@@ -2852,7 +3859,7 @@ internal sealed class XamlCompiler
             return false;
         }
 
-        var split = body.IndexOfAny(new[] { ' ', ',', '\t' });
+        var split = IndexOfTopLevel(body, static character => character is ' ' or ',' or '\t');
         if (split < 0)
         {
             extension = body;
@@ -2862,7 +3869,7 @@ internal sealed class XamlCompiler
         extension = body.Substring(0, split).Trim();
         var rest = body.Substring(split + 1);
 
-        foreach (var part in rest.Split(','))
+        foreach (var part in SplitTopLevel(rest, ','))
         {
             var piece = part.Trim();
             if (piece.Length == 0)
@@ -2870,7 +3877,7 @@ internal sealed class XamlCompiler
                 continue;
             }
 
-            var equals = piece.IndexOf('=');
+            var equals = IndexOfTopLevel(piece, static character => character == '=');
             if (equals < 0)
             {
                 positional = TrimQuotes(piece);
@@ -2883,6 +3890,102 @@ internal sealed class XamlCompiler
         }
 
         return true;
+    }
+
+    // 标记扩展可以嵌套（Converter={StaticResource X}、AncestorType={x:Type local:Foo}），
+    // 所以分隔只认顶层；引号与方括号里的逗号和等号属于值本身。
+    private static int IndexOfTopLevel(string text, Func<char, bool> predicate)
+    {
+        var depth = 0;
+        var quote = '\0';
+        for (var index = 0; index < text.Length; index++)
+        {
+            var character = text[index];
+            if (quote != '\0')
+            {
+                if (character == quote && (index == 0 || text[index - 1] != '\\'))
+                {
+                    quote = '\0';
+                }
+
+                continue;
+            }
+
+            switch (character)
+            {
+                case '\'':
+                case '"':
+                    quote = character;
+                    continue;
+
+                case '{':
+                case '[':
+                case '(':
+                    depth++;
+                    continue;
+
+                case '}':
+                case ']':
+                case ')':
+                    depth = Math.Max(0, depth - 1);
+                    continue;
+            }
+
+            if (depth == 0 && predicate(character))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static IEnumerable<string> SplitTopLevel(string text, char separator)
+    {
+        var start = 0;
+        var depth = 0;
+        var quote = '\0';
+        for (var index = 0; index < text.Length; index++)
+        {
+            var character = text[index];
+            if (quote != '\0')
+            {
+                if (character == quote && (index == 0 || text[index - 1] != '\\'))
+                {
+                    quote = '\0';
+                }
+
+                continue;
+            }
+
+            switch (character)
+            {
+                case '\'':
+                case '"':
+                    quote = character;
+                    continue;
+
+                case '{':
+                case '[':
+                case '(':
+                    depth++;
+                    continue;
+
+                case '}':
+                case ']':
+                case ')':
+                    depth = Math.Max(0, depth - 1);
+                    continue;
+            }
+
+            if (depth == 0 && character == separator)
+            {
+                yield return text.Substring(start, index - start);
+                start = index + 1;
+            }
+        }
+
+        yield return text.Substring(start);
     }
 
     private static string TrimQuotes(string value)

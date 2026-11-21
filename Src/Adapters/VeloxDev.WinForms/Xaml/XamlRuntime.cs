@@ -105,6 +105,71 @@ public static class XamlRuntime
             return value is string span ? TimeSpan.Parse(span, CultureInfo.InvariantCulture) : value;
         }
 
+        if (typeof(Brush).IsAssignableFrom(targetType))
+        {
+            var brush = Brush.FromValue(value);
+            if (brush is null)
+            {
+                return null;
+            }
+
+            if (targetType.IsInstanceOfType(brush))
+            {
+                return brush;
+            }
+
+            if (targetType == typeof(SolidColorBrush))
+            {
+                return new SolidColorBrush(brush.ApproximateColor);
+            }
+
+            throw new InvalidCastException($"Cannot convert '{value}' to '{targetType}'.");
+        }
+
+        if (typeof(Geometry).IsAssignableFrom(targetType))
+        {
+            var geometry = value is Geometry existing
+                ? existing
+                : value is string geometryText
+                    ? Geometry.Parse(geometryText)
+                    : null;
+
+            if (geometry is null)
+            {
+                throw new InvalidCastException($"Cannot convert '{value}' to '{targetType}'.");
+            }
+
+            return targetType.IsInstanceOfType(geometry)
+                ? geometry
+                : throw new InvalidCastException($"Cannot convert '{value}' to '{targetType}'.");
+        }
+
+        if (typeof(ImageSource).IsAssignableFrom(targetType))
+        {
+            var source = value switch
+            {
+                ImageSource imageSource => imageSource,
+                string path => new BitmapImage { Path = path },
+                Uri uri => new BitmapImage { Uri = uri },
+                System.Drawing.Image image => new BitmapImage { Image = image },
+                _ => null,
+            };
+
+            if (source is null)
+            {
+                throw new InvalidCastException($"Cannot convert '{value}' to '{targetType}'.");
+            }
+
+            return targetType.IsInstanceOfType(source)
+                ? source
+                : throw new InvalidCastException($"Cannot convert '{value}' to '{targetType}'.");
+        }
+
+        if (targetType == typeof(System.Drawing.PointF[]))
+        {
+            return value is string pointText ? ParsePointFArray(pointText) : value;
+        }
+
         if (value is IConvertible && typeof(IConvertible).IsAssignableFrom(targetType))
         {
             return Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
@@ -281,6 +346,148 @@ public static class XamlRuntime
 
         property.SetValue(target, ConvertValue(value, property.PropertyType));
     }
+
+    private static readonly ConditionalWeakTable<System.Windows.Forms.Control, DynamicResourceTargetState> DynamicResourceTargets = new();
+
+    // 祖先链变化后让这个控件上的每条 DynamicResource 重新解析。
+    internal static void RefreshDynamicResources(System.Windows.Forms.Control target)
+    {
+        if (DynamicResourceTargets.TryGetValue(target, out var state))
+        {
+            foreach (var entry in state.Entries.Values)
+            {
+                entry.Refresh();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies the resource stored under <paramref name="key"/> to <paramref name="property"/> on
+    /// <paramref name="target"/> and keeps following it.
+    /// </summary>
+    /// <param name="owner">The control whose ancestor resource chain is searched.</param>
+    /// <param name="target">The XAML control receiving the value.</param>
+    /// <param name="property">The dependency property to drive.</param>
+    /// <param name="key">The resource key.</param>
+    /// <remarks>
+    /// Replacing the resource in any dictionary on the owner chain, removing it, or moving the owner in the tree
+    /// re-resolves the value. <paramref name="target"/> is held weakly; its disposal ends the tracking.
+    /// </remarks>
+    public static void SetDynamicResource(
+        VeloxDev.WinForms.Xaml.Controls.Control owner,
+        VeloxDev.WinForms.Xaml.Controls.Control target,
+        DependencyProperty property,
+        object key)
+        => SetDynamicResourceCore(owner, target, property, key);
+
+    /// <summary>
+    /// Applies the resource stored under <paramref name="key"/> to <paramref name="property"/> on a native control and
+    /// keeps following it.
+    /// </summary>
+    /// <param name="owner">The XAML control whose ancestor resource chain is searched.</param>
+    /// <param name="target">The native control receiving the value.</param>
+    /// <param name="property">The dependency property to drive; it must be a dependency property.</param>
+    /// <param name="key">The resource key.</param>
+    public static void SetDynamicResource(
+        VeloxDev.WinForms.Xaml.Controls.Control owner,
+        System.Windows.Forms.Control target,
+        DependencyProperty property,
+        object key)
+        => SetDynamicResourceCore(owner, target, property, key);
+
+    /// <summary>
+    /// Creates a live resource source for a setter binding: reading its <c>Value</c> returns the resource currently
+    /// stored under <paramref name="key"/>, and it raises <c>PropertyChanged</c> when that value is replaced.
+    /// </summary>
+    /// <param name="owner">The control whose ancestor resource chain is searched.</param>
+    /// <param name="key">The resource key.</param>
+    /// <returns>An object exposing a <c>Value</c> property and change notification.</returns>
+    public static object CreateDynamicResourceProvider(
+        VeloxDev.WinForms.Xaml.Controls.Control owner,
+        object key)
+    {
+        if (owner is null) throw new ArgumentNullException(nameof(owner));
+        if (key is null) throw new ArgumentNullException(nameof(key));
+
+        return new DynamicResourceProvider(owner, key);
+    }
+
+    private static void SetDynamicResourceCore(
+        VeloxDev.WinForms.Xaml.Controls.Control owner,
+        System.Windows.Forms.Control target,
+        DependencyProperty property,
+        object key)
+    {
+        if (owner is null) throw new ArgumentNullException(nameof(owner));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (property is null) throw new ArgumentNullException(nameof(property));
+        if (key is null) throw new ArgumentNullException(nameof(key));
+
+        if (target.IsDisposed || target.Disposing)
+        {
+            return;
+        }
+
+        var state = DynamicResourceTargets.GetOrCreateValue(target);
+        if (state.Entries.TryGetValue(property, out var existing))
+        {
+            if (existing.Matches(owner, target, property, key))
+            {
+                existing.Refresh();
+                return;
+            }
+
+            state.Entries.Remove(property);
+            existing.Dispose();
+        }
+
+        state.Entries[property] = new DynamicResourceState(owner, target, property, key);
+    }
+
+    private sealed class DynamicResourceTargetState
+    {
+        public Dictionary<DependencyProperty, DynamicResourceState> Entries { get; } = [];
+    }
+
+    private static readonly ConditionalWeakTable<object, List<BindingExpression>> ObjectBindings = new();
+
+    /// <summary>Binds a plain CLR property on a non-control object, such as <see cref="InputBinding.Command"/>.</summary>
+    /// <param name="owner">The XAML control whose data context and name scope resolve the binding.</param>
+    /// <param name="target">The object receiving the value.</param>
+    /// <param name="propertyName">The target property name.</param>
+    /// <param name="binding">The binding description.</param>
+    public static void SetObjectBinding(
+        VeloxDev.WinForms.Xaml.Controls.Control owner,
+        object target,
+        string propertyName,
+        Binding binding)
+    {
+        if (owner is null) throw new ArgumentNullException(nameof(owner));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (binding is null) throw new ArgumentNullException(nameof(binding));
+
+        var expression = new BindingExpression(owner, binding, new PropertyBindingSink(target, propertyName));
+        var expressions = ObjectBindings.GetOrCreateValue(target);
+        expressions.Add(expression);
+
+        void Refresh(object? sender, EventArgs e) => expression.Refresh();
+        owner.DataContextChanged += Refresh;
+        owner.Disposed += (_, _) =>
+        {
+            owner.DataContextChanged -= Refresh;
+            expression.Dispose();
+            expressions.Remove(expression);
+        };
+
+        expression.Attach();
+    }
+
+    /// <summary>Registers a generated <c>x:Name</c> pair in a name scope.</summary>
+    /// <param name="scope">The view or template scope; <see langword="null"/> is ignored.</param>
+    /// <param name="name">The declared name.</param>
+    /// <param name="control">The control the name refers to.</param>
+    public static void RegisterName(NameScope? scope, string name, System.Windows.Forms.Control control)
+        => scope?.Register(name, control);
 
     /// <summary>Finds a registered attached property, or throws when the owner never registered it.</summary>
     /// <param name="ownerType">The type that registered the attached property.</param>
@@ -475,6 +682,14 @@ public static class XamlRuntime
             }
         }
 
+        foreach (var setter in nativeSetters.Values)
+        {
+            if (setter.Binding is not null || setter.Value is Binding)
+            {
+                throw new InvalidOperationException("A native style setter cannot use a binding.");
+            }
+        }
+
         foreach (var pair in nativeSetters)
         {
             var descriptor = TypeDescriptor.GetProperties(target).Find(pair.Key, ignoreCase: false)
@@ -493,6 +708,11 @@ public static class XamlRuntime
 
         foreach (var pair in dependencySetters)
         {
+            if (pair.Value.Binding is not null || pair.Value.Value is Binding)
+            {
+                throw new InvalidOperationException("A native style setter cannot use a binding.");
+            }
+
             var property = pair.Key;
             var oldValue = property.GetValue(target);
             property.SetValue(target, property.CoerceValue(target, pair.Value.Value));
@@ -579,6 +799,26 @@ public static class XamlRuntime
                 Apply();
             }
         }
+    }
+
+    private static System.Drawing.PointF[] ParsePointFArray(string text)
+    {
+        var pieces = text.Split([' ', ';', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        var points = new System.Drawing.PointF[pieces.Length];
+        for (var index = 0; index < pieces.Length; index++)
+        {
+            var pair = pieces[index].Split(',');
+            if (pair.Length != 2)
+            {
+                throw new FormatException($"'{text}' is not a point list (for example '0,0 10,0 10,10').");
+            }
+
+            points[index] = new System.Drawing.PointF(
+                float.Parse(pair[0], NumberStyles.Float, CultureInfo.InvariantCulture),
+                float.Parse(pair[1], NumberStyles.Float, CultureInfo.InvariantCulture));
+        }
+
+        return points;
     }
 
     private static int[] SplitNumbers(string text)

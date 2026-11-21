@@ -78,7 +78,9 @@ public static class XamlTransition
         DependencyProperty property,
         IReadOnlyList<KeyFrame> frames,
         TimeSpan duration,
-        IEaseCalculator? ease = null)
+        IEaseCalculator? ease = null,
+        int loopTime = 0,
+        bool isAutoReverse = false)
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
         if (property is null) throw new ArgumentNullException(nameof(property));
@@ -127,6 +129,8 @@ public static class XamlTransition
             {
                 Duration = segmentDuration,
                 Ease = ease ?? Eases.Cubic.Out,
+                LoopTime = loopTime,
+                IsAutoReverse = isAutoReverse,
             });
 
             previousOffset = offset;

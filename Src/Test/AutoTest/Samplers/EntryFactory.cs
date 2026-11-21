@@ -24,7 +24,8 @@ internal static class EntryFactory
         object start,
         object end,
         Expression<Func<TTarget, TValue>> selector,
-        Func<double, TValue> expected)
+        Func<double, TValue> expected,
+        Func<object?, object?, bool>? equivalent = null)
         where TSampler : ISampler
         where TTarget : new()
         where TValue : notnull
@@ -50,6 +51,7 @@ internal static class EntryFactory
                 return property.GetValue(target);
             },
             Expected = t => expected(t),
+            Equivalent = equivalent ?? (static (expected, actual) => object.Equals(expected, actual)),
         };
     }
 }

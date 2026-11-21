@@ -9,6 +9,7 @@ namespace VeloxDev.TransitionSystem
         {
             RegisterInterpolator(typeof(Padding), new PaddingSampler());
             RegisterInterpolator(typeof(Thickness), new ThicknessSampler());
+            RegisterInterpolator(typeof(VeloxDev.WinForms.Xaml.Brush), new BrushSampler());
         }
 
         /// <inheritdoc />

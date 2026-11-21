@@ -10,6 +10,22 @@ public abstract class TriggerAction
     public abstract void Invoke(VeloxDev.WinForms.Xaml.Controls.Control control);
 }
 
+/// <summary>Runs several actions in declaration order when a trigger enters or exits.</summary>
+public sealed class TriggerActionGroup : TriggerAction
+{
+    /// <summary>The actions to run, in order.</summary>
+    public IList<TriggerAction> Actions { get; } = new List<TriggerAction>();
+
+    /// <inheritdoc />
+    public override void Invoke(VeloxDev.WinForms.Xaml.Controls.Control control)
+    {
+        foreach (var action in Actions)
+        {
+            action?.Invoke(control);
+        }
+    }
+}
+
 /// <summary>
 /// A trigger action that animates one dependency property to <see cref="To"/> through the VeloxDev transition
 /// system's WinForms host and samplers.
@@ -25,6 +41,12 @@ public sealed class TransitionAction : TriggerAction
     /// <summary>The timing and easing of the animation; omitted means a 240 ms ease-out.</summary>
     public TransitionEffect? Effect { get; set; }
 
+    /// <summary>Additional full passes; zero runs once and <see cref="int.MaxValue"/> repeats forever.</summary>
+    public int LoopTime { get; set; }
+
+    /// <summary>Whether each pass also runs backwards.</summary>
+    public bool IsAutoReverse { get; set; }
+
     /// <inheritdoc />
     public override void Invoke(VeloxDev.WinForms.Xaml.Controls.Control control)
     {
@@ -33,6 +55,24 @@ public sealed class TransitionAction : TriggerAction
             throw new InvalidOperationException("A TransitionAction needs a Property.");
         }
 
-        XamlTransition.Animate(control, Property, To, Effect);
+        var effect = ResolveEffect();
+        XamlTransition.Animate(control, Property, To, effect);
+    }
+
+    private TransitionEffect? ResolveEffect()
+    {
+        if (LoopTime == 0 && !IsAutoReverse)
+        {
+            return Effect;
+        }
+
+        return new TransitionEffect
+        {
+            Duration = Effect?.Duration ?? TimeSpan.FromMilliseconds(240),
+            Ease = Effect?.Ease ?? Eases.Cubic.Out,
+            FPS = Effect?.FPS ?? 60,
+            LoopTime = LoopTime,
+            IsAutoReverse = IsAutoReverse,
+        };
     }
 }

@@ -44,6 +44,20 @@ public abstract class Selector : Control
         typeof(Selector),
         new PropertyMetadata(string.Empty, OnDisplayMemberPathPropertyChanged));
 
+    /// <summary>The property path used to derive <see cref="SelectedValue"/> from <see cref="SelectedItem"/>.</summary>
+    public static readonly DependencyProperty SelectedValuePathProperty = DependencyProperty.Register(
+        nameof(SelectedValuePath),
+        typeof(string),
+        typeof(Selector),
+        new PropertyMetadata(string.Empty, OnSelectedValuePathPropertyChanged));
+
+    /// <summary>The value of <see cref="SelectedItem"/> read through <see cref="SelectedValuePath"/>.</summary>
+    public static readonly DependencyProperty SelectedValueProperty = DependencyProperty.Register(
+        nameof(SelectedValue),
+        typeof(object),
+        typeof(Selector),
+        new PropertyMetadata(null, OnSelectedValuePropertyChanged));
+
     /// <summary>The border stroke colour; a translucent black by default.</summary>
     public static readonly DependencyProperty BorderBrushProperty = DependencyProperty.Register(
         nameof(BorderBrush),
@@ -58,10 +72,14 @@ public abstract class Selector : Control
         typeof(Selector),
         new PropertyMetadata(new Thickness(1f), OnVisualPropertyChanged));
 
+    private readonly List<object?> _selectedItems = [];
     private INotifyCollectionChanged? _observed;
 
     // 原生选择变化回写 DP 时，DP 回调不能再推回原生控件。
     private bool syncing;
+
+    // SelectedValue 由 SelectedItem 反推时，不能再按值反选一次。
+    private bool syncingValue;
 
     /// <summary>Gets or sets the sequence shown by the selector.</summary>
     [Browsable(false)]
@@ -94,6 +112,36 @@ public abstract class Selector : Control
         get => (string?)GetValue(DisplayMemberPathProperty) ?? string.Empty;
         set => SetValue(DisplayMemberPathProperty, value);
     }
+
+    /// <summary>Gets or sets the property path used to derive <see cref="SelectedValue"/>.</summary>
+    /// <remarks>An empty path means the selected item is the selected value.</remarks>
+    public string SelectedValuePath
+    {
+        get => (string?)GetValue(SelectedValuePathProperty) ?? string.Empty;
+        set => SetValue(SelectedValuePathProperty, value);
+    }
+
+    /// <summary>Gets or sets the selected value, matched through <see cref="SelectedValuePath"/>.</summary>
+    /// <remarks>Assigning a value selects the first item whose path value equals it; an unmatched assignment keeps the current selection.</remarks>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public object? SelectedValue
+    {
+        get => GetValue(SelectedValueProperty);
+        set => SetValue(SelectedValueProperty, value);
+    }
+
+    /// <summary>The items selected in the native selector.</summary>
+    /// <remarks>
+    /// The collection is a live snapshot: the base selector mirrors its single selected item, while a multi-select
+    /// selector such as <see cref="ListBox"/> mirrors every selected item after a native selection change.
+    /// </remarks>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public IList SelectedItems => _selectedItems;
+
+    /// <summary>The storage behind <see cref="SelectedItems"/>, for derived selectors that mirror a multi-selection.</summary>
+    protected IList SelectedItemsCore => _selectedItems;
 
     /// <summary>Gets or sets the border stroke colour.</summary>
     public Color BorderBrush
@@ -295,6 +343,12 @@ public abstract class Selector : Control
         }
 
         ApplySelectorProperties();
+        if (SelectedItem is null && SelectedValue is not null)
+        {
+            TrySelectByValue();
+        }
+
+        UpdateSelectedItems();
         PerformLayout();
         Invalidate();
     }
@@ -355,6 +409,101 @@ public abstract class Selector : Control
         {
             syncing = false;
         }
+
+        UpdateSelectedValueFromItem();
+    }
+
+    /// <summary>Copies the native selection into <see cref="SelectedItems"/>.</summary>
+    protected virtual void UpdateSelectedItems()
+    {
+        _selectedItems.Clear();
+        if (NativeSelectedItem is { } item)
+        {
+            _selectedItems.Add(item);
+        }
+    }
+
+    private void UpdateSelectedValueFromItem()
+    {
+        if (syncing || syncingValue || IsDisposed)
+        {
+            return;
+        }
+
+        var item = SelectedItem;
+        object? value = item;
+        if (item is not null && SelectedValuePath is { Length: > 0 } path)
+        {
+            // 路径解析失败时不要把 null 当成 SelectedValue，保留调用方写的值。
+            if (!TryResolveValue(item, path, out value))
+            {
+                return;
+            }
+        }
+
+        if (Equals(SelectedValue, value))
+        {
+            return;
+        }
+
+        syncingValue = true;
+        try
+        {
+            SetValue(SelectedValueProperty, value);
+        }
+        finally
+        {
+            syncingValue = false;
+        }
+    }
+
+    private void TrySelectByValue()
+    {
+        if (IsDisposed || syncing || syncingValue)
+        {
+            return;
+        }
+
+        if (ItemsSource is { } source)
+        {
+            foreach (var item in source)
+            {
+                if (MatchesSelectedValue(item))
+                {
+                    SelectedItem = item;
+                    return;
+                }
+            }
+        }
+
+        if (SelectedValue is null)
+        {
+            // 显式写入 null 表示清空选择；找不到匹配项时保持原选择。
+            SelectedItem = null;
+            SelectedIndex = -1;
+        }
+    }
+
+    private bool MatchesSelectedValue(object? item)
+    {
+        if (SelectedValuePath is { Length: > 0 } path)
+        {
+            return TryResolveValue(item, path, out var value) && Equals(value, SelectedValue);
+        }
+
+        return Equals(item, SelectedValue);
+    }
+
+    private static bool TryResolveValue(object? item, string path, out object? value)
+    {
+        value = null;
+        if (item is null)
+        {
+            return false;
+        }
+
+        var bindingPath = new BindingPath(path);
+        return bindingPath.TryResolve(item, out value, out _, out _);
     }
 
     private void AttachSource(IEnumerable? source)
@@ -396,6 +545,8 @@ public abstract class Selector : Control
             syncing = false;
         }
 
+        UpdateSelectedItems();
+        UpdateSelectedValueFromItem();
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -431,6 +582,22 @@ public abstract class Selector : Control
         if (target is Selector selector && !selector.IsDisposed)
         {
             selector.ApplySelectorProperties();
+        }
+    }
+
+    private static void OnSelectedValuePathPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Selector selector && !selector.IsDisposed)
+        {
+            selector.UpdateSelectedValueFromItem();
+        }
+    }
+
+    private static void OnSelectedValuePropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Selector selector && !selector.IsDisposed && !selector.syncingValue)
+        {
+            selector.TrySelectByValue();
         }
     }
 
@@ -476,6 +643,40 @@ public class ListBox : Selector
     {
         get => (System.Windows.Forms.SelectionMode)GetValue(SelectionModeProperty)!;
         set => SetValue(SelectionModeProperty, value);
+    }
+
+    /// <summary>Selects every item when <see cref="SelectionMode"/> allows multiple selections.</summary>
+    public void SelectAll()
+    {
+        if (listBox.SelectionMode == System.Windows.Forms.SelectionMode.One)
+        {
+            return;
+        }
+
+        listBox.BeginUpdate();
+        try
+        {
+            for (var index = 0; index < listBox.Items.Count; index++)
+            {
+                listBox.SetSelected(index, true);
+            }
+        }
+        finally
+        {
+            listBox.EndUpdate();
+        }
+
+        UpdateSelectedItems();
+    }
+
+    /// <inheritdoc />
+    protected override void UpdateSelectedItems()
+    {
+        SelectedItemsCore.Clear();
+        foreach (var item in listBox.SelectedItems)
+        {
+            SelectedItemsCore.Add(item);
+        }
     }
 
     /// <inheritdoc />

@@ -119,6 +119,9 @@ public class ScrollViewer : Control
     private readonly ScrollBar horizontalScrollBar;
     private readonly ScrollBar verticalScrollBar;
 
+    /// <summary>Raised after <see cref="ScrollOffset"/> or a viewport/extent value changes.</summary>
+    public event EventHandler? ViewChanged;
+
     // 条的值与 ScrollOffset 互相写：任何一方的程序化同步都要把另一方的变更事件挡掉，否则会来回跳。
     private bool updatingBars;
 
@@ -273,6 +276,7 @@ public class ScrollViewer : Control
         if (target is ScrollViewer viewer && !viewer.IsDisposed)
         {
             viewer.UpdateBars();
+            viewer.ViewChanged?.Invoke(viewer, EventArgs.Empty);
         }
     }
 
@@ -281,6 +285,7 @@ public class ScrollViewer : Control
         if (target is ScrollViewer viewer && !viewer.IsDisposed && !viewer.updatingBars)
         {
             viewer.UpdateBars();
+            viewer.ViewChanged?.Invoke(viewer, EventArgs.Empty);
         }
     }
 
@@ -346,8 +351,68 @@ public class ScrollViewer : Control
             updatingBars = false;
         }
 
+        // 拖动条时 OnScrollOffsetChanged 被 updatingBars 门住，不会发 ViewChanged；
+        // 这里补一发，虚拟化宿主的可见集才会跟着条走。
+        ViewChanged?.Invoke(this, EventArgs.Empty);
         Scroll?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <inheritdoc />
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+
+        if (!IsEnabled || e.Delta == 0 || IsDisposed)
+        {
+            return;
+        }
+
+        var lines = SystemInformation.MouseWheelScrollLines;
+        var step = lines > 0
+            ? lines * 16
+            : Math.Max(16, (int)Math.Round(EffectiveViewportHeight / 3d));
+        var notches = e.Delta / (double)SystemInformation.MouseWheelScrollDelta;
+        var shift = (ModifierKeys & Keys.Shift) != 0;
+        var offset = ScrollOffset;
+        var x = offset.X;
+        var y = offset.Y;
+
+        if (shift && horizontalScrollBar.Visible)
+        {
+            x = Clamp(x - (int)Math.Round(notches * step), 0, MaxOffsetX);
+        }
+        else if (verticalScrollBar.Visible)
+        {
+            y = Clamp(y - (int)Math.Round(notches * step), 0, MaxOffsetY);
+        }
+        else if (horizontalScrollBar.Visible)
+        {
+            x = Clamp(x - (int)Math.Round(notches * step), 0, MaxOffsetX);
+        }
+        else
+        {
+            return;
+        }
+
+        if (x == offset.X && y == offset.Y)
+        {
+            return;
+        }
+
+        // 与拖动滚动条走同一条 DP 通路；ViewChanged 会让虚拟化宿主重算可见集。
+        SetValue(ScrollOffsetProperty, new Point(x, y));
+    }
+
+    private int EffectiveViewportWidth => ViewportWidth > 0d ? (int)Math.Round(ViewportWidth) : ClientSize.Width;
+
+    private int EffectiveViewportHeight => ViewportHeight > 0d ? (int)Math.Round(ViewportHeight) : ClientSize.Height;
+
+    private int MaxOffsetX => (int)Math.Round(Math.Max(0d, ExtentWidth - EffectiveViewportWidth));
+
+    private int MaxOffsetY => (int)Math.Round(Math.Max(0d, ExtentHeight - EffectiveViewportHeight));
+
+    private static int Clamp(int value, int minimum, int maximum)
+        => value < minimum ? minimum : value > maximum ? maximum : value;
 
     // 视口与范围先算，再夹偏移、同步两条原生滚动条；两次收敛处理纵横条互相占用空间。
     private void UpdateBars()

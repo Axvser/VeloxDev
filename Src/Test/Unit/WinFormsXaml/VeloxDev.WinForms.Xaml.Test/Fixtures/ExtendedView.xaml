@@ -1,0 +1,91 @@
+<local:ExtendedView
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:VeloxDev.WinForms.Xaml.Test.Fixtures"
+    xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+    x:Class="VeloxDev.WinForms.Xaml.Test.Fixtures.ExtendedView"
+    Size="480, 360">
+
+  <local:ExtendedView.Resources>
+    <v:ResourceDictionary>
+      <local:BracketConverter x:Key="Bracket" />
+      <v:DataTemplate x:Key="ItemTemplate">
+        <v:TextBlock Text="{Binding Name}" Size="120, 20" />
+      </v:DataTemplate>
+      <v:Style x:Key="BoundTitleStyle" TargetType="local:ExtendedCard">
+        <v:Style.Setters>
+          <v:Setter Property="Title" Value="{Binding Caption}" />
+        </v:Style.Setters>
+      </v:Style>
+      <v:ControlTemplate x:Key="CardTemplate" TargetType="local:ExtendedCard">
+        <v:Border Padding="0">
+          <v:TextBlock x:Name="PART_Text" Text="{TemplateBinding Title}" />
+        </v:Border>
+        <v:ControlTemplate.Triggers>
+          <v:Trigger Property="IsHot" Value="True">
+            <v:Trigger.Setters>
+              <v:Setter TargetName="PART_Text"
+                        TargetType="v:TextBlock"
+                        Property="Text"
+                        Value="hot" />
+            </v:Trigger.Setters>
+          </v:Trigger>
+        </v:ControlTemplate.Triggers>
+      </v:ControlTemplate>
+      <v:Style x:Key="TemplatedCardStyle" TargetType="local:ExtendedCard">
+        <v:Style.Setters>
+          <v:Setter Property="StyleValue" Value="9" />
+        </v:Style.Setters>
+        <v:Style.Template>
+          <StaticResource Key="CardTemplate" />
+        </v:Style.Template>
+      </v:Style>
+    </v:ResourceDictionary>
+  </local:ExtendedView.Resources>
+
+  <Label x:Name="sourceLabel" Text="source text" Size="120, 20" />
+  <v:TextBlock x:Name="staticText" Text="{x:Static local:ExtendedStatics.Value}" Size="120, 20" />
+  <v:TextBlock x:Name="elementText" Text="{Binding ElementName=sourceLabel, Path=Text}" Size="120, 20" />
+  <v:TextBlock x:Name="formattedText" Text="{Binding Amount, StringFormat=N2}" Size="120, 20" />
+
+  <local:ExtendedCard x:Name="card"
+                      Style="{StaticResource BoundTitleStyle}"
+                      Size="160, 60" />
+  <local:ExtendedCard x:Name="templateCard"
+                      Style="{StaticResource TemplatedCardStyle}"
+                      Size="160, 60" />
+
+  <v:Border x:Name="lowLayer" v:Panel.ZIndex="0" Size="40, 40" />
+  <v:Border x:Name="highLayer" v:Panel.ZIndex="5" Size="40, 40" />
+
+  <v:Button x:Name="menuButton"
+           Content="Menu"
+           ToolTip="tip text"
+           Size="80, 24">
+    <v:Button.ContextMenu>
+      <v:ContextMenu>
+        <v:MenuItem Header="Open" Click="OnMenuOpen" />
+      </v:ContextMenu>
+    </v:Button.ContextMenu>
+  </v:Button>
+
+  <v:Menu x:Name="menu" Size="80, 24">
+    <v:MenuItem Header="File" />
+  </v:Menu>
+
+  <v:ItemsControl x:Name="items"
+                  ItemsSource="{Binding Items}"
+                  ItemTemplate="{StaticResource ItemTemplate}"
+                  Size="160, 80">
+    <v:ItemsControl.ItemsPanel>
+      <v:StackPanel />
+    </v:ItemsControl.ItemsPanel>
+  </v:ItemsControl>
+
+  <v:Popup x:Name="popup" IsOpen="False">
+    <v:Popup.Child>
+      <v:Border x:Name="popupChild" Size="40, 40" />
+    </v:Popup.Child>
+  </v:Popup>
+
+</local:ExtendedView>

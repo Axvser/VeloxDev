@@ -1,0 +1,22 @@
+<local:CommandView
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:VeloxDev.WinForms.Xaml.Test.Fixtures"
+    xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+    x:Class="VeloxDev.WinForms.Xaml.Test.Fixtures.CommandView"
+    Size="320, 120">
+
+  <v:Button x:Name="commandButton"
+            Content="Save"
+            Command="{Binding SaveCommand}"
+            Size="100, 32" />
+
+  <v:Button x:Name="keyButton"
+            Content="Key"
+            Size="100, 32">
+    <v:Button.InputBindings>
+      <v:KeyBinding Key="F5" Command="{Binding SaveCommand}" />
+    </v:Button.InputBindings>
+  </v:Button>
+
+</local:CommandView>

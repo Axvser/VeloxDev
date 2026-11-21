@@ -21,19 +21,19 @@ namespace VeloxDev.WinForms.Xaml.Controls;
 /// </remarks>
 public class Border : Control
 {
-    /// <summary>The rounded body colour; a colour with alpha composites over <see cref="Backdrop"/>.</summary>
+    /// <summary>The rounded body brush; its alpha composites over <see cref="Backdrop"/>.</summary>
     public new static readonly DependencyProperty BackgroundProperty = DependencyProperty.Register(
         nameof(Background),
-        typeof(Color),
+        typeof(Brush),
         typeof(Border),
-        new PropertyMetadata(Color.Empty, OnVisualPropertyChanged));
+        new PropertyMetadata(null, OnVisualPropertyChanged));
 
-    /// <summary>The colour of the border stroke.</summary>
+    /// <summary>The brush of the border stroke.</summary>
     public static readonly DependencyProperty BorderBrushProperty = DependencyProperty.Register(
         nameof(BorderBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(Border),
-        new PropertyMetadata(Color.Empty, OnVisualPropertyChanged));
+        new PropertyMetadata(null, OnVisualPropertyChanged));
 
     /// <summary>The width of the border stroke per side, in pixels; an empty thickness draws no stroke.</summary>
     public static readonly DependencyProperty BorderThicknessProperty = DependencyProperty.Register(
@@ -68,17 +68,17 @@ public class Border : Control
         DoubleBuffered = true;
     }
 
-    /// <summary>Gets or sets the rounded body colour.</summary>
-    public new Color Background
+    /// <summary>Gets or sets the rounded body brush.</summary>
+    public new Brush? Background
     {
-        get => (Color)GetValue(BackgroundProperty)!;
+        get => GetValue(BackgroundProperty) as Brush;
         set => SetValue(BackgroundProperty, value);
     }
 
-    /// <summary>Gets or sets the border stroke colour.</summary>
-    public Color BorderBrush
+    /// <summary>Gets or sets the border stroke brush.</summary>
+    public Brush? BorderBrush
     {
-        get => (Color)GetValue(BorderBrushProperty)!;
+        get => GetValue(BorderBrushProperty) as Brush;
         set => SetValue(BorderBrushProperty, value);
     }
 
@@ -114,6 +114,17 @@ public class Border : Control
 
         var bounds = new RectangleF(0, 0, Width, Height);
 
+        // 圆角外侧不属于 Background 的路径：不垫父容器就会留下子窗口默认的黑色边。半透明/渐变同样要垫底，
+        // 否则子窗口 DC 里的旧内容会混进来。
+        if (Backdrop.IsEmpty)
+        {
+            PaintParentBackground(e);
+            if (Background is null && !HasXamlValue(BackColorProperty))
+            {
+                return;
+            }
+        }
+
         // 子窗口不与父窗口合成：先用不透明底色擦一遍，带 alpha 的 Background 才有确定的合成结果。
         var backdrop = Backdrop.IsEmpty
             ? (HasXamlValue(BackColorProperty) ? BackColor : Color.Transparent)
@@ -132,20 +143,18 @@ public class Border : Control
 
         using (path)
         {
-            if (Background.A > 0)
+            if (Background is { } body && body.ApproximateColor.A > 0)
             {
-                using var bodyBrush = new SolidBrush(Background);
-                graphics.FillPath(bodyBrush, path);
+                body.FillPath(graphics, path);
             }
 
             var thickness = BorderThickness;
-            if (BorderBrush.A > 0 && !thickness.IsEmpty)
+            if (BorderBrush is { } stroke && stroke.ApproximateColor.A > 0 && !thickness.IsEmpty)
             {
-                using var borderBrush = new SolidBrush(BorderBrush);
                 using var ring = CreateBorderRing(bounds, CornerRadius, thickness);
                 if (ring is not null)
                 {
-                    graphics.FillPath(borderBrush, ring);
+                    stroke.FillPath(graphics, ring);
                 }
             }
         }
@@ -171,10 +180,37 @@ public class Border : Control
             Math.Max(0, ClientSize.Height - padding.Vertical));
 
         var child = Controls[0];
-        if (child.Bounds != content)
+        if (child is Control xamlChild)
+        {
+            // 单内容槽也要走对齐：VerticalAlignment="Center" 的文本在 48px 的圆角块里才会真正居中，
+            // 直接 child.Bounds = content 会让 TextBlock 撑满内容区、文字落在顶部。
+            XamlLayout.Arrange(xamlChild, content);
+        }
+        else if (child.Bounds != content)
         {
             child.Bounds = content;
         }
+    }
+
+    /// <inheritdoc />
+    protected internal override Size MeasureCore(Size availableSize)
+    {
+        // Border 的首选尺寸来自唯一子控件 + Padding：卡片不再写死高度，改内容后也不会被裁掉。
+        var padding = Padding;
+        var horizontal = (int)Math.Ceiling(padding.Horizontal);
+        var vertical = (int)Math.Ceiling(padding.Vertical);
+        var inner = new Size(
+            availableSize.Width > 0 ? Math.Max(0, availableSize.Width - horizontal) : 0,
+            availableSize.Height > 0 ? Math.Max(0, availableSize.Height - vertical) : 0);
+
+        var measured = Controls.Count == 0
+            ? Size.Empty
+            : XamlLayout.Measure(Controls[0], inner);
+        var preferred = new Size(measured.Width + horizontal, measured.Height + vertical);
+
+        return new Size(
+            MeasureAxis(WidthProperty, preferred.Width, MinWidth, MaxWidth, availableSize.Width),
+            MeasureAxis(HeightProperty, preferred.Height, MinHeight, MaxHeight, availableSize.Height));
     }
 
     private static void OnVisualPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)

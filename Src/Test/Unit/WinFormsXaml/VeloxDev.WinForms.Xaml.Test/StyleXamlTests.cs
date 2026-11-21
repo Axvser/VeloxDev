@@ -113,7 +113,7 @@ public sealed class StyleXamlTests
         StringAssert.Contains(generated, ".Triggers.Add(__xaml");
         StringAssert.Contains(
             generated,
-            ".EnterAction = new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.ProbeCard.GlowProperty, To = 1D, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.1\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
+            "new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.ProbeCard.GlowProperty, To = 1D, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.1\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
         StringAssert.Contains(generated, "this.Resources[\"NodeStyle\"] =");
         StringAssert.Contains(generated, "this.Resources[\"ChildStyle\"] =");
         StringAssert.Contains(
@@ -209,7 +209,7 @@ public sealed class StyleXamlTests
                 """),
             "VELOX_XAML002");
 
-        Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         StringAssert.Contains(diagnostic.GetMessage(), "Bogus");
     }
 
@@ -224,7 +224,7 @@ public sealed class StyleXamlTests
                 """),
             "VELOX_XAML002");
 
-        Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         StringAssert.Contains(diagnostic.GetMessage(), "Bogus");
     }
 

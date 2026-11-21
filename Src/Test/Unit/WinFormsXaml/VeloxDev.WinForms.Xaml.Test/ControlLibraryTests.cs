@@ -28,6 +28,93 @@ public sealed class ControlLibraryTests
     }
 
     [TestMethod]
+    public void StackPanel_KeepsAnExplicitCrossAxisSize()
+    {
+        using var panel = new V.StackPanel { Size = new Size(200, 100), Orientation = Orientation.Horizontal };
+        using var child = new V.Border { Width = 30, Height = 20, Margin = V.Thickness.Empty };
+        panel.Controls.Add(child);
+
+        panel.PerformLayout();
+
+        // 横向堆叠的交叉轴是整条带高；显式 Height 不能被 Stretch 覆盖，且应居中。
+        Assert.AreEqual(new Rectangle(0, 40, 30, 20), child.Bounds);
+    }
+
+    [TestMethod]
+    public void AnInheritedBackColor_DoesNotBecomeAPaintedBackground()
+    {
+        using var parent = new V.Panel { BackColor = Color.FromArgb(0xFF, 0x12, 0x34, 0x56) };
+        using var child = new V.TextBlock();
+        parent.Controls.Add(child);
+
+        Assert.IsNull(child.Background, "an ambient BackColor is not an authored background");
+    }
+
+    [TestMethod]
+    public void Border_CentersASingleChildWithCenterAlignment()
+    {
+        using var border = new V.Border { Size = new Size(100, 60), Padding = V.Thickness.Empty };
+        using var child = new V.TextBlock
+        {
+            Text = "centered",
+            Margin = V.Thickness.Empty,
+            HorizontalAlignment = V.HorizontalAlignment.Stretch,
+            VerticalAlignment = V.VerticalAlignment.Center,
+        };
+        border.Controls.Add(child);
+
+        border.PerformLayout();
+
+        Assert.AreEqual(100, child.Width);
+        Assert.IsLessThan(60, child.Height, "the child keeps its measured height");
+        Assert.AreEqual((60 - child.Height) / 2, child.Top, "the child is centered in the content slot");
+    }
+
+    [TestMethod]
+    public void TextBlock_UsesTheAvailableWidthForWrapping()
+    {
+        using var text = new V.TextBlock
+        {
+            Text = "A wrapping line keeps every word inside the width it is measured with.",
+            TextWrapping = V.TextWrapping.Wrap,
+        };
+
+        var narrow = text.Measure(new Size(120, 0));
+        var wide = text.Measure(new Size(2000, 0));
+
+        Assert.IsGreaterThan(wide.Height * 2, narrow.Height, "a narrow measure wraps onto more lines");
+        Assert.IsLessThan(120, narrow.Width, "the preferred width stays inside the available width");
+    }
+
+    [TestMethod]
+    public void StackPanel_KeepsItsOwnExplicitSize()
+    {
+        using var panel = new V.StackPanel { Width = 250, Height = 100 };
+        using var child = new V.Border { Height = 20, Margin = V.Thickness.Empty };
+        panel.Controls.Add(child);
+
+        Assert.AreEqual(new Size(250, 100), panel.Measure(new Size(1000, 1000)));
+    }
+
+    [TestMethod]
+    public void Border_MeasuresItsChildPlusPadding()
+    {
+        using var border = new V.Border { Padding = new V.Thickness(10), Width = 200 };
+        using var text = new V.TextBlock
+        {
+            Text = "A wrapping line keeps every word inside the width it is measured with.",
+            TextWrapping = V.TextWrapping.Wrap,
+            Margin = V.Thickness.Empty,
+        };
+        border.Controls.Add(text);
+
+        var measured = border.Measure(new Size(200, 0));
+
+        Assert.AreEqual(200, measured.Width);
+        Assert.IsGreaterThan(40, measured.Height, "10px padding plus at least two wrapped lines");
+    }
+
+    [TestMethod]
     public void StackPanel_MeasuresTheSumOfItsChildren()
     {
         using var panel = new V.StackPanel { Spacing = 2 };
@@ -211,7 +298,7 @@ public sealed class ControlLibraryTests
         ((System.Windows.Forms.Control)button).Margin = new System.Windows.Forms.Padding(7);
         button.Style = style;
 
-        Assert.AreEqual(Color.Red, button.Background);
+        Assert.AreEqual(Color.Red, button.Background?.ApproximateColor);
         Assert.AreEqual(new V.Thickness(5f), button.Margin);
         Assert.AreEqual(4f, button.CornerRadius);
 

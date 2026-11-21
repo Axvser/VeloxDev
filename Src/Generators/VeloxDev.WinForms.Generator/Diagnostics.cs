@@ -16,7 +16,7 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor UnknownMember = new(
         "VELOX_XAML002", "Unknown XAML member",
         "'{0}' has no property or event named '{1}'",
-        XamlCategory, DiagnosticSeverity.Warning, isEnabledByDefault: true);
+        XamlCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor UnsupportedValue = new(
         "VELOX_XAML003", "Unsupported XAML value",

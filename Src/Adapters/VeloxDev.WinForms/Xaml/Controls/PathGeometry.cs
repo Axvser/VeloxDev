@@ -8,7 +8,8 @@ namespace VeloxDev.WinForms.Xaml.Controls.Shapes;
 using VeloxDev.WinForms.Xaml.Controls;
 
 // 只覆盖 <Path Data="..."> 常用的 SVG 子集；看不懂的字符就地停下，返回已经画出的部分。
-internal static class PathGeometry
+// 类名避开运行时 .Xaml 里公开的 PathGeometry：同名会让 v:PathGeometry 解析到这个 internal 类型。
+internal static class SvgPathParser
 {
     private static readonly Regex TokenPattern = new(
         @"[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?",

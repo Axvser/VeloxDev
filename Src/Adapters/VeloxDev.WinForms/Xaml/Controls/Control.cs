@@ -77,8 +77,22 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         typeof(Control),
         new PropertyMetadata(Color.Empty, OnBackColorPropertyChanged));
 
-    /// <summary>The WPF/Avalonia spelling of <see cref="BackColorProperty"/>.</summary>
-    public static readonly DependencyProperty BackgroundProperty = BackColorProperty;
+    /// <summary>The background brush; the WPF shape of <see cref="BackColorProperty"/>.</summary>
+    /// <remarks>
+    /// <para>
+    /// A <see cref="SolidColorBrush"/> is mirrored into <see cref="BackColorProperty"/> so the native property and old
+    /// callers keep seeing the colour; a written colour is mirrored back as a solid brush. Gradients live only here.
+    /// </para>
+    /// <para>
+    /// The default is <see langword="null"/>: a control with no authored background stays transparent instead of
+    /// painting the WinForms system colour.
+    /// </para>
+    /// </remarks>
+    public static readonly DependencyProperty BackgroundProperty = DependencyProperty.Register(
+        nameof(Background),
+        typeof(Brush),
+        typeof(Control),
+        new PropertyMetadata(null));
 
     /// <summary>The text colour; a WPF-named alias for the native <see cref="System.Windows.Forms.Control.ForeColor"/>.</summary>
     /// <remarks>Unlike the native property, this is a dependency property, so a style, trigger or transition can drive it.</remarks>
@@ -88,8 +102,13 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         typeof(Control),
         new PropertyMetadata(Color.Empty, OnForeColorPropertyChanged));
 
-    /// <summary>The WPF/Avalonia spelling of <see cref="ForeColorProperty"/>.</summary>
-    public static readonly DependencyProperty ForegroundProperty = ForeColorProperty;
+    /// <summary>The text brush; the WPF shape of <see cref="ForeColorProperty"/>.</summary>
+    /// <remarks>A <see cref="SolidColorBrush"/> is mirrored into <see cref="ForeColorProperty"/> and a written colour back into a solid brush.</remarks>
+    public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
+        nameof(Foreground),
+        typeof(Brush),
+        typeof(Control),
+        new PropertyMetadata(null));
 
     /// <summary>The font used by this control; null means the native <see cref="System.Windows.Forms.Control.Font"/>.</summary>
     public static readonly DependencyProperty FontProperty = DependencyProperty.Register(
@@ -154,6 +173,20 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         typeof(Control),
         new PropertyMetadata(true, OnIsEnabledPropertyChanged));
 
+    /// <summary>The position of this control in the tab order; <c>-1</c> means no explicit position.</summary>
+    public static readonly DependencyProperty TabIndexProperty = DependencyProperty.Register(
+        nameof(TabIndex),
+        typeof(int),
+        typeof(Control),
+        new PropertyMetadata(-1, OnTabIndexPropertyChanged) { AffectsRender = false });
+
+    /// <summary>Whether the Tab key can stop on this control; mirrors the native <see cref="System.Windows.Forms.Control.TabStop"/>.</summary>
+    public static readonly DependencyProperty IsTabStopProperty = DependencyProperty.Register(
+        nameof(IsTabStop),
+        typeof(bool),
+        typeof(Control),
+        new PropertyMetadata(true, OnIsTabStopPropertyChanged) { AffectsRender = false });
+
     /// <summary>How a layout panel places this control horizontally inside its slot.</summary>
     public static readonly DependencyProperty HorizontalAlignmentProperty = DependencyProperty.Register(
         nameof(HorizontalAlignment),
@@ -172,9 +205,13 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     private readonly Dictionary<DependencyProperty, BindingExpression> _bindings = [];
     private readonly List<BindingExpression> _attachedBindings = [];
     private readonly List<NativeBindingEntry> _nativeBindings = [];
+    private NameScope? _nativeBindingScope;
     private readonly Dictionary<Trigger, TriggerRuntimeState> _triggerStates = [];
+    private readonly Dictionary<Trigger, TriggerRuntimeState> _templateTriggerStates = [];
     private readonly ResourceDictionary _resources = new();
+    private readonly InputBindingCollection _inputBindings = new();
     private readonly Dictionary<DependencyProperty, object?> _styleValues = [];
+    private readonly Dictionary<DependencyProperty, BindingExpression> _styleSetterBindings = [];
     private readonly Dictionary<DependencyProperty, List<StyleTriggerValue>> _styleTriggerValues = [];
     private readonly List<Trigger> _styleTriggers = [];
     private readonly Dictionary<Trigger, int> _styleTriggerOrders = [];
@@ -187,11 +224,16 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     private Control? _styleResourceScope;
     private object? _styleResourceKey;
     private System.Windows.Forms.Control? _templateContent;
+    private ControlTemplate? _templateTemplate;
     private readonly HashSet<Keys> _pressedKeys = [];
     private bool _evaluatingTriggers;
     private bool _applyingNativeBindings;
     private bool _pointerCaptured;
     private bool _disposed;
+
+    // Brush 面与 Color 面互为镜像：只在作者直接写入时同步，样式/触发器/过渡层各自独立。
+    private XamlValueSource _changeSource = XamlValueSource.Local;
+    private bool _syncingColorAlias;
 
     // DP 清除（样式/触发器退出）时要还原到接管前的原生值，否则原生属性会停在最后一帧。
     private Color? _nativeBackColorFallback;
@@ -262,7 +304,10 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     }
 
     /// <summary>Gets or sets the background colour.</summary>
-    /// <remarks>An unset value falls back to the native <see cref="System.Windows.Forms.Control.BackColor"/>.</remarks>
+    /// <remarks>
+    /// An unset value falls back to a <see cref="SolidColorBrush"/> written through <see cref="BackgroundProperty"/>,
+    /// then to the native <see cref="System.Windows.Forms.Control.BackColor"/>.
+    /// </remarks>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public new Color BackColor
@@ -270,22 +315,59 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         get
         {
             var value = (Color)GetValue(BackColorProperty)!;
-            return value.IsEmpty ? base.BackColor : value;
+            if (!value.IsEmpty)
+            {
+                return value;
+            }
+
+            return HasXamlValue(BackgroundProperty) && GetValue(BackgroundProperty) is Brush brush
+                ? brush.ApproximateColor
+                : base.BackColor;
         }
         set => SetValue(BackColorProperty, value);
     }
 
-    /// <summary>Gets or sets the background colour using the WPF/Avalonia property name.</summary>
+    /// <summary>Gets or sets the background brush; the WPF/Avalonia spelling of <see cref="BackColor"/>.</summary>
+    /// <remarks>
+    /// When no brush is set the property derives one from an authored <see cref="BackColor"/>; otherwise it returns
+    /// <see langword="null"/> so the control stays transparent.
+    /// </remarks>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color Background
+    public Brush? Background
     {
-        get => BackColor;
-        set => BackColor = value;
+        get
+        {
+            if (HasXamlValue(BackgroundProperty))
+            {
+                return GetValue(BackgroundProperty) as Brush;
+            }
+
+            if (HasXamlValue(BackColorProperty))
+            {
+                var color = (Color)GetValue(BackColorProperty)!;
+                return color.IsEmpty ? null : new SolidColorBrush(color);
+            }
+
+            // 原生 BackColor 是环境继承值：没作者写过时它等于父控件的 BackColor（或系统默认），
+            // 不能当成「作者设了背景」，否则子控件会用一块不透明底色盖住父控件的渐变/圆角。
+            if (base.BackColor == DefaultBackColor)
+            {
+                return null;
+            }
+
+            return Parent is { } parent && base.BackColor == parent.BackColor
+                ? null
+                : new SolidColorBrush(base.BackColor);
+        }
+        set => SetValue(BackgroundProperty, value);
     }
 
     /// <summary>Gets or sets the text colour.</summary>
-    /// <remarks>An unset value falls back to the native <see cref="System.Windows.Forms.Control.ForeColor"/>.</remarks>
+    /// <remarks>
+    /// An unset value falls back to a <see cref="SolidColorBrush"/> written through <see cref="ForegroundProperty"/>,
+    /// then to the native <see cref="System.Windows.Forms.Control.ForeColor"/>.
+    /// </remarks>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public new Color ForeColor
@@ -293,18 +375,40 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         get
         {
             var value = (Color)GetValue(ForeColorProperty)!;
-            return value.IsEmpty ? base.ForeColor : value;
+            if (!value.IsEmpty)
+            {
+                return value;
+            }
+
+            return HasXamlValue(ForegroundProperty) && GetValue(ForegroundProperty) is Brush brush
+                ? brush.ApproximateColor
+                : base.ForeColor;
         }
         set => SetValue(ForeColorProperty, value);
     }
 
-    /// <summary>Gets or sets the text colour using the WPF/Avalonia property name.</summary>
+    /// <summary>Gets or sets the text brush; the WPF/Avalonia spelling of <see cref="ForeColor"/>.</summary>
+    /// <remarks>When no brush is set the property derives one from an authored <see cref="ForeColor"/> or the native colour.</remarks>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color Foreground
+    public Brush? Foreground
     {
-        get => ForeColor;
-        set => ForeColor = value;
+        get
+        {
+            if (HasXamlValue(ForegroundProperty))
+            {
+                return GetValue(ForegroundProperty) as Brush;
+            }
+
+            if (HasXamlValue(ForeColorProperty))
+            {
+                var color = (Color)GetValue(ForeColorProperty)!;
+                return color.IsEmpty ? null : new SolidColorBrush(color);
+            }
+
+            return new SolidColorBrush(base.ForeColor);
+        }
+        set => SetValue(ForegroundProperty, value);
     }
 
     /// <summary>Gets or sets the font; null falls back to the native <see cref="System.Windows.Forms.Control.Font"/>.</summary>
@@ -384,6 +488,26 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         set => SetValue(IsEnabledProperty, value);
     }
 
+    /// <summary>Gets or sets this control's position in the tab order; <c>-1</c> means no explicit position.</summary>
+    /// <remarks>Setting a value writes the native <see cref="System.Windows.Forms.Control.TabIndex"/>.</remarks>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public new int TabIndex
+    {
+        get => (int)GetValue(TabIndexProperty)!;
+        set => SetValue(TabIndexProperty, value);
+    }
+
+    /// <summary>Gets or sets whether the Tab key can stop on this control.</summary>
+    /// <remarks>Setting a value writes the native <see cref="System.Windows.Forms.Control.TabStop"/>.</remarks>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool IsTabStop
+    {
+        get => (bool)GetValue(IsTabStopProperty)!;
+        set => SetValue(IsTabStopProperty, value);
+    }
+
     /// <summary>Gets or sets how a layout panel places this control horizontally inside its slot.</summary>
     public HorizontalAlignment HorizontalAlignment
     {
@@ -411,13 +535,20 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     /// <remarks>Derive and override to give a custom control or panel its own measure pass.</remarks>
     protected internal virtual Size MeasureCore(Size availableSize)
     {
-        var preferred = GetPreferredSize(Size.Empty);
+        // 必须把可用宽高交给 GetPreferredSize：TextBlock/ContentControl 靠它决定换行后的高度。
+        var preferred = GetPreferredSize(availableSize);
+        return ConstrainSize(preferred, availableSize);
+    }
+
+    // 面板自己重写 MeasureCore 时也要走这里：显式 Width/Height 与 Min/Max 不能被内容尺寸绕过。
+    internal Size ConstrainSize(Size preferred, Size availableSize)
+    {
         var width = MeasureAxis(WidthProperty, preferred.Width, MinWidth, MaxWidth, availableSize.Width);
         var height = MeasureAxis(HeightProperty, preferred.Height, MinHeight, MaxHeight, availableSize.Height);
         return new Size(width, height);
     }
 
-    private int MeasureAxis(
+    internal int MeasureAxis(
         DependencyProperty sizeProperty,
         int preferred,
         int minimum,
@@ -495,6 +626,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             if (e.NewValue is false && control.IsKeyboardFocused)
             {
                 control.SetValue(IsKeyboardFocusedProperty, false);
+                FocusManager.NotifyFocusLeft(control);
             }
         }
     }
@@ -793,6 +925,22 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         }
     }
 
+    private static void OnTabIndexPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Control control && e.NewValue is int index)
+        {
+            control.NativeTabIndex = index;
+        }
+    }
+
+    private static void OnIsTabStopPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Control control && e.NewValue is bool tabStop)
+        {
+            control.NativeTabStop = tabStop;
+        }
+    }
+
     private static void OnLayoutAffectingPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
     {
         if (target is Control control && !control.IsDisposed)
@@ -822,6 +970,31 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             if (base.Padding != value)
             {
                 base.Padding = value;
+            }
+        }
+    }
+
+    // TabIndex / TabStop 是原生属性；用隐藏属性把 DP 的写入同步过去，WinForms 的 Tab 导航才能看到。
+    private int NativeTabIndex
+    {
+        get => base.TabIndex;
+        set
+        {
+            if (base.TabIndex != value)
+            {
+                base.TabIndex = value;
+            }
+        }
+    }
+
+    private bool NativeTabStop
+    {
+        get => base.TabStop;
+        set
+        {
+            if (base.TabStop != value)
+            {
+                base.TabStop = value;
             }
         }
     }
@@ -880,11 +1053,51 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     /// <remarks>This is separate from the native <see cref="System.Windows.Forms.Control.KeyUp"/> event, which XAML binds normally.</remarks>
     public event EventHandler<KeyInputEventArgs>? KeyInputUp;
 
+    /// <summary>Raised after any dependency property on this control changes.</summary>
+    internal event EventHandler<DependencyPropertyChangedEventArgs>? DependencyPropertyChanged;
+
     /// <summary>The triggers owned by this control.</summary>
     public TriggerCollection Triggers => _triggers ??= new TriggerCollection(this);
 
+    /// <summary>The key and mouse gestures this control turns into commands.</summary>
+    /// <remarks>
+    /// <see cref="OnKeyDown"/> and <see cref="OnMouseDown"/> check this collection before routing the native input, so
+    /// a matching binding runs its command and marks the key event handled. The collection is never <see langword="null"/>.
+    /// </remarks>
+    public InputBindingCollection InputBindings => _inputBindings;
+
     /// <summary>The resources owned by this control, addressable by key from <c>StaticResource</c>.</summary>
     public ResourceDictionary Resources => _resources;
+
+    /// <summary>The names declared in this XAML view or template instance.</summary>
+    /// <remarks>
+    /// Generated code creates one scope on the view root and one on each template root; a lookup walks up to the
+    /// nearest scope, so template names never leak into the outer view.
+    /// </remarks>
+    public NameScope? NameScope { get; set; }
+
+    /// <summary>The control whose <see cref="Style.Template"/> created this control, or <see langword="null"/>.</summary>
+    public Control? TemplatedParent { get; private set; }
+
+    /// <summary>The declarative context menu shown on a right click.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+#pragma warning disable CS0109 // 旧 TFM 的 System.Windows.Forms.Control 还有同名废弃属性；net5+ 没有，故只有一边报。
+    public new ContextMenu? ContextMenu
+#pragma warning restore CS0109
+    {
+        get => base.ContextMenuStrip as ContextMenu;
+        set => base.ContextMenuStrip = value;
+    }
+
+    /// <summary>The declarative tooltip shown on hover; a string or a <see cref="ToolTip"/> object.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public object? ToolTip
+    {
+        get => ToolTipService.GetToolTip(this);
+        set => ToolTipService.SetToolTip(this, value);
+    }
 
     /// <summary>
     /// The style currently applied to this control, or <see langword="null"/> when none is applied.
@@ -1019,6 +1232,62 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         expression.Attach();
     }
 
+    /// <summary>Writes the current target value back to the source for a two-way binding.</summary>
+    /// <param name="property">The bound dependency property.</param>
+    /// <returns><see langword="true"/> when a binding existed and its source was available.</returns>
+    /// <remarks>This is the manual path for <see cref="UpdateSourceTrigger.Explicit"/>.</remarks>
+    public bool UpdateSource(DependencyProperty property)
+    {
+        if (property is null) throw new ArgumentNullException(nameof(property));
+        if (!_bindings.TryGetValue(property, out var expression))
+        {
+            return false;
+        }
+
+        expression.UpdateSource();
+        return true;
+    }
+
+    /// <summary>Writes a native bound property back to its source.</summary>
+    /// <param name="propertyName">The native property name used by <see cref="SetNativeBinding"/>.</param>
+    /// <returns><see langword="true"/> when a native binding was found.</returns>
+    /// <remarks>This is the manual path for <see cref="UpdateSourceTrigger.Explicit"/> on a native binding.</remarks>
+    public bool UpdateSource(string propertyName)
+    {
+        if (propertyName is null) throw new ArgumentNullException(nameof(propertyName));
+        var entry = _nativeBindings.Find(item => string.Equals(item.PropertyName, propertyName, StringComparison.Ordinal));
+        if (entry?.Applied is not { } binding)
+        {
+            return false;
+        }
+
+        binding.WriteValue();
+        return true;
+    }
+
+    /// <summary>Finds the control registered under <paramref name="name"/> in the nearest name scope.</summary>
+    /// <param name="name">The name written with <c>x:Name</c>.</param>
+    public System.Windows.Forms.Control? FindName(string name)
+    {
+        if (name is null) throw new ArgumentNullException(nameof(name));
+        return NameScope.Find(this)?.Find(name);
+    }
+
+    /// <summary>Finds a named part in the applied <see cref="Style.Template"/>.</summary>
+    /// <typeparam name="T">The part's control type.</typeparam>
+    /// <param name="name">The part name.</param>
+    /// <returns>The part, or <see langword="null"/> when the template or name is missing.</returns>
+    public T? GetTemplateChild<T>(string name) where T : System.Windows.Forms.Control
+    {
+        if (name is null) throw new ArgumentNullException(nameof(name));
+        if (_templateContent is Control content && content.NameScope?.Find(name) is T part)
+        {
+            return part;
+        }
+
+        return null;
+    }
+
     /// <summary>Removes the binding, if any, from <paramref name="property"/>.</summary>
     /// <param name="property">The property whose binding is removed.</param>
     public void ClearBinding(DependencyProperty property)
@@ -1099,6 +1368,19 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         {
             expression.Refresh();
         }
+
+        foreach (var expression in _styleSetterBindings.Values)
+        {
+            expression.Refresh();
+        }
+
+        foreach (var state in _triggerStates.Values)
+        {
+            foreach (var expression in state.Bindings.Values)
+            {
+                expression.Refresh();
+            }
+        }
     }
 
     /// <summary>Re-evaluates every trigger against the current values.</summary>
@@ -1154,7 +1436,18 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             EvaluateTriggers();
         }
 
-        OnXamlPropertyChanged(property, oldValue, newValue);
+        var previousSource = _changeSource;
+        _changeSource = source;
+        try
+        {
+            OnXamlPropertyChanged(property, oldValue, newValue);
+        }
+        finally
+        {
+            _changeSource = previousSource;
+        }
+
+        DependencyPropertyChanged?.Invoke(this, new DependencyPropertyChangedEventArgs(property, oldValue, newValue));
     }
 
     /// <summary>Called after any dependency property on this control changes.</summary>
@@ -1163,6 +1456,71 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     /// <param name="newValue">The new value.</param>
     protected virtual void OnXamlPropertyChanged(DependencyProperty property, object? oldValue, object? newValue)
     {
+        SyncColorAliases(property, newValue);
+    }
+
+    // 作者直接写任一面时把另一面同步到同一层；样式、触发器、过渡只改自己那一面，读的时候由 getter 回退。
+    private void SyncColorAliases(DependencyProperty property, object? newValue)
+    {
+        if (_syncingColorAlias || _changeSource != XamlValueSource.Local)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(property, BackgroundProperty))
+        {
+            SyncBrushToColor(BackColorProperty, newValue as Brush);
+        }
+        else if (ReferenceEquals(property, BackColorProperty) && newValue is Color backColor)
+        {
+            SyncColorToBrush(BackgroundProperty, backColor);
+        }
+        else if (ReferenceEquals(property, ForegroundProperty))
+        {
+            SyncBrushToColor(ForeColorProperty, newValue as Brush);
+        }
+        else if (ReferenceEquals(property, ForeColorProperty) && newValue is Color foreColor)
+        {
+            SyncColorToBrush(ForegroundProperty, foreColor);
+        }
+    }
+
+    private void SyncBrushToColor(DependencyProperty colorProperty, Brush? brush)
+    {
+        // 渐变没有单一颜色可镜像；保留 Color 面已有的值。
+        Color? color = brush switch
+        {
+            SolidColorBrush solid => solid.Color,
+            null => Color.Empty,
+            _ => null,
+        };
+        if (color is null)
+        {
+            return;
+        }
+
+        _syncingColorAlias = true;
+        try
+        {
+            SetValue(colorProperty, color.Value);
+        }
+        finally
+        {
+            _syncingColorAlias = false;
+        }
+    }
+
+    private void SyncColorToBrush(DependencyProperty brushProperty, Color color)
+    {
+        _syncingColorAlias = true;
+        try
+        {
+            SetValue(brushProperty, color.IsEmpty ? null : new SolidColorBrush(color));
+        }
+        finally
+        {
+            _syncingColorAlias = false;
+        }
     }
 
     /// <summary>Called when this control's effective data context changes.</summary>
@@ -1177,26 +1535,38 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
 
         // 没有作者设置背景时保持透明：WPF/Avalonia 的默认背景是透明，尤其不能让自绘文本/图形
         // 在暗色表面上盖出一块系统灰。
-        if ((!HasXamlValue(BackColorProperty) && base.BackColor == DefaultBackColor) || background.A == 0)
+        if (background is null)
         {
             PaintParentBackground(e);
             return;
         }
 
         // 半透明背景要先画父容器的底色：WinForms 的子窗口 DC 不含父窗口像素，直接填半透明色
-        // 会与上一次窗口表面的残留内容混合（缩放放大后就是花屏）。
-        if (background.A < 255)
+        // 会与上一次窗口表面的残留内容混合（缩放放大后就是花屏）。渐变可能带透明区，同样先垫底。
+        if (background is SolidColorBrush solid)
+        {
+            if (solid.Color.A == 0)
+            {
+                PaintParentBackground(e);
+                return;
+            }
+
+            if (solid.Color.A < 255)
+            {
+                PaintParentBackground(e);
+            }
+        }
+        else
         {
             PaintParentBackground(e);
         }
 
-        using var brush = new SolidBrush(background);
-        e.Graphics.FillRectangle(brush, ClientRectangle);
+        background.Paint(e.Graphics, ClientRectangle);
     }
 
     // WinForms 没有真正的透明子窗口；把父控件的背景/自绘内容按父坐标画进自己的 DC。
     // 与 Control.OnPaintBackground 对 α < 255 的 BackColor 所做的是同一条伪透明路径。
-    private void PaintParentBackground(PaintEventArgs e)
+    protected void PaintParentBackground(PaintEventArgs e)
     {
         if (Parent is not { } parent || Width <= 0 || Height <= 0)
         {
@@ -1220,6 +1590,8 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     /// <inheritdoc />
     protected override void OnMouseDown(MouseEventArgs e)
     {
+        // 输入绑定先于指针事件执行；MouseEventArgs 没有 Handled，指针通路仍按原样继续。
+        _inputBindings.TryHandleMouse(e.Button, e.Clicks, System.Windows.Forms.Control.ModifierKeys);
         base.OnMouseDown(e);
         XamlInput.RaisePointerPressed(XamlInput.CreatePointerPressedArgs(this, e));
     }
@@ -1270,6 +1642,12 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     /// <inheritdoc />
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // 命中的输入绑定消费这次按键；键码仍是 KeyCode，修饰键单独比较。
+        if (_inputBindings.TryHandleKey(e.KeyCode, e.Modifiers))
+        {
+            e.Handled = true;
+        }
+
         base.OnKeyDown(e);
         var isRepeat = !_pressedKeys.Add(e.KeyCode);
         XamlInput.RaiseKeyInputDown(XamlInput.CreateKeyInputDownArgs(this, e, isRepeat));
@@ -1288,6 +1666,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     {
         base.OnGotFocus(e);
         SetValue(IsKeyboardFocusedProperty, true);
+        FocusManager.NotifyFocusEntered(this);
     }
 
     /// <inheritdoc />
@@ -1296,6 +1675,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         _pressedKeys.Clear();
         SetValue(IsKeyboardFocusedProperty, false);
         _pointerCaptured = false;
+        FocusManager.NotifyFocusLeft(this);
         base.OnLostFocus(e);
     }
 
@@ -1306,6 +1686,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         SetValue(IsKeyboardFocusedProperty, false);
         SetValue(IsPointerOverProperty, false);
         _pointerCaptured = false;
+        FocusManager.NotifyFocusLeft(this);
         base.OnHandleDestroyed(e);
     }
 
@@ -1326,6 +1707,30 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     internal void RaiseKeyInputUp(KeyInputEventArgs args) => KeyInputUp?.Invoke(this, args);
 
     /// <inheritdoc />
+    protected override void OnControlAdded(ControlEventArgs e)
+    {
+        base.OnControlAdded(e);
+
+        // 子控件的 Panel.ZIndex 通常在加入前就写好了；加入这一趟把顺序定下来。
+        XamlLayout.ApplyZOrder(this);
+    }
+
+    /// <summary>Points this control and every XAML descendant at the control that owns the applied template.</summary>
+    /// <param name="parent">The templated parent, or <see langword="null"/> while the template is removed.</param>
+    internal void SetTemplatedParentRecursive(Control? parent)
+    {
+        TemplatedParent = parent;
+        RefreshBindings();
+        foreach (System.Windows.Forms.Control child in Controls)
+        {
+            if (child is Control xaml)
+            {
+                xaml.SetTemplatedParentRecursive(parent);
+            }
+        }
+    }
+
+    /// <inheritdoc />
     protected override void OnParentChanged(EventArgs e)
     {
         base.OnParentChanged(e);
@@ -1337,6 +1742,58 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         EvaluateTriggers();
         ApplyNativeBindings();
         UpdateTemplateDataContext();
+
+        // 子树先建好、再整体挂到某个祖先下时，只有根收到 ParentChanged。资源链与隐式样式对每个后代都要重走一遍，
+        // 否则嵌套视图永远看不到祖先字典里的画刷，也不会套上祖先声明的隐式样式。
+        NotifyAncestorChainChanged();
+    }
+
+    private void NotifyAncestorChainChanged()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        RefreshImplicitStyle();
+        RefreshBindings();
+        XamlRuntime.RefreshDynamicResources(this);
+        OnAncestorChainChanged();
+
+        foreach (System.Windows.Forms.Control child in Controls)
+        {
+            if (child is Control xaml)
+            {
+                xaml.NotifyAncestorChainChanged();
+            }
+            else
+            {
+                RefreshNativeDescendants(child);
+            }
+        }
+    }
+
+    /// <summary>Called when a control above this one joined or left the tree.</summary>
+    /// <remarks>Derived controls that cache an ancestor — a scroll viewer, a host, a template root — re-resolve it here.</remarks>
+    protected virtual void OnAncestorChainChanged()
+    {
+    }
+
+    private static void RefreshNativeDescendants(System.Windows.Forms.Control parent)
+    {
+        XamlRuntime.RefreshDynamicResources(parent);
+
+        foreach (System.Windows.Forms.Control child in parent.Controls)
+        {
+            if (child is Control xaml)
+            {
+                xaml.NotifyAncestorChainChanged();
+            }
+            else
+            {
+                RefreshNativeDescendants(child);
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -1345,6 +1802,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         if (disposing && !_disposed)
         {
             _disposed = true;
+            FocusManager.NotifyFocusLeft(this);
 
             foreach (var expression in _bindings.Values)
             {
@@ -1356,9 +1814,34 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
                 expression.Dispose();
             }
 
+            foreach (var expression in _styleSetterBindings.Values)
+            {
+                expression.Dispose();
+            }
+
+            foreach (var state in _triggerStates.Values)
+            {
+                foreach (var expression in state.Bindings.Values)
+                {
+                    expression.Dispose();
+                }
+            }
+
+            foreach (var state in _templateTriggerStates.Values)
+            {
+                foreach (var expression in state.Bindings.Values)
+                {
+                    expression.Dispose();
+                }
+            }
+
             _bindings.Clear();
             _attachedBindings.Clear();
+            _styleSetterBindings.Clear();
+            _triggerStates.Clear();
+            _templateTriggerStates.Clear();
             RemoveNativeBindings();
+            DetachNativeBindingScope();
 
             if (_triggers is not null)
             {
@@ -1509,7 +1992,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             }
         }
 
-        return null;
+        return ThemeStyles.Find(type);
     }
 
     private void OnResourcesChanged(object? key)
@@ -1602,7 +2085,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             styleNode.RegisterTarget(this);
         }
 
-        var effectiveSetters = new Dictionary<DependencyProperty, object?>();
+        var effectiveSetters = new Dictionary<DependencyProperty, Setter>();
         foreach (var current in chain)
         {
             foreach (var setter in current.Setters)
@@ -1610,14 +2093,14 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
                 if (setter?.Property is { } property)
                 {
                     // 派生样式后写，覆盖基础样式的同属性 setter。
-                    effectiveSetters[property] = setter.Value;
+                    effectiveSetters[property] = setter;
                 }
             }
         }
 
         foreach (var pair in effectiveSetters)
         {
-            SetStyleValue(pair.Key, pair.Value);
+            ApplyStyleSetter(pair.Key, pair.Value);
         }
 
         _styleTriggers.Clear();
@@ -1645,8 +2128,24 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
 
         if (template is not null)
         {
-            _templateContent = template.CreateContent();
+            if (template.TargetType is not null && !template.TargetType.IsInstanceOfType(this))
+            {
+                throw new InvalidOperationException(
+                    $"ControlTemplate TargetType '{template.TargetType}' does not apply to '{GetType()}'.");
+            }
+
+            _templateTemplate = template;
+            template.Changed += OnTemplateMutated;
+            _templateContent = template.CreateContent(this);
+
+            // 模板根就是控件的外观：普通 Control 不会给子控件排版，靠原生 Dock 把它撑满。
+            _templateContent.Dock = System.Windows.Forms.DockStyle.Fill;
             Controls.Add(_templateContent);
+            if (_templateContent is Control templated)
+            {
+                templated.SetTemplatedParentRecursive(this);
+            }
+
             UpdateTemplateDataContext();
         }
 
@@ -1661,6 +2160,24 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         }
 
         _appliedStyleChain.Clear();
+
+        if (_templateTemplate is not null)
+        {
+            _templateTemplate.Changed -= OnTemplateMutated;
+            foreach (var pair in _templateTriggerStates)
+            {
+                if (pair.Value.Active)
+                {
+                    ApplyTemplateExit(pair.Key, pair.Value);
+                }
+
+                pair.Key.Detach(this);
+            }
+
+            _templateTriggerStates.Clear();
+            _templateTemplate = null;
+        }
+
         RemoveTemplateContent();
 
         // 先摘掉样式触发器，再退出它们：退出动作改属性时不会再评估已经离开的样式触发器。
@@ -1684,6 +2201,13 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             trigger.Detach(this);
         }
 
+        foreach (var expression in _styleSetterBindings.Values)
+        {
+            expression.Dispose();
+        }
+
+        _styleSetterBindings.Clear();
+
         foreach (var property in _styleValues.Keys.ToArray())
         {
             var oldEffective = GetLocalValueOrDefault(property);
@@ -1704,6 +2228,11 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         }
 
         _templateContent = null;
+        if (content is Control templated)
+        {
+            templated.SetTemplatedParentRecursive(null);
+        }
+
         try
         {
             Controls.Remove(content);
@@ -1735,6 +2264,29 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             _templateContent.DataContext = context;
 #endif
         }
+    }
+
+    private void ApplyStyleSetter(DependencyProperty property, Setter setter)
+    {
+        var binding = setter.Binding ?? setter.Value as Binding;
+        if (binding is null)
+        {
+            SetStyleValue(property, setter.Value);
+            return;
+        }
+
+        if (_styleSetterBindings.TryGetValue(property, out var existing))
+        {
+            existing.Dispose();
+            _styleSetterBindings.Remove(property);
+        }
+
+        var expression = new BindingExpression(
+            this,
+            binding,
+            new StyleSetterBindingSink(this, property));
+        _styleSetterBindings[property] = expression;
+        expression.Attach();
     }
 
     private void SetStyleValue(DependencyProperty property, object? value)
@@ -1882,6 +2434,8 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
                 }
             }
 
+            EvaluateTemplateTriggers();
+
             foreach (var trigger in _styleTriggers)
             {
                 EvaluateTrigger(trigger, isStyle: true);
@@ -1890,6 +2444,133 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         finally
         {
             _evaluatingTriggers = false;
+        }
+    }
+
+    private void EvaluateTemplateTriggers()
+    {
+        if (_templateTemplate is null)
+        {
+            return;
+        }
+
+        foreach (var trigger in _templateTemplate.Triggers)
+        {
+            if (trigger is null)
+            {
+                continue;
+            }
+
+            trigger.Attach(this);
+            var active = trigger.Matches(this);
+            var wasActive = _templateTriggerStates.TryGetValue(trigger, out var state) && state.Active;
+            if (active == wasActive)
+            {
+                continue;
+            }
+
+            if (state is null)
+            {
+                state = new TriggerRuntimeState();
+                _templateTriggerStates.Add(trigger, state);
+            }
+
+            state.Active = active;
+            if (active)
+            {
+                ApplyTemplateEnter(trigger, state);
+            }
+            else
+            {
+                ApplyTemplateExit(trigger, state);
+            }
+        }
+    }
+
+    private void ApplyTemplateEnter(Trigger trigger, TriggerRuntimeState state)
+    {
+        state.Restore.Clear();
+        foreach (var setter in trigger.Setters)
+        {
+            if (setter is null || setter.Binding is not null || setter.Value is Binding)
+            {
+                continue;
+            }
+
+            var target = ResolveTemplateTarget(setter.TargetName);
+            if (target is null)
+            {
+                continue;
+            }
+
+            if (setter.Property is { } property && target is Control xaml)
+            {
+                var hadLocal = xaml.HasLocalValue(property);
+                var previous = property.GetValue(xaml);
+                property.SetValueCore(xaml, setter.Value, XamlValueSource.Trigger);
+                state.Restore.Add(() =>
+                {
+                    if (hadLocal)
+                    {
+                        property.SetValueCore(xaml, previous, XamlValueSource.Trigger);
+                    }
+                    else
+                    {
+                        property.ClearValueCore(xaml, XamlValueSource.Trigger);
+                    }
+                });
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(setter.PropertyName))
+            {
+                var descriptor = TypeDescriptor.GetProperties(target).Find(setter.PropertyName!, ignoreCase: false);
+                if (descriptor is null || descriptor.IsReadOnly)
+                {
+                    continue;
+                }
+
+                var previous = descriptor.GetValue(target);
+                descriptor.SetValue(target, XamlRuntime.ConvertValue(setter.Value, descriptor.PropertyType));
+                state.Restore.Add(() => descriptor.SetValue(target, previous));
+            }
+        }
+
+        trigger.EnterAction?.Invoke(this);
+    }
+
+    private void ApplyTemplateExit(Trigger trigger, TriggerRuntimeState state)
+    {
+        trigger.ExitAction?.Invoke(this);
+
+        for (var index = state.Restore.Count - 1; index >= 0; index--)
+        {
+            state.Restore[index]();
+        }
+
+        state.Restore.Clear();
+    }
+
+    private System.Windows.Forms.Control? ResolveTemplateTarget(string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return this;
+        }
+
+        if (_templateContent is Control content && content.NameScope?.Find(name!) is { } part)
+        {
+            return part;
+        }
+
+        return null;
+    }
+
+    private void OnTemplateMutated(object? sender, EventArgs e)
+    {
+        if (!_disposed)
+        {
+            EvaluateTemplateTriggers();
         }
     }
 
@@ -2025,7 +2706,21 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     {
         foreach (var setter in trigger.Setters)
         {
-            if (setter?.Property is { } property)
+            if (setter?.Property is not { } property)
+            {
+                continue;
+            }
+
+            if ((setter.Binding ?? setter.Value as Binding) is { } binding)
+            {
+                var expression = new BindingExpression(
+                    this,
+                    binding,
+                    new StyleTriggerBindingSink(this, trigger, property));
+                state.Bindings[setter] = expression;
+                expression.Attach();
+            }
+            else
             {
                 AddStyleTriggerValue(trigger, property, setter.Value);
             }
@@ -2037,6 +2732,13 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     private void ApplyStyleExit(Trigger trigger, TriggerRuntimeState state)
     {
         trigger.ExitAction?.Invoke(this);
+
+        foreach (var expression in state.Bindings.Values)
+        {
+            expression.Dispose();
+        }
+
+        state.Bindings.Clear();
 
         // 样式触发器只摘自己压进样式触发器层的值；样式 setter 层由样式卸载单独处理。
         RemoveStyleTriggerValues(trigger);
@@ -2074,7 +2776,19 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
                 HasLocalValue(setter.Property),
                 GetValue(setter.Property)));
 
-            setter.Property.SetValueCore(this, setter.Value, XamlValueSource.Trigger);
+            if ((setter.Binding ?? setter.Value as Binding) is { } binding)
+            {
+                var expression = new BindingExpression(
+                    this,
+                    binding,
+                    new DirectTriggerBindingSink(this, setter.Property));
+                state.Bindings[setter] = expression;
+                expression.Attach();
+            }
+            else
+            {
+                setter.Property.SetValueCore(this, setter.Value, XamlValueSource.Trigger);
+            }
         }
 
         trigger.EnterAction?.Invoke(this);
@@ -2083,6 +2797,13 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     private void ApplyExit(Trigger trigger, TriggerRuntimeState state)
     {
         trigger.ExitAction?.Invoke(this);
+
+        foreach (var expression in state.Bindings.Values)
+        {
+            expression.Dispose();
+        }
+
+        state.Bindings.Clear();
 
         // 倒序还原：叠在一起的 setter 按应用的逆序解开。
         for (var index = state.Previous.Count - 1; index >= 0; index--)
@@ -2111,6 +2832,11 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         _applyingNativeBindings = true;
         try
         {
+            if (_nativeBindings.Exists(static entry => !string.IsNullOrEmpty(entry.Definition.ElementName)))
+            {
+                EnsureNativeBindingScope();
+            }
+
             foreach (var entry in _nativeBindings)
             {
                 ApplyNativeBinding(entry);
@@ -2138,30 +2864,40 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             entry.Applied = null;
         }
 
-        var context = DataContext;
-        if (context is null)
+        var source = ResolveBindingSource(entry.Definition, entry.Target);
+        if (source is null)
         {
             return;
         }
 
         if (entry.Definition.Mode == BindingMode.OneTime)
         {
-            ApplyOneTimeNativeBinding(entry, context);
+            ApplyOneTimeNativeBinding(entry, source);
             return;
         }
 
         try
         {
+            var trigger = entry.Definition.UpdateSourceTrigger == UpdateSourceTrigger.Default
+                ? UpdateSourceTrigger.PropertyChanged
+                : entry.Definition.UpdateSourceTrigger;
             var updateMode = entry.Definition.Mode == BindingMode.TwoWay
-                ? DataSourceUpdateMode.OnPropertyChanged
+                ? trigger == UpdateSourceTrigger.LostFocus
+                    ? DataSourceUpdateMode.OnValidation
+                    : trigger == UpdateSourceTrigger.Explicit
+                        ? DataSourceUpdateMode.Never
+                        : DataSourceUpdateMode.OnPropertyChanged
                 : DataSourceUpdateMode.Never;
 
             var binding = new System.Windows.Forms.Binding(
                 entry.PropertyName,
-                context,
+                source,
                 entry.Definition.Path,
                 formattingEnabled: true,
                 updateMode);
+
+            binding.Format += (_, e) => e.Value = ConvertBindingForward(entry.Definition, e.Value, e.DesiredType ?? typeof(object));
+            binding.Parse += (_, e) => e.Value = ConvertBindingBack(entry.Definition, e.Value, e.DesiredType ?? typeof(object));
 
             entry.Target.DataBindings.Add(binding);
             entry.Applied = binding;
@@ -2173,15 +2909,72 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         }
     }
 
-    private static void ApplyOneTimeNativeBinding(NativeBindingEntry entry, object context)
+    private object? ResolveBindingSource(Binding definition, System.Windows.Forms.Control target)
+    {
+        if (definition.Source is not null)
+        {
+            return definition.Source;
+        }
+
+        if (!string.IsNullOrEmpty(definition.ElementName))
+        {
+            var scope = NameScope.Find(this);
+            return scope is not null && scope.TryFind(definition.ElementName!, out var named) ? named : null;
+        }
+
+        if (definition.RelativeSource is { } relative)
+        {
+            switch (relative.Mode)
+            {
+                case RelativeSourceMode.Self:
+                    return target;
+
+                case RelativeSourceMode.TemplatedParent:
+                    return TemplatedParent;
+
+                case RelativeSourceMode.FindAncestor:
+                    if (relative.AncestorType is null)
+                    {
+                        return null;
+                    }
+
+                    var level = Math.Max(1, relative.AncestorLevel);
+                    for (System.Windows.Forms.Control? current = target.Parent; current is not null; current = current.Parent)
+                    {
+                        if (!relative.AncestorType.IsInstanceOfType(current))
+                        {
+                            continue;
+                        }
+
+                        if (--level == 0)
+                        {
+                            return current;
+                        }
+                    }
+
+                    return null;
+
+                default:
+                    return null;
+            }
+        }
+
+        return DataContext;
+    }
+
+    private void ApplyOneTimeNativeBinding(NativeBindingEntry entry, object source)
     {
         try
         {
-            var value = XamlRuntime.ConvertValue(ResolvePath(context, entry.Definition.Path), typeof(object));
-            if (entry.Definition.Converter is { } converter)
+            var path = new BindingPath(entry.Definition.Path);
+            var resolved = path.TryResolve(source, out var value, out _, out _);
+            if (!resolved)
             {
-                var descriptor = TypeDescriptor.GetProperties(entry.Target).Find(entry.PropertyName, ignoreCase: false);
-                value = converter.Convert(value, descriptor?.PropertyType ?? typeof(object));
+                value = entry.Definition.FallbackValue;
+            }
+            else if (value is null && entry.Definition.TargetNullValue is not null)
+            {
+                value = entry.Definition.TargetNullValue;
             }
 
             var property = TypeDescriptor.GetProperties(entry.Target).Find(entry.PropertyName, ignoreCase: false);
@@ -2190,7 +2983,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
                 return;
             }
 
-            property.SetValue(entry.Target, XamlRuntime.ConvertValue(value, property.PropertyType));
+            property.SetValue(entry.Target, ConvertBindingForward(entry.Definition, value, property.PropertyType));
         }
         catch (Exception exception)
         {
@@ -2198,31 +2991,70 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         }
     }
 
-    private static object? ResolvePath(object? source, string path)
+    private static object? ConvertBindingForward(Binding definition, object? value, Type targetType)
     {
-        if (source is null || string.IsNullOrEmpty(path) || path == ".")
+        if (definition.Converter is { } converter)
         {
-            return source;
+            value = converter is IParameterizedValueConverter parameterized
+                ? parameterized.Convert(value, targetType, definition.ConverterParameter)
+                : converter.Convert(value, targetType);
         }
 
-        var current = source;
-        foreach (var segment in path.Split('.'))
+        if (!string.IsNullOrEmpty(definition.StringFormat) && value is not null)
         {
-            if (current is null || segment.Length == 0)
-            {
-                return null;
-            }
-
-            var descriptor = TypeDescriptor.GetProperties(current).Find(segment, ignoreCase: false);
-            if (descriptor is null)
-            {
-                return null;
-            }
-
-            current = descriptor.GetValue(current);
+            var format = definition.StringFormat!.IndexOf('{') >= 0
+                ? definition.StringFormat!
+                : "{0:" + definition.StringFormat + "}";
+            value = string.Format(System.Globalization.CultureInfo.CurrentCulture, format, value);
         }
 
-        return current;
+        return XamlRuntime.ConvertValue(value, targetType);
+    }
+
+    private static object? ConvertBindingBack(Binding definition, object? value, Type sourceType)
+    {
+        if (definition.Converter is { } converter)
+        {
+            return converter is IParameterizedValueConverter parameterized
+                ? parameterized.ConvertBack(value, sourceType, definition.ConverterParameter)
+                : converter.ConvertBack(value, sourceType);
+        }
+
+        return XamlRuntime.ConvertValue(value, sourceType);
+    }
+
+    private void EnsureNativeBindingScope()
+    {
+        if (_nativeBindingScope is not null)
+        {
+            return;
+        }
+
+        var scope = NameScope.Find(this);
+        if (scope is null)
+        {
+            return;
+        }
+
+        _nativeBindingScope = scope;
+        scope.Registered += OnNativeBindingNameRegistered;
+    }
+
+    private void OnNativeBindingNameRegistered(object? sender, EventArgs e)
+    {
+        if (!_disposed)
+        {
+            ApplyNativeBindings();
+        }
+    }
+
+    private void DetachNativeBindingScope()
+    {
+        if (_nativeBindingScope is not null)
+        {
+            _nativeBindingScope.Registered -= OnNativeBindingNameRegistered;
+            _nativeBindingScope = null;
+        }
     }
 
     private void RemoveNativeBindings()
@@ -2272,6 +3104,87 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         public bool Active { get; set; }
 
         public List<PreviousValue> Previous { get; } = [];
+
+        public Dictionary<Setter, BindingExpression> Bindings { get; } = [];
+
+        public List<Action> Restore { get; } = [];
+    }
+
+    private sealed class StyleSetterBindingSink : IBindingValueSink
+    {
+        private readonly Control _owner;
+        private readonly DependencyProperty _property;
+        private object? _current;
+
+        public StyleSetterBindingSink(Control owner, DependencyProperty property)
+        {
+            _owner = owner;
+            _property = property;
+        }
+
+        public Type ValueType => _property.PropertyType;
+
+        public bool CanWriteBack => false;
+
+        public object? GetValue() => _current;
+
+        public void SetValue(object? value)
+        {
+            var converted = _property.CoerceValue(_owner, value);
+            _current = converted;
+            var oldEffective = _owner.GetLocalValueOrDefault(_property);
+            _owner._styleValues[_property] = converted;
+            var newEffective = _owner.GetLocalValueOrDefault(_property);
+            _property.RaiseChangedIfDifferent(_owner, oldEffective, newEffective, XamlValueSource.Style);
+        }
+    }
+
+    private sealed class StyleTriggerBindingSink : IBindingValueSink
+    {
+        private readonly Control _owner;
+        private readonly Trigger _trigger;
+        private readonly DependencyProperty _property;
+        private object? _current;
+
+        public StyleTriggerBindingSink(Control owner, Trigger trigger, DependencyProperty property)
+        {
+            _owner = owner;
+            _trigger = trigger;
+            _property = property;
+        }
+
+        public Type ValueType => _property.PropertyType;
+
+        public bool CanWriteBack => false;
+
+        public object? GetValue() => _current;
+
+        public void SetValue(object? value)
+        {
+            _current = _property.CoerceValue(_owner, value);
+            _owner.AddStyleTriggerValue(_trigger, _property, _current);
+        }
+    }
+
+    private sealed class DirectTriggerBindingSink : IBindingValueSink
+    {
+        private readonly Control _owner;
+        private readonly DependencyProperty _property;
+
+        public DirectTriggerBindingSink(Control owner, DependencyProperty property)
+        {
+            _owner = owner;
+            _property = property;
+        }
+
+        public Type ValueType => _property.PropertyType;
+
+        public bool CanWriteBack => false;
+
+        public object? GetValue() => _property.GetValue(_owner);
+
+        public void SetValue(object? value)
+            => _property.SetValueCore(_owner, value, XamlValueSource.Trigger);
     }
 
     private sealed class StyleTriggerValue

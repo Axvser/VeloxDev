@@ -184,10 +184,10 @@ public sealed class AdvancedStyleXamlTests
         StringAssert.Contains(generated, "new global::VeloxDev.WinForms.Xaml.Setter(\"Text\", \"native\")");
         StringAssert.Contains(
             generated,
-            ".EnterAction = new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.Card.StyleValueProperty, To = 6, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.1\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
+            "new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.Card.StyleValueProperty, To = 6, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.1\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
         StringAssert.Contains(
             generated,
-            ".EnterAction = new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.Card.StyleValueProperty, To = 7, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.1\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
+            "new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.Card.StyleValueProperty, To = 7, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.1\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
     }
 
     [TestMethod]

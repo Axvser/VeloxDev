@@ -35,6 +35,12 @@ public sealed class KeyFrameAnimation : TriggerAction
     /// <summary>The easing applied to every segment; <c>Cubic.Out</c> by default.</summary>
     public IEaseCalculator Ease { get; set; } = Eases.Cubic.Out;
 
+    /// <summary>Additional full passes of each segment; zero runs once and <see cref="int.MaxValue"/> repeats forever.</summary>
+    public int LoopTime { get; set; }
+
+    /// <summary>Whether each segment also runs backwards.</summary>
+    public bool IsAutoReverse { get; set; }
+
     /// <summary>The keyframes, in any order; they are sorted by <see cref="KeyFrame.Offset"/> when invoked.</summary>
     public IList<KeyFrame> KeyFrames { get; } = new List<KeyFrame>();
 
@@ -56,6 +62,6 @@ public sealed class KeyFrameAnimation : TriggerAction
             return;
         }
 
-        XamlTransition.AnimateKeyFrames(control, Property, frames, Duration, Ease);
+        XamlTransition.AnimateKeyFrames(control, Property, frames, Duration, Ease, LoopTime, IsAutoReverse);
     }
 }

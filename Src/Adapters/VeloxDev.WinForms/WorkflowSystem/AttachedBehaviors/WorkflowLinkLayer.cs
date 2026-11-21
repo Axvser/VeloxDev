@@ -244,8 +244,8 @@ public static class WorkflowLinkLayer
         private readonly Dictionary<ILinkComponent, PropertyChangedEventHandler> linkHandlers = [];
         private readonly HashSet<ISlotComponent> slotViews = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<INodeComponent> nodeViews = new(ReferenceEqualityComparer.Instance);
-        private readonly Pen pen = new(Color.White);
-        private readonly Pen flowPen = new(Color.White);
+        private readonly System.Drawing.Pen pen = new(Color.White);
+        private readonly System.Drawing.Pen flowPen = new(Color.White);
         private readonly GraphicsPath path = new();
         private readonly List<LinkEntry> entries = [];
         private readonly Dictionary<ISlotComponent, SlotProjection> projections = new(ReferenceEqualityComparer.Instance);

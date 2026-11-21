@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using System.Windows.Input;
 
 namespace VeloxDev.WinForms.Xaml.Controls;
 
@@ -18,15 +20,19 @@ namespace VeloxDev.WinForms.Xaml.Controls;
 /// <see cref="Click"/> is raised from a left-button press/release pair or from Space/Enter while focused. The button
 /// captures the pointer on press and releases it through the base control, so a drag off the button cancels the click.
 /// </para>
+/// <para>
+/// The resting state paints <see cref="Control.Background"/> as a brush, so a gradient survives. Hover and pressed
+/// states shift its <see cref="Brush.ApproximateColor"/>, so a gradient there becomes a solid of its first stop.
+/// </para>
 /// </remarks>
 public class Button : ContentControl
 {
-    /// <summary>The border stroke colour; a translucent black by default.</summary>
+    /// <summary>The border stroke brush; a translucent black by default.</summary>
     public static readonly DependencyProperty BorderBrushProperty = DependencyProperty.Register(
         nameof(BorderBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(Button),
-        new PropertyMetadata(Color.FromArgb(0x66, 0, 0, 0), OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0x66, 0, 0, 0)), OnVisualPropertyChanged));
 
     /// <summary>The border stroke width per side, in pixels; one pixel by default.</summary>
     public static readonly DependencyProperty BorderThicknessProperty = DependencyProperty.Register(
@@ -49,6 +55,22 @@ public class Button : ContentControl
         typeof(Button),
         new PropertyMetadata(false, OnVisualPropertyChanged));
 
+    /// <summary>The command executed when the button is clicked.</summary>
+    public static readonly DependencyProperty CommandProperty = DependencyProperty.Register(
+        nameof(Command),
+        typeof(ICommand),
+        typeof(Button),
+        new PropertyMetadata(null, OnCommandPropertyChanged) { AffectsRender = false });
+
+    /// <summary>The value passed to <see cref="Command"/> when it is evaluated and executed.</summary>
+    public static readonly DependencyProperty CommandParameterProperty = DependencyProperty.Register(
+        nameof(CommandParameter),
+        typeof(object),
+        typeof(Button),
+        new PropertyMetadata(null, OnCommandParameterPropertyChanged) { AffectsRender = false });
+
+    private bool _commandDisabledByCommand;
+
     /// <summary>Creates the button.</summary>
     public Button()
     {
@@ -63,12 +85,16 @@ public class Button : ContentControl
         // 保留标准点击会让一次按下/松开触发两次 Click。
         SetStyle(ControlStyles.StandardClick | ControlStyles.StandardDoubleClick, false);
         Cursor = Cursors.Hand;
+
+        // 命令挂在 Click 上而不是 OnClick：RepeatButton 的重复帧直接调 RaiseClick，也要执行命令。
+        Click += OnClickExecuteCommand;
     }
 
-    /// <summary>Gets or sets the border stroke colour.</summary>
-    public Color BorderBrush
+    /// <summary>Gets or sets the border stroke brush.</summary>
+    /// <remarks>GDI+ pens are solid, so a gradient outline is flattened to its <see cref="Brush.ApproximateColor"/>.</remarks>
+    public Brush? BorderBrush
     {
-        get => (Color)GetValue(BorderBrushProperty)!;
+        get => GetValue(BorderBrushProperty) as Brush;
         set => SetValue(BorderBrushProperty, value);
     }
 
@@ -91,6 +117,29 @@ public class Button : ContentControl
     {
         get => (bool)GetValue(IsPressedProperty)!;
         set => SetValue(IsPressedProperty, value);
+    }
+
+    /// <summary>Gets or sets the command executed when the button is clicked.</summary>
+    /// <remarks>
+    /// While a command is assigned, <see cref="ICommand.CanExecute"/> drives <see cref="Control.IsEnabled"/>: the button
+    /// is disabled when the command refuses and re-enabled when it allows. An <see cref="Control.IsEnabled"/>=false set
+    /// by the author is preserved until the command refuses at least once; from then on the command owns the value.
+    /// </remarks>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public ICommand? Command
+    {
+        get => (ICommand?)GetValue(CommandProperty);
+        set => SetValue(CommandProperty, value);
+    }
+
+    /// <summary>Gets or sets the value passed to <see cref="Command"/> when it is evaluated and executed.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public object? CommandParameter
+    {
+        get => GetValue(CommandParameterProperty);
+        set => SetValue(CommandParameterProperty, value);
     }
 
     /// <summary>Raised when the button is clicked.</summary>
@@ -172,14 +221,14 @@ public class Button : ContentControl
     protected override void OnPaint(PaintEventArgs e)
     {
         var background = IsPressed && IsPointerOver
-            ? Darken(Background, 0.12f)
+            ? new SolidColorBrush(Darken(Background?.ApproximateColor ?? Color.Transparent, 0.12f))
             : IsPointerOver
-                ? Lighten(Background, 0.08f)
-                : Background;
+                ? new SolidColorBrush(Lighten(Background?.ApproximateColor ?? Color.Transparent, 0.08f))
+                : Background ?? new SolidColorBrush(Color.Transparent);
         var foreground = IsEnabled ? ForeColor : SystemColors.GrayText;
 
         var bounds = ClientRectangle;
-        XamlDrawing.PaintChrome(e.Graphics, bounds, background, BorderBrush, BorderThickness, CornerRadius);
+        PaintChrome(e.Graphics, bounds, background, BorderBrush, BorderThickness, CornerRadius);
         if (ContentVisual is null)
         {
             var text = Content?.ToString();
@@ -207,6 +256,38 @@ public class Button : ContentControl
                 };
                 TextRenderer.DrawText(e.Graphics, text, Font, content, foreground, flags);
             }
+        }
+    }
+
+    // 与 XamlDrawing.PaintChrome 同形，但直接消费 Brush：普通态可以是渐变，悬停/按下态用近似色。
+    private void PaintChrome(
+        Graphics graphics,
+        Rectangle bounds,
+        Brush background,
+        Brush? borderBrush,
+        Thickness borderThickness,
+        float cornerRadius)
+    {
+        graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        var body = new RectangleF(0.5f, 0.5f, Math.Max(0, bounds.Width - 1f), Math.Max(0, bounds.Height - 1f));
+        if (body.Width <= 0f || body.Height <= 0f)
+        {
+            return;
+        }
+
+        using var path = XamlDrawing.RoundedRectangle(body, cornerRadius);
+        if (background.ApproximateColor.A > 0)
+        {
+            background.FillPath(graphics, path);
+        }
+
+        var thickness = Math.Min(
+            Math.Max(Math.Max(borderThickness.Left, borderThickness.Right), Math.Max(borderThickness.Top, borderThickness.Bottom)),
+            Math.Min(body.Width, body.Height) / 2f);
+        if (borderBrush is { } stroke && stroke.ApproximateColor.A > 0 && thickness > 0f)
+        {
+            using var pen = new Pen(stroke, thickness);
+            pen.Draw(graphics, path);
         }
     }
 
@@ -248,6 +329,84 @@ public class Button : ContentControl
         {
             control.Invalidate();
             control.Parent?.PerformLayout();
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Click -= OnClickExecuteCommand;
+            if (Command is { } command)
+            {
+                command.CanExecuteChanged -= OnCommandCanExecuteChanged;
+            }
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private static void OnCommandPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not Button button || button.IsDisposed)
+        {
+            return;
+        }
+
+        if (e.OldValue is ICommand previous)
+        {
+            previous.CanExecuteChanged -= button.OnCommandCanExecuteChanged;
+        }
+
+        if (e.NewValue is ICommand current)
+        {
+            current.CanExecuteChanged += button.OnCommandCanExecuteChanged;
+        }
+
+        button.UpdateCommandEnabled();
+    }
+
+    private static void OnCommandParameterPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is Button button && !button.IsDisposed)
+        {
+            button.UpdateCommandEnabled();
+        }
+    }
+
+    private void OnCommandCanExecuteChanged(object? sender, EventArgs e) => UpdateCommandEnabled();
+
+    // 只有命令自己关掉的状态由命令恢复；作者显式设置的 IsEnabled=false 不被覆盖。
+    private void UpdateCommandEnabled()
+    {
+        var command = Command;
+        if (command is not null && !command.CanExecute(CommandParameter))
+        {
+            _commandDisabledByCommand = true;
+            IsEnabled = false;
+            return;
+        }
+
+        if (_commandDisabledByCommand)
+        {
+            _commandDisabledByCommand = false;
+            IsEnabled = true;
+        }
+    }
+
+    private void OnClickExecuteCommand(object? sender, EventArgs e)
+    {
+        var command = Command;
+        if (command is null)
+        {
+            return;
+        }
+
+        var parameter = CommandParameter;
+        if (command.CanExecute(parameter))
+        {
+            command.Execute(parameter);
         }
     }
 }

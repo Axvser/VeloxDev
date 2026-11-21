@@ -70,9 +70,11 @@ public class WrapPanel : Control
             ? Math.Max(0, availableSize.Height - (int)Math.Ceiling(Padding.Vertical))
             : int.MaxValue;
         var lines = ArrangeChildren(width, height, arrange: false);
-        return new Size(
-            lines.Width + (int)Math.Ceiling(Padding.Horizontal),
-            lines.Height + (int)Math.Ceiling(Padding.Vertical));
+        return ConstrainSize(
+            new Size(
+                lines.Width + (int)Math.Ceiling(Padding.Horizontal),
+                lines.Height + (int)Math.Ceiling(Padding.Vertical)),
+            availableSize);
     }
 
     /// <inheritdoc />

@@ -8,10 +8,19 @@ public sealed class Setter
     private DependencyProperty? _property;
     private string? _propertyName;
     private object? _value;
+    private Binding? _binding;
+    private string? _targetName;
 
     /// <summary>Creates an unconfigured setter.</summary>
     public Setter()
     {
+    }
+
+    /// <summary>Creates an unconfigured setter for <paramref name="property"/>.</summary>
+    /// <param name="property">The dependency property to set.</param>
+    public Setter(DependencyProperty property)
+    {
+        _property = property;
     }
 
     /// <summary>Creates a setter for <paramref name="property"/>.</summary>
@@ -30,6 +39,15 @@ public sealed class Setter
     {
         _propertyName = propertyName;
         _value = value;
+    }
+
+    /// <summary>Creates a setter whose value comes from a binding.</summary>
+    /// <param name="property">The dependency property to drive.</param>
+    /// <param name="binding">The binding evaluated while the owning trigger or style is active.</param>
+    public Setter(DependencyProperty property, Binding binding)
+    {
+        _property = property;
+        _binding = binding;
     }
 
     /// <summary>Raised when a property of this setter changes.</summary>
@@ -54,6 +72,20 @@ public sealed class Setter
     {
         get => _value;
         set => SetField(ref _value, value);
+    }
+
+    /// <summary>A binding used instead of <see cref="Value"/> while the owning trigger or style is active.</summary>
+    public Binding? Binding
+    {
+        get => _binding;
+        set => SetField(ref _binding, value);
+    }
+
+    /// <summary>The name of the template part a template trigger writes, or <see langword="null"/> for the templated control.</summary>
+    public string? TargetName
+    {
+        get => _targetName;
+        set => SetField(ref _targetName, value);
     }
 
     private void SetField<T>(ref T field, T value)

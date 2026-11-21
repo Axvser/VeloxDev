@@ -230,7 +230,62 @@ public sealed class ColumnDefinition
 // 面板共用的测量/摆放原语：DP 尺寸与对齐在 Control 上，这里只负责把槽位换算成原生 Bounds。
 internal static class XamlLayout
 {
+    // SetChildIndex 会重新触发一次布局；排序期间挡住重入，否则两个同名 ZIndex 会互相推动。
+    private static bool sortingZOrder;
+
     public static Rectangle ContentBounds(Control control) => control.DisplayRectangle;
+
+    /// <summary>Sorts <paramref name="parent"/>'s children by <see cref="Panel.ZIndexProperty"/>.</summary>
+    /// <remarks>
+    /// WinForms index zero paints last, so a higher ZIndex maps to a lower index. The sort is stable for equal
+    /// values, which keeps an all-default panel in its declaration order.
+    /// </remarks>
+    public static void ApplyZOrder(System.Windows.Forms.Control parent)
+    {
+        if (sortingZOrder || parent.IsDisposed || parent.Controls.Count < 2)
+        {
+            return;
+        }
+
+        var children = parent.Controls.Cast<System.Windows.Forms.Control>().ToArray();
+        var hasZIndex = false;
+        foreach (var child in children)
+        {
+            if (Panel.GetZIndex(child) != 0)
+            {
+                hasZIndex = true;
+                break;
+            }
+        }
+
+        if (!hasZIndex)
+        {
+            return;
+        }
+
+        sortingZOrder = true;
+        try
+        {
+            var ordered = children
+                .Select((child, index) => (Child: child, Index: index))
+                .OrderByDescending(static entry => Panel.GetZIndex(entry.Child))
+                .ThenBy(static entry => entry.Index)
+                .Select(static entry => entry.Child)
+                .ToArray();
+
+            for (var index = 0; index < ordered.Length; index++)
+            {
+                if (parent.Controls.GetChildIndex(ordered[index]) != index)
+                {
+                    parent.Controls.SetChildIndex(ordered[index], index);
+                }
+            }
+        }
+        finally
+        {
+            sortingZOrder = false;
+        }
+    }
 
     // 原生控件没有 Visibility 枚举，Visible=false 就当 Collapsed。
     public static bool OccupiesSpace(System.Windows.Forms.Control child)
@@ -312,26 +367,35 @@ internal static class XamlLayout
             Math.Max(0, slot.Height - (int)Math.Ceiling(margin.Vertical)));
 
         var desired = child.MeasureCore(inner.Size);
-        var width = child.HorizontalAlignment == HorizontalAlignment.Stretch
+
+        // 显式尺寸优先于 Stretch：横向堆叠的交叉轴是整条带高，若让 Stretch 无条件覆盖 Height，
+        // 固定高的按钮/徽标会被拉成整行高。显式尺寸时按中心对齐，和 WPF 的观感一致。
+        var explicitWidth = (int)child.GetValue(Control.WidthProperty)! >= 0;
+        var explicitHeight = (int)child.GetValue(Control.HeightProperty)! >= 0;
+        var width = !explicitWidth && child.HorizontalAlignment == HorizontalAlignment.Stretch
             ? inner.Width
             : Math.Min(inner.Width, Math.Max(0, desired.Width));
-        var height = child.VerticalAlignment == VerticalAlignment.Stretch
+        var height = !explicitHeight && child.VerticalAlignment == VerticalAlignment.Stretch
             ? inner.Height
             : Math.Min(inner.Height, Math.Max(0, desired.Height));
 
-        var x = child.HorizontalAlignment switch
-        {
-            HorizontalAlignment.Center => inner.X + Math.Max(0, (inner.Width - width) / 2),
-            HorizontalAlignment.Right => inner.Right - width,
-            _ => inner.X,
-        };
+        var x = explicitWidth && child.HorizontalAlignment == HorizontalAlignment.Stretch
+            ? inner.X + Math.Max(0, (inner.Width - width) / 2)
+            : child.HorizontalAlignment switch
+            {
+                HorizontalAlignment.Center => inner.X + Math.Max(0, (inner.Width - width) / 2),
+                HorizontalAlignment.Right => inner.Right - width,
+                _ => inner.X,
+            };
 
-        var y = child.VerticalAlignment switch
-        {
-            VerticalAlignment.Center => inner.Y + Math.Max(0, (inner.Height - height) / 2),
-            VerticalAlignment.Bottom => inner.Bottom - height,
-            _ => inner.Y,
-        };
+        var y = explicitHeight && child.VerticalAlignment == VerticalAlignment.Stretch
+            ? inner.Y + Math.Max(0, (inner.Height - height) / 2)
+            : child.VerticalAlignment switch
+            {
+                VerticalAlignment.Center => inner.Y + Math.Max(0, (inner.Height - height) / 2),
+                VerticalAlignment.Bottom => inner.Bottom - height,
+                _ => inner.Y,
+            };
 
         var bounds = new Rectangle(x, y, Math.Max(0, width), Math.Max(0, height));
         if (child.Bounds != bounds)

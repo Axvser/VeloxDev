@@ -9,10 +9,34 @@ namespace VeloxDev.WinForms.Xaml.Controls;
 /// <remarks>Use it where a XAML tree needs a grouping element without a native WinForms counterpart.</remarks>
 public class Panel : Control
 {
+    /// <summary>The paint order inside a panel; a higher value paints in front.</summary>
+    /// <remarks>WinForms orders child windows by their index, so the runtime keeps the collection sorted: higher values move to index zero.</remarks>
+    public static readonly DependencyProperty ZIndexProperty = DependencyProperty.RegisterAttached(
+        "ZIndex",
+        typeof(int),
+        typeof(Panel),
+        new PropertyMetadata(0, OnZIndexChanged));
+
     /// <summary>Creates the container and enables double buffering.</summary>
     public Panel()
     {
         DoubleBuffered = true;
+    }
+
+    /// <summary>Reads the paint order of <paramref name="element"/>.</summary>
+    public static int GetZIndex(System.Windows.Forms.Control element)
+        => (int)(ZIndexProperty.GetValue(element) ?? 0);
+
+    /// <summary>Writes the paint order of <paramref name="element"/>.</summary>
+    public static void SetZIndex(System.Windows.Forms.Control element, int value)
+        => ZIndexProperty.SetValue(element, value);
+
+    private static void OnZIndexChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not null && !target.IsDisposed && target.Parent is { } parent)
+        {
+            XamlLayout.ApplyZOrder(parent);
+        }
     }
 }
 
@@ -131,7 +155,7 @@ public class Canvas : Control
             height = Math.Max(height, ChildExtent(child, horizontal: false));
         }
 
-        return new Size(width, height);
+        return ConstrainSize(new Size(width, height), availableSize);
     }
 
     /// <inheritdoc />

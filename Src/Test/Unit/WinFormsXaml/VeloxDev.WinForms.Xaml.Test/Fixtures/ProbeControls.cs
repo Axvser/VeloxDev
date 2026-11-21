@@ -216,6 +216,81 @@ public sealed class ProbeViewModel : INotifyPropertyChanged
 
     /// <summary>A plain list without collection notifications, for the static-path tests.</summary>
     public List<ProbeItem> PlainItems { get; } = [];
+
+    private double _amount = 1.5d;
+
+    /// <summary>A numeric property used by the StringFormat tests.</summary>
+    public double Amount
+    {
+        get => _amount;
+        set
+        {
+            if (Math.Abs(_amount - value) < double.Epsilon)
+            {
+                return;
+            }
+
+            _amount = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Amount)));
+        }
+    }
+
+    private string? _optionalName;
+
+    /// <summary>A nullable string used by the TargetNullValue tests.</summary>
+    public string? OptionalName
+    {
+        get => _optionalName;
+        set
+        {
+            if (_optionalName == value)
+            {
+                return;
+            }
+
+            _optionalName = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OptionalName)));
+        }
+    }
+
+    private string _caption = "caption";
+
+    /// <summary>A second string used by the style/trigger setter binding tests.</summary>
+    public string Caption
+    {
+        get => _caption;
+        set
+        {
+            if (_caption == value)
+            {
+                return;
+            }
+
+            _caption = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Caption)));
+        }
+    }
+}
+
+/// <summary>A control that can raise <see cref="System.Windows.Forms.Control.LostFocus"/> without a real focus change.</summary>
+public sealed class FocusProbeControl : VeloxDev.WinForms.Xaml.Controls.Control
+{
+    /// <summary>A two-way binding target used by the LostFocus tests.</summary>
+    public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
+        nameof(Text),
+        typeof(string),
+        typeof(FocusProbeControl),
+        new PropertyMetadata(string.Empty));
+
+    /// <summary>Gets or sets the bound text.</summary>
+    public new string Text
+    {
+        get => (string)GetValue(TextProperty)!;
+        set => SetValue(TextProperty, value);
+    }
+
+    /// <summary>Raises the focus-loss path used by <see cref="UpdateSourceTrigger.LostFocus"/>.</summary>
+    public void RaiseLostFocus() => OnLostFocus(EventArgs.Empty);
 }
 
 /// <summary>An observable item used by the DataTrigger indexer-path tests.</summary>
@@ -327,6 +402,26 @@ public sealed class BracketConverter : IValueConverter
         ConvertBackCalls++;
         return value?.ToString()?.Trim('[', ']');
     }
+}
+
+/// <summary>A converter that appends its parameter and implements both converter contracts.</summary>
+public sealed class ParameterConverter : IValueConverter, IParameterizedValueConverter
+{
+    /// <inheritdoc />
+    public object? Convert(object? value, Type targetType) => value;
+
+    /// <inheritdoc />
+    public object? ConvertBack(object? value, Type sourceType) => value;
+
+    /// <inheritdoc />
+    public object? Convert(object? value, Type targetType, object? parameter)
+        => value is null ? null : value + (parameter?.ToString() ?? string.Empty);
+
+    /// <inheritdoc />
+    public object? ConvertBack(object? value, Type sourceType, object? parameter)
+        => value is null
+            ? null
+            : value.ToString()?.Replace(parameter?.ToString() ?? string.Empty, string.Empty, StringComparison.Ordinal);
 }
 
 /// <summary>A trigger action that records when it runs and what the control looked like at that moment.</summary>

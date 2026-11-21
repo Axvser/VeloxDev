@@ -118,10 +118,10 @@ public sealed class InlineTriggerXamlTests
             ".Setters.Add(new global::VeloxDev.WinForms.Xaml.Setter(global::Probe.WorkflowPanel.ColumnProperty, 3));");
         StringAssert.Contains(
             generated,
-            ".EnterAction = new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.ProbeCard.GlowProperty, To = 1D, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.3\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
+            "new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.ProbeCard.GlowProperty, To = 1D, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.3\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
         StringAssert.Contains(
             generated,
-            ".ExitAction = new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.ProbeCard.GlowProperty, To = 0D, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.3\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
+            "new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.ProbeCard.GlowProperty, To = 0D, Effect = new global::VeloxDev.TransitionSystem.TransitionEffect { Duration = global::System.TimeSpan.Parse(\"0:0:0.3\", global::System.Globalization.CultureInfo.InvariantCulture) }, };");
         StringAssert.Contains(generated, "card.Triggers.Add(");
     }
 
@@ -161,7 +161,7 @@ public sealed class InlineTriggerXamlTests
         var generated = run.GeneratedText();
         StringAssert.Contains(
             generated,
-            ".EnterAction = new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.ProbeCard.GlowProperty, To = null, };");
+            "new global::VeloxDev.WinForms.Xaml.TransitionAction { Property = global::Probe.ProbeCard.GlowProperty, To = null, };");
         Assert.IsFalse(generated.Contains(".Value =", StringComparison.Ordinal), "an omitted Value must not be emitted");
     }
 

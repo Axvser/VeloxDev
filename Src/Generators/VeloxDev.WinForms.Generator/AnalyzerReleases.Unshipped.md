@@ -6,7 +6,7 @@
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 VELOX_XAML001 | VeloxDev.Xaml | Error | Unknown XAML type
-VELOX_XAML002 | VeloxDev.Xaml | Warning | Unknown XAML member
+VELOX_XAML002 | VeloxDev.Xaml | Error | Unknown XAML member
 VELOX_XAML003 | VeloxDev.Xaml | Warning | Unsupported XAML value
 VELOX_XAML004 | VeloxDev.Xaml | Warning | Unsupported XAML construct
 VELOX_XAML005 | VeloxDev.Xaml | Error | Missing x:Class

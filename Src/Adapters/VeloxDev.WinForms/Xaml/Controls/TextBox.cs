@@ -86,12 +86,12 @@ public class TextBox : Control
         typeof(TextBox),
         new PropertyMetadata(0, OnEditorPropertyChanged));
 
-    /// <summary>The border stroke colour; a translucent black by default.</summary>
+    /// <summary>The border stroke brush; a translucent black by default.</summary>
     public static readonly DependencyProperty BorderBrushProperty = DependencyProperty.Register(
         nameof(BorderBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(TextBox),
-        new PropertyMetadata(Color.FromArgb(0x66, 0, 0, 0), OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0x66, 0, 0, 0)), OnVisualPropertyChanged));
 
     /// <summary>The border stroke width per side, in pixels; one pixel by default.</summary>
     public static readonly DependencyProperty BorderThicknessProperty = DependencyProperty.Register(
@@ -200,10 +200,11 @@ public class TextBox : Control
         set => SetValue(SelectionLengthProperty, value);
     }
 
-    /// <summary>Gets or sets the border stroke colour.</summary>
-    public Color BorderBrush
+    /// <summary>Gets or sets the border stroke brush.</summary>
+    /// <remarks>GDI+ pens are solid, so a gradient outline is flattened to its <see cref="Brush.ApproximateColor"/>.</remarks>
+    public Brush? BorderBrush
     {
-        get => (Color)GetValue(BorderBrushProperty)!;
+        get => GetValue(BorderBrushProperty) as Brush;
         set => SetValue(BorderBrushProperty, value);
     }
 
@@ -256,7 +257,7 @@ public class TextBox : Control
     {
         base.OnPaint(e);
         var border = BorderThickness;
-        if (BorderBrush.A <= 0 || border.IsEmpty)
+        if (BorderBrush is not { } borderBrush || borderBrush.ApproximateColor.A <= 0 || border.IsEmpty)
         {
             return;
         }
@@ -269,8 +270,8 @@ public class TextBox : Control
         }
 
         using var path = XamlDrawing.RoundedRectangle(bounds, 0f);
-        using var pen = new Pen(BorderBrush, Math.Min(thickness, Math.Min(bounds.Width, bounds.Height) / 2f));
-        e.Graphics.DrawPath(pen, path);
+        using var pen = new Pen(borderBrush, Math.Min(thickness, Math.Min(bounds.Width, bounds.Height) / 2f));
+        pen.Draw(e.Graphics, path);
     }
 
     /// <inheritdoc />
@@ -289,9 +290,13 @@ public class TextBox : Control
             return;
         }
 
-        if (ReferenceEquals(property, BackColorProperty) && newValue is Color background && !background.IsEmpty)
+        if (ReferenceEquals(property, BackgroundProperty) && newValue is Brush background)
         {
-            editor.BackColor = XamlDrawing.ToOpaque(background, SystemColors.Window);
+            editor.BackColor = XamlDrawing.ToOpaque(background.ApproximateColor, SystemColors.Window);
+        }
+        else if (ReferenceEquals(property, BackColorProperty) && newValue is Color backgroundColor && !backgroundColor.IsEmpty)
+        {
+            editor.BackColor = XamlDrawing.ToOpaque(backgroundColor, SystemColors.Window);
         }
         else if (ReferenceEquals(property, ForeColorProperty) && newValue is Color foreground && !foreground.IsEmpty)
         {
@@ -345,8 +350,9 @@ public class TextBox : Control
             };
             editor.UseSystemPasswordChar = false;
             editor.PasswordChar = PasswordChar;
-            editor.BackColor = HasXamlValue(BackColorProperty)
-                ? XamlDrawing.ToOpaque(Background, SystemColors.Window)
+            editor.BackColor = (HasXamlValue(BackColorProperty) || HasXamlValue(BackgroundProperty))
+                && Background is { } background
+                ? XamlDrawing.ToOpaque(background.ApproximateColor, SystemColors.Window)
                 : SystemColors.Window;
             editor.ForeColor = ForeColor;
             editor.Font = Font;

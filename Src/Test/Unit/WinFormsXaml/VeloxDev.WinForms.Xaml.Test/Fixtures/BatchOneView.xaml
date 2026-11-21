@@ -1,0 +1,74 @@
+<local:BatchOneView
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:VeloxDev.WinForms.Xaml.Test.Fixtures"
+    xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+    x:Class="VeloxDev.WinForms.Xaml.Test.Fixtures.BatchOneView"
+    Size="640, 480">
+
+  <v:UniformGrid x:Name="grid"
+                 Rows="2"
+                 Columns="2"
+                 Size="200, 100">
+    <v:Border Size="20, 20" />
+    <v:Border Size="20, 20" />
+    <v:Border Size="20, 20" />
+    <v:Border Size="20, 20" />
+  </v:UniformGrid>
+
+  <v:GroupBox x:Name="group" Header="Group" Size="200, 80">
+    <v:TextBlock Text="group content" />
+  </v:GroupBox>
+
+  <v:Expander x:Name="expander" Header="More" IsExpanded="True" Size="200, 80">
+    <v:TextBlock Text="expanded content" />
+  </v:Expander>
+
+  <v:TabControl x:Name="tabs" Size="240, 120">
+    <v:TabItem Header="One">
+      <v:TextBlock Text="first" />
+    </v:TabItem>
+    <v:TabItem Header="Two">
+      <v:TextBlock Text="second" />
+    </v:TabItem>
+  </v:TabControl>
+
+  <v:TreeView x:Name="tree"
+              ItemsSource="{Binding Items}"
+              DisplayMemberPath="Name"
+              Size="200, 100" />
+
+  <v:ListView x:Name="list"
+              ItemsSource="{Binding Items}"
+              Size="240, 100">
+    <v:ListView.View>
+      <v:GridView>
+        <v:GridView.Columns>
+          <v:GridViewColumn Header="Name" DisplayMemberBinding="Name" Width="120" />
+        </v:GridView.Columns>
+      </v:GridView>
+    </v:ListView.View>
+  </v:ListView>
+
+  <v:DataGrid x:Name="dataGrid"
+              ItemsSource="{Binding Items}"
+              AutoGenerateColumns="False"
+              Size="240, 100">
+    <v:DataGrid.Columns>
+      <v:DataGridColumn Header="Name" Binding="Name" Width="120" />
+    </v:DataGrid.Columns>
+  </v:DataGrid>
+
+  <v:Calendar x:Name="calendar"
+              SelectedDate="{Binding Date, Mode=TwoWay}"
+              Size="200, 160" />
+
+  <v:DatePicker x:Name="datePicker"
+                SelectedDate="{Binding Date, Mode=TwoWay}"
+                Size="200, 32" />
+
+  <v:Polygon x:Name="polygon"
+             Points="0,0 20,0 10,20"
+             Size="20, 20" />
+
+</local:BatchOneView>

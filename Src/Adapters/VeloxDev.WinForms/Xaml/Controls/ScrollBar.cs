@@ -77,33 +77,33 @@ public class ScrollBar : Control
         typeof(ScrollBar),
         new PropertyMetadata(1));
 
-    /// <summary>The colour painted behind the thumb; a 22/255 white by default.</summary>
+    /// <summary>The brush painted behind the thumb; a 22/255 white by default.</summary>
     public static readonly DependencyProperty TrackBrushProperty = DependencyProperty.Register(
         nameof(TrackBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(ScrollBar),
-        new PropertyMetadata(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF), OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)), OnVisualPropertyChanged));
 
-    /// <summary>The colour of the resting thumb; a 66/255 white by default.</summary>
+    /// <summary>The brush of the resting thumb; a 66/255 white by default.</summary>
     public static readonly DependencyProperty ThumbBrushProperty = DependencyProperty.Register(
         nameof(ThumbBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(ScrollBar),
-        new PropertyMetadata(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF), OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)), OnVisualPropertyChanged));
 
-    /// <summary>The colour of the thumb while the pointer is over it or it is being dragged; a 170/255 white by default.</summary>
+    /// <summary>The brush of the thumb while the pointer is over it or it is being dragged; a 170/255 white by default.</summary>
     public static readonly DependencyProperty ThumbHoverBrushProperty = DependencyProperty.Register(
         nameof(ThumbHoverBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(ScrollBar),
-        new PropertyMetadata(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF), OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)), OnVisualPropertyChanged));
 
-    /// <summary>The colour of the thumb outline; transparent by default.</summary>
+    /// <summary>The brush of the thumb outline; transparent by default.</summary>
     public static readonly DependencyProperty ThumbBorderBrushProperty = DependencyProperty.Register(
         nameof(ThumbBorderBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(ScrollBar),
-        new PropertyMetadata(Color.Transparent, OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.Transparent), OnVisualPropertyChanged));
 
     /// <summary>The width of the thumb outline per side; an empty thickness draws no outline.</summary>
     public static readonly DependencyProperty ThumbBorderThicknessProperty = DependencyProperty.Register(
@@ -199,31 +199,31 @@ public class ScrollBar : Control
         set => SetValue(SmallChangeProperty, value);
     }
 
-    /// <summary>Gets or sets the colour painted behind the thumb.</summary>
-    public Color TrackBrush
+    /// <summary>Gets or sets the brush painted behind the thumb.</summary>
+    public Brush? TrackBrush
     {
-        get => (Color)GetValue(TrackBrushProperty)!;
+        get => GetValue(TrackBrushProperty) as Brush;
         set => SetValue(TrackBrushProperty, value);
     }
 
-    /// <summary>Gets or sets the colour of the resting thumb.</summary>
-    public Color ThumbBrush
+    /// <summary>Gets or sets the brush of the resting thumb.</summary>
+    public Brush? ThumbBrush
     {
-        get => (Color)GetValue(ThumbBrushProperty)!;
+        get => GetValue(ThumbBrushProperty) as Brush;
         set => SetValue(ThumbBrushProperty, value);
     }
 
-    /// <summary>Gets or sets the colour of the thumb while the pointer is over it or it is being dragged.</summary>
-    public Color ThumbHoverBrush
+    /// <summary>Gets or sets the brush of the thumb while the pointer is over it or it is being dragged.</summary>
+    public Brush? ThumbHoverBrush
     {
-        get => (Color)GetValue(ThumbHoverBrushProperty)!;
+        get => GetValue(ThumbHoverBrushProperty) as Brush;
         set => SetValue(ThumbHoverBrushProperty, value);
     }
 
-    /// <summary>Gets or sets the colour of the thumb outline.</summary>
-    public Color ThumbBorderBrush
+    /// <summary>Gets or sets the brush of the thumb outline.</summary>
+    public Brush? ThumbBorderBrush
     {
-        get => (Color)GetValue(ThumbBorderBrushProperty)!;
+        get => GetValue(ThumbBorderBrushProperty) as Brush;
         set => SetValue(ThumbBorderBrushProperty, value);
     }
 
@@ -273,12 +273,12 @@ public class ScrollBar : Control
         }
 
         var trackRadius = Math.Min(ThumbCornerRadius, Math.Min(track.Width, track.Height) / 2f);
+        var trackBrushValue = TrackBrush;
         using (var trackPath = CreateRoundedPath(track, trackRadius))
         {
-            if (TrackBrush.A > 0)
+            if (trackBrushValue is { } trackBrush && trackBrush.ApproximateColor.A > 0)
             {
-                using var trackBrush = new SolidBrush(TrackBrush);
-                graphics.FillPath(trackBrush, trackPath);
+                trackBrush.FillPath(graphics, trackPath);
             }
         }
 
@@ -291,20 +291,18 @@ public class ScrollBar : Control
         var thumbRadius = Math.Min(ThumbCornerRadius, Math.Min(thumb.Width, thumb.Height) / 2f);
         using (var thumbPath = CreateRoundedPath(thumb, thumbRadius))
         {
-            var color = _dragging || _hoverThumb ? ThumbHoverBrush : ThumbBrush;
-            if (color.A > 0)
+            var thumbBrushValue = _dragging || _hoverThumb ? ThumbHoverBrush : ThumbBrush;
+            if (thumbBrushValue is { } thumbBrush && thumbBrush.ApproximateColor.A > 0)
             {
-                using var thumbBrush = new SolidBrush(color);
-                graphics.FillPath(thumbBrush, thumbPath);
+                thumbBrush.FillPath(graphics, thumbPath);
             }
 
-            if (ThumbBorderBrush.A > 0 && !ThumbBorderThickness.IsEmpty)
+            if (ThumbBorderBrush is { } borderBrush && borderBrush.ApproximateColor.A > 0 && !ThumbBorderThickness.IsEmpty)
             {
                 using var ring = CreateBorderRing(thumb, thumbRadius, ThumbBorderThickness);
                 if (ring is not null)
                 {
-                    using var borderBrush = new SolidBrush(ThumbBorderBrush);
-                    graphics.FillPath(borderBrush, ring);
+                    borderBrush.FillPath(graphics, ring);
                 }
             }
         }

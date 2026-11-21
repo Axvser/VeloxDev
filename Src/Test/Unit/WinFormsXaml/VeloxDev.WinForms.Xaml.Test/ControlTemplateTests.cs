@@ -78,6 +78,18 @@ public sealed class ControlTemplateTests
     }
 
     [TestMethod]
+    public void TemplateContent_FillsTheTemplatedControl()
+    {
+        using var view = new GeneratedView();
+        using var card = new GeneratedCard();
+        card.Style = (Style)view.Resources["TemplatedCardStyle"]!;
+
+        var chrome = card.Controls.OfType<CardChrome>().Single();
+
+        Assert.AreEqual(System.Windows.Forms.DockStyle.Fill, chrome.Dock);
+    }
+
+    [TestMethod]
     public void ControlTemplateResource_CreatesAFreshContentTree()
     {
         using var view = new GeneratedView();

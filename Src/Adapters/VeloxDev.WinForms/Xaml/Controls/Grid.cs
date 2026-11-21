@@ -100,9 +100,11 @@ public class Grid : Control
     {
         var content = XamlLayout.ContentBounds(this).Size;
         var (columns, rows) = ResolveTracks(content);
-        return new Size(
-            columns.Sum() + (int)Math.Ceiling(Padding.Horizontal),
-            rows.Sum() + (int)Math.Ceiling(Padding.Vertical));
+        return ConstrainSize(
+            new Size(
+                columns.Sum() + (int)Math.Ceiling(Padding.Horizontal),
+                rows.Sum() + (int)Math.Ceiling(Padding.Vertical)),
+            availableSize);
     }
 
     /// <inheritdoc />

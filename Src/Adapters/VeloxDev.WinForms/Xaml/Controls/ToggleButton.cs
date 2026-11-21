@@ -112,7 +112,7 @@ public class CheckBox : ToggleButton
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         // 没有作者设置背景时保持透明；样式写了 Background 才让基类画。
-        if (HasXamlValue(BackColorProperty))
+        if (HasXamlValue(BackColorProperty) || HasXamlValue(BackgroundProperty))
         {
             base.OnPaintBackground(e);
         }
@@ -135,17 +135,18 @@ public class CheckBox : ToggleButton
         var box = new Rectangle(bounds.Left, top, GlyphSize, GlyphSize);
         var boxPath = XamlDrawing.RoundedRectangle(new RectangleF(box.X + 0.5f, box.Y + 0.5f, box.Width - 1f, box.Height - 1f), 3f);
 
+        var accent = Theme.Current.Accent;
         using (boxPath)
         {
-            using var fill = new SolidBrush(IsChecked == true ? ForeColor : SystemColors.Window);
+            using var fill = new SolidBrush(IsChecked == true ? accent : Theme.Current.Surface);
             e.Graphics.FillPath(fill, boxPath);
-            using var pen = new Pen(Color.FromArgb(0x99, ForeColor), 1f);
+            using var pen = new Pen(IsChecked == true ? accent : Theme.Current.ControlBorder, 1f);
             e.Graphics.DrawPath(pen, boxPath);
         }
 
         if (IsChecked == true)
         {
-            using var checkPen = new Pen(SystemColors.Window, 1.8f);
+            using var checkPen = new Pen(Theme.Current.AccentForeground, 1.8f);
             e.Graphics.DrawLines(checkPen,
             [
                 new Point(box.Left + 4, box.Top + 8),
@@ -155,7 +156,7 @@ public class CheckBox : ToggleButton
         }
         else if (IsChecked is null)
         {
-            using var dashPen = new Pen(SystemColors.Window, 1.8f);
+            using var dashPen = new Pen(Theme.Current.AccentForeground, 1.8f);
             e.Graphics.DrawLine(dashPen, box.Left + 4, box.Top + 8, box.Right - 4, box.Top + 8);
         }
 
@@ -179,7 +180,7 @@ public class CheckBox : ToggleButton
                 text,
                 Font,
                 textBounds,
-                IsEnabled ? ForeColor : SystemColors.GrayText,
+                IsEnabled ? ForeColor : Theme.Current.DisabledForeground,
                 flags);
         }
     }
@@ -213,7 +214,7 @@ public class RadioButton : ToggleButton
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         // 没有作者设置背景时保持透明；样式写了 Background 才让基类画。
-        if (HasXamlValue(BackColorProperty))
+        if (HasXamlValue(BackColorProperty) || HasXamlValue(BackgroundProperty))
         {
             base.OnPaintBackground(e);
         }
@@ -254,8 +255,8 @@ public class RadioButton : ToggleButton
         var top = bounds.Top + Math.Max(0, (bounds.Height - GlyphSize) / 2);
         var circle = new Rectangle(bounds.Left, top, GlyphSize, GlyphSize);
 
-        using (var fill = new SolidBrush(SystemColors.Window))
-        using (var border = new Pen(Color.FromArgb(0x99, ForeColor), 1f))
+        using (var fill = new SolidBrush(Theme.Current.Surface))
+        using (var border = new Pen(IsChecked == true ? Theme.Current.Accent : Theme.Current.ControlBorder, 1f))
         {
             e.Graphics.FillEllipse(fill, circle);
             e.Graphics.DrawEllipse(border, circle);
@@ -264,7 +265,7 @@ public class RadioButton : ToggleButton
         if (IsChecked == true)
         {
             var dot = Rectangle.Inflate(circle, -5, -5);
-            using var fill = new SolidBrush(ForeColor);
+            using var fill = new SolidBrush(Theme.Current.Accent);
             e.Graphics.FillEllipse(fill, dot);
         }
 
@@ -288,7 +289,7 @@ public class RadioButton : ToggleButton
                 text,
                 Font,
                 textBounds,
-                IsEnabled ? ForeColor : SystemColors.GrayText,
+                IsEnabled ? ForeColor : Theme.Current.DisabledForeground,
                 flags);
         }
     }

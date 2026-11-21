@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace VeloxDev.WinForms.Xaml.Controls;
@@ -61,26 +62,26 @@ public class Slider : Control
         typeof(Slider),
         new PropertyMetadata(false));
 
-    /// <summary>The colour of the filled part of the track.</summary>
+    /// <summary>The brush of the filled part of the track.</summary>
     public static readonly DependencyProperty BarBrushProperty = DependencyProperty.Register(
         nameof(BarBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(Slider),
-        new PropertyMetadata(Color.FromArgb(0xFF, 0x4C, 0x8B, 0xF5), OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0xFF, 0x4C, 0x8B, 0xF5)), OnVisualPropertyChanged));
 
-    /// <summary>The colour of the empty track.</summary>
+    /// <summary>The brush of the empty track.</summary>
     public static readonly DependencyProperty TrackBrushProperty = DependencyProperty.Register(
         nameof(TrackBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(Slider),
-        new PropertyMetadata(Color.FromArgb(0x33, 0x80, 0x80, 0x80), OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0x33, 0x80, 0x80, 0x80)), OnVisualPropertyChanged));
 
-    /// <summary>The colour of the thumb.</summary>
+    /// <summary>The brush of the thumb.</summary>
     public static readonly DependencyProperty ThumbBrushProperty = DependencyProperty.Register(
         nameof(ThumbBrush),
-        typeof(Color),
+        typeof(Brush),
         typeof(Slider),
-        new PropertyMetadata(Color.White, OnVisualPropertyChanged));
+        new PropertyMetadata(new SolidColorBrush(Color.White), OnVisualPropertyChanged));
 
     /// <summary>The diameter of the thumb in pixels; 14 by default.</summary>
     public static readonly DependencyProperty ThumbSizeProperty = DependencyProperty.Register(
@@ -140,24 +141,24 @@ public class Slider : Control
         set => SetValue(IsSnapToTickEnabledProperty, value);
     }
 
-    /// <summary>Gets or sets the colour of the filled part of the track.</summary>
-    public Color BarBrush
+    /// <summary>Gets or sets the brush of the filled part of the track.</summary>
+    public Brush? BarBrush
     {
-        get => (Color)GetValue(BarBrushProperty)!;
+        get => GetValue(BarBrushProperty) as Brush;
         set => SetValue(BarBrushProperty, value);
     }
 
-    /// <summary>Gets or sets the colour of the empty track.</summary>
-    public Color TrackBrush
+    /// <summary>Gets or sets the brush of the empty track.</summary>
+    public Brush? TrackBrush
     {
-        get => (Color)GetValue(TrackBrushProperty)!;
+        get => GetValue(TrackBrushProperty) as Brush;
         set => SetValue(TrackBrushProperty, value);
     }
 
-    /// <summary>Gets or sets the colour of the thumb.</summary>
-    public Color ThumbBrush
+    /// <summary>Gets or sets the brush of the thumb.</summary>
+    public Brush? ThumbBrush
     {
-        get => (Color)GetValue(ThumbBrushProperty)!;
+        get => GetValue(ThumbBrushProperty) as Brush;
         set => SetValue(ThumbBrushProperty, value);
     }
 
@@ -264,9 +265,12 @@ public class Slider : Control
     private void PaintTrack(Graphics graphics, Rectangle track, float fraction, bool horizontal)
     {
         using var trackPath = XamlDrawing.RoundedRectangle(track, track.Height / 2f);
-        using var trackBrush = new SolidBrush(TrackBrush);
-        graphics.FillPath(trackBrush, trackPath);
-        if (BarBrush.A <= 0 || fraction <= 0f)
+        if (TrackBrush is { } trackBrush && trackBrush.ApproximateColor.A > 0)
+        {
+            trackBrush.FillPath(graphics, trackPath);
+        }
+
+        if (BarBrush is not { } barBrush || barBrush.ApproximateColor.A <= 0 || fraction <= 0f)
         {
             return;
         }
@@ -280,14 +284,18 @@ public class Slider : Control
         }
 
         using var fillPath = XamlDrawing.RoundedRectangle(filled, Math.Min(track.Height / 2f, Math.Min(filled.Width, filled.Height) / 2f));
-        using var barBrush = new SolidBrush(BarBrush);
-        graphics.FillPath(barBrush, fillPath);
+        barBrush.FillPath(graphics, fillPath);
     }
 
     private void PaintThumb(Graphics graphics, Rectangle bounds)
     {
-        using var brush = new SolidBrush(ThumbBrush);
-        graphics.FillEllipse(brush, bounds);
+        if (ThumbBrush is { } thumbBrush && thumbBrush.ApproximateColor.A > 0)
+        {
+            using var path = new GraphicsPath();
+            path.AddEllipse(bounds);
+            thumbBrush.FillPath(graphics, path);
+        }
+
         using var pen = new Pen(Color.FromArgb(0x55, 0, 0, 0));
         graphics.DrawEllipse(pen, bounds);
     }
