@@ -87,3 +87,9 @@
 **它只动单个成员，不动规则**：成员顺序是逐字节契约，`[Archive]` 不重排、不改变其余成员的取舍。改「所有成员」的粒度仍然只有 `SerializationOptions.WithExcludedPropertyTypes`，而且它按**声明类型**精确匹配。
 
 写这个特性时有三个约束（生成器看不见别的生成器、生成器引用不了目标程序集、引用程序集剥非 public 成员），都记在 [pitfalls.md](pitfalls.md) §七。
+
+---
+
+## 四·六、类型改名后
+
+旧文档的 `$type` 仍是旧名。改名前加一条 `VeloxJsonRegistry.RegisterAlias(typeof(NewType), "旧命名空间.旧类型, 程序集")`：它只增加读取方向的键，写出的名字不变。别名不参与声明方/消费方归属规则；同一条别名登记两次时后登记的生效。Core 自己的例子在 `Serialization/WorkflowSerializationAliases.cs`（四个默认组件的 `*DefaultViewModel` 旧名）。

@@ -64,6 +64,8 @@
 
 `RegisterName` / `RegisterContainerFactory` **没有**加同一条：名字由类型自身的程序集与实参拼出，工厂是同一个构造表达式，重复写的就是同一份。
 
+**改名后的旧文档靠别名读取**：`RegisterAlias` 只往 `TypesByName` 加读取键，`NameOf` 写出的仍是现行名；WorkflowSystem 的四个默认组件在 `Serialization/WorkflowSerializationAliases.cs` 的模块初始化器里登记 `*DefaultViewModel`。
+
 > ⚠ **生成物与 Core 必须同版本**：两个注册方法多了一个必填参数，旧的 `.g.cs` 调新的 Core 编不过。耦合在 [extension.md](extension.md) §二 的联动清单里。当前各程序集的注册集合两两不相交，规则只在真的重复时才动作。
 
 ### 闭世界里的第二个开关：成员不只有默认规则
