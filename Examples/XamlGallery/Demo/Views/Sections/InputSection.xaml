@@ -1,0 +1,155 @@
+<v:UserControl
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml;assembly=VeloxDev.WinForms"
+    xmlns:app="clr-namespace:Demo.Views"
+    x:Class="Demo.Views.Sections.InputSection">
+
+  <v:ScrollableControl Dock="Fill" Background="{DynamicResource WindowBrush}">
+    <v:StackPanel Dock="Top" Spacing="16" Padding="4,4,20,28">
+
+      <v:StackPanel Spacing="6">
+        <v:TextBlock Text="04 · Input" Font="{x:Static app:GalleryTypography.Mono}" Foreground="{DynamicResource AccentBrush}" />
+        <v:TextBlock Text="Commands, ranges and chrome" Font="{x:Static app:GalleryTypography.SectionTitle}" />
+        <v:TextBlock Text="Buttons and toggles, keyboard and mouse gestures, ranges, menus, status bars, tooltips and a popup."
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource MutedBrush}"
+                     MaxWidth="980" />
+      </v:StackPanel>
+
+      <v:Border>
+        <v:StackPanel Spacing="10">
+          <v:TextBlock Text="Buttons, toggles and commands" Font="{x:Static app:GalleryTypography.CardTitle}" />
+          <v:TextBlock Text="Command drives IsEnabled through CanExecuteChanged; each button paints its own hover and press states."
+                       Foreground="{DynamicResource MutedBrush}" />
+          <v:StackPanel Orientation="Horizontal" Spacing="10">
+            <v:Button Content="Save" Command="{Binding SaveCommand}" Height="34" />
+            <v:RepeatButton Content="Repeat" Height="34" />
+            <v:ToggleButton Content="Toggle" Height="34" />
+            <v:CheckBox Content="Check" Height="34" Background="{DynamicResource CardBrush}" />
+            <v:RadioButton Content="Radio" GroupName="gallery" Height="34" Background="{DynamicResource CardBrush}" />
+            <v:Button Content="Disabled" Height="34" IsEnabled="False" />
+          </v:StackPanel>
+          <v:TextBlock Text="{Binding SaveCount, StringFormat='Save count: {0}'}" Foreground="{DynamicResource AccentBrush}" />
+          <v:StackPanel Orientation="Horizontal" Spacing="10">
+            <v:Button x:Name="keyButton" Content="Press F5" Height="34">
+              <v:Button.InputBindings>
+                <v:KeyBinding Key="F5" Command="{Binding SaveCommand}" />
+              </v:Button.InputBindings>
+            </v:Button>
+            <v:Button x:Name="mouseButton" Content="Double-click Ctrl+S" Height="34">
+              <v:Button.InputBindings>
+                <v:MouseBinding Action="LeftDoubleClick" Modifiers="Control" Command="{Binding SaveCommand}" />
+              </v:Button.InputBindings>
+            </v:Button>
+            <v:TextBlock Text="Focus a button, then use its gesture." VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" />
+          </v:StackPanel>
+        </v:StackPanel>
+      </v:Border>
+
+      <v:Border>
+        <v:StackPanel Spacing="10">
+          <v:TextBlock Text="Ranges" Font="{x:Static app:GalleryTypography.CardTitle}" />
+          <v:TextBlock Text="Slider, ProgressBar and ScrollBar share value clamping and theme brushes." Foreground="{DynamicResource MutedBrush}" />
+          <v:StackPanel Orientation="Horizontal" Spacing="20">
+            <v:StackPanel Spacing="6" Width="280">
+              <v:TextBlock Text="Slider" Font="{x:Static app:GalleryTypography.Caption}" Foreground="{DynamicResource MutedBrush}" />
+              <v:Slider Height="34" Minimum="0" Maximum="100" Value="42" />
+            </v:StackPanel>
+            <v:StackPanel Spacing="6" Width="280">
+              <v:TextBlock Text="ProgressBar" Font="{x:Static app:GalleryTypography.Caption}" Foreground="{DynamicResource MutedBrush}" />
+              <v:ProgressBar Height="22" Minimum="0" Maximum="100" Value="64" />
+            </v:StackPanel>
+            <v:StackPanel Spacing="6" Width="280">
+              <v:TextBlock Text="ScrollBar" Font="{x:Static app:GalleryTypography.Caption}" Foreground="{DynamicResource MutedBrush}" />
+              <v:ScrollBar Height="22" Orientation="Horizontal" Minimum="0" Maximum="100" Value="30" />
+            </v:StackPanel>
+          </v:StackPanel>
+        </v:StackPanel>
+      </v:Border>
+
+      <v:Border>
+        <v:StackPanel Spacing="10">
+          <v:TextBlock Text="Menus, toolbars and status bars" Font="{x:Static app:GalleryTypography.CardTitle}" />
+          <v:TextBlock Text="Declarative wrappers around the native menu, tool strip and status strip." Foreground="{DynamicResource MutedBrush}" />
+          <v:Menu Height="30">
+            <v:MenuItem Header="File">
+              <v:MenuItem Header="New" />
+              <v:MenuItem Header="Open" />
+              <v:MenuItem Header="Exit" />
+            </v:MenuItem>
+            <v:MenuItem Header="Edit">
+              <v:MenuItem Header="Copy" />
+              <v:MenuItem Header="Paste" />
+            </v:MenuItem>
+            <v:MenuItem Header="Help" />
+          </v:Menu>
+          <v:ToolBar Height="40">
+            <v:ToolBar.Items>
+              <v:Button Content="New" Height="30" />
+              <v:Button Content="Open" Height="30" />
+              <v:Button Content="Save" Height="30" />
+            </v:ToolBar.Items>
+          </v:ToolBar>
+          <v:StatusBar Height="28">
+            <v:StatusBar.Items>
+              <v:StatusBarItem Content="Ready" />
+              <v:StatusBarItem IsSeparator="True" />
+              <v:StatusBarItem Content="XAML runtime" />
+            </v:StatusBar.Items>
+          </v:StatusBar>
+          <v:StackPanel Orientation="Horizontal" Spacing="10">
+            <v:Button Content="Hover for a tooltip" ToolTip="A declarative tooltip" Height="34" />
+            <v:Button Content="Right-click for a menu" Height="34">
+              <v:Button.ContextMenu>
+                <v:ContextMenu>
+                  <v:MenuItem Header="Copy" />
+                  <v:MenuItem Header="Duplicate" />
+                  <v:MenuItem Header="Delete" />
+                </v:ContextMenu>
+              </v:Button.ContextMenu>
+            </v:Button>
+            <v:TextBlock Text="ToolTipService below" v:ToolTipService.ToolTip="Attached to any control" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" />
+          </v:StackPanel>
+        </v:StackPanel>
+      </v:Border>
+
+      <v:Border>
+        <v:StackPanel Spacing="10">
+          <v:TextBlock Text="Pointer and keyboard input" Font="{x:Static app:GalleryTypography.CardTitle}" />
+          <v:TextBlock Text="The XAML pointer and key events bubble from the control under the pointer."
+                       Foreground="{DynamicResource MutedBrush}" />
+          <v:Border x:Name="inputPad"
+                    Height="110"
+                    Padding="0"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Background="{DynamicResource FieldBrush}"
+                    Focusable="True"
+                    PointerEntered="OnPadPointerEntered"
+                    PointerMoved="OnPadPointerMoved"
+                    PointerExited="OnPadPointerExited"
+                    KeyInputDown="OnPadKeyDown">
+            <v:TextBlock x:Name="inputReadout"
+                         Text="Move the pointer here, click to focus, then press a key."
+                         TextAlignment="Center"
+                         VerticalAlignment="Center"
+                         Foreground="{DynamicResource MutedBrush}" />
+          </v:Border>
+          <v:StackPanel Orientation="Horizontal" Spacing="10">
+            <v:Button x:Name="popupButton" Content="Open popup" Height="34" Click="OnPopupClick" />
+            <v:TextBlock Text="The popup is a borderless top-level window." VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" />
+          </v:StackPanel>
+          <v:Popup x:Name="popup" IsOpen="False" Placement="Bottom" PlacementTarget="{Binding ElementName=popupButton}" VerticalOffset="6">
+            <v:Popup.Child>
+              <v:Border Width="260" Height="96" Padding="16" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10">
+                <v:TextBlock Text="Popup content lives in its own borderless Form and is detached while closed." TextWrapping="Wrap" />
+              </v:Border>
+            </v:Popup.Child>
+          </v:Popup>
+        </v:StackPanel>
+      </v:Border>
+
+    </v:StackPanel>
+  </v:ScrollableControl>
+</v:UserControl>

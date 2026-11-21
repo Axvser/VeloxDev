@@ -22,6 +22,9 @@
     <Project Path="Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" />
   </Folder>
   <Folder Name="/Examples/" />
+  <Folder Name="/Examples/XamlGallery/">
+    <Project Path="Examples/XamlGallery/Demo/Demo.csproj" />
+  </Folder>
   <Folder Name="/Examples/AOP/" />
   <Folder Name="/Examples/AOP/Avalonia/">
     <Project Path="Examples/AOP/Avalonia/Demo/Demo.csproj" />
