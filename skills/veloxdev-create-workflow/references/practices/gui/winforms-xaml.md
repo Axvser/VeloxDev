@@ -55,11 +55,13 @@ pipeline.
 
 | Family | Types |
 |---|---|
-| Layout | `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `Border`, `ScrollViewer`, `ContentControl`, `ItemsControl` |
-| Text | `TextBlock`, `Label`, `TextBox`, `PasswordBox` |
-| Selection | `Button`, `RepeatButton`, `ToggleButton`, `CheckBox`, `RadioButton`, `ListBox`, `ComboBox` |
+| Layout | `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `UniformGrid`, `Viewbox`, `GridSplitter`, `Border`, `ScrollViewer`, `ContentControl`, `ItemsControl`, `ContentPresenter`, `ItemsPresenter`, `Decorator`, `AdornerDecorator`, `BulletDecorator`, `VirtualizingStackPanel` |
+| Text | `TextBlock`, `Label`, `TextBox`, `PasswordBox`, `AccessText`, `RichTextBox`, `FlowDocumentScrollViewer`, `DocumentViewer` |
+| Selection | `Button`, `RepeatButton`, `ToggleButton`, `CheckBox`, `RadioButton`, `ListBox`, `ComboBox`, `TreeView`, `ListView`, `DataGrid`, `Calendar`, `DatePicker` |
 | Range / media | `ProgressBar`, `Slider`, `Image`, `Separator` |
-| Shapes | `Rectangle`, `Ellipse`, `Line`, `Path` |
+| Shapes | `Rectangle`, `Ellipse`, `Line`, `Path`, `Polygon`, `Polyline` |
+| Chrome | `GroupBox`, `Expander`, `TabControl`/`TabItem`, `Thumb`, `ToolBar`/`ToolBarTray`, `StatusBar`/`StatusBarItem`, `HeaderedContentControl`, `HeaderedItemsControl`, `AccessText`, `Menu`, `ContextMenu`, `ToolTip`, `Popup` |
+| Navigation | `Page`, `Frame`, `Window`, `NavigationWindow` |
 
 `ListBox` and `ComboBox` wrap the native selectors for selection and scrolling, so they render native
 item text and `DisplayMemberPath`; use `ItemsControl` with `ItemTemplate` when every item needs an
@@ -102,8 +104,18 @@ Attached layout properties:
 ```
 
 `GridLength` literals are `Auto`, `*`, `2*` and pixel counts. `Canvas` also supports `Right` and
-`Bottom`; `Grid` also supports `RowSpan` / `ColumnSpan`. Native children are laid out by the same
-panels; attached coordinates work on them, but the native control itself has no DP pipeline.
+`Bottom`; `Grid` also supports `RowSpan` / `ColumnSpan`. `v:Panel.ZIndex` orders siblings: a higher
+value moves the control toward the front. Native children are laid out by the same panels; attached
+coordinates work on them, but the native control itself has no DP pipeline.
+
+An explicit `Width` / `Height` wins over `Stretch`. In a horizontal stack the cross axis is the
+whole strip, so a fixed-height button stays at that height and centres; the same applies to a fixed
+width in a vertical stack. Leave the size unset when the control should fill the cross axis.
+
+Measurement passes the available width down to `TextBlock` and `ContentControl`, so wrapping text
+reports its wrapped height. `Border` measures its single child plus `Padding`, which means a card
+needs no fixed `Height`: leave it unset and the card grows with its content. Panels that override
+`MeasureCore` apply their own `Width`/`Height`/`Min*`/`Max*` through `Control.ConstrainSize`.
 
 ## 5. Bindings and resources
 
@@ -114,14 +126,38 @@ panels; attached coordinates work on them, but the native control itself has no 
 <v:Border Background="{StaticResource Accent}" />
 ```
 
-- Forms: `{Binding Path}`, `{Binding Path, Mode=OneWay|TwoWay|OneTime}`.
+- Forms: `{Binding Path}`, `{Binding Path, Mode=OneWay|TwoWay|OneTime}`. The path supports dotted
+  properties and simple indexers (`Items[0].Name`).
+- Source selection: `ElementName`, `RelativeSource` (`Self`, `TemplatedParent`,
+  `FindAncestor, AncestorType={x:Type local:Foo}, AncestorLevel=2`) and `Source`.
+- Value shaping: `Converter={StaticResource Key}`, `ConverterParameter`, `StringFormat`,
+  `FallbackValue`, `TargetNullValue`. A converter that implements `IParameterizedValueConverter`
+  receives the parameter; `IValueConverter` alone keeps its two-argument contract.
+- Write-back timing: `UpdateSourceTrigger=PropertyChanged|LostFocus|Explicit`. `Explicit` waits for
+  `control.UpdateSource(property)` on a DP binding or `control.UpdateSource("Text")` on a native
+  binding.
+- `{x:Static local:Foo.Bar}` assigns a public static field or property and can be used as a binding
+  source or a setter value.
 - `DataContext` is inherited through XAML `Control` parents.
 - Bindings re-resolve when the source implements `INotifyPropertyChanged`; collection triggers can
-  subscribe to `INotifyCollectionChanged`.
-- Native controls use `Control.DataBindings`; TwoWay works for native CLR properties there.
-- Attached DP values on native controls are OneWay only; a native write has no DP change pipeline.
+  subscribe to `INotifyCollectionChanged`. A XAML element source is also watched for DP changes so
+  `ElementName` and `TemplateBinding` follow a dependency property; a native element source is read
+  when the binding attaches and does not raise a change pipeline of its own.
+- Native controls use `Control.DataBindings`; TwoWay works for native CLR properties there, and the
+  converter/format/trigger options apply through the native binding's `Format`/`Parse` events.
+- Attached DP values on native controls are OneWay/OneTime only; a native write has no DP change pipeline.
 - `{StaticResource Key}` resolves through the control tree at runtime. A resource object must be
   declared before the resource or control that references it.
+- `{DynamicResource Key}` follows resource replacement/removal. The lookup follows the whole
+  ancestor chain, including ancestors attached after the referencing view was built.
+- `StringFormat` is a .NET format string. Start it with `{}` when it starts with a brace, for
+  example `StringFormat='{}{0:N2}'`; the escape prefix is removed before formatting. `ResourceDictionary.MergedDictionaries`
+  are searched after local entries (last-added-first).
+- Validation: `Binding.ValidationRules`, `ValidatesOnExceptions`, `INotifyDataErrorInfo` and
+  `IDataErrorInfo` update `Validation.HasError`/`Errors`; a style or trigger can react to
+  `Validation.HasError`.
+- `VisualStateManager.GoToState(control, state, useTransitions)` applies `VisualState` setters and
+  enter/exit actions. The compiler has no state-group markup syntax yet.
 
 Resources live in a `v:ResourceDictionary`:
 
@@ -163,13 +199,18 @@ declared.
 
 - A XAML-control style setter targets a **dependency property**. Native-control styles support
   setters only, by CLR property name; native triggers/templates are not part of this subset.
+- `Setter.Value` accepts a literal, `{StaticResource Key}`, `{x:Static ...}` or a `{Binding ...}`.
+  A binding setter follows its source while the style or trigger is active; native-control setters
+  reject bindings.
 - Value precedence is local > style trigger > style setter > default.
 - `Trigger` watches one dependency property and compares it to `Value`.
 - `DataTrigger` watches a binding path on the data context; `MultiTrigger` requires every `Condition`.
 - Inline triggers are declared on the control: `<Owner.Triggers>…`.
-- A trigger can also run an `EnterAction` / `ExitAction`; that is the animation seam below.
+- A trigger can also run an `EnterAction` / `ExitAction`; that is the animation seam below. An action
+  element may contain several actions; they run as one `TriggerActionGroup`.
 - `Style.BasedOn` merges a base style. An implicit style has `TargetType` and no `x:Key`.
-- `Style.Template` applies a `ControlTemplate` (one root control) while the style is active.
+- `Style.Template` applies a `ControlTemplate` while the style is active. A template with triggers
+  declares `TargetType`; a setter that targets a named part also declares the part's `TargetType`.
 
 ## 7. Animations
 
@@ -220,6 +261,12 @@ The same shape works inside `Style.Triggers`:
 | `To` | End value, converted to the property type. Literal only (number, color, enum, `Thickness`, …); markup extensions are not resolved here |
 | `Duration` | `TimeSpan` literal, for example `0:0:0.2` |
 | `Ease` | `CubicOut`, `Cubic.Out`, `SineInOut`, `Sine.InOut`, `Linear`, `Default`; unknown names report `VELOX_XAML003` |
+| `LoopTime` | Additional full passes; `0` runs once, `int.MaxValue` repeats forever |
+| `IsAutoReverse` | `True` runs each pass backwards after the forward pass |
+
+An `EnterAction` / `ExitAction` may contain more than one action element. The generator wraps them in
+a `TriggerActionGroup`; all actions start in declaration order. Use this for a multi-property effect
+that WPF would express as one storyboard.
 
 Both actions are needed for a reversible hover/checked effect. `EnterAction` runs when the
 condition becomes true; `ExitAction` runs when it becomes false. The action writes a local value, it
@@ -366,6 +413,39 @@ public sealed class CustomTemplateSelector : TemplateSelector
 The tree points `behaviors:WorkflowSurfaceBehavior.TemplateSelector` at that resource. `null` from
 the selector means the pool skips the item; the `ViewFactory` reports an unsupported item.
 
+### 8.1 ControlTemplate
+
+A `ControlTemplate` still creates one root control, but it now carries the template pieces WPF
+authors expect:
+
+- The template root is docked to fill the templated control, so a plain `Control` needs no layout
+  code to size its template.
+- `TargetType="local:MyControl"` checks the owning type and lets the template's triggers resolve
+  their properties against it.
+- `{TemplateBinding Property}` binds a template child to the templated parent.
+- `x:Name` inside the template is registered in the template's own `NameScope`; the templated control
+  reads a part with `GetTemplateChild<T>("PART_...")`.
+- `ControlTemplate.Triggers` evaluate against the templated control. A trigger setter may name a
+  part with `TargetName`; use `TargetType="v:TextBlock"` when the property belongs to the part rather
+  than to the templated control.
+
+### 8.2 ItemsControl panels, containers and views
+
+`ItemsControl` supports `ItemsPanel` (a XAML container such as `v:StackPanel`), `ItemsPanelTemplate`,
+`ItemContainerStyle`, `ItemContainerStyleSelector`, `ItemTemplateSelector`, and `Virtualizing` +
+`ItemHeight` for fixed-row virtualized lists inside a `ScrollViewer`. The visible range uses the
+viewer's client height when `ViewportHeight` is left at zero, so the control may be taller than the
+viewer. The viewer handles the mouse wheel itself (Shift for the horizontal axis) and raises
+`ViewChanged` for both wheel and thumb moves; it does not move its content, so a host that scrolls
+static content must apply the offset, while the virtualized `ItemsControl` re-realizes rows on every
+change.
+`ItemContainerGenerator` maps items to generated controls (`ContainerFromItem`,
+`ItemFromContainer`, `ContainerFromIndex`).
+
+`CollectionView`/`CollectionViewSource` provide a WPF-shaped local view: sorting, filtering, grouping,
+current item and `Refresh`. They are not the WindowsBase `ICollectionView` interface; assign the
+`View` (IEnumerable) to `ItemsSource` and reassign when `ViewChanged` fires.
+
 ## 9. Events and input
 
 - Native WinForms events (`Click`, `KeyDown`, `MouseDown`, …) are bound normally and win over the
@@ -376,27 +456,76 @@ the selector means the pool skips the item; the `ViewFactory` reports an unsuppo
 - Native controls participate through `XamlInput.AddPointerPressed` etc.; the adapter's behaviours
   use that bridge. For workflow gestures, subscribe to the tree's `IInputEvents` instead of
   per-control native events.
-- `x:Name` creates a code-behind field. Workflow parts resolve the native `Control.Name`, so a
+- `x:Name` creates a code-behind field and registers the name in the view's `NameScope`, so
+  `ElementName` and `FindName` work. Workflow parts still resolve the native `Control.Name`, so a
   workflow template writes both when both are needed.
+
+## 9.1 Commands, input bindings and focus
+
+`Button.Command` / `CommandParameter` are dependency properties. `Command="{Binding Save}"` works, and
+`CanExecuteChanged` drives `IsEnabled`.
+
+`InputBindings` is a per-control collection:
+
+```xml
+<v:Button Content="Save" Command="{Binding Save}">
+  <v:Button.InputBindings>
+    <v:KeyBinding Key="S" Modifiers="Control" Command="{Binding Save}" />
+    <v:MouseBinding Action="LeftDoubleClick" Command="{Binding Save}" />
+  </v:Button.InputBindings>
+</v:Button>
+```
+
+`KeyBinding`/`MouseBinding` are non-control objects, so their `Command` binding is routed through
+`XamlRuntime.SetObjectBinding`; the host control supplies the data context. `TabIndex` and `IsTabStop`
+mirror the native tab order; `FocusManager` exposes the currently focused XAML control.
+
+## 9.2 Declarative chrome
+
+`v:ContextMenu`, `v:MenuItem` and `v:Menu` wrap the native `ContextMenuStrip` / `MenuStrip`; child
+`MenuItem` elements are added to the parent's item collection. `ContextMenu` can be used on a XAML
+control through the `ContextMenu` property and on a native control through `ContextMenuStrip`.
+
+`v:ToolTipService.ToolTip="text"` attaches a tooltip to any control; a XAML control also has a
+`ToolTip` property that accepts either a string or a `v:ToolTip` object.
+
+`v:Popup` hosts one `Child` in a borderless top-level window. `IsOpen`, `PlacementTarget`,
+`Placement` and the horizontal/vertical offsets control its position. A popup child is detached
+while the popup is closed.
+
+## 9.2 Default theme
+
+`Theme` holds the default palette. `Theme.Mode` swaps between `Light` and `Dark`; `Theme.Current`
+can be replaced with a custom `ThemePalette`. Interactive controls that do not set their own colours
+receive an implicit style from `ThemeStyles`: neutral surface, one accent, 6px corners, 32px control
+height. Containers stay transparent.
+
+After changing the palette, call `Theme.ApplyTo(root)` (or `ThemeStyles.ApplyTo(root)`) to re-apply the
+implicit styles over a live tree. Explicit values and explicit/implicit styles from the control tree
+still win over the theme fallback.
 
 ## 10. Limits and diagnostics
 
 Not in this subset:
 
-- WPF templated parent, template parts, `ElementName`, `RelativeSource`, `x:Static`
 - native attached-value TwoWay, native style triggers/templates
 - designer and hot reload
 - a full WPF measure/arrange engine or `Viewbox`; use the shipped panels and explicit sizes
-- arbitrary markup extensions in `TransitionAction.To` / setter values
+- arbitrary markup extensions in `TransitionAction.To` / `KeyFrame.Value`; only the binding and
+  setter positions accept markup
 - `DataTemplate` content with mixed text and elements; one root control per template
-- a built-in `Opacity` DP; add a custom DP if your control paints from it (WinForms child windows do not composite over siblings)
+- per-keyframe easing; `KeyFrameAnimation` shares one `Ease`
+- virtualization with variable item heights; `Virtualizing` uses a fixed `ItemHeight`
+- a built-in `Opacity` / `RenderTransform` / `Clip` / `Effect` DP; add a custom DP if your control
+  paints from it (WinForms child windows do not composite over siblings)
+- template triggers that target a native part's CLR property; template trigger setters use DPs
 
 The generator reports `VELOX_XAML001–019` and `VELOX_XAMLP001–004`. The most useful ones here:
 
 | ID | Meaning |
 |---|---|
 | `VELOX_XAML001` | unknown type |
-| `VELOX_XAML002` | unknown property or event |
+| `VELOX_XAML002` | unknown property or event (error) |
 | `VELOX_XAML003` | bad literal / ease / duration |
 | `VELOX_XAML004` | unsupported construct |
 | `VELOX_XAML013` | unknown attached property |
@@ -426,3 +555,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Src/Test/Harness/verify-work
 The runtime tests need a real control handle and a pumped message queue: every animation frame is
 posted through `Control.BeginInvoke`. The template harness generates and builds all seven items, but
 it cannot prove drawing or animation; run the Trimmed demo for that.
+
+`Examples/XamlGallery` is the full feature catalogue (layout, text, data, input, graphics, animation,
+binding/validation, styles/templates, theme, navigation). Build it or run it with `--smoke` after
+changing runtime features; `--tab N --scroll PX --light --capture` drives and captures one page.

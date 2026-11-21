@@ -3,6 +3,7 @@
 > 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/AttachedBehaviors/`、`Xaml/` 是 XAML 运行时、`TransitionSystem/` 含一个采样器、`DynamicTheme/ThemeValueConverters.cs`、顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。表面由 XAML 根 + `WorkflowSurfaceBehavior` 接管，网格装饰器归模板。
 > **当前是 XAML-first 架构**：适配器包含 XAML 运行时；生成器独立在 `Src/Generators/VeloxDev.WinForms.Generator/`；Surface、节点/插槽/连线模板与两个 Demo 的视觉壳由 XAML 定义，低层 attachment/behavior 仍留在 code-behind。包版本 11.2.0。
 > **XAML 基础控件库在 `Xaml/Controls/`**（形状在 `Xaml/Controls/Shapes/`）：全部派生 XAML `Control`，属性走 DP，因而 Style/Trigger/Binding/Transition 都可用；原生 WinForms 元素只能接收附加值。**XAML 前缀严格**：`v:` = VeloxDev，`local:` = 模板/Demo，无前缀 = 原生；根元素也要带前缀。XAML 视图 code-behind 的基类写完整命名空间（`VeloxDev.WinForms.Xaml.Controls.UserControl`）。
+> **XAML 运行时的扩展面**：`NameScope` + `ElementName`/`RelativeSource`/`x:Static`，绑定侧 `Converter`/`StringFormat`/`FallbackValue`/`TargetNullValue`/`UpdateSourceTrigger`/索引器，`Setter.Value` 可绑定，`ControlTemplate` 带 `TargetType`/`TemplatedParent`/部件/模板触发器，`Panel.ZIndex`，`TriggerActionGroup`/`LoopTime`/`IsAutoReverse`，`ItemsPanel`/`ItemContainerStyle`/固定行高虚拟化，以及 `Menus.cs`/`Popup.cs` 的声明式外壳。运行时细节与边界见 `memory/modules/WinFormsXaml/architecture.md`。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这处）。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台，不存在平台轴。它在三条轴上的平台差异分别落在

@@ -109,8 +109,10 @@ XamlTransition.Stop(this);
 - A later `Animate` on the same target supersedes the earlier mutual run. `Stop` ends it where it
   stands.
 - Start the first animation on the UI thread: frames are posted through `Control.BeginInvoke`.
-- `TransitionEffect` also exposes `FPS`, `LoopTime` and `IsAutoReverse`; XAML `TransitionAction`
-  only exposes `Duration` and `Ease`, so use code-behind for those extra fields.
+- `TransitionAction` and `KeyFrameAnimation` expose `Duration`, `Ease`, `LoopTime` and
+  `IsAutoReverse` in XAML. `FPS` still needs code-behind.
+- An `EnterAction` / `ExitAction` may contain several action elements. They run as one
+  `TriggerActionGroup` in declaration order.
 
 ## Animatable values
 

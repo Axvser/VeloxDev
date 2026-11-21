@@ -1,4 +1,4 @@
-﻿# TransitionSystem — WinForms
+# TransitionSystem — WinForms
 
 > **读法**：契约（每个类各自要提供什么）、注册位置、`NonPriority` 的选型通则都在
 > `memory/modules/TransitionSystem/extension.md`；
@@ -22,13 +22,13 @@
 
 **`Transition<T>` 有一个泛型 `Property` + 一批手写重载**（泛型 `Transition.cs` 的 `Property<TValue>`，其余是手写重载）。与 WPF 不同 —— 那家手写重载里有泛型表达不了的语义 —— 这批手写重载在 WinForms 上**功能上是冗余的**：参数表被泛型版完全覆盖，方法体逐字相同（对照泛型版与第一个手写重载）。逐类型手写**必须**的只有 Razor（它没有泛型版，`extension.md` §三·A·3）。⇒ 改这些重载不会改变任何行为，**除了 `decimal` 那一个**（见 §4.1）。
 
-### 为什么这家只有 `Padding` 一个采样器
+### 这家有哪些采样器
 
-**采样器条数度量「这家框架自带的、Core 还没覆盖的可动画值类型有几个」，不度量实现完整度。WinForms 的那一族正好被 Core 全包了。**
+**采样器条数度量「这家框架自带的、Core 还没覆盖的可动画值类型有几个」，不度量实现完整度。**
 
 - WinForms 的属性面**就是 `System.Drawing` 那一族**：`Control.Location`=Point、`Control.Size`=Size、`BackColor`/`ForeColor`=Color、`Bounds`/`ClientRectangle`=Rectangle/`RectangleF`、`Font` 是引用类型。Core 的静态构造（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的静态构造）已注册数值类型 + `System.Drawing` 的几何/颜色类型 + `#if !NETSTANDARD2_0` 的 `Vector2/3/4`/`Quaternion`。
-- 排掉这些**只剩 `System.Windows.Forms.Padding`** —— 它是 `System.Drawing` 之外唯一一个 WinForms 专有可动画值类型，也就是 WPF/Avalonia/WinUI/MAUI/Jalium 五家 `Thickness` 的对等物。所以注册表里只有一行（`Interpolator.cs` 静态构造里那条 `Padding` 注册）。现状可核：`TransitionSystem/Samplers/PaddingSampler.cs` 与 `Interpolator.cs` 静态构造里的那条注册。
-- 这家**没有** `Brush`/`Transform`/`CornerRadius`/`GridLength`/`DropShadow`/`Projection`/`Point3D` 的等价物：画刷按需 `new SolidBrush(color)` 现造（`ThemeValueConverters.cs` 的 `ObjectConverter` 里 `new SolidBrush(color)`），坐标变换是 GDI+ 的 `Graphics.Transform` 而不是视图模型上的属性 —— WorkflowSystem 那半边也印证：`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowCanvasTransformBehavior.cs` 存的是一个 `Offset` 结构，不是变换对象。
+- 排掉这些后，WinForms 专有（或 XAML 层新引入）的可动画类型是 `System.Windows.Forms.Padding`、XAML `Thickness` 和 XAML `Brush`。注册表在 `Interpolator.cs` 静态构造里各有一行；实现分别在 `Samplers/PaddingSampler.cs`、`ThicknessSampler.cs`、`BrushSampler.cs`。
+- `BrushSampler` 把两个端点压到 `ApproximateColor` 后逐通道插值，写回 `SolidColorBrush`；渐变会被拍平成代表色。`Transform`/`CornerRadius`/`GridLength`/`DropShadow`/`Projection`/`Point3D` 仍没有等价物；坐标变换是 GDI+ 的 `Graphics.Transform` 而不是视图模型上的属性。
 - **副作用（容易手贱的一点）**：`Point`/`Size`/`Color` 在 Core 里已经注册过，**不要**在这家再注册一遍。`RegisterInterpolator` 是进程级 last-writer-wins 的原子 `AddOrUpdate`（`Src/Core/VeloxDev.Core/TransitionSystem/Sampling/Interpolator.cs` 的 `RegisterInterpolator`），而 `Interpolator` 与 `InterpolatorCore` 两个静态构造谁先跑不确定；重注册会无声地把 Core 的实现换掉。WPF/Avalonia 那种「同名不同型的 `Point`」在这家**不存在**（它俩用的就是同一个 `System.Drawing.Point`），所以那条理由不适用。
 
 ---
@@ -110,7 +110,7 @@
 
 另外两点（都是与 Core 同族的有意对照，不是缺陷）：
 - `PaddingSampler` 忽略 `options`（签名收了 `object? options` 但 `InsertFrame` 体里没用）⇒ `interpolationOptions` 对 `Padding` 无效。
-- `SizeSampler` 特意让宽高共享一个 `BoundedProgress` 并在 0 处停住（`SizeSampler.cs` 里 `BoundedProgress` 那段注释：负尺寸不可表示）；`Padding` 的四条边各算各的，因为四个 int 接受负值 —— **这就是验收表把这条判成 `SamplerRule.Extrapolate` 而不是饱和的原因**（`Src/Test/AutoTest/Samplers/WinFormsEntries.cs` 的 `Expected` 上方注释与实现，写明了「收缩的一侧在 t > 1 处会算出负的 Padding，而 Padding 只是四个 int，接受负值」）。
+- `SizeSampler` 特意让宽高共享一个 `BoundedProgress` 并在 0 处停住（`SizeSampler.cs` 里 `BoundedProgress` 那段注释：负尺寸不可表示）；`Padding` 的四条边各算各的，因为四个 int 接受负值 —— **这就是验收表把这条判成 `SamplerRule.Extrapolate` 而不是饱和的原因**（`Src/Test/AutoTest/Samplers/WinFormsEntries.cs` 的 `Expected` 上方注释与实现，写明了「收缩的一侧在 t > 1 处会算出负的 Padding，而 Padding 只是四个 int，接受负值」）。`ThicknessSampler` 与 `PaddingSampler` 同形；`BrushSampler` 逐通道 `Math.Round` 后夹到 0..255，所以判成 `Saturate`。
 
 ### 4.5 静态构造的触发时机：这家的注册只有一个，漏掉等于「全部不动画」
 
@@ -120,4 +120,4 @@
 
 ## 五、验收覆盖面
 
-- WinForms 的验收表**只有少量 entry**（`Src/Test/AutoTest/Samplers/WinFormsEntries.cs` 的 `All`），而 `Src/Test/AutoTest/Samplers/SamplerCoverageTests.cs` 的 `ExpectedAdapterAssemblies` 里那个 `"VeloxDev.WinForms"` 字符串是「这家还在名单上」的唯一依据 —— 改采样器时覆盖率测试会不会真的验到这家，全靠它。
+- WinForms 的验收表（`Src/Test/AutoTest/Samplers/WinFormsEntries.cs` 的 `All`）覆盖 `PaddingSampler`、`ThicknessSampler`、`BrushSampler`；`BrushSampler`/`ThicknessSampler` 因与其它适配器同名，用反射从 WinForms 程序集取类型。`Src/Test/AutoTest/Samplers/SamplerCoverageTests.cs` 的 `ExpectedAdapterAssemblies` 里那个 `"VeloxDev.WinForms"` 字符串是「这家还在名单上」的唯一依据。
