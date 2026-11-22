@@ -52,9 +52,9 @@ each PNG. `--preview-only` hides the title, side panes and status strip for a co
 | Group | Shows |
 | --- | --- |
 | Layout | `StackPanel`, `DockPanel`, `Grid`, `WrapPanel`, `Canvas`, `UniformGrid`, `Viewbox`, `GridSplitter`, `GroupBox`, `Expander`, `TabControl` |
-| Text | `TextBlock`, `TextBox`, password and multiline editing, `Image` |
+| Text | `TextBlock`, `TextBox`, password/multiline editing, `RichTextBox`, `Image` |
 | Data | `ListBox`, `ComboBox`, `VirtualList`, `TreeView`, `Calendar`, `DatePicker` |
-| Input | `Button`/`RepeatButton`, toggles, `Slider`, `ProgressBar` |
+| Input | `Button`/`RepeatButton`, toggles, `Slider`, `ProgressBar`, `NativeControlHost` |
 | Graphics | Shapes (`Rectangle`, `Ellipse`, `Polygon`, `Path`, `Line`), `VisualPresenter` with a lightweight `Visual` tree, opacity and clip |
 | Overlay | `VisualPopup`, `VisualMenu`, `VisualContextMenu` |
 | Styling | Implicit/explicit `VisualStyle`, `VisualTrigger`, `VisualControlTemplate` with `ContentPresenter` and a named part, resources |

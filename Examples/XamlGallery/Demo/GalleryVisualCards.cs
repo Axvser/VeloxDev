@@ -54,14 +54,14 @@ internal static class GalleryVisualCards
             _ => Row(10,
                 Tile("One", Theme.Current.Accent),
                 Tile("Two", Theme.Current.FocusRing),
-                Tile("Three", Theme.Current.Selection))),
+                Tile("Three", Theme.Current.FocusRing))),
         Card("layout.dock-panel", "Layout", "DockPanel", "Children dock to the four edges; the last child fills.",
             "DockPanel.SetDock(child, DockPlacement.Left)",
             _ =>
             {
                 var dock = new VC.DockPanel { Width = 420, Height = 160 };
                 var top = Tile("Top", Theme.Current.Accent); VC.DockPanel.SetDock(top, VeloxDev.WinForms.Xaml.Controls.DockPlacement.Top);
-                var left = Tile("Left", Theme.Current.Selection); VC.DockPanel.SetDock(left, VeloxDev.WinForms.Xaml.Controls.DockPlacement.Left);
+                var left = Tile("Left", Theme.Current.FocusRing); VC.DockPanel.SetDock(left, VeloxDev.WinForms.Xaml.Controls.DockPlacement.Left);
                 var fill = new VC.Border { Background = Theme.Current.SurfaceAlt, Child = Label("Fill", Theme.Current.Foreground) };
                 dock.Add(top); dock.Add(left); dock.Add(fill);
                 return dock;
@@ -76,7 +76,7 @@ internal static class GalleryVisualCards
                 grid.ColumnDefinitions.Add(new VeloxDev.WinForms.Xaml.Controls.ColumnDefinition { Width = VeloxDev.WinForms.Xaml.Controls.GridLength.Star });
                 grid.ColumnDefinitions.Add(new VeloxDev.WinForms.Xaml.Controls.ColumnDefinition { Width = VeloxDev.WinForms.Xaml.Controls.GridLength.Star });
                 var first = Tile("0,0", Theme.Current.Accent); VC.Grid.SetColumn(first, 1);
-                var second = Tile("1,0", Theme.Current.Selection); VC.Grid.SetRow(second, 1);
+                var second = Tile("1,0", Theme.Current.FocusRing); VC.Grid.SetRow(second, 1);
                 var third = Tile("1,1", Theme.Current.FocusRing); VC.Grid.SetRow(third, 1); VC.Grid.SetColumn(third, 1);
                 grid.Add(first); grid.Add(second); grid.Add(third);
                 return grid;
@@ -88,7 +88,7 @@ internal static class GalleryVisualCards
                 var wrap = new VC.WrapPanel { Width = 300, ItemWidth = 70, ItemHeight = 32, Spacing = 6 };
                 for (var index = 0; index < 8; index++)
                 {
-                    var tile = Tile($"{index + 1}", index % 2 == 0 ? Theme.Current.Accent : Theme.Current.Selection);
+                    var tile = Tile($"{index + 1}", index % 2 == 0 ? Theme.Current.Accent : Theme.Current.FocusRing);
                     tile.Width = 70; tile.Height = 32;
                     wrap.Add(tile);
                 }
@@ -101,7 +101,7 @@ internal static class GalleryVisualCards
             {
                 var canvas = new VC.Canvas { Width = 420, Height = 170, Background = Theme.Current.SurfaceAlt };
                 var first = Tile("Left/Top", Theme.Current.Accent); VC.Canvas.SetLeft(first, 30); VC.Canvas.SetTop(first, 30);
-                var second = Tile("Right/Bottom", Theme.Current.Selection); VC.Canvas.SetLeft(second, 190); VC.Canvas.SetTop(second, 90);
+                var second = Tile("Right/Bottom", Theme.Current.FocusRing); VC.Canvas.SetLeft(second, 190); VC.Canvas.SetTop(second, 90);
                 canvas.Add(first); canvas.Add(second);
                 return canvas;
             }),
@@ -112,7 +112,7 @@ internal static class GalleryVisualCards
                 var grid = new VC.UniformGrid { Columns = 3, Width = 420, Height = 150 };
                 for (var index = 0; index < 6; index++)
                 {
-                    grid.Add(Tile($"Cell {index + 1}", index % 2 == 0 ? Theme.Current.Accent : Theme.Current.Selection));
+                    grid.Add(Tile($"Cell {index + 1}", index % 2 == 0 ? Theme.Current.Accent : Theme.Current.FocusRing));
                 }
 
                 return grid;
@@ -350,6 +350,16 @@ internal static class GalleryVisualCards
                 readout.SetBinding(VC.TextBlock.TextProperty, new XamlBinding("Value") { Source = slider, StringFormat = "F0" });
                 var row = Row(12, slider, readout);
                 return row;
+            }),
+        Card("input.native-host", "Input", "NativeControlHost", "The only native path: a real HWND floats above the visual tree.", "new NativeControlHost { Child = new Button() }",
+            _ =>
+            {
+                var host = new VC.NativeControlHost { Width = 190f, Height = 32f };
+                host.Child = new System.Windows.Forms.Button { Text = "Native WinForms button" };
+                var stack = new VC.StackPanel { Spacing = 8 };
+                stack.Add(Label("WinForms controls are not bridged; the host keeps one rectangle above the visual tree.", Theme.Current.MutedForeground, wrap: true).WithWidth(360));
+                stack.Add(host);
+                return stack;
             }),
         Card("input.progress", "Input", "ProgressBar", "A bounded range painted as a track and fill.",
             "new ProgressBar { Value = 65 }",
