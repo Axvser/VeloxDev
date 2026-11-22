@@ -514,6 +514,8 @@ public class NativeControlHost : VisualElement
         if (disposing)
         {
             Surface?.RemoveNative(this);
+            _child?.Dispose();
+            _child = null;
         }
 
         base.Dispose(disposing);
