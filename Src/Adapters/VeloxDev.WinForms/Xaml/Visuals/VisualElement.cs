@@ -24,7 +24,7 @@ namespace VeloxDev.WinForms.Xaml.Visuals;
 /// local coordinates, and the inherited <see cref="Visual.Render"/> pass translates before drawing content.
 /// </para>
 /// </remarks>
-public abstract class VisualElement : ContainerVisual
+public abstract class VisualElement : ContainerVisual, IDisposable
 {
     /// <summary>The font used by text-bearing elements that do not set one.</summary>
     public static readonly Font DefaultFont = new("Segoe UI", 9.5f);
@@ -260,6 +260,9 @@ public abstract class VisualElement : ContainerVisual
     /// <summary>The surface that hosts this element, resolved through the parent chain.</summary>
     public VisualSurface? Surface => _surface ?? ParentElement?.Surface;
 
+    /// <summary>The rendering DPI of the hosting surface; 96 when detached.</summary>
+    protected int RenderDpi => Surface?.RenderDpi ?? 96;
+
     /// <summary>Raised after the pointer is pressed on this element or bubbles from a child.</summary>
     public event EventHandler<VisualPointerEventArgs>? PointerPressed;
 
@@ -301,7 +304,7 @@ public abstract class VisualElement : ContainerVisual
     {
         if (child is null) throw new ArgumentNullException(nameof(child));
         child._surface = null;
-        Add(child);
+        base.Add(child);
         InvalidateMeasure();
         return child;
     }
@@ -320,6 +323,11 @@ public abstract class VisualElement : ContainerVisual
     /// <returns><see langword="true"/> when the child was present.</returns>
     public bool RemoveChild(VisualElement child)
     {
+        if (Surface?.FocusedElement is { } focused && IsAncestorOf(focused))
+        {
+            Surface.FocusElement(null);
+        }
+
         if (!Remove(child))
         {
             return false;
@@ -328,6 +336,20 @@ public abstract class VisualElement : ContainerVisual
         child._surface = null;
         InvalidateMeasure();
         return true;
+    }
+
+    // 被移除的子树里可能正握着逻辑焦点；先交还焦点，TextBox 的插入符计时器才会停。
+    private bool IsAncestorOf(VisualElement element)
+    {
+        for (var current = element; current is not null; current = current.ParentElement)
+        {
+            if (ReferenceEquals(current, this))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Measures this element inside <paramref name="availableSize"/> and caches the result.</summary>
@@ -421,8 +443,8 @@ public abstract class VisualElement : ContainerVisual
         Surface?.InvalidateSurface();
     }
 
-    /// <summary>Requests a repaint of the hosting surface.</summary>
-    public void InvalidateVisual() => Surface?.InvalidateSurface();
+    /// <summary>Requests a repaint of the hosting surface without a new layout pass.</summary>
+    public void InvalidateVisual() => Surface?.InvalidatePaint();
 
     /// <summary>Moves logical focus to this element.</summary>
     /// <returns><see langword="true"/> when the surface accepted the focus.</returns>
@@ -466,6 +488,33 @@ public abstract class VisualElement : ContainerVisual
             var origin = PointToSurface(PointF.Empty);
             return new RectangleF(origin.X, origin.Y, Bounds.Width, Bounds.Height);
         }
+    }
+
+    /// <summary>Disposes this element and its descendants.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases element resources; derived controls stop timers here.</summary>
+    /// <param name="disposing">Whether managed resources are released.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposing)
+        {
+            return;
+        }
+
+        foreach (var child in Children.ToArray())
+        {
+            if (child is VisualElement element)
+            {
+                element.Dispose();
+            }
+        }
+
+        Children.Clear();
     }
 
     internal void SetSurfaceRoot(VisualSurface? surface) => _surface = surface;

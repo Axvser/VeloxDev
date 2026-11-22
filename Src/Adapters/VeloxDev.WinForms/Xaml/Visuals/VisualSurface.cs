@@ -29,6 +29,12 @@ public class VisualSurface : System.Windows.Forms.Control
     private VisualElement? _capture;
     private readonly List<VisualElement> _hoverChain = [];
     private readonly Dictionary<NativeControlHost, System.Windows.Forms.Control> _nativeChildren = [];
+    private readonly HashSet<NativeControlHost> _placedNative = [];
+    private MouseButtons _buttons;
+    private bool _layoutValid;
+    private Size _layoutSize;
+    private int _renderDpi;
+    private bool _renderDpiValid;
 
     /// <summary>Creates the surface with the double-buffered paint style it needs.</summary>
     public VisualSurface()
@@ -56,6 +62,11 @@ public class VisualSurface : System.Windows.Forms.Control
                 return;
             }
 
+            _focused?.SetFocused(false);
+            _focused = null;
+            _capture = null;
+            _hoverChain.Clear();
+            ClearNativeChildren();
             _root?.SetSurfaceRoot(null);
             _root = value;
             _root?.SetSurfaceRoot(this);
@@ -69,6 +80,27 @@ public class VisualSurface : System.Windows.Forms.Control
     /// <summary>Whether the surface currently has the native keyboard focus.</summary>
     public bool HasKeyboardFocus => Focused;
 
+    internal int RenderDpi
+    {
+        get
+        {
+            if (_renderDpiValid)
+            {
+                return _renderDpi;
+            }
+
+            if (!IsHandleCreated)
+            {
+                return 96;
+            }
+
+            using var graphics = Graphics.FromHwnd(Handle);
+            _renderDpi = (int)Math.Round(graphics.DpiX);
+            _renderDpiValid = true;
+            return _renderDpi;
+        }
+    }
+
     /// <inheritdoc />
     protected override CreateParams CreateParams
     {
@@ -80,8 +112,14 @@ public class VisualSurface : System.Windows.Forms.Control
         }
     }
 
-    /// <summary>Requests a repaint of the whole surface.</summary>
-    public void InvalidateSurface() => Invalidate();
+    /// <summary>Requests a layout pass and a repaint of the whole surface.</summary>
+    public void InvalidateSurface()
+    {
+        _layoutValid = false;
+        Invalidate();
+    }
+
+    internal void InvalidatePaint() => Invalidate();
 
     /// <summary>Renders the tree into <paramref name="graphics"/> at <paramref name="size"/>.</summary>
     /// <param name="graphics">The target surface.</param>
@@ -100,8 +138,7 @@ public class VisualSurface : System.Windows.Forms.Control
         try
         {
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            _root.Measure(size);
-            _root.Arrange(new RectangleF(0f, 0f, size.Width, size.Height));
+            EnsureLayout(size);
             _root.Render(graphics);
         }
         finally
@@ -115,7 +152,8 @@ public class VisualSurface : System.Windows.Forms.Control
     /// <returns><see langword="true"/> when the element belongs to this surface and is focusable.</returns>
     public bool FocusElement(VisualElement? element)
     {
-        if (element is not null && (element.Surface != this || !element.Focusable || !element.IsVisible))
+        if (element is not null
+            && (element.Surface != this || !element.Focusable || !element.IsEnabled || !element.IsVisible))
         {
             return false;
         }
@@ -164,7 +202,8 @@ public class VisualSurface : System.Windows.Forms.Control
             Capture = true;
         }
 
-        var args = new VisualPointerEventArgs(point, button, button, clickCount, 0, ModifierKeys);
+        _buttons |= button;
+        var args = new VisualPointerEventArgs(point, _buttons, button, clickCount, 0, ModifierKeys);
         target?.RaisePointerPressed(args);
         return args.Handled;
     }
@@ -174,11 +213,12 @@ public class VisualSurface : System.Windows.Forms.Control
     /// <returns><see langword="true"/> when an element handled the event.</returns>
     public bool ProcessPointerMove(PointF point)
     {
-        var target = _capture ?? FindElementAt(point);
-        UpdateHover(point, target);
-        var args = new VisualPointerEventArgs(point, MouseButtons.Left, MouseButtons.None, 1, 0, ModifierKeys);
+        var hoverTarget = FindElementAt(point);
+        UpdateHover(point, hoverTarget);
+        var target = _capture ?? hoverTarget;
+        var args = new VisualPointerEventArgs(point, _buttons, MouseButtons.None, 1, 0, ModifierKeys);
         target?.RaisePointerMoved(args);
-        Cursor = target?.Cursor ?? Cursors.Default;
+        Cursor = hoverTarget?.Cursor ?? Cursors.Default;
         return args.Handled;
     }
 
@@ -189,7 +229,8 @@ public class VisualSurface : System.Windows.Forms.Control
     public bool ProcessPointerUp(PointF point, MouseButtons button)
     {
         var target = _capture ?? FindElementAt(point);
-        var args = new VisualPointerEventArgs(point, MouseButtons.None, button, 1, 0, ModifierKeys);
+        _buttons &= ~button;
+        var args = new VisualPointerEventArgs(point, _buttons, button, 1, 0, ModifierKeys);
         target?.RaisePointerReleased(args);
         _capture = null;
         if (IsHandleCreated)
@@ -207,32 +248,45 @@ public class VisualSurface : System.Windows.Forms.Control
     public bool ProcessPointerWheel(PointF point, int delta)
     {
         var target = FindElementAt(point);
-        var args = new VisualPointerEventArgs(point, MouseButtons.None, MouseButtons.None, 1, delta, ModifierKeys);
+        var args = new VisualPointerEventArgs(point, _buttons, MouseButtons.None, 1, delta, ModifierKeys);
         target?.RaisePointerWheel(args);
         return args.Handled;
     }
 
-    /// <summary>Injects a key press into the focused element.</summary>
+    /// <summary>Injects a key press into the focused element with the current modifiers.</summary>
     /// <param name="keyCode">The key code.</param>
     /// <returns><see langword="true"/> when an element handled the event.</returns>
-    public bool ProcessKeyDown(Keys keyCode)
+    public bool ProcessKeyDown(Keys keyCode) => ProcessKeyDown(keyCode, ModifierKeys);
+
+    /// <summary>Injects a key press with explicit modifiers; used by hosts and tests.</summary>
+    /// <param name="keyCode">The key code.</param>
+    /// <param name="modifiers">The modifier keys to report.</param>
+    /// <returns><see langword="true"/> when an element handled the event.</returns>
+    public bool ProcessKeyDown(Keys keyCode, Keys modifiers)
     {
-        var args = new VisualKeyEventArgs(keyCode, ModifierKeys, isRepeat: false);
+        var args = new VisualKeyEventArgs(keyCode, modifiers, isRepeat: false);
         _focused?.RaiseKeyDown(args);
         if (!args.Handled && keyCode == Keys.Tab)
         {
-            MoveFocus((ModifierKeys & Keys.Shift) == 0);
+            MoveFocus((modifiers & Keys.Shift) == 0);
+            return true;
         }
 
         return args.Handled;
     }
 
-    /// <summary>Injects a key release into the focused element.</summary>
+    /// <summary>Injects a key release into the focused element with the current modifiers.</summary>
     /// <param name="keyCode">The key code.</param>
     /// <returns><see langword="true"/> when an element handled the event.</returns>
-    public bool ProcessKeyUp(Keys keyCode)
+    public bool ProcessKeyUp(Keys keyCode) => ProcessKeyUp(keyCode, ModifierKeys);
+
+    /// <summary>Injects a key release with explicit modifiers; used by hosts and tests.</summary>
+    /// <param name="keyCode">The key code.</param>
+    /// <param name="modifiers">The modifier keys to report.</param>
+    /// <returns><see langword="true"/> when an element handled the event.</returns>
+    public bool ProcessKeyUp(Keys keyCode, Keys modifiers)
     {
-        var args = new VisualKeyEventArgs(keyCode, ModifierKeys, isRepeat: false);
+        var args = new VisualKeyEventArgs(keyCode, modifiers, isRepeat: false);
         _focused?.RaiseKeyUp(args);
         return args.Handled;
     }
@@ -261,8 +315,7 @@ public class VisualSurface : System.Windows.Forms.Control
             return null;
         }
 
-        _root.Measure(ClientSize);
-        _root.Arrange(new RectangleF(0f, 0f, ClientSize.Width, ClientSize.Height));
+        EnsureLayout(ClientSize);
         var hit = _root.HitTestVisual(point);
         for (var current = hit; current is not null; current = current.Parent)
         {
@@ -289,6 +342,8 @@ public class VisualSurface : System.Windows.Forms.Control
             Controls.Add(child);
         }
 
+        _placedNative.Add(owner);
+
         if (child.Bounds != bounds)
         {
             child.Bounds = bounds;
@@ -299,7 +354,14 @@ public class VisualSurface : System.Windows.Forms.Control
 
     internal void RemoveNative(NativeControlHost owner)
     {
-        if (_nativeChildren.Remove(owner, out var child))
+        if (!_nativeChildren.TryGetValue(owner, out var child))
+        {
+            return;
+        }
+
+        _nativeChildren.Remove(owner);
+        _placedNative.Remove(owner);
+        if (!child.IsDisposed && Controls.Contains(child))
         {
             Controls.Remove(child);
         }
@@ -316,6 +378,7 @@ public class VisualSurface : System.Windows.Forms.Control
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
+        _renderDpiValid = false;
         InvalidateSurface();
     }
 
@@ -366,10 +429,34 @@ public class VisualSurface : System.Windows.Forms.Control
     }
 
     /// <inheritdoc />
+    protected override bool IsInputKey(Keys keyData)
+    {
+        // Tab/Enter/Escape/arrows are dialog keys by default; the logical focus chain owns them here.
+        var key = keyData & Keys.KeyCode;
+        if (key is Keys.Tab or Keys.Enter or Keys.Escape or Keys.Left or Keys.Right or Keys.Up or Keys.Down)
+        {
+            return true;
+        }
+
+        return base.IsInputKey(keyData);
+    }
+
+    /// <inheritdoc />
+    protected override bool ProcessDialogKey(Keys keyData)
+    {
+        if ((keyData & Keys.KeyCode) == Keys.Tab)
+        {
+            return ProcessKeyDown(Keys.Tab, keyData & Keys.Modifiers);
+        }
+
+        return base.ProcessDialogKey(keyData);
+    }
+
+    /// <inheritdoc />
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (ProcessKeyDown(e.KeyCode))
+        if (ProcessKeyDown(e.KeyCode, e.Modifiers))
         {
             e.Handled = true;
             e.SuppressKeyPress = true;
@@ -380,7 +467,7 @@ public class VisualSurface : System.Windows.Forms.Control
     protected override void OnKeyUp(KeyEventArgs e)
     {
         base.OnKeyUp(e);
-        if (ProcessKeyUp(e.KeyCode))
+        if (ProcessKeyUp(e.KeyCode, e.Modifiers))
         {
             e.Handled = true;
         }
@@ -420,18 +507,29 @@ public class VisualSurface : System.Windows.Forms.Control
     {
         if (disposing)
         {
-            foreach (var child in _nativeChildren.Values)
-            {
-                if (Controls.Contains(child))
-                {
-                    Controls.Remove(child);
-                }
-            }
-
-            _nativeChildren.Clear();
+            ClearNativeChildren();
+            _focused = null;
+            _capture = null;
+            _hoverChain.Clear();
+            _root?.Dispose();
+            _root = null;
         }
 
         base.Dispose(disposing);
+    }
+
+    private void ClearNativeChildren()
+    {
+        foreach (var child in _nativeChildren.Values)
+        {
+            if (!child.IsDisposed && Controls.Contains(child))
+            {
+                Controls.Remove(child);
+            }
+        }
+
+        _nativeChildren.Clear();
+        _placedNative.Clear();
     }
 
     private void UpdateHover(PointF? point, VisualElement? target)
@@ -463,6 +561,31 @@ public class VisualSurface : System.Windows.Forms.Control
 
         _hoverChain.Clear();
         _hoverChain.AddRange(next);
+    }
+
+    private void EnsureLayout(Size size)
+    {
+        if (_root is null || (_layoutValid && _layoutSize == size))
+        {
+            return;
+        }
+
+        _placedNative.Clear();
+        _root.Measure(size);
+        _root.Arrange(new RectangleF(0f, 0f, size.Width, size.Height));
+
+        // A host that was collapsed or removed from the tree never reaches ArrangeOverride, so its HWND would stay
+        // floating above the surface. Anything not visited by this pass is detached.
+        foreach (var host in _nativeChildren.Keys.ToArray())
+        {
+            if (!_placedNative.Contains(host))
+            {
+                RemoveNative(host);
+            }
+        }
+
+        _layoutSize = size;
+        _layoutValid = true;
     }
 
     private static VisualElement? FindFocusableAncestor(VisualElement? element)

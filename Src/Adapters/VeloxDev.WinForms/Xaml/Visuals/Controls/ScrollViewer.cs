@@ -218,4 +218,15 @@ public class NativeControlHost : VisualElement
 
         Surface?.PlaceNative(this, _child, Rectangle.Round(AbsoluteBounds));
     }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Surface?.RemoveNative(this);
+        }
+
+        base.Dispose(disposing);
+    }
 }

@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Visuals;
@@ -16,6 +17,7 @@ public class Button : VisualElement
     private Color _foreground = Color.Empty;
     private bool _hover;
     private bool _pressed;
+    private bool _keyDown;
 
     /// <summary>Creates a focusable button with theme metrics.</summary>
     public Button()
@@ -78,15 +80,17 @@ public class Button : VisualElement
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
-        var measured = string.IsNullOrEmpty(_text)
-            ? TextRenderer.MeasureText("M", _font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPrefix)
-            : TextRenderer.MeasureText(_text, _font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPrefix);
-        var width = measured.Width + (int)Math.Ceiling(Padding.Horizontal) + 2;
+        var sample = string.IsNullOrEmpty(_text) ? "M" : _text;
+        var measured = VisualText.Measure(sample, _font, 0f, wrap: false, RenderDpi);
+        var width = (int)Math.Ceiling(measured.Width + Padding.Horizontal + 2);
         var height = Math.Max(
             Theme.Current.ControlHeight,
-            measured.Height + (int)Math.Ceiling(Padding.Vertical) + 2);
+            (int)Math.Ceiling(measured.Height + Padding.Vertical + 2));
         return new Size(width, height);
     }
+
+    /// <inheritdoc />
+    protected override void RenderContent(Graphics graphics) => OnRender(graphics);
 
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
@@ -102,12 +106,13 @@ public class Button : VisualElement
                         : theme.ControlBackground);
         var border = BorderBrush?.ApproximateColor ?? theme.ControlBorder;
         var bounds = new Rectangle(0, 0, Math.Max(1, (int)Math.Ceiling(Bounds.Width)), Math.Max(1, (int)Math.Ceiling(Bounds.Height)));
+        var thickness = BorderThickness.IsEmpty ? new XamlThickness(1f) : BorderThickness;
         XamlDrawing.PaintChrome(
             graphics,
             bounds,
             background,
             border,
-            new XamlThickness(1f),
+            thickness,
             CornerRadius > 0 ? CornerRadius : theme.CornerRadius);
 
         if (IsFocused)
@@ -132,18 +137,15 @@ public class Button : VisualElement
         var foreground = _foreground.IsEmpty
             ? (IsEnabled ? theme.Foreground : theme.DisabledForeground)
             : _foreground;
-        TextRenderer.DrawText(
+        VisualText.Draw(
             graphics,
             _text,
             _font,
-            content,
             foreground,
-            TextFormatFlags.NoPrefix |
-            TextFormatFlags.HorizontalCenter |
-            TextFormatFlags.VerticalCenter |
-            TextFormatFlags.SingleLine |
-            TextFormatFlags.EndEllipsis |
-            TextFormatFlags.PreserveGraphicsClipping);
+            content,
+            wrap: false,
+            StringAlignment.Center,
+            StringAlignment.Center);
     }
 
     /// <inheritdoc />
@@ -193,15 +195,35 @@ public class Button : VisualElement
     /// <inheritdoc />
     protected override void OnKeyDown(VisualKeyEventArgs args)
     {
-        if (!IsEnabled)
+        if (!IsEnabled || _keyDown)
         {
             return;
         }
 
         if (args.KeyCode is Keys.Space or Keys.Enter)
         {
-            OnClick();
+            _keyDown = true;
+            if (args.KeyCode == Keys.Enter)
+            {
+                OnClick();
+            }
+
             args.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnKeyUp(VisualKeyEventArgs args)
+    {
+        if (args.KeyCode is Keys.Space or Keys.Enter)
+        {
+            var activate = args.KeyCode == Keys.Space && _keyDown && IsEnabled;
+            _keyDown = false;
+            args.Handled = true;
+            if (activate)
+            {
+                OnClick();
+            }
         }
     }
 
@@ -237,8 +259,7 @@ public class TextBox : VisualElement
     private bool _isReadOnly;
     private bool _isPassword;
     private int _selectionAnchor;
-    private int _selectionStart;
-    private int _selectionLength;
+    private int _caretIndex;
     private bool _dragging;
     private bool _caretVisible;
 
@@ -285,7 +306,7 @@ public class TextBox : VisualElement
         set
         {
             _placeholder = value ?? string.Empty;
-            InvalidateVisual();
+            InvalidateMeasure();
         }
     }
 
@@ -339,13 +360,13 @@ public class TextBox : VisualElement
     }
 
     /// <summary>The first selected character.</summary>
-    public int SelectionStart => _selectionStart;
+    public int SelectionStart => Math.Min(_selectionAnchor, _caretIndex);
 
     /// <summary>The number of selected characters.</summary>
-    public int SelectionLength => _selectionLength;
+    public int SelectionLength => Math.Abs(_selectionAnchor - _caretIndex);
 
-    /// <summary>The caret index; the end of the selection.</summary>
-    public int CaretIndex => _selectionStart + _selectionLength;
+    /// <summary>The caret index, which can be either end of the selection.</summary>
+    public int CaretIndex => _caretIndex;
 
     private string DisplayText => _isPassword ? new string('●', _text.Length) : _text;
 
@@ -355,13 +376,16 @@ public class TextBox : VisualElement
         var sample = string.IsNullOrEmpty(_text)
             ? (string.IsNullOrEmpty(_placeholder) ? "M" : _placeholder)
             : DisplayText;
-        var measured = TextRenderer.MeasureText(sample, _font, new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPrefix);
-        var width = Math.Max(120, measured.Width + (int)Math.Ceiling(Padding.Horizontal) + 2);
+        var measured = VisualText.Measure(sample, _font, 0f, wrap: false, RenderDpi);
+        var width = Math.Max(120, (int)Math.Ceiling(measured.Width + Padding.Horizontal + 2));
         var height = Math.Max(
             Theme.Current.ControlHeight,
-            measured.Height + (int)Math.Ceiling(Padding.Vertical) + 2);
+            (int)Math.Ceiling(measured.Height + Padding.Vertical + 2));
         return new Size(width, height);
     }
+
+    /// <inheritdoc />
+    protected override void RenderContent(Graphics graphics) => OnRender(graphics);
 
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
@@ -370,12 +394,13 @@ public class TextBox : VisualElement
         var bounds = new Rectangle(0, 0, Math.Max(1, (int)Math.Ceiling(Bounds.Width)), Math.Max(1, (int)Math.Ceiling(Bounds.Height)));
         var background = Background?.ApproximateColor ?? theme.ControlBackground;
         var border = IsFocused ? theme.FocusRing : BorderBrush?.ApproximateColor ?? theme.ControlBorder;
+        var thickness = BorderThickness.IsEmpty ? new XamlThickness(1f) : BorderThickness;
         XamlDrawing.PaintChrome(
             graphics,
             bounds,
             background,
             border,
-            new XamlThickness(1f),
+            thickness,
             CornerRadius > 0 ? CornerRadius : theme.CornerRadius);
 
         var content = new Rectangle(
@@ -396,44 +421,27 @@ public class TextBox : VisualElement
                 ? (IsEnabled ? theme.Foreground : theme.DisabledForeground)
                 : _foreground;
 
-            if (IsFocused && _selectionLength > 0)
+            if (IsFocused && SelectionLength > 0)
             {
-                var start = MeasurePrefix(_selectionStart);
-                var end = MeasurePrefix(_selectionStart + _selectionLength);
+                var start = MeasurePrefix(SelectionStart);
+                var end = MeasurePrefix(SelectionStart + SelectionLength);
                 using var selection = new SolidBrush(theme.Selection);
                 graphics.FillRectangle(selection, content.Left + start, content.Top, Math.Max(1, end - start), content.Height);
             }
 
-            if (string.IsNullOrEmpty(_text))
+            var text = string.IsNullOrEmpty(_text) ? _placeholder : DisplayText;
+            var textColor = string.IsNullOrEmpty(_text) ? theme.MutedForeground : foreground;
+            if (!string.IsNullOrEmpty(text))
             {
-                if (!string.IsNullOrEmpty(_placeholder))
-                {
-                    TextRenderer.DrawText(
-                        graphics,
-                        _placeholder,
-                        _font,
-                        content,
-                        theme.MutedForeground,
-                        TextFormatFlags.NoPrefix |
-                        TextFormatFlags.Left |
-                        TextFormatFlags.VerticalCenter |
-                        TextFormatFlags.SingleLine |
-                        TextFormatFlags.PreserveGraphicsClipping);
-                }
-            }
-            else
-            {
-                TextRenderer.DrawText(
+                VisualText.Draw(
                     graphics,
-                    DisplayText,
+                    text,
                     _font,
+                    textColor,
                     content,
-                    foreground,
-                    TextFormatFlags.NoPrefix |
-                    TextFormatFlags.Left |
-                    TextFormatFlags.VerticalCenter |
-                    TextFormatFlags.SingleLine |
-                    TextFormatFlags.PreserveGraphicsClipping);
+                    wrap: false,
+                    StringAlignment.Near,
+                    StringAlignment.Center);
             }
 
             if (IsFocused && _caretVisible && !_isReadOnly)
@@ -469,7 +477,7 @@ public class TextBox : VisualElement
     /// <inheritdoc />
     protected override void OnTextInput(VisualTextInputEventArgs args)
     {
-        if (_isReadOnly || string.IsNullOrEmpty(args.Text))
+        if (!IsEnabled || _isReadOnly || string.IsNullOrEmpty(args.Text))
         {
             return;
         }
@@ -488,9 +496,10 @@ public class TextBox : VisualElement
 
         var index = HitTestIndex(args.GetPosition(this));
         _selectionAnchor = index;
-        SetSelection(index, index);
+        _caretIndex = index;
         _dragging = true;
         _caretVisible = true;
+        ResetCaretBlink();
         InvalidateVisual();
         args.Handled = true;
     }
@@ -503,8 +512,8 @@ public class TextBox : VisualElement
             return;
         }
 
-        var index = HitTestIndex(args.GetPosition(this));
-        SetSelection(Math.Min(_selectionAnchor, index), Math.Max(_selectionAnchor, index));
+        _caretIndex = HitTestIndex(args.GetPosition(this));
+        ResetCaretBlink();
         InvalidateVisual();
         args.Handled = true;
     }
@@ -564,8 +573,9 @@ public class TextBox : VisualElement
 
                 break;
             case Keys.A when control:
-                SetSelection(0, _text.Length);
                 _selectionAnchor = 0;
+                _caretIndex = _text.Length;
+                ResetCaretBlink();
                 InvalidateVisual();
                 args.Handled = true;
                 break;
@@ -583,9 +593,9 @@ public class TextBox : VisualElement
                 args.Handled = true;
                 break;
             case Keys.V when control:
-                if (!_isReadOnly && Clipboard.ContainsText())
+                if (!_isReadOnly && TryGetClipboardText(out var pasted))
                 {
-                    ReplaceSelection(Clipboard.GetText());
+                    ReplaceSelection(pasted);
                 }
 
                 args.Handled = true;
@@ -605,11 +615,7 @@ public class TextBox : VisualElement
 
         var display = DisplayText;
         length = Math.Min(length, display.Length);
-        return TextRenderer.MeasureText(
-            display.Substring(0, length),
-            _font,
-            new Size(int.MaxValue, int.MaxValue),
-            TextFormatFlags.NoPrefix).Width;
+        return (int)Math.Ceiling(VisualText.MeasureWidth(display.Substring(0, length), _font, RenderDpi));
     }
 
     private int HitTestIndex(PointF local)
@@ -633,39 +639,25 @@ public class TextBox : VisualElement
 
     private void MoveCaret(int index, bool extend)
     {
-        index = XamlMath.Clamp(index, 0, _text.Length);
-        if (extend)
+        _caretIndex = XamlMath.Clamp(index, 0, _text.Length);
+        if (!extend)
         {
-            SetSelection(Math.Min(_selectionAnchor, index), Math.Max(_selectionAnchor, index));
-        }
-        else
-        {
-            _selectionAnchor = index;
-            SetSelection(index, index);
+            _selectionAnchor = _caretIndex;
         }
 
-        ResetCaretBlink();
-    }
-
-    private void SetSelection(int start, int end)
-    {
-        start = XamlMath.Clamp(start, 0, _text.Length);
-        end = XamlMath.Clamp(end, start, _text.Length);
-        _selectionStart = start;
-        _selectionLength = end - start;
         ResetCaretBlink();
         InvalidateVisual();
     }
 
     private void ReplaceSelection(string replacement)
     {
-        var before = _text.Substring(0, _selectionStart);
-        var after = _text.Substring(_selectionStart + _selectionLength);
+        var start = SelectionStart;
+        var length = SelectionLength;
+        var before = _text.Substring(0, start);
+        var after = _text.Substring(start + length);
         _text = before + replacement + after;
-        var caret = before.Length + replacement.Length;
-        _selectionAnchor = caret;
-        _selectionStart = caret;
-        _selectionLength = 0;
+        _caretIndex = before.Length + replacement.Length;
+        _selectionAnchor = _caretIndex;
         ResetCaretBlink();
         InvalidateMeasure();
         InvalidateVisual();
@@ -673,54 +665,83 @@ public class TextBox : VisualElement
 
     private void Backspace()
     {
-        if (_selectionLength > 0)
+        if (SelectionLength > 0)
         {
             ReplaceSelection(string.Empty);
             return;
         }
 
-        if (_selectionStart == 0)
+        if (_caretIndex == 0)
         {
             return;
         }
 
-        var index = _selectionStart - 1;
-        _text = _text.Remove(index, 1);
-        SetSelection(index, index);
+        _text = _text.Remove(_caretIndex - 1, 1);
+        _caretIndex--;
+        _selectionAnchor = _caretIndex;
+        ResetCaretBlink();
         InvalidateMeasure();
+        InvalidateVisual();
     }
 
     private void Delete()
     {
-        if (_selectionLength > 0)
+        if (SelectionLength > 0)
         {
             ReplaceSelection(string.Empty);
             return;
         }
 
-        if (_selectionStart >= _text.Length)
+        if (_caretIndex >= _text.Length)
         {
             return;
         }
 
-        _text = _text.Remove(_selectionStart, 1);
-        SetSelection(_selectionStart, _selectionStart);
+        _text = _text.Remove(_caretIndex, 1);
+        _selectionAnchor = _caretIndex;
+        ResetCaretBlink();
         InvalidateMeasure();
+        InvalidateVisual();
     }
 
     private void Copy()
     {
-        if (_selectionLength > 0 && !_isPassword)
+        if (SelectionLength > 0 && !_isPassword)
         {
-            Clipboard.SetText(_text.Substring(_selectionStart, _selectionLength));
+            try
+            {
+                Clipboard.SetText(_text.Substring(SelectionStart, SelectionLength));
+            }
+            catch (ExternalException)
+            {
+                // The clipboard can be locked by another process; editing must keep working.
+            }
+        }
+    }
+
+    private static bool TryGetClipboardText(out string text)
+    {
+        text = string.Empty;
+        try
+        {
+            if (!Clipboard.ContainsText())
+            {
+                return false;
+            }
+
+            text = Clipboard.GetText();
+            return text.Length > 0;
+        }
+        catch (ExternalException)
+        {
+            return false;
         }
     }
 
     private void ClampSelection()
     {
         _selectionAnchor = XamlMath.Clamp(_selectionAnchor, 0, _text.Length);
-        _selectionStart = XamlMath.Clamp(_selectionStart, 0, _text.Length);
-        _selectionLength = XamlMath.Clamp(_selectionLength, 0, _text.Length - _selectionStart);
+        _caretIndex = XamlMath.Clamp(_caretIndex, 0, _text.Length);
     }
 
     private void ResetCaretBlink()
@@ -733,5 +754,17 @@ public class TextBox : VisualElement
         _caretVisible = true;
         _caretTimer.Stop();
         _caretTimer.Start();
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _caretTimer.Stop();
+            _caretTimer.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 }

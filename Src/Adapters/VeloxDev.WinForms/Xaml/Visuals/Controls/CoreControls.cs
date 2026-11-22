@@ -34,10 +34,15 @@ public class Border : VisualElement
     /// <summary>Creates a border with theme corner radius.</summary>
     public Border()
     {
-        IsHitTestVisible = true;
+        IsHitTestVisible = false;
         CornerRadius = Theme.Current.CornerRadius;
         Padding = new XamlThickness(12f);
     }
+
+    /// <inheritdoc />
+    protected override bool HitTestContent(PointF point)
+        => (Background is { ApproximateColor.A: > 0 })
+           || (BorderBrush is { ApproximateColor.A: > 0 } && !BorderThickness.IsEmpty);
 
     /// <summary>The single child arranged inside the padding and border.</summary>
     public VisualElement? Child
@@ -303,20 +308,14 @@ public class TextBlock : VisualElement
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
-        var flags = BuildFlags();
         var width = availableSize.Width > 0
             ? Math.Max(0, availableSize.Width - (int)Math.Ceiling(Padding.Horizontal))
             : 0;
-        var measured = string.IsNullOrEmpty(_text)
-            ? TextRenderer.MeasureText("M", _font, new Size(int.MaxValue, int.MaxValue), flags)
-            : TextRenderer.MeasureText(
-                _text,
-                _font,
-                new Size(width <= 0 ? int.MaxValue : width, int.MaxValue),
-                flags);
+        var sample = string.IsNullOrEmpty(_text) ? "M" : _text;
+        var measured = VisualText.Measure(sample, _font, _wrap ? width : 0f, _wrap, RenderDpi);
         return new Size(
-            measured.Width + (int)Math.Ceiling(Padding.Horizontal),
-            measured.Height + (int)Math.Ceiling(Padding.Vertical));
+            (int)Math.Ceiling(measured.Width + Padding.Horizontal),
+            (int)Math.Ceiling(measured.Height + Padding.Vertical));
     }
 
     /// <inheritdoc />
@@ -338,32 +337,21 @@ public class TextBlock : VisualElement
         }
 
         var color = _foreground.IsEmpty ? Theme.Current.Foreground : _foreground;
-        var flags = BuildFlags();
-        if (!_wrap)
+        var horizontal = _textAlignment switch
         {
-            flags |= TextFormatFlags.VerticalCenter;
-        }
-
-        TextRenderer.DrawText(graphics, _text, _font, bounds, color, flags);
-    }
-
-    private TextFormatFlags BuildFlags()
-    {
-        var flags = TextFormatFlags.NoPrefix |
-                    TextFormatFlags.PreserveGraphicsClipping |
-                    TextFormatFlags.SingleLine;
-        if (_wrap)
-        {
-            flags = TextFormatFlags.NoPrefix | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.WordBreak;
-        }
-
-        flags |= _textAlignment switch
-        {
-            XamlTextAlignment.Center => TextFormatFlags.HorizontalCenter,
-            XamlTextAlignment.Right => TextFormatFlags.Right,
-            _ => TextFormatFlags.Left,
+            XamlTextAlignment.Center => StringAlignment.Center,
+            XamlTextAlignment.Right => StringAlignment.Far,
+            _ => StringAlignment.Near,
         };
-        return flags;
+        VisualText.Draw(
+            graphics,
+            _text,
+            _font,
+            color,
+            bounds,
+            _wrap,
+            horizontal,
+            _wrap ? StringAlignment.Near : StringAlignment.Center);
     }
 }
 
@@ -426,6 +414,7 @@ public class Image : VisualElement
         }
 
         var source = new RectangleF(0f, 0f, _source.Width, _source.Height);
+        var box = destination;
         switch (_stretch)
         {
             case XamlStretch.None:
@@ -444,16 +433,24 @@ public class Image : VisualElement
                     destination.Y + ((destination.Height - height) / 2f),
                     width,
                     height);
-                if (_stretch == XamlStretch.UniformToFill)
-                {
-                    graphics.SetClip(destination, CombineMode.Intersect);
-                }
-
                 break;
             }
         }
 
-        graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        graphics.DrawImage(_source, destination, source, GraphicsUnit.Pixel);
+        var state = graphics.Save();
+        try
+        {
+            if (_stretch == XamlStretch.UniformToFill)
+            {
+                graphics.SetClip(box, CombineMode.Intersect);
+            }
+
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.DrawImage(_source, destination, source, GraphicsUnit.Pixel);
+        }
+        finally
+        {
+            graphics.Restore(state);
+        }
     }
 }
