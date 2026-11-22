@@ -154,7 +154,18 @@
 - `Path` 的 `Stretch` 必须用显式 `Matrix(m11, m12, m21, m22, dx, dy)` 构造：GDI+ 行向量下 `Scale`/`Translate` 叠加不会把 `-source` 一起缩放，整条几何会平移出控件；18×18 的 `Path`（SlotView）因此完全不可见。回归：`Path_UniformStretch_FitsTheGeometryIntoTheContentBounds`。
 - `PathGeometry.Parse` 的每个 `M` 必须 `StartFigure`（再补一个零长度段把起点挪到 M 坐标）；当成 `L` 会在两个子路径之间画连接线，白色描边就成了横穿字形的割线。回归：`Path_MultipleMoveCommands_StartSeparateFigures`。
 
-## 四、验证
+## 四、视觉后端（单 HWND）
+
+> 代码：`Xaml/Visuals/`。与 `VisualHost` 的区别：后者是装饰层，原生/HWND 控件仍在树外；这里是完整控件后端，树里不再有第二个 HWND。
+
+- `VisualSurface` 是唯一窗口：`Root` 是 `VisualElement` 树，`RenderTo` 一趟测量/摆放/绘制；`ProcessPointer*` / `ProcessKey*` / `ProcessTextInput` 是可注入的输入入口，测试与自动化也走它。
+- 元素全部继承 `ContainerVisual`（`Bounds` 是父坐标，`Render` 自动平移），不是 `System.Windows.Forms.Control`；`NativeControlHost` 是唯一原生岛，子 HWND 永远浮在视觉树之上，不能被变换/裁剪/混色。
+- 布局：`VisualElement.Measure/Arrange` 管 Margin、显式尺寸、Min/Max、对齐与 Visibility；面板在 `MeasureOverride/ArrangeOverride` 里只算内容。`Hidden` 占位不绘制，`Collapsed` 不测量不占位。
+- 输入：Surface 命中测试最深元素，事件沿 `ParentElement` 冒泡；焦点是逻辑焦点，`FocusElement` 把原生焦点留在 Surface 上，Tab 在焦点链里走。指针捕获、Enter/Leave、滚轮、文本输入都集中在 Surface。
+- `ScrollViewer` 用 `Visual.Clip` 裁视口，内容按 `VerticalOffset` 负向摆放；滚轮沿祖先链冒泡到这里。`TextBox` 自绘插入符/选区/剪贴板；IME 与无障碍未实现（需要原生 EDIT 岛或 Imm/UIA 接入）。
+- 附加属性（Grid/Dock/Canvas）是静态 `Get/Set` + `ConditionalWeakTable`，不是 `DependencyProperty`；没有 XAML/绑定接入。DP 引擎目前绑死在 `System.Windows.Forms.Control` 上，这是下一步。
+
+## 五、验证
 
 ```bash
 dotnet test Src/Test/Unit/WinFormsXaml/VeloxDev.WinForms.Xaml.Test/VeloxDev.WinForms.Xaml.Test.csproj
