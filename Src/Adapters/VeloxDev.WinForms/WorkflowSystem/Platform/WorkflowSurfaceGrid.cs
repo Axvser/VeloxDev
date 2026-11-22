@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Globalization;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem.Platform;
 
 /// <summary>
 /// Grid-line classification and ruler-label formatting, shared by every WinForms surface that draws a grid.

@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem.Platform;
 
 // 按颜色缓存的 GDI+ 画刷：颜色变化时改写属性，避免每次重绘创建/释放原生句柄。
 internal sealed class CachedSolidBrush : IDisposable

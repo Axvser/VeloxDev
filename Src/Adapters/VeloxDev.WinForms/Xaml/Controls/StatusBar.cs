@@ -184,7 +184,7 @@ public class StatusBar : Control
         base.OnPaintBackground(e);
 
         var theme = Theme.Current;
-        var background = HasXamlValue(BackColorProperty) ? Background : new SolidColorBrush(theme.Surface);
+        var background = HasXamlValue(BackgroundProperty) ? Background : new SolidColorBrush(theme.Surface);
         XamlDrawing.PaintChromeWithBrushes(
             e.Graphics,
             ClientRectangle,

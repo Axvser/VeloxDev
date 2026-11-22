@@ -14,6 +14,7 @@ There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md
 styles, triggers, animations, custom controls, or a non-trivial `DataTemplate`; this page only
 summarizes the workflow surface.
 
+
 WinForms has no platform XAML, so this adapter ships its own small runtime (`Src/Adapters/VeloxDev.WinForms/Xaml/`) and a Roslyn generator (`Src/Generators/VeloxDev.WinForms.Generator/`). The generated `InitializeComponent()` builds ordinary WinForms controls:
 
 - **Unprefixed means VeloxDev**: `VeloxDev.WinForms.Xaml.Controls` / `.Controls.Shapes` / `.Xaml` (`UserControl`, `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `Border`, `ScrollViewer`, `Button`, `TextBox`, `ListBox`, `ComboBox`, `TextBlock`, `Rectangle`, `Path`, `Style`, `Trigger`, `DataTemplate`, …).
@@ -169,7 +170,7 @@ The tree template is a `UserControl`; the parts are resolved by native `Control.
 </UserControl>
 ```
 
-⚙ **`x:Name` and `Name` are different things.** `x:Name` creates a code-behind field; the behavior resolves native `Control.Name`, so the `PART_*` contract lives in `Name`. The tree template writes both when the field is useful.
+⚙ **`x:Name` is the WPF-shaped name.** The generator writes the code-behind field, registers the `NameScope` entry, and sets native `Control.Name`; the behavior resolves native `Control.Name`. Write `x:Name="PART_*"` once. An explicit `Name="..."` still overwrites the native value afterwards.
 
 ⚙ **The tree arrives through `SetWorkflowTree`** — typically set from your code-behind (`ViewModel` setter). `Refresh(host)` is part of the contract: a node that moved without a refresh is still drawn where it was.
 
@@ -192,7 +193,7 @@ The layer publishes each curve to Core, so hit-testing, `Delete` and the link co
 
 ⚙ **The canvas repaint must come after the geometry refresh.** `ApplyPanCore` writes the scroll offset first, measures the slots, refreshes the link layer, then calls `canvas.Update()` during a gesture. Reversing that order shows the previous frame's curves while dragging.
 
-⚙ **A per-link view is still possible, but opt-in.** `WorkflowLinkAttachment.Attach(control)` owns endpoints, window-region carving, curve publishing and pointer events; your `OnPaint` draws. A carved link window must use the surface background as `BackColor`, has no stroke to widen at zero length, and needs `Invalidate()+Update()` to avoid drag trails. For a graph with more than a handful of links, use the single layer.
+⚙ **A per-link view is still possible, but opt-in.** `WorkflowLinkAttachment.Attach(control)` owns endpoints, window-region carving, curve publishing and pointer events; your `OnPaint` draws. A carved link window must use the surface background as its backdrop (`Background` on a XAML view), has no stroke to widen at zero length, and needs `Invalidate()+Update()` to avoid drag trails. For a graph with more than a handful of links, use the single layer.
 
 ## Input
 
@@ -201,13 +202,13 @@ The layer publishes each curve to Core, so hit-testing, `Delete` and the link co
 - **Move:** the surface's `IMessageFilter` translates `WM_MOUSEMOVE` and routes it. This is the only way a move over a **node or slot child window** reaches Core; the surface root never receives those `MouseMove` messages.
 - **Press / release:** the node and slot behaviours route every button (left, right, middle) on components; the surface routes presses/releases on empty canvas and links. A right-press on a node/slot therefore reaches that component's `PointerPressed`, not the surface's link menu.
 - **Wheel:** the same message filter routes `PointerWheelChanged` first; a subscriber's `PreventDefault` hands the scroll to `WorkflowInput.Scroller`, otherwise the adapter applies its own step. Ctrl+wheel is zoom.
-- **Target resolution prefers `Tag`:** the attachments write the node/slot model to `Tag`; an inherited `DataContext` may be the tree, so it must not mask the Tag.
+- **Target resolution prefers the attachment:** node/slot/link attachments write the model to both `Tag` and the XAML `DataContext`; resolution checks `Tag`, `ViewModel`, then `DataContext`.
 - **Enter/leave are synthesized by Core** from target changes. Leaving the surface from a node is covered by a 50 ms pointer watch, and the explicit `PointerExited` carries the previous `PointerTarget`.
 - **Keys** are routed with `PointerTarget` as their target; focus moves to the canvas on the press (unless the press landed in an editable control).
 
 ## Adding your own content to a node
 
-⚙ **No `Viewbox`.** `WorkflowNodeViewBehavior` attaches `WorkflowNodeAttachment`, points drag and slot layout at the canvas, and keeps the card backdrop composited. `WorkflowNodeTitleBehavior` binds the title and scales the header with the collapse factor; `WorkflowNodeRowsBehavior` rebuilds the input/output rows from `node.Slots`.
+⚙ **The node template stays on the attached-behavior path.** `WorkflowNodeViewBehavior` attaches the node machinery, `WorkflowNodeTitleBehavior` scales the title strip, and `WorkflowNodeRowsBehavior` rebuilds and vertically centers the port rows. A `Viewbox` cannot matrix-scale native HWND children, so do not replace these with it.
 
 ⚙ **Content you add joins the same layout.** Put it inside the node card's `PART_*` shell and scale it in the node view's own layout code; a render transform is not part of this adapter's measurement contract.
 
@@ -234,30 +235,32 @@ The surface opens the strip on a right-press on a link, positions it, and suspen
 
 ## Item templates — `VeloxDev.WinForms.Templates`
 
-**Generates** `.xaml` + `.xaml.cs` for node, slot, link and tree, and a `.cs` for selector, decorator and minimap. All seven target the HWND-free visual backend (`VeloxDev.WorkflowSystem.VisualHosting`).
+**Generates** `.xaml` + `.xaml.cs` for node, slot, link and tree, and a `.cs` for selector, decorator and minimap.
 
 | Item | Shape | You supply |
-| --- | --- | --- |
-| tree | `UserControl` hosting one `VisualWorkflowSurface`; code-behind sets the palette and exposes `ViewModel` / `TemplateSelector` | the palette, selector wiring, link menu |
-| node | plain visual `Grid`; a `Viewbox` around a fixed design grid gives the elastic layout, XAML bindings give title/body; the surface attaches `VisualWorkflowNodeBehavior` | the card chrome, design layout and bindings |
-| slot | plain visual control; `OnRender` draws the glyph and reads `VisualWorkflowSlotBehavior.GetSlot(this)`; **assign it to `TemplateSelector.SlotTemplate`** or the default glyph is used | the glyph and its state colours |
-| link | derived `VisualElement` — **per-link opt-in**; the default surface draws every link in one `VisualWorkflowLinkLayer` | the resting curve and palette |
-| minimap | plain visual `Border` composing the sealed `VisualWorkflowMinimap` | the four palette colours |
-| grid decorator | plain visual `Border` + `IWorkflowGridDecorator`; draws the grid and axes directly in `OnRender` | grid palette, spacing and offsets |
-| template selector | derived `VisualTemplateSelector` returning `VisualElement` views | a `VisualDataTemplate` per item kind |
+|---|---|---|
+| tree | `UserControl` + `WorkflowSurfaceBehavior`; `PART_Canvas` carries `WorkflowLinkLayer` | the palette, the selector resource, the link layer's line colour/width |
+| node | `UserControl` + `Border` + `Panel` + `native:Label`; `WorkflowNodeViewBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeRowsBehavior` | the card shell (`PART_Card`, `PART_Header`, `PART_Title`, `PART_OutputSlots`) and its colours |
+| slot | `UserControl` + `WorkflowSlotConnectionBehavior` + `Path` | the glyph path and by-state colours |
+| link | `UserControl` + `WorkflowLinkAttachment` — **per-link opt-in**; the default surface draws links in `WorkflowLinkLayer` | the resting curve and palette |
+| minimap | `WorkflowMinimapOverlay` | the four palette colours |
+| grid decorator | `Panel, IWorkflowGridDecorator` plus `SurfaceCanvas` | grid/ruler palette, spacing, major-line frequency |
+| template selector | `CustomTemplateSelector` | the `DataTemplate` each pooled item kind gets (node; link only for the opt-in path) |
 
-⚙ **The items no longer reference each other at compile time.** The tree only references the adapter's `VisualWorkflowSurface`; wire the selector yourself through `VisualWorkflowSurface.TemplateSelector`. The surface asks the selector first, then `NodeViewFactory`, then its internal default card; any `VisualElement` is accepted and gets the node behavior attached.
+⚙ **The tree references siblings by type name**, so generate all seven items into one namespace. The tree needs `GridDecorator` / `SurfaceCanvas` and `CustomTemplateSelector`; the selector needs `NodeView` / `LinkView`. Missing one is a compile error, not a runtime fallback.
 
-⚙ **The surface composes the grid, floating rulers, minimap and link layer itself.** The `workflow-grid-decorator` and `workflow-minimap-overlay` items are standalone extension points (or palette references); changing the tree's look means touching `workflowHost.GridDecorator` / `workflowHost.RulerOverlay` / `workflowHost.Minimap` / `workflowHost.LinkLayer`, not adding controls to the tree. A minimap press recentres the viewport on that content point (same as the other six adapters).
+⚙ **The tree's selector is a resource, not a type-name property.** Derive from `VeloxDev.WinForms.Xaml.TemplateSelector`, expose `DataTemplate` properties, and point `behaviors:WorkflowSurfaceBehavior.TemplateSelector` at the instance. `NodeViewType` / `LinkViewType` are only the built-in reflection fallback.
 
-⚙ **Give the tree a virtualised helper.** `LinkHitTestEx` walks `VisibleItems`; `new TreeHelper(200)` (or a subclass) is required for link hit testing. The surface writes `Viewport(-Pan.X, -Pan.Y, w, h)` on every arrange / pan / zoom.
+⚙ **Shared helpers:** `XamlRuntime.ParseColor` for palette strings and `WorkflowSurfaceGrid` (grid-line classification and ruler-label formatting). Each template draws its own rounded rectangle.
 
-⚙ **The visual surface handles Delete, Ctrl+Z/Y, Ctrl+wheel zoom and Shift+wheel scroll.** A host that also handles them must set `PreventDefault`, or a link is deleted twice.
+⚙ **The decorator is the floating ruler.** `GridDecorator.RulerBand` feeds the virtualizer and the adapter's `WorkflowRulerOverlayForm`, which draws the translucent top/left bands above the opaque node cards. `SurfaceCanvas` is only the pool host; it is not a grid decorator.
 
-⚙ **Set `ApplicationHighDpiMode` to `PerMonitorV2` in the host project.** The visual surface exposes logical DIPs (96 DPI): it scales its own `Graphics` by `DeviceDpi / 96` and converts pointer/native coordinates, so a 100-unit width is the same physical size as WPF's 100 DIP. Content you put **inside** the surface stays in logical units; a **native** overlay above it (a WinForms `Panel`, button, label) is laid out in physical pixels, so multiply its fixed metrics — margins, paddings, offsets, fixed sizes — by `DeviceDpi / 96` and recompute on `OnDpiChangedAfterParent`. Leave point-sized fonts to WinForms. `VisualSurface.DpiScale` and `LogicalClientSize` expose the mapping. (`Examples/XamlGallery` is a separate XAML-only demo and still runs `DpiUnawareGdiScaled`.)
+⚙ **The fully-wired pack.** Every declared parameter, including all four slot colours and `slotPath`, has a consumer here — the pack to read when you want to know what a parameter does on a framework where it is inert.
 
 ## Pitfalls
 
-⚙ **The visual backend is one HWND.** Cards, links and the grid are `VisualElement`s painted in one pass; do not nest native controls over the surface to get effects — subclass the visual element instead.
+⚙ **No transparent sibling overlay for links.** A WinForms child window does not composite over its siblings; a viewport-sized transparent link layer either covers the grid or hides behind the scroll host. Paint links on the canvas instead.
+
+⚙ **Keep `WS_CLIPCHILDREN`/`WS_EX_COMPOSITED` in mind.** The adapter applies them through `NativeWindowStyleHelper`; the composited path is skipped above roughly a hundred descendant windows. A surface that worked at demo size can flicker at graph size.
 
 ⚙ **Do not hand-roll a second link geometry path.** The layer publishes the curve Core hit-tests; a host-side highlight must draw from `ILinkHitTestable.Curve`, or the glow and the click target disagree.

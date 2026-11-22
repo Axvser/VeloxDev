@@ -70,25 +70,6 @@ public sealed class BrushPropertyTests
             bitmap.GetPixel(20, 12).ToArgb());
     }
 
-    /// <summary>Writing either alias mirrors the other: a colour becomes a solid brush and a solid brush becomes its colour.</summary>
-    [TestMethod]
-    public void ColorAliases_SyncInBothDirections()
-    {
-        using var control = new V.Control();
-
-        control.BackColor = Color.Red;
-        Assert.AreEqual(Color.Red, (control.Background as SolidColorBrush)?.Color);
-
-        control.Background = new SolidColorBrush(Color.Blue);
-        Assert.AreEqual(Color.Blue, control.BackColor);
-
-        control.ForeColor = Color.Green;
-        Assert.AreEqual(Color.Green, (control.Foreground as SolidColorBrush)?.Color);
-
-        control.Foreground = new SolidColorBrush(Color.Orange);
-        Assert.AreEqual(Color.Orange, control.ForeColor);
-    }
-
     /// <summary>The registered <see cref="VeloxDev.Adapters.NativeSamplers.BrushSampler"/> drives a brush dependency property to its end value.</summary>
     [TestMethod]
     public void XamlTransition_AnimatesABrushDependencyProperty()

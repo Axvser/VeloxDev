@@ -7,10 +7,12 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
+using XamlControl = VeloxDev.WinForms.Xaml.Controls.Control;
 using PlatformInput = System.Windows.Forms;
 using Wf = VeloxDev.WorkflowSystem;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem.Attachments;
 
 /// <summary>
 /// Everything a WinForms control needs to become one link view, attached to it in a single call. The control stays
@@ -158,7 +160,7 @@ public sealed class WorkflowLinkAttachment
         relay = new ModelChangeRelay(target, OnModelChanged);
 
         // 不透明填充，且与窗口被雕出来的那片网格同色：窗口正好盖住描边带，所以这个填充在画布上必须看不出来。
-        target.BackColor = surfaceBackground;
+        XamlControlColors.SetBackground(target, surfaceBackground);
         // SetStyle 在 Control 上是 protected，所以那几行只能由视图自己写（见本类 remarks 的模板）——
         // 这里只做得出外部做得到的事：关掉焦点与命中，免得描边带吞掉本该发给画布或手势的输入。
         target.TabStop = false;
@@ -250,7 +252,7 @@ public sealed class WorkflowLinkAttachment
         {
             if (surfaceBackground == value) return;
             surfaceBackground = value;
-            target.BackColor = value;
+            XamlControlColors.SetBackground(target, value);
             ApplyColorKey();
             target.Invalidate();
         }
@@ -276,6 +278,7 @@ public sealed class WorkflowLinkAttachment
 
         this.link = link;
         target.Tag = link;
+        if (target is XamlControl xaml) xaml.DataContext = link;
         HookInput(null, link);
 
         // 连线自己，加上它两端 —— 端点的锚点变了，几何就得重算。
@@ -377,7 +380,7 @@ public sealed class WorkflowLinkAttachment
     /// <summary>Parses a <c>#RRGGBB</c>, <c>#AARRGGBB</c> or named colour.</summary>
     /// <param name="hex">The colour text.</param>
     /// <returns>The colour.</returns>
-    public static Color ParseColor(string hex) => WorkflowSurfaceColors.Parse(hex);
+    public static Color ParseColor(string hex) => XamlRuntime.ParseColor(hex);
 
     // 换绑就是换订阅：这条线的四个指针事件跟着走，池化控件因此不需要视图自己记一份。
     private void HookInput(ILinkComponent? previous, ILinkComponent? next)

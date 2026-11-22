@@ -306,7 +306,7 @@ public sealed class ControlLibraryTests
     }
 
     [TestMethod]
-    public void TextBox_TextAndPasswordStayInSync()
+    public void TextBox_TextAndPasswordAreIndependent()
     {
         using var textBox = new V.TextBox();
         textBox.Text = "hello";
@@ -314,7 +314,7 @@ public sealed class ControlLibraryTests
 
         using var passwordBox = new V.PasswordBox();
         passwordBox.Password = "secret";
-        Assert.AreEqual("secret", passwordBox.Text);
+        Assert.AreEqual("secret", passwordBox.Password);
     }
 
     [TestMethod]

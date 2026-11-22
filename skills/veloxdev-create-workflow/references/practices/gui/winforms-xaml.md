@@ -64,6 +64,8 @@ pipeline.
 | Chrome | `GroupBox`, `Expander`, `TabControl`/`TabItem`, `Thumb`, `ToolBar`/`ToolBarTray`, `StatusBar`/`StatusBarItem`, `HeaderedContentControl`, `HeaderedItemsControl`, `AccessText`, `Menu`, `ContextMenu`, `ToolTip`, `Popup` |
 | Navigation | `Page`, `Frame`, `Window`, `NavigationWindow` |
 
+`Label` is a `ContentControl` and uses `Content`; `TextBox` uses `Text`; `PasswordBox` uses `Password` — each control has exactly one text property.
+
 `ListBox` and `ComboBox` wrap the native selectors for selection and scrolling, so they render native
 item text and `DisplayMemberPath`; use `ItemsControl` with `ItemTemplate` when every item needs an
 arbitrary control.
@@ -74,7 +76,7 @@ Every XAML `Control` has these DPs:
 
 - `Width`, `Height`, `MinWidth`, `MinHeight`, `MaxWidth`, `MaxHeight` (pixels)
 - `Margin`, `Padding` (`Thickness`)
-- `Background`, `Foreground` (`Color`; aliases for `BackColor` / `ForeColor`)
+- `Background`, `Foreground` (`Brush`; no `BackColor` / `ForeColor` dependency properties)
 - `Font`, `Visibility`, `IsEnabled`
 - `HorizontalAlignment`, `VerticalAlignment`
 
@@ -523,10 +525,6 @@ surface.Root = root;
 - `NativeControlHost` is the compatibility island for native controls (IME, third-party hosts).
   It is always a rectangular child HWND above the visual tree and cannot be transformed, blended or
   clipped with its visual parent, and an overlay popup cannot cover it.
-- `VeloxDev.WorkflowSystem.VisualHosting.VisualWorkflowSurface` is the reusable single-HWND workflow
-  surface: grid + canvas + one link layer + node views + floating rulers + minimap, Core scroller/navigator, and
-  `WorkflowInput` routing. Host it as `<hosting:VisualWorkflowSurface Dock="Fill" />`; use
-  `NodeViewFactory`, `LinkMenuBuilder` and `NodeMenuBuilder` for policy.
 - `VisualSurface` routes pointer, wheel, keyboard and text input to the deepest hit element; focus is
   logical. `TextBox` uses a native editor overlay while focused for IME/accessibility.
 
@@ -543,9 +541,9 @@ surface.Root = root;
 - Native controls participate through `XamlInput.AddPointerPressed` etc.; the adapter's behaviours
   use that bridge. For workflow gestures, subscribe to the tree's `IInputEvents` instead of
   per-control native events.
-- `x:Name` creates a code-behind field and registers the name in the view's `NameScope`, so
-  `ElementName` and `FindName` work. Workflow parts still resolve the native `Control.Name`, so a
-  workflow template writes both when both are needed.
+- `x:Name` creates a code-behind field, registers the name in the view's `NameScope`, **and writes
+  native `Control.Name`** — the same single name WPF uses. Workflow parts resolve the native name,
+  so a template writes `x:Name="PART_*"` once. An explicit `Name="..."` still overwrites it.
 
 ## 9.1 Commands, input bindings and focus
 
@@ -626,12 +624,13 @@ The generator reports `VELOX_XAML001–019` and `VELOX_XAMLP001–004`. The most
 For the workflow surface, read [winforms.md](winforms.md). The XAML pieces it uses are:
 
 - `WorkflowSurfaceBehavior` on the tree root, part names in `Name`
-- `WorkflowNodeViewBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeRowsBehavior` on a node view
+- `WorkflowNodeDragBehavior` on the node header and `WorkflowSlotLayoutBehavior` on the node root;
+  `ViewFactory` attaches `WorkflowNodeAttachment` when it creates the view
 - `WorkflowSlotConnectionBehavior` on the slot view's path child
 - `WorkflowLinkLayer` on `PART_Canvas` for the single link pass
 - `WorkflowTemplateSelector` resource using the generic selector and `DataTemplate`s
-- `WorkflowSlotAttachment` only as a compatibility helper for old code-first slot views; the
-  generated slot template uses `Path` + `ViewModel` instead
+- `WorkflowSlotAttachment` only as a compatibility helper for code-first pooled slot views; the
+  generated slot template reads `DataContext` and binds its glyph state
 
 ## 12. Verification
 

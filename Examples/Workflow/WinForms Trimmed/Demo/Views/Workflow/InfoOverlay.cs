@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -18,7 +18,6 @@ namespace Demo.Views.Workflow;
 /// </summary>
 public sealed class InfoOverlay : Panel
 {
-    // Fixed metrics are 96-DPI logical units; Scaled turns them into the current monitor's pixels.
     private const int PadX = 10;
     private const int PadTop = 8;
     private const int LineGap = 4;
@@ -38,24 +37,6 @@ public sealed class InfoOverlay : Panel
     private INotifyPropertyChanged? _layoutNotify;
     private string[] _lines = [];
     private string _copyText = "";
-    private Graphics? _measure;
-
-    private int Scaled(int logical) => (int)Math.Round(logical * DeviceDpi / 96f);
-
-    // Measuring with the control's own Graphics keeps the point font resolved at the current monitor DPI,
-    // matching the Graphics.DrawString pass. TextRenderer's static overload uses a screen DC.
-    private Graphics? MeasureGraphics
-    {
-        get
-        {
-            if (!IsHandleCreated || IsDisposed)
-            {
-                return null;
-            }
-
-            return _measure ??= CreateGraphics();
-        }
-    }
 
     /// <summary>Creates a self-painting info HUD with a bottom-right copy button.</summary>
     public InfoOverlay()
@@ -70,7 +51,7 @@ public sealed class InfoOverlay : Panel
             BackColor = s_btnBg,
             ForeColor = s_btnFg,
             Cursor = Cursors.Hand,
-            Size = new Size(Scaled(56), Scaled(24)),
+            Size = new Size(56, 24),
         };
         _copy.FlatAppearance.BorderColor = s_btnFg;
         _copy.Click += (_, _) =>
@@ -149,24 +130,18 @@ public sealed class InfoOverlay : Panel
 
         int maxW = 0;
         int lineH = 0;
-        var measure = MeasureGraphics;
         foreach (var line in _lines)
         {
-            var size = measure is null
-                ? TextRenderer.MeasureText(line, _font)
-                : Size.Ceiling(measure.MeasureString(line, _font));
+            var size = TextRenderer.MeasureText(line, _font);
             maxW = Math.Max(maxW, size.Width);
             lineH = Math.Max(lineH, size.Height);
         }
 
-        int padX = Scaled(PadX);
-        int padTop = Scaled(PadTop);
-        int lineGap = Scaled(LineGap);
-        int w = Math.Max(Scaled(120), maxW + padX * 2 + Scaled(RightZone));
-        int h = Math.Max(Scaled(40), _lines.Length * (lineH + lineGap) - lineGap + padTop * 2);
+        int w = Math.Max(120, maxW + PadX * 2 + RightZone);
+        int h = Math.Max(40, _lines.Length * (lineH + LineGap) - LineGap + PadTop * 2);
         if (Width != w || Height != h)
         {
-            SetBounds(Left, Math.Max(0, (Parent?.ClientSize.Height ?? 0) - h - Scaled(12)), w, h);
+            SetBounds(Left, Math.Max(0, (Parent?.ClientSize.Height ?? 0) - h - 12), w, h);
             changed = true;
         }
 
@@ -191,46 +166,17 @@ public sealed class InfoOverlay : Panel
     /// <summary>Positions the copy button at the panel's bottom-right and pins the overlay bottom-left of its parent.</summary>
     private void LayoutButton()
     {
-        var inset = Scaled(6);
-        _copy.Location = new Point(Width - _copy.Width - inset, Height - _copy.Height - inset);
+        _copy.Location = new Point(Width - _copy.Width - 6, Height - _copy.Height - 6);
 
         if (Parent is not null)
         {
-            int left = Math.Max(Scaled(4), Scaled(40)); // clear the 28-DIP ruler band
-            int top = Math.Max(Scaled(4), Parent.ClientSize.Height - Height - Scaled(12));
+            int left = Math.Max(4, 46); // clear the left ruler band
+            int top = Math.Max(4, Parent.ClientSize.Height - Height - 12);
             if (Left != left || Top != top)
             {
                 Location = new Point(left, top);
             }
         }
-    }
-
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-
-        // A recreated handle invalidates the cached Graphics.
-        _measure?.Dispose();
-        _measure = null;
-        ApplyDpiScale();
-    }
-
-    protected override void OnDpiChangedAfterParent(EventArgs e)
-    {
-        base.OnDpiChangedAfterParent(e);
-
-        // The cached Graphics still reports the old monitor DPI.
-        _measure?.Dispose();
-        _measure = null;
-        ApplyDpiScale();
-    }
-
-    // The native panel and its button are sized in pixels; recompute the physical metrics when the
-    // monitor DPI changes so the HUD keeps the same logical size and still clears the ruler band.
-    private void ApplyDpiScale()
-    {
-        _copy.Size = new Size(Scaled(56), Scaled(24));
-        UpdateText();
     }
 
     protected override void OnResize(EventArgs e)
@@ -245,7 +191,7 @@ public sealed class InfoOverlay : Panel
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         _round.Reset();
-        _round.AddRoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), Scaled(6));
+        _round.AddRoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 6);
         using (var bg = new SolidBrush(s_bg))
         using (var border = new Pen(s_border))
         {
@@ -253,24 +199,13 @@ public sealed class InfoOverlay : Panel
             g.DrawPath(border, _round);
         }
 
-        int y = Scaled(PadTop);
+        int y = PadTop;
         foreach (var line in _lines)
         {
             using var b = new SolidBrush(s_text);
-            g.DrawString(line, _font, b, Scaled(PadX), y);
-            y += (int)g.MeasureString("Ag", _font).Height + Scaled(LineGap);
+            g.DrawString(line, _font, b, PadX, y);
+            y += (int)g.MeasureString("Ag", _font).Height + LineGap;
         }
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _measure?.Dispose();
-            _measure = null;
-        }
-
-        base.Dispose(disposing);
     }
 
     private string[] BuildLines()

@@ -185,7 +185,7 @@ public class Image : Control
 /// <summary>
 /// A one-pixel separator line between groups of controls.
 /// </summary>
-/// <remarks>The line is centred in the control's content rectangle; orientation and colour are dependency properties.</remarks>
+/// <remarks>The line is centred in the control's content rectangle; orientation and thickness are dependency properties.</remarks>
 public class Separator : Control
 {
     /// <summary>Whether the line runs horizontally (the default) or vertically.</summary>
@@ -194,13 +194,6 @@ public class Separator : Control
         typeof(Orientation),
         typeof(Separator),
         new PropertyMetadata(Orientation.Horizontal, OnVisualPropertyChanged));
-
-    /// <summary>The line colour; a light grey by default.</summary>
-    public static readonly DependencyProperty BrushProperty = DependencyProperty.Register(
-        nameof(Brush),
-        typeof(Color),
-        typeof(Separator),
-        new PropertyMetadata(Color.FromArgb(0x33, 0x80, 0x80, 0x80), OnVisualPropertyChanged));
 
     /// <summary>The line thickness in pixels; one by default.</summary>
     public static readonly DependencyProperty ThicknessProperty = DependencyProperty.Register(
@@ -214,13 +207,6 @@ public class Separator : Control
     {
         get => (Orientation)GetValue(OrientationProperty)!;
         set => SetValue(OrientationProperty, value);
-    }
-
-    /// <summary>Gets or sets the line colour.</summary>
-    public Color Brush
-    {
-        get => (Color)GetValue(BrushProperty)!;
-        set => SetValue(BrushProperty, value);
     }
 
     /// <summary>Gets or sets the line thickness in pixels.</summary>
@@ -244,13 +230,13 @@ public class Separator : Control
         if (Orientation == Orientation.Horizontal)
         {
             var y = bounds.Top + (bounds.Height / 2);
-            using var pen = new Pen(Brush, thickness);
+            using var pen = new Pen(EffectiveForeground, thickness);
             e.Graphics.DrawLine(pen, bounds.Left, y, bounds.Right, y);
         }
         else
         {
             var x = bounds.Left + (bounds.Width / 2);
-            using var pen = new Pen(Brush, thickness);
+            using var pen = new Pen(EffectiveForeground, thickness);
             e.Graphics.DrawLine(pen, x, bounds.Top, x, bounds.Bottom);
         }
     }

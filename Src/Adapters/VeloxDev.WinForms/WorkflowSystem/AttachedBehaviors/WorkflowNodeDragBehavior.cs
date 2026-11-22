@@ -1,11 +1,14 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem;
+
+using VeloxDev.WorkflowSystem.Platform;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -27,6 +30,21 @@ public sealed class WorkflowNodeDragBehavior
 
     private static readonly ConditionalWeakTable<Control, DragState> States = new();
 
+    /// <summary>Whether node dragging is active on the control.</summary>
+    public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
+        "IsEnabled", typeof(bool), typeof(WorkflowNodeDragBehavior),
+        new PropertyMetadata(false, OnIsEnabledPropertyChanged));
+
+    /// <summary>Optional name of the canvas that supplies drag coordinates.</summary>
+    public static readonly DependencyProperty CoordinateHostNameProperty = DependencyProperty.RegisterAttached(
+        "CoordinateHostName", typeof(string), typeof(WorkflowNodeDragBehavior),
+        new PropertyMetadata(null, OnCoordinateHostPropertyChanged));
+
+    /// <summary>Optional type of the canvas that supplies drag coordinates.</summary>
+    public static readonly DependencyProperty CoordinateHostTypeProperty = DependencyProperty.RegisterAttached(
+        "CoordinateHostType", typeof(Type), typeof(WorkflowNodeDragBehavior),
+        new PropertyMetadata(null, OnCoordinateHostPropertyChanged));
+
     /// <summary>
     /// Gets whether workflow node dragging behavior is enabled for the specified control.
     /// </summary>
@@ -37,7 +55,7 @@ public sealed class WorkflowNodeDragBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).IsEnabled;
+        return IsEnabledProperty.GetValue(element) is true;
     }
 
     /// <summary>
@@ -50,18 +68,24 @@ public sealed class WorkflowNodeDragBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        var state = GetState(element);
+        IsEnabledProperty.SetValue(element, value);
+    }
+
+    private static void OnIsEnabledPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
+    {
+        var state = GetState(target);
+        var value = e.NewValue is true;
         if (state.IsEnabled == value)
         {
             return;
         }
 
-        Detach(element, state);
+        Detach(target, state);
 
         state.IsEnabled = value;
         if (value)
         {
-            Attach(element, state);
+            Attach(target, state);
         }
         else
         {
@@ -103,7 +127,7 @@ public sealed class WorkflowNodeDragBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).CoordinateHostName;
+        return CoordinateHostNameProperty.GetValue(element) as string;
     }
 
     /// <summary>
@@ -116,7 +140,14 @@ public sealed class WorkflowNodeDragBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        GetState(element).CoordinateHostName = value;
+        CoordinateHostNameProperty.SetValue(element, value);
+    }
+
+    private static void OnCoordinateHostPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
+    {
+        var state = GetState(target);
+        state.CoordinateHostName = CoordinateHostNameProperty.GetValue(target) as string;
+        state.CoordinateHostType = CoordinateHostTypeProperty.GetValue(target) as Type;
     }
 
     /// <summary>
@@ -129,7 +160,7 @@ public sealed class WorkflowNodeDragBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).CoordinateHostType;
+        return CoordinateHostTypeProperty.GetValue(element) as Type;
     }
 
     /// <summary>
@@ -142,7 +173,7 @@ public sealed class WorkflowNodeDragBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        GetState(element).CoordinateHostType = value;
+        CoordinateHostTypeProperty.SetValue(element, value);
     }
 
     private static void Attach(Control control, DragState state)

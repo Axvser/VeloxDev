@@ -1,5 +1,6 @@
 using System.Windows.Forms;
 using System.Windows.Input;
+using VeloxDev.MVVM;
 using Microsoft.CodeAnalysis;
 using VeloxDev.WinForms.Generator;
 using VeloxDev.WinForms.Xaml.Test.Fixtures;
@@ -8,18 +9,18 @@ using VeloxDev.WinForms.Xaml.Test.Infrastructure;
 namespace VeloxDev.WinForms.Xaml.Test;
 
 /// <summary>
-/// The command, input-binding and focus primitives: <see cref="RelayCommand"/>, button commands,
+/// The command, input-binding and focus primitives: <see cref="VeloxCommand"/>, button commands,
 /// <see cref="KeyBinding"/> / <see cref="MouseBinding"/> matching and <see cref="FocusManager"/>.
 /// </summary>
 [STATestClass]
 public sealed class CommandInputTests
 {
     [TestMethod]
-    public void RelayCommand_ExecutesWithTheParameterAndQueriesCanExecute()
+    public void VeloxCommand_ExecutesWithTheParameterAndQueriesCanExecute()
     {
         object? received = null;
         var canExecuteCalls = 0;
-        var command = new RelayCommand(
+        var command = new VeloxCommand(
             parameter => received = parameter,
             _ =>
             {
@@ -35,10 +36,10 @@ public sealed class CommandInputTests
     }
 
     [TestMethod]
-    public void RelayCommand_WithoutAPredicate_IsAlwaysExecutable()
+    public void VeloxCommand_WithoutAPredicate_IsAlwaysExecutable()
     {
         var runs = 0;
-        var command = new RelayCommand(() => runs++);
+        var command = new VeloxCommand(() => runs++);
 
         Assert.IsTrue(command.CanExecute(null));
 
@@ -47,13 +48,13 @@ public sealed class CommandInputTests
     }
 
     [TestMethod]
-    public void RelayCommand_RaiseCanExecuteChanged_RaisesTheEvent()
+    public void VeloxCommand_NotifyRaisesCanExecuteChanged_RaisesTheEvent()
     {
-        var command = new RelayCommand(() => { });
+        var command = new VeloxCommand(() => { });
         var raised = 0;
         command.CanExecuteChanged += (_, _) => raised++;
 
-        command.RaiseCanExecuteChanged();
+        command.Notify();
 
         Assert.AreEqual(1, raised);
     }
@@ -64,7 +65,7 @@ public sealed class CommandInputTests
         var binding = new KeyBinding
         {
             Gesture = new KeyGesture(Keys.S, ModifierKeys.Control),
-            Command = new RelayCommand(_ => { }),
+            Command = new VeloxCommand(_ => { }),
         };
 
         Assert.IsTrue(binding.MatchesKey(Keys.S, Keys.Control));
@@ -114,8 +115,8 @@ public sealed class CommandInputTests
         var second = 0;
         var bindings = new InputBindingCollection
         {
-            new KeyBinding { Key = Keys.F5, Command = new RelayCommand(_ => first++, _ => false) },
-            new KeyBinding { Key = Keys.F5, Command = new RelayCommand(_ => second++) },
+            new KeyBinding { Key = Keys.F5, Command = new VeloxCommand(_ => first++, _ => false) },
+            new KeyBinding { Key = Keys.F5, Command = new VeloxCommand(_ => second++) },
         };
 
         Assert.IsTrue(bindings.TryHandleKey(Keys.F5, Keys.None));
@@ -127,7 +128,7 @@ public sealed class CommandInputTests
     public void InputBindings_ExecuteOnKeyAndMouseDown()
     {
         var executed = 0;
-        var command = new RelayCommand(_ => executed++);
+        var command = new VeloxCommand(_ => executed++);
         using var control = new InputProbeControl();
         control.InputBindings.Add(new KeyBinding { Key = Keys.S, Modifiers = ModifierKeys.Control, Command = command });
         control.InputBindings.Add(new MouseBinding { Action = MouseAction.LeftClick, Command = command });
@@ -149,7 +150,7 @@ public sealed class CommandInputTests
     public void ButtonCommand_ExecutesOnClickWithTheParameter()
     {
         object? received = null;
-        var command = new RelayCommand(parameter => received = parameter);
+        var command = new VeloxCommand(parameter => received = parameter);
         using var button = new VeloxDev.WinForms.Xaml.Controls.Button
         {
             Command = command,
@@ -165,14 +166,14 @@ public sealed class CommandInputTests
     public void ButtonCommand_DrivesIsEnabledFromCanExecute()
     {
         var allowed = false;
-        var command = new RelayCommand(_ => { }, _ => allowed);
+        var command = new VeloxCommand(_ => { }, _ => allowed);
         using var button = new VeloxDev.WinForms.Xaml.Controls.Button { Command = command };
 
         Assert.IsFalse(button.IsEnabled, "a command that cannot execute disables the button");
         Assert.IsFalse(button.Enabled);
 
         allowed = true;
-        command.RaiseCanExecuteChanged();
+        command.Notify();
 
         Assert.IsTrue(button.IsEnabled);
         Assert.IsTrue(button.Enabled);
@@ -183,7 +184,7 @@ public sealed class CommandInputTests
     {
         bool? checkedWhenExecuted = null;
         VeloxDev.WinForms.Xaml.Controls.ToggleButton? toggle = null;
-        var command = new RelayCommand(() => checkedWhenExecuted = toggle!.IsChecked);
+        var command = new VeloxCommand(() => checkedWhenExecuted = toggle!.IsChecked);
         toggle = new VeloxDev.WinForms.Xaml.Controls.ToggleButton { Command = command };
         using var disposable = toggle;
 
@@ -247,14 +248,15 @@ public sealed class CommandInputTests
     {
         const string source = """
             using System.Windows.Input;
+            using VeloxDev.MVVM;
             using VeloxDev.WinForms.Xaml;
 
             namespace Probe;
 
             public static class Commands
             {
-                public static readonly ICommand Save = new RelayCommand(() => { });
-                public static readonly ICommand Open = new RelayCommand(() => { });
+                public static readonly ICommand Save = new VeloxCommand(() => { });
+                public static readonly ICommand Open = new VeloxCommand(() => { });
             }
 
             public partial class ProbeView : VeloxDev.WinForms.Xaml.Controls.Control

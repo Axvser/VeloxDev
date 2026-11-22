@@ -12,8 +12,8 @@
 | 我想加 | 挂点 | 位置 |
 |---|---|---|
 | 一张新的工作流表面 | **XAML 根 + `WorkflowSurfaceBehavior` 附着属性**：根上设 `IsEnabled`/`ZoomEnabled`/`TemplateSelector` 与五个 `*Name`；部件按 `PART_*` 命名 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`；示例 `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/TreeView.xaml` |
-| 一种新的节点卡片 | **`WorkflowNodeAttachment.Attach(this)`**，卡片自绘并按 `PART_*` 名接线 | `WorkflowSystem/AttachedBehaviors/WorkflowNodeAttachment.Attach` |
-| 一种新的插槽图形 | **`WorkflowSlotAttachment.Attach(this)`** | `WorkflowSystem/AttachedBehaviors/WorkflowSlotAttachment.Attach` |
+| 一种新的节点卡片 | **`WorkflowNodeAttachment.Attach(this)`**，卡片自绘并按 `PART_*` 名接线 | `WorkflowSystem/Attachments/WorkflowNodeAttachment.Attach` |
+| 一种新的插槽图形 | **`WorkflowSlotAttachment.Attach(this)`** | `WorkflowSystem/Attachments/WorkflowSlotAttachment.Attach` |
 | 一种新的连线图形 | **自己的控件 + `WorkflowLinkAttachment.Attach(this)`**，在 `OnPaint` 里画 | `WorkflowLinkAttachment.cs` |
 | 换网格/标尺外观 | 模板条目实现 `IWorkflowGridDecorator`，设调色板与间距；宿主用 `GridDecoratorName` 接上 | 模板 `workflow-grid-decorator/TemplateClass.cs`（含 `SurfaceCanvas`） |
 | 「item 类型 → 视图」的选择器 | 派生 `VeloxDev.WinForms.Xaml.TemplateSelector`（`DataTemplate` 属性 + `SelectTemplate`） | `Xaml/TemplateSelector.cs` + 模板里的派生类 |
@@ -51,7 +51,7 @@
 ### 3.1 搭一张工作流表面（这家最常见的扩展）
 
 1. **根节点**：用 `UserControl`（或任意 XAML 根），在根上设 `behaviors:WorkflowSurfaceBehavior.IsEnabled="True"`、`ZoomEnabled`、`TemplateSelector`，并用 `ScrollViewerName`/`CanvasName`/`GridDecoratorName`/`MinimapOverlayName`/`PointerPressSourceName` 指向部件。
-2. **部件名**：目标控件写原生 `Name="PART_*"`；`x:Name` 只生成字段，不会写原生 `Name`。
+2. **部件名**：目标控件写 `x:Name="PART_*"` 即可 —— 生成器同时写字段、`NameScope` 和原生 `Control.Name`。
 3. **卡片/连线**：节点卡片实现 `IWorkflowSurfaceNodeView`（平移时表面调 `ApplySurfacePosition`）；连线默认由 `WorkflowLinkLayer` 统一画，per-link 视图才挂 `WorkflowLinkAttachment`。
 4. **网格/小地图**：模板条目分别实现 `IWorkflowGridDecorator`、派生 `WorkflowMinimapOverlay`，再按名字接上。
 5. **模板/派生联动**：`Src/Templates/VeloxDev.WinForms.Templates/working/content/` 下对应条目，以及两个 demo。
@@ -73,7 +73,7 @@
 
 ### 3.4 加一个 Win32 补偿
 
-1. 在 `WorkflowSystem/AttachedBehaviors/NativeWindowStyleHelper.cs` 加常量与方法（`internal static`，不对外）。
+1. 在 `WorkflowSystem/Platform/NativeWindowStyleHelper.cs` 加常量与方法（`internal static`，不对外）。
 2. `SetWindowLong` 的 index（普通样式 vs 扩展样式）不要凭常量值猜 —— 这家两个常量**值相同**（`WS_CLIPCHILDREN` / `WS_EX_COMPOSITED` 都是 `0x02000000`）。
 3. 至少加一个调用点，并想清楚「句柄还没建」的情况：`ApplyStyle` 只在位缺失时才动 `SetWindowPos`，而 `HandleCreated` 处有重挂（`EnsureClipChildren` / `EnsureComposited`）。
 

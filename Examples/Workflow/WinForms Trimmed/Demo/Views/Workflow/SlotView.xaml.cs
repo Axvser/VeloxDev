@@ -1,66 +1,78 @@
-// VeloxDev customization: the glyph is painted here; the surface binds the slot through VisualWorkflowSlotBehavior.
+// VeloxDev customization: the glyph lives in XAML; the state colours are assigned here.
+using System.ComponentModel;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.VisualHosting;
-using DrawingPen = System.Drawing.Pen;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>A visual workflow slot glyph: a ring and a core whose fill follows the slot's connection state.</summary>
-public sealed partial class SlotView : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
+public sealed partial class SlotView : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
-    /// <summary>Creates the glyph and runs the generated initializer.</summary>
+    private ISlotComponent? slot;
+    private INotifyPropertyChanged? notifier;
+
     public SlotView()
     {
         InitializeComponent();
+        UpdateGlyph();
+        DataContextChanged += (_, _) => ViewModel = DataContext as ISlotComponent;
     }
 
-    /// <inheritdoc />
-    protected override void OnRender(Graphics graphics)
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public ISlotComponent? ViewModel
     {
-        if (VisualWorkflowSlotBehavior.GetSlot(this) is not { } slot)
+        get => slot;
+        set
         {
-            return;
+            if (ReferenceEquals(slot, value))
+            {
+                return;
+            }
+
+            if (notifier is not null)
+            {
+                notifier.PropertyChanged -= OnSlotPropertyChanged;
+            }
+
+            slot = value;
+            Tag = value;
+            notifier = value;
+            if (notifier is not null)
+            {
+                notifier.PropertyChanged += OnSlotPropertyChanged;
+            }
+
+            UpdateGlyph();
         }
-
-        var size = Math.Min(Bounds.Width, Bounds.Height);
-        if (size <= 1f)
-        {
-            return;
-        }
-
-        graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var centerX = Bounds.Width / 2f;
-        var centerY = Bounds.Height / 2f;
-        var ringRadius = size * 0.30f;
-        var coreRadius = size * 0.13f;
-
-        using var ring = new DrawingPen(XamlRuntime.ParseColor("#FFFFFFFF"), Math.Max(1f, size * 0.08f));
-        graphics.DrawEllipse(ring, centerX - ringRadius, centerY - ringRadius, ringRadius * 2f, ringRadius * 2f);
-
-        using var core = new SolidBrush(FillFor(slot.State));
-        graphics.FillEllipse(core, centerX - coreRadius, centerY - coreRadius, coreRadius * 2f, coreRadius * 2f);
     }
 
-    private static Color FillFor(SlotState state)
+    protected override void Dispose(bool disposing)
     {
-        if (state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver))
+        if (disposing && notifier is not null)
         {
-            return Color.Violet;
+            notifier.PropertyChanged -= OnSlotPropertyChanged;
         }
 
-        if (state.HasFlag(SlotState.Sender) || state.HasFlag(SlotState.PreviewSender))
-        {
-            return Color.Tomato;
-        }
+        base.Dispose(disposing);
+    }
 
-        if (state.HasFlag(SlotState.Receiver) || state.HasFlag(SlotState.PreviewReceiver))
+    private void OnSlotPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ISlotComponent.State) or null)
         {
-            return Color.Lime;
+            UpdateGlyph();
         }
+    }
 
-        return XamlRuntime.ParseColor("#DD1E1E1E");
+    private void UpdateGlyph()
+    {
+        RootPath.Fill = (slot?.State ?? SlotState.StandBy) switch
+        {
+            var state when state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver) => Color.Violet,
+            var state when state.HasFlag(SlotState.Sender) => Color.Tomato,
+            var state when state.HasFlag(SlotState.Receiver) => Color.Lime,
+            _ => XamlRuntime.ParseColor("#DD1E1E1E"),
+        };
     }
 }

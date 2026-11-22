@@ -66,6 +66,10 @@
 
 ⇒ **七家现在是同一句话**：库给事件与几何（`Curve`），效果画在你自己的视图里。
 
+### 1.5 适配器不提供工作流视图控件
+
+（2026-11-22 用户定）适配器只给**附着行为 / 附件 / 平台机制**，不给工作流业务控件 —— 没有 `Surface`、`NodeView`、`SlotView`、`LinkLayer`、`GridDecorator`、`Minimap` 这类可被继承的类（WPF 是参照：`AttachedBehaviors/` + `ViewHosting/`，没有工作流视图）。模板与 Demo 一律用平台的**基本元素**（`Grid` / `Border` / `ScrollViewer` / `Canvas` / `UserControl` …）加附着属性组成，所以模板 code-behind 通常只剩 `InitializeComponent()`。需要默认外观时用模板自己的普通控件画；需要平台服务时挂行为，不要从适配器派生一个 workflow 基类。
+
 ---
 
 ## 二、边界上的常见误判

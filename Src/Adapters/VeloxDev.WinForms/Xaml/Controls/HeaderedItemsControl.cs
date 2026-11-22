@@ -105,7 +105,7 @@ public class HeaderedItemsControl : ItemsControl
         base.OnPaintBackground(e);
 
         var theme = Theme.Current;
-        var background = HasXamlValue(BackColorProperty) ? Background : new SolidColorBrush(theme.Surface);
+        var background = HasXamlValue(BackgroundProperty) ? Background : new SolidColorBrush(theme.Surface);
         XamlDrawing.PaintChromeWithBrushes(
             e.Graphics,
             ClientRectangle,
@@ -150,7 +150,7 @@ public class HeaderedItemsControl : ItemsControl
             return;
         }
 
-        var foreground = HasXamlValue(ForeColorProperty) ? ForeColor : theme.Foreground;
+        var foreground = HasXamlValue(ForegroundProperty) ? EffectiveForeground : theme.Foreground;
         var textBounds = new Rectangle(header.Left + 12, header.Top, Math.Max(0, header.Width - 24), header.Height);
         TextRenderer.DrawText(
             e.Graphics,

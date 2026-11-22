@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Input;
+using VeloxDev.MVVM;
 using VeloxDev.WinForms.Xaml;
 
 namespace VeloxDev.WinForms.Xaml.Test.Fixtures;
@@ -78,7 +79,7 @@ public sealed class ExtendedModel : INotifyPropertyChanged
     /// <summary>Creates the model and its command.</summary>
     public ExtendedModel()
     {
-        SaveCommand = new RelayCommand(_ => SaveCount++);
+        SaveCommand = new VeloxCommand(_ => SaveCount++);
     }
 
     /// <summary>The items shown by the paneled items control.</summary>

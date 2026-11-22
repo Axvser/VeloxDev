@@ -3,6 +3,8 @@ using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
+using VeloxDev.WorkflowSystem.Attachments;
+
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Turns a workflow item into a WinForms control through the host's <see cref="TemplateSelector"/>.</summary>
@@ -30,6 +32,12 @@ public sealed class ViewFactory : IViewFactory<IWorkflowComponent, Control>
     {
         var template = selector.SelectTemplate(item)
             ?? throw new InvalidOperationException($"No DataTemplate applies to '{item?.GetType().FullName}'.");
-        return template.CreateContent();
+        var view = template.CreateContent();
+        if (item is INodeComponent)
+        {
+            WorkflowNodeAttachment.Attach(view);
+        }
+
+        return view;
     }
 }

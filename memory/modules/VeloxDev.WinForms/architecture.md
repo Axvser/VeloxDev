@@ -1,6 +1,6 @@
 # VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/AttachedBehaviors/`、`Xaml/` 是 XAML 运行时、`TransitionSystem/` 含一个采样器、`DynamicTheme/ThemeValueConverters.cs`、顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。表面由 XAML 根 + `WorkflowSurfaceBehavior` 接管，网格装饰器归模板。
+> 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/` 下分 `AttachedBehaviors/`（XAML 附着行为）、`Attachments/`（node/slot/link 的代码视图附件）、`Platform/`（Win32/GDI 辅助）、`ViewHosting/`（池与视图生命周期）；`Xaml/` 是 XAML 运行时、`TransitionSystem/` 含一个采样器、`DynamicTheme/ThemeValueConverters.cs`、顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。表面由 XAML 根 + `WorkflowSurfaceBehavior` 接管，网格装饰器归模板。
 > **当前是 XAML-first 架构**：适配器包含 XAML 运行时；生成器独立在 `Src/Generators/VeloxDev.WinForms.Generator/`；Surface、节点/插槽/连线模板与两个 Demo 的视觉壳由 XAML 定义，低层 attachment/behavior 仍留在 code-behind。包版本 12.0.0。
 > **XAML 基础控件库在 `Xaml/Controls/`**（形状在 `Xaml/Controls/Shapes/`）：全部派生 XAML `Control`，属性走 DP，因而 Style/Trigger/Binding/Transition 都可用；原生 WinForms 元素只能接收附加值。**XAML 前缀严格**：无前缀 = VeloxDev（`Controls` → `Controls.Shapes` → `.Xaml`），`native:` = `System.Windows.Forms`，`local:` = 模板/Demo；根元素按同一张表解析。`v:` 仅作 VeloxDev 旧别名保留。XAML 视图 code-behind 的基类写完整命名空间（`VeloxDev.WinForms.Xaml.Controls.UserControl`）。
 > **XAML 运行时的扩展面**：`NameScope` + `ElementName`/`RelativeSource`/`x:Static`，绑定侧 `Converter`/`StringFormat`/`FallbackValue`/`TargetNullValue`/`UpdateSourceTrigger`/索引器，`Setter.Value` 可绑定，`ControlTemplate` 带 `TargetType`/`TemplatedParent`/部件/模板触发器，`Panel.ZIndex`，`TriggerActionGroup`/`LoopTime`/`IsAutoReverse`，`ItemsPanel`/`ItemContainerStyle`/固定行高虚拟化，以及 `Menus.cs`/`Popup.cs` 的声明式外壳。运行时细节与边界见 `memory/modules/WinFormsXaml/architecture.md`。
@@ -15,7 +15,7 @@
 
 | 轴 | Core 契约 | 本项目落点 | 平台差异记在哪 |
 |---|---|---|---|
-| WorkflowSystem | 七个视图角色 + 模型事件 | `WorkflowSystem/AttachedBehaviors/` | `WorkflowSystem/adapters/winforms.md` |
+| WorkflowSystem | 七个视图角色 + 模型事件 | `WorkflowSystem/AttachedBehaviors/`（行为）、`Attachments/`（视图附件）、`Platform/`（Win32/GDI） | `WorkflowSystem/adapters/winforms.md` |
 | TransitionSystem | 宿主 / 解释器 / 调度器 / 帧 pacer / 采样器 | `TransitionSystem/`（平台类型 + 一个采样器） | `TransitionSystem/adapters/winforms.md` |
 | DynamicTheme | `IThemeValueConverter` | `DynamicTheme/ThemeValueConverters.cs`（一组转换器） | DynamicTheme 模块记忆 |
 
@@ -36,12 +36,14 @@
 | 类型 | 形态 | 宿主/模板做什么 | 关键成员 |
 |---|---|---|---|
 | `WorkflowSurfaceBehavior` | 附着行为（静态 `RegisterAttached`） | tree XAML 根上设 `IsEnabled` / `ZoomEnabled` / `TemplateSelector` 与五个 `*Name` | `EnsureParts` / `EnsurePool` / `ApplyPan` / `WorkflowTree` / `LinkMenuBuilder` |
-| `WorkflowNodeAttachment` | 附到用户的 `Control` 上 | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画整张卡 | `Node`/`Title`/`Collapse`/`SurfacePanOffset`/`SurfaceContentOffset`；`ApplySurfacePosition`；事件 `Rebound`/`TitleChanged`/`CollapseChanged`/`AnchorChanged`/`Moving`…`Deleted` |
-| `WorkflowSlotAttachment` | 附到用户的 `Control` 上 | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画 | `Slot`/`SlotPath`/`PathViewBox`/`SlotBackground`/`StandbyColor`/`BorderColor`/`IconPath`/`GlyphColor`；事件 `ChannelChanging`/`ChannelChanged`；`SvgPathParser` |
-| `WorkflowLinkAttachment` | 附到用户的 `Control` 上 | 视图构造里 `WorkflowLinkAttachment.Attach(this)`，自己在 `OnPaint` 里画 | `LineColor`/`Thickness`/`PullMinimum`/`SurfaceBackground`/`Curve`/`Link`；`Paint(Graphics)`/`Bind(link)`/`Attach`/`For`；事件 `PointerEntered`/`PointerLeft`/`PointerPressed`/`PointerReleased` |
+| `WorkflowNodeAttachment` | 附到用户的 `Control` 上 | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画整张卡；XAML 卡片同时写 `DataContext` 供模板绑定 | `Node`/`Title`/`Collapse`/`SurfacePanOffset`/`SurfaceContentOffset`；`ApplySurfacePosition`；事件 `Rebound`/`TitleChanged`/`CollapseChanged`/`AnchorChanged`/`Moving`…`Deleted` |
+| `WorkflowSlotAttachment` | 附到用户的 `Control` 上 | 用户自己的控件 + `Attach(this)`，自己在 `OnPaint` 里画；XAML 视图同时写 `DataContext` | `Slot`/`SlotPath`/`PathViewBox`/`SlotBackground`/`StandbyColor`/`BorderColor`/`IconPath`/`GlyphColor`；事件 `ChannelChanging`/`ChannelChanged` |
+| `WorkflowLinkAttachment` | 附到用户的 `Control` 上 | 视图构造里 `WorkflowLinkAttachment.Attach(this)`，自己在 `OnPaint` 里画；XAML 视图同时写 `DataContext` | `LineColor`/`Thickness`/`PullMinimum`/`SurfaceBackground`/`Curve`/`Link`；`Paint(Graphics)`/`Bind(link)`/`Attach`/`For`；事件 `PointerEntered`/`PointerLeft`/`PointerPressed`/`PointerReleased` |
 | `VeloxDev.WinForms.Xaml.TemplateSelector` | 通用选择器基类 | 派生类用 `DataTemplate` 属性按 item 类型选模板；tree 的资源按 `{StaticResource}` 引用 | `SelectTemplate(object?)` → `DataTemplate?` |
-| `WorkflowNodeRowsBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeViewBehavior` | 节点侧的三个附着行为 | 节点 XAML 声明 `PART_Card` / `PART_Header` / `PART_Title` / `PART_OutputSlots` | 行重建、标题缩放、拖动/槽布局接线 |
+| `WorkflowNodeRowsBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeViewBehavior` | 节点侧的三个附着行为 | 节点 XAML 声明 `PART_Card` / `PART_Header` / `PART_Title` / `PART_OutputSlots` | 行重建与居中、标题/行按 collapse 缩放、拖动/槽布局接线 |
 | `WorkflowMinimapOverlay` | `Panel, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource` | 模板派生，只给调色板 | 定位、拖拽映射、`ScrollOffsetX/Y` |
+
+**节点不需要 workflow 控件基类，但需要这三个附着行为**：HWND 子控件不能矩阵缩放，XAML `Viewbox` 只能改外框和字体；节点视图用 `Viewbox` + `ItemsControl` 时 Slot/行/边距不会跟着缩，行也不会整体居中。行为只做平台机制（`Attach`/`For`、按 collapse 重算度量），模板仍是 `Border`/`Panel`/`Label` 等基本元素，code-behind 仍只有 `InitializeComponent()`。
 
 **支撑件：**
 
@@ -49,7 +51,7 @@
 - `IWorkflowMinimapScrollSource`：`ViewportScrollRequested` 事件；**故意不进 Core 的 `IWorkflowMinimapOverlay`**（那个要框架中立），由表面行为订阅。
 - `ModelChangeRelay`（`internal`）：把「订阅、退订、`InvokeRequired` 编组」收敛成一份，三个视图控件共用。
 - `WorkflowRulerOverlayForm`：`IWorkflowGridDecorator.RulerBand` 驱动的分层标尺浮层；由表面行为在句柄建立后创建。
-- `WorkflowSurfaceColors`（解析 `#RRGGBB`/`#AARRGGBB`/颜色名）、`WorkflowSurfaceGraphics`（圆角矩形）、`WorkflowSurfaceGrid`（大/次网格线判定 + 标尺标签格式）。
+- `WorkflowSurfaceGrid`（大/次网格线判定 + 标尺标签格式）；颜色解析统一走 `VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor`。
 
 ---
 
@@ -57,7 +59,7 @@
 
 **XAML 侧有 DP/附加属性；适配器内部状态仍存在 `ConditionalWeakTable<Control, State>` 里。** 没有跨模块的 `ModuleInitializer` / `[assembly:`；XAML 运行时由 `Xaml/DependencyProperty` 提供 DP，`WorkflowSurfaceBehavior` 用 `RegisterAttached` 暴露接线面。
 
-**名字仍是唯一的接线语言。** 表面行为按 `Control.Name` 解析 `PART_*`，解析器 `FindControlByName`（`WorkflowSlotLayoutBehavior`）：**递归遍历宿主子树 + `Ordinal` 比较**，取第一个命中。⇒ 与 WPF 的 `NameScope` 不同：只管宿主子树、跨容器/非子孙一律找不到、**找不到不抛也不报**，只在那条数据推送处静默跳过。`x:Name` 只生成字段，不会写原生 `Name`；模板里的 `Name="PART_*"` 才是契约。
+**名字仍是唯一的接线语言。** 表面行为按 `Control.Name` 解析 `PART_*`，解析器 `FindControlByName`（`WorkflowSlotLayoutBehavior`）：**递归遍历宿主子树 + `Ordinal` 比较**，取第一个命中。⇒ 与 WPF 的 `NameScope` 不同：只管宿主子树、跨容器/非子孙一律找不到、**找不到不抛也不报**，只在那条数据推送处静默跳过。**`x:Name` 现在同时也写原生 `Control.Name`**（与 WPF 的 `FrameworkElement.Name` 同义），模板只写 `x:Name="PART_*"` 一次即可；显式 `Name="..."` 仍会在其后覆盖原生值。
 
 **三个开关各做什么：**
 
@@ -120,8 +122,8 @@
 | 想改的东西 | 先打开 |
 |---|---|
 | 工作表表面：chrome / 平移 / 池接线 / 布局调度 / 标尺浮层 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`（模板只在 XAML 根上挂属性） |
-| 节点卡片 | `WorkflowSystem/AttachedBehaviors/WorkflowNodeAttachment.cs`（附加）+ 用户卡片自己的 `OnPaint` |
-| 插槽 / 连线图形 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotAttachment.cs`、`WorkflowLinkAttachment.cs` |
+| 节点卡片 | `WorkflowSystem/Attachments/WorkflowNodeAttachment.cs`（附加）+ 用户卡片自己的 `OnPaint` |
+| 插槽 / 连线图形 | `WorkflowSystem/Attachments/WorkflowSlotAttachment.cs`、`WorkflowLinkAttachment.cs` |
 | 网格/标尺调色板与间距 | 模板条目 `workflow-grid-decorator/TemplateClass.cs`（含同文件的 `SurfaceCanvas`） |
 | 「item 类型 → 视图」的选择器 | `Src/Adapters/VeloxDev.WinForms/Xaml/TemplateSelector.cs`（通用基类）+ 模板里的派生类 |
 | 滚轮缩放 / Ctrl 判定 / 消息过滤器 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`（`SetZoomEnabled`、`SurfaceState.OnMessage`） |
@@ -131,7 +133,7 @@
 | 插槽两阶段连接手势 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.cs` |
 | 视图池 / 物品→控件的工厂 / 上下文注入 | `WorkflowSystem/AttachedBehaviors/ViewPool.cs`（挂点）+ `WorkflowSystem/ViewHosting/`（`ViewSourcePipeline`、`ViewContainer`、`ViewFactory`） |
 | 小地图（现在是可继承基类） | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` |
-| Win32 样式、100 个控件的阈值 | `WorkflowSystem/AttachedBehaviors/NativeWindowStyleHelper.cs` |
+| Win32 样式、100 个控件的阈值 | `WorkflowSystem/Platform/NativeWindowStyleHelper.cs` |
 | 线程、优先级、pacer、调度器、采样器 | `TransitionSystem/` —— 差异与坑见 `TransitionSystem/adapters/winforms.md` |
 | 主题字符串 → 值 | `DynamicTheme/ThemeValueConverters.cs` |
 | 「宿主怎么把这些接起来」 | `Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-tree-view/TemplateClass.xaml` + `.xaml.cs`；两个 demo 在 `Examples/Workflow/WinForms Trimmed/` 与 `Examples/Workflow/WinForms/`，视觉壳均已 XAML 化 |

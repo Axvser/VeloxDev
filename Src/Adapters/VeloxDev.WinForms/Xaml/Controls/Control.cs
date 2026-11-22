@@ -69,46 +69,19 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         typeof(Control),
         new PropertyMetadata(Thickness.Empty, OnPaddingPropertyChanged) { AffectsMeasure = true });
 
-    /// <summary>The background colour; a WPF-named alias for the native <see cref="System.Windows.Forms.Control.BackColor"/>.</summary>
-    /// <remarks>Unlike the native property, this is a dependency property, so a style, trigger or transition can drive it.</remarks>
-    public static readonly DependencyProperty BackColorProperty = DependencyProperty.Register(
-        nameof(BackColor),
-        typeof(Color),
-        typeof(Control),
-        new PropertyMetadata(Color.Empty, OnBackColorPropertyChanged));
-
-    /// <summary>The background brush; the WPF shape of <see cref="BackColorProperty"/>.</summary>
-    /// <remarks>
-    /// <para>
-    /// A <see cref="SolidColorBrush"/> is mirrored into <see cref="BackColorProperty"/> so the native property and old
-    /// callers keep seeing the colour; a written colour is mirrored back as a solid brush. Gradients live only here.
-    /// </para>
-    /// <para>
-    /// The default is <see langword="null"/>: a control with no authored background stays transparent instead of
-    /// painting the WinForms system colour.
-    /// </para>
-    /// </remarks>
+    /// <summary>The background brush. The default is <see langword="null"/>: a control with no authored background stays transparent instead of painting the WinForms system colour.</summary>
     public static readonly DependencyProperty BackgroundProperty = DependencyProperty.Register(
         nameof(Background),
         typeof(Brush),
         typeof(Control),
-        new PropertyMetadata(null));
+        new PropertyMetadata(null, OnBackgroundPropertyChanged));
 
-    /// <summary>The text colour; a WPF-named alias for the native <see cref="System.Windows.Forms.Control.ForeColor"/>.</summary>
-    /// <remarks>Unlike the native property, this is a dependency property, so a style, trigger or transition can drive it.</remarks>
-    public static readonly DependencyProperty ForeColorProperty = DependencyProperty.Register(
-        nameof(ForeColor),
-        typeof(Color),
-        typeof(Control),
-        new PropertyMetadata(Color.Empty, OnForeColorPropertyChanged));
-
-    /// <summary>The text brush; the WPF shape of <see cref="ForeColorProperty"/>.</summary>
-    /// <remarks>A <see cref="SolidColorBrush"/> is mirrored into <see cref="ForeColorProperty"/> and a written colour back into a solid brush.</remarks>
+    /// <summary>The text brush; <see langword="null"/> falls back to the native <see cref="System.Windows.Forms.Control.ForeColor"/>.</summary>
     public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
         nameof(Foreground),
         typeof(Brush),
         typeof(Control),
-        new PropertyMetadata(null));
+        new PropertyMetadata(null, OnForegroundPropertyChanged));
 
     /// <summary>The font used by this control; null means the native <see cref="System.Windows.Forms.Control.Font"/>.</summary>
     public static readonly DependencyProperty FontProperty = DependencyProperty.Register(
@@ -241,13 +214,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     private bool _layoutPassRunning;
     private bool _layoutPassRequested;
 
-    // Brush 面与 Color 面互为镜像：只在作者直接写入时同步，样式/触发器/过渡层各自独立。
-    private XamlValueSource _changeSource = XamlValueSource.Local;
-    private bool _syncingColorAlias;
-
     // DP 清除（样式/触发器退出）时要还原到接管前的原生值，否则原生属性会停在最后一帧。
-    private Color? _nativeBackColorFallback;
-    private Color? _nativeForeColorFallback;
     private Font? _nativeFontFallback;
     private int? _nativeWidthFallback;
     private int? _nativeHeightFallback;
@@ -315,34 +282,10 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         set => SetValue(PaddingProperty, value);
     }
 
-    /// <summary>Gets or sets the background colour.</summary>
+    /// <summary>Gets or sets the background brush.</summary>
     /// <remarks>
-    /// An unset value falls back to a <see cref="SolidColorBrush"/> written through <see cref="BackgroundProperty"/>,
-    /// then to the native <see cref="System.Windows.Forms.Control.BackColor"/>.
-    /// </remarks>
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public new Color BackColor
-    {
-        get
-        {
-            var value = (Color)GetValue(BackColorProperty)!;
-            if (!value.IsEmpty)
-            {
-                return value;
-            }
-
-            return HasXamlValue(BackgroundProperty) && GetValue(BackgroundProperty) is Brush brush
-                ? brush.ApproximateColor
-                : base.BackColor;
-        }
-        set => SetValue(BackColorProperty, value);
-    }
-
-    /// <summary>Gets or sets the background brush; the WPF/Avalonia spelling of <see cref="BackColor"/>.</summary>
-    /// <remarks>
-    /// When no brush is set the property derives one from an authored <see cref="BackColor"/>; otherwise it returns
-    /// <see langword="null"/> so the control stays transparent.
+    /// When no brush is set the control stays transparent; a native <see cref="System.Windows.Forms.Control.BackColor"/>
+    /// written directly still produces a brush so code that paints a card itself keeps working.
     /// </remarks>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -353,12 +296,6 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             if (HasXamlValue(BackgroundProperty))
             {
                 return GetValue(BackgroundProperty) as Brush;
-            }
-
-            if (HasXamlValue(BackColorProperty))
-            {
-                var color = (Color)GetValue(BackColorProperty)!;
-                return color.IsEmpty ? null : new SolidColorBrush(color);
             }
 
             // 原生 BackColor 是环境继承值：没作者写过时它等于父控件的 BackColor（或系统默认），
@@ -375,53 +312,28 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         set => SetValue(BackgroundProperty, value);
     }
 
-    /// <summary>Gets or sets the text colour.</summary>
-    /// <remarks>
-    /// An unset value falls back to a <see cref="SolidColorBrush"/> written through <see cref="ForegroundProperty"/>,
-    /// then to the native <see cref="System.Windows.Forms.Control.ForeColor"/>.
-    /// </remarks>
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public new Color ForeColor
-    {
-        get
-        {
-            var value = (Color)GetValue(ForeColorProperty)!;
-            if (!value.IsEmpty)
-            {
-                return value;
-            }
-
-            return HasXamlValue(ForegroundProperty) && GetValue(ForegroundProperty) is Brush brush
-                ? brush.ApproximateColor
-                : base.ForeColor;
-        }
-        set => SetValue(ForeColorProperty, value);
-    }
-
-    /// <summary>Gets or sets the text brush; the WPF/Avalonia spelling of <see cref="ForeColor"/>.</summary>
-    /// <remarks>When no brush is set the property derives one from an authored <see cref="ForeColor"/> or the native colour.</remarks>
+    /// <summary>Gets or sets the text brush; <see langword="null"/> falls back to the native <see cref="System.Windows.Forms.Control.ForeColor"/>.</summary>
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Brush? Foreground
     {
-        get
-        {
-            if (HasXamlValue(ForegroundProperty))
-            {
-                return GetValue(ForegroundProperty) as Brush;
-            }
-
-            if (HasXamlValue(ForeColorProperty))
-            {
-                var color = (Color)GetValue(ForeColorProperty)!;
-                return color.IsEmpty ? null : new SolidColorBrush(color);
-            }
-
-            return new SolidColorBrush(base.ForeColor);
-        }
+        get => HasXamlValue(ForegroundProperty)
+            ? GetValue(ForegroundProperty) as Brush
+            : new SolidColorBrush(base.ForeColor);
         set => SetValue(ForegroundProperty, value);
     }
+
+    /// <summary>The colour <see cref="Background"/> paints, or the native fallback when no brush is authored.</summary>
+    internal Color EffectiveBackground
+        => HasXamlValue(BackgroundProperty) && GetValue(BackgroundProperty) is Brush background
+            ? background.ApproximateColor
+            : base.BackColor;
+
+    /// <summary>The colour <see cref="Foreground"/> paints, or the native fallback when no brush is authored.</summary>
+    internal Color EffectiveForeground
+        => HasXamlValue(ForegroundProperty) && GetValue(ForegroundProperty) is Brush foreground
+            ? foreground.ApproximateColor
+            : base.ForeColor;
 
     /// <summary>Gets or sets the font; null falls back to the native <see cref="System.Windows.Forms.Control.Font"/>.</summary>
     [Browsable(false)]
@@ -800,74 +712,21 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         }
     }
 
-    private static void OnBackColorPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    private static void OnBackgroundPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
     {
-        if (target is not Control control)
+        if (target is Control control)
         {
-            return;
-        }
-
-        if (e.NewValue is Color color && !color.IsEmpty)
-        {
-            control._nativeBackColorFallback ??= control.NativeBackColor;
-            control.NativeBackColor = color;
-            control.Invalidate();
-            return;
-        }
-
-        if (control._nativeBackColorFallback is { } fallback)
-        {
-            control.NativeBackColor = fallback;
-            control._nativeBackColorFallback = null;
+            control.OnBackColorChanged(EventArgs.Empty);
             control.Invalidate();
         }
     }
 
-    private static void OnForeColorPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    private static void OnForegroundPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
     {
-        if (target is not Control control)
+        if (target is Control control)
         {
-            return;
-        }
-
-        if (e.NewValue is Color color && !color.IsEmpty)
-        {
-            control._nativeForeColorFallback ??= control.NativeForeColor;
-            control.NativeForeColor = color;
+            control.OnForeColorChanged(EventArgs.Empty);
             control.Invalidate();
-            return;
-        }
-
-        if (control._nativeForeColorFallback is { } fallback)
-        {
-            control.NativeForeColor = fallback;
-            control._nativeForeColorFallback = null;
-            control.Invalidate();
-        }
-    }
-
-    // BackColor/ForeColor 是 WinForms 的 virtual 属性；这里用隐藏属性把 DP 接到原生布局与绘制上。
-    private Color NativeBackColor
-    {
-        get => base.BackColor;
-        set
-        {
-            if (base.BackColor != value)
-            {
-                base.BackColor = value;
-            }
-        }
-    }
-
-    private Color NativeForeColor
-    {
-        get => base.ForeColor;
-        set
-        {
-            if (base.ForeColor != value)
-            {
-                base.ForeColor = value;
-            }
         }
     }
 
@@ -1522,16 +1381,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             EvaluateTriggers();
         }
 
-        var previousSource = _changeSource;
-        _changeSource = source;
-        try
-        {
-            OnXamlPropertyChanged(property, oldValue, newValue);
-        }
-        finally
-        {
-            _changeSource = previousSource;
-        }
+        OnXamlPropertyChanged(property, oldValue, newValue);
 
         DependencyPropertyChanged?.Invoke(this, new DependencyPropertyChangedEventArgs(property, oldValue, newValue));
     }
@@ -1542,71 +1392,6 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     /// <param name="newValue">The new value.</param>
     protected virtual void OnXamlPropertyChanged(DependencyProperty property, object? oldValue, object? newValue)
     {
-        SyncColorAliases(property, newValue);
-    }
-
-    // 作者直接写任一面时把另一面同步到同一层；样式、触发器、过渡只改自己那一面，读的时候由 getter 回退。
-    private void SyncColorAliases(DependencyProperty property, object? newValue)
-    {
-        if (_syncingColorAlias || _changeSource != XamlValueSource.Local)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(property, BackgroundProperty))
-        {
-            SyncBrushToColor(BackColorProperty, newValue as Brush);
-        }
-        else if (ReferenceEquals(property, BackColorProperty) && newValue is Color backColor)
-        {
-            SyncColorToBrush(BackgroundProperty, backColor);
-        }
-        else if (ReferenceEquals(property, ForegroundProperty))
-        {
-            SyncBrushToColor(ForeColorProperty, newValue as Brush);
-        }
-        else if (ReferenceEquals(property, ForeColorProperty) && newValue is Color foreColor)
-        {
-            SyncColorToBrush(ForegroundProperty, foreColor);
-        }
-    }
-
-    private void SyncBrushToColor(DependencyProperty colorProperty, Brush? brush)
-    {
-        // 渐变没有单一颜色可镜像；保留 Color 面已有的值。
-        Color? color = brush switch
-        {
-            SolidColorBrush solid => solid.Color,
-            null => Color.Empty,
-            _ => null,
-        };
-        if (color is null)
-        {
-            return;
-        }
-
-        _syncingColorAlias = true;
-        try
-        {
-            SetValue(colorProperty, color.Value);
-        }
-        finally
-        {
-            _syncingColorAlias = false;
-        }
-    }
-
-    private void SyncColorToBrush(DependencyProperty brushProperty, Color color)
-    {
-        _syncingColorAlias = true;
-        try
-        {
-            SetValue(brushProperty, color.IsEmpty ? null : new SolidColorBrush(color));
-        }
-        finally
-        {
-            _syncingColorAlias = false;
-        }
     }
 
     /// <summary>Called when this control's effective data context changes.</summary>
@@ -1872,8 +1657,9 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
 
     private void UnhookNativeHover(System.Windows.Forms.Control child)
     {
-        if (_nativeHoverHandlers.Remove(child, out var handler))
+        if (_nativeHoverHandlers.TryGetValue(child, out var handler))
         {
+            _nativeHoverHandlers.Remove(child);
             child.MouseEnter -= handler;
             child.MouseLeave -= handler;
         }

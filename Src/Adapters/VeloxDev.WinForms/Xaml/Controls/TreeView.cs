@@ -309,11 +309,11 @@ public class TreeView : Control
         base.Dispose(disposing);
     }
 
-    private Color EffectiveBackground => HasXamlValue(BackColorProperty) && Background is { A: > 0 } brush
+    private new Color EffectiveBackground => HasXamlValue(BackgroundProperty) && Background is { A: > 0 } brush
         ? brush.ApproximateColor
         : Theme.Current.Surface;
 
-    private Color EffectiveForeground => HasXamlValue(ForeColorProperty) ? ForeColor : Theme.Current.Foreground;
+    private new Color EffectiveForeground => HasXamlValue(ForegroundProperty) ? base.EffectiveForeground : Theme.Current.Foreground;
 
     private Color EffectiveBorder => HasXamlValue(BorderBrushProperty) ? BorderBrush : Theme.Current.ControlBorder;
 

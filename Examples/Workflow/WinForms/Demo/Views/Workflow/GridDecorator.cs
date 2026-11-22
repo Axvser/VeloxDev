@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem;
+using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
@@ -20,7 +21,7 @@ public sealed class GridDecorator : Panel, IWorkflowGridDecorator
     private const int DefaultMajorFreq = 5;
     private const int DefaultRulerThickness = 36;
 
-    private readonly Color _gridBackground = WorkflowSurfaceColors.Parse("#171717");
+    private readonly Color _gridBackground = XamlRuntime.ParseColor("#171717");
     private readonly Color _minorGridColor = Color.FromArgb(35, 35, 35);
     private readonly Color _majorGridColor = Color.FromArgb(46, 46, 46);
     private readonly Color _axisColor = Color.FromArgb(58, 58, 58);
@@ -181,7 +182,7 @@ public sealed class SurfaceScrollableControl : VeloxDev.WinForms.Xaml.Controls.S
     public SurfaceScrollableControl()
     {
         SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-        BackColor = Color.Transparent;
+        Background = null;
     }
 }
 
@@ -195,7 +196,7 @@ public sealed class SurfaceCanvas : VeloxDev.WinForms.Xaml.Controls.Canvas
     public SurfaceCanvas()
     {
         SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-        BackColor = Color.Transparent;
+        Background = null;
     }
 
     /// <inheritdoc />

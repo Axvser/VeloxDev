@@ -1,8 +1,9 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using VeloxDev.MVVM;
 using VeloxDev.WinForms.Xaml;
 
 namespace Demo;
@@ -79,7 +80,7 @@ public sealed class GalleryModel : INotifyPropertyChanged, INotifyDataErrorInfo
             },
         ];
 
-        SaveCommand = new RelayCommand(_ => SaveCount++);
+        SaveCommand = new VeloxCommand(_ => SaveCount++);
         RowsView = new CollectionView(Rows);
         for (var index = 0; index < 400; index++)
         {
@@ -225,16 +226,4 @@ public sealed class GalleryModel : INotifyPropertyChanged, INotifyDataErrorInfo
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         return true;
     }
-}
-
-// 最小命令实现：只为示例提供 ICommand，不引入额外依赖。
-internal sealed class RelayCommand(Action<object?> execute) : ICommand
-{
-    public event EventHandler? CanExecuteChanged;
-
-    public bool CanExecute(object? parameter) => true;
-
-    public void Execute(object? parameter) => execute(parameter);
-
-    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
 }

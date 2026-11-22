@@ -62,20 +62,6 @@ public class Slider : Control
         typeof(Slider),
         new PropertyMetadata(false));
 
-    /// <summary>The brush of the filled part of the track.</summary>
-    public static readonly DependencyProperty BarBrushProperty = DependencyProperty.Register(
-        nameof(BarBrush),
-        typeof(Brush),
-        typeof(Slider),
-        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0xFF, 0x4C, 0x8B, 0xF5)), OnVisualPropertyChanged));
-
-    /// <summary>The brush of the empty track.</summary>
-    public static readonly DependencyProperty TrackBrushProperty = DependencyProperty.Register(
-        nameof(TrackBrush),
-        typeof(Brush),
-        typeof(Slider),
-        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0x33, 0x80, 0x80, 0x80)), OnVisualPropertyChanged));
-
     /// <summary>The brush of the thumb.</summary>
     public static readonly DependencyProperty ThumbBrushProperty = DependencyProperty.Register(
         nameof(ThumbBrush),
@@ -139,20 +125,6 @@ public class Slider : Control
     {
         get => (bool)GetValue(IsSnapToTickEnabledProperty)!;
         set => SetValue(IsSnapToTickEnabledProperty, value);
-    }
-
-    /// <summary>Gets or sets the brush of the filled part of the track.</summary>
-    public Brush? BarBrush
-    {
-        get => GetValue(BarBrushProperty) as Brush;
-        set => SetValue(BarBrushProperty, value);
-    }
-
-    /// <summary>Gets or sets the brush of the empty track.</summary>
-    public Brush? TrackBrush
-    {
-        get => GetValue(TrackBrushProperty) as Brush;
-        set => SetValue(TrackBrushProperty, value);
     }
 
     /// <summary>Gets or sets the brush of the thumb.</summary>
@@ -265,12 +237,12 @@ public class Slider : Control
     private void PaintTrack(Graphics graphics, Rectangle track, float fraction, bool horizontal)
     {
         using var trackPath = XamlDrawing.RoundedRectangle(track, track.Height / 2f);
-        if (TrackBrush is { } trackBrush && trackBrush.ApproximateColor.A > 0)
+        if (Background is { } trackBrush && trackBrush.ApproximateColor.A > 0)
         {
             trackBrush.FillPath(graphics, trackPath);
         }
 
-        if (BarBrush is not { } barBrush || barBrush.ApproximateColor.A <= 0 || fraction <= 0f)
+        if (Foreground is not { } barBrush || barBrush.ApproximateColor.A <= 0 || fraction <= 0f)
         {
             return;
         }

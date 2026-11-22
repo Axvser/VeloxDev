@@ -1,6 +1,9 @@
-<!-- VeloxDev customization: opt-in per-link view; the default surface draws every link in its single link layer. -->
-<local:TemplateClass
+<UserControl
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="clr-namespace:TemplateNamespace"
-    x:Class="TemplateNamespace.TemplateClass" />
+    x:Class="TemplateNamespace.TemplateClass">
+
+  <!-- VeloxDev customization: per-link view (opt-in). The default WinForms surface draws every link in one
+       WorkflowLinkLayer pass on PART_Canvas; keep this item only if your host puts a control on each link. -->
+
+</UserControl>

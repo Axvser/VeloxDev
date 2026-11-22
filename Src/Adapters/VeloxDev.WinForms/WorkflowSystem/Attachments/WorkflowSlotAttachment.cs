@@ -4,8 +4,12 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
+using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
+using XamlControl = VeloxDev.WinForms.Xaml.Controls.Control;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
+
+namespace VeloxDev.WorkflowSystem.Attachments;
 
 /// <summary>
 /// Everything a WinForms control needs to become one slot view, attached to it in a single call. The control stays
@@ -95,7 +99,7 @@ public sealed class WorkflowSlotAttachment
         // alpha 强制 255：共享的 slotBackground 默认是 #01000000（近乎透明），而 WinForms 的
         // Control.BackColor 在 A != 0xFF 且未声明 SupportsTransparentBackColor 时会抛。这个底色只作为
         // 「没有父控件」时的兜底（视图自己会把父控件的底色擦上去），所以不透明就够。
-        target.BackColor = Opaque(slotBackground);
+        XamlControlColors.SetBackground(target, Opaque(slotBackground));
 
         // 拖拽连线那一层是适配器的：挂上它，控件才参与手势。SetStyle 是 protected，只能由视图自己设。
         WorkflowSlotConnectionBehavior.SetIsEnabled(target, true);
@@ -130,6 +134,7 @@ public sealed class WorkflowSlotAttachment
 
             slot = value;
             target.Tag = value;
+            if (target is XamlControl xaml) xaml.DataContext = value;
             target.Visible = value is not null;
             relay.Set(value as INotifyPropertyChanged);
 
@@ -176,7 +181,7 @@ public sealed class WorkflowSlotAttachment
         {
             if (slotBackground == value) return;
             slotBackground = value;
-            target.BackColor = Opaque(value);
+            XamlControlColors.SetBackground(target, Opaque(value));
             target.Invalidate();
         }
     }
@@ -260,7 +265,7 @@ public sealed class WorkflowSlotAttachment
     /// <summary>Parses a <c>#RRGGBB</c>, <c>#AARRGGBB</c> or named colour.</summary>
     /// <param name="hex">The colour text.</param>
     /// <returns>The colour.</returns>
-    public static Color ParseColor(string hex) => WorkflowSurfaceColors.Parse(hex);
+    public static Color ParseColor(string hex) => XamlRuntime.ParseColor(hex);
 
     /// <summary>
     /// The opaque version of a colour — WinForms has no reliable transparent composition, so a view erases itself to
@@ -275,7 +280,7 @@ public sealed class WorkflowSlotAttachment
         if (iconPath is not null) return iconPath;
         if (slotPath.Length == 0) return null;
 
-        iconPath = SvgPathParser.BuildPath(slotPath);
+        iconPath = VeloxDev.WinForms.Xaml.Controls.Shapes.SvgPathParser.Parse(slotPath);
         return iconPath;
     }
 

@@ -282,7 +282,7 @@ public class RichTextBox : Control
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         // 原生编辑器需要不透明底色；没有作者背景时用主题表面色，而不是系统灰。
-        if (!HasXamlValue(BackColorProperty))
+        if (!HasXamlValue(BackgroundProperty))
         {
             using var brush = new SolidBrush(Theme.Current.ControlBackground);
             e.Graphics.FillRectangle(brush, ClientRectangle);
@@ -355,8 +355,8 @@ public class RichTextBox : Control
         base.Dispose(disposing);
     }
 
-    private Color EffectiveForeground
-        => HasXamlValue(ForeColorProperty) ? ForeColor : Theme.Current.Foreground;
+    private new Color EffectiveForeground
+        => HasXamlValue(ForegroundProperty) ? base.EffectiveForeground : Theme.Current.Foreground;
 
     private void ApplyEditorProperties()
     {
@@ -371,7 +371,7 @@ public class RichTextBox : Control
         {
             editor.ReadOnly = IsReadOnly;
             editor.BorderStyle = BorderStyle.None;
-            editor.BackColor = HasXamlValue(BackColorProperty)
+            editor.BackColor = HasXamlValue(BackgroundProperty)
                 ? XamlDrawing.ToOpaque(Background, Theme.Current.ControlBackground)
                 : Theme.Current.ControlBackground;
             editor.ForeColor = EffectiveForeground;

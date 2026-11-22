@@ -337,9 +337,11 @@ internal sealed class XamlCompiler
             }
         }
 
-        if (IsVisualElement(type) && !string.IsNullOrEmpty(name))
+        if (!string.IsNullOrEmpty(name))
         {
-            // 普通视觉元素没有 NameScope；Name 只是给检查器/树导出用的标签，模板部件另走 VisualNameScope。
+            // WPF 的 x:Name 同时就是 FrameworkElement.Name；这里也让 x:Name 写原生 Name，
+            // 这样 PART_* 只需写一次，按 Control.Name 解析的附着行为也能找到它。
+            // 显式的 Name="..." 属性仍在 ApplyAttributes 里应用，后写覆盖前者。
             _current.Line($"{expression}.Name = {SyntaxHelpers.Quote(name!)};");
         }
 

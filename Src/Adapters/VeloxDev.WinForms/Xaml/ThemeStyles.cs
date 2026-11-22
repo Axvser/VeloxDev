@@ -83,25 +83,17 @@ public static class ThemeStyles
         var palette = Theme.Current;
         var style = new Style { TargetType = type };
         var surface = SurfaceTypes.Contains(type.Name);
+        var track = type.Name is "ProgressBar" or "Slider";
 
-        Add(style, type, "Background", palette.ControlBackground, surface);
-        Add(style, type, "BackColor", palette.ControlBackground, surface);
-        Add(style, type, "Foreground", palette.Foreground, true);
-        Add(style, type, "ForeColor", palette.Foreground, true);
+        Add(style, type, "Background", track ? palette.SurfaceAlt : palette.ControlBackground, surface || track);
+        Add(style, type, "Foreground", track ? palette.Accent : palette.Foreground, true);
         Add(style, type, "BorderBrush", palette.ControlBorder, surface);
         Add(style, type, "BorderThickness", new XamlThickness(1f), surface);
         Add(style, type, "CornerRadius", palette.CornerRadius, surface);
 
         switch (type.Name)
         {
-            case "ProgressBar":
-                Add(style, type, "BarBrush", palette.Accent);
-                Add(style, type, "TrackBrush", palette.SurfaceAlt);
-                break;
-
             case "Slider":
-                Add(style, type, "BarBrush", palette.Accent);
-                Add(style, type, "TrackBrush", palette.SurfaceAlt);
                 Add(style, type, "ThumbBrush", palette.Accent);
                 break;
 
@@ -141,8 +133,7 @@ public static class ThemeStyles
             return;
         }
 
-        // Background/Foreground are the Brush DPs and BackColor/ForeColor their Color aliases; both are set.
-        // The loop still keeps a DP from being added twice when a derived type redeclares one.
+        // The loop keeps a DP from being added twice when a derived type redeclares one.
         foreach (var existing in style.Setters)
         {
             if (ReferenceEquals(existing.Property, property))

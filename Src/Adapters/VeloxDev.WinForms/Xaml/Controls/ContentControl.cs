@@ -187,7 +187,7 @@ public class ContentControl : Control
             _ => TextFormatFlags.Top,
         };
 
-        TextRenderer.DrawText(e.Graphics, text, Font, bounds, ForeColor, flags);
+        TextRenderer.DrawText(e.Graphics, text, Font, bounds, EffectiveForeground, flags);
     }
 
     /// <inheritdoc />

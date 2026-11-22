@@ -31,10 +31,9 @@ public sealed class SurfaceContractTests
         RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowMinimapOverlay");
         RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowCanvasTransformBehavior");
         RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.ViewPool");
-        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowNodeAttachment");
-        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowSlotAttachment");
-        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowLinkAttachment");
-        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowNodeRowsBehavior");
+        RequireType("VeloxDev.WorkflowSystem.Attachments.WorkflowNodeAttachment");
+        RequireType("VeloxDev.WorkflowSystem.Attachments.WorkflowSlotAttachment");
+        RequireType("VeloxDev.WorkflowSystem.Attachments.WorkflowLinkAttachment");
         RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowNodeDragBehavior");
         RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowSlotConnectionBehavior");
         RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowSlotLayoutBehavior");
@@ -70,10 +69,6 @@ public sealed class SurfaceContractTests
 
         RequireMethod(typeof(ViewPool), "SetItemsSource");
         RequireMethod(typeof(ViewPool), "SetTemplateSelector");
-
-        RequireMethod(typeof(WorkflowNodeRowsBehavior), "SetIsEnabled");
-        RequireMethod(typeof(WorkflowNodeRowsBehavior), "SetRowsHostName");
-        RequireMethod(typeof(WorkflowNodeRowsBehavior), "SetSlotViewFactory");
 
         RequireMethod(typeof(WorkflowNodeDragBehavior), "SetIsEnabled");
         RequireMethod(typeof(WorkflowNodeDragBehavior), "SetCoordinateHostName");

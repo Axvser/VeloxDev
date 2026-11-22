@@ -135,7 +135,7 @@ public class Thumb : Control
     {
         var theme = Theme.Current;
         var bounds = ClientRectangle;
-        var background = HasXamlValue(BackColorProperty) && Background is { } custom
+        var background = HasXamlValue(BackgroundProperty) && Background is { } custom
             ? custom.ApproximateColor
             : _dragging || IsPointerOver
                 ? theme.ControlHover

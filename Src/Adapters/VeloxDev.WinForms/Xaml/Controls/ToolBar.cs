@@ -181,7 +181,7 @@ public class ToolBar : Control
         base.OnPaintBackground(e);
 
         var theme = Theme.Current;
-        var background = HasXamlValue(BackColorProperty) ? Background : new SolidColorBrush(theme.Surface);
+        var background = HasXamlValue(BackgroundProperty) ? Background : new SolidColorBrush(theme.Surface);
         XamlDrawing.PaintChromeWithBrushes(
             e.Graphics,
             ClientRectangle,
@@ -199,7 +199,7 @@ public class ToolBar : Control
             return;
         }
 
-        var foreground = HasXamlValue(ForeColorProperty) ? ForeColor : Theme.Current.Foreground;
+        var foreground = HasXamlValue(ForegroundProperty) ? EffectiveForeground : Theme.Current.Foreground;
         foreach (var slot in _textSlots)
         {
             TextRenderer.DrawText(

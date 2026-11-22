@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem.Platform;
 
 /// <summary>
 /// Orchestrates Win32 window styles for the workflow host to eliminate flicker/ghosting caused

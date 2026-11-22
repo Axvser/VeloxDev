@@ -6,6 +6,8 @@ using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem;
 
+using VeloxDev.WorkflowSystem.Attachments;
+
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>

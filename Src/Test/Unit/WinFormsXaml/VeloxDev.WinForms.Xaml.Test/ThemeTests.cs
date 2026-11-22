@@ -165,12 +165,12 @@ public sealed class ThemeTests
             Assert.AreEqual(palette.Foreground, richTextBox.Foreground?.ApproximateColor);
             Assert.AreEqual(palette.ControlBorder, richTextBox.BorderBrush);
 
-            Assert.AreEqual(palette.Accent, slider.BarBrush?.ApproximateColor);
-            Assert.AreEqual(palette.SurfaceAlt, slider.TrackBrush?.ApproximateColor);
+            Assert.AreEqual(palette.Accent, slider.Foreground?.ApproximateColor);
+            Assert.AreEqual(palette.SurfaceAlt, slider.Background?.ApproximateColor);
             Assert.AreEqual(palette.Accent, slider.ThumbBrush?.ApproximateColor);
 
-            Assert.AreEqual(palette.Accent, progress.BarBrush?.ApproximateColor);
-            Assert.AreEqual(palette.SurfaceAlt, progress.TrackBrush?.ApproximateColor);
+            Assert.AreEqual(palette.Accent, progress.Foreground?.ApproximateColor);
+            Assert.AreEqual(palette.SurfaceAlt, progress.Background?.ApproximateColor);
 
             Assert.AreEqual(palette.SurfaceAlt, scrollBar.TrackBrush?.ApproximateColor);
             Assert.AreEqual(palette.MutedForeground, scrollBar.ThumbBrush?.ApproximateColor);

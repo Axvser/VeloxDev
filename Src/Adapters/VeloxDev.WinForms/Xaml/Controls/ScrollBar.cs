@@ -150,7 +150,7 @@ public class ScrollBar : Control
             ControlStyles.SupportsTransparentBackColor,
             true);
         DoubleBuffered = true;
-        BackColor = Color.Transparent;
+        Background = null;
         TabStop = false;
     }
 

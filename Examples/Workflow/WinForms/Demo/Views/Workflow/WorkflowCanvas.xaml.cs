@@ -1,20 +1,19 @@
 using Demo.ViewModels;
 using Demo.Workflow;
 using System.ComponentModel;
-using System.Drawing;
 using System.Windows.Forms;
 using VeloxDev.TransitionSystem;
-using VeloxDev.WinForms.Xaml.Visuals.Controls;
 using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.VisualHosting;
+using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 using Wf = VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
 /// <summary>
-/// The workflow surface host. The reusable <see cref="VisualWorkflowSurface"/> owns pan, zoom, the visual node cards,
-/// the single link layer, slot anchors and the standard input route. What stays here is this demo's policy: session
-/// wiring, the link-flow clock, the delete/undo/redo gestures, the Ctrl-click selection veto and the node menu.
+/// The workflow surface host. The heavy machinery — pan, zoom, viewport, node/link pooling, slot layout and the
+/// floating ruler — belongs to <see cref="WorkflowBehaviors.WorkflowSurfaceBehavior"/>, attached in
+/// <c>WorkflowCanvas.xaml</c>. What stays here is this demo's policy: session wiring, the link-flow clock, the
+/// hover highlight, the delete gesture, the Ctrl-click selection veto and the node context menu.
 /// </summary>
 public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
@@ -68,15 +67,6 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
         set { _bandIntensity = value; PushFlow(); }
     }
 
-    /// <summary>Whether the visual minimap is shown.</summary>
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool IsMinimapVisible
-    {
-        get => workflowHost.IsMinimapVisible;
-        set => workflowHost.IsMinimapVisible = value;
-    }
-
     // 三段相位依次声明、Repeat(int.MaxValue) 整链重复并重放首周期抓到的起值；首尾皆无光，接缝不可见。
     private static readonly Transition<WorkflowCanvas> Flow =
         Transition<WorkflowCanvas>.Create()
@@ -92,39 +82,27 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
             .Effect(new TransitionEffect { Duration = TimeSpan.FromMilliseconds(450), Ease = Eases.Default, FPS = 30 })
             .Repeat(int.MaxValue);
 
-    /// <summary>Creates the surface, wires the demo's menus and binds the HUD.</summary>
+    /// <summary>Creates the surface and wires this demo's link menu, HUD and node menu.</summary>
     public WorkflowCanvas()
     {
         InitializeComponent();
 
+        // Panel 默认不可获焦，而没有焦点就收不到 Delete：选中连线时要把焦点取过来。
         SetStyle(ControlStyles.Selectable, true);
-        TabStop = true;
+        TabStop = false;
 
-        workflowHost.BackColor = CardTheme.Ground;
-        workflowHost.GridDecorator.Background = CardTheme.Ground;
-        workflowHost.LinkLayer.LineColor = Color.FromArgb(0xCC, 0x6E, 0x8B, 0xFF);
-        workflowHost.LinkLayer.HoverLineColor = Color.White;
-        workflowHost.LinkLayer.LineWidth = 2f;
-        workflowHost.LinkLayer.HoverLineWidth = 3.5f;
-        workflowHost.LinkLayer.Glow = true;
-        workflowHost.LinkLayer.FlowColor = Color.FromArgb(0xE6, 0xE7, 0xE7, 0xE7);
-        workflowHost.Minimap.NodeBrush = Color.FromArgb(0xDC, 0x6E, 0x8B, 0xFF);
-        workflowHost.NodeViewFactory = static _ => new DemoWorkflowNodeView();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetLinkMenuBuilder(
+            this, static (menu, link) => menu.Items.Add(
+                "Delete", null, (_, _) => link.DeleteCommand.Execute(null)));
 
-        workflowHost.LinkMenuBuilder = static (menu, link) => menu.AddItem("Delete", () =>
-        {
-            if (link.DeleteCommand.CanExecute(null))
-            {
-                link.DeleteCommand.Execute(null);
-            }
-        });
-        workflowHost.NodeMenuBuilder = BuildNodeLayoutMenu;
+        WorkflowNodeCard.MenuBuilder = BuildNodeLayoutMenu;
 
-        // WinForms 把子控件追加到 z 序末尾（最下）；把 HUD 提上来。
+        // WinForms 把子控件追加到 z 序末尾（最下）；把浮层提上来。
+        PART_MinimapOverlay.BringToFront();
         _infoOverlay.BringToFront();
 
         // 视口数是 surface 在平移/缩放后推的，HUD 随画布每帧重算一次即可。
-        workflowHost.Paint += (_, _) => _infoOverlay.UpdateText();
+        PART_Canvas.Paint += (_, _) => _infoOverlay.UpdateText();
     }
 
     /// <inheritdoc />
@@ -139,20 +117,25 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
     {
         if (disposing)
         {
+            // 关掉表面行为：它会摘掉应用级过滤器并把树上的 Scroller 还原。
+            WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(this, false);
+
             if (_session?.Tree.ResetVirtualLinkCommand.CanExecute(null) == true)
             {
                 _session.Tree.ResetVirtualLinkCommand.Execute(null);
             }
 
             DetachSession(_session);
-            workflowHost.NodeMenuBuilder = null;
+            WorkflowNodeCard.MenuBuilder = null;
         }
 
         base.Dispose(disposing);
     }
 
-    /// <summary>Re-reads the tree and the current viewport, for hosts that toggled the surface's visibility.</summary>
-    public new void Refresh() => workflowHost.Refresh();
+    /// <summary>The minimap part declared in the surface markup, for host-level show/hide policy.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public MinimapOverlay MinimapOverlay => PART_MinimapOverlay;
 
     // ── Session lifecycle ───────────────────────────────────────────────────────
 
@@ -160,11 +143,11 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
     {
         if (session is null) return;
 
-        workflowHost.Tree = session.Tree;
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, session.Tree);
         AttachLinkInput(session.Tree);
         VetoFrameworkGestures(session.Tree);
         _infoOverlay.Bind(session.Tree);
-        workflowHost.Refresh();
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
         StartLinkFlow();
     }
 
@@ -174,8 +157,9 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
 
         StopLinkFlow();
         DetachLinkInput();
-        workflowHost.Tree = null;
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(this, null);
         _infoOverlay.Bind(null);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(this);
     }
 
     // ── Link flow clock ─────────────────────────────────────────────────────────
@@ -191,9 +175,13 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
 
     private void StopLinkFlow() => Transition.Exit(this, IncludeMutual: true, IncludeNoMutual: true);
 
-    private void PushFlow() => workflowHost.LinkLayer.SetFlow(_bandHead, _bandIntensity);
+    private void PushFlow()
+    {
+        WorkflowBehaviors.WorkflowLinkLayer.SetFlowHead(PART_Canvas, _bandHead);
+        WorkflowBehaviors.WorkflowLinkLayer.SetFlowIntensity(PART_Canvas, _bandIntensity);
+    }
 
-    // ── Link input: delete, undo/redo and the shifted wheel ─────────────────────
+    // ── Link input: hover highlight and delete ──────────────────────────────────
 
     private void AttachLinkInput(ITreeComponent tree)
     {
@@ -205,6 +193,9 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
 
         if (tree.GetHelper() is Wf.IInputEvents events)
         {
+            events.Input.PointerMoved += OnInputPointerMoved;
+            events.Input.PointerEntered += OnInputPointerMoved;
+            events.Input.PointerExited += OnInputPointerExited;
             events.Input.KeyDown += OnInputKeyDown;
             events.Input.PointerWheelChanged += OnInputPointerWheel;
         }
@@ -216,6 +207,9 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
 
         if (input.Tree.GetHelper() is Wf.IInputEvents events)
         {
+            events.Input.PointerMoved -= OnInputPointerMoved;
+            events.Input.PointerEntered -= OnInputPointerMoved;
+            events.Input.PointerExited -= OnInputPointerExited;
             events.Input.KeyDown -= OnInputKeyDown;
             events.Input.PointerWheelChanged -= OnInputPointerWheel;
         }
@@ -225,6 +219,13 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
             new Anchor(), Wf.InputModifiers.None, this, null, new WorkflowEventHandle()));
         _input = null;
     }
+
+    private void OnInputPointerMoved(object? sender, Wf.PointerEventArgs e) => UpdateLinkHighlights();
+
+    private void OnInputPointerExited(object? sender, Wf.PointerExitedEventArgs e) => UpdateLinkHighlights();
+
+    // 单层绘制从 WorkflowInput.HoveredLink 读悬停线；指针换目标时重画画布就够了。
+    private void UpdateLinkHighlights() => PART_Canvas.Invalidate();
 
     // 键也过输入路由：**删不删是这里的决定**。更靠前的一级（连线自己）可以在句柄上拒绝这一次。
     private void OnInputKeyDown(object? sender, Wf.KeyDownEventArgs e)
@@ -260,7 +261,7 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
     }
 
     /// <summary>
-    /// The presses this host has claimed: Ctrl-click toggles agent selection, Shift-click on the empty canvas is
+    /// The presses this host has claimed: Ctrl-click toggles agent selection, Shift-drag on the empty canvas is
     /// reserved for the host. The framework's own hand stands down when this refuses a press.
     /// </summary>
     private void VetoFrameworkGestures(TreeViewModel tree)
@@ -287,31 +288,33 @@ public sealed partial class WorkflowCanvas : VeloxDev.WinForms.Xaml.Controls.Use
 
     // ── Node context menu: the shared layout presets ─────────────────────────────
 
-    private void BuildNodeLayoutMenu(VisualWorkflowMenu menu, INodeComponent node)
+    private ContextMenuStrip BuildNodeLayoutMenu(INodeComponent node)
     {
-        var layout = new VisualMenuItem { Header = "自动布局" };
+        var menu = new ContextMenuStrip();
+
+        var layout = new ToolStripMenuItem("自动布局");
         foreach (var (label, traversal) in WorkflowLayoutDemo.Traversals)
         {
-            var item = new VisualMenuItem { Header = label };
-            item.Command = () => ApplyNodeLayout(node, traversal);
-            layout.Items.Add(item);
+            var item = new ToolStripMenuItem(label);
+            item.Click += (_, _) => ApplyNodeLayout(node, traversal);
+            layout.DropDownItems.Add(item);
         }
         menu.Items.Add(layout);
 
-        var tolerance = new VisualMenuItem { Header = "布局容差" };
+        var tolerance = new ToolStripMenuItem("布局容差");
         foreach (var (label, value) in WorkflowLayoutDemo.Tolerances)
         {
-            var item = new VisualMenuItem
+            var item = new ToolStripMenuItem(label)
             {
-                Header = label,
-                IsChecked = Math.Abs(_nodeLayoutTolerance - value) < 1e-9,
+                Checked = Math.Abs(_nodeLayoutTolerance - value) < 1e-9,
             };
-            item.Command = () => _nodeLayoutTolerance = value;
-            tolerance.Items.Add(item);
+            item.Click += (_, _) => _nodeLayoutTolerance = value;
+            tolerance.DropDownItems.Add(item);
         }
-
-        menu.AddSeparator();
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(tolerance);
+
+        return menu;
     }
 
     private void ApplyNodeLayout(INodeComponent node, WorkflowLayoutTraversal traversal)

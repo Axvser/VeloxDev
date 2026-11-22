@@ -1,11 +1,12 @@
 # VeloxDev.WinForms — Adapter API
 
-Package: `VeloxDev.WinForms` · Namespace: `VeloxDev.WorkflowSystem.AttachedBehaviors`
+Package: `VeloxDev.WinForms` · Namespaces: `VeloxDev.WorkflowSystem.AttachedBehaviors` (XAML-attachable behaviours),
+`VeloxDev.WorkflowSystem.Attachments` (node/slot/link view attachments), `VeloxDev.WorkflowSystem.Platform` (Win32/GDI helpers).
 
 The adapter has two surfaces. The **XAML layer** ships a dependency-property runtime, a Roslyn
 generator and a WPF/Avalonia-shaped control library (see [XAML control library](#xaml-control-library)).
-The **code-first behaviours** keep the old shape: static `Get`/`Set` methods that store per-control
-state in a `ConditionalWeakTable<Control, State>`; attach behaviour `X` to a control by calling
+The **behaviours and attachments** expose attached dependency properties plus static `Get`/`Set`
+methods; per-control state lives in a `ConditionalWeakTable<Control, State>`; attach behaviour `X` to a control by calling
 `WorkflowXxxBehavior.SetYyy(control, value)`.
 
 ## XAML control library
@@ -120,27 +121,32 @@ root.Child = new StackPanel { Spacing = 8 }
 surface.Root = root;
 ```
 
-### Visual workflow surface
+### Workflow surface
 
-`VeloxDev.WorkflowSystem.VisualHosting.VisualWorkflowSurface` is a single-HWND surface that composes a grid
-decorator, a `Canvas` of node views, one link layer and a minimap. It implements the Core
-`IWorkflowSurfaceScroller` / `IWorkflowSurfaceNavigator`, translates pointer/key/wheel into
-`WorkflowInput` (including drag-to-connect between measured slot glyphs), and exposes `NodeViewFactory`,
-`TemplateSelector`, `LinkMenuBuilder` and `NodeMenuBuilder` for host policy.
-Host it directly in XAML:
+The workflow surface is an attached behavior, not an adapter-provided control. A host's `UserControl`
+declares plain parts (`PART_ScrollViewer`, `PART_Canvas`, `PART_GridDecorator`, `PART_MinimapOverlay`,
+`PART_Surface`) and enables `behaviors:WorkflowSurfaceBehavior` on its root; the behavior resolves those
+parts by name and owns pan/zoom, input routing, view pooling, slot layout and teardown. Grid decorator and
+minimap remain template roles (`IWorkflowGridDecorator` / `IWorkflowMinimapOverlay`), so the adapter never
+ships a workflow view class for a template to inherit:
 
 ```xml
-<hosting:VisualWorkflowSurface x:Name="surface" Dock="Fill" />
+<UserControl behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+             behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+             behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator">
+  <local:GridDecorator Name="PART_GridDecorator">
+    <ScrollViewer Name="PART_ScrollViewer">
+      <local:SurfaceCanvas Name="PART_Canvas" />
+    </ScrollViewer>
+  </local:GridDecorator>
+</UserControl>
 ```
 
-The surface publishes link curves in model space and hit-tests through `LinkHitTestEx`; node positions
-use the already-collapsed `Anchor`/`Size` plus the pan. See
-[`memory/modules/VeloxDev.WinForms/visual-workflow-hosting.md`](../../../memory/modules/VeloxDev.WinForms/visual-workflow-hosting.md)
-for the coordinate contract and known limits.
-
-The runnable sample is [`Examples/XamlGallery`](../../../Examples/XamlGallery/README.md); it is built
-entirely on the visual backend and includes the workflow graph card. The full workflow surface lives in
-`Examples/Workflow/WinForms`.
+Node, slot and link views are the host's own controls; they attach `WorkflowNodeAttachment`,
+`WorkflowSlotAttachment` and `WorkflowLinkAttachment` in code-behind and paint themselves. The runnable
+samples are `Examples/Workflow/WinForms` and `Examples/Workflow/WinForms Trimmed`. The separate visual
+backend (`Xaml/Visuals`) is demonstrated by [`Examples/XamlGallery`](../../../Examples/XamlGallery/README.md)
+and does not provide a workflow surface.
 
 ## XAML animations
 
@@ -196,7 +202,7 @@ palette, a glyph, what a card looks like:
 | `WorkflowLinkView` | `LineColor` / `Thickness` / `SurfaceBackground` | Window-region carving, endpoint subscription, geometry |
 | `WorkflowMinimapOverlay` | `MinimapBackground` / `MinimapBorderBrush` / `NodeBrush` / `ViewportStroke` | Top-right anchoring, the layout maths, the drag mapping |
 
-`WorkflowSurfaceColors.Parse` turns the `#RRGGBB` / `#AARRGGBB` text a generated host carries into a colour; each
+`XamlRuntime.ParseColor` turns the `#RRGGBB` / `#AARRGGBB` text a generated host carries into a colour; each
 base also exposes it as a `protected static ParseColor` for its own subclass.
 
 ### `WorkflowTreeView`

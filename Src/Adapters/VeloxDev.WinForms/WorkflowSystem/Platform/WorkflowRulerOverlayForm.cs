@@ -4,8 +4,9 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem.Platform;
 
 // 逐像素 alpha 的浮动标尺带。WinForms 的子控件永远画在父控件之上，画在视口里的半透明带压不住
 // 从下面滚过的不透明卡片；唯一能压住的是 WS_EX_LAYERED 的顶层弹窗，由表面行为创建并跟随宿主。
@@ -23,11 +24,11 @@ internal sealed class WorkflowRulerOverlayForm : Form
     private const int MajorFreq = 5;
 
     // 与表面同一套配色。alpha 取 0x70：带子合成在卡片与网格之上，太重会把带下的网格盖没。
-    private readonly Color _rulerBackground = WorkflowSurfaceColors.Parse("#70252526");
-    private readonly Color _labelColor = WorkflowSurfaceColors.Parse("#888888");
-    private readonly Color _tickColor = WorkflowSurfaceColors.Parse("#555555");
-    private readonly Color _axisColor = WorkflowSurfaceColors.Parse("#4D4D4D");
-    private readonly Color _dividerColor = WorkflowSurfaceColors.Parse("#3A3D40");
+    private readonly Color _rulerBackground = XamlRuntime.ParseColor("#70252526");
+    private readonly Color _labelColor = XamlRuntime.ParseColor("#888888");
+    private readonly Color _tickColor = XamlRuntime.ParseColor("#555555");
+    private readonly Color _axisColor = XamlRuntime.ParseColor("#4D4D4D");
+    private readonly Color _dividerColor = XamlRuntime.ParseColor("#3A3D40");
     private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
     private readonly StringFormat _labelFormat = new(StringFormat.GenericTypographic);
     private readonly CachedSolidBrush _rulerBrush = new();

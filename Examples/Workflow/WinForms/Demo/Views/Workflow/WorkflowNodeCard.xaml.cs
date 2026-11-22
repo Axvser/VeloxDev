@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.Attachments;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 // `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; a drawing
 // alias keeps `new Size(24, 24)` and `node.Size` unambiguous in the same file.
@@ -31,7 +32,7 @@ namespace Demo.Views.Workflow;
 public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.UserControl
 {
     // ── Attachment ─────────────────────────────────────────────────────────────
-    private readonly WorkflowBehaviors.WorkflowNodeAttachment _attachment;
+    private readonly WorkflowNodeAttachment _attachment;
 
     /// <summary>
     /// Supplies this card's node context menu. The card receives nodes from the surface's view pool, so the
@@ -110,12 +111,12 @@ public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Controls.U
 
         DoubleBuffered = true;
         // CardTheme owns the palette; the XAML shell only declares the frame's structure.
-        BackColor = CardTheme.Ground;
+        Background = new VeloxDev.WinForms.Xaml.SolidColorBrush(CardTheme.Ground);
         _rootLayout.BackColor = CardTheme.Surface;
 
         // Binding, placement and zoom collapse come from the attachment; the card owns its own paint.
-        _attachment = WorkflowBehaviors.WorkflowNodeAttachment.For(this)
-            ?? WorkflowBehaviors.WorkflowNodeAttachment.Attach(this);
+        _attachment = WorkflowNodeAttachment.For(this)
+            ?? WorkflowNodeAttachment.Attach(this);
         _attachment.SurfaceBackdrop = CardTheme.Ground;
         _attachment.Rebound += (_, _) => OnNodeRebound();
 

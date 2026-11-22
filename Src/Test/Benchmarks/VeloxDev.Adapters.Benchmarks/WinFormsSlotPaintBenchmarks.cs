@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using BenchmarkDotNet.Attributes;
 using VeloxDev.AdapterTestKit;
-using WfSlot = wf::VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowSlotAttachment;
+using WfSlot = wf::VeloxDev.WorkflowSystem.Attachments.WorkflowSlotAttachment;
 
 namespace VeloxDev.Adapters.Benchmarks;
 

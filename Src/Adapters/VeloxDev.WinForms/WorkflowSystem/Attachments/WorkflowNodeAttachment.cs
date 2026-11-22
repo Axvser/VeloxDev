@@ -4,8 +4,10 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
+using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
+using XamlControl = VeloxDev.WinForms.Xaml.Controls.Control;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem.Attachments;
 
 /// <summary>
 /// Everything a WinForms control needs to become one workflow node card, attached to it in a single call. The
@@ -71,7 +73,7 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
 
         // 不透明底色：WinForms 里没有可靠的透明合成，卡片自己擦成不透明色。alpha 强制 255 —— .NET 10 上给
         // BackColor 一个半透明值会抛（没有 SupportsTransparentBackColor 时要求 A == 0xFF）。
-        target.BackColor = Color.FromArgb(255, surfaceBackdrop);
+        XamlControlColors.SetBackground(target, Color.FromArgb(255, surfaceBackdrop));
         target.HandleCreated += (_, _) => ApplyPosition();
         target.ParentChanged += OnTargetParentChanged;
         target.Disposed += (_, _) =>
@@ -150,6 +152,7 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
 
             node = value;
             target.Tag = value;
+            if (target is XamlControl xaml) xaml.DataContext = value;
             relay.Set(value as INotifyPropertyChanged);
             // 学到所管的节点这一处接上模型事件；换绑时 UnsubscribeNode 已经摘掉上一份订阅。
             modelEvents = value is null ? null : WorkflowEventRelay.Attach(value, eventSink);
@@ -184,7 +187,7 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
         {
             if (surfaceBackdrop == value) return;
             surfaceBackdrop = value;
-            target.BackColor = Color.FromArgb(255, value);
+            XamlControlColors.SetBackground(target, Color.FromArgb(255, value));
         }
     }
 
@@ -299,7 +302,7 @@ public sealed class WorkflowNodeAttachment : IWorkflowSurfaceNodeView
     /// <summary>Parses a <c>#RRGGBB</c>, <c>#AARRGGBB</c> or named colour.</summary>
     /// <param name="hex">The colour text.</param>
     /// <returns>The colour.</returns>
-    public static Color ParseColor(string hex) => WorkflowSurfaceColors.Parse(hex);
+    public static Color ParseColor(string hex) => XamlRuntime.ParseColor(hex);
 
     // 句柄建好、或挂到父容器时把位置补一次（否则第一帧停在原点）。
     private void OnTargetParentChanged(object? sender, EventArgs e) => ApplyPosition();

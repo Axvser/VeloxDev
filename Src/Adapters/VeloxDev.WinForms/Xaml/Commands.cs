@@ -3,58 +3,6 @@ using System.Windows.Input;
 namespace VeloxDev.WinForms.Xaml;
 
 /// <summary>
-/// An <see cref="ICommand"/> whose execute and can-execute behaviour comes from delegates.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The command never observes its own state. <see cref="RaiseCanExecuteChanged"/> is the only way to tell command
-/// sources to re-query <see cref="CanExecute"/>; call it on the UI thread after the delegates' state changes.
-/// </para>
-/// <para>
-/// A <see langword="null"/> can-execute delegate means the command is always executable.
-/// </para>
-/// </remarks>
-public sealed class RelayCommand : ICommand
-{
-    private readonly Action<object?> _execute;
-    private readonly Func<object?, bool>? _canExecute;
-
-    /// <summary>Creates a command from a parameterized execute delegate.</summary>
-    /// <param name="execute">The action run by <see cref="Execute"/>.</param>
-    /// <param name="canExecute">The predicate queried by <see cref="CanExecute"/>; null means always executable.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="execute"/> is <see langword="null"/>.</exception>
-    public RelayCommand(Action<object?> execute, Func<object?, bool>? canExecute = null)
-    {
-        _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-        _canExecute = canExecute;
-    }
-
-    /// <summary>Creates a command from a parameterless execute delegate.</summary>
-    /// <param name="execute">The action run by <see cref="Execute"/>.</param>
-    /// <param name="canExecute">The predicate queried by <see cref="CanExecute"/>; null means always executable.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="execute"/> is <see langword="null"/>.</exception>
-    public RelayCommand(Action execute, Func<bool>? canExecute = null)
-    {
-        if (execute is null) throw new ArgumentNullException(nameof(execute));
-
-        _execute = _ => execute();
-        _canExecute = canExecute is null ? null : _ => canExecute();
-    }
-
-    /// <inheritdoc />
-    public event EventHandler? CanExecuteChanged;
-
-    /// <inheritdoc />
-    public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
-
-    /// <inheritdoc />
-    public void Execute(object? parameter) => _execute(parameter);
-
-    /// <summary>Notifies command sources that <see cref="CanExecute"/> may have changed.</summary>
-    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-}
-
-/// <summary>
 /// Pairs an <see cref="ICommand"/> with optional delegates that replace its execute and can-execute behaviour.
 /// </summary>
 /// <remarks>

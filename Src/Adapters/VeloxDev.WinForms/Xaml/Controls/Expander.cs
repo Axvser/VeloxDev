@@ -169,7 +169,7 @@ public class Expander : ContentControl
             new Thickness(1f),
             theme.CornerRadius);
 
-        var foreground = HasXamlValue(ForeColorProperty) ? ForeColor : theme.Foreground;
+        var foreground = HasXamlValue(ForegroundProperty) ? EffectiveForeground : theme.Foreground;
         PaintChevron(e.Graphics, ChevronOrigin(header), _hoverHeader ? theme.Foreground : theme.MutedForeground);
 
         if (!string.IsNullOrEmpty(Header))

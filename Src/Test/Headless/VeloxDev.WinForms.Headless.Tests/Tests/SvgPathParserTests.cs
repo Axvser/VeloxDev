@@ -4,18 +4,18 @@ using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;
 
-// SvgPathParser 是 internal：它只服务插槽图形，不值得为它开 InternalsVisibleTo。
-// 这里用反射走 BuildPath，验 M/m、A/a、Z 三种命令和未知命令的「停而不抛」。
+// The SVG path reader is internal to the XAML shapes; the slot attachment uses the same one.
+// Reflection keeps this suite free of an InternalsVisibleTo for a parser that only serves glyphs.
 [TestClass]
 public sealed class SvgPathParserTests
 {
     private static GraphicsPath Build(string data)
     {
         var type = typeof(WorkflowSurfaceBehavior).Assembly.GetType(
-            "VeloxDev.WorkflowSystem.AttachedBehaviors.SvgPathParser")
+            "VeloxDev.WinForms.Xaml.Controls.Shapes.SvgPathParser")
             ?? throw new InvalidOperationException("SvgPathParser moved; update the headless suite.");
-        var method = type.GetMethod("BuildPath", BindingFlags.Public | BindingFlags.Static)
-            ?? throw new InvalidOperationException("SvgPathParser.BuildPath moved; update the headless suite.");
+        var method = type.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static)
+            ?? throw new InvalidOperationException("SvgPathParser.Parse moved; update the headless suite.");
         return (GraphicsPath)method.Invoke(null, [data])!;
     }
 

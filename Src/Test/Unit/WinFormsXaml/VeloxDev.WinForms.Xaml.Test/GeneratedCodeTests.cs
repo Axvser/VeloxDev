@@ -23,6 +23,9 @@ public sealed class GeneratedCodeTests
         Assert.IsInstanceOfType<Label>(view.Controls[0]);
         Assert.IsInstanceOfType<GeneratedCard>(view.Controls[1]);
         Assert.IsInstanceOfType<Button>(view.Controls[2]);
+        Assert.AreEqual("captionLabel", view.Controls[0].Name, "x:Name must write the native Control.Name");
+        Assert.AreEqual("card", view.Controls[1].Name);
+        Assert.AreEqual("probeButton", view.Controls[2].Name);
         Assert.AreEqual(new Size(420, 320), view.Size);
     }
 

@@ -1,24 +1,21 @@
-// VeloxDev customization: the minimap palette; the adapter's minimap is composed, not inherited.
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WorkflowSystem.VisualHosting;
-using VisualBorder = VeloxDev.WinForms.Xaml.Visuals.Controls.Border;
-using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
+// VeloxDev customization: The minimap overlay. The adapter's WorkflowMinimapOverlay already owns the layout
+// maths, the drag mapping and the top-right anchoring; this file supplies the palette only. Name it
+// PART_MinimapOverlay in TreeView.xaml and the surface behavior wires it up.
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
 
-/// <summary>The workflow minimap overlay with this project's palette.</summary>
-public sealed class MinimapOverlay : VisualBorder
+/// <summary>
+/// The minimap overlay: the adapter's <see cref="WorkflowMinimapOverlay"/> with this project's palette.
+/// </summary>
+public sealed class MinimapOverlay : WorkflowMinimapOverlay
 {
-    /// <summary>Creates the minimap and applies the palette.</summary>
+    /// <summary>Creates the overlay and applies the palette.</summary>
     public MinimapOverlay()
     {
-        Padding = new XamlThickness(0f);
-        Child = new VisualWorkflowMinimap
-        {
-            Background = XamlRuntime.ParseColor("#D2141922"),
-            BorderBrush = XamlRuntime.ParseColor("#DC94A3B8"),
-            NodeBrush = XamlRuntime.ParseColor("#DC38BDF8"),
-            ViewportStroke = XamlRuntime.ParseColor("#F0FFFFFF"),
-        };
+        MinimapBackground = ParseColor("#D2141922");
+        MinimapBorderBrush = ParseColor("#DC94A3B8");
+        NodeBrush = ParseColor("#DC38BDF8");
+        ViewportStroke = ParseColor("#F0FFFFFF");
     }
 }

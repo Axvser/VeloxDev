@@ -1,6 +1,6 @@
 using System.Drawing;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem.Attachments;
 
 /// <summary>
 /// A node card that <see cref="WorkflowSurfaceBehavior"/> re-places on every pan.

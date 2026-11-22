@@ -225,7 +225,7 @@ public class Button : ContentControl
             : IsPointerOver
                 ? new SolidColorBrush(Lighten(Background?.ApproximateColor ?? Color.Transparent, 0.08f))
                 : Background ?? new SolidColorBrush(Color.Transparent);
-        var foreground = IsEnabled ? ForeColor : SystemColors.GrayText;
+        var foreground = IsEnabled ? EffectiveForeground : SystemColors.GrayText;
 
         var bounds = ClientRectangle;
         PaintChrome(e.Graphics, bounds, background, BorderBrush, BorderThickness, CornerRadius);

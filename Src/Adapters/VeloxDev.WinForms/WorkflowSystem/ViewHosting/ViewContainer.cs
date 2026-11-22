@@ -4,6 +4,8 @@ using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
+using VeloxDev.WorkflowSystem.Attachments;
+
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Owns a WinForms view's membership in its host control and its role-based binding.</summary>

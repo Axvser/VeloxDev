@@ -151,7 +151,7 @@ public class ContentPresenter : Control
             text,
             Font,
             XamlLayout.ContentBounds(this),
-            ForeColor,
+            EffectiveForeground,
             TextFormatFlags.NoPrefix | TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.EndEllipsis);
     }
 

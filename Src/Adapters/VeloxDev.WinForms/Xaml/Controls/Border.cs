@@ -121,7 +121,7 @@ public class Border : Control
         {
             PaintParentBackground(e);
             if (Background is null
-                && !HasXamlValue(BackColorProperty)
+                && !HasXamlValue(BackgroundProperty)
                 && (BorderBrush is null || BorderBrush.ApproximateColor.A <= 0 || BorderThickness.IsEmpty))
             {
                 // 只有描边的 Border 也必须画出来：早退条件只看底色会漏掉整圈边框。
@@ -131,7 +131,7 @@ public class Border : Control
 
         // 子窗口不与父窗口合成：先用不透明底色擦一遍，带 alpha 的 Background 才有确定的合成结果。
         var backdrop = Backdrop.IsEmpty
-            ? (HasXamlValue(BackColorProperty) ? BackColor : Color.Transparent)
+            ? (HasXamlValue(BackgroundProperty) ? EffectiveBackground : Color.Transparent)
             : Backdrop;
         if (backdrop.A > 0)
         {

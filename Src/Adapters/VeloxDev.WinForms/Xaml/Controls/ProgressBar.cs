@@ -41,20 +41,6 @@ public class ProgressBar : Control
         typeof(ProgressBar),
         new PropertyMetadata(false, OnIndeterminatePropertyChanged));
 
-    /// <summary>The brush of the filled part; a blue by default.</summary>
-    public static readonly DependencyProperty BarBrushProperty = DependencyProperty.Register(
-        nameof(BarBrush),
-        typeof(Brush),
-        typeof(ProgressBar),
-        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0xFF, 0x4C, 0x8B, 0xF5)), OnVisualPropertyChanged));
-
-    /// <summary>The brush of the empty track; a light grey by default.</summary>
-    public static readonly DependencyProperty TrackBrushProperty = DependencyProperty.Register(
-        nameof(TrackBrush),
-        typeof(Brush),
-        typeof(ProgressBar),
-        new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0x33, 0x80, 0x80, 0x80)), OnVisualPropertyChanged));
-
     /// <summary>The corner radius in pixels; three by default.</summary>
     public static readonly DependencyProperty CornerRadiusProperty = DependencyProperty.Register(
         nameof(CornerRadius),
@@ -109,20 +95,6 @@ public class ProgressBar : Control
         set => SetValue(IsIndeterminateProperty, value);
     }
 
-    /// <summary>Gets or sets the brush of the filled part.</summary>
-    public Brush? BarBrush
-    {
-        get => GetValue(BarBrushProperty) as Brush;
-        set => SetValue(BarBrushProperty, value);
-    }
-
-    /// <summary>Gets or sets the brush of the empty track.</summary>
-    public Brush? TrackBrush
-    {
-        get => GetValue(TrackBrushProperty) as Brush;
-        set => SetValue(TrackBrushProperty, value);
-    }
-
     /// <summary>Gets or sets the corner radius in pixels.</summary>
     public float CornerRadius
     {
@@ -147,13 +119,13 @@ public class ProgressBar : Control
 
         e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         using var trackPath = XamlDrawing.RoundedRectangle(bounds, CornerRadius);
-        var trackBrush = TrackBrush;
+        var trackBrush = Background;
         if (trackBrush is { } track && track.ApproximateColor.A > 0)
         {
             track.FillPath(e.Graphics, trackPath);
         }
 
-        var barBrush = BarBrush;
+        var barBrush = Foreground;
         if ((trackBrush?.ApproximateColor.A ?? 0) <= 0 && (barBrush?.ApproximateColor.A ?? 0) <= 0)
         {
             return;

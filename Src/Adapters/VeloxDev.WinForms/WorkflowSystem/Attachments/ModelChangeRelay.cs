@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows.Forms;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem.Attachments;
 
 // 把一个或多个模型对象的属性变更编组到控件自己的线程上再回调。
 // 三个视图控件（slot / link / node）此前各写过一遍同样的「订阅、退订、InvokeRequired 编排」，

@@ -7,13 +7,14 @@ using NativeTextBox = System.Windows.Forms.TextBox;
 namespace VeloxDev.WinForms.Xaml.Controls;
 
 /// <summary>
-/// An editable text field whose properties are dependency properties.
+/// The shared editable text field behind <see cref="TextBox"/> and <see cref="PasswordBox"/>.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The editor itself is a native <see cref="System.Windows.Forms.TextBox"/> child; this class owns the XAML surface,
-/// the border and the dependency-property model. Binding <see cref="Text"/> two-way works because a native edit writes
-/// the dependency property back through the ordinary local-value path.
+/// the border and the dependency-property model. A derived control exposes the committed value under its aligned
+/// name (<see cref="TextBox.Text"/> or <see cref="PasswordBox.Password"/>), and a native edit writes it back through
+/// the ordinary local-value path.
 /// </para>
 /// <para>
 /// The native border is disabled: <see cref="BorderBrush"/> and <see cref="BorderThickness"/> paint the outline and
@@ -21,83 +22,76 @@ namespace VeloxDev.WinForms.Xaml.Controls;
 /// <c>KeyDown</c>, <c>KeyUp</c> and the pointer events normally.
 /// </para>
 /// </remarks>
-public class TextBox : Control
+public abstract class TextBoxBase : Control
 {
-    /// <summary>The current text.</summary>
-    public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
-        nameof(Text),
-        typeof(string),
-        typeof(TextBox),
-        new PropertyMetadata(string.Empty, OnTextPropertyChanged));
-
     /// <summary>Text shown while the field is empty.</summary>
     public static readonly DependencyProperty PlaceholderTextProperty = DependencyProperty.Register(
         nameof(PlaceholderText),
         typeof(string),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata(string.Empty, OnEditorPropertyChanged));
 
     /// <summary>Whether the text can be edited.</summary>
     public static readonly DependencyProperty IsReadOnlyProperty = DependencyProperty.Register(
         nameof(IsReadOnly),
         typeof(bool),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata(false, OnEditorPropertyChanged));
 
     /// <summary>Whether the field accepts multiple lines.</summary>
     public static readonly DependencyProperty AcceptsReturnProperty = DependencyProperty.Register(
         nameof(AcceptsReturn),
         typeof(bool),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata(false, OnEditorPropertyChanged));
 
     /// <summary>The maximum number of characters; zero means no limit.</summary>
     public static readonly DependencyProperty MaxLengthProperty = DependencyProperty.Register(
         nameof(MaxLength),
         typeof(int),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata(0, OnEditorPropertyChanged));
 
     /// <summary>How the text is aligned inside the field.</summary>
     public static readonly DependencyProperty TextAlignmentProperty = DependencyProperty.Register(
         nameof(TextAlignment),
         typeof(TextAlignment),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata(TextAlignment.Left, OnEditorPropertyChanged));
 
     /// <summary>The character used to mask input; <c>'\0'</c> shows the text normally.</summary>
     public static readonly DependencyProperty PasswordCharProperty = DependencyProperty.Register(
         nameof(PasswordChar),
         typeof(char),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata('\0', OnEditorPropertyChanged));
 
     /// <summary>The selection start index.</summary>
     public static readonly DependencyProperty SelectionStartProperty = DependencyProperty.Register(
         nameof(SelectionStart),
         typeof(int),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata(0, OnEditorPropertyChanged));
 
     /// <summary>The selection length.</summary>
     public static readonly DependencyProperty SelectionLengthProperty = DependencyProperty.Register(
         nameof(SelectionLength),
         typeof(int),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata(0, OnEditorPropertyChanged));
 
     /// <summary>The border stroke brush; a translucent black by default.</summary>
     public static readonly DependencyProperty BorderBrushProperty = DependencyProperty.Register(
         nameof(BorderBrush),
         typeof(Brush),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata(new SolidColorBrush(Color.FromArgb(0x66, 0, 0, 0)), OnVisualPropertyChanged));
 
     /// <summary>The border stroke width per side, in pixels; one pixel by default.</summary>
     public static readonly DependencyProperty BorderThicknessProperty = DependencyProperty.Register(
         nameof(BorderThickness),
         typeof(Thickness),
-        typeof(TextBox),
+        typeof(TextBoxBase),
         new PropertyMetadata(new Thickness(1f), OnVisualPropertyChanged));
 
     private const int EmSetCueBanner = 0x1501;
@@ -111,7 +105,7 @@ public class TextBox : Control
     private bool syncing;
 
     /// <summary>Creates the wrapper and its native editor.</summary>
-    public TextBox()
+    protected TextBoxBase()
     {
         TabStop = false;
         editor = new NativeTextBox
@@ -137,12 +131,11 @@ public class TextBox : Control
         ApplyEditorProperties();
     }
 
-    /// <summary>Gets or sets the current text.</summary>
-    public new string Text
-    {
-        get => (string?)GetValue(TextProperty) ?? string.Empty;
-        set => SetValue(TextProperty, value);
-    }
+    /// <summary>The value the native editor commits; the derived control exposes it under its aligned name.</summary>
+    protected abstract string CurrentText { get; set; }
+
+    /// <summary>Whether the native editor and the dependency property are currently being synchronized.</summary>
+    protected bool Syncing => syncing;
 
     /// <summary>Gets or sets the text shown while the field is empty.</summary>
     public string PlaceholderText
@@ -214,9 +207,6 @@ public class TextBox : Control
         get => (Thickness)GetValue(BorderThicknessProperty)!;
         set => SetValue(BorderThicknessProperty, value);
     }
-
-    /// <summary>Raised after <see cref="Text"/> changes, whether from code or from the user.</summary>
-    public new event EventHandler? TextChanged;
 
     /// <summary>Moves focus to the native editor.</summary>
     /// <returns><see langword="true"/> when the editor received focus.</returns>
@@ -317,13 +307,9 @@ public class TextBox : Control
         {
             editor.BackColor = XamlDrawing.ToOpaque(background.ApproximateColor, SystemColors.Window);
         }
-        else if (ReferenceEquals(property, BackColorProperty) && newValue is Color backgroundColor && !backgroundColor.IsEmpty)
+        else if (ReferenceEquals(property, ForegroundProperty) && newValue is Brush foreground)
         {
-            editor.BackColor = XamlDrawing.ToOpaque(backgroundColor, SystemColors.Window);
-        }
-        else if (ReferenceEquals(property, ForeColorProperty) && newValue is Color foreground && !foreground.IsEmpty)
-        {
-            editor.ForeColor = foreground;
+            editor.ForeColor = foreground.ApproximateColor;
         }
         else if (ReferenceEquals(property, FontProperty) && newValue is Font font)
         {
@@ -347,7 +333,8 @@ public class TextBox : Control
         base.Dispose(disposing);
     }
 
-    private void ApplyEditorProperties()
+    /// <summary>Copies every dependency property to the native editor.</summary>
+    protected void ApplyEditorProperties()
     {
         if (syncing)
         {
@@ -357,9 +344,9 @@ public class TextBox : Control
         syncing = true;
         try
         {
-            if (editor.Text != Text)
+            if (editor.Text != CurrentText)
             {
-                editor.Text = Text;
+                editor.Text = CurrentText;
             }
 
             editor.ReadOnly = IsReadOnly;
@@ -373,11 +360,10 @@ public class TextBox : Control
             };
             editor.UseSystemPasswordChar = false;
             editor.PasswordChar = PasswordChar;
-            editor.BackColor = (HasXamlValue(BackColorProperty) || HasXamlValue(BackgroundProperty))
-                && Background is { } background
+            editor.BackColor = HasXamlValue(BackgroundProperty) && Background is { } background
                 ? XamlDrawing.ToOpaque(background.ApproximateColor, SystemColors.Window)
                 : SystemColors.Window;
-            editor.ForeColor = ForeColor;
+            editor.ForeColor = EffectiveForeground;
             editor.Font = Font;
             editor.Enabled = IsEnabled;
             ApplyPlaceholder();
@@ -433,7 +419,7 @@ public class TextBox : Control
         syncing = true;
         try
         {
-            SetValue(TextProperty, editor.Text);
+            CurrentText = editor.Text;
         }
         finally
         {
@@ -441,22 +427,9 @@ public class TextBox : Control
         }
     }
 
-    private static void OnTextPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is TextBox textBox && !textBox.IsDisposed)
-        {
-            if (!textBox.syncing)
-            {
-                textBox.ApplyEditorProperties();
-            }
-
-            textBox.TextChanged?.Invoke(textBox, EventArgs.Empty);
-        }
-    }
-
     private static void OnEditorPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
     {
-        if (target is TextBox textBox && !textBox.IsDisposed)
+        if (target is TextBoxBase textBox && !textBox.IsDisposed)
         {
             textBox.ApplyEditorProperties();
         }
@@ -472,14 +445,56 @@ public class TextBox : Control
     }
 }
 
-/// <summary>
-/// A <see cref="TextBox"/> that masks its input.
-/// </summary>
-/// <remarks><see cref="Password"/> is the unmasked text as a string; it is an alias for <see cref="TextBox.Text"/>.</remarks>
-public class PasswordBox : TextBox
+/// <summary>An editable text field exposing <see cref="Text"/>.</summary>
+public class TextBox : TextBoxBase
 {
-    /// <summary>The unmasked password text; it is the same dependency property as <see cref="TextBox.Text"/>.</summary>
-    public static readonly DependencyProperty PasswordProperty = TextProperty;
+    /// <summary>The current text.</summary>
+    public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
+        nameof(Text),
+        typeof(string),
+        typeof(TextBox),
+        new PropertyMetadata(string.Empty, OnTextPropertyChanged));
+
+    /// <summary>Gets or sets the current text.</summary>
+    public new string Text
+    {
+        get => CurrentText;
+        set => CurrentText = value;
+    }
+
+    /// <summary>Raised after <see cref="Text"/> changes, whether from code or from the user.</summary>
+    public new event EventHandler? TextChanged;
+
+    /// <inheritdoc />
+    protected override string CurrentText
+    {
+        get => (string?)GetValue(TextProperty) ?? string.Empty;
+        set => SetValue(TextProperty, value);
+    }
+
+    private static void OnTextPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is TextBox textBox && !textBox.IsDisposed)
+        {
+            if (!textBox.Syncing)
+            {
+                textBox.ApplyEditorProperties();
+            }
+
+            textBox.TextChanged?.Invoke(textBox, EventArgs.Empty);
+        }
+    }
+}
+
+/// <summary>A <see cref="TextBoxBase"/> that masks its input and exposes only <see cref="Password"/>.</summary>
+public class PasswordBox : TextBoxBase
+{
+    /// <summary>The unmasked password text.</summary>
+    public static readonly DependencyProperty PasswordProperty = DependencyProperty.Register(
+        nameof(Password),
+        typeof(string),
+        typeof(PasswordBox),
+        new PropertyMetadata(string.Empty, OnPasswordPropertyChanged));
 
     /// <summary>Creates the field with a bullet mask.</summary>
     public PasswordBox()
@@ -490,7 +505,30 @@ public class PasswordBox : TextBox
     /// <summary>Gets or sets the unmasked password text.</summary>
     public string Password
     {
-        get => Text;
-        set => Text = value;
+        get => CurrentText;
+        set => CurrentText = value;
+    }
+
+    /// <summary>Raised after <see cref="Password"/> changes, whether from code or from the user.</summary>
+    public event EventHandler? PasswordChanged;
+
+    /// <inheritdoc />
+    protected override string CurrentText
+    {
+        get => (string?)GetValue(PasswordProperty) ?? string.Empty;
+        set => SetValue(PasswordProperty, value);
+    }
+
+    private static void OnPasswordPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is PasswordBox passwordBox && !passwordBox.IsDisposed)
+        {
+            if (!passwordBox.Syncing)
+            {
+                passwordBox.ApplyEditorProperties();
+            }
+
+            passwordBox.PasswordChanged?.Invoke(passwordBox, EventArgs.Empty);
+        }
     }
 }

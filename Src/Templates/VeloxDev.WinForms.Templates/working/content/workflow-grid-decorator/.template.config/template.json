@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "http://json.schemastore.org/template",
   "author": "Axvser",
   "classifications": [
@@ -9,7 +9,7 @@
   ],
   "identity": "VeloxDev.WinForms.WorkflowGridDecorator",
   "name": "VeloxDev WinForms Workflow Grid Decorator",
-  "description": "A visual workflow grid backdrop for the HWND-free WinForms backend.",
+  "description": "A lightweight WinForms workflow grid implementing IWorkflowGridDecorator.",
   "shortName": "winforms-v-decorator",
   "sourceName": "TemplateClass",
   "defaultName": "GridDecorator",
@@ -72,7 +72,7 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Accepted for cross-GUI CLI parity; the WinForms surface draws its floating ruler in the adapter, which uses the same default.",
-      "defaultValue": "#70252526",
+      "defaultValue": "#C8252526",
       "replaces": "TemplateRulerBackground"
     },
     "rulerTickColor": {

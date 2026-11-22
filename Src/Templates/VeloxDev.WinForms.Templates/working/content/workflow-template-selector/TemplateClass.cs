@@ -1,31 +1,25 @@
-// VeloxDev customization: assign the templates your surface should create; a missing template falls through.
-using VeloxDev.WinForms.Xaml.Visuals;
+// VeloxDev customization: assign the DataTemplates your tree declares; add the slot/tree templates if the host pools them.
+using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem;
 
 namespace TemplateNamespace;
 
-/// <summary>Chooses the visual element each workflow component is shown with.</summary>
-public sealed class TemplateClass : VisualTemplateSelector
+public sealed class TemplateClass : TemplateSelector
 {
-    /// <summary>The template used for a node, or <see langword="null"/>.</summary>
-    public VisualDataTemplate? NodeTemplate { get; set; }
+    public DataTemplate? NodeTemplate { get; set; }
 
-    /// <summary>The template used for a slot, or <see langword="null"/>.</summary>
-    public VisualDataTemplate? SlotTemplate { get; set; }
+    public DataTemplate? SlotTemplate { get; set; }
 
-    /// <summary>The template used for a link, or <see langword="null"/>.</summary>
-    public VisualDataTemplate? LinkTemplate { get; set; }
+    public DataTemplate? LinkTemplate { get; set; }
 
-    /// <summary>The template used for a tree, or <see langword="null"/>.</summary>
-    public VisualDataTemplate? TreeTemplate { get; set; }
+    public DataTemplate? TreeTemplate { get; set; }
 
-    /// <inheritdoc />
-    public override VisualElement? SelectTemplate(object? item) => item switch
+    public override DataTemplate? SelectTemplate(object? item) => item switch
     {
-        ILinkComponent => LinkTemplate?.Create(),
-        ISlotComponent => SlotTemplate?.Create(),
-        INodeComponent => NodeTemplate?.Create(),
-        ITreeComponent => TreeTemplate?.Create(),
+        ILinkComponent => LinkTemplate,
+        ISlotComponent => SlotTemplate,
+        INodeComponent => NodeTemplate,
+        ITreeComponent => TreeTemplate,
         _ => null,
     };
 }

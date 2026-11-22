@@ -1,6 +1,6 @@
 using System;
 
-namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
+namespace VeloxDev.WorkflowSystem.Platform;
 
 /// <summary>
 /// A minimap overlay whose viewport can be dragged to request surface scrolling.

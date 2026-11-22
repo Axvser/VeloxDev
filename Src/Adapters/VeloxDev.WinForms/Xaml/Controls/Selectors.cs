@@ -275,13 +275,13 @@ public abstract class Selector : Control
     {
         base.OnXamlPropertyChanged(property, oldValue, newValue);
 
-        if (ReferenceEquals(property, BackColorProperty) && newValue is Color background && !background.IsEmpty)
+        if (ReferenceEquals(property, BackgroundProperty) && newValue is Brush background)
         {
-            NativeSelector.BackColor = XamlDrawing.ToOpaque(background, SystemColors.Window);
+            NativeSelector.BackColor = XamlDrawing.ToOpaque(background.ApproximateColor, SystemColors.Window);
         }
-        else if (ReferenceEquals(property, ForeColorProperty) && newValue is Color foreground && !foreground.IsEmpty)
+        else if (ReferenceEquals(property, ForegroundProperty) && newValue is Brush foreground)
         {
-            NativeSelector.ForeColor = foreground;
+            NativeSelector.ForeColor = foreground.ApproximateColor;
         }
         else if (ReferenceEquals(property, FontProperty) && newValue is Font font)
         {
@@ -378,10 +378,10 @@ public abstract class Selector : Control
         try
         {
             NativeSelector.DisplayMember = DisplayMemberPath;
-            NativeSelector.BackColor = HasXamlValue(BackColorProperty)
-                ? XamlDrawing.ToOpaque(Background, SystemColors.Window)
+            NativeSelector.BackColor = HasXamlValue(BackgroundProperty)
+                ? XamlDrawing.ToOpaque(EffectiveBackground, SystemColors.Window)
                 : SystemColors.Window;
-            NativeSelector.ForeColor = ForeColor;
+            NativeSelector.ForeColor = EffectiveForeground;
             NativeSelector.Font = Font;
             NativeSelector.Enabled = IsEnabled;
 

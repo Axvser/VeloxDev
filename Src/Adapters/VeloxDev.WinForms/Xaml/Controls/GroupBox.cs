@@ -89,7 +89,7 @@ public class GroupBox : ContentControl
         base.OnPaintBackground(e);
 
         var theme = Theme.Current;
-        var background = HasXamlValue(BackColorProperty) ? Background : new SolidColorBrush(theme.Surface);
+        var background = HasXamlValue(BackgroundProperty) ? Background : new SolidColorBrush(theme.Surface);
         XamlDrawing.PaintChromeWithBrushes(
             e.Graphics,
             ClientRectangle,
@@ -110,7 +110,7 @@ public class GroupBox : ContentControl
         var theme = Theme.Current;
         var content = DisplayRectangle;
         var header = new Rectangle(content.Left, content.Top, content.Width, HeaderHeight);
-        var foreground = HasXamlValue(ForeColorProperty) ? ForeColor : theme.Foreground;
+        var foreground = HasXamlValue(ForegroundProperty) ? EffectiveForeground : theme.Foreground;
 
         if (header.Width > 0 && header.Height > 0)
         {

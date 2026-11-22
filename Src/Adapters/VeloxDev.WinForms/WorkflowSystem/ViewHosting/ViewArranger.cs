@@ -1,6 +1,8 @@
 using System.Windows.Forms;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
+using VeloxDev.WorkflowSystem.Attachments;
+
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Places a node card through its attachment; links and slots are positioned by their own layers.</summary>

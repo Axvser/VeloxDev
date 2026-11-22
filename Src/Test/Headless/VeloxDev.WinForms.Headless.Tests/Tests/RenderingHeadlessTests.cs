@@ -4,7 +4,9 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.WorkflowSystem;
+using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using VeloxDev.WorkflowSystem.Platform;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;
 
@@ -43,10 +45,10 @@ public sealed class RenderingHeadlessTests
     }
 
     [TestMethod]
-    public void SurfaceColors_ParseArgbAndRgb()
+    public void XamlRuntime_ParsesArgbAndRgb()
     {
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x10, 0x20, 0x30), WorkflowSurfaceColors.Parse("#FF102030"));
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x10, 0x20, 0x30), WorkflowSurfaceColors.Parse("#102030"));
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x10, 0x20, 0x30), XamlRuntime.ParseColor("#FF102030"));
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x10, 0x20, 0x30), XamlRuntime.ParseColor("#102030"));
     }
 
     // 模板自有的完整装饰器：适配器只留 IWorkflowGridDecorator 契约与共享的网格数学。

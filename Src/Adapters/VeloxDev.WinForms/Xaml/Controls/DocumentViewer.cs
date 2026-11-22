@@ -177,7 +177,7 @@ public class DocumentViewer : Control
     /// <inheritdoc />
     protected override void OnPaintBackground(PaintEventArgs e)
     {
-        if (!HasXamlValue(BackColorProperty))
+        if (!HasXamlValue(BackgroundProperty))
         {
             using var brush = new SolidBrush(Theme.Current.WindowBackground);
             e.Graphics.FillRectangle(brush, ClientRectangle);
@@ -227,8 +227,8 @@ public class DocumentViewer : Control
         base.Dispose(disposing);
     }
 
-    private Color EffectiveForeground
-        => HasXamlValue(ForeColorProperty) ? ForeColor : Theme.Current.Foreground;
+    private new Color EffectiveForeground
+        => HasXamlValue(ForegroundProperty) ? base.EffectiveForeground : Theme.Current.Foreground;
 
     private void ApplyViewerProperties()
     {
@@ -239,7 +239,7 @@ public class DocumentViewer : Control
 
         viewer.ReadOnly = true;
         viewer.BorderStyle = BorderStyle.None;
-        viewer.BackColor = HasXamlValue(BackColorProperty)
+        viewer.BackColor = HasXamlValue(BackgroundProperty)
             ? XamlDrawing.ToOpaque(Background, Theme.Current.WindowBackground)
             : Theme.Current.WindowBackground;
         viewer.ForeColor = EffectiveForeground;

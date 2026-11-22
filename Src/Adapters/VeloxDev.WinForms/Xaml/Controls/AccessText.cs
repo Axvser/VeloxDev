@@ -64,7 +64,7 @@ public class AccessText : TextBlock
             return;
         }
 
-        TextRenderer.DrawText(e.Graphics, display, Font, bounds, ForeColor, BuildFlags());
+        TextRenderer.DrawText(e.Graphics, display, Font, bounds, EffectiveForeground, BuildFlags());
         if (underlineIndex >= 0 && underlineIndex < display.Length)
         {
             DrawUnderline(e.Graphics, display, underlineIndex, bounds);
@@ -123,7 +123,7 @@ public class AccessText : TextBlock
         }
 
         x = Math.Max(bounds.Left, Math.Min(x, bounds.Right - 1));
-        using var pen = new Pen(ForeColor, 1f);
+        using var pen = new Pen(EffectiveForeground, 1f);
         graphics.DrawLine(pen, x, y, Math.Min(bounds.Right, x + width), y);
     }
 

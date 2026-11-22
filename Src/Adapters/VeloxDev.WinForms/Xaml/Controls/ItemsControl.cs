@@ -366,6 +366,7 @@ public class ItemsControl : Control
         }
 
         ClearItems();
+        InvalidateMeasure();
         if (ItemsSource is not { } source)
         {
             PerformLayout();

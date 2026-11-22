@@ -1,6 +1,8 @@
-<!-- VeloxDev customization: opt-in per-link view; the default surface draws every link in its single link layer. -->
-<local:LinkView
+<UserControl
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="clr-namespace:Demo.Views.Workflow"
-    x:Class="Demo.Views.Workflow.LinkView" />
+    x:Class="Demo.Views.Workflow.LinkView">
+
+  <!-- VeloxDev customization: the curve is painted by this view; line colour and thickness live in code-behind. -->
+
+</UserControl>

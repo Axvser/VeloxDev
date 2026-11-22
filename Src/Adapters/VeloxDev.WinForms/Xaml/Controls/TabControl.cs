@@ -243,7 +243,7 @@ public class TabControl : Control
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         var theme = Theme.Current;
-        var background = HasXamlValue(BackColorProperty) && Background is { } custom
+        var background = HasXamlValue(BackgroundProperty) && Background is { } custom
             ? custom.ApproximateColor
             : theme.Surface;
         using var fill = new SolidBrush(background);

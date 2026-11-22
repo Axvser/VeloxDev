@@ -12,6 +12,9 @@ using PlatformInput = System.Windows.Forms;
 using Wf = VeloxDev.WorkflowSystem;
 using XamlScrollViewer = VeloxDev.WinForms.Xaml.Controls.ScrollViewer;
 
+using VeloxDev.WorkflowSystem.Attachments;
+using VeloxDev.WorkflowSystem.Platform;
+
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>

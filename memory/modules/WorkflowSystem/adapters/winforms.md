@@ -3,10 +3,6 @@
 > 连线交互规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)：输入是标准输入
 > （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），指针底下是谁（节点 / 插槽 / 连线）由适配器解析、认不到才回退 Core 的共享曲线判定，外观、删除与菜单的接线归宿主/适配器。
 >
-> **视觉后端**的单 HWND 工作流表面在 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/VisualHosting/`，坐标与坑见
-> [`VeloxDev.WinForms/visual-workflow-hosting.md`](../../VeloxDev.WinForms/visual-workflow-hosting.md)；本文下面的
-> 附着行为 / 池 / 消息过滤器仍服务 HWND 路径。
->
 > **读法**：契约（七个视图角色、注册位置、联动清单）在 `memory/modules/WorkflowSystem/extension.md` §3.9 与 §4.3；
 > 人面向的「怎么搭一个 WinForms 工作流视图」在 `skills/veloxdev-create-workflow/references/gui/winforms.md`，
 > 逐角色职责表在 `skills/veloxdev-create-workflow/references/view-layer.md`（`new-adapter.md` 同源）。
@@ -43,10 +39,10 @@
 ### 2.1 接线靠附着属性、部件名与 `ConditionalWeakTable`
 
 - **表面行为把开关注册成 XAML 附着属性**：`IsEnabled` / `ZoomEnabled` / `TemplateSelector` / `WorkflowTree` / `LinkMenuBuilder` / 五个 `*Name` / `NodeViewType` / `LinkViewType`；状态放 `ConditionalWeakTable<Control, SurfaceState>`。⇒ **CWT 不可枚举**，需要「遍历所有已挂载控件」时得另存一个普通集合。
-- **其余行为的接线面有两种**：`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSlotLayoutBehavior` 是静态 `Get/Set` + CWT；`WorkflowNodeRowsBehavior` 与 `WorkflowLinkLayer` 注册附着属性。状态都在各自类型的 CWT 里。
+- **其余行为都注册了附着 DP**：`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSlotLayoutBehavior` 的 `IsEnabled`（以及后两者的 `SlotNames` / `SlotEnumeratorNames` / `CoordinateHost*`）都是 `RegisterAttached`，静态 `Get/Set` 只是它们的 CLR 外观；`WorkflowLinkLayer` 亦然。运行状态都在各自类型的 CWT 里。模板因此可以直接在 XAML 上写 `behaviors:...IsEnabled="True"`。
 - **部件解析是 `FindNamed`**：递归 `Controls`、`Ordinal` 比较 `Control.Name`，取第一个命中。`x:Name` 只生成字段，不写原生 `Name`；`Name="PART_*"` 才是契约。找不到静默跳过。
 - **视图池的 item → view**：`ViewPool.SetTemplateSelector`，选择器是通用 `VeloxDev.WinForms.Xaml.TemplateSelector`（`SelectTemplate(object?)` → `DataTemplate?`）。未给选择器时 `NodeViewType` / `LinkViewType` 由 `SurfaceTemplateSelector` 按程序集 + 命名空间反射构造，找不到抛 `InvalidOperationException`。
-- **绑定**：`ViewContainer.ApplyBinding` 先看附件（`WorkflowNodeAttachment` / `WorkflowSlotAttachment` / `WorkflowLinkAttachment`），其余角色 `Tag = item`，再对 `"ViewModel"` / `"DataContext"` / `"BindingContext"` 三个属性名反射 `SetValue`（`ViewHosting/ViewContainer.cs` 的 `ApplyBinding`）。⇒ 视图想拿到 VM，要么读 `Tag`，要么有那三个名字之一的属性；其它名字静默拿不到。
+- **绑定**：`ViewContainer.ApplyBinding` 先看附件（`WorkflowNodeAttachment` / `WorkflowSlotAttachment` / `WorkflowLinkAttachment`；三个附件都会把 item 写进 XAML 视图的 `DataContext`），其余角色 `Tag = item`，再对 `"ViewModel"` / `"DataContext"` / `"BindingContext"` 三个属性名反射 `SetValue`（`ViewHosting/ViewContainer.cs` 的 `ApplyBinding`）。⇒ 视图想拿到 VM，优先读 `DataContext`，否则读 `Tag` 或那三个名字之一。
 - **没有 `Panel.ZIndex`，层级按角色在挂树时定**：`ViewContainer.Attach` 第一次物化时 `Controls.Add`，随后节点 `BringToFront`、连线 `SendToBack`（`Controls` 序号 0 在最前，`Add` 追加到末尾 = 最后面）。池是异步物化的，所以层级必须在挂树这一趟当场定下来；`SetZOrder` 是空操作。别家靠 `Panel.ZIndex`，这家没有对应物。
 
 ### 2.2 没有路由/隧道事件 ⇒ `Application.AddMessageFilter`，而且是**进程级单例**
@@ -61,8 +57,8 @@
 ### 2.3 子控件永远画在父控件的 `OnPaintBackground` 之上 ⇒ **透明分层在这家不可用**
 
 - `WorkflowRulerOverlayForm.cs` 的类注释写明：WinForms 子控件总是画在父控件之上，画在视口里的半透明带压不住从下面滚过的不透明卡片，**唯一能压住的是 `WS_EX_LAYERED` 的顶层弹窗**。实现是 `UpdateLayeredWindow` 逐像素 alpha（还带 `WM_NCHITTEST → HTTRANSPARENT` 让下面的平移与拖拽继续可用）。浮层由 `WorkflowSurfaceBehavior.EnsureRulerOverlay` 在 `RulerBand > 0` 且宿主句柄已建时创建，`SyncRulerOverlay` 每次 `ApplyPanCore` 推偏移。
-- 节点卡片照这个结论写：整卡用**不透明**填充（`WorkflowNodeAttachment` 构造函数里 `Color.FromArgb(255, surfaceBackdrop)`，注释说明 .NET 10 给没有 `SupportsTransparentBackColor` 的控件设半透明 `BackColor` 会抛）。
-- 插槽视图走通用形态：`UserControl` 里一个 `Path`（`Stretch="Uniform"` 把 1024 图形缩到槽大小），`WorkflowSlotConnectionBehavior` 挂在 `Path` 上；code-behind 只订阅 `ViewModel.PropertyChanged` 的 `State` 并把颜色写到 `RootPath.Fill`。`WorkflowNodeRowsBehavior` 先写 `ViewModel` + `Tag`（`TrySetSlotViewModel`），没有该属性的旧式视图才回退 `WorkflowSlotAttachment`。
+- 节点卡片照这个结论写：整卡用**不透明**填充（`WorkflowNodeAttachment` 构造函数里 `Color.FromArgb(255, surfaceBackdrop)`；XAML 控件经 `XamlControlColors.SetBackground` 写 `Background`，原生控件才写 `BackColor`）。
+- 插槽视图走通用形态：`UserControl` 里一个 `Path`（`Stretch="Uniform"` 把 1024 图形缩到槽大小），`WorkflowSlotConnectionBehavior` 挂在 `Path` 上；code-behind 从 `DataContext` 取 `ISlotComponent`，订阅其 `PropertyChanged` 的 `State` 并把颜色写到 `RootPath.Fill`。节点模板用 `ItemsControl` 生成端口行，槽视图的 `DataContext` 由 `ItemTemplate` 绑定 `{Binding Slot}`。
 - ⇒ WPF/Avalonia/WinUI/MAUI 的透明叠加（半透明标尺、发光描边、阴影）在这家一律换成**不透明绘制**或**顶层分层窗口**，没有第三条路。
 
 ### 2.4 平移只有一套模型：`state.PanOffset` + 自绘滚动条
@@ -109,20 +105,9 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 ---
 
-### 2.9 没有绑定引擎 ⇒ `WorkflowBindingExtensions`
+### 2.9 绑定走 XAML `DataContext`，没有独立绑定助手
 
-这家没有 WPF 那种绑定引擎：`DataBindings` 要求每个属性配一个 `BindingSource`。
-适配器包的 `WorkflowBindingExtensions` 补上这一块：
-
-- `Control.Bind(model, (view, m) => …)` —— 立刻应用一次，之后模型每报一次变更再应用一次；
-- `Control.Bind(model, m => m.Anchor, (view, anchor) => …)` —— 先投影再比，投影值没变就不重放
-  （跟一个属性走，不必写属性名字符串）；
-- `Control.BindCollection(source, (view, e) => …)` —— 集合变更编组到控件线程。
-
-三条共用的语义两条：**控件销毁即解订**（挂在 `Control.Disposed` 上）；
-跨线程编组复用 `ModelChangeRelay`（这家「订阅 / 退订 / `InvokeRequired` 编排」只有这一份）。
-
-⚠ **它是给用户自己写的视图用的**。适配器自带的那几个视图走各自的助手（`WorkflowNodeAttachment` 等），不用它。
+适配器不再提供 `WorkflowBindingExtensions`。`WorkflowNodeAttachment` / `WorkflowSlotAttachment` / `WorkflowLinkAttachment` 把模型写进 XAML 视图的 `DataContext`，模板用普通的 `{Binding}`；需要手写订阅的代码直接用 `ModelChangeRelay` 做跨线程编组。
 
 ### 2.10 卡片/插槽上的按下送不到画布，所以由组件自己路由
 
@@ -142,7 +127,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 | 1 | **启用表面顺手改 Win32 窗口样式（七家里唯一）**：`Attach` 给宿主上 `WS_CLIPCHILDREN`、给顶层窗体上 `WS_EX_COMPOSITED`。这家没有合成器，自绘画布与子窗口的重绘分离必然产生闪烁/鬼影，只能在窗口层解决。 | `WorkflowSurfaceBehavior.Attach` 里 `EnsureClipChildren` / `EnsureComposited` 两行 |
 | 2 | **滚轮走应用级 `IMessageFilter`：看得见每一笔滚轮，且 Ctrl+缩放能把消息吃掉（七家里唯一）**：别家都用平台的路由/隧道/预览阶段；WinUI 没有预览相，得挂滚动容器的**内容**（画布）才不漏（见 `wpf.md` §三·1）。这家没有事件路由，只能抢在消息泵那一层；被否决即 `m.Result = IntPtr.Zero; return true;`。 | `WorkflowSurfaceBehavior.cs` 的 `PreFilterMessage` |
 | 3 | **插槽连接用消息过滤器 + `WindowFromPoint` + 静态单活动连接（七家里唯一）**：整个手势压在一个应用级过滤器上；按下与抬起可能落在不同的窗口上，必须靠 `WindowFromPoint` 反查目标控件、并自己维护「谁在拖」。 | `WorkflowSlotConnectionBehavior.cs` 的 `_messageFilter` / `_activeConnection`、`GetControlAtScreenPoint`、`TryCompleteFromMouseUp` |
-| 4 | **`WorkflowSlotLayoutBehavior.SyncNow(Control)` 只有这家有**：一个公开的**同步**重测入口。延迟路径 `BeginInvoke` 会合并到消息循环，而消息循环排在强制同步重绘之后，所以缩放折叠/画布扩张期间连线会用旧端点画一帧。**调用方**：`WorkflowSurfaceBehavior.ApplyPanCore` / `ApplyViewProjection`、`WorkflowNodeDragBehavior.OnMouseMove`、`WorkflowNodeRowsBehavior`（折叠后）。 | `WorkflowSlotLayoutBehavior.SyncNow` |
+| 4 | **`WorkflowSlotLayoutBehavior.SyncNow(Control)` 只有这家有**：一个公开的**同步**重测入口。延迟路径 `BeginInvoke` 会合并到消息循环，而消息循环排在强制同步重绘之后，所以缩放折叠/画布扩张期间连线会用旧端点画一帧。**调用方**：`WorkflowSurfaceBehavior.ApplyPanCore` / `ApplyViewProjection`、`WorkflowNodeDragBehavior.OnMouseMove`。 | `WorkflowSlotLayoutBehavior.SyncNow` |
 | 5 | **小地图不订阅节点**：`WorkflowMinimapOverlay` 只收表面推来的 scroll/content/viewport，节点移动的重画由表面在 `WorkflowNodeAttachment.AnchorChanged` 上补（`SurfaceState.OnNodeAnchorChanged`）。其余家的小地图自己订阅模型。 | `WorkflowMinimapOverlay.ComputeLayout`、`WorkflowSurfaceBehavior.HookView` |
 | 6 | **`Replace` 由共享的 Core 池处理**：`Src/Core/VeloxDev.Core/WorkflowSystem/ViewHosting/ViewPool.cs` 的 `OnCollectionChanged` 显式列了 `Replace`（先 Remove 再 Add）。⇒ 「原地替换 `VisibleItems` 元素」会刷新视图；六家都走 Core 池。 | `ViewPool.cs` 的 `case NotifyCollectionChangedAction.Replace` |
 | 7 | **Ctrl 判定是精确相等**：消息过滤器先判 `Control.ModifierKeys == Keys.Control`、再看 `GetZoomEnabled(host)`。与 WPF 同形，另四家用 `HasFlag`。⇒ **Ctrl+Shift+滚轮在这家不缩放**（走汇报支、按默认滚处理）；这是七家不一致的地方，代码里没写是刻意还是遗漏。 | `WorkflowSurfaceBehavior.cs` 的 `PreFilterMessage`（`zoomGesture`） |
@@ -161,7 +146,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 ### 4.3 坐标换算的入口
 
-`WorkflowSlotLayoutBehavior` 的坐标换算走 `ResolveCoordinateHost` + `PointToClient`（见 §4.4）；没有按名字设置布局属性名的开关。`ResolveCoordinateHost` 的顺序：`CoordinateHostName` 在 `parentHost` 子树里找 → `WorkflowSurfaceBehavior.FindSurfaceCanvas`（表面行为手里的 `PART_Canvas`）→ `CoordinateHostType`（默认 `typeof(Panel)`，沿祖先链上溯）→ `parentHost`。`WorkflowNodeViewBehavior.Attach` 把两个行为的 `CoordinateHostType` 都设成 `VeloxDev.WinForms.Xaml.Controls.Canvas`。
+`WorkflowSlotLayoutBehavior` 的坐标换算走 `ResolveCoordinateHost` + `PointToClient`（见 §4.4）；没有按名字设置布局属性名的开关。`ResolveCoordinateHost` 的顺序：`CoordinateHostName` 在 `parentHost` 子树里找 → `WorkflowSurfaceBehavior.FindSurfaceCanvas`（表面行为手里的 `PART_Canvas`）→ `CoordinateHostType`（默认 `typeof(Panel)`，沿祖先链上溯）→ `parentHost`。节点模板只开 `IsEnabled`，坐标宿由 `FindSurfaceCanvas` 兜底。
 
 ### 4.4 插槽锚点**必须**用 `SlotAnchorFromCanvasLocal`，用 `SlotAnchorFromVisualCenter` 会系统性偏移
 
@@ -248,15 +233,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 `WorkflowNodeCard.BuildLayout` 先 `ResetRefs()` 把 `_scriptBox` 等字段置空，再 `_bodyPanel.Controls.Clear()`；被摘掉的旧视口仍可能收到一次 `VisibleChanged` → `Layout`。因此卡片内的布局/绘制回调捕获创建时的局部控件并检查 `IsDisposed`，不读会被 `ResetRefs` 清空的字段；`BuildScriptEditor` 的 `viewport.Layout` 按此写。
 
-### 4.14 `SlotRowsPanel.ApplyScale` 不能按自己记住的 collapse 早退
-
-缩放后 `WorkflowNodeRowsBehavior.Rebuild` 会新建输入视图与行；如果面板因为自身 `collapse`/`baseSlotSize` 已经是当前值就 `return`，这些新控件从未收到缩放，停在 18×18，表现为同一卡片里部分端口大、部分端口小。每次 `ApplyScale` 都要把因子传播给所有行并 `PerformLayout`；行自己的 `appliedScale` 去重，不会重复建字体。
-
-### 4.15 缩放换字体时不能立即 Dispose 旧 Font
-
-`SlotRowPanel.ApplyScale` / `WorkflowNodeTitleBehavior.ApplyCollapse` 给 Label 换字体后，旧 Font 若当场 `Dispose`，而 Label 正在用这份字体 `MeasureString`，GDI+ 抛 `ArgumentException: Parameter is not valid.`（`Label.GetPreferredSizeCore` → `Graphics.MeasureStringInternal`），这次绘制会留下红框和红色乱线。旧字体只放进 `retiredFonts`，等行/标题销毁（`Detach`）后统一释放。
-
-### 4.16 悬停高亮需要宿主推帧
+### 4.14 悬停高亮需要宿主推帧
 
 `WorkflowLinkLayer.OnPaint` 只在被绘制时读 `WorkflowInput.HoveredLink`；指针换目标本身不会让画布 `Invalidate`。宿主订 `IInputEvents` 的 `PointerMoved` / `PointerEntered` / `PointerExited` 并调用 `surfaceCanvas.Invalidate()`，`HoveredLineColor` / `HoveredThickness` 才会在悬停时生效（两个 demo 的 `TreeView` / `WorkflowCanvas` 都这么做）。
 

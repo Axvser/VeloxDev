@@ -147,7 +147,7 @@ public class GridSplitter : Control
             : IsPointerOver
                 ? theme.ControlHover
                 : Color.Transparent;
-        if (Background is { A: > 0 } authoredBrush && HasXamlValue(BackColorProperty))
+        if (Background is { A: > 0 } authoredBrush && HasXamlValue(BackgroundProperty))
         {
             background = authoredBrush.ApproximateColor;
         }

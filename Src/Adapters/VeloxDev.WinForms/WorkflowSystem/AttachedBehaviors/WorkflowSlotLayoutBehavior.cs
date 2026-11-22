@@ -1,10 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
+using NativeBinding = System.Windows.Forms.Binding;
+using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -35,6 +37,36 @@ public sealed class WorkflowSlotLayoutBehavior
 
     private static readonly ConditionalWeakTable<Control, LayoutState> States = new();
     private static readonly ConditionalWeakTable<ISlotComponent, LocalAnchorBox> LocalAnchors = new();
+
+    /// <summary>Whether the slot-layout lifecycle is active on the control.</summary>
+    public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
+        "IsEnabled", typeof(bool), typeof(WorkflowSlotLayoutBehavior),
+        new PropertyMetadata(false, OnIsEnabledPropertyChanged));
+
+    /// <summary>Comma-separated names of the controls that carry fixed slots.</summary>
+    public static readonly DependencyProperty SlotNamesProperty = DependencyProperty.RegisterAttached(
+        "SlotNames", typeof(string), typeof(WorkflowSlotLayoutBehavior),
+        new PropertyMetadata(null, OnSlotNamesPropertyChanged));
+
+    /// <summary>Comma-separated names of the controls that host generated slot enumerators.</summary>
+    public static readonly DependencyProperty SlotEnumeratorNamesProperty = DependencyProperty.RegisterAttached(
+        "SlotEnumeratorNames", typeof(string), typeof(WorkflowSlotLayoutBehavior),
+        new PropertyMetadata(null, OnSlotEnumeratorNamesPropertyChanged));
+
+    /// <summary>Optional name of the canvas that supplies slot coordinates.</summary>
+    public static readonly DependencyProperty CoordinateHostNameProperty = DependencyProperty.RegisterAttached(
+        "CoordinateHostName", typeof(string), typeof(WorkflowSlotLayoutBehavior),
+        new PropertyMetadata(null, OnCoordinateHostPropertyChanged));
+
+    /// <summary>Optional type of the canvas that supplies slot coordinates.</summary>
+    public static readonly DependencyProperty CoordinateHostTypeProperty = DependencyProperty.RegisterAttached(
+        "CoordinateHostType", typeof(Type), typeof(WorkflowSlotLayoutBehavior),
+        new PropertyMetadata(null, OnCoordinateHostPropertyChanged));
+
+    /// <summary>Optional name of the control whose subtree holds the named slot controls.</summary>
+    public static readonly DependencyProperty ParentHostNameProperty = DependencyProperty.RegisterAttached(
+        "ParentHostName", typeof(string), typeof(WorkflowSlotLayoutBehavior),
+        new PropertyMetadata(null, OnParentHostNamePropertyChanged));
 
     /// <summary>The slot's centre in its node view's client coordinates, in the same units as the node's Anchor/Size.</summary>
     private sealed class LocalAnchorBox
@@ -69,7 +101,7 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).IsEnabled;
+        return IsEnabledProperty.GetValue(element) is true;
     }
 
     /// <summary>
@@ -82,17 +114,23 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        var state = GetState(element);
+        IsEnabledProperty.SetValue(element, value);
+    }
+
+    private static void OnIsEnabledPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
+    {
+        var state = GetState(target);
+        var value = e.NewValue is true;
         if (state.IsEnabled == value)
         {
             return;
         }
 
-        Detach(element);
+        Detach(target);
         state.IsEnabled = value;
         if (value)
         {
-            Attach(element);
+            Attach(target);
         }
     }
 
@@ -106,7 +144,7 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).SlotNames;
+        return SlotNamesProperty.GetValue(element) as string;
     }
 
     /// <summary>
@@ -119,10 +157,15 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        var state = GetState(element);
-        state.SlotNames = value;
+        SlotNamesProperty.SetValue(element, value);
+    }
+
+    private static void OnSlotNamesPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
+    {
+        var state = GetState(target);
+        state.SlotNames = e.NewValue as string;
         state.SlotControlsDirty = true;
-        RequestSync(element);
+        RequestSync(target);
     }
 
     /// <summary>
@@ -135,7 +178,7 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).SlotEnumeratorNames;
+        return SlotEnumeratorNamesProperty.GetValue(element) as string;
     }
 
     /// <summary>
@@ -148,10 +191,15 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        var state = GetState(element);
-        state.SlotEnumeratorNames = value;
+        SlotEnumeratorNamesProperty.SetValue(element, value);
+    }
+
+    private static void OnSlotEnumeratorNamesPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
+    {
+        var state = GetState(target);
+        state.SlotEnumeratorNames = e.NewValue as string;
         state.SlotControlsDirty = true;
-        RequestSync(element);
+        RequestSync(target);
     }
 
     /// <summary>
@@ -164,7 +212,7 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).CoordinateHostName;
+        return CoordinateHostNameProperty.GetValue(element) as string;
     }
 
     /// <summary>
@@ -177,8 +225,15 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        GetState(element).CoordinateHostName = value;
-        RequestSync(element);
+        CoordinateHostNameProperty.SetValue(element, value);
+    }
+
+    private static void OnCoordinateHostPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
+    {
+        var state = GetState(target);
+        state.CoordinateHostName = CoordinateHostNameProperty.GetValue(target) as string;
+        state.CoordinateHostType = CoordinateHostTypeProperty.GetValue(target) as Type;
+        RequestSync(target);
     }
 
     /// <summary>
@@ -191,7 +246,7 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).CoordinateHostType;
+        return CoordinateHostTypeProperty.GetValue(element) as Type;
     }
 
     /// <summary>
@@ -204,8 +259,7 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        GetState(element).CoordinateHostType = value;
-        RequestSync(element);
+        CoordinateHostTypeProperty.SetValue(element, value);
     }
 
     /// <summary>
@@ -218,7 +272,7 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        return GetState(element).ParentHostName;
+        return ParentHostNameProperty.GetValue(element) as string;
     }
 
     /// <summary>
@@ -231,8 +285,13 @@ public sealed class WorkflowSlotLayoutBehavior
             throw new ArgumentNullException(nameof(element));
         }
 
-        GetState(element).ParentHostName = value;
-        RequestSync(element);
+        ParentHostNameProperty.SetValue(element, value);
+    }
+
+    private static void OnParentHostNamePropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
+    {
+        GetState(target).ParentHostName = e.NewValue as string;
+        RequestSync(target);
     }
 
     /// <summary>
@@ -790,7 +849,7 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (control.DataBindings.Count > 0)
         {
-            foreach (var binding in control.DataBindings.OfType<Binding>())
+            foreach (var binding in control.DataBindings.OfType<NativeBinding>())
             {
                 if (binding.DataSource is not null)
                 {

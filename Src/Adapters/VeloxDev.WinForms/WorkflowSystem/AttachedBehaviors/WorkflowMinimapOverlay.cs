@@ -3,6 +3,10 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
+using DrawingPen = System.Drawing.Pen;
+using VeloxDev.WinForms.Xaml;
+
+using VeloxDev.WorkflowSystem.Platform;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -147,7 +151,7 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
     /// <summary>Parses a <c>#RRGGBB</c>, <c>#AARRGGBB</c> or named colour.</summary>
     /// <param name="hex">The colour text.</param>
     /// <returns>The colour.</returns>
-    protected static Color ParseColor(string hex) => WorkflowSurfaceColors.Parse(hex);
+    protected static Color ParseColor(string hex) => XamlRuntime.ParseColor(hex);
 
     /// <inheritdoc />
     protected override void OnParentChanged(EventArgs e)
@@ -195,7 +199,7 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
         var rect = new RectangleF(0, 0, Width, Height);
 
         using var bgBrush = new SolidBrush(_minimapBackground);
-        using var borderPen = new Pen(_minimapBorderBrush, 1f);
+        using var borderPen = new DrawingPen(_minimapBorderBrush, 1f);
         g.FillRectangle(bgBrush, rect);
         g.DrawRectangle(borderPen, rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
 
@@ -204,7 +208,7 @@ public class WorkflowMinimapOverlay : Panel, IWorkflowMinimapOverlay, IWorkflowM
         var l = layout.Value;
 
         using var nodeBrush = new SolidBrush(_nodeBrush);
-        using var viewportPen = new Pen(_viewportStroke, 1.5f);
+        using var viewportPen = new DrawingPen(_viewportStroke, 1.5f);
 
         foreach (var (nx, ny, nw, nh) in _nodeRects)
         {

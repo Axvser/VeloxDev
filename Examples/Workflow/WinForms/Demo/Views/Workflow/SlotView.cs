@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.Attachments;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 // `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; a drawing
 // alias keeps `new Size(24, 24)` unambiguous in generated code.

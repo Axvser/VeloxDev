@@ -112,7 +112,7 @@ public class CheckBox : ToggleButton
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         // 没有作者设置背景时保持透明；样式写了 Background 才让基类画。
-        if (HasXamlValue(BackColorProperty) || HasXamlValue(BackgroundProperty))
+        if (HasXamlValue(BackgroundProperty) || HasXamlValue(BackgroundProperty))
         {
             base.OnPaintBackground(e);
         }
@@ -180,7 +180,7 @@ public class CheckBox : ToggleButton
                 text,
                 Font,
                 textBounds,
-                IsEnabled ? ForeColor : Theme.Current.DisabledForeground,
+                IsEnabled ? EffectiveForeground : Theme.Current.DisabledForeground,
                 flags);
         }
     }
@@ -214,7 +214,7 @@ public class RadioButton : ToggleButton
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         // 没有作者设置背景时保持透明；样式写了 Background 才让基类画。
-        if (HasXamlValue(BackColorProperty) || HasXamlValue(BackgroundProperty))
+        if (HasXamlValue(BackgroundProperty) || HasXamlValue(BackgroundProperty))
         {
             base.OnPaintBackground(e);
         }
@@ -289,7 +289,7 @@ public class RadioButton : ToggleButton
                 text,
                 Font,
                 textBounds,
-                IsEnabled ? ForeColor : Theme.Current.DisabledForeground,
+                IsEnabled ? EffectiveForeground : Theme.Current.DisabledForeground,
                 flags);
         }
     }

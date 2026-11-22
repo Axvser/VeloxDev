@@ -3,12 +3,12 @@ using System.Windows.Forms;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using VeloxDev.WorkflowSystem.Attachments;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;
 
 /// <summary>
 /// The adapter-level behavior facades: node, slot and link views are ordinary controls that attach a helper.
-/// The dynamic slot rows are a helper too, not a card base class.
 /// </summary>
 [STATestClass]
 public sealed class WorkflowBaseControlsHeadlessTests
@@ -81,95 +81,4 @@ public sealed class WorkflowBaseControlsHeadlessTests
         Assert.IsTrue(WorkflowSlotConnectionBehavior.GetIsEnabled(view));
     }
 
-    [TestMethod]
-    public void NodeRowsBehavior_BuildsARowForEachOutputSlot()
-    {
-        var graph = TestGraph.Create(connect: false);
-        using var card = CreateCardWithRowsHost();
-        var attachment = WorkflowNodeAttachment.Attach(card);
-
-        WorkflowNodeRowsBehavior.SetSlotViewFactory(card, () => new Panel());
-        WorkflowNodeRowsBehavior.SetIsEnabled(card, true);
-
-        attachment.Node = graph.Left;
-        Application.DoEvents();
-
-        var rowsHost = Descendants(card).Single(control => control.Name == "PART_DynamicOutputs");
-        Assert.IsTrue(rowsHost.Controls.Count > 0, "the bound node's slots must produce rows");
-    }
-
-    [TestMethod]
-    public void NodeRowsBehavior_BindsAViewModelSlotViewWithoutAnAttachment()
-    {
-        var graph = TestGraph.Create(connect: false);
-        using var card = CreateCardWithRowsHost();
-        var attachment = WorkflowNodeAttachment.Attach(card);
-
-        WorkflowNodeRowsBehavior.SetSlotViewFactory(card, () => new ViewModelSlotView());
-        WorkflowNodeRowsBehavior.SetIsEnabled(card, true);
-
-        attachment.Node = graph.Left;
-        Application.DoEvents();
-
-        var slotViews = Descendants(card).OfType<ViewModelSlotView>().ToList();
-        Assert.IsTrue(slotViews.Count > 0, "the bound node's slots must produce view-model slot views");
-        Assert.IsTrue(slotViews.All(view => view.ViewModel is not null));
-        Assert.IsTrue(slotViews.All(view => WorkflowSlotAttachment.For(view) is null));
-    }
-
-    [TestMethod]
-    public void NodeRowsBehavior_RendersAPureInputSlotAsTheBarePort()
-    {
-        var graph = TestGraph.Create(connect: false);
-        graph.RightInput.GetHelper().SetChannel(SlotChannel.MultipleSources);
-
-        using var card = CreateCardWithRowsHost();
-        var attachment = WorkflowNodeAttachment.Attach(card);
-
-        WorkflowNodeRowsBehavior.SetSlotViewFactory(card, () => new Panel());
-        WorkflowNodeRowsBehavior.SetIsEnabled(card, true);
-
-        attachment.Node = graph.Right;
-        Application.DoEvents();
-
-        var rowsHost = Descendants(card).Single(control => control.Name == "PART_DynamicOutputs");
-        var rowsPanel = rowsHost.Controls.OfType<Panel>().Single();
-        var slotViews = Descendants(rowsPanel)
-            .Where(control => WorkflowSlotAttachment.For(control) is not null)
-            .ToList();
-
-        Assert.AreEqual(1, slotViews.Count, "a source-only slot is one bare input port, not an output row");
-        Assert.AreSame(graph.RightInput, WorkflowSlotAttachment.For(slotViews[0])!.Slot);
-    }
-
-    private static Panel CreateCardWithRowsHost()
-    {
-        var card = new Panel { Width = 240, Height = 160 };
-        card.Controls.Add(new Panel
-        {
-            Name = "PART_DynamicOutputs",
-            Dock = DockStyle.Fill,
-        });
-        card.CreateControl();
-        return card;
-    }
-
-    private static IEnumerable<Control> Descendants(Control root)
-    {
-        foreach (Control child in root.Controls)
-        {
-            yield return child;
-            foreach (var nested in Descendants(child))
-            {
-                yield return nested;
-            }
-        }
-    }
-
-    private sealed class ViewModelSlotView : Panel
-    {
-        [System.ComponentModel.Browsable(false)]
-        [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-        public ISlotComponent? ViewModel { get; set; }
-    }
 }

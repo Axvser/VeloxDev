@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "http://json.schemastore.org/template",
   "author": "Axvser",
   "classifications": [
@@ -10,7 +10,7 @@
   ],
   "identity": "VeloxDev.WinForms.WorkflowTreeView",
   "name": "VeloxDev WinForms Workflow Tree View",
-  "description": "A visual workflow tree surface hosting nodes, links, the grid backdrop and a minimap on the HWND-free WinForms backend.",
+  "description": "A XAML-first WinForms workflow tree surface composing scroll, canvas, grid decorator, and view pooling.",
   "shortName": "winforms-v-tree",
   "sourceName": "TemplateClass",
   "defaultName": "TreeView",
@@ -52,7 +52,7 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Workflow surface corner radius.",
-      "defaultValue": "3",
+      "defaultValue": "0",
       "replaces": "TemplateSurfaceCornerRadius"
     }
   },

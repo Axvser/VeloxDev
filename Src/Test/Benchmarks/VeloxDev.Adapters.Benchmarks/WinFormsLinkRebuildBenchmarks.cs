@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Windows.Forms;
 using BenchmarkDotNet.Attributes;
 using VeloxDev.AdapterTestKit;
-using WfLink = wf::VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowLinkAttachment;
+using WfLink = wf::VeloxDev.WorkflowSystem.Attachments.WorkflowLinkAttachment;
 
 namespace VeloxDev.Adapters.Benchmarks;
 

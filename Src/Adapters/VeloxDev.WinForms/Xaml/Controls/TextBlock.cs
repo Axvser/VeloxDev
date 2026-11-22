@@ -155,7 +155,7 @@ public class TextBlock : Control
             flags |= TextFormatFlags.VerticalCenter;
         }
 
-        TextRenderer.DrawText(e.Graphics, Text, Font, bounds, ForeColor, flags);
+        TextRenderer.DrawText(e.Graphics, Text, Font, bounds, EffectiveForeground, flags);
     }
 
     private TextFormatFlags BuildFlags()
@@ -196,25 +196,7 @@ public class TextBlock : Control
     }
 }
 
-/// <summary>
-/// A <see cref="TextBlock"/> that also accepts WPF/Avalonia-style <see cref="Content"/>.
-/// </summary>
-/// <remarks>
-/// <see cref="Content"/> is a convenience alias for <see cref="TextBlock.Text"/>: assigning an object writes its
-/// <see cref="object.ToString"/> result. Use <see cref="TextBlock.Text"/> when the value is already a string.
-/// </remarks>
-public class Label : TextBlock
+/// <summary>A WPF-shaped label: a <see cref="ContentControl"/> whose content is text or a child control.</summary>
+public class Label : ContentControl
 {
-    /// <summary>The label content; it is the same dependency property as <see cref="TextBlock.Text"/>.</summary>
-    /// <remarks>Declaring it as a separate property would let a style's Content setter leave a local Text value behind when the style is removed.</remarks>
-    public static readonly DependencyProperty ContentProperty = TextProperty;
-
-    /// <summary>Gets or sets the label content.</summary>
-    [Browsable(false)]
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public object? Content
-    {
-        get => Text;
-        set => Text = value?.ToString() ?? string.Empty;
-    }
 }

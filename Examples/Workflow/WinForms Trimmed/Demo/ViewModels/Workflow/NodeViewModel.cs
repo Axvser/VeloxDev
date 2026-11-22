@@ -10,9 +10,6 @@ internal partial class NodeViewModel
 
     [VeloxProperty] private string _name = string.Empty;
 
-    /// <summary>The node type name shown as the card subtitle.</summary>
-    public string TypeName => GetType().Name;
-
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
     [VeloxProperty] public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }

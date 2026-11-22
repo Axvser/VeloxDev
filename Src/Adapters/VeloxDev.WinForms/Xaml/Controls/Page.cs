@@ -44,7 +44,7 @@ public class Page : ContentControl
     /// <inheritdoc />
     protected override void OnPaintBackground(PaintEventArgs e)
     {
-        if (!HasXamlValue(BackColorProperty))
+        if (!HasXamlValue(BackgroundProperty))
         {
             using var brush = new SolidBrush(Theme.Current.Surface);
             e.Graphics.FillRectangle(brush, ClientRectangle);
