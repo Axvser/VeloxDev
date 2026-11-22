@@ -3,6 +3,7 @@ using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using XamlControl = VeloxDev.WinForms.Xaml.Controls.Control;
 using XamlContentControl = VeloxDev.WinForms.Xaml.Controls.ContentControl;
+using XamlRenderScope = VeloxDev.WinForms.Xaml.Controls.XamlRenderScope;
 using XamlScrollableControl = VeloxDev.WinForms.Xaml.Controls.ScrollableControl;
 using XamlStackPanel = VeloxDev.WinForms.Xaml.Controls.StackPanel;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
@@ -48,6 +49,9 @@ internal sealed class GalleryPreviewController : IDisposable
     /// <summary>Shows one card or section page.</summary>
     public void ShowEntry(GalleryEntry entry, GalleryModel model)
     {
+        // The old view, the new section and the card fit are three separate layouts; freeze the host so the
+        // intermediate trees are never painted.
+        using var render = XamlRenderScope.Begin(_host);
         Clear();
         CurrentEntryId = entry.Id;
 

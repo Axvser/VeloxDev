@@ -227,6 +227,8 @@ public class ContentControl : Control
 
     private void ApplyContent()
     {
+        // 换内容会同时摘旧子控件、加新子控件并重排；不冻结的话两步会各自留下一帧。
+        using var render = XamlRenderScope.Begin(this);
         if (Content is System.Windows.Forms.Control control)
         {
             RemoveTemplateContent();
@@ -263,6 +265,7 @@ public class ContentControl : Control
 
     private void RebuildTemplate()
     {
+        using var render = XamlRenderScope.Begin(this);
         RemoveTemplateContent();
         var template = ContentTemplateSelector?.SelectTemplate(Content) ?? ContentTemplate;
         if (Content is System.Windows.Forms.Control || template is not { } selected)

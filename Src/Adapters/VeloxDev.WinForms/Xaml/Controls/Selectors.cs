@@ -166,6 +166,10 @@ public abstract class Selector : Control
     /// <summary>The native selector this class mirrors.</summary>
     protected abstract ListControl NativeSelector { get; }
 
+    /// <summary>Whether the native selector is centred vertically when it is shorter than the content area.</summary>
+    /// <remarks>A combo box keeps its font-driven height, so a taller wrapper would otherwise leave its text at the top.</remarks>
+    protected virtual bool CentersNativeSelector => false;
+
     /// <summary>The native item collection.</summary>
     protected abstract System.Collections.IList NativeItems { get; }
 
@@ -228,6 +232,16 @@ public abstract class Selector : Control
             content.Top + (int)Math.Ceiling(border.Top),
             Math.Max(0, content.Width - (int)Math.Ceiling(border.Horizontal)),
             Math.Max(0, content.Height - (int)Math.Ceiling(border.Vertical)));
+
+        if (CentersNativeSelector)
+        {
+            var preferred = NativeSelector.GetPreferredSize(Size.Empty).Height;
+            if (preferred > 0 && preferred < inset.Height)
+            {
+                inset = new Rectangle(inset.Left, inset.Top + ((inset.Height - preferred) / 2), inset.Width, preferred);
+            }
+        }
+
         if (NativeSelector.Bounds != inset)
         {
             NativeSelector.Bounds = inset;
@@ -741,6 +755,9 @@ public class ComboBox : Selector
         get => (bool)GetValue(IsEditableProperty)!;
         set => SetValue(IsEditableProperty, value);
     }
+
+    /// <inheritdoc />
+    protected override bool CentersNativeSelector => true;
 
     /// <inheritdoc />
     protected override ListControl NativeSelector => comboBox;

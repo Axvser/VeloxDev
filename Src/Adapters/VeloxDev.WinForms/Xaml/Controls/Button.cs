@@ -259,7 +259,7 @@ public class Button : ContentControl
         }
     }
 
-    // 与 XamlDrawing.PaintChrome 同形，但直接消费 Brush：普通态可以是渐变，悬停/按下态用近似色。
+    // 按钮的直接消费 Brush：普通态可以是渐变，悬停/按下态用近似色；边框环与 XamlDrawing 共用同一条路径。
     private void PaintChrome(
         Graphics graphics,
         Rectangle bounds,
@@ -267,29 +267,7 @@ public class Button : ContentControl
         Brush? borderBrush,
         Thickness borderThickness,
         float cornerRadius)
-    {
-        graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var body = new RectangleF(0.5f, 0.5f, Math.Max(0, bounds.Width - 1f), Math.Max(0, bounds.Height - 1f));
-        if (body.Width <= 0f || body.Height <= 0f)
-        {
-            return;
-        }
-
-        using var path = XamlDrawing.RoundedRectangle(body, cornerRadius);
-        if (background.ApproximateColor.A > 0)
-        {
-            background.FillPath(graphics, path);
-        }
-
-        var thickness = Math.Min(
-            Math.Max(Math.Max(borderThickness.Left, borderThickness.Right), Math.Max(borderThickness.Top, borderThickness.Bottom)),
-            Math.Min(body.Width, body.Height) / 2f);
-        if (borderBrush is { } stroke && stroke.ApproximateColor.A > 0 && thickness > 0f)
-        {
-            using var pen = new Pen(stroke, thickness);
-            pen.Draw(graphics, path);
-        }
-    }
+        => XamlDrawing.PaintChromeWithBrushes(graphics, bounds, background, borderBrush, borderThickness, cornerRadius);
 
     /// <summary>Raises <see cref="Click"/>.</summary>
     protected virtual void OnClick() => RaiseClick();

@@ -22,12 +22,12 @@ public abstract class Shape : Control
         typeof(Shape),
         new PropertyMetadata(new SolidColorBrush(Color.Transparent), OnVisualPropertyChanged));
 
-    /// <summary>The outline brush; black by default.</summary>
+    /// <summary>The outline brush; none by default, so a fill-only shape has no outline.</summary>
     public static readonly DependencyProperty StrokeProperty = DependencyProperty.Register(
         nameof(Stroke),
         typeof(Brush),
         typeof(Shape),
-        new PropertyMetadata(new SolidColorBrush(Color.Black), OnVisualPropertyChanged));
+        new PropertyMetadata(null, OnVisualPropertyChanged));
 
     /// <summary>The outline width in pixels; one by default.</summary>
     public static readonly DependencyProperty StrokeThicknessProperty = DependencyProperty.Register(
@@ -70,7 +70,21 @@ public abstract class Shape : Control
             return;
         }
 
-        using var path = CreatePath(bounds);
+        // 客户区边缘会裁掉半个像素：纯填充也内移半像素，描边则内移半个笔宽，右、下才不会少一条边。
+        var inset = Stroke is { } stroke && stroke.ApproximateColor.A > 0 && StrokeThickness > 0f
+            ? StrokeThickness / 2f
+            : 0.5f;
+        var geometry = new RectangleF(
+            bounds.X + inset,
+            bounds.Y + inset,
+            Math.Max(0f, bounds.Width - (inset * 2f)),
+            Math.Max(0f, bounds.Height - (inset * 2f)));
+        if (geometry.Width <= 0f || geometry.Height <= 0f)
+        {
+            return;
+        }
+
+        using var path = CreatePath(geometry);
         PaintPath(e.Graphics, path, closed: true);
     }
 

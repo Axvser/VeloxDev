@@ -266,6 +266,8 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             ControlStyles.SupportsTransparentBackColor,
             true);
 
+        // 原生 Margin 默认 3；XAML 的读回路径在没人写 Margin 时会落到它，所以这里同步成 0。
+        NativeMargin = System.Windows.Forms.Padding.Empty;
         _resources.Changed += OnResourcesChanged;
         ApplyFocusableStyle();
     }
@@ -1835,6 +1837,12 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         if (e.Control is not null and not Control)
         {
             HookNativeHover(e.Control);
+
+            // 原生控件默认 Margin 3，而 XAML 控件现在是 0；不抹平的话混排面板里两者会差 3px。
+            if (e.Control.Margin == new Padding(3))
+            {
+                e.Control.Margin = System.Windows.Forms.Padding.Empty;
+            }
         }
     }
 

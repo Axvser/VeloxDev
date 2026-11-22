@@ -54,27 +54,78 @@ internal static class XamlDrawing
         Thickness borderThickness,
         float cornerRadius)
     {
+        using var backgroundBrush = background.A > 0 ? new System.Drawing.SolidBrush(background) : null;
+        using var strokeBrush = borderBrush.A > 0 ? new System.Drawing.SolidBrush(borderBrush) : null;
+        PaintChromeCore(
+            graphics,
+            bounds,
+            borderThickness,
+            cornerRadius,
+            backgroundBrush is null ? null : path => graphics.FillPath(backgroundBrush, path),
+            strokeBrush is null ? null : path => graphics.FillPath(strokeBrush, path));
+    }
+
+    // Brush 版单独命名：Brush 与 Color 之间有双向隐式转换，同名重载会二义。
+    public static void PaintChromeWithBrushes(
+        Graphics graphics,
+        Rectangle bounds,
+        Brush? background,
+        Brush? borderBrush,
+        Thickness borderThickness,
+        float cornerRadius)
+    {
+        PaintChromeCore(
+            graphics,
+            bounds,
+            borderThickness,
+            cornerRadius,
+            background is { } fill && fill.ApproximateColor.A > 0 ? path => fill.FillPath(graphics, path) : null,
+            borderBrush is { } stroke && stroke.ApproximateColor.A > 0 ? path => stroke.FillPath(graphics, path) : null);
+    }
+
+    private static void PaintChromeCore(
+        Graphics graphics,
+        Rectangle bounds,
+        Thickness borderThickness,
+        float cornerRadius,
+        Action<GraphicsPath>? fillBackground,
+        Action<GraphicsPath>? fillBorder)
+    {
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var body = new RectangleF(0.5f, 0.5f, Math.Max(0, bounds.Width - 1f), Math.Max(0, bounds.Height - 1f));
-        if (body.Width <= 0f || body.Height <= 0f)
+        if (bounds.Width <= 0 || bounds.Height <= 0)
         {
             return;
         }
 
+        // 外轮廓压到 -0.5：GDI+ 以像素中心取样，贴 0 画环会让左、上各占半像素、右、下被裁掉半像素。
+        var body = new RectangleF(-0.5f, -0.5f, bounds.Width, bounds.Height);
         using var path = RoundedRectangle(body, cornerRadius);
-        if (background.A > 0)
+        fillBackground?.Invoke(path);
+
+        var left = Math.Max(0f, borderThickness.Left);
+        var top = Math.Max(0f, borderThickness.Top);
+        var right = Math.Max(0f, borderThickness.Right);
+        var bottom = Math.Max(0f, borderThickness.Bottom);
+        if (fillBorder is null || (left <= 0f && top <= 0f && right <= 0f && bottom <= 0f))
         {
-            using var brush = new SolidBrush(background);
-            graphics.FillPath(brush, path);
+            return;
         }
 
-        var thickness = Math.Min(
-            Math.Max(Math.Max(borderThickness.Left, borderThickness.Right), Math.Max(borderThickness.Top, borderThickness.Bottom)),
-            Math.Min(body.Width, body.Height) / 2f);
-        if (borderBrush.A > 0 && thickness > 0f)
+        var inner = new RectangleF(
+            body.X + left,
+            body.Y + top,
+            body.Width - left - right,
+            body.Height - top - bottom);
+        if (inner.Width <= 0f || inner.Height <= 0f)
         {
-            using var pen = new Pen(borderBrush, thickness);
-            graphics.DrawPath(pen, path);
+            fillBorder(path);
+            return;
         }
+
+        var inset = Math.Max(Math.Max(left, right), Math.Max(top, bottom));
+        using var innerPath = RoundedRectangle(inner, Math.Max(0f, cornerRadius - inset));
+        path.FillMode = FillMode.Alternate;
+        path.AddPath(innerPath, connect: false);
+        fillBorder(path);
     }
 }

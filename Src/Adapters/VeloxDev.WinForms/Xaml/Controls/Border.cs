@@ -15,8 +15,9 @@ namespace VeloxDev.WinForms.Xaml.Controls;
 /// its parent — without that fill a semi-transparent <see cref="Background"/> would blend against a stale buffer.
 /// </para>
 /// <para>
-/// Exactly one child is accepted. Its bounds are the control's display rectangle, so the native
-/// <see cref="System.Windows.Forms.Control.Padding"/> keeps the content inside the rounded edge.
+/// Exactly one child is accepted. Its bounds are the control's display rectangle inset by
+/// <see cref="BorderThickness"/> and <see cref="System.Windows.Forms.Control.Padding"/>, so neither the stroke nor the
+/// padding can be covered by the content.
 /// </para>
 /// </remarks>
 public class Border : Control
@@ -119,8 +120,11 @@ public class Border : Control
         if (Backdrop.IsEmpty)
         {
             PaintParentBackground(e);
-            if (Background is null && !HasXamlValue(BackColorProperty))
+            if (Background is null
+                && !HasXamlValue(BackColorProperty)
+                && (BorderBrush is null || BorderBrush.ApproximateColor.A <= 0 || BorderThickness.IsEmpty))
             {
+                // 只有描边的 Border 也必须画出来：早退条件只看底色会漏掉整圈边框。
                 return;
             }
         }
@@ -151,7 +155,7 @@ public class Border : Control
             var thickness = BorderThickness;
             if (BorderBrush is { } stroke && stroke.ApproximateColor.A > 0 && !thickness.IsEmpty)
             {
-                using var ring = CreateBorderRing(bounds, CornerRadius, thickness);
+                using var ring = CreateBorderRing(StrokeBounds(bounds), CornerRadius, thickness);
                 if (ring is not null)
                 {
                     stroke.FillPath(graphics, ring);
@@ -173,11 +177,12 @@ public class Border : Control
         // 用原生 Padding：DP 的每次变化都会同步到它，而直接改原生属性的代码（缩放、设计器）也不会被忽略。
         // base 指向 Control（它已隐藏 Padding），所以必须显式落到 ScrollableControl 的成员上。
         var padding = ((System.Windows.Forms.ScrollableControl)this).Padding;
+        var border = BorderThickness;
         var content = new Rectangle(
-            padding.Left,
-            padding.Top,
-            Math.Max(0, ClientSize.Width - padding.Horizontal),
-            Math.Max(0, ClientSize.Height - padding.Vertical));
+            padding.Left + (int)Math.Ceiling(border.Left),
+            padding.Top + (int)Math.Ceiling(border.Top),
+            Math.Max(0, ClientSize.Width - padding.Horizontal - (int)Math.Ceiling(border.Horizontal)),
+            Math.Max(0, ClientSize.Height - padding.Vertical - (int)Math.Ceiling(border.Vertical)));
 
         var child = Controls[0];
         if (child is Control xamlChild)
@@ -195,10 +200,11 @@ public class Border : Control
     /// <inheritdoc />
     protected internal override Size MeasureCore(Size availableSize)
     {
-        // Border 的首选尺寸来自唯一子控件 + Padding：卡片不再写死高度，改内容后也不会被裁掉。
+        // Border 的首选尺寸来自唯一子控件 + Padding + 描边：卡片不再写死高度，改内容后也不会被裁掉。
         var padding = Padding;
-        var horizontal = (int)Math.Ceiling(padding.Horizontal);
-        var vertical = (int)Math.Ceiling(padding.Vertical);
+        var border = BorderThickness;
+        var horizontal = (int)Math.Ceiling(padding.Horizontal) + (int)Math.Ceiling(border.Horizontal);
+        var vertical = (int)Math.Ceiling(padding.Vertical) + (int)Math.Ceiling(border.Vertical);
         var inner = new Size(
             availableSize.Width > 0 ? Math.Max(0, availableSize.Width - horizontal) : 0,
             availableSize.Height > 0 ? Math.Max(0, availableSize.Height - vertical) : 0);
@@ -220,6 +226,13 @@ public class Border : Control
             border.Invalidate();
         }
     }
+
+    // GDI+ 的 AA 填充按像素中心取样：外轮廓贴着 0 时四边各占半个像素，右、下再被客户区裁掉一半。
+    // 外轮廓压到 -0.5 后，1px 环正好覆盖最外一整像素，内缘落在子控件的起点之外。
+    private static RectangleF StrokeBounds(RectangleF bounds)
+        => bounds.Width > 0f && bounds.Height > 0f
+            ? new RectangleF(bounds.X - 0.5f, bounds.Y - 0.5f, bounds.Width, bounds.Height)
+            : bounds;
 
     // 边框按每边宽度画成「外轮廓减内轮廓」的环：GDI+ 的单支笔只能有一种宽度，WPF 的 BorderThickness 是四边各一个。
     private static GraphicsPath? CreateBorderRing(RectangleF bounds, float radius, Thickness thickness)

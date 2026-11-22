@@ -246,6 +246,17 @@ public class TextBox : Control
             content.Top + (int)Math.Ceiling(border.Top),
             Math.Max(0, content.Width - (int)Math.Ceiling(border.Horizontal)),
             Math.Max(0, content.Height - (int)Math.Ceiling(border.Vertical)));
+
+        // 原生单行 EDIT 在比行高大的窗口里文字贴顶；把编辑器本身按首选高度垂直居中，文字才落在框中间。
+        if (!editor.Multiline)
+        {
+            var preferred = editor.PreferredHeight;
+            if (preferred > 0 && preferred < inset.Height)
+            {
+                inset = new Rectangle(inset.Left, inset.Top + ((inset.Height - preferred) / 2), inset.Width, preferred);
+            }
+        }
+
         if (editor.Bounds != inset)
         {
             editor.Bounds = inset;
@@ -272,6 +283,18 @@ public class TextBox : Control
         using var path = XamlDrawing.RoundedRectangle(bounds, 0f);
         using var pen = new Pen(borderBrush, Math.Min(thickness, Math.Min(bounds.Width, bounds.Height) / 2f));
         pen.Draw(e.Graphics, path);
+    }
+
+    /// <inheritdoc />
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        // 编辑器只占内容区中部；点在上下留白也要聚焦，否则框看起来可点、实际没反应。
+        if (!editor.IsDisposed)
+        {
+            editor.Focus();
+        }
+
+        base.OnMouseDown(e);
     }
 
     /// <inheritdoc />

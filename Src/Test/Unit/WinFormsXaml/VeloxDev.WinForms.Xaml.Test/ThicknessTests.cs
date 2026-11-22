@@ -81,13 +81,13 @@ public sealed class ThicknessTests
     }
 
     [TestMethod]
-    public void MarginProperty_DefaultsToTheNativeMarginAndWritesTheNativeMargin()
+    public void MarginProperty_DefaultsToZeroAndWritesTheNativeMargin()
     {
         using var control = new ProbeControl();
 
-        // Control.DefaultMargin 是 3：DP 默认值与原生布局的起点一致。
-        Assert.AreEqual(new Thickness(3f), (Thickness)control.GetValue(VeloxDev.WinForms.Xaml.Controls.Control.MarginProperty)!);
-        Assert.AreEqual(new Padding(3), ((System.Windows.Forms.Control)control).Margin);
+        // XAML 的 Margin 是 0；原生 WinForms 默认的 3 已经在构造时同步掉。
+        Assert.AreEqual(Thickness.Empty, (Thickness)control.GetValue(VeloxDev.WinForms.Xaml.Controls.Control.MarginProperty)!);
+        Assert.AreEqual(Padding.Empty, ((System.Windows.Forms.Control)control).Margin);
 
         control.Margin = new Thickness(6f, 8f, 10f, 12f);
 
@@ -95,7 +95,7 @@ public sealed class ThicknessTests
 
         control.ClearValue(VeloxDev.WinForms.Xaml.Controls.Control.MarginProperty);
 
-        Assert.AreEqual(new Padding(3), ((System.Windows.Forms.Control)control).Margin);
+        Assert.AreEqual(Padding.Empty, ((System.Windows.Forms.Control)control).Margin);
     }
 
     [TestMethod]

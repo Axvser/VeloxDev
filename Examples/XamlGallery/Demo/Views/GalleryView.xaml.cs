@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using XamlControl = VeloxDev.WinForms.Xaml.Controls.Control;
+using XamlRenderScope = VeloxDev.WinForms.Xaml.Controls.XamlRenderScope;
 
 namespace Demo.Views;
 
@@ -292,13 +293,17 @@ public sealed partial class GalleryView : VeloxDev.WinForms.Xaml.Controls.UserCo
             return;
         }
 
-        Application.SetColorMode(Theme.Mode == ThemeMode.Dark ? SystemColorMode.Dark : SystemColorMode.Classic);
-        ApplyPalette();
-        Theme.ApplyTo(this);
-        ThemeStyles.ApplyTo(this);
-        previewAdorner.AdornerLayer.ColorKey = Theme.Current.Surface;
-        _selection.RefreshAdorner();
-        Invalidate(true);
+        // The palette swap repaints every DynamicResource consumer; commit the new colours in one frame.
+        using (XamlRenderScope.Begin(this))
+        {
+            Application.SetColorMode(Theme.Mode == ThemeMode.Dark ? SystemColorMode.Dark : SystemColorMode.Classic);
+            ApplyPalette();
+            Theme.ApplyTo(this);
+            ThemeStyles.ApplyTo(this);
+            previewAdorner.AdornerLayer.ColorKey = Theme.Current.Surface;
+            _selection.RefreshAdorner();
+            Invalidate(true);
+        }
 
         // Native controls and the preview sections were built under the previous process colour mode. Rebuild
         // both after the current event finishes so a section button can finish its click handler.
@@ -314,6 +319,8 @@ public sealed partial class GalleryView : VeloxDev.WinForms.Xaml.Controls.UserCo
                 return;
             }
 
+            // Rebuilding the tree and re-selecting the entry are separate layouts; submit them together.
+            using var render = XamlRenderScope.Begin(this);
             var current = _currentEntry?.Id;
             _tree.Build(catalogSearch.Text);
             UpdateCatalogCount();

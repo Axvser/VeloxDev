@@ -23,8 +23,9 @@ public readonly struct Thickness : IEquatable<Thickness>
     /// <summary>A thickness whose four sides are zero.</summary>
     public static readonly Thickness Empty = new(0f);
 
-    // WinForms 的 Control.DefaultMargin 是 3；DP 默认值取同一个数，动画起点才不会从 0 跳一下。
-    internal static readonly Thickness DefaultMargin = new(3f);
+    // XAML 的默认外边距是 0（WPF 语义）。原生 DefaultMargin 的 3 会让每个控件的可用区缩一圈，
+    // 固定高度条带里 34px 的标题只剩 32px，文字底部被裁掉；需要原生间距时显式写 Margin。
+    internal static readonly Thickness DefaultMargin = Empty;
 
     /// <summary>Creates a thickness with all four sides set to <paramref name="uniformLength"/>.</summary>
     /// <param name="uniformLength">The length of every side.</param>

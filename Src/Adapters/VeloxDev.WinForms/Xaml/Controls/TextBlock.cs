@@ -122,11 +122,12 @@ public class TextBlock : Control
         var width = proposedSize.Width > 0
             ? Math.Max(0, proposedSize.Width - (int)Math.Ceiling(Padding.Horizontal))
             : 0;
+        // SingleLine 与 WordBreak 同时传会让测量和绘制各按一套规则；BuildFlags 已经按是否换行选好了一边。
         var measured = TextRenderer.MeasureText(
             Text,
             Font,
             new Size(width <= 0 ? int.MaxValue : width, int.MaxValue),
-            BuildFlags() | TextFormatFlags.WordBreak);
+            BuildFlags());
         return new Size(
             measured.Width + (int)Math.Ceiling(Padding.Horizontal),
             measured.Height + (int)Math.Ceiling(Padding.Vertical));
@@ -147,7 +148,14 @@ public class TextBlock : Control
             return;
         }
 
-        TextRenderer.DrawText(e.Graphics, Text, Font, bounds, ForeColor, BuildFlags());
+        // 单行文本在比行高更高的盒子里默认贴顶，MinHeight/固定高度的标签看起来就偏下；单行时垂直居中。
+        var flags = BuildFlags();
+        if (TextWrapping == TextWrapping.NoWrap)
+        {
+            flags |= TextFormatFlags.VerticalCenter;
+        }
+
+        TextRenderer.DrawText(e.Graphics, Text, Font, bounds, ForeColor, flags);
     }
 
     private TextFormatFlags BuildFlags()
