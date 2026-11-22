@@ -135,6 +135,10 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     private VisualSurface? _surface;
     private bool _focused;
     private bool _pointerOver;
+    private VisualStyle? _explicitStyle;
+    private VisualStyle? _implicitStyle;
+    private VisualStyleApplication? _styleApplication;
+    private VisualStyleCollection? _styles;
 
     /// <summary>The outer spacing around this element.</summary>
     public XamlThickness Margin
@@ -295,6 +299,36 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>The rendering DPI of the hosting surface; 96 when detached.</summary>
     protected int RenderDpi => Surface?.RenderDpi ?? 96;
 
+    /// <summary>The style explicitly assigned to this element, or <see langword="null"/>.</summary>
+    /// <remarks>
+    /// An explicit style takes precedence over any implicit style resolved from a <see cref="Styles"/> collection or
+    /// <see cref="VisualSurface.Styles"/>. Assigning <see langword="null"/> re-applies the implicit style, if any.
+    /// </remarks>
+    public VisualStyle? Style
+    {
+        get => _explicitStyle;
+        set
+        {
+            if (ReferenceEquals(_explicitStyle, value))
+            {
+                return;
+            }
+
+            _explicitStyle = value;
+            ApplyEffectiveStyle();
+        }
+    }
+
+    /// <summary>Styles offered implicitly to this element and its descendants.</summary>
+    /// <remarks>
+    /// The nearest collection wins: this element's own collection is consulted first, then each ancestor's, then
+    /// <see cref="VisualSurface.Styles"/>. Within a collection the first style whose
+    /// <see cref="VisualStyle.TargetType"/> accepts the element is used. The subtree is re-resolved when this
+    /// collection changes, when a child is added through <see cref="Add{T}"/>, and when the surface root is assigned
+    /// or replaced.
+    /// </remarks>
+    public VisualStyleCollection Styles => _styles ??= CreateStyles();
+
     /// <summary>Raised after the pointer is pressed on this element or bubbles from a child.</summary>
     public event EventHandler<VisualPointerEventArgs>? PointerPressed;
 
@@ -328,7 +362,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>Raised after this element loses logical focus.</summary>
     public event EventHandler? LostFocus;
 
-    /// <summary>Adds a child element, clears a stale root surface and invalidates layout.</summary>
+    /// <summary>Adds a child element, applies the implicit styles it inherits, clears a stale root surface and invalidates layout.</summary>
     /// <param name="child">The child to add.</param>
     /// <typeparam name="T">The child's concrete type.</typeparam>
     /// <returns>The added child.</returns>
@@ -337,6 +371,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         if (child is null) throw new ArgumentNullException(nameof(child));
         child._surface = null;
         base.Add(child);
+        child.RefreshImplicitStyles();
         InvalidateMeasure();
         return child;
     }
@@ -366,6 +401,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         }
 
         child._surface = null;
+        child.RefreshImplicitStyles();
         InvalidateMeasure();
         return true;
     }
@@ -538,6 +574,11 @@ public abstract class VisualElement : ContainerVisual, IDisposable
             return;
         }
 
+        // 样式应用握着本元素的 PropertyChanged 订阅；释放时摘掉，避免事件把已释放对象拉回来。
+        _styleApplication?.Apply(null);
+        _explicitStyle = null;
+        _implicitStyle = null;
+
         foreach (var child in Children.ToArray())
         {
             if (child is VisualElement element)
@@ -600,6 +641,57 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     }
 
     internal void SetSurfaceRoot(VisualSurface? surface) => _surface = surface;
+
+    // 显式样式压过隐式；两者都为空时把两个层清干净。
+    private void ApplyEffectiveStyle()
+        => (_styleApplication ??= new VisualStyleApplication(this)).Apply(_explicitStyle ?? _implicitStyle);
+
+    private VisualStyleCollection CreateStyles()
+    {
+        var styles = new VisualStyleCollection();
+        styles.Changed += (_, _) => RefreshImplicitStyles();
+        return styles;
+    }
+
+    internal void SetImplicitStyle(VisualStyle? style)
+    {
+        if (ReferenceEquals(_implicitStyle, style))
+        {
+            return;
+        }
+
+        _implicitStyle = style;
+        if (_explicitStyle is null)
+        {
+            ApplyEffectiveStyle();
+        }
+    }
+
+    // 从本元素起向下重解隐式样式；挂在祖先集合上的样式变化只需从那个祖先调用一次。
+    internal void RefreshImplicitStyles()
+    {
+        SetImplicitStyle(ResolveImplicitStyle());
+        foreach (var child in Children)
+        {
+            if (child is VisualElement element)
+            {
+                element.RefreshImplicitStyles();
+            }
+        }
+    }
+
+    private VisualStyle? ResolveImplicitStyle()
+    {
+        for (var current = this; current is not null; current = current.ParentElement)
+        {
+            if (current._styles?.FindMatch(this) is { } match)
+            {
+                return match;
+            }
+        }
+
+        return Surface?.Styles.FindMatch(this);
+    }
 
     internal void SetFocused(bool focused)
     {

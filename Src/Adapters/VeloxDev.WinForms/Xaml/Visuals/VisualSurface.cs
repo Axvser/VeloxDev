@@ -30,6 +30,7 @@ public class VisualSurface : System.Windows.Forms.Control
     private readonly List<VisualElement> _hoverChain = [];
     private readonly Dictionary<NativeControlHost, System.Windows.Forms.Control> _nativeChildren = [];
     private readonly HashSet<NativeControlHost> _placedNative = [];
+    private readonly VisualStyleCollection _styles = new();
     private MouseButtons _buttons;
     private bool _layoutValid;
     private Size _layoutSize;
@@ -49,7 +50,16 @@ public class VisualSurface : System.Windows.Forms.Control
             true);
         DoubleBuffered = true;
         TabStop = true;
+        _styles.Changed += (_, _) => RefreshStyles();
     }
+
+    /// <summary>Styles applied implicitly to matching elements in this surface's visual tree.</summary>
+    /// <remarks>
+    /// An element's own <see cref="VisualElement.Styles"/> collection and its ancestors' collections take precedence
+    /// over this one; an explicit <see cref="VisualElement.Style"/> takes precedence over all of them. The tree is
+    /// re-resolved whenever this collection changes or the root is assigned.
+    /// </remarks>
+    public VisualStyleCollection Styles => _styles;
 
     /// <summary>The root element painted by this surface.</summary>
     public VisualElement? Root
@@ -68,8 +78,10 @@ public class VisualSurface : System.Windows.Forms.Control
             _hoverChain.Clear();
             ClearNativeChildren();
             _root?.SetSurfaceRoot(null);
+            _root?.RefreshImplicitStyles();
             _root = value;
             _root?.SetSurfaceRoot(this);
+            RefreshStyles();
             InvalidateSurface();
         }
     }
@@ -517,6 +529,8 @@ public class VisualSurface : System.Windows.Forms.Control
 
         base.Dispose(disposing);
     }
+
+    private void RefreshStyles() => _root?.RefreshImplicitStyles();
 
     private void ClearNativeChildren()
     {
