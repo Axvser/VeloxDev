@@ -34,6 +34,8 @@ public class VisualSurface : System.Windows.Forms.Control
     private readonly ResourceDictionary _resources = new();
     private readonly OverlayLayer _overlay = new();
     private readonly List<VisualPopup> _openPopups = [];
+    private Rectangle _damage;
+    private bool _damageFull = true;
     private MouseButtons _buttons;
     private bool _layoutValid;
     private Size _layoutSize;
@@ -136,24 +138,61 @@ public class VisualSurface : System.Windows.Forms.Control
     public void InvalidateSurface()
     {
         _layoutValid = false;
+        _damageFull = true;
         Invalidate();
     }
 
-    internal void InvalidatePaint() => Invalidate();
+    internal void InvalidatePaint()
+    {
+        _damageFull = true;
+        Invalidate();
+    }
+
+    internal void InvalidatePaint(RectangleF damage)
+    {
+        if (_damageFull)
+        {
+            return;
+        }
+
+        var rectangle = Rectangle.Round(damage);
+        if (rectangle.Width <= 0 || rectangle.Height <= 0)
+        {
+            return;
+        }
+
+        _damage = _damage.Width == 0 ? rectangle : Rectangle.Union(_damage, rectangle);
+        Invalidate(rectangle);
+    }
+
+    /// <inheritdoc />
+    protected override void OnBackColorChanged(EventArgs e)
+    {
+        base.OnBackColorChanged(e);
+        _damageFull = true;
+        Invalidate();
+    }
 
     /// <summary>Renders the tree into <paramref name="graphics"/> at <paramref name="size"/>.</summary>
     /// <param name="graphics">The target surface.</param>
     /// <param name="size">The logical size of the surface.</param>
     public void RenderTo(Graphics graphics, Size size)
+        => RenderCore(graphics, size, new Rectangle(0, 0, size.Width, size.Height));
+
+    private void RenderCore(Graphics graphics, Size size, Rectangle clearArea)
     {
         if (graphics is null) throw new ArgumentNullException(nameof(graphics));
+
+        using (var background = new SolidBrush(BackColor))
+        {
+            graphics.FillRectangle(background, clearArea);
+        }
+
         if (_root is null)
         {
-            graphics.Clear(BackColor);
             return;
         }
 
-        graphics.Clear(BackColor);
         var state = graphics.Save();
         try
         {
@@ -167,6 +206,9 @@ public class VisualSurface : System.Windows.Forms.Control
             graphics.Restore(state);
         }
     }
+
+    /// <summary>Closes every popup currently hosted by the overlay layer.</summary>
+    public void ClosePopups() => CloseAllPopups();
 
     /// <summary>Moves logical focus to <paramref name="element"/>.</summary>
     /// <param name="element">The element to focus, or <see langword="null"/> to clear focus.</param>
@@ -393,7 +435,29 @@ public class VisualSurface : System.Windows.Forms.Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        RenderTo(e.Graphics, ClientSize);
+        var damage = _damageFull
+            ? new Rectangle(0, 0, ClientSize.Width, ClientSize.Height)
+            : e.ClipRectangle.Width > 0 && e.ClipRectangle.Height > 0
+                ? e.ClipRectangle
+                : _damage;
+        if (damage.Width <= 0 || damage.Height <= 0)
+        {
+            return;
+        }
+
+        var state = e.Graphics.Save();
+        try
+        {
+            e.Graphics.SetClip(damage);
+            RenderCore(e.Graphics, ClientSize, damage);
+        }
+        finally
+        {
+            e.Graphics.Restore(state);
+        }
+
+        _damage = Rectangle.Empty;
+        _damageFull = false;
     }
 
     /// <inheritdoc />

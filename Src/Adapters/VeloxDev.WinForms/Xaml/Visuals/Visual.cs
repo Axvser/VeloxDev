@@ -41,8 +41,36 @@ public abstract class Visual : WinformsObject
     /// <summary>Whether this visual and its subtree are painted and hit-tested.</summary>
     public bool IsVisible { get; set; } = true;
 
+    /// <summary>Whether the subtree is cached in a bitmap between frames.</summary>
+    /// <remarks>
+    /// Use it for static groups over which only cheap changes happen: moving a cached visual does not re-render its
+    /// content. A dependency-property change inside a <see cref="VisualElement"/> subtree marks the nearest cache
+    /// dirty automatically; a custom visual must call <see cref="InvalidateCache"/> after changing the pixels it
+    /// draws. An <see cref="Effect"/> disables the cache for that visual.
+    /// </remarks>
+    public bool CacheAsBitmap { get; set; }
+
     /// <summary>The container that owns this visual, or <see langword="null"/> for a root.</summary>
     public ContainerVisual? Parent { get; internal set; }
+
+    private Bitmap? _cache;
+    private bool _cacheDirty = true;
+    private CacheKey _cacheKey;
+
+    /// <summary>Marks this visual's bitmap cache and every enclosing cache dirty.</summary>
+    public void InvalidateCache()
+    {
+        _cacheDirty = true;
+        Parent?.InvalidateCache();
+    }
+
+    /// <summary>Disposes this visual's cached bitmap, if any.</summary>
+    internal void DisposeCache()
+    {
+        _cache?.Dispose();
+        _cache = null;
+        _cacheDirty = true;
+    }
 
     /// <summary>Paints this visual and its children into <paramref name="graphics"/>.</summary>
     /// <param name="graphics">The target surface, already in the parent's coordinates.</param>
@@ -66,6 +94,12 @@ public abstract class Visual : WinformsObject
             if (Clip is { } clip)
             {
                 graphics.SetClip(clip, CombineMode.Intersect);
+            }
+
+            if (CacheAsBitmap && Effect is null)
+            {
+                RenderCached(graphics);
+                return;
             }
 
             if (Opacity < 0.999d || Effect is not null)
@@ -203,6 +237,71 @@ public abstract class Visual : WinformsObject
         return local;
     }
 
+    // 缓存位图只装本地内容；Bounds 的平移、Transform 与 Clip 仍由外层 Render 应用，移动缓存节点不需要重画子树。
+    private void RenderCached(Graphics target)
+    {
+        var width = (int)Math.Ceiling(Bounds.Width);
+        var height = (int)Math.Ceiling(Bounds.Height);
+        if (width <= 0 || height <= 0 || width > 8192 || height > 8192)
+        {
+            RenderContent(target);
+            RenderChildren(target);
+            return;
+        }
+
+        var key = new CacheKey(width, height, Transform, Clip);
+        if (_cache is null
+            || _cache.Width != width
+            || _cache.Height != height
+            || _cacheDirty
+            || !_cacheKey.Equals(key))
+        {
+            _cache?.Dispose();
+            _cache = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
+            using (var graphics = Graphics.FromImage(_cache))
+            {
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                RenderContent(graphics);
+                RenderChildren(graphics);
+            }
+
+            _cacheDirty = false;
+            _cacheKey = key;
+        }
+
+        DrawBitmap(target, _cache, PointF.Empty, Opacity);
+    }
+
+    private readonly struct CacheKey
+    {
+        private readonly int _width;
+        private readonly int _height;
+        private readonly float[] _transform;
+        private readonly bool _hasClip;
+        private readonly RectangleF _clip;
+
+        internal CacheKey(int width, int height, Matrix transform, RectangleF? clip)
+        {
+            _width = width;
+            _height = height;
+            _transform = transform.IsIdentity ? Array.Empty<float>() : transform.Elements;
+            _hasClip = clip is not null;
+            _clip = clip ?? RectangleF.Empty;
+        }
+
+        public bool Equals(CacheKey other)
+            => _width == other._width
+               && _height == other._height
+               && _hasClip == other._hasClip
+               && _clip.Equals(other._clip)
+               && _transform.SequenceEqual(other._transform);
+
+        public override bool Equals(object? obj) => obj is CacheKey other && Equals(other);
+
+        public override int GetHashCode()
+            => _width ^ (_height << 16) ^ _clip.GetHashCode() ^ (_hasClip ? 1 : 0);
+    }
+
     // 透明度/效果需要把整棵子树先落到一张位图，再按目标 alpha 合成；否则重叠子项会各自透，组透明度就不对。
     private void RenderComposited(Graphics target)
     {
@@ -246,7 +345,7 @@ public abstract class Visual : WinformsObject
         }
 
         using var attributes = new ImageAttributes();
-        var matrix = new ColorMatrix { Matrix33 = (float)Math.Clamp(opacity, 0d, 1d) };
+        var matrix = new ColorMatrix { Matrix33 = (float)XamlMath.Clamp(opacity, 0d, 1d) };
         attributes.SetColorMatrix(matrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
         target.DrawImage(
             bitmap,
@@ -411,7 +510,7 @@ public sealed class DropShadowEffect : VisualEffect
     /// <inheritdoc />
     public override void Render(Bitmap source, Graphics target, PointF destination, double opacity)
     {
-        var shadowOpacity = Math.Clamp(Opacity * opacity, 0d, 1d);
+        var shadowOpacity = XamlMath.Clamp(Opacity * opacity, 0d, 1d);
         var blur = Math.Max(0f, Blur);
 
         // 用若干次低 alpha 偏移绘制近似柔化；GDI+ 没有可用的模糊原语，这样足够小且不分配像素缓冲。
@@ -436,7 +535,7 @@ public sealed class DropShadowEffect : VisualEffect
             Matrix00 = 0f,
             Matrix11 = 0f,
             Matrix22 = 0f,
-            Matrix33 = (float)Math.Clamp(opacity, 0d, 1d),
+            Matrix33 = (float)XamlMath.Clamp(opacity, 0d, 1d),
             Matrix40 = color.R / 255f,
             Matrix41 = color.G / 255f,
             Matrix42 = color.B / 255f,

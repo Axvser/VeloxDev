@@ -556,7 +556,52 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     }
 
     /// <summary>Requests a repaint of the hosting surface without a new layout pass.</summary>
-    public void InvalidateVisual() => Surface?.InvalidatePaint();
+    public void InvalidateVisual()
+    {
+        // 最近的位图缓存要重画；InvalidateCache 会把外层缓存也一并标脏。
+        VisualElement? cached = null;
+        for (var current = this; current is not null; current = current.ParentElement)
+        {
+            if (current.CacheAsBitmap)
+            {
+                current.InvalidateCache();
+                cached = current;
+                break;
+            }
+        }
+
+        if (Surface is not { } surface)
+        {
+            return;
+        }
+
+        // 缓存节点重画时可能同时刷新外层缓存；直接整面重画，避免漏掉更大的缓存区域。
+        if (cached is not null)
+        {
+            surface.InvalidatePaint();
+            return;
+        }
+
+        var damage = AbsoluteBounds;
+        if (damage.Width <= 0f || damage.Height <= 0f)
+        {
+            surface.InvalidatePaint();
+            return;
+        }
+
+        // 变换后的像素位置与 Bounds 不一致；效果还会画到 Bounds 之外。这两种走整面重画。
+        for (var current = this; current is not null; current = current.ParentElement)
+        {
+            if (!current.Transform.IsIdentity)
+            {
+                surface.InvalidatePaint();
+                return;
+            }
+        }
+
+        damage.Inflate(2f + (Effect?.Padding ?? 0f), 2f + (Effect?.Padding ?? 0f));
+        surface.InvalidatePaint(damage);
+    }
 
     /// <summary>Moves logical focus to this element.</summary>
     /// <returns><see langword="true"/> when the surface accepted the focus.</returns>
@@ -622,12 +667,17 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         _styleApplication?.Apply(null);
         _explicitStyle = null;
         _implicitStyle = null;
+        DisposeCache();
 
         foreach (var child in Children.ToArray())
         {
             if (child is VisualElement element)
             {
                 element.Dispose();
+            }
+            else
+            {
+                child.DisposeCache();
             }
         }
 

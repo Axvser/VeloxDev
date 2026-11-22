@@ -49,12 +49,12 @@ public class ProgressBar : VisualElement
     public double Value
     {
         get => (double)GetValue(ValueProperty)!;
-        set => SetValue(ValueProperty, Math.Clamp(value, Minimum, Maximum));
+        set => SetValue(ValueProperty, XamlMath.Clamp(value, Minimum, Maximum));
     }
 
     /// <summary>The covered fraction in the range 0..1.</summary>
     protected double Fraction
-        => Maximum <= Minimum ? 0d : Math.Clamp((Value - Minimum) / (Maximum - Minimum), 0d, 1d);
+        => Maximum <= Minimum ? 0d : XamlMath.Clamp((Value - Minimum) / (Maximum - Minimum), 0d, 1d);
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
@@ -93,7 +93,7 @@ public class ProgressBar : VisualElement
         base.OnPropertyChanged(e);
         if (ReferenceEquals(e.Property, ValueProperty))
         {
-            var coerced = Math.Clamp(Value, Minimum, Maximum);
+            var coerced = XamlMath.Clamp(Value, Minimum, Maximum);
             if (Math.Abs(coerced - Value) > double.Epsilon)
             {
                 SetValue(ValueProperty, coerced);
@@ -154,11 +154,11 @@ public class Slider : VisualElement
     public double Value
     {
         get => (double)GetValue(ValueProperty)!;
-        set => SetValue(ValueProperty, Math.Clamp(value, Minimum, Maximum));
+        set => SetValue(ValueProperty, XamlMath.Clamp(value, Minimum, Maximum));
     }
 
     private double Fraction
-        => Maximum <= Minimum ? 0d : Math.Clamp((Value - Minimum) / (Maximum - Minimum), 0d, 1d);
+        => Maximum <= Minimum ? 0d : XamlMath.Clamp((Value - Minimum) / (Maximum - Minimum), 0d, 1d);
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
@@ -280,7 +280,7 @@ public class Slider : VisualElement
     private void SetFromX(float x)
     {
         var width = Math.Max(1f, Bounds.Width - (ThumbRadius * 2f));
-        var fraction = Math.Clamp((x - ThumbRadius) / width, 0f, 1f);
+        var fraction = XamlMath.Clamp((x - ThumbRadius) / width, 0f, 1f);
         Value = Minimum + ((Maximum - Minimum) * fraction);
     }
 }
