@@ -117,6 +117,12 @@ reports its wrapped height. `Border` measures its single child plus `Padding`, w
 needs no fixed `Height`: leave it unset and the card grows with its content. Panels that override
 `MeasureCore` apply their own `Width`/`Height`/`Min*`/`Max*` through `Control.ConstrainSize`.
 
+Layout invalidation is metadata-driven: `PropertyMetadata.AffectsMeasure` (or `AffectsArrange`)
+makes the change clear the measure cache up to the topmost XAML control and run one coalesced
+layout pass. `Control.MeasureCached` reuses a result for the same available size until that
+invalidation. Custom controls should declare the flag rather than calling `Parent.PerformLayout()`
+inside a property callback.
+
 ## 5. Bindings and resources
 
 ```xml
@@ -431,6 +437,28 @@ authors expect:
 
 ### 8.2 ItemsControl panels, containers and views
 
+### 8.3 Lightweight visual tree
+
+For non-interactive content that needs composition, `v:VisualHost` hosts a `Visual` tree painted in
+one pass with no child window per node:
+
+```csharp
+var host = new VisualHost { Dock = DockStyle.Fill };
+var group = new ContainerVisual { Bounds = new RectangleF(20, 20, 400, 200), Opacity = 0.7 };
+group.Add(new ShapeVisual { Bounds = new RectangleF(0, 0, 80, 80), Geometry = new EllipseGeometry(), Fill = new SolidColorBrush(Color.White) });
+group.Transform.RotateAt(8f, new PointF(200, 100));
+host.Root.Add(group);
+```
+
+- `Visual.Bounds` is parent coordinates; content paints in `0..Width/Height`.
+- `Transform`, `Opacity`, `Clip` and `Effect` apply to the subtree. Group opacity and effects render
+  through a temporary bitmap; very large visuals fall back to one direct pass.
+- `VisualHost.HitTestVisual(point)` walks the visual tree. Visual nodes are not HWND controls: they
+  have no `DataContext`, focus, keyboard routing or accessibility. Keep native/`v:Control` controls
+  as HWNDs and use this layer for decoration, text, shapes and connector batches.
+- `ContainerVisual`, `ShapeVisual`, `TextVisual` and `CurveBatchVisual` are the built-in nodes;
+  derive from `Visual` and override `RenderContent` / `HitTestContent` for new content.
+
 `ItemsControl` supports `ItemsPanel` (a XAML container such as `v:StackPanel`), `ItemsPanelTemplate`,
 `ItemContainerStyle`, `ItemContainerStyleSelector`, `ItemTemplateSelector`, and `Virtualizing` +
 `ItemHeight` for fixed-row virtualized lists inside a `ScrollViewer`. The visible range uses the
@@ -516,8 +544,8 @@ Not in this subset:
 - `DataTemplate` content with mixed text and elements; one root control per template
 - per-keyframe easing; `KeyFrameAnimation` shares one `Ease`
 - virtualization with variable item heights; `Virtualizing` uses a fixed `ItemHeight`
-- a built-in `Opacity` / `RenderTransform` / `Clip` / `Effect` DP; add a custom DP if your control
-  paints from it (WinForms child windows do not composite over siblings)
+- a built-in `Opacity` / `RenderTransform` / `Clip` / `Effect` DP on HWND controls; the opt-in
+  `VisualHost` visual tree supports them, but HWND controls do not composite over siblings
 - template triggers that target a native part's CLR property; template trigger setters use DPs
 
 The generator reports `VELOX_XAML001–019` and `VELOX_XAMLP001–004`. The most useful ones here:
@@ -557,5 +585,5 @@ posted through `Control.BeginInvoke`. The template harness generates and builds 
 it cannot prove drawing or animation; run the Trimmed demo for that.
 
 `Examples/XamlGallery` is the full feature catalogue (layout, text, data, input, graphics, animation,
-binding/validation, styles/templates, theme, navigation). Build it or run it with `--smoke` after
+binding/validation, styles/templates, lightweight visuals, theme, navigation). Build it or run it with `--smoke` after
 changing runtime features; `--tab N --scroll PX --light --capture` drives and captures one page.

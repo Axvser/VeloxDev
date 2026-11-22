@@ -30,14 +30,22 @@
 - 自定义动作：继承 `TriggerAction`，公共无参构造 + 可写属性；`Invoke(Control)` 里用 `XamlTransition.Animate`。嵌套内容与非 `{StaticResource}` 标记不支持。
 - 校验规则：继承 `ValidationRule`，`Validate(object?, CultureInfo)` 返回 `ValidationResult`。`Binding.ValidationRules` 没有 XAML 语法，用 code-behind `SetBinding`。
 
-## 四、样式与模板
+## 四、轻量视觉树
+
+- 需要 Transform / Opacity / Clip / Effect，或大量不交互的图形/连线时，用 `VisualHost` + `Visual` 树，而不是给每个元素建一个控件。
+- 新视觉类型继承 `Visual`，实现 `RenderContent`，按需覆写 `HitTestContent`；子项用 `ContainerVisual.Add`。`Bounds` 是父坐标，内容画在 `0..Width/Height`。
+- 效果实现 `VisualEffect`：`Padding` 声明额外空间，`Render` 在源位图上合成；组透明度与效果由 `Visual` 统一走临时位图。
+- `VisualHost.Root` 铺满宿主客户区；改树后调 `InvalidateVisual()`；命中用 `HitTestVisual(Point)`。
+- **不要**把原生/HWND 控件塞进视觉树，也不要把视觉节点当成可交互控件：两者没有共同的输入、焦点、无障碍管线。
+
+## 五、样式与模板
 
 - 显式样式 `Style="{StaticResource Key}"` 由资源替换/移除驱动重应用；无 `x:Key` 的 `TargetType` 样式是隐式兜底。
 - `Style.Template` 接受 `ControlTemplate`；模板根的 `Dock=Fill` 由运行时设置，**不要**在模板里自己写 `Dock`。
 - 模板触发器里的 Setter 指命名部件时写 `TargetName`；部件属性不属于模板父时再写 `TargetType`。
 - 样式 Setter 里的 `{DynamicResource}` 在**活动控件**上求值；跨视图的键必须在控制树祖先里，而不是兄弟视图的资源里。
 
-## 五、官方做法 vs 看起来能编译的捷径
+## 六、官方做法 vs 看起来能编译的捷径
 
 | 想做的事 | 官方做法 | 错的捷径 |
 |---|---|---|
@@ -52,4 +60,6 @@
 | 静态内容要滚动 | 用 `ScrollableControl`（原生 AutoScroll）并给内容 `Dock=Top`；内容高度由 `GalleryLayout` 这类宿主量 | 把静态面板塞进 `ScrollViewer` 期待它自动平移 —— `ScrollViewer` 只报告偏移，不移动内容 |
 | 覆盖在兄弟窗口上的装饰层 | `AdornerDecorator`/`AdornerLayer`；层为空时自动隐藏 | 自己给层铺不透明底 —— 会盖住被装饰控件 |
 | 主题切换后的原生控件 | 进程启动时 `Application.SetColorMode(...)`；干净双色用 `--light` 重启 | 运行期切 `SetColorMode` 期待已建句柄的滚动条/下拉全部重绘 |
+| 布局属性变化后重排 | 声明 `AffectsMeasure`（或 `AffectsArrange`）；失效从元数据扇出到根 | 在 DP 回调里手写 `Parent?.PerformLayout()`，仍只重排一层 |
+| 大量不交互图形/连线 | `VisualHost` + `Visual` 树，一趟绘制 | 每个元素一个 `Control`；HWND 数量和布局成本都上去 |
 | 新控件加进主题兜底 | 交互控件加 `ThemeStyles.SurfaceTypes`，容器不加 | 给所有控件塞不透明背景，盖住父级渐变/圆角 |

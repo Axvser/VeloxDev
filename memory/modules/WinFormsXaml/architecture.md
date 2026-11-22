@@ -33,6 +33,7 @@
 | `IInputElement.cs` | `IInputElement` | `Focusable` / `IsKeyboardFocused` / `IsPointerOver` / `Focus` / `CapturePointer` / `ReleasePointerCapture` |
 | `Binding.cs` / `BindingExpression.cs` / `BindingPath.cs` | `Binding` / `BindingMode` / `UpdateSourceTrigger` / `RelativeSource` / `IParameterizedValueConverter` | OneWay / TwoWay / OneTime；DataContext / `Source` / `ElementName` / `RelativeSource`；点分路径 + 索引器；Converter/ConverterParameter/StringFormat/FallbackValue/TargetNullValue；`PropertyChanged`/`LostFocus`/`Explicit`；`INotifyPropertyChanged`/`INotifyCollectionChanged`/Control DP 变更；原生控件走 `Control.DataBindings` |
 | `NameScope.cs` | `NameScope` | `x:Name` 注册表；按控件树找最近作用域；`Registered` 事件让未解析的 `ElementName` 重试 |
+| `Controls/VisualHost.cs` + `Visuals/Visual.cs` | `VisualHost` / `Visual` / `ContainerVisual` / `ShapeVisual` / `TextVisual` / `CurveBatchVisual` / `DropShadowEffect` | 可选的轻量视觉树：一个宿主窗口一趟画完整棵树；支持 Transform / Opacity / Clip / Effect，视觉节点没有 HWND |
 | `Theme.cs` / `ThemeStyles.cs` | `Theme` / `ThemePalette` / `ThemeStyles` | 现代默认调色板（明/暗）与按控件类型缓存的隐式兜底样式；容器保持透明，交互控件获得表面/边框/圆角；`ThemeStyles.ApplyTo` 在换主题后重应用 |
 | `Trigger.cs` | `Trigger` / `Setter` / `TriggerCollection` / `DataTrigger` / `MultiTrigger` / `Condition` | 单属性、数据路径、多条件 Trigger；进入应用 setter、离开按逆序恢复；移除/替换活动 trigger 会先走 exit；`Setter.Binding` 在样式/触发器活动期间持续跟随源；`TargetName` 供模板触发器指向部件 |
 | `Style.cs` | `Style` | `TargetType` / `Setters` / `Triggers` / `BasedOn` / `Template`；显式/隐式、原生 Control 样式；本地 > style trigger > style setter > 默认；集合变更自动重应用 |
@@ -56,7 +57,7 @@
 - VSM：`VisualStateManager`/`VisualStateGroup`/`VisualState`/`VisualTransition` 是运行时 API，`GoToState` 应用 setter 与 Enter/Exit 动作；`VisualStateGroups` 是附加 DP，但 **XAML 编译器还没有状态组语法**。
 - DynamicResource：`ResourceDictionary.MergedDictionaries` + `XamlRuntime.SetDynamicResource`；生成器支持 DP 值、附加值、Setter 值里的 `{DynamicResource Key}`。合并字典仍是运行时特性，编译器仍会把嵌套 `<ResourceDictionary>` 摊平。
 - 富文本/导航：`FlowDocument` + `Paragraph`/`Section`/`ListBlock`/`Table`/`Run` 等模型（列表类型叫 `ListBlock`，避免遮蔽 `List<T>`）；`RichTextBox`/`FlowDocumentScrollViewer`/`DocumentViewer` 用原生 RichTextBox 显示 RTF；`Page`/`Frame` 有简单 journal；`Window`/`NavigationWindow` 用无边框 Form 宿主，关闭时把内容摘出以便重新 Show。没有 WPF 的分页/缩放/查找/URI 导航/模态对话框。
-- 全量示例在 `Examples/XamlGallery`：十个分页 Layout/Text/Data/Input/Graphics/Animation/Binding/Styles/Theme/Navigation，覆盖布局、文本与 FlowDocument、数据视图与虚拟化、输入与 chrome、矢量、动画/自定义 action/VSM、绑定与校验、样式与模板、调色板与导航。`--smoke` 无头验证窗口构造；`--capture <dir> --tab N --scroll PX --light --dump` 逐页截图并导出控件树。Demo 以 `DpiUnawareGdiScaled` 运行（XAML 以设备像素排版、字体按点），原生控件随启动时的 `Application.SetColorMode` 走暗色/浅色。
+- 全量示例在 `Examples/XamlGallery`：十一个分页 Layout/Text/Data/Input/Graphics/Animation/Binding/Styles/Visuals/Theme/Navigation，覆盖布局、文本与 FlowDocument、数据视图与虚拟化、输入与 chrome、矢量、动画/自定义 action/VSM、绑定与校验、样式与模板、轻量视觉树、调色板与导航。`--smoke` 无头验证窗口构造；`--capture <dir> --tab N --scroll PX --light --dump` 逐页截图并导出控件树。Demo 以 `DpiUnawareGdiScaled` 运行（XAML 以设备像素排版、字体按点），原生控件随启动时的 `Application.SetColorMode` 走暗色/浅色。
 
 ## 二、源生成器
 
@@ -88,7 +89,7 @@
 
 ## 三、边界
 
-- 支持：XAML 编译、原生 WinForms 控件、派生控件、DP/附加属性、XAML 附加属性属性值、XAML 风格 Pointer/Key 事件与原生桥接、内联 Trigger / DataTrigger / MultiTrigger / Setter / TransitionAction、显式/隐式 Style / BasedOn / Style.Triggers / Template、原生 Control 样式、OneWay/TwoWay/OneTime、DataContext 继承、资源（含空元素对象资源）、DataTemplate、TransitionSystem 动画、样式集合变更自动刷新、索引器路径、`Ease`、`Converter`/`ConverterParameter`/`StringFormat`/`FallbackValue`/`TargetNullValue`/`UpdateSourceTrigger`、`ElementName`/`RelativeSource`/`x:Static`、`TemplateBinding`/模板部件/模板触发器、`Panel.ZIndex`、`TriggerActionGroup`/`LoopTime`/`IsAutoReverse`、`ItemsPanel`/`ItemContainerStyle`/固定行高虚拟化、声明式 `Menu`/`ContextMenu`/`MenuItem`/`ToolTip`/`Popup`。
+- 支持：XAML 编译、原生 WinForms 控件、派生控件、DP/附加属性、XAML 附加属性属性值、XAML 风格 Pointer/Key 事件与原生桥接、可选的 `VisualHost` 轻量视觉树（Transform/Opacity/Clip/Effect、批量曲线）、内联 Trigger / DataTrigger / MultiTrigger / Setter / TransitionAction、显式/隐式 Style / BasedOn / Style.Triggers / Template、原生 Control 样式、OneWay/TwoWay/OneTime、DataContext 继承、资源（含空元素对象资源）、DataTemplate、TransitionSystem 动画、样式集合变更自动刷新、索引器路径、`Ease`、`Converter`/`ConverterParameter`/`StringFormat`/`FallbackValue`/`TargetNullValue`/`UpdateSourceTrigger`、`ElementName`/`RelativeSource`/`x:Static`、`TemplateBinding`/模板部件/模板触发器、`Panel.ZIndex`、`TriggerActionGroup`/`LoopTime`/`IsAutoReverse`、`ItemsPanel`/`ItemContainerStyle`/固定行高虚拟化、声明式 `Menu`/`ContextMenu`/`MenuItem`/`ToolTip`/`Popup`。
 - 不支持：设计器/热重载、原生附加值的 TwoWay、原生样式的 Trigger/Template、无 `INotifyCollectionChanged` 的集合通知、自定义 action 的嵌套内容/非 `{StaticResource}` 标记、非 `Control` 祖先接收冒泡事件、原生控件横向滚轮、`TransitionAction.To` 的标记扩展、可变行高虚拟化、模板触发器指向原生部件的 CLR 属性、`Opacity`/`RenderTransform`/`Clip`/`Effect`、每条关键帧独立 `Ease`、`Viewbox`/完整 WPF measure-arrange。
 - XAML 附加属性必须带前缀：`v:Owner.Property`（适配器 owner）或 `clr-namespace:...` 的 `local:Owner.Property`；无前缀点号属性报 `VELOX_XAML004`。
 - `x:Name` 现在既生成字段也注册进 `NameScope`；每个 XAML 根与每个 `DataTemplate`/`ControlTemplate` 各有一个作用域，查找只看最近的。工作流的 `PART_*` 仍读原生 `Control.Name`，两者不是一回事。
@@ -101,6 +102,7 @@
 - **祖先链是不变量，不是构造期快照**：`ResourceChainObserver` 盯住链上每个控件的 `ParentChanged`（不只 owner），`Control.NotifyAncestorChainChanged` 在根挂进新祖先时重跑子树的隐式样式、绑定与 DynamicResource；缓存祖先的派生控件覆写 `OnAncestorChainChanged`（`ItemsControl` 用它重找 `ScrollViewer`）。只挂在 owner 上的观察会漏掉「子树先建好、再整体挂上去」。
 - **`Control.Background` 只认作者值**：没有本地/样式 Brush 时，原生 `BackColor` 若等于父级环境值就返回 null（透明），不再从继承来的颜色合成画刷。`Border.OnPaintBackground` 在 `Backdrop` 为空时总是先 `PaintParentBackground`，圆角外侧与半透明底色才有确定的父像素；`Background == null` 时直接走同一条透明路径。
 - **显式尺寸压过 Stretch**：`XamlLayout.ArrangeXaml` 里 `Width`/`Height` 有本地值就不拉伸，交叉轴按中心对齐（横向 `StackPanel` 的固定高按钮、纵向条里的固定宽内容都靠这条）。**单内容容器**（`Border`、`ContentControl`、`Decorator`、`AdornerDecorator`、`GroupBox`、`HeaderedContentControl`、`Expander`）必须用 `XamlLayout.Arrange` 摆 XAML 子控件；直接 `child.Bounds = 内容区` 会绕过对齐，`VerticalAlignment="Center"` 被忽略、文字落在槽顶部。原生子控件仍按整块内容区摆放。
+- **布局失效是元数据驱动的**：`PropertyMetadata.AffectsMeasure` / `AffectsArrange` 由 `DependencyProperty.RaiseChanged` 扇出；`Control.InvalidateMeasure` 清到根的测量缓存并在根控件合并一次 `PerformLayout`，`InvalidateArrange` 只重排。`Control.MeasureCached` 按 `availableSize` 缓存；`XamlLayout.Measure/ArrangeXaml` 走缓存。布局属性不再需要在每个回调里手写 `Parent?.PerformLayout()`。
 - **测量把可用尺寸传下去**：`Control.MeasureCore` 调 `GetPreferredSize(availableSize)`，`TextBlock`/`ContentControl` 靠这个宽度算换行后的高度；面板重写 `MeasureCore` 时必须经 `Control.ConstrainSize` 应用自身 `Width`/`Height`/`Min*`/`Max*`，否则面板的显式尺寸会被内容尺寸绕过。`Border` 的首选尺寸 = 唯一子控件测量值 + `Padding`，所以卡片不写死 `Height` 也能按内容（含折行文本）测高；Demo 的分页卡片都走这条。
 - `ScrollViewer` 自己处理滚轮（纵向；Shift 横向），`ScrollOffset` 变化发 `ViewChanged`；它**不移动内容**，静态内容由宿主按偏移摆放，虚拟化 `ItemsControl` 按新偏移重算可见集。**拖条时 `OnScrollOffsetChanged` 被 `updatingBars` 门住**，必须由 `OnBarValueChanged` 在重置标志后补发 `ViewChanged`；漏了它滚轮能滚、拖条却只移动内容不重算可见集（表现为整块空白）。
 - **虚拟化拖条的每像素成本**：`ItemsControl.UpdateVirtualRangeCore` 在算出的 `first/last` 与上一轮相同时直接返回，只有跨行才重建/重排；`ViewChanged` 仍每像素到达宿主，宿主只移动内容（`Top = -offset`），状态文字只在跨行/可见数量变化时更新。
@@ -108,6 +110,7 @@
 - `ControlTemplate` 创建的根控件以 `Dock=Fill` 挂进模板父，普通 `Control` 不需要自己排版模板；`ItemsControl` 虚拟模式的可见范围在 `ScrollViewer.ViewportHeight == 0` 时用 viewer 的客户区高度，而不是 `ItemsControl` 自身（后者通常撑满全部条目）。
 - `StringFormat` 的 XAML `{}` 转义在生成器里剥掉再写进 `Binding.StringFormat`；生成器不再把 `{}{0:N2}` 原样交给 `string.Format`。
 - `AdornerLayer` 没有 adorner 时 `Visible=false`，不盖住子控件；运行期给窗口加 `WS_EX_LAYERED` 后必须 `SetWindowPos(... SWP_FRAMECHANGED)` 再 `SetLayeredWindowAttributes`，否则色键不生效、整层会露出洋红。
+- **轻量视觉树是 opt-in，不是第二套控件**：`VisualHost` 的 `Root` 是 `ContainerVisual`；`ShapeVisual`/`TextVisual`/`CurveBatchVisual` 只画，不创建子窗口。`Opacity`/`Effect` 会把子树落到临时位图再合成（组透明度正确，超大视觉会退化为不合成）；`Transform` 用 GDI+ 矩阵，`Clip` 用本地矩形。命中测试沿视觉树走，原生/HWND 控件仍留在 WinForms 树里，二者不互通。
 - **默认主题是暗/浅两套中性调色板**（`Theme.CreateDark`/`CreateLight`）：近黑表面、单一强调色、8px 圆角、34px 控件高。`ThemeStyles` 只给交互控件表面/边框/前景；容器保持透明，显式值/样式仍优先。`Theme.Mode` 换成浅色时，原生 WinForms 控件的暗色模式不会随运行期切换完全重绘，干净的双色截图用 `--light` 从进程启动。
 - 动画走 WinForms 适配器的互斥调度器：同一控件上的新 trigger 动画会 supersede 旧动画。
 - 布局属性：`Thickness` 是 `Margin` / `Padding` / `Border.BorderThickness` 的类型；DP 变更同步到原生 `Padding`/`Margin`，`ThicknessSampler` 已注册，`XamlTransition.Animate` 可动画这三类属性（每帧一个 box，与既有 `PaddingSampler` 相同）。

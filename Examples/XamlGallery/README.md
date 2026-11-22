@@ -46,6 +46,7 @@ process in the light mode instead.
 | Animation | Hover `TransitionAction` groups, `KeyFrameAnimation` with `LoopTime`/`IsAutoReverse`, `Thickness` animation, a custom `TriggerAction`, `VisualStateManager` |
 | Binding | Converter + parameter, `StringFormat`, `FallbackValue`, `TargetNullValue`, indexer, `ElementName`, `RelativeSource` Self/FindAncestor, `x:Static`, two-way updates, `INotifyDataErrorInfo`, a custom `ValidationRule`, `DynamicResource` |
 | Styles | Explicit/implicit styles, `BasedOn`, `Style.Template`/`ControlTemplate` with `TemplateBinding` and template triggers, `DataTrigger`/`MultiTrigger`, generated dependency properties, theme fallback, `ContentPresenter`, `HeaderedItemsControl`, `Separator` |
+| Visuals | Opt-in lightweight visual tree: `VisualHost` with `ContainerVisual`, text/shape visuals, group opacity, transform, clip, drop shadow and a batched connector scene |
 | Theme | Palette swatches, light/dark switch, gradients, fallback metrics |
 | Navigation | `Frame`/`Page` journal, detached `Window`, `NavigationWindow` |
 
@@ -54,7 +55,9 @@ process in the light mode instead.
 - The shell owns one `GalleryModel`; sections inherit its `DataContext`.
 - Theme mode swaps the palette brushes; consumers use `{DynamicResource ...}` so they follow.
   `ThemeStyles` re-applies the implicit fallback to every unstyled library control.
+- The Visuals page is the only page that uses the opt-in lightweight visual layer; every other page
+  is HWND-backed XAML. Transforms, opacity, clips and effects apply to visual nodes, not to child
+  windows.
 - Sections scroll through a native-auto-scroll `ScrollableControl`; `GalleryLayout` measures the
   content panel to its preferred height, so cards can be edited without counting pixels.
-- Platform-wall controls (MediaElement, WebBrowser, InkCanvas, Viewport3D, arbitrary child-window
-  transforms/opacity/effects) are intentionally absent.
+- Platform-wall controls (MediaElement, WebBrowser, InkCanvas, Viewport3D) are intentionally absent.

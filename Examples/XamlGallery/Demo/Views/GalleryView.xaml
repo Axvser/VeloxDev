@@ -163,6 +163,9 @@
       <v:TabItem Header="Styles">
         <local:StylesSection />
       </v:TabItem>
+      <v:TabItem Header="Visuals">
+        <local:VisualsSection />
+      </v:TabItem>
       <v:TabItem Header="Theme">
         <local:ThemeSection />
       </v:TabItem>
