@@ -18,14 +18,14 @@ public class DockPanel : Control
         "Dock",
         typeof(DockPlacement),
         typeof(DockPanel),
-        new PropertyMetadata(DockPlacement.Left, OnDockChanged));
+        new PropertyMetadata(DockPlacement.Left) { AffectsMeasure = true });
 
     /// <summary>Whether the last child fills the room left by the docked children.</summary>
     public static readonly DependencyProperty LastChildFillProperty = DependencyProperty.Register(
         nameof(LastChildFill),
         typeof(bool),
         typeof(DockPanel),
-        new PropertyMetadata(true, OnLayoutPropertyChanged));
+        new PropertyMetadata(true) { AffectsMeasure = true });
 
     /// <summary>Creates the panel with double buffering.</summary>
     public DockPanel()
@@ -53,7 +53,11 @@ public class DockPanel : Control
 
     protected internal override Size MeasureCore(Size availableSize)
     {
-        var content = XamlLayout.ContentBounds(this).Size;
+        var bounds = XamlLayout.ContentBounds(this).Size;
+        var padding = Padding;
+        var content = new Size(
+            availableSize.Width > 0 ? Math.Max(0, availableSize.Width - (int)Math.Ceiling(padding.Horizontal)) : bounds.Width,
+            availableSize.Height > 0 ? Math.Max(0, availableSize.Height - (int)Math.Ceiling(padding.Vertical)) : bounds.Height);
         var width = 0;
         var height = 0;
 
@@ -156,19 +160,5 @@ public class DockPanel : Control
         }
     }
 
-    private static void OnDockChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Control control && !control.IsDisposed)
-        {
-            control.Parent?.PerformLayout();
-        }
-    }
 
-    private static void OnLayoutPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Control control && !control.IsDisposed)
-        {
-            control.PerformLayout();
-        }
-    }
 }

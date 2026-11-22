@@ -25,35 +25,35 @@ public class ContentControl : Control
         nameof(Content),
         typeof(object),
         typeof(ContentControl),
-        new PropertyMetadata(null, OnContentPropertyChanged));
+        new PropertyMetadata(null, OnContentPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>The template used when <see cref="Content"/> is not already a control.</summary>
     public static readonly DependencyProperty ContentTemplateProperty = DependencyProperty.Register(
         nameof(ContentTemplate),
         typeof(DataTemplate),
         typeof(ContentControl),
-        new PropertyMetadata(null, OnContentTemplatePropertyChanged));
+        new PropertyMetadata(null, OnContentTemplatePropertyChanged) { AffectsMeasure = true });
 
     /// <summary>Chooses a template from the content object; a non-null result wins over <see cref="ContentTemplate"/>.</summary>
     public static readonly DependencyProperty ContentTemplateSelectorProperty = DependencyProperty.Register(
         nameof(ContentTemplateSelector),
         typeof(TemplateSelector),
         typeof(ContentControl),
-        new PropertyMetadata(null, OnContentTemplateSelectorPropertyChanged));
+        new PropertyMetadata(null, OnContentTemplateSelectorPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>How the content is placed horizontally inside the padding.</summary>
     public static readonly DependencyProperty HorizontalContentAlignmentProperty = DependencyProperty.Register(
         nameof(HorizontalContentAlignment),
         typeof(HorizontalAlignment),
         typeof(ContentControl),
-        new PropertyMetadata(HorizontalAlignment.Left, OnContentLayoutPropertyChanged));
+        new PropertyMetadata(HorizontalAlignment.Left) { AffectsArrange = true });
 
     /// <summary>How the content is placed vertically inside the padding.</summary>
     public static readonly DependencyProperty VerticalContentAlignmentProperty = DependencyProperty.Register(
         nameof(VerticalContentAlignment),
         typeof(VerticalAlignment),
         typeof(ContentControl),
-        new PropertyMetadata(VerticalAlignment.Top, OnContentLayoutPropertyChanged));
+        new PropertyMetadata(VerticalAlignment.Top) { AffectsArrange = true });
 
     private System.Windows.Forms.Control? _templateContent;
     private System.Windows.Forms.Control? _contentChild;
@@ -222,15 +222,6 @@ public class ContentControl : Control
         if (target is ContentControl control && !control.IsDisposed)
         {
             control.RebuildTemplate();
-        }
-    }
-
-    private static void OnContentLayoutPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Control control && !control.IsDisposed)
-        {
-            control.PerformLayout();
-            control.Invalidate();
         }
     }
 

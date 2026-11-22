@@ -18,21 +18,21 @@ public class WrapPanel : Control
         nameof(Orientation),
         typeof(Orientation),
         typeof(WrapPanel),
-        new PropertyMetadata(Orientation.Horizontal, OnLayoutPropertyChanged));
+        new PropertyMetadata(Orientation.Horizontal) { AffectsMeasure = true });
 
     /// <summary>A fixed slot width for every child, in pixels; zero keeps the measured width.</summary>
     public static readonly DependencyProperty ItemWidthProperty = DependencyProperty.Register(
         nameof(ItemWidth),
         typeof(int),
         typeof(WrapPanel),
-        new PropertyMetadata(0, OnLayoutPropertyChanged));
+        new PropertyMetadata(0) { AffectsMeasure = true });
 
     /// <summary>A fixed slot height for every child, in pixels; zero keeps the measured height.</summary>
     public static readonly DependencyProperty ItemHeightProperty = DependencyProperty.Register(
         nameof(ItemHeight),
         typeof(int),
         typeof(WrapPanel),
-        new PropertyMetadata(0, OnLayoutPropertyChanged));
+        new PropertyMetadata(0) { AffectsMeasure = true });
 
     /// <summary>Creates the panel with double buffering.</summary>
     public WrapPanel()
@@ -136,11 +136,4 @@ public class WrapPanel : Control
             horizontal ? totalCross + lineCross : Math.Max(totalMain, lineMain));
     }
 
-    private static void OnLayoutPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Control control && !control.IsDisposed)
-        {
-            control.PerformLayout();
-        }
-    }
 }

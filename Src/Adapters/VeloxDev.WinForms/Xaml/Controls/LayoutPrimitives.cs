@@ -307,7 +307,7 @@ internal static class XamlLayout
             var xamlMargin = xaml.Margin;
             var innerWidth = available.Width > 0 ? Math.Max(0, available.Width - (int)Math.Ceiling(xamlMargin.Horizontal)) : 0;
             var innerHeight = available.Height > 0 ? Math.Max(0, available.Height - (int)Math.Ceiling(xamlMargin.Vertical)) : 0;
-            var measured = xaml.MeasureCore(new Size(innerWidth, innerHeight));
+            var measured = xaml.MeasureCached(new Size(innerWidth, innerHeight));
             return new Size(
                 measured.Width + (int)Math.Ceiling(xamlMargin.Horizontal),
                 measured.Height + (int)Math.Ceiling(xamlMargin.Vertical));
@@ -366,7 +366,7 @@ internal static class XamlLayout
             Math.Max(0, slot.Width - (int)Math.Ceiling(margin.Horizontal)),
             Math.Max(0, slot.Height - (int)Math.Ceiling(margin.Vertical)));
 
-        var desired = child.MeasureCore(inner.Size);
+        var desired = child.MeasureCached(inner.Size);
 
         // 显式尺寸优先于 Stretch：横向堆叠的交叉轴是整条带高，若让 Stretch 无条件覆盖 Height，
         // 固定高的按钮/徽标会被拉成整行高。显式尺寸时按中心对齐，和 WPF 的观感一致。

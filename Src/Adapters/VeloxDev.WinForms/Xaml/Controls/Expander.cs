@@ -37,21 +37,21 @@ public class Expander : ContentControl
         nameof(Header),
         typeof(string),
         typeof(Expander),
-        new PropertyMetadata(string.Empty, OnLayoutPropertyChanged));
+        new PropertyMetadata(string.Empty) { AffectsMeasure = true });
 
     /// <summary>Whether the content is shown; collapsed by default.</summary>
     public static readonly DependencyProperty IsExpandedProperty = DependencyProperty.Register(
         nameof(IsExpanded),
         typeof(bool),
         typeof(Expander),
-        new PropertyMetadata(false, OnLayoutPropertyChanged));
+        new PropertyMetadata(false) { AffectsMeasure = true });
 
     /// <summary>The direction the content opens towards; downwards by default.</summary>
     public static readonly DependencyProperty ExpandDirectionProperty = DependencyProperty.Register(
         nameof(ExpandDirection),
         typeof(ExpandDirection),
         typeof(Expander),
-        new PropertyMetadata(ExpandDirection.Down, OnLayoutPropertyChanged));
+        new PropertyMetadata(ExpandDirection.Down) { AffectsMeasure = true });
 
     private const int HeaderThickness = 32;
     private bool _hoverHeader;
@@ -396,15 +396,6 @@ public class Expander : ContentControl
         };
     }
 
-    private static void OnLayoutPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Expander expander && !expander.IsDisposed)
-        {
-            expander.PerformLayout();
-            expander.Parent?.PerformLayout();
-            expander.Invalidate();
-        }
-    }
 
     private void OnThemeChanged(object? sender, EventArgs e) => Invalidate();
 }

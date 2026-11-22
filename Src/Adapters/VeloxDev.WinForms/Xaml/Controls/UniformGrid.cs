@@ -23,21 +23,21 @@ public class UniformGrid : Control
         nameof(Rows),
         typeof(int),
         typeof(UniformGrid),
-        new PropertyMetadata(0, OnLayoutPropertyChanged));
+        new PropertyMetadata(0) { AffectsMeasure = true });
 
     /// <summary>The number of columns; zero derives the column count from <see cref="Rows"/> or the child count.</summary>
     public static readonly DependencyProperty ColumnsProperty = DependencyProperty.Register(
         nameof(Columns),
         typeof(int),
         typeof(UniformGrid),
-        new PropertyMetadata(0, OnLayoutPropertyChanged));
+        new PropertyMetadata(0) { AffectsMeasure = true });
 
     /// <summary>The number of leading cells left empty in the first row; zero by default.</summary>
     public static readonly DependencyProperty FirstColumnProperty = DependencyProperty.Register(
         nameof(FirstColumn),
         typeof(int),
         typeof(UniformGrid),
-        new PropertyMetadata(0, OnLayoutPropertyChanged));
+        new PropertyMetadata(0) { AffectsMeasure = true });
 
     /// <summary>Creates the panel with double buffering.</summary>
     public UniformGrid()
@@ -177,11 +177,4 @@ public class UniformGrid : Control
         return (Math.Max(1, columns), Math.Max(1, rows));
     }
 
-    private static void OnLayoutPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Control control && !control.IsDisposed)
-        {
-            control.PerformLayout();
-        }
-    }
 }

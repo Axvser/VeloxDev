@@ -27,28 +27,28 @@ public class Grid : Control
         "Row",
         typeof(int),
         typeof(Grid),
-        new PropertyMetadata(0, OnCellPropertyChanged));
+        new PropertyMetadata(0) { AffectsMeasure = true });
 
     /// <summary>The zero-based column a child occupies.</summary>
     public static readonly DependencyProperty ColumnProperty = DependencyProperty.RegisterAttached(
         "Column",
         typeof(int),
         typeof(Grid),
-        new PropertyMetadata(0, OnCellPropertyChanged));
+        new PropertyMetadata(0) { AffectsMeasure = true });
 
     /// <summary>The number of rows a child spans; at least one.</summary>
     public static readonly DependencyProperty RowSpanProperty = DependencyProperty.RegisterAttached(
         "RowSpan",
         typeof(int),
         typeof(Grid),
-        new PropertyMetadata(1, OnCellPropertyChanged));
+        new PropertyMetadata(1) { AffectsMeasure = true });
 
     /// <summary>The number of columns a child spans; at least one.</summary>
     public static readonly DependencyProperty ColumnSpanProperty = DependencyProperty.RegisterAttached(
         "ColumnSpan",
         typeof(int),
         typeof(Grid),
-        new PropertyMetadata(1, OnCellPropertyChanged));
+        new PropertyMetadata(1) { AffectsMeasure = true });
 
     /// <summary>Creates the grid with double buffering.</summary>
     public Grid()
@@ -98,7 +98,11 @@ public class Grid : Control
 
     protected internal override Size MeasureCore(Size availableSize)
     {
-        var content = XamlLayout.ContentBounds(this).Size;
+        var bounds = XamlLayout.ContentBounds(this).Size;
+        var padding = Padding;
+        var content = new Size(
+            availableSize.Width > 0 ? Math.Max(0, availableSize.Width - (int)Math.Ceiling(padding.Horizontal)) : bounds.Width,
+            availableSize.Height > 0 ? Math.Max(0, availableSize.Height - (int)Math.Ceiling(padding.Vertical)) : bounds.Height);
         var (columns, rows) = ResolveTracks(content);
         return ConstrainSize(
             new Size(
@@ -281,22 +285,6 @@ public class Grid : Control
         }
 
         return offsets;
-    }
-
-    private static void OnCellPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Control control && !control.IsDisposed)
-        {
-            control.Parent?.PerformLayout();
-        }
-    }
-
-    private static void OnLayoutPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Control control && !control.IsDisposed)
-        {
-            control.PerformLayout();
-        }
     }
 
     private sealed class DefinitionCollection<T> : Collection<T>, IList<T>

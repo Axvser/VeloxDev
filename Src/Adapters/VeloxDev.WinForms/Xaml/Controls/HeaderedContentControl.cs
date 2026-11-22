@@ -20,7 +20,7 @@ public class HeaderedContentControl : ContentControl
         nameof(Header),
         typeof(string),
         typeof(HeaderedContentControl),
-        new PropertyMetadata(string.Empty, OnHeaderPropertyChanged));
+        new PropertyMetadata(string.Empty) { AffectsMeasure = true });
 
     /// <summary>Creates the control with the double-buffered, self-painted style it needs.</summary>
     public HeaderedContentControl()
@@ -186,15 +186,6 @@ public class HeaderedContentControl : ContentControl
         base.Dispose(disposing);
     }
 
-    private static void OnHeaderPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is HeaderedContentControl control && !control.IsDisposed)
-        {
-            control.PerformLayout();
-            control.Parent?.PerformLayout();
-            control.Invalidate();
-        }
-    }
 
     private void OnThemeChanged(object? sender, EventArgs e) => Invalidate();
 }

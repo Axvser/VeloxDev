@@ -91,4 +91,22 @@ public class PropertyMetadata
     /// properties that never reach a paint pass. Native WinForms targets are never invalidated by this flag.
     /// </remarks>
     public bool AffectsRender { get; init; } = true;
+
+    /// <summary>
+    /// Whether a change to this property invalidates the measure of the target and its ancestors.
+    /// </summary>
+    /// <remarks>
+    /// A measure invalidation also runs the layout pass that arranges the affected subtree. Set it for properties that
+    /// change a desired size, such as <c>Width</c>, <c>Padding</c>, text or a panel's spacing.
+    /// </remarks>
+    public bool AffectsMeasure { get; init; }
+
+    /// <summary>
+    /// Whether a change to this property invalidates the arrange of the target's subtree without changing its measure.
+    /// </summary>
+    /// <remarks>
+    /// Use it for alignment or position properties that do not change the desired size. <see cref="AffectsMeasure"/>
+    /// already implies an arrange pass; a property never needs both flags.
+    /// </remarks>
+    public bool AffectsArrange { get; init; }
 }

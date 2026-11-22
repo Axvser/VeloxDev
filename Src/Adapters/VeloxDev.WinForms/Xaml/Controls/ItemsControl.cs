@@ -29,63 +29,63 @@ public class ItemsControl : Control
         nameof(ItemsSource),
         typeof(IEnumerable),
         typeof(ItemsControl),
-        new PropertyMetadata(null, OnItemsSourcePropertyChanged));
+        new PropertyMetadata(null, OnItemsSourcePropertyChanged) { AffectsMeasure = true });
 
     /// <summary>The template used for each item; null draws the item's string form.</summary>
     public static readonly DependencyProperty ItemTemplateProperty = DependencyProperty.Register(
         nameof(ItemTemplate),
         typeof(DataTemplate),
         typeof(ItemsControl),
-        new PropertyMetadata(null, OnItemTemplatePropertyChanged));
+        new PropertyMetadata(null, OnItemTemplatePropertyChanged) { AffectsMeasure = true });
 
     /// <summary>Chooses a template per item; a non-null result wins over <see cref="ItemTemplate"/>.</summary>
     public static readonly DependencyProperty ItemTemplateSelectorProperty = DependencyProperty.Register(
         nameof(ItemTemplateSelector),
         typeof(TemplateSelector),
         typeof(ItemsControl),
-        new PropertyMetadata(null, OnItemTemplateSelectorPropertyChanged));
+        new PropertyMetadata(null, OnItemTemplateSelectorPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>The panel that hosts generated items, or null to stack them directly in this control.</summary>
     public static readonly DependencyProperty ItemsPanelProperty = DependencyProperty.Register(
         nameof(ItemsPanel),
         typeof(Control),
         typeof(ItemsControl),
-        new PropertyMetadata(null, OnItemsPanelPropertyChanged));
+        new PropertyMetadata(null, OnItemsPanelPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>Creates the hosting panel when <see cref="ItemsPanel"/> is not set.</summary>
     public static readonly DependencyProperty ItemsPanelTemplateProperty = DependencyProperty.Register(
         nameof(ItemsPanelTemplate),
         typeof(ItemsPanelTemplate),
         typeof(ItemsControl),
-        new PropertyMetadata(null, OnItemsPanelTemplatePropertyChanged));
+        new PropertyMetadata(null, OnItemsPanelTemplatePropertyChanged) { AffectsMeasure = true });
 
     /// <summary>A style applied to every generated XAML item container.</summary>
     public static readonly DependencyProperty ItemContainerStyleProperty = DependencyProperty.Register(
         nameof(ItemContainerStyle),
         typeof(Style),
         typeof(ItemsControl),
-        new PropertyMetadata(null, OnItemContainerStylePropertyChanged));
+        new PropertyMetadata(null, OnItemContainerStylePropertyChanged) { AffectsMeasure = true });
 
     /// <summary>Chooses a style per generated item; a non-null result wins over <see cref="ItemContainerStyle"/>.</summary>
     public static readonly DependencyProperty ItemContainerStyleSelectorProperty = DependencyProperty.Register(
         nameof(ItemContainerStyleSelector),
         typeof(StyleSelector),
         typeof(ItemsControl),
-        new PropertyMetadata(null, OnItemContainerStyleSelectorPropertyChanged));
+        new PropertyMetadata(null, OnItemContainerStyleSelectorPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>Whether only the items inside the nearest scroll viewport are realized.</summary>
     public static readonly DependencyProperty VirtualizingProperty = DependencyProperty.Register(
         nameof(Virtualizing),
         typeof(bool),
         typeof(ItemsControl),
-        new PropertyMetadata(false, OnVirtualizingPropertyChanged));
+        new PropertyMetadata(false, OnVirtualizingPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>The fixed row height used when <see cref="Virtualizing"/> is on; 24 pixels by default.</summary>
     public static readonly DependencyProperty ItemHeightProperty = DependencyProperty.Register(
         nameof(ItemHeight),
         typeof(int),
         typeof(ItemsControl),
-        new PropertyMetadata(24, OnItemHeightPropertyChanged));
+        new PropertyMetadata(24, OnItemHeightPropertyChanged) { AffectsMeasure = true });
 
     private readonly List<System.Windows.Forms.Control> _generated = [];
     private readonly Dictionary<int, System.Windows.Forms.Control> _virtualVisuals = [];

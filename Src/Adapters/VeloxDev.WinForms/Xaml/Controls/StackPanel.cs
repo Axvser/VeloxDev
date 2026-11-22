@@ -19,14 +19,14 @@ public class StackPanel : Control
         nameof(Orientation),
         typeof(Orientation),
         typeof(StackPanel),
-        new PropertyMetadata(Orientation.Vertical, OnLayoutPropertyChanged));
+        new PropertyMetadata(Orientation.Vertical) { AffectsMeasure = true });
 
     /// <summary>The number of pixels inserted between adjacent children.</summary>
     public static readonly DependencyProperty SpacingProperty = DependencyProperty.Register(
         nameof(Spacing),
         typeof(int),
         typeof(StackPanel),
-        new PropertyMetadata(0, OnLayoutPropertyChanged));
+        new PropertyMetadata(0) { AffectsMeasure = true });
 
     /// <summary>Creates the panel with double buffering.</summary>
     public StackPanel()
@@ -132,13 +132,5 @@ public class StackPanel : Control
         return new Size(
             Math.Max(0, available.Width - (int)Math.Ceiling(padding.Horizontal)),
             Math.Max(0, available.Height - (int)Math.Ceiling(padding.Vertical)));
-    }
-
-    private static void OnLayoutPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Control control && !control.IsDisposed)
-        {
-            control.Parent?.PerformLayout();
-        }
     }
 }

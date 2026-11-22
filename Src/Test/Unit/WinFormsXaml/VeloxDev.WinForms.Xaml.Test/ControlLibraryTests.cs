@@ -115,6 +115,61 @@ public sealed class ControlLibraryTests
     }
 
     [TestMethod]
+    public void ExplicitChildSize_InvalidatesTheRootLayout()
+    {
+        using var panel = new V.StackPanel { Size = new Size(200, 100), Spacing = 0 };
+        using var child = new V.Border
+        {
+            Width = 10,
+            Height = 20,
+            Margin = V.Thickness.Empty,
+            HorizontalAlignment = V.HorizontalAlignment.Left,
+        };
+        panel.Controls.Add(child);
+        panel.PerformLayout();
+
+        child.Width = 40;
+
+        Assert.AreEqual(new Rectangle(0, 0, 40, 20), child.Bounds);
+    }
+
+    [TestMethod]
+    public void Measure_ReusesTheCacheUntilTheControlIsInvalidated()
+    {
+        using var text = new V.TextBlock { Text = "a" };
+        var first = text.Measure(new Size(300, 0));
+
+        text.Text = "a much longer line that wraps onto several lines when it is measured";
+
+        var second = text.Measure(new Size(300, 0));
+        Assert.IsGreaterThan(first.Width, second.Width);
+    }
+
+    [TestMethod]
+    public void Grid_MeasuresAgainstTheAvailableConstraint()
+    {
+        using var grid = new V.Grid();
+
+        Assert.AreEqual(new Size(200, 100), grid.Measure(new Size(200, 100)));
+    }
+
+    [TestMethod]
+    public void Measure_CachesTheResultAndInvalidatesTheCache()
+    {
+        using var probe = new CountingControl();
+
+        probe.Measure(new Size(100, 100));
+        probe.Measure(new Size(100, 100));
+
+        Assert.AreEqual(1, probe.Measures, "the second measure hits the cache");
+
+        probe.Width = 40;
+        probe.Measure(new Size(100, 100));
+
+        Assert.AreEqual(2, probe.Measures, "a size change invalidates the path");
+    }
+
+    [TestMethod]
     public void StackPanel_MeasuresTheSumOfItsChildren()
     {
         using var panel = new V.StackPanel { Spacing = 2 };
@@ -409,6 +464,17 @@ public sealed class ControlLibraryTests
         }
 
         Assert.AreEqual(Color.Red.ToArgb(), bitmap.GetPixel(10, 10).ToArgb());
+    }
+
+    private sealed class CountingControl : V.Control
+    {
+        public int Measures { get; private set; }
+
+        protected override Size MeasureCore(Size availableSize)
+        {
+            Measures++;
+            return base.MeasureCore(availableSize);
+        }
     }
 
     private sealed class ProbeButton : V.Button

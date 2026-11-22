@@ -58,7 +58,7 @@ public class TextBlock : Control
         nameof(Text),
         typeof(string),
         typeof(TextBlock),
-        new PropertyMetadata(string.Empty, OnTextPropertyChanged));
+        new PropertyMetadata(string.Empty, OnTextPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>How the text is aligned horizontally inside the content rectangle.</summary>
     public static readonly DependencyProperty TextAlignmentProperty = DependencyProperty.Register(
@@ -72,14 +72,14 @@ public class TextBlock : Control
         nameof(TextWrapping),
         typeof(TextWrapping),
         typeof(TextBlock),
-        new PropertyMetadata(TextWrapping.NoWrap, OnTextPropertyChanged));
+        new PropertyMetadata(TextWrapping.NoWrap, OnTextPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>How overlong text is trimmed.</summary>
     public static readonly DependencyProperty TextTrimmingProperty = DependencyProperty.Register(
         nameof(TextTrimming),
         typeof(TextTrimming),
         typeof(TextBlock),
-        new PropertyMetadata(TextTrimming.None, OnTextPropertyChanged));
+        new PropertyMetadata(TextTrimming.None, OnTextPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>Gets or sets the text to draw.</summary>
     public new string Text
@@ -184,7 +184,6 @@ public class TextBlock : Control
         if (target is Control control && !control.IsDisposed)
         {
             control.Invalidate();
-            control.Parent?.PerformLayout();
         }
     }
 }

@@ -236,6 +236,20 @@ public sealed class DependencyProperty
         {
             xaml.OnDependencyPropertyChangedCore(this, oldValue, newValue, source);
 
+            // 布局失效由元数据统一扇出：顺序 / 位置类属性只需声明 AffectsMeasure 或 AffectsArrange，
+            // 不必在每处回调里手写 Parent?.PerformLayout()。
+            if (!xaml.IsDisposed)
+            {
+                if (Metadata.AffectsMeasure)
+                {
+                    xaml.InvalidateMeasure();
+                }
+                else if (Metadata.AffectsArrange)
+                {
+                    xaml.InvalidateArrange();
+                }
+            }
+
             // 现代 GUI 的自动脏标记：依赖属性变了，画它的控件就要重画。以前只有显式写了
             // PropertyChangedCallback 的控件会 Invalidate，自定义视图的文本/颜色因此会停旧值。
             if (Metadata.AffectsRender && !xaml.IsDisposed)

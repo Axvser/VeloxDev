@@ -59,7 +59,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         nameof(Margin),
         typeof(Thickness),
         typeof(Control),
-        new PropertyMetadata(Thickness.DefaultMargin, OnMarginPropertyChanged));
+        new PropertyMetadata(Thickness.DefaultMargin, OnMarginPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>The inner spacing between this control's edge and its children, animatable like a WPF padding.</summary>
     /// <remarks>Every change is written to the native <see cref="System.Windows.Forms.ScrollableControl.Padding"/>, so native layout and scrolling keep seeing it.</remarks>
@@ -67,7 +67,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         nameof(Padding),
         typeof(Thickness),
         typeof(Control),
-        new PropertyMetadata(Thickness.Empty, OnPaddingPropertyChanged));
+        new PropertyMetadata(Thickness.Empty, OnPaddingPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>The background colour; a WPF-named alias for the native <see cref="System.Windows.Forms.Control.BackColor"/>.</summary>
     /// <remarks>Unlike the native property, this is a dependency property, so a style, trigger or transition can drive it.</remarks>
@@ -115,56 +115,56 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         nameof(Font),
         typeof(Font),
         typeof(Control),
-        new PropertyMetadata(null, OnFontPropertyChanged));
+        new PropertyMetadata(null, OnFontPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>The requested width in pixels; a negative value leaves the native width in charge.</summary>
     public static readonly DependencyProperty WidthProperty = DependencyProperty.Register(
         nameof(Width),
         typeof(int),
         typeof(Control),
-        new PropertyMetadata(-1, OnWidthPropertyChanged));
+        new PropertyMetadata(-1, OnWidthPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>The requested height in pixels; a negative value leaves the native height in charge.</summary>
     public static readonly DependencyProperty HeightProperty = DependencyProperty.Register(
         nameof(Height),
         typeof(int),
         typeof(Control),
-        new PropertyMetadata(-1, OnHeightPropertyChanged));
+        new PropertyMetadata(-1, OnHeightPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>The smallest width layout may assign, in pixels.</summary>
     public static readonly DependencyProperty MinWidthProperty = DependencyProperty.Register(
         nameof(MinWidth),
         typeof(int),
         typeof(Control),
-        new PropertyMetadata(0, OnSizeConstraintChanged));
+        new PropertyMetadata(0, OnSizeConstraintChanged) { AffectsMeasure = true });
 
     /// <summary>The smallest height layout may assign, in pixels.</summary>
     public static readonly DependencyProperty MinHeightProperty = DependencyProperty.Register(
         nameof(MinHeight),
         typeof(int),
         typeof(Control),
-        new PropertyMetadata(0, OnSizeConstraintChanged));
+        new PropertyMetadata(0, OnSizeConstraintChanged) { AffectsMeasure = true });
 
     /// <summary>The largest width layout may assign, in pixels; <see cref="int.MaxValue"/> means unbounded.</summary>
     public static readonly DependencyProperty MaxWidthProperty = DependencyProperty.Register(
         nameof(MaxWidth),
         typeof(int),
         typeof(Control),
-        new PropertyMetadata(int.MaxValue, OnSizeConstraintChanged));
+        new PropertyMetadata(int.MaxValue, OnSizeConstraintChanged) { AffectsMeasure = true });
 
     /// <summary>The largest height layout may assign, in pixels; <see cref="int.MaxValue"/> means unbounded.</summary>
     public static readonly DependencyProperty MaxHeightProperty = DependencyProperty.Register(
         nameof(MaxHeight),
         typeof(int),
         typeof(Control),
-        new PropertyMetadata(int.MaxValue, OnSizeConstraintChanged));
+        new PropertyMetadata(int.MaxValue, OnSizeConstraintChanged) { AffectsMeasure = true });
 
     /// <summary>Whether the control and its children are painted and laid out.</summary>
     public static readonly DependencyProperty VisibilityProperty = DependencyProperty.Register(
         nameof(Visibility),
         typeof(Visibility),
         typeof(Control),
-        new PropertyMetadata(Visibility.Visible, OnVisibilityPropertyChanged));
+        new PropertyMetadata(Visibility.Visible, OnVisibilityPropertyChanged) { AffectsMeasure = true });
 
     /// <summary>Whether the control accepts input; mirrors the native <see cref="System.Windows.Forms.Control.Enabled"/>.</summary>
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.Register(
@@ -192,14 +192,14 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         nameof(HorizontalAlignment),
         typeof(HorizontalAlignment),
         typeof(Control),
-        new PropertyMetadata(HorizontalAlignment.Stretch, OnLayoutAffectingPropertyChanged));
+        new PropertyMetadata(HorizontalAlignment.Stretch) { AffectsArrange = true });
 
     /// <summary>How a layout panel places this control vertically inside its slot.</summary>
     public static readonly DependencyProperty VerticalAlignmentProperty = DependencyProperty.Register(
         nameof(VerticalAlignment),
         typeof(VerticalAlignment),
         typeof(Control),
-        new PropertyMetadata(VerticalAlignment.Stretch, OnLayoutAffectingPropertyChanged));
+        new PropertyMetadata(VerticalAlignment.Stretch) { AffectsArrange = true });
 
     private readonly Dictionary<DependencyProperty, object?> _values = [];
     private readonly Dictionary<DependencyProperty, BindingExpression> _bindings = [];
@@ -230,6 +230,15 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     private bool _applyingNativeBindings;
     private bool _pointerCaptured;
     private bool _disposed;
+
+    // 本控件最近一次测量的结果。只有 availableSize 相同才命中；失效时沿祖先链清到根。
+    private bool _measureCacheValid;
+    private Size _measureCacheAvailable;
+    private Size _measureCacheResult;
+
+    // 根控件持有的布局 pass 状态：子树里的失效请求在这里合并成一次 PerformLayout。
+    private bool _layoutPassRunning;
+    private bool _layoutPassRequested;
 
     // Brush 面与 Color 面互为镜像：只在作者直接写入时同步，样式/触发器/过渡层各自独立。
     private XamlValueSource _changeSource = XamlValueSource.Local;
@@ -527,8 +536,98 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
 
     /// <summary>Returns the size this control wants inside <paramref name="availableSize"/>.</summary>
     /// <param name="availableSize">The room the parent can offer; zero means unconstrained.</param>
-    /// <remarks>The explicit width and height win over <see cref="GetPreferredSize"/>.</remarks>
-    public Size Measure(Size availableSize) => MeasureCore(availableSize);
+    /// <remarks>The explicit width and height win over <see cref="GetPreferredSize"/>; repeated calls with the same
+    /// available size reuse the cached result until <see cref="InvalidateMeasure"/>.</remarks>
+    public Size Measure(Size availableSize) => MeasureCached(availableSize);
+
+    /// <summary>Marks the measure of this control and every ancestor as stale.</summary>
+    /// <remarks>
+    /// A layout pass runs on the topmost XAML control and coalesces further requests made during that pass. This is
+    /// the single invalidation entry for properties declared with <see cref="PropertyMetadata.AffectsMeasure"/>.
+    /// </remarks>
+    public void InvalidateMeasure()
+    {
+        if (_disposed || IsDisposed || Disposing)
+        {
+            return;
+        }
+
+        ClearMeasureCacheToRoot();
+        RequestLayoutPass();
+    }
+
+    /// <summary>Marks the arrange of this control's subtree as stale without invalidating its measure.</summary>
+    /// <remarks>Use it for alignment or position changes that do not alter the desired size.</remarks>
+    public void InvalidateArrange()
+    {
+        if (_disposed || IsDisposed || Disposing)
+        {
+            return;
+        }
+
+        RequestLayoutPass();
+    }
+
+    internal Size MeasureCached(Size availableSize)
+    {
+        if (_measureCacheValid && _measureCacheAvailable == availableSize)
+        {
+            return _measureCacheResult;
+        }
+
+        var result = MeasureCore(availableSize);
+        _measureCacheAvailable = availableSize;
+        _measureCacheResult = result;
+        _measureCacheValid = true;
+        return result;
+    }
+
+    internal void ClearMeasureCache()
+    {
+        _measureCacheValid = false;
+    }
+
+    private void ClearMeasureCacheToRoot()
+    {
+        for (Control? current = this; current is not null; current = current.Parent as Control)
+        {
+            current._measureCacheValid = false;
+        }
+    }
+
+    // 根控件的 PerformLayout 会递归走到整棵子树；期间再来的失效只标一次，结束后再跑一轮。
+    private void RequestLayoutPass()
+    {
+        Control root = this;
+        while (root.Parent is Control parent)
+        {
+            root = parent;
+        }
+
+        if (root._layoutPassRunning)
+        {
+            root._layoutPassRequested = true;
+            return;
+        }
+
+        root._layoutPassRunning = true;
+        try
+        {
+            for (var pass = 0; pass < 8 && !root.IsDisposed; pass++)
+            {
+                root._layoutPassRequested = false;
+                root.PerformLayout();
+                if (!root._layoutPassRequested)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            root._layoutPassRunning = false;
+        }
+    }
 
     /// <summary>Returns the size this control wants inside <paramref name="availableSize"/>.</summary>
     /// <param name="availableSize">The room the parent can offer; zero means unconstrained.</param>
@@ -781,7 +880,6 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             control._nativeFontFallback ??= control.NativeFont;
             control.NativeFont = font;
             control.Invalidate();
-            control.Parent?.PerformLayout();
             return;
         }
 
@@ -790,7 +888,6 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             control.NativeFont = fallback;
             control._nativeFontFallback = null;
             control.Invalidate();
-            control.Parent?.PerformLayout();
         }
     }
 
@@ -823,8 +920,6 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             control.NativeWidth = fallback;
             control._nativeWidthFallback = null;
         }
-
-        control.Parent?.PerformLayout();
     }
 
     private static void OnHeightPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
@@ -844,8 +939,6 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             control.NativeHeight = fallback;
             control._nativeHeightFallback = null;
         }
-
-        control.Parent?.PerformLayout();
     }
 
     private int NativeWidth
@@ -908,8 +1001,6 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         {
             control.Visible = visible;
         }
-
-        control.Parent?.PerformLayout();
     }
 
     private static void OnIsEnabledPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
@@ -938,14 +1029,6 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         if (target is Control control && e.NewValue is bool tabStop)
         {
             control.NativeTabStop = tabStop;
-        }
-    }
-
-    private static void OnLayoutAffectingPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is Control control && !control.IsDisposed)
-        {
-            control.Parent?.PerformLayout();
         }
     }
 
