@@ -356,7 +356,7 @@ public class HeaderedContentControl : VisualElement
 
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
-        => VisualText.Draw(
+        => VisualText.Draw(this,
             graphics,
             Header,
             DefaultFont,

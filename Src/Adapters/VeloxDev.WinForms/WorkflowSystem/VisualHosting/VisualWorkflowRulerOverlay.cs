@@ -57,7 +57,11 @@ public sealed class VisualWorkflowRulerOverlay : VisualElement
     /// <summary>The colour of the tick at world zero.</summary>
     public Color AxisColor { get; set; }
 
-    /// <summary>The font used for major-tick labels; <see langword="null"/> derives a size from the band thickness.</summary>
+    /// <summary>The font used for major-tick labels; <see langword="null"/> derives a pixel-unit font from the band thickness.</summary>
+    /// <remarks>
+    /// An explicit font is used as authored, except that a point-unit font is re-derived for 96 DPI like every other
+    /// visual text so the surface's world scale does not enlarge it twice. A pixel-unit font is used verbatim.
+    /// </remarks>
     public Font? LabelFont { get; set; }
 
     /// <summary>The left band's width from the last paint; always <see cref="RulerThickness"/>.</summary>
@@ -97,7 +101,7 @@ public sealed class VisualWorkflowRulerOverlay : VisualElement
         }
 
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var font = LabelFontForRender();
+        var font = LabelFontForRender(graphics);
 
         var spacing = Math.Max(8d, GridSpacing);
         var majorStep = spacing * Math.Max(1, MajorLineEvery);
@@ -237,15 +241,15 @@ public sealed class VisualWorkflowRulerOverlay : VisualElement
         base.Dispose(disposing);
     }
 
-    private Font LabelFontForRender()
+    private Font LabelFontForRender(Graphics graphics)
     {
         if (LabelFont is { } custom)
         {
-            return custom;
+            return ResolveDrawFont(custom, graphics);
         }
 
-        // Points, not pixels: the font follows the surface DPI while its size stays tied to the band.
-        var size = (float)Math.Clamp(RulerThickness * 0.27d, 8d, 12d);
+        // 用像素而非点：标尺按逻辑单位排版，像素字体在表面的世界缩放下大小不变，点位字体会被放大两次。
+        var size = (float)Math.Clamp(RulerThickness * 0.27d, 9d, 13d);
         return AutoFont(size);
     }
 
@@ -253,7 +257,7 @@ public sealed class VisualWorkflowRulerOverlay : VisualElement
     {
         if (!_autoFonts.TryGetValue(size, out var font))
         {
-            font = new Font("Segoe UI", size, FontStyle.Regular, GraphicsUnit.Point);
+            font = new Font("Segoe UI", size, FontStyle.Regular, GraphicsUnit.Pixel);
             _autoFonts[size] = font;
         }
 

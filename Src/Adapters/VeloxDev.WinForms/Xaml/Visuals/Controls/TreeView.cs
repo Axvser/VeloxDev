@@ -126,7 +126,7 @@ public class TreeViewItem : VisualElement
             (int)Math.Ceiling(Padding.Top),
             Math.Max(0, (int)Math.Ceiling(Bounds.Width - Padding.Horizontal)),
             Math.Max(0, (int)Math.Ceiling(Bounds.Height - Padding.Vertical)));
-        VisualText.Draw(
+        VisualText.Draw(this,
             graphics,
             Header,
             font,

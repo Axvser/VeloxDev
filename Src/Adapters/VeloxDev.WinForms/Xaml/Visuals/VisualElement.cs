@@ -325,8 +325,13 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>The surface that hosts this element, resolved through the parent chain.</summary>
     public VisualSurface? Surface => _surface ?? ParentElement?.Surface;
 
-    /// <summary>The rendering DPI of the hosting surface; 96 when detached.</summary>
-    protected int RenderDpi => Surface?.RenderDpi ?? 96;
+    /// <summary>The DPI used to measure text.</summary>
+    /// <remarks>
+    /// Always 96: the visual tree is laid out in logical units and the surface applies the monitor scale once when
+    /// painting. Reporting the physical control DPI here would make a point font both measure and render at the
+    /// high DPI, then get scaled a second time by the world transform.
+    /// </remarks>
+    protected int RenderDpi => 96;
 
     /// <summary>The style explicitly assigned to this element, or <see langword="null"/>.</summary>
     /// <remarks>

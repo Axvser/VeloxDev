@@ -126,7 +126,7 @@ public class Expander : VisualElement
                 });
         }
 
-        VisualText.Draw(
+        VisualText.Draw(this,
             graphics,
             Header,
             DefaultFont,
@@ -303,7 +303,7 @@ public class GroupBox : VisualElement
         {
             using var background = new SolidBrush(Background?.ApproximateColor ?? theme.Surface);
             graphics.FillRectangle(background, 10f, 0f, headerWidth, 14f);
-            VisualText.Draw(
+            VisualText.Draw(this,
                 graphics,
                 Header,
                 DefaultFont,
@@ -440,7 +440,7 @@ public class TabControl : VisualElement
                 graphics.DrawLine(accent, tab.Left + 6f, tab.Bottom - 1f, tab.Right - 6f, tab.Bottom - 1f);
             }
 
-            VisualText.Draw(
+            VisualText.Draw(this,
                 graphics,
                 Items[index].Header,
                 DefaultFont,

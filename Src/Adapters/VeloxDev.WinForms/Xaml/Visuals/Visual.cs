@@ -56,6 +56,7 @@ public abstract class Visual : WinformsObject
     private Bitmap? _cache;
     private bool _cacheDirty = true;
     private CacheKey _cacheKey;
+    private Dictionary<(Font Font, int Dpi), Font>? _drawFonts;
 
     /// <summary>Marks this visual's bitmap cache and every enclosing cache dirty.</summary>
     public void InvalidateCache()
@@ -64,12 +65,54 @@ public abstract class Visual : WinformsObject
         Parent?.InvalidateCache();
     }
 
-    /// <summary>Disposes this visual's cached bitmap, if any.</summary>
+    // 释放位图缓存与本视觉派生出的绘制字体。
     internal void DisposeCache()
     {
         _cache?.Dispose();
         _cache = null;
         _cacheDirty = true;
+
+        if (_drawFonts is { } fonts)
+        {
+            foreach (var font in fonts.Values)
+            {
+                font.Dispose();
+            }
+
+            fonts.Clear();
+        }
+    }
+
+    // 点位字体由 GDI+ 按 Graphics 的 DPI 解释；表面又叠了一层世界缩放，先折回 96 DPI 才不会放大两次。
+    // 像素字体本身就是逻辑像素，保持原样。
+    internal Font ResolveDrawFont(Font font, Graphics graphics)
+    {
+        if (font.Unit != GraphicsUnit.Point)
+        {
+            return font;
+        }
+
+        var dpi = (int)Math.Round(graphics.DpiY);
+        if (dpi <= 0 || dpi == 96)
+        {
+            return font;
+        }
+
+        _drawFonts ??= [];
+        var key = (font, dpi);
+        if (!_drawFonts.TryGetValue(key, out var derived))
+        {
+            derived = new Font(
+                font.FontFamily,
+                font.Size * 96f / dpi,
+                font.Style,
+                GraphicsUnit.Point,
+                font.GdiCharSet,
+                font.GdiVerticalFont);
+            _drawFonts[key] = derived;
+        }
+
+        return derived;
     }
 
     /// <summary>Paints this visual and its children into <paramref name="graphics"/>.</summary>

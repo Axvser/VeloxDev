@@ -39,8 +39,9 @@ public class VisualSurface : System.Windows.Forms.Control
     private MouseButtons _buttons;
     private bool _layoutValid;
     private Size _layoutSize;
-    private int _renderDpi;
-    private bool _renderDpiValid;
+    private float _dpiScale;
+    private bool _dpiScaleValid;
+    private float _dpiScaleOverride;
 
     /// <summary>Creates the surface with the double-buffered paint style it needs.</summary>
     public VisualSurface()
@@ -102,24 +103,86 @@ public class VisualSurface : System.Windows.Forms.Control
     /// <summary>Whether the surface currently has the native keyboard focus.</summary>
     public bool HasKeyboardFocus => Focused;
 
-    internal int RenderDpi
+    /// <summary>The physical pixels per logical unit; 1 while the control has no handle.</summary>
+    /// <remarks>
+    /// Layout, input and painting all use logical device-independent pixels (DIPs). The control scales the logical
+    /// tree by <see cref="DpiScale"/> when it paints, so element sizes and authored fonts stay identical at every
+    /// monitor scale. Tests can pin a scale with <see cref="DpiScaleOverride"/>.
+    /// </remarks>
+    public float DpiScale
     {
         get
         {
-            if (_renderDpiValid)
+            if (_dpiScaleOverride > 0f)
             {
-                return _renderDpi;
+                return _dpiScaleOverride;
             }
 
             if (!IsHandleCreated)
             {
-                return 96;
+                return 1f;
             }
 
+            if (_dpiScaleValid)
+            {
+                return _dpiScale;
+            }
+
+            _dpiScale = DeviceDpiValue / 96f;
+            _dpiScaleValid = true;
+            return _dpiScale;
+        }
+    }
+
+    /// <summary>The client area in logical units: <see cref="Control.ClientSize"/> divided by <see cref="DpiScale"/>.</summary>
+    public Size LogicalClientSize
+    {
+        get
+        {
+            var scale = DpiScale;
+            if (scale <= 0f)
+            {
+                scale = 1f;
+            }
+
+            return new Size(
+                Math.Max(0, (int)Math.Round(ClientSize.Width / scale)),
+                Math.Max(0, (int)Math.Round(ClientSize.Height / scale)));
+        }
+    }
+
+    /// <summary>Pins <see cref="DpiScale"/> instead of deriving it from the device; 0 restores automatic scaling.</summary>
+    /// <remarks>
+    /// Intended for tests and for hosts that preview a different monitor scale. It does not change the control's
+    /// actual DPI awareness; it only tells layout, painting and input which scale to assume.
+    /// </remarks>
+    public float DpiScaleOverride
+    {
+        get => _dpiScaleOverride;
+        set
+        {
+            var normalized = Math.Max(0f, value);
+            if (Math.Abs(_dpiScaleOverride - normalized) < 0.0001f)
+            {
+                return;
+            }
+
+            _dpiScaleOverride = normalized;
+            _dpiScaleValid = false;
+            InvalidateSurface();
+        }
+    }
+
+    private int DeviceDpiValue
+    {
+        get
+        {
+#if NETFRAMEWORK
             using var graphics = Graphics.FromHwnd(Handle);
-            _renderDpi = (int)Math.Round(graphics.DpiX);
-            _renderDpiValid = true;
-            return _renderDpi;
+            return (int)Math.Round(graphics.DpiX);
+#else
+            return DeviceDpi;
+#endif
         }
     }
 
@@ -155,7 +218,8 @@ public class VisualSurface : System.Windows.Forms.Control
             return;
         }
 
-        var rectangle = Rectangle.Round(damage);
+        // 脏区以逻辑单位传入，Invalidate 却按物理客户区像素工作。
+        var rectangle = ToPhysical(Rectangle.Round(damage));
         if (rectangle.Width <= 0 || rectangle.Height <= 0)
         {
             return;
@@ -176,8 +240,48 @@ public class VisualSurface : System.Windows.Forms.Control
     /// <summary>Renders the tree into <paramref name="graphics"/> at <paramref name="size"/>.</summary>
     /// <param name="graphics">The target surface.</param>
     /// <param name="size">The logical size of the surface.</param>
+    /// <remarks>
+    /// This is the deterministic test and export path: <paramref name="size"/> and every coordinate are logical,
+    /// and no DPI transform is applied even when the control itself runs at a non-96 DPI. Use
+    /// <see cref="RenderPhysical"/> to paint a real client area at the current <see cref="DpiScale"/>.
+    /// </remarks>
     public void RenderTo(Graphics graphics, Size size)
         => RenderCore(graphics, size, new Rectangle(0, 0, size.Width, size.Height));
+
+    // 把逻辑树画到物理客户区：先按 DPI 缩放世界坐标，再由 RenderCore 按逻辑尺寸排版。
+    internal void RenderPhysical(Graphics graphics, Rectangle deviceClip)
+    {
+        if (graphics is null) throw new ArgumentNullException(nameof(graphics));
+
+        var scale = DpiScale;
+        if (scale <= 0f)
+        {
+            scale = 1f;
+        }
+
+        var logicalClip = ToLogical(deviceClip, scale);
+        if (logicalClip.Width <= 0 || logicalClip.Height <= 0)
+        {
+            return;
+        }
+
+        var state = graphics.Save();
+        try
+        {
+            if (Math.Abs(scale - 1f) > 0.0001f)
+            {
+                graphics.ScaleTransform(scale, scale);
+            }
+
+            // 裁剪区必须在缩放之后设置，才会和其余坐标一样按逻辑单位解释。
+            graphics.SetClip(logicalClip);
+            RenderCore(graphics, LogicalClientSize, logicalClip);
+        }
+        finally
+        {
+            graphics.Restore(state);
+        }
+    }
 
     private void RenderCore(Graphics graphics, Size size, Rectangle clearArea)
     {
@@ -242,13 +346,14 @@ public class VisualSurface : System.Windows.Forms.Control
         return true;
     }
 
-    /// <summary>Injects a pointer press at a surface point.</summary>
-    /// <param name="point">The point in surface coordinates.</param>
+    /// <summary>Injects a pointer press at a client point.</summary>
+    /// <param name="point">The point in physical client pixels; it is converted to logical surface coordinates.</param>
     /// <param name="button">The pressed button.</param>
     /// <param name="clickCount">The click count; at least one.</param>
     /// <returns><see langword="true"/> when an element handled the event.</returns>
     public bool ProcessPointerDown(PointF point, MouseButtons button, int clickCount = 1)
     {
+        point = ToLogical(point);
         var target = FindElementAt(point);
         DismissPopupsFor(target);
         if (target is not null)
@@ -272,11 +377,12 @@ public class VisualSurface : System.Windows.Forms.Control
         return args.Handled;
     }
 
-    /// <summary>Injects a pointer move at a surface point.</summary>
-    /// <param name="point">The point in surface coordinates.</param>
+    /// <summary>Injects a pointer move at a client point.</summary>
+    /// <param name="point">The point in physical client pixels; it is converted to logical surface coordinates.</param>
     /// <returns><see langword="true"/> when an element handled the event.</returns>
     public bool ProcessPointerMove(PointF point)
     {
+        point = ToLogical(point);
         var hoverTarget = FindElementAt(point);
         UpdateHover(point, hoverTarget);
         var target = _capture ?? hoverTarget;
@@ -286,12 +392,13 @@ public class VisualSurface : System.Windows.Forms.Control
         return args.Handled;
     }
 
-    /// <summary>Injects a pointer release at a surface point.</summary>
-    /// <param name="point">The point in surface coordinates.</param>
+    /// <summary>Injects a pointer release at a client point.</summary>
+    /// <param name="point">The point in physical client pixels; it is converted to logical surface coordinates.</param>
     /// <param name="button">The released button.</param>
     /// <returns><see langword="true"/> when an element handled the event.</returns>
     public bool ProcessPointerUp(PointF point, MouseButtons button)
     {
+        point = ToLogical(point);
         var target = _capture ?? FindElementAt(point);
         _buttons &= ~button;
         var args = new VisualPointerEventArgs(point, _buttons, button, 1, 0, ModifierKeys);
@@ -305,12 +412,13 @@ public class VisualSurface : System.Windows.Forms.Control
         return args.Handled;
     }
 
-    /// <summary>Injects a wheel turn at a surface point.</summary>
-    /// <param name="point">The point in surface coordinates.</param>
+    /// <summary>Injects a wheel turn at a client point.</summary>
+    /// <param name="point">The point in physical client pixels; it is converted to logical surface coordinates.</param>
     /// <param name="delta">The wheel delta; positive scrolls up.</param>
     /// <returns><see langword="true"/> when an element handled the event.</returns>
     public bool ProcessPointerWheel(PointF point, int delta)
     {
+        point = ToLogical(point);
         var target = FindElementAt(point);
         var args = new VisualPointerEventArgs(point, _buttons, MouseButtons.None, 1, delta, ModifierKeys);
         target?.RaisePointerWheel(args);
@@ -370,8 +478,8 @@ public class VisualSurface : System.Windows.Forms.Control
         return args.Handled;
     }
 
-    /// <summary>Finds the deepest element under a surface point.</summary>
-    /// <param name="point">The point in surface coordinates.</param>
+    /// <summary>Finds the deepest element under a logical surface point.</summary>
+    /// <param name="point">The point in logical surface coordinates (DIPs), never physical client pixels.</param>
     public VisualElement? FindElementAt(PointF point)
     {
         if (_root is null)
@@ -379,7 +487,7 @@ public class VisualSurface : System.Windows.Forms.Control
             return null;
         }
 
-        EnsureLayout(ClientSize);
+        EnsureLayout(LogicalClientSize);
         var hit = _overlay.HitTestVisual(point) ?? _root.HitTestVisual(point);
         for (var current = hit; current is not null; current = current.Parent)
         {
@@ -392,6 +500,7 @@ public class VisualSurface : System.Windows.Forms.Control
         return null;
     }
 
+    // bounds 是逻辑单位；原生 HWND 必须按物理客户区像素摆放。
     internal void PlaceNative(NativeControlHost owner, System.Windows.Forms.Control child, Rectangle bounds)
     {
         if (!_nativeChildren.TryGetValue(owner, out var existing))
@@ -408,9 +517,10 @@ public class VisualSurface : System.Windows.Forms.Control
 
         _placedNative.Add(owner);
 
-        if (child.Bounds != bounds)
+        var physical = ToPhysical(bounds);
+        if (child.Bounds != physical)
         {
-            child.Bounds = bounds;
+            child.Bounds = physical;
         }
 
         child.Visible = owner.IsVisible && owner.Visibility == XamlVisibility.Visible;
@@ -435,6 +545,7 @@ public class VisualSurface : System.Windows.Forms.Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
+        // 这里追踪的脏区是物理像素；RenderPhysical 再把它换算成逻辑单位。
         var damage = _damageFull
             ? new Rectangle(0, 0, ClientSize.Width, ClientSize.Height)
             : e.ClipRectangle.Width > 0 && e.ClipRectangle.Height > 0
@@ -445,26 +556,35 @@ public class VisualSurface : System.Windows.Forms.Control
             return;
         }
 
-        var state = e.Graphics.Save();
-        try
-        {
-            e.Graphics.SetClip(damage);
-            RenderCore(e.Graphics, ClientSize, damage);
-        }
-        finally
-        {
-            e.Graphics.Restore(state);
-        }
+        RenderPhysical(e.Graphics, damage);
 
         _damage = Rectangle.Empty;
         _damageFull = false;
     }
 
     /// <inheritdoc />
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        _dpiScaleValid = false;
+        InvalidateSurface();
+    }
+
+#if !NETFRAMEWORK
+    /// <inheritdoc />
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+        _dpiScaleValid = false;
+        InvalidateSurface();
+    }
+#endif
+
+    /// <inheritdoc />
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        _renderDpiValid = false;
+        _dpiScaleValid = false;
         InvalidateSurface();
     }
 
@@ -503,7 +623,9 @@ public class VisualSurface : System.Windows.Forms.Control
     protected override void OnMouseEnter(EventArgs e)
     {
         base.OnMouseEnter(e);
-        UpdateHover(PointToClient(Cursor.Position), FindElementAt(PointToClient(Cursor.Position)));
+        // PointToClient 返回物理坐标，悬停链用的是逻辑坐标。
+        var point = ToLogical(PointToClient(Cursor.Position));
+        UpdateHover(point, FindElementAt(point));
     }
 
     /// <inheritdoc />
@@ -690,6 +812,38 @@ public class VisualSurface : System.Windows.Forms.Control
         _hoverChain.Clear();
         _hoverChain.AddRange(next);
     }
+
+    private PointF ToLogical(PointF point)
+    {
+        var scale = DpiScale;
+        return scale <= 0f || Math.Abs(scale - 1f) < 0.0001f
+            ? point
+            : new PointF(point.X / scale, point.Y / scale);
+    }
+
+    private Rectangle ToPhysical(Rectangle rectangle)
+    {
+        var scale = DpiScale;
+        if (scale <= 0f || Math.Abs(scale - 1f) < 0.0001f)
+        {
+            return rectangle;
+        }
+
+        return new Rectangle(
+            (int)Math.Floor(rectangle.X * scale),
+            (int)Math.Floor(rectangle.Y * scale),
+            Math.Max(1, (int)Math.Ceiling(rectangle.Width * scale)),
+            Math.Max(1, (int)Math.Ceiling(rectangle.Height * scale)));
+    }
+
+    private static Rectangle ToLogical(Rectangle rectangle, float scale)
+        => scale <= 0f || Math.Abs(scale - 1f) < 0.0001f
+            ? rectangle
+            : new Rectangle(
+                (int)Math.Floor(rectangle.X / scale),
+                (int)Math.Floor(rectangle.Y / scale),
+                Math.Max(1, (int)Math.Ceiling(rectangle.Width / scale)),
+                Math.Max(1, (int)Math.Ceiling(rectangle.Height / scale)));
 
     private void EnsureLayout(Size size)
     {

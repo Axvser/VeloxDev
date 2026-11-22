@@ -110,7 +110,13 @@ public class TextVisual : Visual
             FormatFlags = Wrap ? 0 : StringFormatFlags.NoWrap,
         };
         graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-        graphics.DrawString(Text, Font, brush, new RectangleF(0f, 0f, Bounds.Width, Bounds.Height), format);
+        // 表面按 DPI 做世界缩放，点位字体要先折回 96 DPI，否则会被放大两次；像素字体保持原样。
+        graphics.DrawString(
+            Text,
+            ResolveDrawFont(Font, graphics),
+            brush,
+            new RectangleF(0f, 0f, Bounds.Width, Bounds.Height),
+            format);
     }
 }
 

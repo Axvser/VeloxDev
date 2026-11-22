@@ -5,9 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
-    <!-- The visual backend draws in 96-DPI coordinates; let Windows scale the whole window so a 100-unit
-         width is the same physical size as WPF's 100 DIP (the XamlGallery demo uses the same mode). -->
-    <ApplicationHighDpiMode>DpiUnawareGdiScaled</ApplicationHighDpiMode>
+    <!-- The visual backend keeps its public layout in logical DIPs (96 DPI) and scales its own Graphics by
+         DeviceDpi/96. Run per-monitor aware so the window itself is laid out at the real monitor DPI instead
+         of letting Windows bitmap-scale a DpiUnaware window. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
   <ItemGroup>

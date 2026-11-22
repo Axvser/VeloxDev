@@ -18,6 +18,7 @@ namespace Demo.Views.Workflow;
 /// </summary>
 public sealed class InfoOverlay : Panel
 {
+    // 固定指标按 96-DPI 逻辑值书写；Scaled 换算成当前监视器的像素。
     private const int PadX = 10;
     private const int PadTop = 8;
     private const int LineGap = 4;
@@ -37,6 +38,24 @@ public sealed class InfoOverlay : Panel
     private INotifyPropertyChanged? _layoutNotify;
     private string[] _lines = [];
     private string _copyText = "";
+    private Graphics? _measure;
+
+    private int Scaled(int logical) => (int)Math.Round(logical * DeviceDpi / 96f);
+
+    // 用控件自己的 Graphics 量文字，点制字体才按当前监视器 DPI 解析，和 Graphics.DrawString 同一基准；
+    // TextRenderer 的静态重载走屏幕 DC。
+    private Graphics? MeasureGraphics
+    {
+        get
+        {
+            if (!IsHandleCreated || IsDisposed)
+            {
+                return null;
+            }
+
+            return _measure ??= CreateGraphics();
+        }
+    }
 
     /// <summary>Creates a self-painting info HUD with a bottom-right copy button.</summary>
     public InfoOverlay()
@@ -51,7 +70,7 @@ public sealed class InfoOverlay : Panel
             BackColor = s_btnBg,
             ForeColor = s_btnFg,
             Cursor = Cursors.Hand,
-            Size = new Size(56, 24),
+            Size = new Size(Scaled(56), Scaled(24)),
         };
         _copy.FlatAppearance.BorderColor = s_btnFg;
         _copy.Click += (_, _) =>
@@ -130,18 +149,24 @@ public sealed class InfoOverlay : Panel
 
         int maxW = 0;
         int lineH = 0;
+        var measure = MeasureGraphics;
         foreach (var line in _lines)
         {
-            var size = TextRenderer.MeasureText(line, _font);
+            var size = measure is null
+                ? TextRenderer.MeasureText(line, _font)
+                : Size.Ceiling(measure.MeasureString(line, _font));
             maxW = Math.Max(maxW, size.Width);
             lineH = Math.Max(lineH, size.Height);
         }
 
-        int w = Math.Max(120, maxW + PadX * 2 + RightZone);
-        int h = Math.Max(40, _lines.Length * (lineH + LineGap) - LineGap + PadTop * 2);
+        int padX = Scaled(PadX);
+        int padTop = Scaled(PadTop);
+        int lineGap = Scaled(LineGap);
+        int w = Math.Max(Scaled(120), maxW + padX * 2 + Scaled(RightZone));
+        int h = Math.Max(Scaled(40), _lines.Length * (lineH + lineGap) - lineGap + padTop * 2);
         if (Width != w || Height != h)
         {
-            SetBounds(Left, Math.Max(0, (Parent?.ClientSize.Height ?? 0) - h - 12), w, h);
+            SetBounds(Left, Math.Max(0, (Parent?.ClientSize.Height ?? 0) - h - Scaled(12)), w, h);
             changed = true;
         }
 
@@ -166,17 +191,45 @@ public sealed class InfoOverlay : Panel
     // 复制按钮摆到面板右下，覆盖层钉在父容器左下
     private void LayoutButton()
     {
-        _copy.Location = new Point(Width - _copy.Width - 6, Height - _copy.Height - 6);
+        var inset = Scaled(6);
+        _copy.Location = new Point(Width - _copy.Width - inset, Height - _copy.Height - inset);
 
         if (Parent is not null)
         {
-            int left = Math.Max(4, 40); // 让开左侧标尺带
-            int top = Math.Max(4, Parent.ClientSize.Height - Height - 12);
+            int left = Math.Max(Scaled(4), Scaled(40)); // 让开 28-DIP 的左侧标尺带
+            int top = Math.Max(Scaled(4), Parent.ClientSize.Height - Height - Scaled(12));
             if (Left != left || Top != top)
             {
                 Location = new Point(left, top);
             }
         }
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+
+        // 句柄重建后缓存里的 Graphics 失效。
+        _measure?.Dispose();
+        _measure = null;
+        ApplyDpiScale();
+    }
+
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+
+        // 缓存的 Graphics 还停在旧监视器 DPI。
+        _measure?.Dispose();
+        _measure = null;
+        ApplyDpiScale();
+    }
+
+    // 原生面板与按钮按物理像素布局；换监视器 DPI 后重算这些指标，保持逻辑尺寸并让开标尺带。
+    private void ApplyDpiScale()
+    {
+        _copy.Size = new Size(Scaled(56), Scaled(24));
+        UpdateText();
     }
 
     protected override void OnResize(EventArgs e)
@@ -191,7 +244,7 @@ public sealed class InfoOverlay : Panel
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         _round.Reset();
-        _round.AddRoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 6);
+        _round.AddRoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), Scaled(6));
         using (var bg = new SolidBrush(s_bg))
         using (var border = new Pen(s_border))
         {
@@ -199,13 +252,24 @@ public sealed class InfoOverlay : Panel
             g.DrawPath(border, _round);
         }
 
-        int y = PadTop;
+        int y = Scaled(PadTop);
         foreach (var line in _lines)
         {
             using var b = new SolidBrush(s_text);
-            g.DrawString(line, _font, b, PadX, y);
-            y += (int)g.MeasureString("Ag", _font).Height + LineGap;
+            g.DrawString(line, _font, b, Scaled(PadX), y);
+            y += (int)g.MeasureString("Ag", _font).Height + Scaled(LineGap);
         }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _measure?.Dispose();
+            _measure = null;
+        }
+
+        base.Dispose(disposing);
     }
 
     private string[] BuildLines()

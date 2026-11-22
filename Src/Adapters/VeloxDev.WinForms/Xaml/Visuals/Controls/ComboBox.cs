@@ -229,7 +229,7 @@ public class ComboBox : VisualElement
             (int)Math.Ceiling(Padding.Top),
             Math.Max(0, bounds.Width - (int)Math.Ceiling(Padding.Horizontal) - 18),
             Math.Max(0, bounds.Height - (int)Math.Ceiling(Padding.Vertical)));
-        VisualText.Draw(
+        VisualText.Draw(this,
             graphics,
             text,
             DefaultFont,

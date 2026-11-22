@@ -135,7 +135,7 @@ public class Button : VisualElement
         var foreground = Foreground.IsEmpty
             ? (IsEnabled ? theme.Foreground : theme.DisabledForeground)
             : Foreground;
-        VisualText.Draw(
+        VisualText.Draw(this,
             graphics,
             Text,
             Font,
@@ -545,7 +545,7 @@ public class TextBox : VisualElement
             {
                 if (!string.IsNullOrEmpty(Placeholder))
                 {
-                    VisualText.Draw(
+                    VisualText.Draw(this,
                         graphics,
                         Placeholder,
                         Font,
@@ -1048,7 +1048,7 @@ public class TextBox : VisualElement
                 content.Top + (index * _lineHeight),
                 Math.Max(content.Width, width + 2f),
                 _lineHeight);
-            VisualText.Draw(
+            VisualText.Draw(this,
                 graphics,
                 text,
                 Font,

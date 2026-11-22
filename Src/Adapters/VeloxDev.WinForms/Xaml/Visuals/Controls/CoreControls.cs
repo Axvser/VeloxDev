@@ -338,7 +338,7 @@ public class TextBlock : VisualElement
             XamlTextAlignment.Right => StringAlignment.Far,
             _ => StringAlignment.Near,
         };
-        VisualText.Draw(
+        VisualText.Draw(this,
             graphics,
             Text,
             Font,

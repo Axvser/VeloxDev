@@ -191,7 +191,7 @@ public class VisualContextMenu : VisualPopup
                 (int)Math.Ceiling(row.Top),
                 Math.Max(0, (int)Math.Ceiling(row.Width - CheckColumn - ArrowColumn - 8f)),
                 (int)Math.Ceiling(row.Height));
-            VisualText.Draw(
+            VisualText.Draw(this,
                 graphics,
                 item.Header,
                 DefaultFont,
@@ -208,7 +208,7 @@ public class VisualContextMenu : VisualPopup
                     (int)Math.Ceiling(row.Top),
                     Math.Max(0, (int)Math.Ceiling(row.Width - ArrowColumn - 8f)),
                     (int)Math.Ceiling(row.Height));
-                VisualText.Draw(
+                VisualText.Draw(this,
                     graphics,
                     gestureText,
                     DefaultFont,
@@ -478,7 +478,7 @@ public class VisualMenu : Panel
                 graphics.FillPath(background, path);
             }
 
-            VisualText.Draw(
+            VisualText.Draw(this,
                 graphics,
                 Items[index].Header,
                 DefaultFont,

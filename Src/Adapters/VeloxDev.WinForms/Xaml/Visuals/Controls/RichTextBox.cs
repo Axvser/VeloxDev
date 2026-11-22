@@ -312,7 +312,7 @@ public class RichTextBox : VisualElement
                 var color = cell.Style.Foreground.IsEmpty
                     ? Foreground.IsEmpty ? theme.Foreground : Foreground
                     : cell.Style.Foreground;
-                VisualText.Draw(
+                VisualText.Draw(this,
                     graphics,
                     cell.Value.ToString(),
                     font,

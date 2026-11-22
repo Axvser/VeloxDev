@@ -108,7 +108,7 @@ public class Calendar : VisualElement
         }
 
         var monthTitle = DisplayMonth.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
-        VisualText.Draw(
+        VisualText.Draw(this,
             graphics,
             monthTitle,
             DefaultFont,
@@ -125,7 +125,7 @@ public class Calendar : VisualElement
             var day = (DayOfWeek)((firstWeekDay + column) % 7);
             var label = CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedDayName(day);
             label = label.Length > 2 ? label.Substring(0, 2) : label;
-            VisualText.Draw(
+            VisualText.Draw(this,
                 graphics,
                 label,
                 DefaultFont,
@@ -180,7 +180,7 @@ public class Calendar : VisualElement
                     cell.Height - 5f);
             }
 
-            VisualText.Draw(
+            VisualText.Draw(this,
                 graphics,
                 dayNumber.ToString(CultureInfo.CurrentCulture),
                 DefaultFont,
@@ -429,7 +429,7 @@ public class DatePicker : VisualElement
             return;
         }
 
-        VisualText.Draw(
+        VisualText.Draw(this,
             graphics,
             text,
             DefaultFont,

@@ -80,6 +80,9 @@ namespace Demo
 
         private readonly System.Windows.Forms.Timer _uiTimer = new() { Interval = 500 };
 
+        // 这里设置的指标发生在 WinForms 自动缩放之后，必须自己把 96-DPI 设计值换成当前监视器像素。
+        private int Dip(int logical) => (int)Math.Round(logical * DeviceDpi / 96f);
+
         public Form1()
         {
             InitializeComponent();
@@ -114,6 +117,22 @@ namespace Demo
             RepaintShellDeferred();
         }
 
+        /// <inheritdoc />
+        protected override void OnDpiChanged(DpiChangedEventArgs e)
+        {
+            base.OnDpiChanged(e);
+
+            // 外壳由 AutoScaleMode.Font 缩放；排到消息队列末尾再按新 DPI 重新钉住检查器宽度。
+            if (IsHandleCreated && !IsDisposed)
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    PositionInspector();
+                    RepaintShellDeferred();
+                }));
+            }
+        }
+
         // The shell's cards and strips are custom-painted containers with child labels. WinForms can finish the
         // parent's paint after a child has drawn, which leaves a label invisible until its own WM_PAINT runs; a
         // single invalidate(true) on the containers after layout puts every label back.
@@ -135,7 +154,7 @@ namespace Demo
             _mainContent.Refresh();
         }
 
-        // The inspector's width is a constant of the shell, not a fraction: the Avalonia grid pins it at 348.
+        // The inspector's width is a constant of the shell, not a fraction: the Avalonia grid pins it at 348 DIPs.
         // SplitterDistance is only valid after the container has a width, so it is set once the form is shown.
         private void PositionInspector()
         {
@@ -143,10 +162,10 @@ namespace Demo
 
             // Minimums are set only once the control has a width: assigning them while the splitter is still
             // at its construction size makes the framework clamp SplitterDistance to an impossible range.
-            _rightSplit.Panel1MinSize = 520;
-            _rightSplit.Panel2MinSize = 260;
+            _rightSplit.Panel1MinSize = Dip(520);
+            _rightSplit.Panel2MinSize = Dip(260);
 
-            var distance = _rightSplit.Width - 348 - _rightSplit.SplitterWidth;
+            var distance = _rightSplit.Width - Dip(348) - _rightSplit.SplitterWidth;
             if (distance < _rightSplit.Panel1MinSize) return;
             if (distance > _rightSplit.Width - _rightSplit.Panel2MinSize) return;
             _rightSplit.SplitterDistance = distance;
@@ -343,7 +362,7 @@ namespace Demo
                 return;
             }
 
-            menu.ShowAt(PointToScreen(new Point(330, 24)), this);
+            menu.ShowAt(PointToScreen(new Point(Dip(330), Dip(24))), this);
         }
 
         private DarkPopupMenu BuildCommandMenu()

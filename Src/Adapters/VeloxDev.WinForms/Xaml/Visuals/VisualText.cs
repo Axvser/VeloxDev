@@ -47,6 +47,7 @@ internal static class VisualText
     }
 
     public static void Draw(
+        Visual owner,
         Graphics graphics,
         string text,
         Font font,
@@ -64,7 +65,7 @@ internal static class VisualText
         using var brush = new SolidBrush(color);
         using var format = CreateFormat(wrap, horizontal, vertical);
         graphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-        graphics.DrawString(text, font, brush, bounds, format);
+        graphics.DrawString(text, owner.ResolveDrawFont(font, graphics), brush, bounds, format);
     }
 
     private static StringFormat CreateFormat(bool wrap, StringAlignment horizontal, StringAlignment vertical)

@@ -153,7 +153,8 @@ public class VisualPopup : VisualElement
             return;
         }
 
-        var client = _surface.ClientSize;
+        // 弹层的位置与偏移都是逻辑单位，物理像素交给表面的世界缩放。
+        var client = _surface.LogicalClientSize;
         var available = new Size(Math.Max(0, client.Width), Math.Max(0, client.Height));
         // 自绘弹层（菜单）没有 Child，Measure 走它自己的 MeasureOverride；有 Child 时由基类量 Child + Padding。
         var desired = Measure(available);

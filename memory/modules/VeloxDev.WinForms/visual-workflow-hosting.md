@@ -28,7 +28,7 @@
 - `Visual.Transform` 现在是**局部**变换（`Visual.Render` 用 `MatrixOrder.Prepend`）：`Viewbox`、代码卡片的 `ScaledContentHost` 都靠它按设计尺寸缩放，不会再缩放祖先的 `Bounds` 平移。
 - 槽位按设计行排（标题下 72、行高 22、输入内缩 2 / 输出内缩 12），位置与字形都乘当前比例；字形最小 10px，避免缩得太小点不到。
 - 网格、刻度带、小地图三者共用 `Canvas.Pan`；`VisualWorkflowSurface.SyncSurfacePan` 是唯一同步点。
-- 视觉后端按 **96-DPI 坐标**绘制，不自己乘 DPI。宿主工程要设 `ApplicationHighDpiMode=DpiUnawareGdiScaled`（XamlGallery 与两个 WinForms workflow demo 同款），让 Windows 整体缩放窗口；否则在 150% 下，100 单位只有 100 物理像素，而 WPF 的 100 DIP 是 150 物理像素，WinForms 会明显偏小。
+- 视觉后端公开坐标是**逻辑 DIP**（96 DPI）：`VisualSurface` 自己把 `Graphics` 乘 `DeviceDpi / 96`，并把指针、原生、弹出与 damage 坐标换算到同一空间；宿主读 `DpiScale` / `LogicalClientSize`。宿主工程设 `ApplicationHighDpiMode=PerMonitorV2`（两个 WinForms workflow demo 同款；XamlGallery 是纯 XAML demo，仍用 `DpiUnawareGdiScaled`）。原生覆盖层（`InfoOverlay` 这类 Panel）的固定像素指标自己乘 `DeviceDpi / 96`，并在 `OnDpiChangedAfterParent` 重算；点制字体不手动缩放。原生外壳两家不同：trimmed demo 的窗体 `AutoScaleMode=None`、自己按 `DeviceDpi` 定客户区；全量 demo 交给 `AutoScaleMode.Font` 自动缩放。
 
 ## 三、必须知道的坑
 
@@ -36,12 +36,14 @@
 - 表面在每次 arrange / pan / zoom 后把 `Viewport(-Pan.X, -Pan.Y, width, height)` 写回 helper；这是 `VisibleItems` 跟随视口的唯一驱动，**不是** `CanvasLayout.ActualOffset`（视觉宿主不使用该偏移）。
 - `VisualWorkflowSurface` 是 `sealed`。宿主换卡走 `TemplateSelector`（优先）/ `NodeViewFactory`，换菜单走 `LinkMenuBuilder`/`NodeMenuBuilder`，换配色走 `LinkLayer`/`GridDecorator`/`RulerOverlay`/`Minimap` 的属性 —— 按 layer-ownership 规范，外观与策略留在 demo。
 - `TemplateSelector` / `NodeViewFactory` 接受**任意** `VisualElement`；表面给它挂 `VisualWorkflowNodeBehavior`。卡片想用代码而不是标记构建正文时实现 `IVisualWorkflowNodeContent`。
-- 槽/节点视图**没有** WorkflowSystem 专用基类：模板 slot 是普通视觉控件 + `VisualWorkflowSlotBehavior.GetSlot(this)`；`workflow-grid-decorator` / `workflow-minimap-overlay` 仍是角色基类（与 Avalonia 的 minimap 基类同形）。
+- 槽/节点/grid/minimap **都没有** WorkflowSystem 专用基类：模板 slot 是普通视觉控件 + `VisualWorkflowSlotBehavior.GetSlot(this)`；grid 是普通视觉 + `IWorkflowGridDecorator` 在 `OnRender` 自绘；minimap 是普通视觉组合 sealed 默认件。`VisualWorkflowGridDecorator` / `VisualWorkflowMinimap` 只是 sealed 角色实现。
+- DPI 测试接缝：`VisualSurface.DpiScaleOverride` 固定缩放（0 恢复自动）；`RenderTo` 永远按逻辑坐标、scale 1 渲染，不读 `DeviceDpi`。点制字体在 `Visual.ResolveDrawFont` 里按 `96 / graphics.DpiY` 重导出，像素字体原样；`RenderDpi` 恒为 96（测量空间）。
 - 指针事件在根元素（`WorkflowRoot`）汇总后转发，所以直接调 `VisualSurface.ProcessPointerDown/Move/...`（无消息循环的测试）也会走完 Core 路由；键事件要求根元素持有逻辑焦点，`FocusSurface()` 是测试与宿主的显式入口。
 - Delete 的默认策略在表面里（悬停线存在且未被 `PreventDefault` 时执行 `DeleteCommand`）；demo 若自己删线必须置 `PreventDefault`，否则会删两次。
 - 插槽连线：在 sender 槽按下 → `SendConnectionCommand`；移动时 `SetPointerCommand` + `StandardSetPreviewReceiver`（槽命中用 `SlotHitTestEx`）；在接收槽上松手 → `ReceiveConnectionCommand`，否则 `ResetVirtualLinkCommand`；Escape 取消。模板 slot 只画字形，不再挂连接行为。
 - **小地图按哪儿就把视口中心移到哪儿**（与其余六家一致），不是只做相对拖拽：按下与每次移动都经 `IWorkflowSurfaceNavigator.CenterOn`；`IWorkflowSurfaceScroller` 只在 navigator 不可用时兜底。
 - 槽视图由 `TemplateSelector` 的 `SlotTemplate` 创建，再挂 `VisualWorkflowSlotBehavior`；宿主不给时才退回内部默认字形。`node.Slots` 里的条件分支槽（`MultipleBoth`）也会各得一个字形，所以卡片右缘会出现多个槽。
+- DPI 剩余的软点：`CacheAsBitmap` / 组 `Opacity` / `Effect` 子树先按逻辑尺寸落到位图再被世界变换放大，文字大小正确但可能略软；`NativeControlHost.MeasureOverride` 拿原生首选尺寸（设备像素），未给显式逻辑尺寸时可能量得过大；`LogicalClientSize` 取整会在右/下留不到一个物理像素的缝。
 
 ## 四、扩展点
 

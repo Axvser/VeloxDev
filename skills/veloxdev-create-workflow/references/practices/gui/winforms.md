@@ -254,7 +254,7 @@ The surface opens the strip on a right-press on a link, positions it, and suspen
 
 ⚙ **The visual surface handles Delete, Ctrl+Z/Y, Ctrl+wheel zoom and Shift+wheel scroll.** A host that also handles them must set `PreventDefault`, or a link is deleted twice.
 
-⚙ **Set `ApplicationHighDpiMode` to `DpiUnawareGdiScaled` in the host project.** The visual backend draws in 96-DPI coordinates; letting Windows scale the whole window makes a 100-unit width the same physical size as a 100-DIP width in WPF. Without it, high-DPI Windows renders the visual surface smaller than the other GUI demos (the XamlGallery demo uses the same mode).
+⚙ **Set `ApplicationHighDpiMode` to `PerMonitorV2` in the host project.** The visual surface exposes logical DIPs (96 DPI): it scales its own `Graphics` by `DeviceDpi / 96` and converts pointer/native coordinates, so a 100-unit width is the same physical size as WPF's 100 DIP. Content you put **inside** the surface stays in logical units; a **native** overlay above it (a WinForms `Panel`, button, label) is laid out in physical pixels, so multiply its fixed metrics — margins, paddings, offsets, fixed sizes — by `DeviceDpi / 96` and recompute on `OnDpiChangedAfterParent`. Leave point-sized fonts to WinForms. `VisualSurface.DpiScale` and `LogicalClientSize` expose the mapping. (`Examples/XamlGallery` is a separate XAML-only demo and still runs `DpiUnawareGdiScaled`.)
 
 ## Pitfalls
 
