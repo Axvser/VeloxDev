@@ -25,6 +25,17 @@ internal static class GalleryLayout
         }
     }
 
+    /// <summary>Fits the single XAML content child of one scroll host immediately.</summary>
+    public static void FitNow(XamlScrollableControl host)
+    {
+        if (host.IsDisposed || host.Disposing || host.Controls.Count != 1 || host.Controls[0] is not XamlControl content)
+        {
+            return;
+        }
+
+        Fit(host, content);
+    }
+
     public static IEnumerable<T> Descendants<T>(System.Windows.Forms.Control root) where T : System.Windows.Forms.Control
     {
         foreach (System.Windows.Forms.Control child in root.Controls)

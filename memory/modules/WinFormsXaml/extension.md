@@ -10,8 +10,8 @@
 2. 视觉属性用 `DependencyProperty.Register`；可动画的像素/颜色/`Thickness` 用默认 `AffectsRender=true`，纯配置属性写 `new PropertyMetadata(...) { AffectsRender = false }`。
 3. 在 `OnPaintBackground`/`OnPaint` 里自绘；需要子控件的在 `OnLayout` 里按 `XamlLayout.ContentBounds` 摆放，别依赖原生 `Dock`，除非模板根（见 §五）。
 4. 交互控件把类型名加进 `ThemeStyles.SurfaceTypes`；容器**不要**加，容器保持透明。
-5. 生成器无需登记：`v:` 前缀按 `Controls` → `Controls.Shapes` → `.Xaml` 顺序反射查找。
-6. 测试放 `Src/Test/Unit/WinFormsXaml/VeloxDev.WinForms.Xaml.Test/`；视觉能力要在 `Examples/XamlGallery` 的分页里出现。
+5. 生成器无需登记：不带前缀的类型按 `Controls` → `Controls.Shapes` → `.Xaml` 顺序反射查找。
+6. 测试放 `Src/Test/Unit/WinFormsXaml/VeloxDev.WinForms.Xaml.Test/`；视觉能力要在 `Examples/XamlGallery` 的卡片条目里出现（`GalleryCatalog.cs` + 对应 Section 的 `x:Name`）。
 7. 更新 `skills/veloxdev-create-workflow/references/practices/gui/winforms-xaml.md` 的控件表与本模块记忆。
 
 联动清单（漏一处通常不报错，只是悄悄少一块）：`XamlRuntime.ConvertValue`（新字面量类型）、`ThemeStyles`（是否交互控件）、`XamlCompiler` 的类型解析顺序（只在新增命名空间时）、文档、Gallery。
@@ -20,7 +20,7 @@
 
 - 生成器路径：`[XamlProperty(DefaultValue = ...)] public partial T X { get; set; }`。非可空引用类型必须写 `DefaultValue` 或改成可空，否则 `VELOX_XAMLP005`。
 - 手写路径：`DependencyProperty.Register(nameof(X), typeof(T), typeof(Owner), new PropertyMetadata(...))` + CLR 包装。
-- 附加属性：`DependencyProperty.RegisterAttached` + 静态 `GetX`/`SetX`；XAML 里必须写 `v:Owner.X` 或 `local:Owner.X`。
+- 附加属性：`DependencyProperty.RegisterAttached` + 静态 `GetX`/`SetX`；适配器 owner 在 XAML 里不写前缀（`Grid.Row`），自己的 owner 写 `local:Owner.X`，原生 owner 写 `native:Owner.X`。
 - 原生控件上的附加值只支持 OneWay/OneTime；TwoWay 不成立。
 
 ## 三、新增一个可插拔类型
@@ -49,7 +49,8 @@
 
 | 想做的事 | 官方做法 | 错的捷径 |
 |---|---|---|
-| 在 XAML 里用适配器类型 | 写 `v:Foo` | 不写前缀；只解析原生表，报 `VELOX_XAML019` |
+| 在 XAML 里用适配器类型 | 直接写 `Foo`（不带前缀） | 写 `native:Foo` —— `native:` 只解析 `System.Windows.Forms` |
+| 在 XAML 里用原生 WinForms 控件 | 写 `native:Foo` | 写 `Foo` —— 现在按适配器解析，找不到就报 `VELOX_XAML019` |
 | 嵌套视图共用调色板/样式 | 祖先放隐式样式，或 `{DynamicResource}`；`StaticResource` 在视图构造期只能看到自己的字典 | 在子视图里 `{StaticResource}` 祖先字典的键 —— 构造时还没有祖先，拿不到 |
 | 固定高度的控件放进横向堆叠 | 直接写 `Height`；显式尺寸压过 Stretch 并居中 | 依赖 Stretch 再自己算 Alignment |
 | 单内容容器里让文字居中 | 子控件写 `VerticalAlignment="Center"`；容器必须走 `XamlLayout.Arrange` | 在 `OnLayout` 里直接 `child.Bounds = 内容区`，对齐被绕过，文字贴顶 |

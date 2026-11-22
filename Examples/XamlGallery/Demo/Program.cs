@@ -20,11 +20,10 @@ internal static class Program
         Application.SetColorMode(light ? SystemColorMode.Classic : SystemColorMode.Dark);
 
         using var form = new GalleryForm(args);
-        GalleryCapture.ApplyTab(form, args);
-        GalleryCapture.ApplyScroll(form, args);
+        GalleryCapture.ApplyStartup(form, args);
         if (GalleryCapture.TryRun(form, args))
         {
-            // 截图模式：窗口显示后逐页抓图，抓完自己关掉。
+            // 截图模式：窗口显示后逐条抓图，抓完自己关掉。
             Application.Run(form);
             return;
         }

@@ -1,109 +1,108 @@
-<v:UserControl
+<UserControl
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml;assembly=VeloxDev.WinForms"
     xmlns:app="clr-namespace:Demo.Views"
     x:Class="Demo.Views.Sections.ThemeSection">
 
-  <v:UserControl.Resources>
-    <v:ResourceDictionary>
-      <v:LinearGradientBrush x:Key="HeroGradient" StartPoint="0,0" EndPoint="1,1">
-        <v:LinearGradientBrush.GradientStops>
-          <v:GradientStop Color="#FF5B8CFF" Offset="0" />
-          <v:GradientStop Color="#FF9B6BFF" Offset="1" />
-        </v:LinearGradientBrush.GradientStops>
-      </v:LinearGradientBrush>
-    </v:ResourceDictionary>
-  </v:UserControl.Resources>
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <LinearGradientBrush x:Key="HeroGradient" StartPoint="0,0" EndPoint="1,1">
+        <LinearGradientBrush.GradientStops>
+          <GradientStop Color="#FF5B8CFF" Offset="0" />
+          <GradientStop Color="#FF9B6BFF" Offset="1" />
+        </LinearGradientBrush.GradientStops>
+      </LinearGradientBrush>
+    </ResourceDictionary>
+  </UserControl.Resources>
 
-  <v:ScrollableControl Dock="Fill" Background="{DynamicResource WindowBrush}">
-    <v:StackPanel Dock="Top" Spacing="16" Padding="4,4,20,28">
+  <ScrollableControl Dock="Fill" Background="{DynamicResource WindowBrush}">
+    <StackPanel Dock="Top" Spacing="16" Padding="4,4,20,28">
 
-      <v:StackPanel Spacing="6">
-        <v:TextBlock Text="09 · Theme" Font="{x:Static app:GalleryTypography.Mono}" Foreground="{DynamicResource AccentBrush}" />
-        <v:TextBlock Text="Palette, brushes and fallback" Font="{x:Static app:GalleryTypography.SectionTitle}" />
-        <v:TextBlock Text="The shell swaps the palette; DynamicResource consumers follow. ThemeStyles keeps unstyled controls on the same surface."
+      <StackPanel Spacing="6">
+        <TextBlock Text="09 · Theme" Font="{x:Static app:GalleryTypography.Mono}" Foreground="{DynamicResource AccentBrush}" />
+        <TextBlock Text="Palette, brushes and fallback" Font="{x:Static app:GalleryTypography.SectionTitle}" />
+        <TextBlock Text="The shell swaps the palette; DynamicResource consumers follow. ThemeStyles keeps unstyled controls on the same surface."
                      TextWrapping="Wrap"
                      Foreground="{DynamicResource MutedBrush}"
                      MaxWidth="980" />
-      </v:StackPanel>
+      </StackPanel>
 
-      <v:Border>
-        <v:StackPanel Spacing="12">
-          <v:TextBlock Text="Palette" Font="{x:Static app:GalleryTypography.CardTitle}" />
-          <v:StackPanel Orientation="Horizontal" Spacing="12" Height="110">
-            <v:Border Width="160" Padding="0" BorderThickness="1" Background="{DynamicResource WindowBrush}">
-              <v:TextBlock Text="Window" TextAlignment="Center" VerticalAlignment="Center" />
-            </v:Border>
-            <v:Border Width="160" Padding="0" BorderThickness="1" Background="{DynamicResource SurfaceBrush}">
-              <v:TextBlock Text="Surface" TextAlignment="Center" VerticalAlignment="Center" />
-            </v:Border>
-            <v:Border Width="160" Padding="0" BorderThickness="1" Background="{DynamicResource CardBrush}">
-              <v:TextBlock Text="Card" TextAlignment="Center" VerticalAlignment="Center" />
-            </v:Border>
-            <v:Border Width="160" Padding="0" BorderThickness="0" Background="{DynamicResource FieldBrush}">
-              <v:TextBlock Text="Field" TextAlignment="Center" VerticalAlignment="Center" />
-            </v:Border>
-            <v:Border Width="160" Padding="0" BorderThickness="0" Background="{DynamicResource AccentBrush}">
-              <v:TextBlock Text="Accent" TextAlignment="Center" VerticalAlignment="Center" Foreground="#FFFFFFFF" />
-            </v:Border>
-            <v:Border Width="160" Padding="0" BorderThickness="0" Background="{DynamicResource AccentSoftBrush}">
-              <v:TextBlock Text="AccentSoft" TextAlignment="Center" VerticalAlignment="Center" />
-            </v:Border>
-          </v:StackPanel>
-          <v:StackPanel Orientation="Horizontal" Spacing="10">
-            <v:Button Content="Light palette" Height="34" Click="OnLightClick" />
-            <v:Button Content="Dark palette" Height="34" Click="OnDarkClick" />
-            <v:TextBlock Text="Switching also re-applies the implicit fallback styles over the live tree."
+      <Border x:Name="CardPalette">
+        <StackPanel Spacing="12">
+          <TextBlock Text="Palette" Font="{x:Static app:GalleryTypography.CardTitle}" />
+          <StackPanel Orientation="Horizontal" Spacing="12" Height="110">
+            <Border Width="160" Padding="0" BorderThickness="1" Background="{DynamicResource WindowBrush}">
+              <TextBlock Text="Window" TextAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <Border Width="160" Padding="0" BorderThickness="1" Background="{DynamicResource SurfaceBrush}">
+              <TextBlock Text="Surface" TextAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <Border Width="160" Padding="0" BorderThickness="1" Background="{DynamicResource CardBrush}">
+              <TextBlock Text="Card" TextAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <Border Width="160" Padding="0" BorderThickness="0" Background="{DynamicResource FieldBrush}">
+              <TextBlock Text="Field" TextAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <Border Width="160" Padding="0" BorderThickness="0" Background="{DynamicResource AccentBrush}">
+              <TextBlock Text="Accent" TextAlignment="Center" VerticalAlignment="Center" Foreground="#FFFFFFFF" />
+            </Border>
+            <Border Width="160" Padding="0" BorderThickness="0" Background="{DynamicResource AccentSoftBrush}">
+              <TextBlock Text="AccentSoft" TextAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <Button Content="Light palette" Height="34" Click="OnLightClick" />
+            <Button Content="Dark palette" Height="34" Click="OnDarkClick" />
+            <TextBlock Text="Switching also re-applies the implicit fallback styles over the live tree."
                          VerticalAlignment="Center"
                          Foreground="{DynamicResource MutedBrush}" />
-          </v:StackPanel>
-        </v:StackPanel>
-      </v:Border>
+          </StackPanel>
+        </StackPanel>
+      </Border>
 
-      <v:Border>
-        <v:StackPanel Spacing="12">
-          <v:TextBlock Text="Gradient hero" Font="{x:Static app:GalleryTypography.CardTitle}" />
-          <v:TextBlock Text="A LinearGradientBrush is a brush like any other: borders, shapes and cards accept it."
+      <Border x:Name="CardGradientHero">
+        <StackPanel Spacing="12">
+          <TextBlock Text="Gradient hero" Font="{x:Static app:GalleryTypography.CardTitle}" />
+          <TextBlock Text="A LinearGradientBrush is a brush like any other: borders, shapes and cards accept it."
                        Foreground="{DynamicResource MutedBrush}" />
-          <v:StackPanel Orientation="Horizontal" Spacing="18" Height="160">
-            <v:Border Width="440" Height="150" BorderThickness="0" Background="{StaticResource HeroGradient}" Padding="24">
-              <v:StackPanel Spacing="6" VerticalAlignment="Center">
-                <v:TextBlock Text="Gradient surfaces" Font="{x:Static app:GalleryTypography.SectionTitle}" Foreground="#FFFFFFFF" />
-                <v:TextBlock Text="The same brush paints the card behind this text." Foreground="#CCFFFFFF" />
-              </v:StackPanel>
-            </v:Border>
-            <v:Path Width="150" Height="150"
+          <StackPanel Orientation="Horizontal" Spacing="18" Height="160">
+            <Border Width="440" Height="150" BorderThickness="0" Background="{StaticResource HeroGradient}" Padding="24">
+              <StackPanel Spacing="6" VerticalAlignment="Center">
+                <TextBlock Text="Gradient surfaces" Font="{x:Static app:GalleryTypography.SectionTitle}" Foreground="#FFFFFFFF" />
+                <TextBlock Text="The same brush paints the card behind this text." Foreground="#CCFFFFFF" />
+              </StackPanel>
+            </Border>
+            <Path Width="150" Height="150"
                     Stretch="Uniform"
                     Data="M 10 90 L 45 20 L 80 90 Z"
                     Fill="{StaticResource HeroGradient}"
                     Stroke="{DynamicResource TextBrush}"
                     StrokeThickness="2" />
-            <v:Ellipse Width="150" Height="150" Fill="{StaticResource HeroGradient}" />
-          </v:StackPanel>
-        </v:StackPanel>
-      </v:Border>
+            <Ellipse Width="150" Height="150" Fill="{StaticResource HeroGradient}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
 
-      <v:Border>
-        <v:StackPanel Spacing="12">
-          <v:TextBlock Text="Fallback metrics" Font="{x:Static app:GalleryTypography.CardTitle}" />
-          <v:TextBlock Text="ThemePalette also carries the corner radius and control height that ThemeStyles hands to every unstyled library control."
+      <Border x:Name="CardFallbackMetrics">
+        <StackPanel Spacing="12">
+          <TextBlock Text="Fallback metrics" Font="{x:Static app:GalleryTypography.CardTitle}" />
+          <TextBlock Text="ThemePalette also carries the corner radius and control height that ThemeStyles hands to every unstyled library control."
                        Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
-          <v:StackPanel Orientation="Horizontal" Spacing="14">
-            <v:Border Width="220" Height="84" Padding="0" BorderThickness="0" Background="{DynamicResource FieldBrush}">
-              <v:TextBlock Text="CornerRadius 8" TextAlignment="Center" VerticalAlignment="Center" />
-            </v:Border>
-            <v:Border Width="220" Height="84" Padding="0" BorderThickness="0" Background="{DynamicResource FieldBrush}">
-              <v:TextBlock Text="ControlHeight 34" TextAlignment="Center" VerticalAlignment="Center" />
-            </v:Border>
-            <v:StackPanel Spacing="8" VerticalAlignment="Center">
-              <v:Button Content="Unstyled button" Height="34" />
-              <v:Slider Width="220" Height="34" HorizontalAlignment="Left" Minimum="0" Maximum="100" Value="48" />
-            </v:StackPanel>
-          </v:StackPanel>
-        </v:StackPanel>
-      </v:Border>
+          <StackPanel Orientation="Horizontal" Spacing="14">
+            <Border Width="220" Height="84" Padding="0" BorderThickness="0" Background="{DynamicResource FieldBrush}">
+              <TextBlock Text="CornerRadius 8" TextAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <Border Width="220" Height="84" Padding="0" BorderThickness="0" Background="{DynamicResource FieldBrush}">
+              <TextBlock Text="ControlHeight 34" TextAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <StackPanel Spacing="8" VerticalAlignment="Center">
+              <Button Content="Unstyled button" Height="34" />
+              <Slider Width="220" Height="34" HorizontalAlignment="Left" Minimum="0" Maximum="100" Value="48" />
+            </StackPanel>
+          </StackPanel>
+        </StackPanel>
+      </Border>
 
-    </v:StackPanel>
-  </v:ScrollableControl>
-</v:UserControl>
+    </StackPanel>
+  </ScrollableControl>
+</UserControl>

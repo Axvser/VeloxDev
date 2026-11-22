@@ -13,16 +13,21 @@ public sealed class GalleryForm : Form
     /// <param name="args">Command-line arguments forwarded from <see cref="Program"/>.</param>
     public GalleryForm(string[] args)
     {
+        _ = args;
         Text = "VeloxDev WinForms XAML Gallery";
-        ClientSize = new Size(1280, 820);
-        MinimumSize = new Size(1024, 680);
+        ClientSize = new Size(1440, 900);
+        MinimumSize = new Size(1180, 720);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.Current.WindowBackground;
         AutoScaleMode = AutoScaleMode.None;
 
-        Controls.Add(new GalleryView { Dock = DockStyle.Fill });
+        Gallery = new GalleryView { Dock = DockStyle.Fill };
+        Controls.Add(Gallery);
         Theme.Changed += OnThemeChanged;
     }
+
+    /// <summary>The three-pane gallery hosted by this window.</summary>
+    public GalleryView Gallery { get; }
 
     /// <inheritdoc />
     protected override void OnHandleCreated(EventArgs e)
@@ -36,8 +41,10 @@ public sealed class GalleryForm : Form
     {
         base.OnShown(e);
         ApplyTitleBarTheme();
+        Gallery.PerformLayout();
+        Gallery.EnsureInitialSelection();
 
-        // 首帧里标题栏/分页的控件会先按未完成布局的尺寸画一遍；透明子窗口不会自己清掉旧位置。
+        // 首帧里标题栏/分栏的控件会先按未完成布局的尺寸画一遍；透明子窗口不会自己清掉旧位置。
         // 显示完再整窗重画一次，截图与用户看到的第一眼都是干净的一帧。
         BeginInvoke(new Action(() =>
         {

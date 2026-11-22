@@ -2,41 +2,60 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Text;
 using System.Windows.Forms;
-using XamlTabControl = VeloxDev.WinForms.Xaml.Controls.TabControl;
+using Demo.Views;
 
 namespace Demo;
 
-// 开发用截图模式：窗口显示后抓一张当前分页的截图，可选导出控件边界树。
-// 一次进程只抓一页：先选定分页再显示窗口，首帧就是目标状态，不会拍到切页中间态。
+// 开发用截图/启动选项：--capture 按目录条目逐张抓图，--entry/--group/--scroll 也用于交互启动。
 internal static class GalleryCapture
 {
-    public static void ApplyTab(Form form, string[] args)
+    /// <summary>Applies interactive selection, scroll and chrome switches after the window is shown.</summary>
+    public static void ApplyStartup(Form form, string[] args)
     {
-        var tabs = FindTabControl(form);
-        if (tabs is null || tabs.Items.Count == 0)
+        if (HasFlag(args, "--capture"))
         {
             return;
         }
 
-        var index = Math.Clamp(ReadInt(args, "--tab", 0), 0, tabs.Items.Count - 1);
-        tabs.SelectedIndex = index;
-    }
+        var gallery = FindGallery(form);
+        if (gallery is null)
+        {
+            return;
+        }
 
-    public static void ApplyScroll(Form form, string[] args)
-    {
-        var offset = ReadInt(args, "--scroll", 0);
-        if (offset <= 0)
+        var id = ReadEntryId(args);
+        var scroll = ReadInt(args, "--scroll", 0);
+        var previewOnly = HasFlag(args, "--preview-only");
+        if (id is null && scroll <= 0 && !previewOnly)
         {
             return;
         }
 
         form.Shown += (_, _) => form.BeginInvoke(() =>
         {
-            ScrollVisibleSection(form, offset);
-            form.Invalidate(true);
+            if (form.IsDisposed || gallery.IsDisposed)
+            {
+                return;
+            }
+
+            if (previewOnly)
+            {
+                gallery.SetChromeVisible(false);
+            }
+
+            if (id is not null)
+            {
+                gallery.SelectEntry(id);
+            }
+
+            if (scroll > 0)
+            {
+                gallery.SetPreviewScrollOffset(scroll);
+            }
         });
     }
 
+    /// <summary>Runs capture mode when <c>--capture</c> is present.</summary>
     public static bool TryRun(Form form, string[] args)
     {
         var start = Array.FindIndex(args, a => string.Equals(a, "--capture", StringComparison.OrdinalIgnoreCase));
@@ -50,37 +69,63 @@ internal static class GalleryCapture
             : Path.Combine(AppContext.BaseDirectory, "captures");
         Directory.CreateDirectory(directory);
 
-        var tabs = FindTabControl(form)
-            ?? throw new InvalidOperationException("No XAML TabControl was found.");
-        var tabIndex = Math.Clamp(ReadInt(args, "--tab", 0), 0, Math.Max(0, tabs.Items.Count - 1));
-        tabs.SelectedIndex = tabIndex;
+        var gallery = FindGallery(form)
+            ?? throw new InvalidOperationException("No GalleryView was found.");
+        var includeGroups = HasFlag(args, "--include-groups");
+        var targets = ResolveTargets(gallery, args, includeGroups);
+        var scroll = ReadInt(args, "--scroll", 0);
+        var dump = HasFlag(args, "--dump");
+        var previewOnly = HasFlag(args, "--preview-only");
 
         form.StartPosition = FormStartPosition.Manual;
         form.Location = new Point(60, 60);
         form.TopMost = true;
-        var scroll = ReadInt(args, "--scroll", 0);
+
         form.Shown += (_, _) => form.BeginInvoke(() =>
         {
             try
             {
-                Pump(form);
-                ScrollVisibleSection(form, scroll);
-                Pump(form);
-                var header = tabs.Items[tabIndex]?.Header ?? $"tab{tabIndex}";
-                var name = string.Join('-', header.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries));
-                Capture(form, Path.Combine(directory, $"{tabIndex:00}-{name}.png"));
-
-                if (args.Contains("--dump", StringComparer.OrdinalIgnoreCase))
+                if (previewOnly)
                 {
-                    var builder = new StringBuilder();
-                    builder.AppendLine($"window {form.Bounds}");
-                    Dump(form, builder, 0);
-                    File.WriteAllText(Path.Combine(directory, $"{tabIndex:00}-{name}.txt"), builder.ToString());
+                    gallery.SetChromeVisible(false);
+                }
+
+                for (var index = 0; index < targets.Count; index++)
+                {
+                    var target = targets[index];
+                    if (!gallery.SelectEntry(target.Id))
+                    {
+                        File.WriteAllText(
+                            Path.Combine(directory, $"capture-error-{SafeName(target.Id)}.txt"),
+                            $"Entry '{target.Id}' was not found.");
+                        continue;
+                    }
+
+                    if (scroll > 0 && targets.Count == 1)
+                    {
+                        gallery.SetPreviewScrollOffset(scroll);
+                    }
+
+                    gallery.ClearSelection();
+                    Pump(form, index == 0 ? 24 : 8);
+
+                    var name = targets.Count == 1
+                        ? SafeName(target.Id)
+                        : $"{index:00}-{SafeName(target.Id)}";
+                    Capture(form, Path.Combine(directory, name + ".png"));
+
+                    if (dump)
+                    {
+                        var builder = new StringBuilder();
+                        builder.AppendLine($"window {form.Bounds}");
+                        Dump(form, builder, 0);
+                        File.WriteAllText(Path.Combine(directory, name + ".txt"), builder.ToString());
+                    }
                 }
             }
             catch (Exception ex)
             {
-                File.WriteAllText(Path.Combine(directory, $"capture-error-{tabIndex}.txt"), ex.ToString());
+                File.WriteAllText(Path.Combine(directory, "capture-error.txt"), ex.ToString());
             }
             finally
             {
@@ -91,40 +136,72 @@ internal static class GalleryCapture
         return true;
     }
 
-    private static int ReadInt(string[] args, string name, int fallback)
+    private static List<GalleryEntry> ResolveTargets(GalleryView gallery, string[] args, bool includeGroups)
+    {
+        if (HasFlag(args, "--all"))
+        {
+            return gallery.EnumerateEntries(includeGroups).ToList();
+        }
+
+        var id = ReadEntryId(args) ?? "layout.stack-panel";
+        var entry = GalleryCatalog.Find(id);
+        return entry is null ? [] : [entry];
+    }
+
+    private static string? ReadEntryId(string[] args)
+    {
+        var entry = ReadOption(args, "--entry");
+        if (entry is not null)
+        {
+            return entry;
+        }
+
+        var group = ReadOption(args, "--group");
+        if (group is null)
+        {
+            return null;
+        }
+
+        return GalleryCatalog.FindGroup(group)?.Id ?? group;
+    }
+
+    private static string? ReadOption(string[] args, string name)
     {
         var index = Array.FindIndex(args, a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
-        return index >= 0 && index + 1 < args.Length && int.TryParse(args[index + 1], out var value)
-            ? value
-            : fallback;
+        return index >= 0 && index + 1 < args.Length && !args[index + 1].StartsWith('-')
+            ? args[index + 1]
+            : null;
     }
 
-    private static void ScrollVisibleSection(Form form, int offset)
+    private static int ReadInt(string[] args, string name, int fallback)
     {
-        if (offset <= 0)
-        {
-            return;
-        }
-
-        foreach (var host in GalleryLayout.Descendants<VeloxDev.WinForms.Xaml.Controls.ScrollableControl>(form))
-        {
-            if (!host.Visible || host.Height <= 0)
-            {
-                continue;
-            }
-
-            host.AutoScrollPosition = new Point(0, offset);
-            return;
-        }
+        var text = ReadOption(args, name);
+        return int.TryParse(text, out var value) ? value : fallback;
     }
 
-    private static void Pump(Form form)
+    private static bool HasFlag(string[] args, string name)
+        => Array.Exists(args, a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
+
+    private static GalleryView? FindGallery(Form form)
+    {
+        if (form is GalleryForm galleryForm)
+        {
+            return galleryForm.Gallery;
+        }
+
+        return GalleryLayout.Descendants<GalleryView>(form).FirstOrDefault();
+    }
+
+    private static string SafeName(string id)
+        => string.Join('-', id.Split(['.', '/', '\\', ' ', ':'], StringSplitOptions.RemoveEmptyEntries));
+
+    private static void Pump(Form form, int frames)
     {
         form.Activate();
-        for (var frame = 0; frame < 24; frame++)
+        for (var frame = 0; frame < frames; frame++)
         {
             Application.DoEvents();
-            Thread.Sleep(50);
+            Thread.Sleep(frames > 8 ? 40 : 30);
         }
     }
 
@@ -225,24 +302,5 @@ internal static class GalleryCapture
             builder.AppendLine();
             Dump(child, builder, depth + 1);
         }
-    }
-
-    private static XamlTabControl? FindTabControl(System.Windows.Forms.Control root)
-    {
-        foreach (System.Windows.Forms.Control child in root.Controls)
-        {
-            if (child is XamlTabControl tabs)
-            {
-                return tabs;
-            }
-
-            var nested = FindTabControl(child);
-            if (nested is not null)
-            {
-                return nested;
-            }
-        }
-
-        return null;
     }
 }
