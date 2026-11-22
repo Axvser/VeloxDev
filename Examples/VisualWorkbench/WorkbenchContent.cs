@@ -6,6 +6,7 @@ using VeloxDev.WinForms.Xaml.Visuals;
 using VisualWorkbench.Views;
 using VisualBorder = VeloxDev.WinForms.Xaml.Visuals.Controls.Border;
 using VisualButton = VeloxDev.WinForms.Xaml.Visuals.Controls.Button;
+using VisualCanvas = VeloxDev.WinForms.Xaml.Visuals.Controls.Canvas;
 using VisualGrid = VeloxDev.WinForms.Xaml.Visuals.Controls.Grid;
 using VisualImage = VeloxDev.WinForms.Xaml.Visuals.Controls.Image;
 using VisualNativeControlHost = VeloxDev.WinForms.Xaml.Visuals.Controls.NativeControlHost;
@@ -36,6 +37,7 @@ internal static class WorkbenchContent
         page.Add(CreateColumns(theme));
         page.Add(CreateSection(theme, "Visual XAML · v: profile", new VisualSample()));
         page.Add(CreateStyleSection(theme));
+        page.Add(CreateGraphSection(theme));
 
         return new VisualBorder
         {
@@ -279,6 +281,79 @@ internal static class WorkbenchContent
         });
         stack.Add(host);
         return CreateSection(theme, "Native control host", stack);
+    }
+
+    private static VisualBorder CreateGraphSection(ThemePalette theme)
+    {
+        var canvas = new VisualCanvas { Width = 760, Height = 220 };
+        var first = CreateGraphNode(theme, "Prompt", "Workflow input", 30, 40);
+        var second = CreateGraphNode(theme, "Agent", "Run the graph", 310, 120);
+        VisualCanvas.SetLeft(first, 30);
+        VisualCanvas.SetTop(first, 40);
+        VisualCanvas.SetLeft(second, 330);
+        VisualCanvas.SetTop(second, 130);
+
+        var link = new LinkElement { Width = 170, Height = 110, PenColor = theme.Accent };
+        VisualCanvas.SetLeft(link, 210);
+        VisualCanvas.SetTop(link, 70);
+
+        canvas.Add(link);
+        canvas.Add(first);
+        canvas.Add(second);
+        return CreateSection(theme, "Graph · visual nodes and a drawn link", canvas);
+    }
+
+    private static VisualBorder CreateGraphNode(ThemePalette theme, string title, string body, float left, float top)
+    {
+        var stack = new VisualStackPanel { Spacing = 4 };
+        stack.Add(new VisualTextBlock
+        {
+            Text = title,
+            Font = new Font("Segoe UI Semibold", 11f),
+            Foreground = theme.Accent,
+        });
+        stack.Add(new VisualTextBlock { Text = body, Foreground = theme.MutedForeground });
+
+        return new VisualBorder
+        {
+            Width = 190,
+            Height = 76,
+            Background = theme.SurfaceAlt,
+            BorderBrush = theme.ControlBorder,
+            BorderThickness = new XamlThickness(1f),
+            CornerRadius = 8f,
+            Padding = new XamlThickness(12f, 10f),
+            Child = stack,
+        };
+    }
+
+    private sealed class LinkElement : VisualElement
+    {
+        public Color PenColor { get; set; } = Color.White;
+
+        public LinkElement()
+        {
+            IsHitTestVisible = false;
+        }
+
+        protected override void OnRender(Graphics graphics)
+        {
+            using var pen = new System.Drawing.Pen(PenColor, 2f)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+            };
+            graphics.DrawBezier(
+                pen,
+                0f,
+                18f,
+                Bounds.Width * 0.45f,
+                0f,
+                Bounds.Width * 0.55f,
+                Bounds.Height,
+                Bounds.Width,
+                Bounds.Height - 18f);
+        }
     }
 
     private static VisualBorder CreateStyleSection(ThemePalette theme)
