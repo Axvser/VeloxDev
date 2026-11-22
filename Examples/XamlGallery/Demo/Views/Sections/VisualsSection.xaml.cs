@@ -134,26 +134,37 @@ public sealed partial class VisualsSection : VeloxDev.WinForms.Xaml.Controls.Use
         root.Background = new SolidColorBrush(Theme.Current.ControlBackground);
         root.CornerRadius = 12f;
 
-        var batch = new CurveBatchVisual
+        // 三个批次各用一种颜色，既保留单趟绘制的成本，又不会把所有曲线叠成一块纯色。
+        var colors = new[]
         {
-            Bounds = new RectangleF(20f, 12f, 900f, 220f),
-            Stroke = new XamlPen(Color.FromArgb(0x9A, 0x5B, 0x8C, 0xFF), 1.4f),
+            Color.FromArgb(0x88, 0x5B, 0x8C, 0xFF),
+            Color.FromArgb(0x88, 0x9B, 0x6B, 0xFF),
+            Color.FromArgb(0x88, 0xF2, 0xB4, 0x4B),
         };
+        var batches = new CurveBatchVisual[colors.Length];
+        for (var index = 0; index < batches.Length; index++)
+        {
+            batches[index] = new CurveBatchVisual
+            {
+                Bounds = new RectangleF(20f, 12f, 900f, 220f),
+                Stroke = new XamlPen(colors[index], 1.3f),
+            };
+            root.Add(batches[index]);
+        }
 
         for (var index = 0; index < _curveCount; index++)
         {
             var start = new PointF(0f, 60f + (float)_random.NextDouble() * 100f);
             var end = new PointF(880f, 30f + (float)_random.NextDouble() * 170f);
             var lift = 30f + (float)_random.NextDouble() * 60f;
-            batch.Add(
+            batches[index % batches.Length].Add(
                 start,
                 new PointF(220f, start.Y - lift),
                 new PointF(640f, end.Y - lift),
                 end);
         }
 
-        root.Add(batch);
-        connectorStatus.Text = $"{_curveCount} curves · 1 path · 0 HWNDs";
+        connectorStatus.Text = $"{_curveCount} curves · {batches.Length} paths · 0 HWNDs";
     }
 
     private static Matrix Rotation(float degrees, PointF center)

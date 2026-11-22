@@ -39,12 +39,12 @@
       <v:Border>
         <v:StackPanel Spacing="10">
           <v:TextBlock Text="Connector batch" Font="{x:Static app:GalleryTypography.CardTitle}" />
-          <v:TextBlock Text="Hundreds of cubic curves share one path and one pen. They are visual nodes, not controls."
+          <v:TextBlock Text="Hundreds of cubic curves share a few batched paths. They are visual nodes, not controls."
                        Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
           <v:VisualHost x:Name="connectorHost" Height="250" Background="{DynamicResource FieldBrush}" />
           <v:StackPanel Orientation="Horizontal" Spacing="14">
             <v:Button x:Name="addConnectorsButton" Content="Add 200 curves" Height="34" Click="OnAddConnectorsClick" />
-            <v:TextBlock x:Name="connectorStatus" Text="400 curves · 1 path · 0 HWNDs" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" />
+            <v:TextBlock x:Name="connectorStatus" Text="400 curves · 3 paths · 0 HWNDs" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" />
           </v:StackPanel>
         </v:StackPanel>
       </v:Border>
