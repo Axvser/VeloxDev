@@ -89,6 +89,15 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
     /// </summary>
     public Func<INodeComponent, VisualWorkflowNodeView>? NodeViewFactory { get; set; }
 
+    /// <summary>
+    /// Chooses the card for a node before <see cref="NodeViewFactory"/> and the default card are consulted.
+    /// </summary>
+    /// <remarks>
+    /// A selection must be a <see cref="VisualWorkflowNodeView"/> to be placed on the canvas; any other element is
+    /// ignored and the next source is tried.
+    /// </remarks>
+    public VisualTemplateSelector? TemplateSelector { get; set; }
+
     /// <summary>Fills the context menu opened on a right press over a link.</summary>
     public Action<VisualWorkflowMenu, ILinkComponent>? LinkMenuBuilder { get; set; }
 
@@ -210,7 +219,9 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
     }
 
     internal VisualWorkflowNodeView CreateNodeView(INodeComponent node)
-        => NodeViewFactory?.Invoke(node) ?? CreateDefaultNodeView(node);
+        => TemplateSelector?.SelectTemplate(node) as VisualWorkflowNodeView
+           ?? NodeViewFactory?.Invoke(node)
+           ?? CreateDefaultNodeView(node);
 
     internal void OnCanvasGeometryChanged()
     {

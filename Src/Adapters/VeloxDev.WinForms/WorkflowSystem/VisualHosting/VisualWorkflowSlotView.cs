@@ -14,8 +14,9 @@ namespace VeloxDev.WorkflowSystem.VisualHosting;
 /// <remarks>
 /// The glyph is hit-testable, so a press that lands on it resolves to the slot rather than to the owning node. The
 /// ripple language of the demo card is deliberately not reproduced here; this is the adapter's neutral default.
+/// Derive and override <see cref="OnRender"/> to supply a host's own glyph.
 /// </remarks>
-public sealed class VisualWorkflowSlotView : VisualElement
+public class VisualWorkflowSlotView : VisualElement
 {
     /// <summary>The glyph's diameter at scale one, in pixels.</summary>
     public const float DefaultGlyphSize = 12f;

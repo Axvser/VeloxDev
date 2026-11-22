@@ -10,7 +10,7 @@
   ],
   "identity": "VeloxDev.WinForms.WorkflowNodeView",
   "name": "VeloxDev WinForms Workflow Node View",
-  "description": "A minimal XAML-first WinForms view for a VeloxDev workflow node component.",
+  "description": "A visual workflow node card for the HWND-free WinForms backend.",
   "shortName": "winforms-v-node",
   "sourceName": "TemplateClass",
   "defaultName": "NodeView",

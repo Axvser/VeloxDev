@@ -10,7 +10,7 @@
   ],
   "identity": "VeloxDev.WinForms.WorkflowTreeView",
   "name": "VeloxDev WinForms Workflow Tree View",
-  "description": "A XAML-first WinForms workflow tree surface composing scroll, canvas, grid decorator, and view pooling.",
+  "description": "A visual workflow tree surface hosting nodes, links, the grid backdrop and a minimap on the HWND-free WinForms backend.",
   "shortName": "winforms-v-tree",
   "sourceName": "TemplateClass",
   "defaultName": "TreeView",

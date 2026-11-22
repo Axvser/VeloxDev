@@ -123,6 +123,40 @@ public sealed class VisualWorkflowHostTests
         Assert.IsNull(WorkflowInput.For(model.Tree).Navigator);
     }
 
+    [TestMethod]
+    public void TemplateSelectorTakesPrecedenceOverNodeViewFactory()
+    {
+        var model = CreateModel();
+        var selectorCalls = 0;
+        var factoryCalls = 0;
+
+        using var surface = new VisualWorkflowSurface
+        {
+            Size = new System.Drawing.Size(Width, Height),
+            NodeViewFactory = _ =>
+            {
+                factoryCalls++;
+                return new VisualWorkflowNodeView();
+            },
+            TemplateSelector = new NodeCardSelector(() =>
+            {
+                selectorCalls++;
+                return new VisualWorkflowNodeView();
+            }),
+        };
+        surface.Tree = model.Tree;
+        Render(surface);
+
+        Assert.AreEqual(2, selectorCalls, "the selector creates both node cards");
+        Assert.AreEqual(0, factoryCalls, "the factory is only consulted when the selector has no match");
+    }
+
+    private sealed class NodeCardSelector(Func<VisualElement> factory) : VisualTemplateSelector
+    {
+        public override VisualElement? SelectTemplate(object? item)
+            => item is INodeComponent ? factory() : null;
+    }
+
     private static VisualWorkflowSurface CreateSurface(ITreeComponent tree)
     {
         var surface = new VisualWorkflowSurface

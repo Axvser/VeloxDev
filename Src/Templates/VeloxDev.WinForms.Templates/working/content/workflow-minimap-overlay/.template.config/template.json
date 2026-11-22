@@ -9,7 +9,7 @@
   ],
   "identity": "VeloxDev.WinForms.WorkflowMinimapOverlay",
   "name": "VeloxDev WinForms Workflow Minimap Overlay",
-  "description": "A WinForms minimap overlay implementing IWorkflowMinimapOverlay.",
+  "description": "A visual workflow minimap for the HWND-free WinForms backend.",
   "shortName": "winforms-v-minimap",
   "sourceName": "TemplateClass",
   "defaultName": "MinimapOverlay",

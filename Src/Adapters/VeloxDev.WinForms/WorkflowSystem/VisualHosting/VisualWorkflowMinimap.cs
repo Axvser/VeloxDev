@@ -18,8 +18,9 @@ namespace VeloxDev.WorkflowSystem.VisualHosting;
 /// <see cref="WorkflowSurfaceMath.MinimapLocal"/>, <see cref="WorkflowSurfaceMath.MinimapViewportRect"/>). A drag
 /// converts the pointer travel back to canvas-local units and asks the surface's
 /// <see cref="IWorkflowSurfaceScroller"/> to move by that amount — the minimap never writes the pan itself.
+/// Derive to change the palette or paint extra overview marks.
 /// </remarks>
-public sealed class VisualWorkflowMinimap : VisualElement
+public class VisualWorkflowMinimap : VisualElement
 {
     /// <summary>The default width, in pixels.</summary>
     public const float DefaultWidth = 168f;

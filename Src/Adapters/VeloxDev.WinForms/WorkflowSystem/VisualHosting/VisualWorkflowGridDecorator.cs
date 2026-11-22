@@ -13,9 +13,9 @@ namespace VeloxDev.WorkflowSystem.VisualHosting;
 /// </summary>
 /// <remarks>
 /// The decorator never takes a pointer hit. It follows the canvas pan through <see cref="Pan"/>, so the grid lines
-/// stay anchored to the world instead of to the window.
+/// stay anchored to the world instead of to the window. Derive to change the palette or paint extra world decoration.
 /// </remarks>
-public sealed class VisualWorkflowGridDecorator : VisualElement
+public class VisualWorkflowGridDecorator : VisualElement
 {
     private DrawingPointF _pan;
 

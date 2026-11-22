@@ -24,18 +24,28 @@ public sealed class MainForm : Form
         _treeView = new WorkflowSurface { Dock = DockStyle.Fill };
         Controls.Add(_treeView);
 
-        // The grid decorator, minimap and HUD are PART_* controls declared in TreeView.xaml; the surface
-        // behavior resolves them by name and pushes the layout into them once the tree is bound.
+        // The grid decorator, minimap and HUD are part of the visual surface; the tree is bound through ViewModel.
         var tree = new TreeViewModel();
         LoadTree(tree);
         _treeView.ViewModel = tree;
+
+        // 视觉表面用 Pan 定位世界；首帧布局完成后把原点居中，四个象限的节点都在视口里。
+        var centered = false;
+        _treeView.Surface.Paint += (_, _) =>
+        {
+            if (centered)
+            {
+                return;
+            }
+
+            centered = true;
+            // Paint 事件早于表面的布局；排到消息队列末尾再居中，此时视口尺寸已经写入。
+            _treeView.Surface.BeginInvoke(new Action(() => _treeView.Surface.CenterOn(0d, 0d)));
+        };
     }
 
     private static void LoadTree(TreeViewModel tree)
     {
-        // Shift the world origin into the visible area so nodes in every quadrant are on screen when zoomed.
-        tree.Layout.NegativeOffset = new Offset(320, 260);
-
         var size = new VeloxDev.WorkflowSystem.Size(260, 180);
         var nodes = new[]
         {

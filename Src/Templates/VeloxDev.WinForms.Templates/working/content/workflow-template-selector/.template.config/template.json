@@ -9,7 +9,7 @@
   ],
   "identity": "VeloxDev.WinForms.WorkflowTemplateSelector",
   "name": "VeloxDev WinForms Workflow Template Selector",
-  "description": "A WinForms TemplateSelector for VeloxDev node, slot, link, and tree view models.",
+  "description": "A visual template selector for VeloxDev node, slot, link, and tree view models.",
   "shortName": "winforms-v-selector",
   "sourceName": "TemplateClass",
   "defaultName": "CustomTemplateSelector",

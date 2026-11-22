@@ -10,7 +10,7 @@
   ],
   "identity": "VeloxDev.WinForms.WorkflowLinkView",
   "name": "VeloxDev WinForms Workflow Link View",
-  "description": "A minimal XAML-first WinForms view for a VeloxDev workflow link component.",
+  "description": "An opt-in visual view for one VeloxDev workflow link.",
   "shortName": "winforms-v-link",
   "sourceName": "TemplateClass",
   "defaultName": "LinkView",
@@ -44,7 +44,7 @@
     "surfaceBackground": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Workflow surface background color. Must match the tree view's surface background.",
+      "description": "Accepted for cross-GUI CLI parity; the visual per-link view draws no backdrop.",
       "defaultValue": "#1E1E1E",
       "replaces": "TemplateSurfaceBackground"
     }

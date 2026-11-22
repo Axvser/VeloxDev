@@ -9,7 +9,7 @@
   ],
   "identity": "VeloxDev.WinForms.WorkflowGridDecorator",
   "name": "VeloxDev WinForms Workflow Grid Decorator",
-  "description": "A lightweight WinForms workflow grid implementing IWorkflowGridDecorator.",
+  "description": "A visual workflow grid backdrop for the HWND-free WinForms backend.",
   "shortName": "winforms-v-decorator",
   "sourceName": "TemplateClass",
   "defaultName": "GridDecorator",

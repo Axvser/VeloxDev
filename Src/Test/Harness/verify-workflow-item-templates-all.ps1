@@ -87,7 +87,7 @@ $configs = [ordered]@{
         MirrorBase      = @{}
         Aliases         = [ordered]@{}
         Expected        = @{
-            'tree' = 'the demo tree is the host shell: it derives from the adapter surface, adds the demo-only InfoOverlay HUD, the host''s link-menu entries, its own key/wheel policy and the link hover repaint - the template is a self-contained v:UserControl wired through WorkflowSurfaceBehavior and ships none of those'
+            'tree' = 'the demo tree is the host shell: it hosts the same visual surface but adds the demo-only InfoOverlay HUD, the host''s link-menu entries and the demo''s palette - the template is a self-contained v:UserControl that ships none of those'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false
