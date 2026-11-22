@@ -11,8 +11,8 @@ namespace VeloxDev.WinForms.Xaml.Visuals;
 /// <remarks>
 /// <para>
 /// This is the opt-in lightweight layer of the WinForms XAML runtime. It is intended for non-interactive content such
-/// as decoration, text, shapes and connector batches; native controls and <see cref="Controls.Control"/> instances
-/// stay real child windows. A tree of visuals is hosted by <see cref="Controls.VisualHost"/> and painted in one pass.
+/// as decoration, text, shapes and connector batches; native controls and <see cref="VeloxDev.WinForms.Xaml.Controls.Control"/> instances
+/// stay real child windows. A tree of visuals is hosted by <see cref="VeloxDev.WinForms.Xaml.Controls.VisualHost"/> and painted in one pass.
 /// </para>
 /// <para>
 /// <see cref="Bounds"/> is expressed in the parent's coordinates; content is painted in the visual's own local
@@ -297,7 +297,7 @@ public class ContainerVisual : Visual
             return;
         }
 
-        using var path = Controls.XamlDrawing.RoundedRectangle(
+        using var path = VeloxDev.WinForms.Xaml.Controls.XamlDrawing.RoundedRectangle(
             new RectangleF(0f, 0f, Bounds.Width, Bounds.Height),
             CornerRadius);
         background.FillPath(graphics, path);

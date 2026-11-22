@@ -1,0 +1,521 @@
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml.Visuals.Controls;
+using XamlVisibility = VeloxDev.WinForms.Xaml.Controls.Visibility;
+
+namespace VeloxDev.WinForms.Xaml.Visuals;
+
+/// <summary>
+/// The single window that hosts a tree of <see cref="VisualElement"/> objects and routes all input to it.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Exactly one HWND is created for the whole tree. Elements are painted in one pass into the double buffer, so a
+/// structural change cannot show half of an old and half of a new tree. Native WinForms controls stay outside the
+/// tree unless an element opts into a child window through <c>NativeControlHost</c>.
+/// </para>
+/// <para>
+/// Focus is logical: the surface keeps the native keyboard focus and <see cref="FocusedElement"/> receives key and
+/// text input. Pointer events hit-test the visual tree, capture through <see cref="VisualElement"/> and bubble.
+/// </para>
+/// </remarks>
+public class VisualSurface : System.Windows.Forms.Control
+{
+    private const int WsClipChildren = 0x02000000;
+
+    private VisualElement? _root;
+    private VisualElement? _focused;
+    private VisualElement? _capture;
+    private readonly List<VisualElement> _hoverChain = [];
+    private readonly Dictionary<NativeControlHost, System.Windows.Forms.Control> _nativeChildren = [];
+
+    /// <summary>Creates the surface with the double-buffered paint style it needs.</summary>
+    public VisualSurface()
+    {
+        SetStyle(
+            ControlStyles.UserPaint |
+            ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer |
+            ControlStyles.ResizeRedraw |
+            ControlStyles.SupportsTransparentBackColor |
+            ControlStyles.Selectable,
+            true);
+        DoubleBuffered = true;
+        TabStop = true;
+    }
+
+    /// <summary>The root element painted by this surface.</summary>
+    public VisualElement? Root
+    {
+        get => _root;
+        set
+        {
+            if (ReferenceEquals(_root, value))
+            {
+                return;
+            }
+
+            _root?.SetSurfaceRoot(null);
+            _root = value;
+            _root?.SetSurfaceRoot(this);
+            InvalidateSurface();
+        }
+    }
+
+    /// <summary>The element that currently receives keyboard and text input.</summary>
+    public VisualElement? FocusedElement => _focused;
+
+    /// <summary>Whether the surface currently has the native keyboard focus.</summary>
+    public bool HasKeyboardFocus => Focused;
+
+    /// <inheritdoc />
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var parameters = base.CreateParams;
+            parameters.Style |= WsClipChildren;
+            return parameters;
+        }
+    }
+
+    /// <summary>Requests a repaint of the whole surface.</summary>
+    public void InvalidateSurface() => Invalidate();
+
+    /// <summary>Renders the tree into <paramref name="graphics"/> at <paramref name="size"/>.</summary>
+    /// <param name="graphics">The target surface.</param>
+    /// <param name="size">The logical size of the surface.</param>
+    public void RenderTo(Graphics graphics, Size size)
+    {
+        if (graphics is null) throw new ArgumentNullException(nameof(graphics));
+        if (_root is null)
+        {
+            graphics.Clear(BackColor);
+            return;
+        }
+
+        graphics.Clear(BackColor);
+        var state = graphics.Save();
+        try
+        {
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            _root.Measure(size);
+            _root.Arrange(new RectangleF(0f, 0f, size.Width, size.Height));
+            _root.Render(graphics);
+        }
+        finally
+        {
+            graphics.Restore(state);
+        }
+    }
+
+    /// <summary>Moves logical focus to <paramref name="element"/>.</summary>
+    /// <param name="element">The element to focus, or <see langword="null"/> to clear focus.</param>
+    /// <returns><see langword="true"/> when the element belongs to this surface and is focusable.</returns>
+    public bool FocusElement(VisualElement? element)
+    {
+        if (element is not null && (element.Surface != this || !element.Focusable || !element.IsVisible))
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(_focused, element))
+        {
+            if (element is not null)
+            {
+                Focus();
+            }
+
+            return true;
+        }
+
+        _focused?.SetFocused(false);
+        _focused = element;
+        _focused?.SetFocused(true);
+        if (element is not null)
+        {
+            Focus();
+        }
+
+        return true;
+    }
+
+    /// <summary>Injects a pointer press at a surface point.</summary>
+    /// <param name="point">The point in surface coordinates.</param>
+    /// <param name="button">The pressed button.</param>
+    /// <param name="clickCount">The click count; at least one.</param>
+    /// <returns><see langword="true"/> when an element handled the event.</returns>
+    public bool ProcessPointerDown(PointF point, MouseButtons button, int clickCount = 1)
+    {
+        var target = FindElementAt(point);
+        if (target is not null)
+        {
+            var focusable = FindFocusableAncestor(target);
+            if (focusable is not null)
+            {
+                FocusElement(focusable);
+            }
+        }
+
+        _capture = target;
+        if (target is not null && IsHandleCreated)
+        {
+            Capture = true;
+        }
+
+        var args = new VisualPointerEventArgs(point, button, button, clickCount, 0, ModifierKeys);
+        target?.RaisePointerPressed(args);
+        return args.Handled;
+    }
+
+    /// <summary>Injects a pointer move at a surface point.</summary>
+    /// <param name="point">The point in surface coordinates.</param>
+    /// <returns><see langword="true"/> when an element handled the event.</returns>
+    public bool ProcessPointerMove(PointF point)
+    {
+        var target = _capture ?? FindElementAt(point);
+        UpdateHover(point, target);
+        var args = new VisualPointerEventArgs(point, MouseButtons.Left, MouseButtons.None, 1, 0, ModifierKeys);
+        target?.RaisePointerMoved(args);
+        Cursor = target?.Cursor ?? Cursors.Default;
+        return args.Handled;
+    }
+
+    /// <summary>Injects a pointer release at a surface point.</summary>
+    /// <param name="point">The point in surface coordinates.</param>
+    /// <param name="button">The released button.</param>
+    /// <returns><see langword="true"/> when an element handled the event.</returns>
+    public bool ProcessPointerUp(PointF point, MouseButtons button)
+    {
+        var target = _capture ?? FindElementAt(point);
+        var args = new VisualPointerEventArgs(point, MouseButtons.None, button, 1, 0, ModifierKeys);
+        target?.RaisePointerReleased(args);
+        _capture = null;
+        if (IsHandleCreated)
+        {
+            Capture = false;
+        }
+
+        return args.Handled;
+    }
+
+    /// <summary>Injects a wheel turn at a surface point.</summary>
+    /// <param name="point">The point in surface coordinates.</param>
+    /// <param name="delta">The wheel delta; positive scrolls up.</param>
+    /// <returns><see langword="true"/> when an element handled the event.</returns>
+    public bool ProcessPointerWheel(PointF point, int delta)
+    {
+        var target = FindElementAt(point);
+        var args = new VisualPointerEventArgs(point, MouseButtons.None, MouseButtons.None, 1, delta, ModifierKeys);
+        target?.RaisePointerWheel(args);
+        return args.Handled;
+    }
+
+    /// <summary>Injects a key press into the focused element.</summary>
+    /// <param name="keyCode">The key code.</param>
+    /// <returns><see langword="true"/> when an element handled the event.</returns>
+    public bool ProcessKeyDown(Keys keyCode)
+    {
+        var args = new VisualKeyEventArgs(keyCode, ModifierKeys, isRepeat: false);
+        _focused?.RaiseKeyDown(args);
+        if (!args.Handled && keyCode == Keys.Tab)
+        {
+            MoveFocus((ModifierKeys & Keys.Shift) == 0);
+        }
+
+        return args.Handled;
+    }
+
+    /// <summary>Injects a key release into the focused element.</summary>
+    /// <param name="keyCode">The key code.</param>
+    /// <returns><see langword="true"/> when an element handled the event.</returns>
+    public bool ProcessKeyUp(Keys keyCode)
+    {
+        var args = new VisualKeyEventArgs(keyCode, ModifierKeys, isRepeat: false);
+        _focused?.RaiseKeyUp(args);
+        return args.Handled;
+    }
+
+    /// <summary>Injects text input into the focused element.</summary>
+    /// <param name="text">The characters to insert.</param>
+    /// <returns><see langword="true"/> when an element handled the event.</returns>
+    public bool ProcessTextInput(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var args = new VisualTextInputEventArgs(text);
+        _focused?.RaiseTextInput(args);
+        return args.Handled;
+    }
+
+    /// <summary>Finds the deepest element under a surface point.</summary>
+    /// <param name="point">The point in surface coordinates.</param>
+    public VisualElement? FindElementAt(PointF point)
+    {
+        if (_root is null)
+        {
+            return null;
+        }
+
+        _root.Measure(ClientSize);
+        _root.Arrange(new RectangleF(0f, 0f, ClientSize.Width, ClientSize.Height));
+        var hit = _root.HitTestVisual(point);
+        for (var current = hit; current is not null; current = current.Parent)
+        {
+            if (current is VisualElement element)
+            {
+                return element;
+            }
+        }
+
+        return null;
+    }
+
+    internal void PlaceNative(NativeControlHost owner, System.Windows.Forms.Control child, Rectangle bounds)
+    {
+        if (!_nativeChildren.TryGetValue(owner, out var existing))
+        {
+            _nativeChildren[owner] = child;
+            Controls.Add(child);
+        }
+        else if (!ReferenceEquals(existing, child))
+        {
+            Controls.Remove(existing);
+            _nativeChildren[owner] = child;
+            Controls.Add(child);
+        }
+
+        if (child.Bounds != bounds)
+        {
+            child.Bounds = bounds;
+        }
+
+        child.Visible = owner.IsVisible && owner.Visibility == XamlVisibility.Visible;
+    }
+
+    internal void RemoveNative(NativeControlHost owner)
+    {
+        if (_nativeChildren.Remove(owner, out var child))
+        {
+            Controls.Remove(child);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        RenderTo(e.Graphics, ClientSize);
+    }
+
+    /// <inheritdoc />
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        InvalidateSurface();
+    }
+
+    /// <inheritdoc />
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        ProcessPointerDown(e.Location, e.Button, e.Clicks);
+    }
+
+    /// <inheritdoc />
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        ProcessPointerMove(e.Location);
+    }
+
+    /// <inheritdoc />
+    protected override void OnMouseUp(MouseEventArgs e)
+    {
+        base.OnMouseUp(e);
+        ProcessPointerUp(e.Location, e.Button);
+    }
+
+    /// <inheritdoc />
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        if (ProcessPointerWheel(e.Location, e.Delta))
+        {
+            // handled; WinForms does not expose a cancel flag here
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnMouseEnter(EventArgs e)
+    {
+        base.OnMouseEnter(e);
+        UpdateHover(PointToClient(Cursor.Position), FindElementAt(PointToClient(Cursor.Position)));
+    }
+
+    /// <inheritdoc />
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        UpdateHover(null, null);
+        Cursor = Cursors.Default;
+    }
+
+    /// <inheritdoc />
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (ProcessKeyDown(e.KeyCode))
+        {
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+        if (ProcessKeyUp(e.KeyCode))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnKeyPress(KeyPressEventArgs e)
+    {
+        base.OnKeyPress(e);
+        if (char.IsControl(e.KeyChar))
+        {
+            return;
+        }
+
+        if (ProcessTextInput(e.KeyChar.ToString()))
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnGotFocus(EventArgs e)
+    {
+        base.OnGotFocus(e);
+        _focused?.SetFocused(true);
+    }
+
+    /// <inheritdoc />
+    protected override void OnLostFocus(EventArgs e)
+    {
+        base.OnLostFocus(e);
+        _focused?.SetFocused(false);
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            foreach (var child in _nativeChildren.Values)
+            {
+                if (Controls.Contains(child))
+                {
+                    Controls.Remove(child);
+                }
+            }
+
+            _nativeChildren.Clear();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void UpdateHover(PointF? point, VisualElement? target)
+    {
+        var next = new List<VisualElement>();
+        for (var current = target; current is not null; current = current.ParentElement)
+        {
+            next.Add(current);
+        }
+
+        var args = point is { } position
+            ? new VisualPointerEventArgs(position, MouseButtons.None, MouseButtons.None, 1, 0, ModifierKeys)
+            : null;
+        foreach (var element in _hoverChain)
+        {
+            if (!next.Contains(element))
+            {
+                element.SetPointerOver(false, args);
+            }
+        }
+
+        foreach (var element in next)
+        {
+            if (!_hoverChain.Contains(element))
+            {
+                element.SetPointerOver(true, args);
+            }
+        }
+
+        _hoverChain.Clear();
+        _hoverChain.AddRange(next);
+    }
+
+    private static VisualElement? FindFocusableAncestor(VisualElement? element)
+    {
+        for (var current = element; current is not null; current = current.ParentElement)
+        {
+            if (current.Focusable && current.IsEnabled && current.IsVisible)
+            {
+                return current;
+            }
+        }
+
+        return null;
+    }
+
+    private void MoveFocus(bool forward)
+    {
+        var order = new List<VisualElement>();
+        if (_root is not null)
+        {
+            CollectFocusable(_root, order);
+        }
+
+        if (order.Count == 0)
+        {
+            return;
+        }
+
+        var index = _focused is null ? -1 : order.IndexOf(_focused);
+        var next = forward
+            ? (index + 1) % order.Count
+            : (index <= 0 ? order.Count - 1 : index - 1);
+        FocusElement(order[next]);
+    }
+
+    private static void CollectFocusable(VisualElement element, List<VisualElement> order)
+    {
+        if (!element.IsVisible)
+        {
+            return;
+        }
+
+        if (element.Focusable && element.IsEnabled)
+        {
+            order.Add(element);
+        }
+
+        foreach (var child in element.Children)
+        {
+            if (child is VisualElement elementChild)
+            {
+                CollectFocusable(elementChild, order);
+            }
+        }
+    }
+}
