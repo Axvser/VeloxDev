@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Visuals;
@@ -229,6 +230,32 @@ public sealed class VisualBackendTests
     }
 
     [TestMethod]
+    public void NativeKeyMessages_ReachTheFocusedElement()
+    {
+        using var surface = CreateSurface(260, 160);
+        _ = surface.Handle;
+        Application.DoEvents();
+
+        var root = new VC.StackPanel();
+        var first = new VC.TextBox { Width = 220, Height = 34 };
+        var second = new VC.TextBox { Width = 220, Height = 34 };
+        root.Add(first);
+        root.Add(second);
+        surface.Root = root;
+        Layout(surface, 260, 160);
+        surface.FocusElement(first);
+
+        SendKey(surface, Keys.Tab);
+        Assert.AreSame(second, surface.FocusedElement, "Tab must reach the logical focus chain through WM_KEYDOWN");
+
+        first.Text = "abc";
+        surface.FocusElement(first);
+        SendKey(surface, Keys.End);
+        SendKey(surface, Keys.Left);
+        Assert.AreEqual(2, first.CaretIndex, "arrow keys must reach the focused field");
+    }
+
+    [TestMethod]
     public void CollapsingANativeHost_RemovesItsChildWindow()
     {
         using var surface = CreateSurface(200, 100);
@@ -299,4 +326,17 @@ public sealed class VisualBackendTests
         using var graphics = Graphics.FromImage(bitmap);
         surface.RenderTo(graphics, new Size(width, height));
     }
+
+    private static void SendKey(VisualSurface surface, Keys key)
+    {
+        SendMessage(surface.Handle, WmKeyDown, (IntPtr)key, IntPtr.Zero);
+        SendMessage(surface.Handle, WmKeyUp, (IntPtr)key, IntPtr.Zero);
+        Application.DoEvents();
+    }
+
+    private const int WmKeyDown = 0x0100;
+    private const int WmKeyUp = 0x0101;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam);
 }
