@@ -3,6 +3,10 @@
 > 连线交互规则见 [WorkflowSystem/architecture.md §3.6](../architecture.md)：输入是标准输入
 > （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），指针底下是谁（节点 / 插槽 / 连线）由适配器解析、认不到才回退 Core 的共享曲线判定，外观、删除与菜单的接线归宿主/适配器。
 >
+> **视觉后端**的单 HWND 工作流表面在 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/VisualHosting/`，坐标与坑见
+> [`VeloxDev.WinForms/visual-workflow-hosting.md`](../../VeloxDev.WinForms/visual-workflow-hosting.md)；本文下面的
+> 附着行为 / 池 / 消息过滤器仍服务 HWND 路径。
+>
 > **读法**：契约（七个视图角色、注册位置、联动清单）在 `memory/modules/WorkflowSystem/extension.md` §3.9 与 §4.3；
 > 人面向的「怎么搭一个 WinForms 工作流视图」在 `skills/veloxdev-create-workflow/references/gui/winforms.md`，
 > 逐角色职责表在 `skills/veloxdev-create-workflow/references/view-layer.md`（`new-adapter.md` 同源）。

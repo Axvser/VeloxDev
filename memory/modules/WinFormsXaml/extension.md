@@ -51,7 +51,10 @@
 - 样式：视觉资源里的 `<Style TargetType="v:Button">` 用 `<Style.Setters>` / `<Style.Triggers>`（`<Setter Property="Text" Value="..."/>`）。有 `x:Key` 走 `Style="{StaticResource}"`，无键按 `TargetType` 隐式；`VisualStyle.Template` 可以带模板。
 - 模板：`<ControlTemplate TargetType="v:ContentControl">` 必须恰好一个视觉根；`x:Name` 是部件名（`GetTemplateChild<T>`），`ContentPresenter` 显示 `Content`。`TemplateBinding` 绑到 `TemplatedParent`；模板触发器写 `BindingPriority.Template`，`TargetName` 指部件。
 - 弹层：`ComboBox` 直接可用；自定义 `VisualPopup` 的 `PlacementTarget` 要在 code-behind 赋值（视觉绑定没有 `ElementName`）。弹层内容脱离根树，只能看到自己的资源与 `VisualSurface.Resources`，拿不到祖先的隐式样式/DataContext（打开时会推目标 DataContext）。
-- 工作流视觉 host：节点位置 = `node.Anchor`/`node.Size`（已按 `Layout.Scale` 坍缩）+ 平移；所有输入先转成画布局部坐标（减 `AbsoluteBounds.Location`），再减平移得到模型点。连线在模型空间建并 `PublishCurve`，绘制时才加平移。直接往 `tree.Links` 加线必须同时写 `LinksMap` / `Targets` / `Sources`。
+- 工作流视觉 host：节点位置 = `node.Anchor`/`node.Size`（已按 `Layout.Scale` 坍缩）+ 平移；所有输入先转成画布局部坐标（减 `AbsoluteBounds.Location`），再减平移得到模型点。连线在模型空间建并 `PublishCurve`，绘制时才加平移。直接往 `tree.Links` 加线必须同时写 `LinksMap` / `Targets` / `Sources`。可复用的单 HWND 表面在 `WorkflowSystem/VisualHosting/`，细节见 `VeloxDev.WinForms/visual-workflow-hosting.md`。
+- 视觉子树里的文字：一律走 `VisualText.Draw`（GDI+ `DrawString`）；`TextRenderer` 直接写 HDC、不认 world transform，嵌套平移后文字会画到表面原点。
+- 自定义 `Visual` 改变绘制内容后调用 `InvalidateCache()`；走依赖属性的元素由 `InvalidateVisual` 自动标脏最近的 `CacheAsBitmap` 祖先。
+- `DockPanel` 顶部子项要显式高度：没有 `RowDefinitions` 的 `Grid` 默认一行星号，会吃掉全部可用高度，把后面的停靠项挤成 0。
 
 ## 七、官方做法 vs 看起来能编译的捷径
 

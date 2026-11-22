@@ -120,6 +120,23 @@ root.Child = new StackPanel { Spacing = 8 }
 surface.Root = root;
 ```
 
+### Visual workflow surface
+
+`VeloxDev.WorkflowSystem.VisualHosting.VisualWorkflowSurface` is a single-HWND surface that composes a grid
+decorator, a `Canvas` of node views, one link layer and a minimap. It implements the Core
+`IWorkflowSurfaceScroller` / `IWorkflowSurfaceNavigator`, translates pointer/key/wheel into
+`WorkflowInput`, and exposes `NodeViewFactory`, `LinkMenuBuilder` and `NodeMenuBuilder` for host policy.
+Host it directly in XAML:
+
+```xml
+<hosting:VisualWorkflowSurface x:Name="surface" Dock="Fill" />
+```
+
+The surface publishes link curves in model space and hit-tests through `LinkHitTestEx`; node positions
+use the already-collapsed `Anchor`/`Size` plus the pan. See
+[`memory/modules/VeloxDev.WinForms/visual-workflow-hosting.md`](../../../memory/modules/VeloxDev.WinForms/visual-workflow-hosting.md)
+for the coordinate contract and known limits.
+
 The runnable sample is [`Examples/XamlGallery`](../../../Examples/XamlGallery/README.md); it is built
 entirely on the visual backend and includes the workflow graph card. The full workflow surface lives in
 `Examples/Workflow/WinForms`.

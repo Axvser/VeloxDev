@@ -70,6 +70,7 @@ each PNG. `--preview-only` hides the title, side panes and status strip for a co
 - Theme switching rebuilds the visual root so every control reads the new `Theme.Current` values.
 - The inspector writes local dependency-property values on the card root; it does not edit template
   or child parts.
-- The workflow graph card is a demo-level surface (drag/pan/zoom/Delete); the full workflow host is
-  used by `Examples/Workflow/WinForms`.
+- The workflow graph card is a demo-level surface (drag/pan/zoom/Delete); the reusable
+  `VisualWorkflowSurface` host is used by both `Examples/Workflow/WinForms` and
+  `Examples/Workflow/WinForms Trimmed`.
 - Platform-wall controls (MediaElement, WebBrowser, InkCanvas, Viewport3D) are intentionally absent.
