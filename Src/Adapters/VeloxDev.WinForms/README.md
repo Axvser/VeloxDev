@@ -49,6 +49,58 @@ WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(myCanvas, tree);
 
 ---
 
+## Visual backend (one HWND)
+
+`VeloxDev.WinForms.Xaml.Visuals` is an opt-in, HWND-free control tree. A `VisualSurface` is the only
+WinForms `Control`; `VisualSurface.Root` is a `VisualElement` tree that is measured, arranged,
+hit-tested and painted in one pass. It is not a replacement for the HWND XAML library above: both
+backends coexist and share the built-in `Theme`.
+
+- **Properties.** `VisualElement` derives from `WinformsObject` and implements `IWinformsObject`.
+  Properties use the same WPF naming as the HWND layer: `DependencyProperty.Register(...,
+  new PropertyMetadata(default) { AffectsMeasure/AffectsArrange/AffectsRender/Inherits = ... })`,
+  `GetValue`/`SetValue`/`ClearValue`, attached properties via `RegisterAttached`. Values carry a
+  priority layer (`Animation`, `LocalValue`, `StyleTrigger`, `Template`, `Style`, `Inherited`).
+- **Bindings.** `element.SetBinding(Element.PropProperty, new Binding("Name") { Source = vm })`
+  supports `OneWay`/`OneTime`/`TwoWay`, `DataContext` paths, converters, `StringFormat`,
+  `FallbackValue` and `TargetNullValue`. `GetObservable`/`Bind` push an `IObservable` into a layer.
+  `ElementName`, `RelativeSource`, validation rules and visual templates are not part of this layer.
+- **Controls.** `Border`, `StackPanel`, `Grid`, `DockPanel`, `Canvas`, `WrapPanel`, `TextBlock`,
+  `Image`, `Button`, `TextBox`, `ScrollViewer`; new selection and item controls live in the same
+  namespace. None of them creates a child window.
+- **Native compatibility.** `NativeControlHost` hosts a real WinForms control as a child HWND above
+  the surface. WinForms child windows always paint above the visual tree, so the island must stay
+  rectangular and axis-aligned; it cannot be transformed, blended or clipped with its visual parent.
+- **Input.** Pointer, wheel, keyboard and text input are routed from the single surface to the
+  deepest hit element; focus is logical and `FocusElement`/`Tab` move it. Document-level input
+  rules still apply: `IsInputKey`/`ProcessDialogKey` are handled by `VisualSurface`.
+- **Visual XAML.** Use the `v:` prefix for the experimental visual profile:
+  `xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"`.
+  Unprefixed names keep resolving to the HWND `Xaml.Controls`. Visual markup supports literal
+  properties, attached properties, `x:Name` fields and CLR events; resources, templates and binding
+  markup are diagnosed rather than silently dropped.
+- **Theme.** The built-in `Theme.CreateDark()` / `CreateLight()` palettes follow VS Code Dark+ /
+  Light+ (editor and side-bar colours, `#007ACC` accent, `#007FD4`/`#0090F1` focus ring, Dark+
+  `#264F78` / Light+ `#ADD6FF` selection, 4 px radius, 28 px controls). Switching `Theme.Mode`
+  re-renders the visual backend; call `Application.SetColorMode(...)` before creating native controls
+  so the WinForms islands follow the same mode.
+
+```csharp
+var surface = new VisualSurface { Dock = DockStyle.Fill };
+var root = new Border
+{
+    Padding = new Thickness(16f),
+    Background = new SolidColorBrush(Theme.Current.Surface),
+};
+root.Child = new StackPanel { Spacing = 8 }
+    .Add(new TextBlock { Text = "Hello", Foreground = Theme.Current.Foreground })
+    .Add(new Button { Text = "Run" });
+surface.Root = root;
+```
+
+The runnable sample is [`Examples/VisualWorkbench`](../../../Examples/VisualWorkbench/README.md),
+including the secondary-screen capture mode and the Dark/Light toggle.
+
 ## XAML animations
 
 A XAML control's dependency properties animate through the WinForms transition system. In markup,

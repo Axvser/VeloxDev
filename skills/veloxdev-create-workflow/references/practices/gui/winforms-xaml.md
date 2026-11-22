@@ -476,6 +476,41 @@ change.
 current item and `Refresh`. They are not the WindowsBase `ICollectionView` interface; assign the
 `View` (IEnumerable) to `ItemsSource` and reassign when `ViewChanged` fires.
 
+### 8.4 HWND-free visual backend (opt-in)
+
+`VeloxDev.WinForms.Xaml.Visuals` is a second, opt-in backend: one `VisualSurface` window hosts a
+tree of `VisualElement` objects; the tree is measured, arranged, hit-tested and painted in one pass.
+It is independent from the HWND `Xaml.Controls` library and shares `Theme`.
+
+```csharp
+var surface = new VisualSurface { Dock = DockStyle.Fill };
+var root = new Border { Padding = new Thickness(16), Background = new SolidColorBrush(Theme.Current.Surface) };
+root.Child = new StackPanel { Spacing = 8 }
+    .Add(new TextBlock { Text = "Hello" })
+    .Add(new Button { Text = "Run" });
+surface.Root = root;
+```
+
+- Properties use the same WPF naming: `DependencyProperty.Register`, `PropertyMetadata`, attached
+  properties, `GetValue`/`SetValue`/`ClearValue`; `VisualElement` derives from `WinformsObject` and
+  implements `IWinformsObject` with priority layers (`Animation`, `LocalValue`, `StyleTrigger`,
+  `Template`, `Style`, `Inherited`).
+- Bindings: `element.SetBinding(Control.PropProperty, new Binding("Path") { Source = vm })` for
+  `OneWay`/`OneTime`/`TwoWay`, `DataContext`, converters and formatting; `Bind`/`GetObservable` for
+  observable streams. `ElementName`, `RelativeSource`, validation rules and visual templates are not
+  available.
+- Styles: `VisualStyle` / `VisualSetter` / `VisualTrigger`, explicit `Style` or implicit `Styles`
+  collections; setters write at `Style`, triggers at `StyleTrigger`.
+- Visual XAML: prefix every visual type with
+  `xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"`.
+  The root code-behind derives from the visual root type; `x:Name` fields and CLR events work.
+  Resources, templates, bindings and triggers in visual markup are diagnosed, not silently emitted.
+- `NativeControlHost` is the compatibility island for native controls (IME, third-party hosts).
+  It is always a rectangular child HWND above the visual tree and cannot be transformed, blended or
+  clipped with its visual parent.
+- `VisualSurface` routes pointer, wheel, keyboard and text input to the deepest hit element; focus is
+  logical. `TextBox` uses a native editor overlay while focused for IME/accessibility.
+
 ## 9. Events and input
 
 - `IsPointerOver` follows the subtree: hovering a XAML child or a native child keeps every XAML ancestor's
@@ -529,9 +564,11 @@ while the popup is closed.
 ## 9.2 Default theme
 
 `Theme` holds the default palette. `Theme.Mode` swaps between `Light` and `Dark`; `Theme.Current`
-can be replaced with a custom `ThemePalette`. Interactive controls that do not set their own colours
-receive an implicit style from `ThemeStyles`: neutral surface, one accent, 6px corners, 32px control
-height. Containers stay transparent.
+can be replaced with a custom `ThemePalette`. The built-in palettes follow VS Code Dark+/Light+
+(editor `#1E1E1E`/`#FFFFFF`, side bar `#252526`/`#F3F3F3`, accent `#007ACC`, focus
+`#007FD4`/`#0090F1`, selection `#264F78`/`#ADD6FF`). Interactive controls that do not set their own
+colours receive an implicit style from `ThemeStyles`: neutral surface, one accent, 4px corners, 28px
+control height. Containers stay transparent.
 
 After changing the palette, call `Theme.ApplyTo(root)` (or `ThemeStyles.ApplyTo(root)`) to re-apply the
 implicit styles over a live tree. Explicit values and explicit/implicit styles from the control tree

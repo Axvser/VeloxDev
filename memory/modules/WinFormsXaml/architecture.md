@@ -121,7 +121,7 @@
 - `AdornerLayer` 没有 adorner 时 `Visible=false`，不盖住子控件；运行期给窗口加 `WS_EX_LAYERED` 后必须 `SetWindowPos(... SWP_FRAMECHANGED)` 再 `SetLayeredWindowAttributes`，否则色键不生效、整层会露出洋红。
 - **IsPointerOver 沿祖先链**：WinForms 的 Enter/Leave 是逐子窗口的，指针进入子控件时父窗口会收到 MouseLeave。`Control.UpdatePointerOver` 用屏幕矩形重算自己与整条 XAML 祖先链；原生子控件的 MouseEnter/Leave 由 `OnControlAdded` 挂上回调。子控件（含原生）上悬停时祖先的 `IsPointerOver` 保持 true，指针离开整棵子树才清掉。回归：`HoverTests.HoveringAChild_MarksTheAncestorPointerOver`。
 - **轻量视觉树是 opt-in，不是第二套控件**：`VisualHost` 的 `Root` 是 `ContainerVisual`；`ShapeVisual`/`TextVisual`/`CurveBatchVisual` 只画，不创建子窗口。`Opacity`/`Effect` 会把子树落到临时位图再合成（组透明度正确，超大视觉会退化为不合成）；`Transform` 用 GDI+ 矩阵，`Clip` 用本地矩形。命中测试沿视觉树走，原生/HWND 控件仍留在 WinForms 树里，二者不互通。
-- **默认主题是暗/浅两套中性调色板**（`Theme.CreateDark`/`CreateLight`）：近黑表面、单一强调色、8px 圆角、34px 控件高。`ThemeStyles` 只给交互控件表面/边框/前景；容器保持透明，显式值/样式仍优先。`Theme.Mode` 换成浅色时，原生 WinForms 控件的暗色模式不会随运行期切换完全重绘，干净的双色截图用 `--light` 从进程启动。
+- **默认主题对齐 VS Code Dark+/Light+**（`Theme.CreateDark`/`CreateLight`）：editor `#1E1E1E`/`#FFFFFF`、side `#252526`/`#F3F3F3`、accent `#007ACC`、focus `#007FD4`/`#0090F1`、selection `#264F78`/`#ADD6FF`、4px 圆角、28px 控件高。`ThemeStyles` 只给交互控件表面/边框/前景；容器保持透明，显式值/样式仍优先。`Theme.Mode` 换成浅色时，原生 WinForms 控件的暗色模式不会随运行期切换完全重绘，干净的双色截图用 `--light` 从进程启动。
 - 动画走 WinForms 适配器的互斥调度器：同一控件上的新 trigger 动画会 supersede 旧动画。
 - 布局属性：`Thickness` 是 `Margin` / `Padding` / `Border.BorderThickness` 的类型；DP 变更同步到原生 `Padding`/`Margin`，`ThicknessSampler` 已注册，`XamlTransition.Animate` 可动画这三类属性（每帧一个 box，与既有 `PaddingSampler` 相同）。
 - 适配器/模板/Demo 中不再有 `Xaml*` 类型别名。**XAML 视图的 code-behind 用完整命名空间声明基类**（`public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserControl`），因为 `System.Windows.Forms.UserControl` 与 XAML 的 `UserControl` 同名；模板与 Trimmed demo 的四个视图已按此写法。纯代码控件（不是 XAML 视图）仍可直接继承原生 WinForms 类型。
@@ -166,6 +166,9 @@
 - `ScrollViewer` 用 `Visual.Clip` 裁视口，内容按 `VerticalOffset` 负向摆放；滚轮沿祖先链冒泡到这里。`TextBox` 自绘插入符/选区/剪贴板；IME 与无障碍未实现（需要原生 EDIT 岛或 Imm/UIA 接入）。
 - `Visual` 继承 `WinformsObject`；视觉元素自己的属性用 WPF 写法注册：`DependencyProperty.Register(nameof(X), typeof(T), typeof(Owner), new PropertyMetadata(default) { AffectsMeasure = ..., AffectsArrange = ..., AffectsRender = ... })`（`Margin`/`Padding`/`Width`/`Height`/对齐/Visibility/Border/Background/CornerRadius 等），`VisualElement.OnPropertyChanged` 按 `e.Property.Metadata` 的 `AffectsMeasure/Arrange/Render` 失效。`Grid.Row`、`DockPanel.Dock`、`Canvas.Left` 是 `RegisterAttached` 的 `DependencyProperty`，存储在各元素的同一个优先级表里。
 - `DataContext` 是 inherited 属性：没有本地层时从 `ParentElement` 解析，祖先切换会向没有本地值的后代补发 `Inherited` 变更；`Bind` 写进指定优先级层，dispose 时清掉该层。
+- 路径绑定：`element.SetBinding(Property, new Binding("Path") { Source/DataContext, Mode, Converter, StringFormat, FallbackValue, TargetNullValue })` 走 `VisualBindingOperations`；`OneWay`/`OneTime`/`TwoWay`、点路径与索引器可用，`ElementName`/`RelativeSource`/校验规则尚未接入视觉后端。
+- 视觉样式：`VisualStyle` / `VisualSetter` / `VisualTrigger`，显式 `VisualElement.Style` 优先，隐式 `Styles` 按「元素自身 → 祖先 → Surface」最近匹配、每个集合取第一个 `TargetType` 命中的样式；setter 写 `Style` 层、trigger 写 `StyleTrigger` 层，移除时只清自己那两层。样式是描述不是活对象，改已应用样式的 `Setters` 不会自动重应用。
+- 视觉 XAML：`xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"` 的显式 `v:` 前缀走视觉树，父级用 `Add`、根类派生自视觉根类型；`x:Name` 只生成字段（视觉元素没有 `NameScope`）；资源/模板/绑定标记还不支持，遇到会报诊断。
 - HWND 后端仍用 `DependencyProperty`；两套属性系统互不替换。视觉后端没有 XAML/样式引擎接入，DP 引擎仍绑在 `System.Windows.Forms.Control` 上。
 
 ## 五、验证

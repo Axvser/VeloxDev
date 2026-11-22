@@ -64,7 +64,10 @@
 | 需要无 HWND 的控件树 / 大量节点 | `VisualSurface` + `VisualElement`（`Xaml/Visuals/`）；元素继承 `ContainerVisual`，不是 `Control` | 继续用 `Xaml/Controls/*` 每个控件一个 HWND —— 结构切换必然逐窗口上屏，节点数也被 HWND 成本吃掉 |
 | 需要原生 WinForms 控件 | `NativeControlHost` 单子窗口岛；保持矩形、轴对齐，它永远浮在视觉树上方 | 把原生控件塞进需要 Transform/Opacity/Clip 的视觉子树 —— airspace，合成与裁剪都不成立 |
 | 视觉元素要新增一个会触发重排/重绘的属性 | `DependencyProperty.Register(nameof(X), typeof(T), typeof(Owner), new PropertyMetadata(default) { AffectsMeasure/AffectsArrange/AffectsRender = ... })` + `(T)GetValue(XProperty)` 包装；附加属性用 `RegisterAttached` | 写成普通 auto-property —— 改了不会失效，布局/绘制停在旧值 |
-| 视觉元素绑定一个视图模型属性 | `element.Bind(Element.PropProperty, vm.GetObservable(Vm.PropProperty))`；dispose 归还该优先级层 | 直接 `PropertyChanged +=` 手写回调 —— 失去优先级/清除/多源语义 |
+| 视觉元素绑定一个视图模型属性 | 路径用 `element.SetBinding(Element.PropProperty, new Binding("Name") { Source = vm })`；流式更新用 `element.Bind(Element.PropProperty, vm.GetObservable(...))`；dispose 归还该优先级层 | 直接 `PropertyChanged +=` 手写回调 —— 失去优先级/清除/多源语义 |
+| 视觉元素绑定 DataContext 路径 | `element.DataContext = vm; element.SetBinding(Element.PropProperty, new Binding("Name"))` | 把 `Source` 写成整个树或依赖 `ElementName` —— 视觉后端没有 `NameScope`，`ElementName` 不解析 |
+| 给视觉子树加隐式样式 | `root.Styles.Add(new VisualStyle { TargetType = typeof(TextBlock), Setters = { new VisualSetter(TextBlock.ForegroundProperty, color) } })`；本地值仍优先 | 把颜色写进每个元素 —— 样式层失去优先级，改主题只能重建整棵树 |
+| 用 XAML 写视觉后端 | 根与子元素都用显式 `v:` 前缀，父级自动发 `Add`，根 code-behind 派生视觉类型 | 不加前缀 —— 仍解析到 `Xaml.Controls` 的 HWND 控件，不会进入视觉树 |
 | 覆盖在兄弟窗口上的装饰层 | `AdornerDecorator`/`AdornerLayer`；层为空时自动隐藏 | 自己给层铺不透明底 —— 会盖住被装饰控件 |
 | 主题切换后的原生控件 | 进程启动时 `Application.SetColorMode(...)`；干净双色用 `--light` 重启 | 运行期切 `SetColorMode` 期待已建句柄的滚动条/下拉全部重绘 |
 | 祖先在子元素上悬停 | 让子控件走 `Control` 的 OnMouseEnter/Leave；原生子控件由 `OnControlAdded` 自动挂回调 | 用子控件自己的 `IsPointerOver` 判断祖先，或依赖 WinForms 的窗口级 MouseLeave |
