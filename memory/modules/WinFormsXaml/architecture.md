@@ -175,7 +175,7 @@
 - 模板：`ContentControl` 的 `Content` 可以是视觉元素或字符串，也可以由 `VisualControlTemplate` + `ContentPresenter` 呈现；`VisualStyle.Template` 由样式应用，直接赋给 `ContentControl.Template` 时优先。模板根及后代拿 `TemplatedParent`，`GetTemplateChild<T>` 从**每实例**的 `VisualNameScope` 取部件；模板触发器写 `BindingPriority.Template` 层，`TargetName` 指命名部件。
 - 覆盖层：`VisualSurface` 在根树之后绘制、之前命中一个铺满客户区的 `OverlayLayer`。`VisualPopup` 打开时把自己挂进去，因此不受祖先 `ScrollViewer.Clip` 裁切，也不被后续兄弟盖住；点击弹层与 `PlacementTarget` 之外、或在弹层内按 Escape 都会关闭。弹层脱离根树后继承链断开，打开时把目标 `DataContext` 以 `Inherited` 层推给内容。
 - `ComboBox`：组合 `ListBox` + `ScrollViewer`，逻辑焦点留在 ComboBox（列表与滚动器 `Focusable=false`），方向键/Home/End/PageUp/PageDown 转发给它们；Enter 提交、Escape 回滚到打开时的选择。`ItemsControl.ItemsRebuilt` 用于「先写 `SelectedIndex`、后加条目」的顺序：条目物化后把选择回推给列表。
-- 工作流 demo：`Examples/VisualWorkbench/Views/WorkflowGraphSample.cs` 用真实 `TreeDefaultComponent`，不碰模板/HWND。坐标不变量：节点 `Anchor`/`Size` 已按 `Layout.Scale` 坍缩；画布局部坐标 = surface 坐标 − 画布 `AbsoluteBounds.Location`；模型点 = 局部坐标 − 平移。连线在模型空间建并 `PublishCurve`，只在绘制时加平移。往 `tree.Links` 直接加线时必须同时写 `LinksMap`、`sender.Targets`、`receiver.Sources`，否则 `StandardDelete` 静默拒绝。
+- 工作流 demo：`Examples/XamlGallery/Demo/Views/WorkflowGraphSample.cs` 用真实 `TreeDefaultComponent`，不碰模板/HWND。坐标不变量：节点 `Anchor`/`Size` 已按 `Layout.Scale` 坍缩；画布局部坐标 = surface 坐标 − 画布 `AbsoluteBounds.Location`；模型点 = 局部坐标 − 平移。连线在模型空间建并 `PublishCurve`，只在绘制时加平移。往 `tree.Links` 直接加线时必须同时写 `LinksMap`、`sender.Targets`、`receiver.Sources`，否则 `StandardDelete` 静默拒绝。
 - 两套属性系统共存：HWND 后端的值存在 `Control` 上，视觉后端用 `IWinformsObject`/`WinformsObject` 的优先级表；两者共用 `DependencyProperty`/`PropertyMetadata`，但 `PropertyMetadata` 的变更回调参数是 `System.Windows.Forms.Control`，视觉属性靠覆写 `VisualElement.OnPropertyChanged` 响应。
 
 ## 五、验证

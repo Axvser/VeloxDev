@@ -75,10 +75,14 @@ backends coexist and share the built-in `Theme`.
   `ContentPresenter` receives the content. `VisualStyle.Template` applies through a style;
   `ContentControl.Template` wins over it. Template triggers write at the `Template` layer and may
   target a named part with `TargetName`.
-- **Controls.** `Border`, `StackPanel`, `Grid`, `DockPanel`, `Canvas`, `WrapPanel`, `TextBlock`,
-  `Image`, `Button`, `ToggleButton`, `CheckBox`, `RadioButton`, `TextBox`, `ScrollViewer`,
-  `ItemsControl`, `ListBox`, `VirtualList`, `ContentControl`, `ContentPresenter`, `ComboBox`; none of
-  them creates a child window.
+- **Controls.** `Border`, `StackPanel`, `Grid`, `DockPanel`, `Canvas`, `WrapPanel`, `UniformGrid`,
+  `Viewbox`, `Decorator`, `HeaderedContentControl`, `GridSplitter`, `GroupBox`, `Expander`,
+  `TabControl`, `TextBlock`, `TextBox`, `RichTextBox`, `Image`, `Button`, `RepeatButton`,
+  `ToggleButton`, `CheckBox`, `RadioButton`, `Slider`, `ProgressBar`, `ScrollViewer`, `ItemsControl`,
+  `ListBox`, `VirtualList`, `TreeView`, `ComboBox`, `Calendar`, `DatePicker`, `ContentControl`,
+  `ContentPresenter`, `VisualMenu`/`VisualContextMenu`, and the `Shapes` elements
+  (`Rectangle`/`Ellipse`/`Line`/`Polygon`/`Polyline`/`Path`); none of them creates a child window.
+  `VisualPresenter` hosts a lightweight `ContainerVisual` tree inside the control tree.
 - **Overlay and popups.** `VisualSurface` paints and hit-tests an overlay layer after the root tree.
   `VisualPopup` moves its child into that layer and is therefore not clipped by an ancestor
   `ScrollViewer`; a press outside the popup and its placement target closes it, and Escape closes it
@@ -116,8 +120,9 @@ root.Child = new StackPanel { Spacing = 8 }
 surface.Root = root;
 ```
 
-The runnable sample is [`Examples/VisualWorkbench`](../../../Examples/VisualWorkbench/README.md),
-including the secondary-screen capture mode and the Dark/Light toggle.
+The runnable sample is [`Examples/XamlGallery`](../../../Examples/XamlGallery/README.md); it is built
+entirely on the visual backend and includes the workflow graph card. The full workflow surface lives in
+`Examples/Workflow/WinForms`.
 
 ## XAML animations
 

@@ -509,7 +509,11 @@ surface.Root = root;
   wins). Template triggers write at `Template` and may target a part with `TargetName`.
 - Overlay: `VisualSurface` paints and hit-tests an overlay layer after the root. `VisualPopup` hosts
   its child there (not clipped by a `ScrollViewer`) and closes on an outside press or Escape.
-  `ComboBox` uses it for the drop-down and keeps focus on itself.
+  `ComboBox`, `Calendar`/`DatePicker`, `VisualMenu` and `VisualContextMenu` use it.
+- Wider control set: `TreeView`, `ListBox`, `VirtualList`, `ItemsControl`, `RichTextBox`, `Slider`,
+  `ProgressBar`, `RepeatButton`, `Expander`, `GroupBox`, `TabControl`, `UniformGrid`, `Viewbox`,
+  `Decorator`, `GridSplitter`, plus the `Shapes` elements and `VisualPresenter` for a lightweight
+  `ContainerVisual` tree.
 - Visual XAML: prefix every visual type with
   `xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"`.
   The root code-behind derives from the visual root type; `x:Name`, CLR events, `<Resources>` with
