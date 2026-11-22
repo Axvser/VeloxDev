@@ -194,9 +194,8 @@ public class ItemsControl : Control
     {
         base.OnAncestorChainChanged();
         HookScrollViewer();
-        if (Virtualizing)
+        if (Virtualizing && UpdateVirtualRange())
         {
-            UpdateVirtualRange();
             PerformLayout();
         }
     }
@@ -450,17 +449,17 @@ public class ItemsControl : Control
         return content;
     }
 
-    private void UpdateVirtualRange()
+    private bool UpdateVirtualRange()
     {
         if (_clearingItems || _updatingVirtualRange)
         {
-            return;
+            return false;
         }
 
         _updatingVirtualRange = true;
         try
         {
-            UpdateVirtualRangeCore();
+            return UpdateVirtualRangeCore();
         }
         finally
         {
@@ -468,15 +467,16 @@ public class ItemsControl : Control
         }
     }
 
-    private void UpdateVirtualRangeCore()
+    private bool UpdateVirtualRangeCore()
     {
         if (!Virtualizing)
         {
-            return;
+            return false;
         }
 
         if (_items.Count == 0)
         {
+            var hadVisuals = _virtualVisuals.Count > 0;
             foreach (var pair in _virtualVisuals)
             {
                 RemoveItemVisual(pair.Value);
@@ -484,7 +484,7 @@ public class ItemsControl : Control
 
             _virtualVisuals.Clear();
             SyncVirtualContainers();
-            return;
+            return hadVisuals;
         }
 
         var height = Math.Max(1, ItemHeight);
@@ -506,7 +506,7 @@ public class ItemsControl : Control
         // 拖条每像素都会触发 ViewChanged；可见下标范围没跨行时什么都不用做，避免逐像素重建/重排。
         if (first == _virtualFirst && last == _virtualLast)
         {
-            return;
+            return false;
         }
 
         _virtualFirst = first;
@@ -541,6 +541,7 @@ public class ItemsControl : Control
         _generated.Clear();
         _generated.AddRange(_virtualVisuals.Values);
         SyncVirtualContainers();
+        return true;
     }
 
     // 虚拟模式下未实现的条目没有容器，但仍占一个下标。
@@ -640,8 +641,10 @@ public class ItemsControl : Control
             return;
         }
 
-        UpdateVirtualRange();
-        PerformLayout();
+        if (UpdateVirtualRange())
+        {
+            PerformLayout();
+        }
     }
 
     private Control? EffectiveItemsPanel => _itemsPanel ?? _templatePanel;

@@ -30,8 +30,10 @@ public sealed partial class DataSection : VeloxDev.WinForms.Xaml.Controls.UserCo
         virtualConfigured = true;
         var count = (DataContext as GalleryModel)?.VirtualRows.Count ?? 400;
         virtualViewer.ExtentHeight = count * VirtualRowHeight;
-        virtualList.Width = virtualCanvas.ClientSize.Width;
-        virtualList.Height = count * VirtualRowHeight;
+        virtualContent.Width = virtualCanvas.ClientSize.Width;
+        virtualContent.Height = count * VirtualRowHeight;
+        virtualList.Width = virtualContent.Width;
+        virtualList.Height = virtualContent.Height;
         MoveVirtualContent();
     }
 
@@ -43,11 +45,18 @@ public sealed partial class DataSection : VeloxDev.WinForms.Xaml.Controls.UserCo
         }
 
         var offset = (int)virtualViewer.ScrollOffset.Y;
-        virtualList.Width = virtualCanvas.ClientSize.Width;
-        var top = -offset;
-        if (virtualList.Top != top)
+        var width = virtualCanvas.ClientSize.Width;
+        if (virtualContent.Width != width)
         {
-            virtualList.Top = top;
+            virtualContent.Width = width;
+            virtualList.Width = width;
+        }
+
+        // 移动只有一个孩子的包装 Canvas，而不是逐个移动已实现的行；ItemsControl 的局部布局不参与。
+        var top = -offset;
+        if (virtualContent.Top != top)
+        {
+            virtualContent.Top = top;
         }
 
         // 拖条每像素都会进这里；只在跨行或可见数量变化时改状态文字，避免逐像素重排文本。

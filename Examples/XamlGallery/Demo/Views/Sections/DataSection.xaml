@@ -183,11 +183,13 @@
           <v:StackPanel Orientation="Horizontal" Spacing="14">
             <v:ScrollViewer x:Name="virtualViewer" Width="620" Height="190" VerticalScrollBarVisibility="Visible">
               <v:Canvas x:Name="virtualCanvas">
-                <v:ItemsControl x:Name="virtualList"
-                                ItemsSource="{Binding VirtualRows}"
-                                ItemTemplate="{StaticResource VirtualRowTemplate}"
-                                Virtualizing="True"
-                                ItemHeight="28" />
+                <v:Canvas x:Name="virtualContent">
+                  <v:ItemsControl x:Name="virtualList"
+                                  ItemsSource="{Binding VirtualRows}"
+                                  ItemTemplate="{StaticResource VirtualRowTemplate}"
+                                  Virtualizing="True"
+                                  ItemHeight="28" />
+                </v:Canvas>
               </v:Canvas>
             </v:ScrollViewer>
             <v:StackPanel Spacing="8" Width="250">
