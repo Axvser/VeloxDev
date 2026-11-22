@@ -69,6 +69,7 @@ internal static class SyntaxHelpers
     public const string XamlControlMetadataName = "VeloxDev.WinForms.Xaml.Controls.Control";
     public const string ControlMetadataName = "System.Windows.Forms.Control";
     public const string DependencyPropertyMetadataName = "VeloxDev.WinForms.Xaml.DependencyProperty";
+    public const string VisualElementMetadataName = "VeloxDev.WinForms.Xaml.Visuals.VisualElement";
 
     public static readonly SymbolDisplayFormat TypeFormat = SymbolDisplayFormat.FullyQualifiedFormat
         .WithMiscellaneousOptions(

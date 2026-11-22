@@ -104,7 +104,7 @@ internal sealed class XamlCompiler
             return;
         }
 
-        if (!SyntaxHelpers.DerivesFrom(owner, SyntaxHelpers.ControlMetadataName))
+        if (!SyntaxHelpers.DerivesFrom(owner, SyntaxHelpers.ControlMetadataName) && !IsVisualElement(owner))
         {
             Report(Diagnostics.UnsupportedRoot, root, root.Name.LocalName, owner.Name);
             return;
@@ -159,10 +159,16 @@ internal sealed class XamlCompiler
 
     private void EmitRoot(XElement root)
     {
-        var host = IsXamlControl(_owner) ? "this" : null;
+        // 视觉子树没有 HWND：不调用 SuspendLayout/ResumeLayout，也不建立 NameScope。
+        var visualRoot = IsVisualElement(_owner);
+        var host = !visualRoot && IsXamlControl(_owner) ? "this" : null;
         _rootScope = host;
 
-        _current.Line("this.SuspendLayout();");
+        if (!visualRoot)
+        {
+            _current.Line("this.SuspendLayout();");
+        }
+
         if (host is not null)
         {
             _current.Line("this.NameScope = new global::VeloxDev.WinForms.Xaml.NameScope();");
@@ -186,11 +192,16 @@ internal sealed class XamlCompiler
         }
 
         _deferredEvents.Clear();
-        _current.Line("this.ResumeLayout(false);");
+        if (!visualRoot)
+        {
+            _current.Line("this.ResumeLayout(false);");
+        }
     }
 
     private void ProcessChildren(XElement element, ITypeSymbol elementType, string elementExpression, string? hostExpression)
     {
+        var parentIsVisual = IsVisualElement(elementType);
+
         foreach (var child in element.Elements())
         {
             if (IsResourcesProperty(child))
@@ -212,6 +223,31 @@ internal sealed class XamlCompiler
                     Report(Diagnostics.UnknownType, child, child.Name.LocalName);
                 }
 
+                continue;
+            }
+
+            if (parentIsVisual)
+            {
+                if (!IsVisualElement(type))
+                {
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        child,
+                        $"'{elementType.Name}' is a visual element and cannot host '{type.Name}'; only visual elements can be children.");
+                    continue;
+                }
+
+                var visualExpression = EmitControl(child, type, hostExpression: null);
+                _current.Line($"{elementExpression}.Add({visualExpression});");
+                continue;
+            }
+
+            if (IsVisualElement(type))
+            {
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    child,
+                    $"The visual element '{type.Name}' cannot be added to '{elementType.Name}'; host visual elements under a visual root instead.");
                 continue;
             }
 
@@ -307,6 +343,12 @@ internal sealed class XamlCompiler
 
     private string EmitXamlObject(XElement element, ITypeSymbol type, string? hostExpression)
     {
+        // 视觉元素必须走 EmitControl：只有它生成 x:Name 字段并递归用 Add 挂子项。
+        if (IsVisualElement(type))
+        {
+            return EmitControl(element, type, hostExpression);
+        }
+
         if (SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.ControlMetadataName))
         {
             return EmitControl(element, type, hostExpression);
@@ -503,16 +545,35 @@ internal sealed class XamlCompiler
             }
 
             var memberName = attribute.Name.LocalName;
-            if (memberName == "Style"
-                && !IsXamlControl(type)
-                && SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.ControlMetadataName))
+            var isVisual = IsVisualElement(type);
+
+            if (memberName == "Style")
             {
-                EmitNativeStyleAttribute(attribute, targetExpression);
-                continue;
+                if (isVisual)
+                {
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        attribute,
+                        $"A style is not supported on the visual backend; '{type.Name}' accepts literal property values only.");
+                    continue;
+                }
+
+                if (!IsXamlControl(type)
+                    && SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.ControlMetadataName))
+                {
+                    EmitNativeStyleAttribute(attribute, targetExpression);
+                    continue;
+                }
             }
 
             if (memberName.IndexOf('.') >= 0)
             {
+                if (isVisual)
+                {
+                    EmitVisualAttachedAttribute(attribute, targetExpression);
+                    continue;
+                }
+
                 if (!SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.ControlMetadataName))
                 {
                     Report(
@@ -536,6 +597,15 @@ internal sealed class XamlCompiler
 
             if (property is not null)
             {
+                if (isVisual && TryParseMarkup(attribute.Value, out var extension, out _, out _))
+                {
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        attribute,
+                        $"Markup extension '{extension}' is not supported on the visual backend; use a literal value.");
+                    continue;
+                }
+
                 EmitPropertyValue(attribute, targetExpression, property, attribute.Value, hostExpression);
                 continue;
             }
@@ -1316,6 +1386,66 @@ internal sealed class XamlCompiler
         {
             _current.Line($"{SyntaxHelpers.Fqn("XamlRuntime")}.SetAttachedValue({targetExpression}, {dependencyProperty}, {valueExpression});");
         }
+    }
+
+    // 视觉元素的附加属性由生成器写依赖属性本身：值类型在生成期已知，直接 Emit SetValue(Owner.XxxProperty, value)。
+    // 运行时的 XamlRuntime.SetAttachedValue 只接受 System.Windows.Forms.Control，不能用于 VisualElement。
+    private void EmitVisualAttachedAttribute(XAttribute attribute, string targetExpression)
+    {
+        var localName = attribute.Name.LocalName;
+        var dot = localName.IndexOf('.');
+        if (dot <= 0 || dot == localName.Length - 1 || localName.IndexOf('.', dot + 1) >= 0)
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                attribute,
+                $"Attached XAML attribute '{localName}' must be written as 'Owner.Property' or 'prefix:Owner.Property'.");
+            return;
+        }
+
+        var clrNamespace = GetClrNamespace(attribute.Name.NamespaceName);
+        if (clrNamespace is null)
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                attribute,
+                "An attached property on a visual element needs a clr-namespace prefix (for example xmlns:v=\"clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms\").");
+            return;
+        }
+
+        var ownerName = localName.Substring(0, dot);
+        var propertyName = localName.Substring(dot + 1);
+        var ownerType = _compilation.GetTypeByMetadataName(clrNamespace + "." + ownerName);
+        if (ownerType is null)
+        {
+            Report(Diagnostics.UnknownType, attribute, ownerName);
+            return;
+        }
+
+        if (!TryGetAttachedPropertyReference(ownerType, propertyName, out var dependencyProperty, out var valueType))
+        {
+            Report(Diagnostics.UnknownAttachedProperty, attribute, ownerType.Name, propertyName);
+            return;
+        }
+
+        if (TryParseMarkup(attribute.Value, out var extension, out _, out _))
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                attribute,
+                $"Markup extension '{extension}' is not supported on a visual attached property; use a literal value.");
+            return;
+        }
+
+        var valueExpression = valueType is null
+            ? $"{SyntaxHelpers.Fqn("XamlRuntime")}.ConvertValue({SyntaxHelpers.Quote(UnescapeMarkup(attribute.Value))}, {dependencyProperty}.PropertyType)"
+            : CreateLiteralExpression(valueType, attribute.Value, attribute);
+        if (valueExpression is null)
+        {
+            return;
+        }
+
+        _current.Line($"{targetExpression}.SetValue({dependencyProperty}, {valueExpression});");
     }
 
     private void EmitAttachedBinding(
@@ -2710,15 +2840,34 @@ internal sealed class XamlCompiler
     {
         var fullName = propertyElement.Name.LocalName;
         var memberName = fullName.Substring(fullName.LastIndexOf('.') + 1);
+        var isVisual = IsVisualElement(ownerType);
 
         if (memberName == "Resources")
         {
+            if (isVisual)
+            {
+                Report(
+                    Diagnostics.UnsupportedResource,
+                    propertyElement,
+                    $"'{ownerType.Name}' is a visual element and cannot own resources; use literal property values.");
+                return;
+            }
+
             EmitResources(propertyElement, ownerExpression, ownerType);
             return;
         }
 
         if (memberName == "Controls")
         {
+            if (isVisual)
+            {
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    propertyElement,
+                    "A visual element adds children with 'Add'; a Controls property element is not supported.");
+                return;
+            }
+
             ProcessChildren(propertyElement, ownerType, ownerExpression, hostExpression);
             return;
         }
@@ -3221,22 +3370,24 @@ internal sealed class XamlCompiler
             var prefix = typeName.Substring(0, colon);
             var localName = typeName.Substring(colon + 1);
 
+            var uri = GetNamespaceUriForPrefix(contextElement, prefix);
+            var clrNamespace = uri is null ? null : GetClrNamespace(uri);
+            if (clrNamespace is not null)
+            {
+                if (string.Equals(clrNamespace, SyntaxHelpers.RuntimeNamespace, StringComparison.Ordinal))
+                {
+                    return ResolveAdapterType(localName, contextElement);
+                }
+
+                return _compilation.GetTypeByMetadataName(clrNamespace + "." + localName);
+            }
+
             if (prefix == "v")
             {
                 return ResolveAdapterType(localName, contextElement);
             }
 
-            var uri = GetNamespaceUriForPrefix(contextElement, prefix);
-            var clrNamespace = uri is null ? null : GetClrNamespace(uri);
-            if (clrNamespace is not null
-                && string.Equals(clrNamespace, SyntaxHelpers.RuntimeNamespace, StringComparison.Ordinal))
-            {
-                return ResolveAdapterType(localName, contextElement);
-            }
-
-            return clrNamespace is null
-                ? null
-                : _compilation.GetTypeByMetadataName(clrNamespace + "." + localName);
+            return null;
         }
 
         // A fully qualified name needs no prefix resolution.
@@ -3589,26 +3740,27 @@ internal sealed class XamlCompiler
             return ResolveUnprefixedType(localName, element);
         }
 
+        // 显式 clr-namespace 优先于历史 `v:` 约定：视觉后端的 .Visuals / .Visuals.Controls 才能按原 URI 解析，
+        // 而 .Xaml 仍回退到适配器命名空间（Controls / Shapes / Runtime）。
+        var clrNamespace = GetClrNamespace(uri);
+        if (clrNamespace is not null)
+        {
+            if (string.Equals(clrNamespace, SyntaxHelpers.RuntimeNamespace, StringComparison.Ordinal))
+            {
+                return ResolveAdapterType(localName, element);
+            }
+
+            return _compilation.GetTypeByMetadataName(clrNamespace + "." + localName);
+        }
+
         // A legacy `v:` prefix still means the adapter namespaces: controls live in `.Xaml.Controls`, every other
-        // runtime type lives in `.Xaml`. This holds whether the prefix maps to `.Xaml`, `.Xaml.Controls` or a
-        // non-clr URI.
+        // runtime type lives in `.Xaml`. This holds when the prefix maps to a non-clr URI.
         if (GetPrefixForNamespace(element, uri) == "v")
         {
             return ResolveAdapterType(localName, element);
         }
 
-        var clrNamespace = GetClrNamespace(uri);
-        if (clrNamespace is null)
-        {
-            return null;
-        }
-
-        if (string.Equals(clrNamespace, SyntaxHelpers.RuntimeNamespace, StringComparison.Ordinal))
-        {
-            return ResolveAdapterType(localName, element);
-        }
-
-        return _compilation.GetTypeByMetadataName(clrNamespace + "." + localName);
+        return null;
     }
 
     /// <summary>
@@ -3784,6 +3936,9 @@ internal sealed class XamlCompiler
     }
 
     private static bool IsXamlControl(ITypeSymbol type) => SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.XamlControlMetadataName);
+
+    private static bool IsVisualElement(ITypeSymbol type)
+        => SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.VisualElementMetadataName);
 
     private static bool CanAssign(ITypeSymbol from, ITypeSymbol to)
     {
