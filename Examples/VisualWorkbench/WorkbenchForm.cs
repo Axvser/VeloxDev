@@ -59,6 +59,77 @@ public sealed class WorkbenchForm : Form
         }
     }
 
+    /// <summary>Drags the first workflow node; used by capture mode to prove the model gesture path.</summary>
+    public void DragFirstGraphNode()
+    {
+        if (FindGraph(_surface.Root) is not { } graph || graph.Tree.Nodes.Count == 0)
+        {
+            return;
+        }
+
+        var bounds = graph.NodeBounds(graph.Tree.Nodes[0]);
+        if (bounds.IsEmpty)
+        {
+            return;
+        }
+
+        var center = new Point(
+            (int)(bounds.X + (bounds.Width / 2f)),
+            (int)(bounds.Y + (bounds.Height / 2f)));
+        var target = new Point(center.X + 46, center.Y + 26);
+        _surface.ProcessPointerDown(center, MouseButtons.Left);
+        _surface.ProcessPointerMove(target);
+        _surface.ProcessPointerUp(target, MouseButtons.Left);
+    }
+
+    /// <summary>Hovers the first workflow link and presses Delete; used by capture mode.</summary>
+    public void DeleteFirstGraphLink()
+    {
+        if (FindGraph(_surface.Root) is not { } graph)
+        {
+            return;
+        }
+
+        var point = graph.FirstLinkMidpoint();
+        if (point.IsEmpty)
+        {
+            return;
+        }
+
+        _surface.ProcessPointerMove(point);
+        graph.Focus();
+        _surface.ProcessKeyDown(Keys.Delete);
+    }
+
+    /// <summary>Zooms the workflow graph; used by capture mode.</summary>
+    public void ZoomGraph()
+    {
+        FindGraph(_surface.Root)?.ZoomDemo();
+    }
+
+    private static Views.WorkflowGraphSample? FindGraph(VisualElement? element)
+    {
+        if (element is null)
+        {
+            return null;
+        }
+
+        if (element is Views.WorkflowGraphSample graph)
+        {
+            return graph;
+        }
+
+        foreach (var child in element.Children)
+        {
+            if (child is VisualElement childElement && FindGraph(childElement) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     private static VeloxDev.WinForms.Xaml.Visuals.Controls.ComboBox? FindComboBox(VisualElement? element)
     {
         if (element is null)

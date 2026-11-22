@@ -63,22 +63,40 @@ backends coexist and share the built-in `Theme`.
   priority layer (`Animation`, `LocalValue`, `StyleTrigger`, `Template`, `Style`, `Inherited`).
 - **Bindings.** `element.SetBinding(Element.PropProperty, new Binding("Name") { Source = vm })`
   supports `OneWay`/`OneTime`/`TwoWay`, `DataContext` paths, converters, `StringFormat`,
-  `FallbackValue` and `TargetNullValue`. `GetObservable`/`Bind` push an `IObservable` into a layer.
-  `ElementName`, `RelativeSource`, validation rules and visual templates are not part of this layer.
+  `FallbackValue` and `TargetNullValue`; `RelativeSource.Self` and `TemplateBinding`
+  (`RelativeSource.TemplatedParent`) resolve too. `GetObservable`/`Bind` push an `IObservable` into a
+  layer. `ElementName` and validation rules are not part of this layer.
+- **Resources and styles.** `VisualElement.Resources` and `VisualSurface.Resources` are ordinary
+  `ResourceDictionary` stores; `VisualResourceLookup.Get<T>` walks the element, its ancestors and the
+  surface. `VisualStyle` / `VisualSetter` / `VisualTrigger` still come from code or from the `Styles`
+  collections.
+- **Templates.** `ContentControl` shows one `Content` or a `VisualControlTemplate`; the template's root
+  reports `TemplatedParent`, named parts resolve through `GetTemplateChild<T>`, and
+  `ContentPresenter` receives the content. `VisualStyle.Template` applies through a style;
+  `ContentControl.Template` wins over it. Template triggers write at the `Template` layer and may
+  target a named part with `TargetName`.
 - **Controls.** `Border`, `StackPanel`, `Grid`, `DockPanel`, `Canvas`, `WrapPanel`, `TextBlock`,
-  `Image`, `Button`, `TextBox`, `ScrollViewer`; new selection and item controls live in the same
-  namespace. None of them creates a child window.
+  `Image`, `Button`, `ToggleButton`, `CheckBox`, `RadioButton`, `TextBox`, `ScrollViewer`,
+  `ItemsControl`, `ListBox`, `VirtualList`, `ContentControl`, `ContentPresenter`, `ComboBox`; none of
+  them creates a child window.
+- **Overlay and popups.** `VisualSurface` paints and hit-tests an overlay layer after the root tree.
+  `VisualPopup` moves its child into that layer and is therefore not clipped by an ancestor
+  `ScrollViewer`; a press outside the popup and its placement target closes it, and Escape closes it
+  from the focused element. `ComboBox` uses this for its drop-down and keeps logical focus on itself.
 - **Native compatibility.** `NativeControlHost` hosts a real WinForms control as a child HWND above
   the surface. WinForms child windows always paint above the visual tree, so the island must stay
-  rectangular and axis-aligned; it cannot be transformed, blended or clipped with its visual parent.
+  rectangular and axis-aligned; it cannot be transformed, blended or clipped with its visual parent,
+  and an overlay popup cannot cover it.
 - **Input.** Pointer, wheel, keyboard and text input are routed from the single surface to the
   deepest hit element; focus is logical and `FocusElement`/`Tab` move it. Document-level input
   rules still apply: `IsInputKey`/`ProcessDialogKey` are handled by `VisualSurface`.
 - **Visual XAML.** Use the `v:` prefix for the experimental visual profile:
   `xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"`.
   Unprefixed names keep resolving to the HWND `Xaml.Controls`. Visual markup supports literal
-  properties, attached properties, `x:Name` fields and CLR events; resources, templates and binding
-  markup are diagnosed rather than silently dropped.
+  properties, attached properties, `x:Name`, CLR events, `<Resources>` with scalar resources and
+  `<Style>` / `<ControlTemplate>` entries, `Style="{StaticResource Key}"`, and `{Binding}` /
+  `{TemplateBinding}` / `{StaticResource}` on dependency properties. `{DynamicResource}` and
+  `<DataTemplate>` are diagnosed because they have no visual-backend implementation.
 - **Theme.** The built-in `Theme.CreateDark()` / `CreateLight()` palettes follow VS Code Dark+ /
   Light+ (editor and side-bar colours, `#007ACC` accent, `#007FD4`/`#0090F1` focus ring, Dark+
   `#264F78` / Light+ `#ADD6FF` selection, 4 px radius, 28 px controls). Switching `Theme.Mode`

@@ -53,6 +53,24 @@ internal static class Program
                         Pump(frames: 4);
                     }
 
+                    if (args.Contains("--graph-drag", StringComparer.OrdinalIgnoreCase))
+                    {
+                        form.DragFirstGraphNode();
+                        Pump(frames: 4);
+                    }
+
+                    if (args.Contains("--graph-delete", StringComparer.OrdinalIgnoreCase))
+                    {
+                        form.DeleteFirstGraphLink();
+                        Pump(frames: 4);
+                    }
+
+                    if (args.Contains("--graph-zoom", StringComparer.OrdinalIgnoreCase))
+                    {
+                        form.ZoomGraph();
+                        Pump(frames: 4);
+                    }
+
                     Capture(form, capturePath);
                 }
                 catch (Exception exception)

@@ -497,17 +497,28 @@ surface.Root = root;
   `Template`, `Style`, `Inherited`).
 - Bindings: `element.SetBinding(Control.PropProperty, new Binding("Path") { Source = vm })` for
   `OneWay`/`OneTime`/`TwoWay`, `DataContext`, converters and formatting; `Bind`/`GetObservable` for
-  observable streams. `ElementName`, `RelativeSource`, validation rules and visual templates are not
-  available.
-- Styles: `VisualStyle` / `VisualSetter` / `VisualTrigger`, explicit `Style` or implicit `Styles`
-  collections; setters write at `Style`, triggers at `StyleTrigger`.
+  observable streams. `RelativeSource.Self` and `TemplateBinding` resolve; `ElementName` and
+  validation rules do not.
+- Resources: `VisualElement.Resources` / `VisualSurface.Resources` plus
+  `VisualResourceLookup.Get<T>(element, key)`, which searches the element, its ancestors and the
+  surface. Styles: `VisualStyle` / `VisualSetter` / `VisualTrigger`, explicit `Style` or implicit
+  `Styles` collections; setters write at `Style`, triggers at `StyleTrigger`.
+- Templates: `ContentControl` shows `Content` directly or through a `VisualControlTemplate`;
+  `ContentPresenter` displays the content, `GetTemplateChild<T>` resolves named parts, and
+  `VisualStyle.Template` applies a template through a style (a direct `ContentControl.Template`
+  wins). Template triggers write at `Template` and may target a part with `TargetName`.
+- Overlay: `VisualSurface` paints and hit-tests an overlay layer after the root. `VisualPopup` hosts
+  its child there (not clipped by a `ScrollViewer`) and closes on an outside press or Escape.
+  `ComboBox` uses it for the drop-down and keeps focus on itself.
 - Visual XAML: prefix every visual type with
   `xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"`.
-  The root code-behind derives from the visual root type; `x:Name` fields and CLR events work.
-  Resources, templates, bindings and triggers in visual markup are diagnosed, not silently emitted.
+  The root code-behind derives from the visual root type; `x:Name`, CLR events, `<Resources>` with
+  `<Style>` / `<ControlTemplate>`, `Style="{StaticResource}"` and `{Binding}` /
+  `{TemplateBinding}` / `{StaticResource}` work. `{DynamicResource}` and `<DataTemplate>` are
+  diagnosed.
 - `NativeControlHost` is the compatibility island for native controls (IME, third-party hosts).
   It is always a rectangular child HWND above the visual tree and cannot be transformed, blended or
-  clipped with its visual parent.
+  clipped with its visual parent, and an overlay popup cannot cover it.
 - `VisualSurface` routes pointer, wheel, keyboard and text input to the deepest hit element; focus is
   logical. `TextBox` uses a native editor overlay while focused for IME/accessibility.
 
