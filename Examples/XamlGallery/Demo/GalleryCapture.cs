@@ -2,7 +2,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Text;
 using System.Windows.Forms;
-using Demo.Views;
+using VeloxDev.WinForms.Xaml.Visuals;
 
 namespace Demo;
 
@@ -12,18 +12,12 @@ internal static class GalleryCapture
     /// <summary>Applies interactive selection, scroll and chrome switches after the window is shown.</summary>
     public static void ApplyStartup(Form form, string[] args)
     {
-        if (HasFlag(args, "--capture"))
+        if (HasFlag(args, "--capture") || form is not GalleryForm gallery)
         {
             return;
         }
 
-        var gallery = FindGallery(form);
-        if (gallery is null)
-        {
-            return;
-        }
-
-        var id = ReadEntryId(args);
+        var id = ReadEntryId(gallery, args);
         var scroll = ReadInt(args, "--scroll", 0);
         var previewOnly = HasFlag(args, "--preview-only");
         if (id is null && scroll <= 0 && !previewOnly)
@@ -33,7 +27,7 @@ internal static class GalleryCapture
 
         form.Shown += (_, _) => form.BeginInvoke(() =>
         {
-            if (form.IsDisposed || gallery.IsDisposed)
+            if (form.IsDisposed)
             {
                 return;
             }
@@ -43,6 +37,11 @@ internal static class GalleryCapture
                 gallery.SetChromeVisible(false);
             }
 
+            if (HasFlag(args, "--toggle-theme"))
+            {
+                gallery.ToggleThemeForCapture();
+            }
+
             if (id is not null)
             {
                 gallery.SelectEntry(id);
@@ -50,8 +49,10 @@ internal static class GalleryCapture
 
             if (scroll > 0)
             {
-                gallery.SetPreviewScrollOffset(scroll);
+                gallery.SetScrollOffset(scroll);
             }
+
+            gallery.Surface.InvalidateSurface();
         });
     }
 
@@ -69,16 +70,19 @@ internal static class GalleryCapture
             : Path.Combine(AppContext.BaseDirectory, "captures");
         Directory.CreateDirectory(directory);
 
-        var gallery = FindGallery(form)
-            ?? throw new InvalidOperationException("No GalleryView was found.");
-        var includeGroups = HasFlag(args, "--include-groups");
-        var targets = ResolveTargets(gallery, args, includeGroups);
+        if (form is not GalleryForm gallery)
+        {
+            throw new InvalidOperationException("The capture mode needs a GalleryForm.");
+        }
+
+        var targets = ResolveTargets(gallery, args);
         var scroll = ReadInt(args, "--scroll", 0);
         var dump = HasFlag(args, "--dump");
         var previewOnly = HasFlag(args, "--preview-only");
+        var includeGroups = HasFlag(args, "--include-groups");
+        _ = includeGroups;
 
-        form.StartPosition = FormStartPosition.Manual;
-        form.Location = new Point(60, 60);
+        PlaceOnCaptureScreen(form);
         form.TopMost = true;
 
         form.Shown += (_, _) => form.BeginInvoke(() =>
@@ -90,35 +94,42 @@ internal static class GalleryCapture
                     gallery.SetChromeVisible(false);
                 }
 
+                if (HasFlag(args, "--toggle-theme"))
+                {
+                    gallery.ToggleThemeForCapture();
+                    Pump(form, 4);
+                }
+
                 for (var index = 0; index < targets.Count; index++)
                 {
-                    var target = targets[index];
-                    if (!gallery.SelectEntry(target.Id))
+                    var id = targets[index];
+                    if (!gallery.SelectEntry(id))
                     {
                         File.WriteAllText(
-                            Path.Combine(directory, $"capture-error-{SafeName(target.Id)}.txt"),
-                            $"Entry '{target.Id}' was not found.");
+                            Path.Combine(directory, $"capture-error-{SafeName(id)}.txt"),
+                            $"Entry '{id}' was not found.");
                         continue;
                     }
 
                     if (scroll > 0 && targets.Count == 1)
                     {
-                        gallery.SetPreviewScrollOffset(scroll);
+                        gallery.SetScrollOffset(scroll);
                     }
 
-                    gallery.ClearSelection();
                     Pump(form, index == 0 ? 24 : 8);
 
-                    var name = targets.Count == 1
-                        ? SafeName(target.Id)
-                        : $"{index:00}-{SafeName(target.Id)}";
+                    var name = targets.Count == 1 ? SafeName(id) : $"{index:00}-{SafeName(id)}";
                     Capture(form, Path.Combine(directory, name + ".png"));
 
                     if (dump)
                     {
                         var builder = new StringBuilder();
                         builder.AppendLine($"window {form.Bounds}");
-                        Dump(form, builder, 0);
+                        if (gallery.Surface.Root is { } root)
+                        {
+                            Dump(root, builder, 0);
+                        }
+
                         File.WriteAllText(Path.Combine(directory, name + ".txt"), builder.ToString());
                     }
                 }
@@ -136,19 +147,33 @@ internal static class GalleryCapture
         return true;
     }
 
-    private static List<GalleryEntry> ResolveTargets(GalleryView gallery, string[] args, bool includeGroups)
+    private static List<string> ResolveTargets(GalleryForm gallery, string[] args)
     {
+        var cards = gallery.Shell.Cards;
         if (HasFlag(args, "--all"))
         {
-            return gallery.EnumerateEntries(includeGroups).ToList();
+            return cards.Select(static card => card.Id).ToList();
         }
 
-        var id = ReadEntryId(args) ?? "layout.stack-panel";
-        var entry = GalleryCatalog.Find(id);
-        return entry is null ? [] : [entry];
+        var group = ReadOption(args, "--group");
+        if (group is not null)
+        {
+            return cards
+                .Where(card => string.Equals(card.Group, group, StringComparison.OrdinalIgnoreCase))
+                .Select(static card => card.Id)
+                .ToList();
+        }
+
+        var entry = ReadOption(args, "--entry");
+        if (entry is not null)
+        {
+            return [entry];
+        }
+
+        return cards.Count > 0 ? [cards[0].Id] : [];
     }
 
-    private static string? ReadEntryId(string[] args)
+    private static string? ReadEntryId(GalleryForm gallery, string[] args)
     {
         var entry = ReadOption(args, "--entry");
         if (entry is not null)
@@ -162,7 +187,9 @@ internal static class GalleryCapture
             return null;
         }
 
-        return GalleryCatalog.FindGroup(group)?.Id ?? group;
+        return gallery.Shell.Cards
+            .FirstOrDefault(card => string.Equals(card.Group, group, StringComparison.OrdinalIgnoreCase))
+            ?.Id;
     }
 
     private static string? ReadOption(string[] args, string name)
@@ -182,14 +209,16 @@ internal static class GalleryCapture
     private static bool HasFlag(string[] args, string name)
         => Array.Exists(args, a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
 
-    private static GalleryView? FindGallery(Form form)
+    private static void PlaceOnCaptureScreen(Form form)
     {
-        if (form is GalleryForm galleryForm)
-        {
-            return galleryForm.Gallery;
-        }
-
-        return GalleryLayout.Descendants<GalleryView>(form).FirstOrDefault();
+        var screen = Screen.AllScreens.FirstOrDefault(static candidate => !candidate.Primary)
+                     ?? Screen.PrimaryScreen
+                     ?? Screen.AllScreens[0];
+        var area = screen.WorkingArea;
+        form.StartPosition = FormStartPosition.Manual;
+        form.Location = new Point(
+            area.X + Math.Max(0, (area.Width - form.Width) / 2),
+            area.Y + Math.Max(0, (area.Height - form.Height) / 2));
     }
 
     private static string SafeName(string id)
@@ -213,13 +242,20 @@ internal static class GalleryCapture
         using (var graphics = Graphics.FromImage(bitmap))
         {
             var hdc = graphics.GetHdc();
+            bool captured;
             try
             {
-                _ = PrintWindow(form.Handle, hdc, 2);
+                captured = PrintWindow(form.Handle, hdc, 2);
             }
             finally
             {
                 graphics.ReleaseHdc(hdc);
+            }
+
+            if (!captured && form is GalleryForm gallery)
+            {
+                graphics.Clear(gallery.Surface.BackColor);
+                gallery.Surface.RenderTo(graphics, gallery.Surface.ClientSize);
             }
         }
 
@@ -229,78 +265,34 @@ internal static class GalleryCapture
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool PrintWindow(IntPtr hwnd, IntPtr hdc, uint flags);
 
-    private static void Dump(System.Windows.Forms.Control parent, StringBuilder builder, int depth)
+    private static void Dump(VisualElement element, StringBuilder builder, int depth)
     {
-        foreach (System.Windows.Forms.Control child in parent.Controls)
+        builder.Append(new string(' ', depth * 2));
+        builder.Append(element.GetType().Name);
+        if (!string.IsNullOrEmpty(element.Name))
         {
-            builder.Append(new string(' ', depth * 2));
-            builder.Append(child.GetType().Name);
-            if (!string.IsNullOrEmpty(child.Name))
+            builder.Append(' ').Append('#').Append(element.Name);
+        }
+
+        builder.Append(' ').Append(element.AbsoluteBounds);
+        builder.Append(" vis=").Append(element.Visibility);
+        if (element.Background is { } background)
+        {
+            builder.Append(" bg=").Append(background.ApproximateColor.ToArgb().ToString("X8"));
+        }
+
+        if (element.BorderBrush is { } border)
+        {
+            builder.Append(" border=").Append(border.ApproximateColor.ToArgb().ToString("X8"));
+        }
+
+        builder.AppendLine();
+        foreach (var child in element.Children)
+        {
+            if (child is VisualElement visual)
             {
-                builder.Append(' ').Append('#').Append(child.Name);
+                Dump(visual, builder, depth + 1);
             }
-
-            builder.Append(' ').Append(child.Bounds);
-            if (child is VeloxDev.WinForms.Xaml.Controls.Control xamlControl)
-            {
-                builder.Append(" bg=");
-                switch (xamlControl.Background)
-                {
-                    case null:
-                        builder.Append("null");
-                        break;
-                    case VeloxDev.WinForms.Xaml.SolidColorBrush solid:
-                        builder.Append(solid.Color.ToArgb().ToString("X8"));
-                        break;
-                    case VeloxDev.WinForms.Xaml.LinearGradientBrush gradient:
-                        builder.Append("gradient:").Append(gradient.GradientStops.Count);
-                        break;
-                    default:
-                        builder.Append(xamlControl.Background.GetType().Name);
-                        break;
-                }
-                if (xamlControl is VeloxDev.WinForms.Xaml.Controls.Border border)
-                {
-                    builder.Append(" borderBg=");
-                    switch (border.Background)
-                    {
-                        case null:
-                            builder.Append("null");
-                            break;
-                        case VeloxDev.WinForms.Xaml.SolidColorBrush solid:
-                            builder.Append(solid.Color.ToArgb().ToString("X8"));
-                            break;
-                        case VeloxDev.WinForms.Xaml.LinearGradientBrush gradient:
-                            builder.Append("gradient:").Append(gradient.GradientStops.Count);
-                            break;
-                        default:
-                            builder.Append(border.Background.GetType().Name);
-                            break;
-                    }
-
-                    builder.Append(" thick=").Append(border.BorderThickness).Append(" stroke=");
-                    switch (border.BorderBrush)
-                    {
-                        case null:
-                            builder.Append("null");
-                            break;
-                        case VeloxDev.WinForms.Xaml.SolidColorBrush solidStroke:
-                            builder.Append(solidStroke.Color.ToArgb().ToString("X8"));
-                            break;
-                        default:
-                            builder.Append(border.BorderBrush.GetType().Name);
-                            break;
-                    }
-                }
-            }
-
-            if (!child.Visible)
-            {
-                builder.Append(" hidden");
-            }
-
-            builder.AppendLine();
-            Dump(child, builder, depth + 1);
         }
     }
 }
