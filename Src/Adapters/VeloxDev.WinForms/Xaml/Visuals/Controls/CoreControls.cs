@@ -110,27 +110,28 @@ public class Border : VisualElement
 public class StackPanel : Panel
 {
     /// <summary>Whether children stack vertically (default) or horizontally.</summary>
-    public static readonly WinformsProperty<Orientation> OrientationProperty =
-        WinformsProperty.Register<StackPanel, Orientation>(
-            nameof(Orientation),
-            Orientation.Vertical,
-            affectsMeasure: true);
+    public static readonly DependencyProperty OrientationProperty =
+        DependencyProperty.Register(
+            nameof(Orientation), typeof(Orientation), typeof(StackPanel),
+            new PropertyMetadata(Orientation.Vertical) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>The gap between adjacent children in pixels.</summary>
-    public static readonly WinformsProperty<int> SpacingProperty =
-        WinformsProperty.Register<StackPanel, int>(nameof(Spacing), 0, affectsMeasure: true);
+    public static readonly DependencyProperty SpacingProperty =
+        DependencyProperty.Register(
+            nameof(Spacing), typeof(int), typeof(StackPanel),
+            new PropertyMetadata(0) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>Whether children stack vertically (default) or horizontally.</summary>
     public Orientation Orientation
     {
-        get => GetValue(OrientationProperty);
+        get => (Orientation)GetValue(OrientationProperty)!;
         set => SetValue(OrientationProperty, value);
     }
 
     /// <summary>The gap between adjacent children in pixels.</summary>
     public int Spacing
     {
-        get => GetValue(SpacingProperty);
+        get => (int)GetValue(SpacingProperty)!;
         set => SetValue(SpacingProperty, value);
     }
 
@@ -213,39 +214,34 @@ public class StackPanel : Panel
 public class TextBlock : VisualElement
 {
     /// <summary>The text to draw.</summary>
-    public static readonly WinformsProperty<string> TextProperty =
-        WinformsProperty.Register<TextBlock, string>(
-            nameof(Text),
-            string.Empty,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty TextProperty =
+        DependencyProperty.Register(
+            nameof(Text), typeof(string), typeof(TextBlock),
+            new PropertyMetadata(string.Empty) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>The font used to draw the text.</summary>
-    public static readonly WinformsProperty<Font> FontProperty =
-        WinformsProperty.Register<TextBlock, Font>(
-            nameof(Font),
-            DefaultFont,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty FontProperty =
+        DependencyProperty.Register(
+            nameof(Font), typeof(Font), typeof(TextBlock),
+            new PropertyMetadata(DefaultFont) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>The text colour; empty uses the active theme.</summary>
-    public static readonly WinformsProperty<Color> ForegroundProperty =
-        WinformsProperty.Register<TextBlock, Color>(nameof(Foreground), Color.Empty, affectsRender: true);
+    public static readonly DependencyProperty ForegroundProperty =
+        DependencyProperty.Register(
+            nameof(Foreground), typeof(Color), typeof(TextBlock),
+            new PropertyMetadata(Color.Empty) { AffectsRender = true });
 
     /// <summary>Whether overlong text wraps at word boundaries.</summary>
-    public static readonly WinformsProperty<bool> WrapProperty =
-        WinformsProperty.Register<TextBlock, bool>(
-            nameof(Wrap),
-            false,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty WrapProperty =
+        DependencyProperty.Register(
+            nameof(Wrap), typeof(bool), typeof(TextBlock),
+            new PropertyMetadata(false) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>How the text is aligned horizontally.</summary>
-    public static readonly WinformsProperty<XamlTextAlignment> TextAlignmentProperty =
-        WinformsProperty.Register<TextBlock, XamlTextAlignment>(
-            nameof(TextAlignment),
-            XamlTextAlignment.Left,
-            affectsRender: true);
+    public static readonly DependencyProperty TextAlignmentProperty =
+        DependencyProperty.Register(
+            nameof(TextAlignment), typeof(XamlTextAlignment), typeof(TextBlock),
+            new PropertyMetadata(XamlTextAlignment.Left) { AffectsRender = true });
 
     /// <summary>Creates a non-hit-testable text element.</summary>
     public TextBlock()
@@ -256,14 +252,14 @@ public class TextBlock : VisualElement
     /// <summary>The text to draw.</summary>
     public string Text
     {
-        get => GetValue(TextProperty);
+        get => (string)GetValue(TextProperty)!;
         set => SetValue(TextProperty, value ?? string.Empty);
     }
 
     /// <summary>The font used to draw the text.</summary>
     public Font Font
     {
-        get => GetValue(FontProperty);
+        get => (Font)GetValue(FontProperty)!;
         set
         {
             if (value is not null)
@@ -276,21 +272,21 @@ public class TextBlock : VisualElement
     /// <summary>The text colour; empty uses the active theme.</summary>
     public Color Foreground
     {
-        get => GetValue(ForegroundProperty);
+        get => (Color)GetValue(ForegroundProperty)!;
         set => SetValue(ForegroundProperty, value);
     }
 
     /// <summary>Whether overlong text wraps at word boundaries.</summary>
     public bool Wrap
     {
-        get => GetValue(WrapProperty);
+        get => (bool)GetValue(WrapProperty)!;
         set => SetValue(WrapProperty, value);
     }
 
     /// <summary>How the text is aligned horizontally.</summary>
     public XamlTextAlignment TextAlignment
     {
-        get => GetValue(TextAlignmentProperty);
+        get => (XamlTextAlignment)GetValue(TextAlignmentProperty)!;
         set => SetValue(TextAlignmentProperty, value);
     }
 
@@ -348,20 +344,16 @@ public class TextBlock : VisualElement
 public class Image : VisualElement
 {
     /// <summary>The bitmap or image to draw.</summary>
-    public static readonly WinformsProperty<System.Drawing.Image?> SourceProperty =
-        WinformsProperty.Register<Image, System.Drawing.Image?>(
-            nameof(Source),
-            null,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty SourceProperty =
+        DependencyProperty.Register(
+            nameof(Source), typeof(System.Drawing.Image), typeof(Image),
+            new PropertyMetadata(null) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>How the source is fitted inside the bounds.</summary>
-    public static readonly WinformsProperty<XamlStretch> StretchProperty =
-        WinformsProperty.Register<Image, XamlStretch>(
-            nameof(Stretch),
-            XamlStretch.Uniform,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty StretchProperty =
+        DependencyProperty.Register(
+            nameof(Stretch), typeof(XamlStretch), typeof(Image),
+            new PropertyMetadata(XamlStretch.Uniform) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>Creates a non-hit-testable image element.</summary>
     public Image()
@@ -372,14 +364,14 @@ public class Image : VisualElement
     /// <summary>The bitmap or image to draw.</summary>
     public System.Drawing.Image? Source
     {
-        get => GetValue(SourceProperty);
+        get => (System.Drawing.Image)GetValue(SourceProperty)!;
         set => SetValue(SourceProperty, value);
     }
 
     /// <summary>How the source is fitted inside the bounds.</summary>
     public XamlStretch Stretch
     {
-        get => GetValue(StretchProperty);
+        get => (XamlStretch)GetValue(StretchProperty)!;
         set => SetValue(StretchProperty, value);
     }
 

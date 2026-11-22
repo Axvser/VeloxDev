@@ -20,20 +20,28 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 public class Canvas : Panel
 {
     /// <summary>The attached left offset; <see cref="double.NaN"/> leaves it unset.</summary>
-    public static readonly WinformsProperty<double> LeftProperty =
-        WinformsProperty.RegisterAttached<Canvas, double>("Left", double.NaN, affectsArrange: true);
+    public static readonly DependencyProperty LeftProperty =
+        DependencyProperty.RegisterAttached(
+            "Left", typeof(double), typeof(Canvas),
+            new PropertyMetadata(double.NaN) { AffectsRender = false, AffectsArrange = true });
 
     /// <summary>The attached top offset; <see cref="double.NaN"/> leaves it unset.</summary>
-    public static readonly WinformsProperty<double> TopProperty =
-        WinformsProperty.RegisterAttached<Canvas, double>("Top", double.NaN, affectsArrange: true);
+    public static readonly DependencyProperty TopProperty =
+        DependencyProperty.RegisterAttached(
+            "Top", typeof(double), typeof(Canvas),
+            new PropertyMetadata(double.NaN) { AffectsRender = false, AffectsArrange = true });
 
     /// <summary>The attached right offset; <see cref="double.NaN"/> leaves it unset.</summary>
-    public static readonly WinformsProperty<double> RightProperty =
-        WinformsProperty.RegisterAttached<Canvas, double>("Right", double.NaN, affectsArrange: true);
+    public static readonly DependencyProperty RightProperty =
+        DependencyProperty.RegisterAttached(
+            "Right", typeof(double), typeof(Canvas),
+            new PropertyMetadata(double.NaN) { AffectsRender = false, AffectsArrange = true });
 
     /// <summary>The attached bottom offset; <see cref="double.NaN"/> leaves it unset.</summary>
-    public static readonly WinformsProperty<double> BottomProperty =
-        WinformsProperty.RegisterAttached<Canvas, double>("Bottom", double.NaN, affectsArrange: true);
+    public static readonly DependencyProperty BottomProperty =
+        DependencyProperty.RegisterAttached(
+            "Bottom", typeof(double), typeof(Canvas),
+            new PropertyMetadata(double.NaN) { AffectsRender = false, AffectsArrange = true });
 
     /// <summary>Reads the left offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element whose attached value is read.</param>
@@ -41,13 +49,13 @@ public class Canvas : Panel
     public static double GetLeft(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return LeftProperty.GetValue(element);
+        return (double)element.GetValue(LeftProperty)!;
     }
 
     /// <summary>Writes the left offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element receiving the attached value.</param>
     /// <param name="value">The offset in pixels, or <see cref="double.NaN"/> to unset it.</param>
-    public static void SetLeft(VisualElement element, double value) => LeftProperty.SetValue(element, value);
+    public static void SetLeft(VisualElement element, double value) => element.SetValue(LeftProperty, value);
 
     /// <summary>Reads the top offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element whose attached value is read.</param>
@@ -55,13 +63,13 @@ public class Canvas : Panel
     public static double GetTop(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return TopProperty.GetValue(element);
+        return (double)element.GetValue(TopProperty)!;
     }
 
     /// <summary>Writes the top offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element receiving the attached value.</param>
     /// <param name="value">The offset in pixels, or <see cref="double.NaN"/> to unset it.</param>
-    public static void SetTop(VisualElement element, double value) => TopProperty.SetValue(element, value);
+    public static void SetTop(VisualElement element, double value) => element.SetValue(TopProperty, value);
 
     /// <summary>Reads the right offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element whose attached value is read.</param>
@@ -69,13 +77,13 @@ public class Canvas : Panel
     public static double GetRight(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return RightProperty.GetValue(element);
+        return (double)element.GetValue(RightProperty)!;
     }
 
     /// <summary>Writes the right offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element receiving the attached value.</param>
     /// <param name="value">The offset in pixels, or <see cref="double.NaN"/> to unset it.</param>
-    public static void SetRight(VisualElement element, double value) => RightProperty.SetValue(element, value);
+    public static void SetRight(VisualElement element, double value) => element.SetValue(RightProperty, value);
 
     /// <summary>Reads the bottom offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element whose attached value is read.</param>
@@ -83,13 +91,13 @@ public class Canvas : Panel
     public static double GetBottom(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return BottomProperty.GetValue(element);
+        return (double)element.GetValue(BottomProperty)!;
     }
 
     /// <summary>Writes the bottom offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element receiving the attached value.</param>
     /// <param name="value">The offset in pixels, or <see cref="double.NaN"/> to unset it.</param>
-    public static void SetBottom(VisualElement element, double value) => BottomProperty.SetValue(element, value);
+    public static void SetBottom(VisualElement element, double value) => element.SetValue(BottomProperty, value);
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)

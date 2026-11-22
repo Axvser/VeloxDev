@@ -153,7 +153,7 @@ internal static class WorkbenchContent
             Font = new Font("Segoe UI Semibold", 11f),
             Foreground = theme.Foreground,
         };
-        counter.Bind(VisualTextBlock.TextProperty, state.GetObservable(CounterState.CaptionProperty));
+        counter.Bind<string>(VisualTextBlock.TextProperty, state.GetObservable<string>(CounterState.CaptionProperty));
 
         var increment = new VisualButton { Text = "Increment" };
         increment.Click += (_, _) => state.Count++;
@@ -296,17 +296,19 @@ internal static class WorkbenchContent
 internal sealed class CounterState : WinformsObject
 {
     /// <summary>The numeric click count.</summary>
-    public static readonly WinformsProperty<int> CountProperty =
-        WinformsProperty.Register<CounterState, int>(nameof(Count), 0);
+    public static readonly DependencyProperty CountProperty =
+        DependencyProperty.Register(
+            nameof(Count), typeof(int), typeof(CounterState), new PropertyMetadata(0));
 
     /// <summary>The formatted caption shown by the label.</summary>
-    public static readonly WinformsProperty<string> CaptionProperty =
-        WinformsProperty.Register<CounterState, string>(nameof(Caption), "Clicks: 0");
+    public static readonly DependencyProperty CaptionProperty =
+        DependencyProperty.Register(
+            nameof(Caption), typeof(string), typeof(CounterState), new PropertyMetadata("Clicks: 0"));
 
     /// <summary>Gets or sets the numeric click count and refreshes the caption.</summary>
     public int Count
     {
-        get => GetValue(CountProperty);
+        get => (int)GetValue(CountProperty)!;
         set
         {
             SetValue(CountProperty, value);
@@ -317,7 +319,7 @@ internal sealed class CounterState : WinformsObject
     /// <summary>Gets or sets the formatted caption.</summary>
     public string Caption
     {
-        get => GetValue(CaptionProperty);
+        get => (string)GetValue(CaptionProperty)!;
         set => SetValue(CaptionProperty, value);
     }
 }

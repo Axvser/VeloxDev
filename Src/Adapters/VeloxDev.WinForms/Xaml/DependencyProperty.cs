@@ -34,7 +34,7 @@ internal enum XamlValueSource
 /// the control to be rebuilt or subclassed.
 /// </para>
 /// </remarks>
-public sealed class DependencyProperty
+public sealed partial class DependencyProperty
 {
     private static readonly object RegistryLock = new();
     private static readonly Dictionary<Type, Dictionary<string, DependencyProperty>> Registry = new();

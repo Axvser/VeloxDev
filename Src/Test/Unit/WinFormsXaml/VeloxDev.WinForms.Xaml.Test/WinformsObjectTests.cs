@@ -10,13 +10,13 @@ namespace VeloxDev.WinForms.Xaml.Test;
 /// The AvaloniaObject-style property system: priority layers, attached values, inheritance and observable bindings.
 /// </summary>
 [STATestClass]
-public sealed class WinformsPropertyTests
+public sealed class WinformsObjectTests
 {
     [TestMethod]
     public void LocalValue_BeatsTheDefaultAndClearsBack()
     {
         var model = new Model();
-        var changes = new List<WinformsPropertyChangedEventArgs>();
+        var changes = new List<DependencyPropertyChangedEventArgs>();
         model.PropertyChanged += (_, e) => changes.Add(e);
 
         Assert.AreEqual("default", model.Name);
@@ -75,7 +75,7 @@ public sealed class WinformsPropertyTests
         Assert.AreEqual("root", grandchild.DataContext);
 
         var observed = new List<object?>();
-        using var subscription = grandchild.GetObservable(VisualElement.DataContextProperty).Subscribe(
+        using var subscription = grandchild.GetObservable<object?>(VisualElement.DataContextProperty).Subscribe(
             new Observer<object?>(observed.Add));
 
         child.DataContext = "child";
@@ -92,7 +92,7 @@ public sealed class WinformsPropertyTests
         var model = new Model();
         var source = new Subject<string?>();
 
-        var subscription = model.Bind(Model.NameProperty, source);
+        var subscription = model.Bind<string>(Model.NameProperty, source);
         source.Emit("bound");
         Assert.AreEqual("bound", model.Name);
         Assert.AreEqual("bound", model.GetValue(Model.NameProperty));
@@ -106,7 +106,7 @@ public sealed class WinformsPropertyTests
     {
         var model = new Model();
         var observed = new List<string?>();
-        using var subscription = model.GetObservable(Model.NameProperty).Subscribe(
+        using var subscription = model.GetObservable<string>(Model.NameProperty).Subscribe(
             new Observer<string?>(observed.Add));
 
         model.Name = "one";
@@ -153,12 +153,13 @@ public sealed class WinformsPropertyTests
 
     private sealed class Model : WinformsObject
     {
-        public static readonly WinformsProperty<string> NameProperty =
-            WinformsProperty.Register<Model, string>(nameof(Name), "default");
+        public static readonly DependencyProperty NameProperty =
+            DependencyProperty.Register(
+                nameof(Name), typeof(string), typeof(Model), new PropertyMetadata("default"));
 
         public string Name
         {
-            get => GetValue(NameProperty);
+            get => (string)GetValue(NameProperty)!;
             set => SetValue(NameProperty, value);
         }
     }

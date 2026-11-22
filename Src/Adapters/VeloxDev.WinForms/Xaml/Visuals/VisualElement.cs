@@ -30,98 +30,104 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     public static readonly Font DefaultFont = new("Segoe UI", 9.5f);
 
     /// <summary>The outer spacing around an element.</summary>
-    public static readonly WinformsProperty<XamlThickness> MarginProperty =
-        WinformsProperty.Register<VisualElement, XamlThickness>(nameof(Margin), XamlThickness.Empty, affectsMeasure: true);
+    public static readonly DependencyProperty MarginProperty = DependencyProperty.Register(
+        nameof(Margin), typeof(XamlThickness), typeof(VisualElement),
+        new PropertyMetadata(XamlThickness.Empty) { AffectsMeasure = true, AffectsRender = false });
 
     /// <summary>The inner spacing between an element's edge and its children.</summary>
-    public static readonly WinformsProperty<XamlThickness> PaddingProperty =
-        WinformsProperty.Register<VisualElement, XamlThickness>(nameof(Padding), XamlThickness.Empty, affectsMeasure: true);
+    public static readonly DependencyProperty PaddingProperty = DependencyProperty.Register(
+        nameof(Padding), typeof(XamlThickness), typeof(VisualElement),
+        new PropertyMetadata(XamlThickness.Empty) { AffectsMeasure = true, AffectsRender = false });
 
     /// <summary>The requested width; <see cref="double.NaN"/> sizes to content and alignment.</summary>
-    public static readonly WinformsProperty<double> WidthProperty =
-        WinformsProperty.Register<VisualElement, double>(nameof(Width), double.NaN, affectsMeasure: true);
+    public static readonly DependencyProperty WidthProperty = DependencyProperty.Register(
+        nameof(Width), typeof(double), typeof(VisualElement),
+        new PropertyMetadata(double.NaN) { AffectsMeasure = true, AffectsRender = false });
 
     /// <summary>The requested height; <see cref="double.NaN"/> sizes to content and alignment.</summary>
-    public static readonly WinformsProperty<double> HeightProperty =
-        WinformsProperty.Register<VisualElement, double>(nameof(Height), double.NaN, affectsMeasure: true);
+    public static readonly DependencyProperty HeightProperty = DependencyProperty.Register(
+        nameof(Height), typeof(double), typeof(VisualElement),
+        new PropertyMetadata(double.NaN) { AffectsMeasure = true, AffectsRender = false });
 
     /// <summary>The smallest width layout may assign.</summary>
-    public static readonly WinformsProperty<double> MinWidthProperty =
-        WinformsProperty.Register<VisualElement, double>(nameof(MinWidth), 0d, affectsMeasure: true);
+    public static readonly DependencyProperty MinWidthProperty = DependencyProperty.Register(
+        nameof(MinWidth), typeof(double), typeof(VisualElement),
+        new PropertyMetadata(0d) { AffectsMeasure = true, AffectsRender = false });
 
     /// <summary>The smallest height layout may assign.</summary>
-    public static readonly WinformsProperty<double> MinHeightProperty =
-        WinformsProperty.Register<VisualElement, double>(nameof(MinHeight), 0d, affectsMeasure: true);
+    public static readonly DependencyProperty MinHeightProperty = DependencyProperty.Register(
+        nameof(MinHeight), typeof(double), typeof(VisualElement),
+        new PropertyMetadata(0d) { AffectsMeasure = true, AffectsRender = false });
 
     /// <summary>The largest width layout may assign.</summary>
-    public static readonly WinformsProperty<double> MaxWidthProperty =
-        WinformsProperty.Register<VisualElement, double>(nameof(MaxWidth), double.PositiveInfinity, affectsMeasure: true);
+    public static readonly DependencyProperty MaxWidthProperty = DependencyProperty.Register(
+        nameof(MaxWidth), typeof(double), typeof(VisualElement),
+        new PropertyMetadata(double.PositiveInfinity) { AffectsMeasure = true, AffectsRender = false });
 
     /// <summary>The largest height layout may assign.</summary>
-    public static readonly WinformsProperty<double> MaxHeightProperty =
-        WinformsProperty.Register<VisualElement, double>(nameof(MaxHeight), double.PositiveInfinity, affectsMeasure: true);
+    public static readonly DependencyProperty MaxHeightProperty = DependencyProperty.Register(
+        nameof(MaxHeight), typeof(double), typeof(VisualElement),
+        new PropertyMetadata(double.PositiveInfinity) { AffectsMeasure = true, AffectsRender = false });
 
     /// <summary>How an element is placed inside its slot horizontally.</summary>
-    public static readonly WinformsProperty<XamlHorizontalAlignment> HorizontalAlignmentProperty =
-        WinformsProperty.Register<VisualElement, XamlHorizontalAlignment>(
-            nameof(HorizontalAlignment),
-            XamlHorizontalAlignment.Stretch,
-            affectsArrange: true);
+    public static readonly DependencyProperty HorizontalAlignmentProperty = DependencyProperty.Register(
+        nameof(HorizontalAlignment), typeof(XamlHorizontalAlignment), typeof(VisualElement),
+        new PropertyMetadata(XamlHorizontalAlignment.Stretch) { AffectsArrange = true, AffectsRender = false });
 
     /// <summary>How an element is placed inside its slot vertically.</summary>
-    public static readonly WinformsProperty<XamlVerticalAlignment> VerticalAlignmentProperty =
-        WinformsProperty.Register<VisualElement, XamlVerticalAlignment>(
-            nameof(VerticalAlignment),
-            XamlVerticalAlignment.Stretch,
-            affectsArrange: true);
+    public static readonly DependencyProperty VerticalAlignmentProperty = DependencyProperty.Register(
+        nameof(VerticalAlignment), typeof(XamlVerticalAlignment), typeof(VisualElement),
+        new PropertyMetadata(XamlVerticalAlignment.Stretch) { AffectsArrange = true, AffectsRender = false });
 
     /// <summary>Whether an element is painted, laid out and hit-tested.</summary>
-    public static readonly WinformsProperty<XamlVisibility> VisibilityProperty =
-        WinformsProperty.Register<VisualElement, XamlVisibility>(
-            nameof(Visibility),
-            XamlVisibility.Visible,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty VisibilityProperty = DependencyProperty.Register(
+        nameof(Visibility), typeof(XamlVisibility), typeof(VisualElement),
+        new PropertyMetadata(XamlVisibility.Visible) { AffectsMeasure = true });
 
     /// <summary>Whether an element accepts input and draws an enabled state.</summary>
-    public static readonly WinformsProperty<bool> IsEnabledProperty =
-        WinformsProperty.Register<VisualElement, bool>(nameof(IsEnabled), true, affectsRender: true);
+    public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.Register(
+        nameof(IsEnabled), typeof(bool), typeof(VisualElement),
+        new PropertyMetadata(true));
 
     /// <summary>Whether an element participates in the focus chain.</summary>
-    public static readonly WinformsProperty<bool> FocusableProperty =
-        WinformsProperty.Register<VisualElement, bool>(nameof(Focusable), false);
+    public static readonly DependencyProperty FocusableProperty = DependencyProperty.Register(
+        nameof(Focusable), typeof(bool), typeof(VisualElement),
+        new PropertyMetadata(false) { AffectsRender = false });
 
     /// <summary>Whether a pointer hit lands on an element's own rectangle.</summary>
-    public static readonly WinformsProperty<bool> IsHitTestVisibleProperty =
-        WinformsProperty.Register<VisualElement, bool>(nameof(IsHitTestVisible), true);
+    public static readonly DependencyProperty IsHitTestVisibleProperty = DependencyProperty.Register(
+        nameof(IsHitTestVisible), typeof(bool), typeof(VisualElement),
+        new PropertyMetadata(true) { AffectsRender = false });
 
     /// <summary>The cursor shown while the pointer is over an element.</summary>
-    public static readonly WinformsProperty<Cursor?> CursorProperty =
-        WinformsProperty.Register<VisualElement, Cursor?>(nameof(Cursor), null);
+    public static readonly DependencyProperty CursorProperty = DependencyProperty.Register(
+        nameof(Cursor), typeof(Cursor), typeof(VisualElement),
+        new PropertyMetadata(null) { AffectsRender = false });
 
     /// <summary>The outline brush drawn around an element's rectangle.</summary>
-    public static readonly WinformsProperty<XamlBrush?> BorderBrushProperty =
-        WinformsProperty.Register<VisualElement, XamlBrush?>(nameof(BorderBrush), null, affectsRender: true);
+    public static readonly DependencyProperty BorderBrushProperty = DependencyProperty.Register(
+        nameof(BorderBrush), typeof(XamlBrush), typeof(VisualElement),
+        new PropertyMetadata(null));
 
     /// <summary>The outline width per side, in pixels.</summary>
-    public static readonly WinformsProperty<XamlThickness> BorderThicknessProperty =
-        WinformsProperty.Register<VisualElement, XamlThickness>(
-            nameof(BorderThickness),
-            XamlThickness.Empty,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty BorderThicknessProperty = DependencyProperty.Register(
+        nameof(BorderThickness), typeof(XamlThickness), typeof(VisualElement),
+        new PropertyMetadata(XamlThickness.Empty) { AffectsMeasure = true });
 
     /// <summary>The background brush painted behind an element's content.</summary>
-    public static readonly WinformsProperty<XamlBrush?> BackgroundProperty =
-        WinformsProperty.Register<VisualElement, XamlBrush?>(nameof(Background), null, affectsRender: true);
+    public static readonly DependencyProperty BackgroundProperty = DependencyProperty.Register(
+        nameof(Background), typeof(XamlBrush), typeof(VisualElement),
+        new PropertyMetadata(null));
 
     /// <summary>The background and border corner radius in pixels.</summary>
-    public static readonly WinformsProperty<float> CornerRadiusProperty =
-        WinformsProperty.Register<VisualElement, float>(nameof(CornerRadius), 0f, affectsRender: true);
+    public static readonly DependencyProperty CornerRadiusProperty = DependencyProperty.Register(
+        nameof(CornerRadius), typeof(float), typeof(VisualElement),
+        new PropertyMetadata(0f));
 
     /// <summary>The inherited data context used by bindings and templates.</summary>
-    public static readonly WinformsProperty<object?> DataContextProperty =
-        WinformsProperty.Register<VisualElement, object?>(nameof(DataContext), null, inherits: true);
+    public static readonly DependencyProperty DataContextProperty = DependencyProperty.Register(
+        nameof(DataContext), typeof(object), typeof(VisualElement),
+        new PropertyMetadata(null) { Inherits = true, AffectsRender = false });
 
     private bool _measureValid;
     private Size _measureAvailable;
@@ -133,91 +139,91 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>The outer spacing around this element.</summary>
     public XamlThickness Margin
     {
-        get => GetValue(MarginProperty);
+        get => (XamlThickness)GetValue(MarginProperty)!;
         set => SetValue(MarginProperty, value);
     }
 
     /// <summary>The inner spacing between this element's edge and its children.</summary>
     public XamlThickness Padding
     {
-        get => GetValue(PaddingProperty);
+        get => (XamlThickness)GetValue(PaddingProperty)!;
         set => SetValue(PaddingProperty, value);
     }
 
     /// <summary>The requested width; <see cref="double.NaN"/> sizes to content and alignment.</summary>
     public double Width
     {
-        get => GetValue(WidthProperty);
+        get => (double)GetValue(WidthProperty)!;
         set => SetValue(WidthProperty, value);
     }
 
     /// <summary>The requested height; <see cref="double.NaN"/> sizes to content and alignment.</summary>
     public double Height
     {
-        get => GetValue(HeightProperty);
+        get => (double)GetValue(HeightProperty)!;
         set => SetValue(HeightProperty, value);
     }
 
     /// <summary>The smallest width layout may assign.</summary>
     public double MinWidth
     {
-        get => GetValue(MinWidthProperty);
+        get => (double)GetValue(MinWidthProperty)!;
         set => SetValue(MinWidthProperty, value);
     }
 
     /// <summary>The smallest height layout may assign.</summary>
     public double MinHeight
     {
-        get => GetValue(MinHeightProperty);
+        get => (double)GetValue(MinHeightProperty)!;
         set => SetValue(MinHeightProperty, value);
     }
 
     /// <summary>The largest width layout may assign.</summary>
     public double MaxWidth
     {
-        get => GetValue(MaxWidthProperty);
+        get => (double)GetValue(MaxWidthProperty)!;
         set => SetValue(MaxWidthProperty, value);
     }
 
     /// <summary>The largest height layout may assign.</summary>
     public double MaxHeight
     {
-        get => GetValue(MaxHeightProperty);
+        get => (double)GetValue(MaxHeightProperty)!;
         set => SetValue(MaxHeightProperty, value);
     }
 
     /// <summary>How this element is placed inside its slot horizontally.</summary>
     public XamlHorizontalAlignment HorizontalAlignment
     {
-        get => GetValue(HorizontalAlignmentProperty);
+        get => (XamlHorizontalAlignment)GetValue(HorizontalAlignmentProperty)!;
         set => SetValue(HorizontalAlignmentProperty, value);
     }
 
     /// <summary>How this element is placed inside its slot vertically.</summary>
     public XamlVerticalAlignment VerticalAlignment
     {
-        get => GetValue(VerticalAlignmentProperty);
+        get => (XamlVerticalAlignment)GetValue(VerticalAlignmentProperty)!;
         set => SetValue(VerticalAlignmentProperty, value);
     }
 
     /// <summary>Whether this element is painted, laid out and hit-tested.</summary>
     public XamlVisibility Visibility
     {
-        get => GetValue(VisibilityProperty);
+        get => (XamlVisibility)GetValue(VisibilityProperty)!;
         set => SetValue(VisibilityProperty, value);
     }
 
     /// <summary>Whether this element accepts input and draws an enabled state.</summary>
     public bool IsEnabled
     {
-        get => GetValue(IsEnabledProperty);
+        get => (bool)GetValue(IsEnabledProperty)!;
         set => SetValue(IsEnabledProperty, value);
     }
 
     /// <summary>Whether this element participates in the focus chain.</summary>
     public bool Focusable
     {
-        get => GetValue(FocusableProperty);
+        get => (bool)GetValue(FocusableProperty)!;
         set => SetValue(FocusableProperty, value);
     }
 
@@ -225,42 +231,42 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <remarks>Panels set this to <see langword="false"/> when they have no background so content clicks pass through.</remarks>
     public bool IsHitTestVisible
     {
-        get => GetValue(IsHitTestVisibleProperty);
+        get => (bool)GetValue(IsHitTestVisibleProperty)!;
         set => SetValue(IsHitTestVisibleProperty, value);
     }
 
     /// <summary>The cursor shown while the pointer is over this element, or <see langword="null"/> for the default.</summary>
     public Cursor? Cursor
     {
-        get => GetValue(CursorProperty);
+        get => (Cursor?)GetValue(CursorProperty)!;
         set => SetValue(CursorProperty, value);
     }
 
     /// <summary>The outline brush drawn around the element's rectangle.</summary>
     public XamlBrush? BorderBrush
     {
-        get => GetValue(BorderBrushProperty);
+        get => (XamlBrush?)GetValue(BorderBrushProperty)!;
         set => SetValue(BorderBrushProperty, value);
     }
 
     /// <summary>The outline width per side, in pixels.</summary>
     public XamlThickness BorderThickness
     {
-        get => GetValue(BorderThicknessProperty);
+        get => (XamlThickness)GetValue(BorderThicknessProperty)!;
         set => SetValue(BorderThicknessProperty, value);
     }
 
     /// <summary>The background brush painted behind the element's content.</summary>
     public new XamlBrush? Background
     {
-        get => GetValue(BackgroundProperty);
+        get => (XamlBrush?)GetValue(BackgroundProperty)!;
         set => SetValue(BackgroundProperty, value);
     }
 
     /// <summary>The background and border corner radius in pixels.</summary>
     public new float CornerRadius
     {
-        get => GetValue(CornerRadiusProperty);
+        get => (float)GetValue(CornerRadiusProperty)!;
         set => SetValue(CornerRadiusProperty, value);
     }
 
@@ -544,13 +550,13 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     }
 
     /// <inheritdoc />
-    protected override object? GetInheritedValue(WinformsProperty property)
+    protected override object? GetInheritedValue(DependencyProperty property)
         => ReferenceEquals(property, DataContextProperty)
             ? ParentElement?.DataContext
             : base.GetInheritedValue(property);
 
     /// <inheritdoc />
-    protected override void OnPropertyChanged(WinformsPropertyChangedEventArgs e)
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
 
@@ -563,16 +569,16 @@ public abstract class VisualElement : ContainerVisual, IDisposable
             NotifyDataContextDescendants(this, e.OldValue, e.NewValue);
         }
 
-        if (e.Property.AffectsMeasure)
+        if (e.Property.Metadata.AffectsMeasure)
         {
             InvalidateMeasure();
         }
-        else if (e.Property.AffectsArrange)
+        else if (e.Property.Metadata.AffectsArrange)
         {
             InvalidateArrange();
         }
 
-        if (e.Property.AffectsRender)
+        if (e.Property.Metadata.AffectsRender)
         {
             InvalidateVisual();
         }

@@ -21,10 +21,25 @@ public readonly struct DependencyPropertyChangedEventArgs
     /// <param name="oldValue">The value before the change.</param>
     /// <param name="newValue">The value after the change.</param>
     public DependencyPropertyChangedEventArgs(DependencyProperty property, object? oldValue, object? newValue)
+        : this(property, oldValue, newValue, BindingPriority.LocalValue)
+    {
+    }
+
+    /// <summary>Creates the event arguments for one dependency property change at a priority layer.</summary>
+    /// <param name="property">The <see cref="DependencyProperty"/> that changed.</param>
+    /// <param name="oldValue">The value before the change.</param>
+    /// <param name="newValue">The value after the change.</param>
+    /// <param name="priority">The priority layer that changed.</param>
+    public DependencyPropertyChangedEventArgs(
+        DependencyProperty property,
+        object? oldValue,
+        object? newValue,
+        BindingPriority priority)
     {
         Property = property;
         OldValue = oldValue;
         NewValue = newValue;
+        Priority = priority;
     }
 
     /// <summary>The <see cref="DependencyProperty"/> that changed.</summary>
@@ -35,6 +50,9 @@ public readonly struct DependencyPropertyChangedEventArgs
 
     /// <summary>The value after the change.</summary>
     public object? NewValue { get; }
+
+    /// <summary>The priority layer that changed.</summary>
+    public BindingPriority Priority { get; }
 }
 
 /// <summary>The default value, change notification and coercion hooks of a dependency property.</summary>
@@ -109,4 +127,10 @@ public class PropertyMetadata
     /// already implies an arrange pass; a property never needs both flags.
     /// </remarks>
     public bool AffectsArrange { get; init; }
+
+    /// <summary>
+    /// Whether an ancestor's value is used when the target has no value of its own.
+    /// </summary>
+    /// <remarks>Used by the visual backend's <c>DataContext</c>; the HWND backend leaves it false.</remarks>
+    public bool Inherits { get; init; }
 }

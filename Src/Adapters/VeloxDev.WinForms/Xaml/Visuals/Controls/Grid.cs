@@ -23,20 +23,28 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 public class Grid : Panel
 {
     /// <summary>The attached row index.</summary>
-    public static readonly WinformsProperty<int> RowProperty =
-        WinformsProperty.RegisterAttached<Grid, int>("Row", 0, affectsMeasure: true);
+    public static readonly DependencyProperty RowProperty =
+        DependencyProperty.RegisterAttached(
+            "Row", typeof(int), typeof(Grid),
+            new PropertyMetadata(0) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>The attached column index.</summary>
-    public static readonly WinformsProperty<int> ColumnProperty =
-        WinformsProperty.RegisterAttached<Grid, int>("Column", 0, affectsMeasure: true);
+    public static readonly DependencyProperty ColumnProperty =
+        DependencyProperty.RegisterAttached(
+            "Column", typeof(int), typeof(Grid),
+            new PropertyMetadata(0) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>The attached row span; values below one become one.</summary>
-    public static readonly WinformsProperty<int> RowSpanProperty =
-        WinformsProperty.RegisterAttached<Grid, int>("RowSpan", 1, affectsMeasure: true);
+    public static readonly DependencyProperty RowSpanProperty =
+        DependencyProperty.RegisterAttached(
+            "RowSpan", typeof(int), typeof(Grid),
+            new PropertyMetadata(1) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>The attached column span; values below one become one.</summary>
-    public static readonly WinformsProperty<int> ColumnSpanProperty =
-        WinformsProperty.RegisterAttached<Grid, int>("ColumnSpan", 1, affectsMeasure: true);
+    public static readonly DependencyProperty ColumnSpanProperty =
+        DependencyProperty.RegisterAttached(
+            "ColumnSpan", typeof(int), typeof(Grid),
+            new PropertyMetadata(1) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>Creates an empty grid.</summary>
     public Grid()
@@ -57,7 +65,7 @@ public class Grid : Panel
     public static int GetRow(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return RowProperty.GetValue(element);
+        return (int)element.GetValue(RowProperty)!;
     }
 
     /// <summary>Writes the zero-based row of <paramref name="element"/>.</summary>
@@ -66,7 +74,7 @@ public class Grid : Panel
     public static void SetRow(VisualElement element, int value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        RowProperty.SetValue(element, Math.Max(0, value));
+        element.SetValue(RowProperty, Math.Max(0, value));
     }
 
     /// <summary>Reads the zero-based column of <paramref name="element"/>.</summary>
@@ -75,7 +83,7 @@ public class Grid : Panel
     public static int GetColumn(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return ColumnProperty.GetValue(element);
+        return (int)element.GetValue(ColumnProperty)!;
     }
 
     /// <summary>Writes the zero-based column of <paramref name="element"/>.</summary>
@@ -84,7 +92,7 @@ public class Grid : Panel
     public static void SetColumn(VisualElement element, int value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        ColumnProperty.SetValue(element, Math.Max(0, value));
+        element.SetValue(ColumnProperty, Math.Max(0, value));
     }
 
     /// <summary>Reads how many rows <paramref name="element"/> spans.</summary>
@@ -93,7 +101,7 @@ public class Grid : Panel
     public static int GetRowSpan(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return Math.Max(1, RowSpanProperty.GetValue(element));
+        return Math.Max(1, (int)element.GetValue(RowSpanProperty)!);
     }
 
     /// <summary>Writes how many rows <paramref name="element"/> spans.</summary>
@@ -102,7 +110,7 @@ public class Grid : Panel
     public static void SetRowSpan(VisualElement element, int value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        RowSpanProperty.SetValue(element, Math.Max(1, value));
+        element.SetValue(RowSpanProperty, Math.Max(1, value));
     }
 
     /// <summary>Reads how many columns <paramref name="element"/> spans.</summary>
@@ -111,7 +119,7 @@ public class Grid : Panel
     public static int GetColumnSpan(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return Math.Max(1, ColumnSpanProperty.GetValue(element));
+        return Math.Max(1, (int)element.GetValue(ColumnSpanProperty)!);
     }
 
     /// <summary>Writes how many columns <paramref name="element"/> spans.</summary>
@@ -120,7 +128,7 @@ public class Grid : Panel
     public static void SetColumnSpan(VisualElement element, int value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        ColumnSpanProperty.SetValue(element, Math.Max(1, value));
+        element.SetValue(ColumnSpanProperty, Math.Max(1, value));
     }
 
     /// <inheritdoc />

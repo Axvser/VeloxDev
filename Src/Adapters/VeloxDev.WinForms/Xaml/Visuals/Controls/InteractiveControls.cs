@@ -13,24 +13,22 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 public class Button : VisualElement
 {
     /// <summary>The text drawn inside the button.</summary>
-    public static readonly WinformsProperty<string> TextProperty =
-        WinformsProperty.Register<Button, string>(
-            nameof(Text),
-            string.Empty,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty TextProperty =
+        DependencyProperty.Register(
+            nameof(Text), typeof(string), typeof(Button),
+            new PropertyMetadata(string.Empty) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>The font used to draw the text.</summary>
-    public static readonly WinformsProperty<Font> FontProperty =
-        WinformsProperty.Register<Button, Font>(
-            nameof(Font),
-            DefaultFont,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty FontProperty =
+        DependencyProperty.Register(
+            nameof(Font), typeof(Font), typeof(Button),
+            new PropertyMetadata(DefaultFont) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>The text colour; empty uses the active theme.</summary>
-    public static readonly WinformsProperty<Color> ForegroundProperty =
-        WinformsProperty.Register<Button, Color>(nameof(Foreground), Color.Empty, affectsRender: true);
+    public static readonly DependencyProperty ForegroundProperty =
+        DependencyProperty.Register(
+            nameof(Foreground), typeof(Color), typeof(Button),
+            new PropertyMetadata(Color.Empty) { AffectsRender = true });
 
     private bool _hover;
     private bool _pressed;
@@ -50,14 +48,14 @@ public class Button : VisualElement
     /// <summary>The text drawn inside the button.</summary>
     public string Text
     {
-        get => GetValue(TextProperty);
+        get => (string)GetValue(TextProperty)!;
         set => SetValue(TextProperty, value ?? string.Empty);
     }
 
     /// <summary>The font used to draw the text.</summary>
     public Font Font
     {
-        get => GetValue(FontProperty);
+        get => (Font)GetValue(FontProperty)!;
         set
         {
             if (value is not null)
@@ -70,7 +68,7 @@ public class Button : VisualElement
     /// <summary>The text colour; empty uses the active theme.</summary>
     public Color Foreground
     {
-        get => GetValue(ForegroundProperty);
+        get => (Color)GetValue(ForegroundProperty)!;
         set => SetValue(ForegroundProperty, value);
     }
 
@@ -252,44 +250,40 @@ public class Button : VisualElement
 public class TextBox : VisualElement
 {
     /// <summary>The current text.</summary>
-    public static readonly WinformsProperty<string> TextProperty =
-        WinformsProperty.Register<TextBox, string>(
-            nameof(Text),
-            string.Empty,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty TextProperty =
+        DependencyProperty.Register(
+            nameof(Text), typeof(string), typeof(TextBox),
+            new PropertyMetadata(string.Empty) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>The text shown while the field is empty.</summary>
-    public static readonly WinformsProperty<string> PlaceholderProperty =
-        WinformsProperty.Register<TextBox, string>(
-            nameof(Placeholder),
-            string.Empty,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty PlaceholderProperty =
+        DependencyProperty.Register(
+            nameof(Placeholder), typeof(string), typeof(TextBox),
+            new PropertyMetadata(string.Empty) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>The font used to draw the text.</summary>
-    public static readonly WinformsProperty<Font> FontProperty =
-        WinformsProperty.Register<TextBox, Font>(
-            nameof(Font),
-            DefaultFont,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty FontProperty =
+        DependencyProperty.Register(
+            nameof(Font), typeof(Font), typeof(TextBox),
+            new PropertyMetadata(DefaultFont) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>The text colour; empty uses the active theme.</summary>
-    public static readonly WinformsProperty<Color> ForegroundProperty =
-        WinformsProperty.Register<TextBox, Color>(nameof(Foreground), Color.Empty, affectsRender: true);
+    public static readonly DependencyProperty ForegroundProperty =
+        DependencyProperty.Register(
+            nameof(Foreground), typeof(Color), typeof(TextBox),
+            new PropertyMetadata(Color.Empty) { AffectsRender = true });
 
     /// <summary>Whether the text can be edited.</summary>
-    public static readonly WinformsProperty<bool> IsReadOnlyProperty =
-        WinformsProperty.Register<TextBox, bool>(nameof(IsReadOnly), false, affectsRender: true);
+    public static readonly DependencyProperty IsReadOnlyProperty =
+        DependencyProperty.Register(
+            nameof(IsReadOnly), typeof(bool), typeof(TextBox),
+            new PropertyMetadata(false) { AffectsRender = true });
 
     /// <summary>Whether the text is drawn as bullets.</summary>
-    public static readonly WinformsProperty<bool> IsPasswordProperty =
-        WinformsProperty.Register<TextBox, bool>(
-            nameof(IsPassword),
-            false,
-            affectsMeasure: true,
-            affectsRender: true);
+    public static readonly DependencyProperty IsPasswordProperty =
+        DependencyProperty.Register(
+            nameof(IsPassword), typeof(bool), typeof(TextBox),
+            new PropertyMetadata(false) { AffectsMeasure = true, AffectsRender = true });
 
     private readonly System.Windows.Forms.Timer _caretTimer;
     private int _selectionAnchor;
@@ -317,21 +311,21 @@ public class TextBox : VisualElement
     /// <summary>The current text.</summary>
     public string Text
     {
-        get => GetValue(TextProperty);
+        get => (string)GetValue(TextProperty)!;
         set => SetValue(TextProperty, value ?? string.Empty);
     }
 
     /// <summary>The text shown while the field is empty.</summary>
     public string Placeholder
     {
-        get => GetValue(PlaceholderProperty);
+        get => (string)GetValue(PlaceholderProperty)!;
         set => SetValue(PlaceholderProperty, value ?? string.Empty);
     }
 
     /// <summary>The font used to draw the text.</summary>
     public Font Font
     {
-        get => GetValue(FontProperty);
+        get => (Font)GetValue(FontProperty)!;
         set
         {
             if (value is not null)
@@ -344,21 +338,21 @@ public class TextBox : VisualElement
     /// <summary>The text colour; empty uses the active theme.</summary>
     public Color Foreground
     {
-        get => GetValue(ForegroundProperty);
+        get => (Color)GetValue(ForegroundProperty)!;
         set => SetValue(ForegroundProperty, value);
     }
 
     /// <summary>Whether the text can be edited.</summary>
     public bool IsReadOnly
     {
-        get => GetValue(IsReadOnlyProperty);
+        get => (bool)GetValue(IsReadOnlyProperty)!;
         set => SetValue(IsReadOnlyProperty, value);
     }
 
     /// <summary>Whether the text is drawn as bullets.</summary>
     public bool IsPassword
     {
-        get => GetValue(IsPasswordProperty);
+        get => (bool)GetValue(IsPasswordProperty)!;
         set => SetValue(IsPasswordProperty, value);
     }
 
@@ -461,7 +455,7 @@ public class TextBox : VisualElement
     }
 
     /// <inheritdoc />
-    protected override void OnPropertyChanged(WinformsPropertyChangedEventArgs e)
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
         if (ReferenceEquals(e.Property, TextProperty))

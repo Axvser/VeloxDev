@@ -20,19 +20,21 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 public class DockPanel : Panel
 {
     /// <summary>The attached dock edge.</summary>
-    public static readonly WinformsProperty<XamlDockPlacement> DockProperty =
-        WinformsProperty.RegisterAttached<DockPanel, XamlDockPlacement>(
-            "Dock",
-            XamlDockPlacement.Left);
+    public static readonly DependencyProperty DockProperty =
+        DependencyProperty.RegisterAttached(
+            "Dock", typeof(XamlDockPlacement), typeof(DockPanel),
+            new PropertyMetadata(XamlDockPlacement.Left) { AffectsRender = false });
 
     /// <summary>Whether the last visible child fills the room left by the docked children.</summary>
-    public static readonly WinformsProperty<bool> LastChildFillProperty =
-        WinformsProperty.Register<DockPanel, bool>(nameof(LastChildFill), true, affectsMeasure: true);
+    public static readonly DependencyProperty LastChildFillProperty =
+        DependencyProperty.Register(
+            nameof(LastChildFill), typeof(bool), typeof(DockPanel),
+            new PropertyMetadata(true) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>Whether the last visible child fills the room left by the docked children.</summary>
     public bool LastChildFill
     {
-        get => GetValue(LastChildFillProperty);
+        get => (bool)GetValue(LastChildFillProperty)!;
         set => SetValue(LastChildFillProperty, value);
     }
 
@@ -43,7 +45,7 @@ public class DockPanel : Panel
     public static XamlDockPlacement GetDock(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return DockProperty.GetValue(element);
+        return (XamlDockPlacement)element.GetValue(DockProperty)!;
     }
 
     /// <summary>Writes which edge <paramref name="element"/> docks to.</summary>
@@ -52,7 +54,7 @@ public class DockPanel : Panel
     public static void SetDock(VisualElement element, XamlDockPlacement value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        DockProperty.SetValue(element, value);
+        element.SetValue(DockProperty, value);
     }
 
     /// <inheritdoc />

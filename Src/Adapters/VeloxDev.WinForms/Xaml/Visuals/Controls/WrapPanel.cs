@@ -13,49 +13,54 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 public class WrapPanel : Panel
 {
     /// <summary>The wrapping direction: horizontally by default.</summary>
-    public static readonly WinformsProperty<Orientation> OrientationProperty =
-        WinformsProperty.Register<WrapPanel, Orientation>(
-            nameof(Orientation),
-            Orientation.Horizontal,
-            affectsMeasure: true);
+    public static readonly DependencyProperty OrientationProperty =
+        DependencyProperty.Register(
+            nameof(Orientation), typeof(Orientation), typeof(WrapPanel),
+            new PropertyMetadata(Orientation.Horizontal) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>A fixed slot width for every child, in pixels; zero keeps the measured width.</summary>
-    public static readonly WinformsProperty<int> ItemWidthProperty =
-        WinformsProperty.Register<WrapPanel, int>(nameof(ItemWidth), 0, affectsMeasure: true);
+    public static readonly DependencyProperty ItemWidthProperty =
+        DependencyProperty.Register(
+            nameof(ItemWidth), typeof(int), typeof(WrapPanel),
+            new PropertyMetadata(0) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>A fixed slot height for every child, in pixels; zero keeps the measured height.</summary>
-    public static readonly WinformsProperty<int> ItemHeightProperty =
-        WinformsProperty.Register<WrapPanel, int>(nameof(ItemHeight), 0, affectsMeasure: true);
+    public static readonly DependencyProperty ItemHeightProperty =
+        DependencyProperty.Register(
+            nameof(ItemHeight), typeof(int), typeof(WrapPanel),
+            new PropertyMetadata(0) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>The gap between adjacent items and between lines, in pixels.</summary>
-    public static readonly WinformsProperty<int> SpacingProperty =
-        WinformsProperty.Register<WrapPanel, int>(nameof(Spacing), 0, affectsMeasure: true);
+    public static readonly DependencyProperty SpacingProperty =
+        DependencyProperty.Register(
+            nameof(Spacing), typeof(int), typeof(WrapPanel),
+            new PropertyMetadata(0) { AffectsRender = false, AffectsMeasure = true });
 
     /// <summary>The wrapping direction: horizontally by default.</summary>
     public Orientation Orientation
     {
-        get => GetValue(OrientationProperty);
+        get => (Orientation)GetValue(OrientationProperty)!;
         set => SetValue(OrientationProperty, value);
     }
 
     /// <summary>A fixed slot width for every child, in pixels; zero keeps the measured width.</summary>
     public int ItemWidth
     {
-        get => GetValue(ItemWidthProperty);
+        get => (int)GetValue(ItemWidthProperty)!;
         set => SetValue(ItemWidthProperty, Math.Max(0, value));
     }
 
     /// <summary>A fixed slot height for every child, in pixels; zero keeps the measured height.</summary>
     public int ItemHeight
     {
-        get => GetValue(ItemHeightProperty);
+        get => (int)GetValue(ItemHeightProperty)!;
         set => SetValue(ItemHeightProperty, Math.Max(0, value));
     }
 
     /// <summary>The gap between adjacent items and between lines, in pixels.</summary>
     public int Spacing
     {
-        get => GetValue(SpacingProperty);
+        get => (int)GetValue(SpacingProperty)!;
         set => SetValue(SpacingProperty, Math.Max(0, value));
     }
 
