@@ -99,7 +99,7 @@ Transition<Border>.Create()
 | Pause, resume, seek, set a rate, stop | [references/practices/control-and-samplers.md](references/practices/control-and-samplers.md#controlling-a-running-animation) |
 | Interpolate a custom type | [references/practices/control-and-samplers.md](references/practices/control-and-samplers.md#custom-samplers) |
 | Animate a link's travelling highlight / a flow | [references/practices/flow.md](references/practices/flow.md) |
-| Animate a WinForms XAML control (`v:` control, trigger action) | [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) |
+| Animate a WinForms XAML control (unprefixed VeloxDev control, trigger action) | [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) |
 | Build an adapter for another GUI | [references/practices/adapter.md](references/practices/adapter.md) |
 
 ## Pitfalls

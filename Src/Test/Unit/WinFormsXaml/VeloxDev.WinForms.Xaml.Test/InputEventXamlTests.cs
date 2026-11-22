@@ -46,6 +46,7 @@ public sealed class InputEventXamlTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
+            xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
             x:Class="Probe.ProbeView">
         """;
 
@@ -61,8 +62,8 @@ public sealed class InputEventXamlTests
                              PointerMoved="OnPointerMoved"
                              KeyDown="OnKeyDown"
                              KeyInputDown="OnKeyInputDown" />
-            <Button x:Name="button"
-                    PointerPressed="OnNativePressed"
+            <native:Button x:Name="button"
+                           PointerPressed="OnNativePressed"
                     KeyDown="OnNativeKeyDown"
                     KeyInputDown="OnKeyInputDown"
                     MouseDown="OnNativeMouseDown"
@@ -164,7 +165,7 @@ public sealed class InputEventXamlTests
         => Wrap($"<local:ProbeCard x:Name=\"card\" {attributes} />");
 
     private static string ButtonAttributes(string attributes)
-        => Wrap($"<Button x:Name=\"button\" {attributes} />");
+        => Wrap($"<native:Button x:Name=\"button\" {attributes} />");
 
     private static string Wrap(string body) => OpenRoot + "\n" + body + "\n" + CloseRoot;
 

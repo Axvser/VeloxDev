@@ -68,23 +68,22 @@ public sealed class InlineTriggerXamlTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
             x:Class="Probe.ProbeView">
 
           <local:ProbeCard x:Name="card">
             <local:ProbeCard.Triggers>
-              <v:Trigger Property="IsHot" Value="True">
-                <v:Trigger.Setters>
-                  <v:Setter Property="BorderWidth" Value="4" />
-                  <v:Setter Property="WorkflowPanel.Column" Value="3" />
-                </v:Trigger.Setters>
-                <v:Trigger.EnterAction>
-                  <v:TransitionAction Property="Glow" To="1" Duration="0:0:0.3" />
-                </v:Trigger.EnterAction>
-                <v:Trigger.ExitAction>
-                  <v:TransitionAction Property="Glow" To="0" Duration="0:0:0.3" />
-                </v:Trigger.ExitAction>
-              </v:Trigger>
+              <Trigger Property="IsHot" Value="True">
+                <Trigger.Setters>
+                  <Setter Property="BorderWidth" Value="4" />
+                  <Setter Property="WorkflowPanel.Column" Value="3" />
+                </Trigger.Setters>
+                <Trigger.EnterAction>
+                  <TransitionAction Property="Glow" To="1" Duration="0:0:0.3" />
+                </Trigger.EnterAction>
+                <Trigger.ExitAction>
+                  <TransitionAction Property="Glow" To="0" Duration="0:0:0.3" />
+                </Trigger.ExitAction>
+              </Trigger>
             </local:ProbeCard.Triggers>
           </local:ProbeCard>
 
@@ -133,15 +132,14 @@ public sealed class InlineTriggerXamlTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
-                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
                 x:Class="Probe.ProbeView">
               <local:ProbeCard x:Name="card">
                 <local:ProbeCard.Triggers>
-                  <v:Trigger Property="IsHot">
-                    <v:Trigger.EnterAction>
-                      <v:TransitionAction Property="Glow" />
-                    </v:Trigger.EnterAction>
-                  </v:Trigger>
+                  <Trigger Property="IsHot">
+                    <Trigger.EnterAction>
+                      <TransitionAction Property="Glow" />
+                    </Trigger.EnterAction>
+                  </Trigger>
                 </local:ProbeCard.Triggers>
               </local:ProbeCard>
             </local:ProbeView>
@@ -173,18 +171,17 @@ public sealed class InlineTriggerXamlTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
-                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
                 x:Class="Probe.ProbeView">
               <local:ProbeCard x:Name="card">
                 <local:ProbeCard.Triggers>
-                  <v:Trigger Property="IsHot" Value="True">
-                    <v:Trigger.EnterAction>
-                      <v:TransitionAction Property="Glow" To="1" Duration="0:0:0.1" Ease="CubicOut" />
-                    </v:Trigger.EnterAction>
-                    <v:Trigger.ExitAction>
-                      <v:TransitionAction Property="Glow" To="0" Duration="0:0:0.1" Ease="Sine.InOut" />
-                    </v:Trigger.ExitAction>
-                  </v:Trigger>
+                  <Trigger Property="IsHot" Value="True">
+                    <Trigger.EnterAction>
+                      <TransitionAction Property="Glow" To="1" Duration="0:0:0.1" Ease="CubicOut" />
+                    </Trigger.EnterAction>
+                    <Trigger.ExitAction>
+                      <TransitionAction Property="Glow" To="0" Duration="0:0:0.1" Ease="Sine.InOut" />
+                    </Trigger.ExitAction>
+                  </Trigger>
                 </local:ProbeCard.Triggers>
               </local:ProbeCard>
             </local:ProbeView>
@@ -214,19 +211,18 @@ public sealed class InlineTriggerXamlTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
-                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
                 x:Class="Probe.ProbeView">
               <local:ProbeCard x:Name="card">
                 <local:ProbeCard.Triggers>
-                  <v:Trigger Property="IsHot" Value="True">
-                    <v:Trigger.EnterAction>
-                      <v:KeyFrameAnimation Property="Glow" Duration="0:0:0.3" Ease="CubicOut">
-                        <v:KeyFrame Offset="0" Value="0" />
-                        <v:KeyFrame Offset="0.5" Value="0.5" />
-                        <v:KeyFrame Offset="1" Value="1" />
-                      </v:KeyFrameAnimation>
-                    </v:Trigger.EnterAction>
-                  </v:Trigger>
+                  <Trigger Property="IsHot" Value="True">
+                    <Trigger.EnterAction>
+                      <KeyFrameAnimation Property="Glow" Duration="0:0:0.3" Ease="CubicOut">
+                        <KeyFrame Offset="0" Value="0" />
+                        <KeyFrame Offset="0.5" Value="0.5" />
+                        <KeyFrame Offset="1" Value="1" />
+                      </KeyFrameAnimation>
+                    </Trigger.EnterAction>
+                  </Trigger>
                 </local:ProbeCard.Triggers>
               </local:ProbeCard>
             </local:ProbeView>

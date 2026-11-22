@@ -50,7 +50,7 @@
 
 ### 3.1 搭一张工作流表面（这家最常见的扩展）
 
-1. **根节点**：用 `v:UserControl`（或任意 XAML 根），在根上设 `behaviors:WorkflowSurfaceBehavior.IsEnabled="True"`、`ZoomEnabled`、`TemplateSelector`，并用 `ScrollViewerName`/`CanvasName`/`GridDecoratorName`/`MinimapOverlayName`/`PointerPressSourceName` 指向部件。
+1. **根节点**：用 `UserControl`（或任意 XAML 根），在根上设 `behaviors:WorkflowSurfaceBehavior.IsEnabled="True"`、`ZoomEnabled`、`TemplateSelector`，并用 `ScrollViewerName`/`CanvasName`/`GridDecoratorName`/`MinimapOverlayName`/`PointerPressSourceName` 指向部件。
 2. **部件名**：目标控件写原生 `Name="PART_*"`；`x:Name` 只生成字段，不会写原生 `Name`。
 3. **卡片/连线**：节点卡片实现 `IWorkflowSurfaceNodeView`（平移时表面调 `ApplySurfacePosition`）；连线默认由 `WorkflowLinkLayer` 统一画，per-link 视图才挂 `WorkflowLinkAttachment`。
 4. **网格/小地图**：模板条目分别实现 `IWorkflowGridDecorator`、派生 `WorkflowMinimapOverlay`，再按名字接上。
@@ -95,7 +95,7 @@
 ### 4.1 改任何 `Set*` / `Get*` 的名字或语义（这家最重的联动）
 
 - [ ] **本模块 README**（`Src/Adapters/VeloxDev.WinForms/README.md`，逐表列 API；它自己就是消费者入口）
-- [ ] **各模板条目**（`Src/Templates/VeloxDev.WinForms.Templates/working/content/*/`；`tree-view` 是 `v:UserControl` + `WorkflowSurfaceBehavior`，画布上挂 `WorkflowLinkLayer`；`node-view` 用 `WorkflowNodeAttachment.Attach`，`slot-view` 用 `WorkflowSlotAttachment.Attach`；`link-view` 是 per-link 可选路径；`grid-decorator`/`minimap-overlay`/`template-selector` 各有形状）
+- [ ] **各模板条目**（`Src/Templates/VeloxDev.WinForms.Templates/working/content/*/`；`tree-view` 是 `UserControl` + `WorkflowSurfaceBehavior`，画布上挂 `WorkflowLinkLayer`；`node-view` 用 `WorkflowNodeAttachment.Attach`，`slot-view` 用 `WorkflowSlotAttachment.Attach`；`link-view` 是 per-link 可选路径；`grid-decorator`/`minimap-overlay`/`template-selector` 各有形状）
 - [ ] **两个 Workflow demo**：`Examples/Workflow/WinForms/Demo/` 与 `Examples/Workflow/WinForms Trimmed/Demo/`
 - [ ] `skills/veloxdev-create-workflow/references/gui/winforms.md`
 - [ ] `memory/modules/{WorkflowSystem,TransitionSystem,Templates}/adapters/winforms.md` + 本文

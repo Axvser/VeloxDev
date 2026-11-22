@@ -83,7 +83,7 @@ public sealed class AdvancedStyleXamlTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+            xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
             x:Class="Probe.ProbeView">
         """;
 
@@ -91,58 +91,58 @@ public sealed class AdvancedStyleXamlTests
 
     private const string ValidResources = """
         <local:ProbeView.Resources>
-          <v:ResourceDictionary>
-            <v:ControlTemplate x:Key="CardTemplate">
+          <ResourceDictionary>
+            <ControlTemplate x:Key="CardTemplate">
               <local:CardChrome Label="{Binding Title}" />
-            </v:ControlTemplate>
-            <v:Style x:Key="CardStyle" TargetType="local:Card">
-              <v:Style.Setters>
-                <v:Setter Property="StyleValue" Value="2" />
-              </v:Style.Setters>
-              <v:Style.Triggers>
-                <v:Trigger Property="IsHot" Value="True">
-                  <v:Trigger.Setters>
-                    <v:Setter Property="StyleValue" Value="4" />
-                  </v:Trigger.Setters>
-                  <v:Trigger.EnterAction>
-                    <v:TransitionAction Property="StyleValue" To="6" Duration="0:0:0.1" />
-                  </v:Trigger.EnterAction>
-                </v:Trigger>
-                <v:DataTrigger Binding="{Binding IsHot}" Value="True">
-                  <v:DataTrigger.Setters>
-                    <v:Setter Property="Note" Value="data" />
-                  </v:DataTrigger.Setters>
-                </v:DataTrigger>
-                <v:MultiTrigger>
-                  <v:MultiTrigger.Conditions>
-                    <v:Condition Property="IsHot" Value="True" />
-                    <v:Condition Property="IsPinned" Value="True" />
-                  </v:MultiTrigger.Conditions>
-                  <v:MultiTrigger.Setters>
-                    <v:Setter Property="Note" Value="multi" />
-                  </v:MultiTrigger.Setters>
-                  <v:MultiTrigger.EnterAction>
-                    <v:TransitionAction Property="StyleValue" To="7" Duration="0:0:0.1" />
-                  </v:MultiTrigger.EnterAction>
-                </v:MultiTrigger>
-              </v:Style.Triggers>
-            </v:Style>
-            <v:Style x:Key="TemplatedStyle" TargetType="local:Card" Template="{StaticResource CardTemplate}">
-              <v:Style.Setters>
-                <v:Setter Property="StyleValue" Value="3" />
-              </v:Style.Setters>
-            </v:Style>
-            <v:Style TargetType="local:Card">
-              <v:Style.Setters>
-                <v:Setter Property="StyleValue" Value="5" />
-              </v:Style.Setters>
-            </v:Style>
-            <v:Style x:Key="NativeStyle" TargetType="Button">
-              <v:Style.Setters>
-                <v:Setter Property="Text" Value="native" />
-              </v:Style.Setters>
-            </v:Style>
-          </v:ResourceDictionary>
+            </ControlTemplate>
+            <Style x:Key="CardStyle" TargetType="local:Card">
+              <Style.Setters>
+                <Setter Property="StyleValue" Value="2" />
+              </Style.Setters>
+              <Style.Triggers>
+                <Trigger Property="IsHot" Value="True">
+                  <Trigger.Setters>
+                    <Setter Property="StyleValue" Value="4" />
+                  </Trigger.Setters>
+                  <Trigger.EnterAction>
+                    <TransitionAction Property="StyleValue" To="6" Duration="0:0:0.1" />
+                  </Trigger.EnterAction>
+                </Trigger>
+                <DataTrigger Binding="{Binding IsHot}" Value="True">
+                  <DataTrigger.Setters>
+                    <Setter Property="Note" Value="data" />
+                  </DataTrigger.Setters>
+                </DataTrigger>
+                <MultiTrigger>
+                  <MultiTrigger.Conditions>
+                    <Condition Property="IsHot" Value="True" />
+                    <Condition Property="IsPinned" Value="True" />
+                  </MultiTrigger.Conditions>
+                  <MultiTrigger.Setters>
+                    <Setter Property="Note" Value="multi" />
+                  </MultiTrigger.Setters>
+                  <MultiTrigger.EnterAction>
+                    <TransitionAction Property="StyleValue" To="7" Duration="0:0:0.1" />
+                  </MultiTrigger.EnterAction>
+                </MultiTrigger>
+              </Style.Triggers>
+            </Style>
+            <Style x:Key="TemplatedStyle" TargetType="local:Card" Template="{StaticResource CardTemplate}">
+              <Style.Setters>
+                <Setter Property="StyleValue" Value="3" />
+              </Style.Setters>
+            </Style>
+            <Style TargetType="local:Card">
+              <Style.Setters>
+                <Setter Property="StyleValue" Value="5" />
+              </Style.Setters>
+            </Style>
+            <Style x:Key="NativeStyle" TargetType="native:Button">
+              <Style.Setters>
+                <Setter Property="Text" Value="native" />
+              </Style.Setters>
+            </Style>
+          </ResourceDictionary>
         </local:ProbeView.Resources>
         """;
 
@@ -151,7 +151,7 @@ public sealed class AdvancedStyleXamlTests
     {
         var xaml = Wrap(ValidResources + """
             <local:Card x:Name="card" Style="{StaticResource CardStyle}" />
-            <Button x:Name="button" Style="{StaticResource NativeStyle}" />
+            <native:Button x:Name="button" Style="{StaticResource NativeStyle}" />
             """);
 
         var (run, output) = GeneratorProbe.RunAndCompile(
@@ -194,7 +194,7 @@ public sealed class AdvancedStyleXamlTests
     public void ADataTriggerWithoutBindingOrPath_IsXaml004()
     {
         var diagnostic = AssertSingle(
-            CardTriggers("<v:DataTrigger Value=\"True\" />"),
+            CardTriggers("<DataTrigger Value=\"True\" />"),
             "VELOX_XAML004");
 
         Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
@@ -205,7 +205,7 @@ public sealed class AdvancedStyleXamlTests
     public void ADataTriggerBindingThatIsNotMarkup_IsXaml004()
     {
         var diagnostic = AssertSingle(
-            CardTriggers("<v:DataTrigger Binding=\"IsHot\" Value=\"True\" />"),
+            CardTriggers("<DataTrigger Binding=\"IsHot\" Value=\"True\" />"),
             "VELOX_XAML004");
 
         StringAssert.Contains(diagnostic.GetMessage(), "Binding");
@@ -216,11 +216,11 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             CardTriggers("""
-                <v:MultiTrigger>
-                  <v:MultiTrigger.Setters>
-                    <v:Setter Property="Note" Value="x" />
-                  </v:MultiTrigger.Setters>
-                </v:MultiTrigger>
+                <MultiTrigger>
+                  <MultiTrigger.Setters>
+                    <Setter Property="Note" Value="x" />
+                  </MultiTrigger.Setters>
+                </MultiTrigger>
                 """),
             "VELOX_XAML004");
 
@@ -232,14 +232,14 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             CardTriggers("""
-                <v:MultiTrigger>
-                  <v:MultiTrigger.Conditions>
-                    <v:Condition Value="True" />
-                  </v:MultiTrigger.Conditions>
-                  <v:MultiTrigger.Setters>
-                    <v:Setter Property="Note" Value="x" />
-                  </v:MultiTrigger.Setters>
-                </v:MultiTrigger>
+                <MultiTrigger>
+                  <MultiTrigger.Conditions>
+                    <Condition Value="True" />
+                  </MultiTrigger.Conditions>
+                  <MultiTrigger.Setters>
+                    <Setter Property="Note" Value="x" />
+                  </MultiTrigger.Setters>
+                </MultiTrigger>
                 """),
             "VELOX_XAML004");
 
@@ -250,7 +250,7 @@ public sealed class AdvancedStyleXamlTests
     public void AControlTemplateWithoutARoot_IsXaml004()
     {
         var diagnostic = AssertSingle(
-            WithResources("<v:ControlTemplate x:Key=\"Bad\" />"),
+            WithResources("<ControlTemplate x:Key=\"Bad\" />"),
             "VELOX_XAML004");
 
         StringAssert.Contains(diagnostic.GetMessage(), "root");
@@ -261,10 +261,10 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             WithResources("""
-                <v:ControlTemplate x:Key="Bad">
+                <ControlTemplate x:Key="Bad">
                   <local:CardChrome />
                   <local:CardChrome />
-                </v:ControlTemplate>
+                </ControlTemplate>
                 """),
             "VELOX_XAML004");
 
@@ -276,9 +276,9 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             WithResources("""
-                <v:ControlTemplate x:Key="Bad">
+                <ControlTemplate x:Key="Bad">
                   <local:NotAControl />
-                </v:ControlTemplate>
+                </ControlTemplate>
                 """),
             "VELOX_XAML004");
 
@@ -290,11 +290,11 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             WithResources("""
-                <v:Style x:Key="Bad" TargetType="Button">
-                  <v:Style.Setters>
-                    <v:Setter Property="Bogus" Value="1" />
-                  </v:Style.Setters>
-                </v:Style>
+                <Style x:Key="Bad" TargetType="native:Button">
+                  <Style.Setters>
+                    <Setter Property="Bogus" Value="1" />
+                  </Style.Setters>
+                </Style>
                 """),
             "VELOX_XAML002");
 
@@ -306,11 +306,11 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             WithResources("""
-                <v:Style x:Key="Bad" TargetType="Button">
-                  <v:Style.Setters>
-                    <v:Setter Property="Owner.Value" Value="1" />
-                  </v:Style.Setters>
-                </v:Style>
+                <Style x:Key="Bad" TargetType="native:Button">
+                  <Style.Setters>
+                    <Setter Property="Owner.Value" Value="1" />
+                  </Style.Setters>
+                </Style>
                 """),
             "VELOX_XAML004");
 
@@ -322,11 +322,11 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             WithResources("""
-                <v:Style x:Key="Bad" TargetType="Button">
-                  <v:Style.Triggers>
-                    <v:Trigger Property="Text" Value="x" />
-                  </v:Style.Triggers>
-                </v:Style>
+                <Style x:Key="Bad" TargetType="native:Button">
+                  <Style.Triggers>
+                    <Trigger Property="Text" Value="x" />
+                  </Style.Triggers>
+                </Style>
                 """),
             "VELOX_XAML004");
 
@@ -337,7 +337,7 @@ public sealed class AdvancedStyleXamlTests
     public void ANativeStyleWithATemplate_IsXaml004()
     {
         var diagnostic = AssertSingle(
-            WithResources("<v:Style x:Key=\"Bad\" TargetType=\"Button\" Template=\"{StaticResource Tpl}\" />"),
+            WithResources("<Style x:Key=\"Bad\" TargetType=\"native:Button\" Template=\"{StaticResource Tpl}\" />"),
             "VELOX_XAML004");
 
         StringAssert.Contains(diagnostic.GetMessage(), "ControlTemplate");
@@ -348,11 +348,11 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             WithResources("""
-                <v:Style TargetType="Button">
-                  <v:Style.Setters>
-                    <v:Setter Property="Text" Value="x" />
-                  </v:Style.Setters>
-                </v:Style>
+                <Style TargetType="native:Button">
+                  <Style.Setters>
+                    <Setter Property="Text" Value="x" />
+                  </Style.Setters>
+                </Style>
                 """),
             "VELOX_XAML004");
 
@@ -364,11 +364,11 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             WithResources("""
-                <v:Style>
-                  <v:Style.Setters>
-                    <v:Setter Property="StyleValue" Value="1" />
-                  </v:Style.Setters>
-                </v:Style>
+                <Style>
+                  <Style.Setters>
+                    <Setter Property="StyleValue" Value="1" />
+                  </Style.Setters>
+                </Style>
                 """),
             "VELOX_XAML014");
 
@@ -381,11 +381,11 @@ public sealed class AdvancedStyleXamlTests
     {
         var diagnostic = AssertSingle(
             WithResources("""
-                <v:Style x:Key="Bad" TargetType="local:Card">
-                  <v:Style.Template>
-                    <v:Setter Property="Note" Value="x" />
-                  </v:Style.Template>
-                </v:Style>
+                <Style x:Key="Bad" TargetType="local:Card">
+                  <Style.Template>
+                    <Setter Property="Note" Value="x" />
+                  </Style.Template>
+                </Style>
                 """),
             "VELOX_XAML004");
 
@@ -396,7 +396,7 @@ public sealed class AdvancedStyleXamlTests
     public void AStyleTemplateAttributeThatIsNotAStaticResource_IsXaml004()
     {
         var diagnostic = AssertSingle(
-            WithResources("<v:Style x:Key=\"Bad\" TargetType=\"local:Card\" Template=\"Tpl\" />"),
+            WithResources("<Style x:Key=\"Bad\" TargetType=\"local:Card\" Template=\"Tpl\" />"),
             "VELOX_XAML004");
 
         StringAssert.Contains(diagnostic.GetMessage(), "Template");
@@ -406,7 +406,7 @@ public sealed class AdvancedStyleXamlTests
         => Wrap("<local:Card x:Name=\"card\"><local:Card.Triggers>" + body + "</local:Card.Triggers></local:Card>");
 
     private static string WithResources(string resources)
-        => Wrap("<local:ProbeView.Resources><v:ResourceDictionary>" + resources + "</v:ResourceDictionary></local:ProbeView.Resources>");
+        => Wrap("<local:ProbeView.Resources><ResourceDictionary>" + resources + "</ResourceDictionary></local:ProbeView.Resources>");
 
     private static string Wrap(string body) => OpenRoot + "\n" + body + "\n" + CloseRoot;
 

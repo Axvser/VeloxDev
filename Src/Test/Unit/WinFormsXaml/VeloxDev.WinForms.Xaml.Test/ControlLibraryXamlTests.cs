@@ -6,7 +6,7 @@ namespace VeloxDev.WinForms.Xaml.Test;
 
 /// <summary>
 /// The XAML path for the expanded control library: panels, attached coordinates, grid definitions, text content
-/// and the shape namespace all resolve through an explicit <c>v:</c> prefix.
+/// and the shape namespace all resolve through unprefixed VeloxDev names.
 /// </summary>
 [TestClass]
 public sealed class ControlLibraryXamlTests
@@ -27,40 +27,39 @@ public sealed class ControlLibraryXamlTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
             x:Class="Probe.ProbeView">
 
-          <v:StackPanel x:Name="stack" Spacing="4">
-            <v:Button x:Name="ok" Content="OK" />
-            <v:TextBlock x:Name="caption">hello</v:TextBlock>
-          </v:StackPanel>
+          <StackPanel x:Name="stack" Spacing="4">
+            <Button x:Name="ok" Content="OK" />
+            <TextBlock x:Name="caption">hello</TextBlock>
+          </StackPanel>
 
-          <v:Grid x:Name="layout">
-            <v:Grid.RowDefinitions>
-              <v:RowDefinition Height="Auto" />
-              <v:RowDefinition Height="2*" />
-            </v:Grid.RowDefinitions>
-            <v:Grid.ColumnDefinitions>
-              <v:ColumnDefinition Width="120" />
-              <v:ColumnDefinition Width="*" />
-            </v:Grid.ColumnDefinitions>
-            <v:Border x:Name="cell" v:Grid.Row="1" v:Grid.Column="1" />
-          </v:Grid>
+          <Grid x:Name="layout">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="2*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="120" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border x:Name="cell" Grid.Row="1" Grid.Column="1" />
+          </Grid>
 
-          <v:Canvas x:Name="canvas">
-            <v:Border x:Name="positioned" v:Canvas.Left="10" v:Canvas.Top="20" />
-          </v:Canvas>
+          <Canvas x:Name="canvas">
+            <Border x:Name="positioned" Canvas.Left="10" Canvas.Top="20" />
+          </Canvas>
 
-          <v:DockPanel x:Name="dock">
-            <v:Border x:Name="docked" v:DockPanel.Dock="Top" Height="20" />
-          </v:DockPanel>
+          <DockPanel x:Name="dock">
+            <Border x:Name="docked" DockPanel.Dock="Top" Height="20" />
+          </DockPanel>
 
-          <v:Path x:Name="path" Data="M0,0 L10,10 Z" />
+          <Path x:Name="path" Data="M0,0 L10,10 Z" />
         </local:ProbeView>
         """;
 
     [TestMethod]
-    public void ControlLibrary_CompilesThroughTheExplicitPrefix()
+    public void ControlLibrary_CompilesThroughUnprefixedNames()
     {
         var (run, output) = GeneratorProbe.RunAndCompile(
             [new XamlFileGenerator()],
@@ -88,7 +87,7 @@ public sealed class ControlLibraryXamlTests
     }
 
     [TestMethod]
-    public void UnprefixedShape_IsRejectedEvenThoughTheShapeExists()
+    public void UnprefixedShape_ResolvesToTheShapesNamespace()
     {
         const string xaml = """
             <local:ProbeView
@@ -96,17 +95,22 @@ public sealed class ControlLibraryXamlTests
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
                 x:Class="Probe.ProbeView">
-              <Rectangle />
+              <Rectangle x:Name="shape" />
             </local:ProbeView>
             """;
 
-        var (run, _) = GeneratorProbe.RunAndCompile(
+        var (run, output) = GeneratorProbe.RunAndCompile(
             [new XamlFileGenerator()],
             Source,
             "UnprefixedShapeProbe",
             new InMemoryAdditionalText("ProbeView.xaml", xaml));
 
-        var diagnostic = run.Diagnostics.Single(d => d.Id == "VELOX_XAML019");
-        StringAssert.Contains(diagnostic.GetMessage(), "v:Rectangle");
+        Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
+        Assert.IsEmpty(
+            output.GetDiagnostics().Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
+            GeneratorProbe.Describe(output.GetDiagnostics()));
+        StringAssert.Contains(
+            run.GeneratedText(),
+            "private global::VeloxDev.WinForms.Xaml.Controls.Shapes.Rectangle shape = null!;");
     }
 }

@@ -55,56 +55,56 @@ public sealed class ExtendedGeneratorTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+            xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
             x:Class="Probe.ProbeView">
 
           <local:ProbeView.Resources>
-            <v:ResourceDictionary>
+            <ResourceDictionary>
               <local:ProbeConverter x:Key="Converter" />
-              <v:ControlTemplate x:Key="CardTemplate" TargetType="local:ProbeCard">
-                <v:Border>
-                  <v:TextBlock Text="{TemplateBinding Title}" />
-                </v:Border>
-              </v:ControlTemplate>
-              <v:Style x:Key="BoundStyle" TargetType="local:ProbeCard">
-                <v:Style.Setters>
-                  <v:Setter Property="Title"
+              <ControlTemplate x:Key="CardTemplate" TargetType="local:ProbeCard">
+                <Border>
+                  <TextBlock Text="{TemplateBinding Title}" />
+                </Border>
+              </ControlTemplate>
+              <Style x:Key="BoundStyle" TargetType="local:ProbeCard">
+                <Style.Setters>
+                  <Setter Property="Title"
                             Value="{Binding Caption, Converter={StaticResource Converter}, StringFormat=N2, FallbackValue=fallback, TargetNullValue=none, UpdateSourceTrigger=LostFocus}" />
-                </v:Style.Setters>
-              </v:Style>
-            </v:ResourceDictionary>
+                </Style.Setters>
+              </Style>
+            </ResourceDictionary>
           </local:ProbeView.Resources>
 
           <local:ProbeCard x:Name="card"
                            Title="{Binding ElementName=card, Path=Title}"
-                           v:Panel.ZIndex="5">
+                           Panel.ZIndex="5">
             <local:ProbeCard.Triggers>
-              <v:Trigger Property="IsHot" Value="True">
-                <v:Trigger.EnterAction>
-                  <v:TransitionAction Property="Glow" To="1" Duration="0:0:0.1" LoopTime="2" IsAutoReverse="True" />
-                  <v:TransitionAction Property="BorderWidth" To="4" Duration="0:0:0.1" />
-                </v:Trigger.EnterAction>
-              </v:Trigger>
+              <Trigger Property="IsHot" Value="True">
+                <Trigger.EnterAction>
+                  <TransitionAction Property="Glow" To="1" Duration="0:0:0.1" LoopTime="2" IsAutoReverse="True" />
+                  <TransitionAction Property="BorderWidth" To="4" Duration="0:0:0.1" />
+                </Trigger.EnterAction>
+              </Trigger>
             </local:ProbeCard.Triggers>
           </local:ProbeCard>
 
-          <v:TextBlock Text="{Binding Caption, RelativeSource={RelativeSource Self}}" />
-          <v:TextBlock Text="{Binding Caption, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local:ProbeCard}}}" />
-          <v:TextBlock Text="{x:Static local:ProbeStatics.Value}" />
+          <TextBlock Text="{Binding Caption, RelativeSource={RelativeSource Self}}" />
+          <TextBlock Text="{Binding Caption, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local:ProbeCard}}}" />
+          <TextBlock Text="{x:Static local:ProbeStatics.Value}" />
 
-          <Button x:Name="nativeButton" Text="Native">
-            <Button.ContextMenu>
-              <v:ContextMenu>
-                <v:MenuItem Header="Native" />
-              </v:ContextMenu>
-            </Button.ContextMenu>
+          <native:Button x:Name="nativeButton" Text="Native">
+            <native:Button.ContextMenu>
+              <ContextMenu>
+                <MenuItem Header="Native" />
+              </ContextMenu>
+            </native:Button.ContextMenu>
+          </native:Button>
+
+          <Button x:Name="commandButton" Content="Go">
+            <Button.InputBindings>
+              <KeyBinding Key="F5" Command="{Binding Save}" />
+            </Button.InputBindings>
           </Button>
-
-          <v:Button x:Name="commandButton" Content="Go">
-            <v:Button.InputBindings>
-              <v:KeyBinding Key="F5" Command="{Binding Save}" />
-            </v:Button.InputBindings>
-          </v:Button>
 
         </local:ProbeView>
         """;
@@ -117,9 +117,8 @@ public sealed class ExtendedGeneratorTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
-                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
                 x:Class="Probe.ProbeView">
-              <v:TextBlock Text="{Binding Amount, StringFormat='{}{0:N2}'}" />
+              <TextBlock Text="{Binding Amount, StringFormat='{}{0:N2}'}" />
             </local:ProbeView>
             """;
 

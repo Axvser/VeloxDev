@@ -1,8 +1,8 @@
 # VeloxDev.WinForms — 架构
 
 > 代码：`Src/Adapters/VeloxDev.WinForms/`（`WorkflowSystem/AttachedBehaviors/`、`Xaml/` 是 XAML 运行时、`TransitionSystem/` 含一个采样器、`DynamicTheme/ThemeValueConverters.cs`、顶层 `GlobalUsings.cs`）。同目录另有一份 `README.md`。表面由 XAML 根 + `WorkflowSurfaceBehavior` 接管，网格装饰器归模板。
-> **当前是 XAML-first 架构**：适配器包含 XAML 运行时；生成器独立在 `Src/Generators/VeloxDev.WinForms.Generator/`；Surface、节点/插槽/连线模板与两个 Demo 的视觉壳由 XAML 定义，低层 attachment/behavior 仍留在 code-behind。包版本 11.2.0。
-> **XAML 基础控件库在 `Xaml/Controls/`**（形状在 `Xaml/Controls/Shapes/`）：全部派生 XAML `Control`，属性走 DP，因而 Style/Trigger/Binding/Transition 都可用；原生 WinForms 元素只能接收附加值。**XAML 前缀严格**：`v:` = VeloxDev，`local:` = 模板/Demo，无前缀 = 原生；根元素也要带前缀。XAML 视图 code-behind 的基类写完整命名空间（`VeloxDev.WinForms.Xaml.Controls.UserControl`）。
+> **当前是 XAML-first 架构**：适配器包含 XAML 运行时；生成器独立在 `Src/Generators/VeloxDev.WinForms.Generator/`；Surface、节点/插槽/连线模板与两个 Demo 的视觉壳由 XAML 定义，低层 attachment/behavior 仍留在 code-behind。包版本 12.0.0。
+> **XAML 基础控件库在 `Xaml/Controls/`**（形状在 `Xaml/Controls/Shapes/`）：全部派生 XAML `Control`，属性走 DP，因而 Style/Trigger/Binding/Transition 都可用；原生 WinForms 元素只能接收附加值。**XAML 前缀严格**：无前缀 = VeloxDev（`Controls` → `Controls.Shapes` → `.Xaml`），`native:` = `System.Windows.Forms`，`local:` = 模板/Demo；根元素按同一张表解析。`v:` 仅作 VeloxDev 旧别名保留。XAML 视图 code-behind 的基类写完整命名空间（`VeloxDev.WinForms.Xaml.Controls.UserControl`）。
 > **XAML 运行时的扩展面**：`NameScope` + `ElementName`/`RelativeSource`/`x:Static`，绑定侧 `Converter`/`StringFormat`/`FallbackValue`/`TargetNullValue`/`UpdateSourceTrigger`/索引器，`Setter.Value` 可绑定，`ControlTemplate` 带 `TargetType`/`TemplatedParent`/部件/模板触发器，`Panel.ZIndex`，`TriggerActionGroup`/`LoopTime`/`IsAutoReverse`，`ItemsPanel`/`ItemContainerStyle`/固定行高虚拟化，以及 `Menus.cs`/`Popup.cs` 的声明式外壳。运行时细节与边界见 `memory/modules/WinFormsXaml/architecture.md`。
 > **计数写法**：`git ls-files 'Src/Adapters/VeloxDev.WinForms/*.cs' 'Src/Adapters/VeloxDev.WinForms/**/*.cs'`。只写 `'.../**/*.cs'` 会漏 —— 这条 pathspec 不匹配目录**本级**的 `.cs`（漏掉 `GlobalUsings.cs`；七家各自都正好漏这处）。
 >
@@ -31,7 +31,7 @@
 
 ## 二、这套适配器现在「给」什么：整套表面
 
-表面引擎是 `WorkflowSurfaceBehavior`，**没有树基类**。模板/Demo 的 tree 是普通 `v:UserControl`，在根上挂 `behaviors:WorkflowSurfaceBehavior.*` 附着属性；行为按 `PART_*` 名称解析部件，接管 pan/zoom、输入路由、ViewPool、ruler/minimap、布局调度与 teardown。网格装饰器与小地图是**模板角色**，适配器只留 `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` 契约（没有 `WorkflowGridDecorator` 类）。
+表面引擎是 `WorkflowSurfaceBehavior`，**没有树基类**。模板/Demo 的 tree 是普通 `UserControl`，在根上挂 `behaviors:WorkflowSurfaceBehavior.*` 附着属性；行为按 `PART_*` 名称解析部件，接管 pan/zoom、输入路由、ViewPool、ruler/minimap、布局调度与 teardown。网格装饰器与小地图是**模板角色**，适配器只留 `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` 契约（没有 `WorkflowGridDecorator` 类）。
 
 | 类型 | 形态 | 宿主/模板做什么 | 关键成员 |
 |---|---|---|---|
@@ -89,8 +89,8 @@
 | `<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` | `TargetFrameworks` | 七家里只有这家与 WPF 是这个四元组 |
 | `UseWindowsForms` + `SuppressTfmSupportBuildWarnings` | 同名属性 | 四元组里 `netcoreapp3.0` 不带 `-windows`，靠后者压掉兼容告警（WPF 同形） |
 | `Nullable` + `ImplicitUsings` + `LangVersion latest` | 同名属性 | 全模块开可空 |
-| `GeneratePackageOnBuild` + `<Version>11.2.0</Version>` | 同名属性 | 与其余六家同；**没有** `GenerateDocumentationFile` |
-| Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 11.2.0` | 两个引用项 | 与生成器那套双轨同形；包里唯一的依赖是 Core |
+| `GeneratePackageOnBuild` + `<Version>12.0.0</Version>` | 同名属性 | 与其余六家同；**没有** `GenerateDocumentationFile` |
+| Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core 12.0.0` | 两个引用项 | 与生成器那套双轨同形；包里唯一的依赖是 Core |
 | 四个 TFM 一起编 | — | 新写的 BCL 调用必须在 netframework4.6.1 与 netcoreapp3.0 上都存在，否则只在对应的那一次编译里报错（`bin/` 下每个 TFM 一份产物） |
 
 **别用 `bin/`/`obj/` 目录名推支持的框架**：`bin/Debug/` 里可能残留旧的 `net10.0-windows` 目录；声明的是四元组，两个下游 demo 都是 `net10.0-windows`，它们解析到 `net8.0-windows` 那份资产。旧 TFM 的兼容层在 `Xaml/Compat.cs`：IsExternalInit、UnconditionalSuppressMessageAttribute、Clamp/IsFinite/TickCount64。
@@ -152,7 +152,7 @@
 `Examples/Workflow/WinForms/Demo/Form1.cs` 的 `BuildWorkbenchFrame` 在 Designer 的 `splitContainer` 外面套 32px 标题条 + 24px 状态条，`BuildSidebar` 再把 `Panel1` 换成 48px 活动栏 + 侧栏；`Panel1/2.Padding=Empty`、`SplitterWidth=4`、`SplitterDistance=320` 是工作台版式。**全部工作流视图在 `Views/Workflow/`、命名空间 `Demo.Views.Workflow`**：表面是 `WorkflowCanvas.xaml` + `.xaml.cs`，节点卡 `WorkflowNodeCard.xaml` + `.xaml.cs`，网格/`SurfaceCanvas` 在 `GridDecorator.cs`，连线和端口在 `LinkView.cs` / `SlotView.cs`，HUD/小地图在 `InfoOverlay.cs` / `MinimapOverlay.cs`，色板与自绘原语在 `CardTheme.cs` / `FramePanel.cs` / `GhostButton.cs`；`Views/Workbench/` 只放外壳件。WinForms 没有 `BorderThickness`/圆角属性，分隔线用 1px `Panel`/自绘。
 
 - **Designer 只保留仍在用的控件**：`splitContainer`、五个动作按钮（reload/undo/redo/save/select）、权限模式标签与选择器、Agent 日志与输入、执行日志、`workflowSurfaceControl`。工作台在 `BuildExplorerPage` / `BuildAgentPage` / `BuildOutputPanel` / `BuildMainArea` 里重新挂载它们。
-- **两个 demo 的视图选择器同形**：tree/canvas 的 `Resources` 声明 `NodeTemplate`/`LinkTemplate` 两个 `v:DataTemplate` 与 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" … />`，根上 `TemplateSelector="{StaticResource WorkflowTemplateSelector}"`；派生类继承通用 `VeloxDev.WinForms.Xaml.TemplateSelector` 并按 item 类型返回模板。键/滚轮策略（Delete、Ctrl+Z/Y、Shift+滚轮横滚）订在树的 `IInputEvents` 上，两边一致。
+- **两个 demo 的视图选择器同形**：tree/canvas 的 `Resources` 声明 `NodeTemplate`/`LinkTemplate` 两个 `DataTemplate` 与 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" … />`，根上 `TemplateSelector="{StaticResource WorkflowTemplateSelector}"`；派生类继承通用 `VeloxDev.WinForms.Xaml.TemplateSelector` 并按 item 类型返回模板。键/滚轮策略（Delete、Ctrl+Z/Y、Shift+滚轮横滚）订在树的 `IInputEvents` 上，两边一致。
 
 - **四区外壳**：主区（`流程图`/`输出`）+ 348px 检查器（`属性`/`AI 助手`）；运行侧栏由 `Views/Workflow/RunManagerPanel.cs` 绑 `TreeViewModel.Runs`，检查器由 `Views/Workflow/WorkflowInspectorPanel.cs` 绑 `SelectedElement`/`CompiledStructure`，子代理面板是 `SubAgentPanel.cs`；`Views/Workbench/` 放共享外壳件（`WorkbenchPalette` / `StatusBarStrip` / `WorkbenchTabButton`）。
 - **标题条有菜单与命令中心**：`BuildTitleStrip` 用 `GhostButton` 做“文件/编辑/视图/帮助”和居中的“搜索命令 Ctrl+Shift+P”；下拉是 `Views/Workbench/DarkPopupMenu`（无边框 `Form`，自己画 panel/hover/快捷键列），不是 `ContextMenuStrip`。**实测 2026-11-18**：`ContextMenuStrip` 即使设了自定义 `ToolStripRenderer`、`ToolStripManager.Renderer` 和 `Application.SetColorMode(SystemColorMode.Dark)`，弹层仍是浅色面板 + 浅色字；换自己的 Form 才稳定。原生窗口边框继续负责最小化/最大化/关闭，不画假按钮。

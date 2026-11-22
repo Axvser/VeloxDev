@@ -70,7 +70,6 @@ public sealed class AttachedAndTriggerDiagnosticsTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
             x:Class="Probe.ProbeView">
         """;
 
@@ -94,18 +93,30 @@ public sealed class AttachedAndTriggerDiagnosticsTests
     }
 
     [TestMethod]
-    public void AnUnprefixedAttachedAttribute_IsXaml004()
+    public void AnUnprefixedAttachedAttribute_ResolvesToVeloxDev()
     {
-        var diagnostic = AssertSingle(Wrap("<Button WorkflowPanel.Column=\"1\" />"), "VELOX_XAML004");
-        Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
-        StringAssert.Contains(diagnostic.GetMessage(), "clr-namespace");
+        var result = Run(Wrap("<Button x:Name=\"button\" Grid.Column=\"1\" />"));
+
+        Assert.IsEmpty(result.Diagnostics, GeneratorProbe.Describe(result.Diagnostics));
+        StringAssert.Contains(
+            result.GeneratedText(),
+            "global::VeloxDev.WinForms.Xaml.Controls.Grid.ColumnProperty");
+    }
+
+    [TestMethod]
+    public void ALocalAttachedOwnerWrittenWithoutItsPrefix_IsXaml001()
+    {
+        // Unprefixed owners are VeloxDev types now, so a local owner needs its clr-namespace prefix.
+        var diagnostic = AssertSingle(Wrap("<Button WorkflowPanel.Column=\"1\" />"), "VELOX_XAML001");
+        Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
+        StringAssert.Contains(diagnostic.GetMessage(), "WorkflowPanel");
     }
 
     [TestMethod]
     public void ATriggerWithoutAProperty_IsXaml004()
     {
         var diagnostic = AssertSingle(
-            Wrap(TriggerCard("<v:Trigger Value=\"True\" />")),
+            Wrap(TriggerCard("<Trigger Value=\"True\" />")),
             "VELOX_XAML004");
 
         Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
@@ -116,7 +127,7 @@ public sealed class AttachedAndTriggerDiagnosticsTests
     public void AnUnknownTriggerProperty_IsXaml002()
     {
         var diagnostic = AssertSingle(
-            Wrap(TriggerCard("<v:Trigger Property=\"Bogus\" Value=\"True\" />")),
+            Wrap(TriggerCard("<Trigger Property=\"Bogus\" Value=\"True\" />")),
             "VELOX_XAML002");
 
         Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
@@ -128,11 +139,11 @@ public sealed class AttachedAndTriggerDiagnosticsTests
     {
         var diagnostic = AssertSingle(
             Wrap(TriggerCard("""
-                <v:Trigger Property="IsHot" Value="True">
-                  <v:Trigger.Setters>
-                    <v:Setter Property="Bogus" Value="1" />
-                  </v:Trigger.Setters>
-                </v:Trigger>
+                <Trigger Property="IsHot" Value="True">
+                  <Trigger.Setters>
+                    <Setter Property="Bogus" Value="1" />
+                  </Trigger.Setters>
+                </Trigger>
                 """)),
             "VELOX_XAML002");
 
@@ -145,11 +156,11 @@ public sealed class AttachedAndTriggerDiagnosticsTests
     {
         var diagnostic = AssertSingle(
             Wrap(TriggerCard("""
-                <v:Trigger Property="IsHot" Value="True">
-                  <v:Trigger.EnterAction>
+                <Trigger Property="IsHot" Value="True">
+                  <Trigger.EnterAction>
                     <local:NotAnAction />
-                  </v:Trigger.EnterAction>
-                </v:Trigger>
+                  </Trigger.EnterAction>
+                </Trigger>
                 """)),
             "VELOX_XAML004");
 
@@ -162,11 +173,11 @@ public sealed class AttachedAndTriggerDiagnosticsTests
     {
         var diagnostic = AssertSingle(
             Wrap(TriggerCard("""
-                <v:Trigger Property="IsHot" Value="True">
-                  <v:Trigger.EnterAction>
-                    <v:TransitionAction Property="Glow" To="1" Duration="not-a-duration" />
-                  </v:Trigger.EnterAction>
-                </v:Trigger>
+                <Trigger Property="IsHot" Value="True">
+                  <Trigger.EnterAction>
+                    <TransitionAction Property="Glow" To="1" Duration="not-a-duration" />
+                  </Trigger.EnterAction>
+                </Trigger>
                 """)),
             "VELOX_XAML003");
 
@@ -190,11 +201,11 @@ public sealed class AttachedAndTriggerDiagnosticsTests
     {
         var diagnostic = AssertSingle(
             Wrap(TriggerCard("""
-                <v:Trigger Property="IsHot" Value="True">
-                  <v:Trigger.EnterAction>
-                    <v:TransitionAction Property="Glow" To="1" Ease="Nope" />
-                  </v:Trigger.EnterAction>
-                </v:Trigger>
+                <Trigger Property="IsHot" Value="True">
+                  <Trigger.EnterAction>
+                    <TransitionAction Property="Glow" To="1" Ease="Nope" />
+                  </Trigger.EnterAction>
+                </Trigger>
                 """)),
             "VELOX_XAML003");
 

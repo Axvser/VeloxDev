@@ -17,16 +17,17 @@ summarizes the workflow surface.
 
 WinForms has no platform XAML, so this adapter ships its own small runtime (`Src/Adapters/VeloxDev.WinForms/Xaml/`) and a Roslyn generator (`Src/Generators/VeloxDev.WinForms.Generator/`). The generated `InitializeComponent()` builds ordinary WinForms controls:
 
-- `v:` prefix = `VeloxDev.WinForms.Xaml` / `.Controls` / `.Controls.Shapes` (`UserControl`, `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `Border`, `ScrollViewer`, `Button`, `TextBox`, `ListBox`, `ComboBox`, `TextBlock`, `Rectangle`, `Path`, `Style`, `Trigger`, `DataTemplate`, …).
-- **No prefix means native WinForms only** (`Label`, `TableLayoutPanel`, `Button`, …). A VeloxDev control written without `v:` is `VELOX_XAML019`, even when the native table has the same name.
-- `local:` is your own namespace; the item templates use it for sibling views. **The root view is prefixed too**: `<local:TreeView …>` / `<v:UserControl …>`.
+- **Unprefixed means VeloxDev**: `VeloxDev.WinForms.Xaml.Controls` / `.Controls.Shapes` / `.Xaml` (`UserControl`, `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `Border`, `ScrollViewer`, `Button`, `TextBox`, `ListBox`, `ComboBox`, `TextBlock`, `Rectangle`, `Path`, `Style`, `Trigger`, `DataTemplate`, …).
+- `native:` means `System.Windows.Forms` (`Label`, `TableLayoutPanel`, `Button`, …); declare `xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"`.
+- An unprefixed name that is not a VeloxDev type is `VELOX_XAML019`; write `native:` for a WinForms type or `local:` for your own.
+- `local:` is your own namespace; the item templates use it for sibling views. **The root view follows the same rule**: `<UserControl …>` and `<local:TreeView …>` resolve by the same table; a native root is `<native:UserControl …>`. (`v:` is still accepted as a legacy alias for VeloxDev.)
 - Dependency properties, attached properties, `{Binding}`, `{StaticResource}`, `Style`, `Trigger`, `DataTrigger`, `MultiTrigger`, `TransitionAction`, `DataTemplate` and `ControlTemplate` are supported.
 - A **selector** is an object resource whose `DataTemplate` properties point at template resources:
   `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" />`.
 - Every DP change on a XAML `Control` calls `Invalidate()` automatically. Mark configuration properties with `new PropertyMetadata(...) { AffectsRender = false }` if they never paint.
 
 ```xml
-xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml;assembly=VeloxDev.WinForms"
+xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
 xmlns:local="clr-namespace:MyApp.Views"
 xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WinForms"
 ```
@@ -49,7 +50,7 @@ public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserContr
 
 ## Base control library
 
-`VeloxDev.WinForms` ships a WPF/Avalonia-shaped control set under `v:`. Every type derives from the XAML `Control`, so its properties are dependency properties and styles, triggers, transitions and bindings work; a native WinForms element written without `v:` keeps native behaviour and only supports attached values.
+`VeloxDev.WinForms` ships a WPF/Avalonia-shaped control set whose types are written unprefixed. Every type derives from the XAML `Control`, so its properties are dependency properties and styles, triggers, transitions and bindings work; a native WinForms element written with `native:` keeps native behaviour and only supports attached values.
 
 | Family | Controls |
 | --- | --- |
@@ -59,30 +60,30 @@ public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserContr
 | Range / media | `ProgressBar`, `Slider`, `Image`, `Separator` |
 | Shapes | `Rectangle`, `Ellipse`, `Line`, `Path` |
 
-Attached coordinates follow the same `v:Owner.Property` spelling:
+Attached coordinates follow the same `Owner.Property` spelling:
 
 ```xml
-<v:Grid x:Name="layout">
-  <v:Grid.RowDefinitions>
-    <v:RowDefinition Height="Auto" />
-    <v:RowDefinition Height="*" />
-  </v:Grid.RowDefinitions>
-  <v:Border v:Grid.Row="1" />
-</v:Grid>
+<Grid x:Name="layout">
+  <Grid.RowDefinitions>
+    <RowDefinition Height="Auto" />
+    <RowDefinition Height="*" />
+  </Grid.RowDefinitions>
+  <Border Grid.Row="1" />
+</Grid>
 
-<v:Canvas>
-  <v:Border v:Canvas.Left="10" v:Canvas.Top="20" />
-</v:Canvas>
+<Canvas>
+  <Border Canvas.Left="10" Canvas.Top="20" />
+</Canvas>
 
-<v:StackPanel Spacing="4">
-  <v:Button Content="OK" Click="OnOk" />
-  <v:TextBlock>a text body works too</v:TextBlock>
-</v:StackPanel>
+<StackPanel Spacing="4">
+  <Button Content="OK" Click="OnOk" />
+  <TextBlock>a text body works too</TextBlock>
+</StackPanel>
 ```
 
 - `Width` / `Height` / `Min*` / `Max*`, `Margin`, `Padding`, `Background`, `Foreground`, `Font`, `Visibility`, `IsEnabled`, `HorizontalAlignment` and `VerticalAlignment` are dependency properties on every XAML control.
 - `Canvas.Left/Top/Right/Bottom`, `Grid.Row/Column/RowSpan/ColumnSpan` and `DockPanel.Dock` are attached dependency properties.
-- Native children are still laid out by the `v:` panels; attach `v:` coordinates when a native control needs a cell.
+- Native children are still laid out by the VeloxDev panels; attach VeloxDev coordinates (`Grid.Row`, `Canvas.Left`, …) when a native control needs a cell.
 - `ItemsControl` is the template host: `ItemsSource` + `ItemTemplate` creates one control per item. `ListBox` and `ComboBox` wrap the native selectors for selection and scrolling, so they render the native item text and `DisplayMemberPath`, not an arbitrary `ItemTemplate`.
 
 ## Animations
@@ -91,33 +92,33 @@ Animations are dependency-property transitions: one action animates one DP to on
 From markup, put a `TransitionAction` under a trigger's `EnterAction` / `ExitAction`:
 
 ```xml
-<v:Button Content="Save">
-  <v:Button.Triggers>
-    <v:Trigger Property="IsPointerOver" Value="True">
-      <v:Trigger.EnterAction>
-        <v:TransitionAction Property="Background" To="#FF2B6CFF"
+<Button Content="Save">
+  <Button.Triggers>
+    <Trigger Property="IsPointerOver" Value="True">
+      <Trigger.EnterAction>
+        <TransitionAction Property="Background" To="#FF2B6CFF"
                             Duration="0:0:0.18" Ease="CubicOut" />
-      </v:Trigger.EnterAction>
-      <v:Trigger.ExitAction>
-        <v:TransitionAction Property="Background" To="#FF20242C"
+      </Trigger.EnterAction>
+      <Trigger.ExitAction>
+        <TransitionAction Property="Background" To="#FF20242C"
                             Duration="0:0:0.24" Ease="CubicOut" />
-      </v:Trigger.ExitAction>
-    </v:Trigger>
-  </v:Button.Triggers>
-</v:Button>
+      </Trigger.ExitAction>
+    </Trigger>
+  </Button.Triggers>
+</Button>
 ```
 
 For more than two stops, use a `KeyFrameAnimation`; it is the same transition chain, one segment per
 adjacent pair of frames:
 
 ```xml
-<v:Trigger.EnterAction>
-  <v:KeyFrameAnimation Property="Background" Duration="0:0:0.6" Ease="CubicInOut">
-    <v:KeyFrame Offset="0" Value="#FF20242C" />
-    <v:KeyFrame Offset="0.5" Value="#FF2B6CFF" />
-    <v:KeyFrame Offset="1" Value="#FF20242C" />
-  </v:KeyFrameAnimation>
-</v:Trigger.EnterAction>
+<Trigger.EnterAction>
+  <KeyFrameAnimation Property="Background" Duration="0:0:0.6" Ease="CubicInOut">
+    <KeyFrame Offset="0" Value="#FF20242C" />
+    <KeyFrame Offset="0.5" Value="#FF2B6CFF" />
+    <KeyFrame Offset="1" Value="#FF20242C" />
+  </KeyFrameAnimation>
+</Trigger.EnterAction>
 ```
 
 From code-behind, call `XamlTransition.Animate(control, property, to, effect)` for one segment or
@@ -138,10 +139,10 @@ The full attribute table, custom `TriggerAction` shape and failure cases are in
 
 ## Writing the surface
 
-The tree template is a `v:UserControl`; the parts are resolved by native `Control.Name`, and the attached properties are declared on the root:
+The tree template is a `UserControl`; the parts are resolved by native `Control.Name`, and the attached properties are declared on the root:
 
 ```xml
-<v:UserControl x:Class="MyApp.Views.TreeView"
+<UserControl x:Class="MyApp.Views.TreeView"
                behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
                behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
                behaviors:WorkflowSurfaceBehavior.TemplateSelector="{StaticResource WorkflowTemplateSelector}"
@@ -150,23 +151,23 @@ The tree template is a `v:UserControl`; the parts are resolved by native `Contro
                behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
                behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
                behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_Surface">
-  <v:UserControl.Resources>
-    <v:ResourceDictionary>
-      <v:DataTemplate x:Key="NodeTemplate">
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <DataTemplate x:Key="NodeTemplate">
         <local:NodeView />
-      </v:DataTemplate>
+      </DataTemplate>
       <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
                                     NodeTemplate="{StaticResource NodeTemplate}" />
-    </v:ResourceDictionary>
-  </v:UserControl.Resources>
-  <v:Panel Name="PART_Surface" Dock="Fill">
+    </ResourceDictionary>
+  </UserControl.Resources>
+  <Panel Name="PART_Surface" Dock="Fill">
     <local:GridDecorator Name="PART_GridDecorator" Dock="Fill">
-      <v:ScrollViewer Name="PART_ScrollViewer" Dock="Fill">
+      <ScrollViewer Name="PART_ScrollViewer" Dock="Fill">
         <local:SurfaceCanvas Name="PART_Canvas" Dock="Fill" />
-      </v:ScrollViewer>
+      </ScrollViewer>
     </local:GridDecorator>
-  </v:Panel>
-</v:UserControl>
+  </Panel>
+</UserControl>
 ```
 
 ⚙ **`x:Name` and `Name` are different things.** `x:Name` creates a code-behind field; the behavior resolves native `Control.Name`, so the `PART_*` contract lives in `Name`. The tree template writes both when the field is useful.
@@ -238,10 +239,10 @@ The surface opens the strip on a right-press on a link, positions it, and suspen
 
 | Item | Shape | You supply |
 |---|---|---|
-| tree | `v:UserControl` + `WorkflowSurfaceBehavior`; `PART_Canvas` carries `WorkflowLinkLayer` | the palette, the selector resource, the link layer's line colour/width |
-| node | `v:UserControl` + `WorkflowNodeViewBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeRowsBehavior` | the card shell (`PART_Card`, `PART_Header`, `PART_Title`, `PART_OutputSlots`) and its colours |
-| slot | `v:UserControl` + `WorkflowSlotConnectionBehavior` + `v:Path` | the glyph path and by-state colours |
-| link | `v:UserControl` + `WorkflowLinkAttachment` — **per-link opt-in**; the default surface draws links in `WorkflowLinkLayer` | the resting curve and palette |
+| tree | `UserControl` + `WorkflowSurfaceBehavior`; `PART_Canvas` carries `WorkflowLinkLayer` | the palette, the selector resource, the link layer's line colour/width |
+| node | `UserControl` + `WorkflowNodeViewBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeRowsBehavior` | the card shell (`PART_Card`, `PART_Header`, `PART_Title`, `PART_OutputSlots`) and its colours |
+| slot | `UserControl` + `WorkflowSlotConnectionBehavior` + `Path` | the glyph path and by-state colours |
+| link | `UserControl` + `WorkflowLinkAttachment` — **per-link opt-in**; the default surface draws links in `WorkflowLinkLayer` | the resting curve and palette |
 | minimap | `WorkflowMinimapOverlay` | the four palette colours |
 | grid decorator | `Panel, IWorkflowGridDecorator` plus `SurfaceCanvas` | grid/ruler palette, spacing, major-line frequency |
 | template selector | `CustomTemplateSelector` | the `DataTemplate` each pooled item kind gets (node; link only for the opt-in path) |

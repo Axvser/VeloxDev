@@ -37,15 +37,16 @@ public sealed class XamlDiagnosticsTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
+            xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
             x:Class="Probe.ProbeView">
         """;
 
     private const string CloseRoot = "</local:ProbeView>";
 
     [TestMethod]
-    public void AnUnknownElement_IsXaml001()
+    public void AnUnknownPrefixedElement_IsXaml001()
     {
-        var diagnostic = AssertSingle(Wrap("<MissingControl />"), "VELOX_XAML001");
+        var diagnostic = AssertSingle(Wrap("<local:MissingControl />"), "VELOX_XAML001");
         Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         StringAssert.Contains(diagnostic.GetMessage(), "MissingControl");
     }
@@ -53,7 +54,7 @@ public sealed class XamlDiagnosticsTests
     [TestMethod]
     public void AnUnknownMember_IsXaml002()
     {
-        var diagnostic = AssertSingle(Wrap("<Button Bogus=\"1\" />"), "VELOX_XAML002");
+        var diagnostic = AssertSingle(Wrap("<native:Button Bogus=\"1\" />"), "VELOX_XAML002");
         Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         StringAssert.Contains(diagnostic.GetMessage(), "Bogus");
     }
@@ -65,8 +66,9 @@ public sealed class XamlDiagnosticsTests
             <local:ProbeView
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                xmlns:local="clr-namespace:Probe">
-              <Button Text="OK" />
+                xmlns:local="clr-namespace:Probe"
+                xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms">
+              <native:Button Text="OK" />
             </local:ProbeView>
             """;
 
@@ -82,8 +84,9 @@ public sealed class XamlDiagnosticsTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
+                xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
                 x:Class="Probe.DoesNotExist">
-              <Button Text="OK" />
+              <native:Button Text="OK" />
             </local:ProbeView>
             """;
 
@@ -96,7 +99,7 @@ public sealed class XamlDiagnosticsTests
     public void ADuplicateXName_IsXaml007()
     {
         var diagnostic = AssertSingle(
-            Wrap("<Button x:Name=\"duplicate\" /><Label x:Name=\"duplicate\" />"),
+            Wrap("<native:Button x:Name=\"duplicate\" /><native:Label x:Name=\"duplicate\" />"),
             "VELOX_XAML007");
         Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
         StringAssert.Contains(diagnostic.GetMessage(), "duplicate");
@@ -105,7 +108,7 @@ public sealed class XamlDiagnosticsTests
     [TestMethod]
     public void AMissingEventHandler_IsXaml008()
     {
-        var diagnostic = AssertSingle(Wrap("<Button Click=\"DoesNotExist\" />"), "VELOX_XAML008");
+        var diagnostic = AssertSingle(Wrap("<native:Button Click=\"DoesNotExist\" />"), "VELOX_XAML008");
         Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
         StringAssert.Contains(diagnostic.GetMessage(), "DoesNotExist");
     }
@@ -113,7 +116,7 @@ public sealed class XamlDiagnosticsTests
     [TestMethod]
     public void ANonPartialXClass_IsXaml009()
     {
-        var result = Run(Wrap("<Button Text=\"OK\" />"), NonPartialSource);
+        var result = Run(Wrap("<native:Button Text=\"OK\" />"), NonPartialSource);
         var diagnostic = AssertSingle(result, "VELOX_XAML009");
         Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
         Assert.IsEmpty(result.GeneratedText());
@@ -142,7 +145,7 @@ public sealed class XamlDiagnosticsTests
             }
             """;
 
-        var result = Run(Wrap("<Button Text=\"OK\" />"), source);
+        var result = Run(Wrap("<native:Button Text=\"OK\" />"), source);
         var diagnostic = AssertSingle(result, "VELOX_XAML015");
 
         Assert.AreEqual(DiagnosticSeverity.Error, diagnostic.Severity);
@@ -164,7 +167,7 @@ public sealed class XamlDiagnosticsTests
             }
             """;
 
-        var result = Run(Wrap("<Button Text=\"OK\" />"), source);
+        var result = Run(Wrap("<native:Button Text=\"OK\" />"), source);
         AssertSingle(result, "VELOX_XAML015");
         Assert.IsEmpty(result.GeneratedText());
     }

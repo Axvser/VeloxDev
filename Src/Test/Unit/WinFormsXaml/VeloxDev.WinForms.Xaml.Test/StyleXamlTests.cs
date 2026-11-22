@@ -75,7 +75,6 @@ public sealed class StyleXamlTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
             x:Class="Probe.ProbeView">
         """;
 
@@ -129,18 +128,18 @@ public sealed class StyleXamlTests
     {
         var xaml = Wrap("""
             <local:ProbeView.Resources>
-              <v:ResourceDictionary>
-                <v:Style x:Key="Child" TargetType="local:ProbeCard" BasedOn="{StaticResource Base}">
-                  <v:Style.Setters>
-                    <v:Setter Property="StyleValue" Value="3" />
-                  </v:Style.Setters>
-                </v:Style>
-                <v:Style x:Key="Base" TargetType="local:ProbeCard">
-                  <v:Style.Setters>
-                    <v:Setter Property="BorderWidth" Value="2" />
-                  </v:Style.Setters>
-                </v:Style>
-              </v:ResourceDictionary>
+              <ResourceDictionary>
+                <Style x:Key="Child" TargetType="local:ProbeCard" BasedOn="{StaticResource Base}">
+                  <Style.Setters>
+                    <Setter Property="StyleValue" Value="3" />
+                  </Style.Setters>
+                </Style>
+                <Style x:Key="Base" TargetType="local:ProbeCard">
+                  <Style.Setters>
+                    <Setter Property="BorderWidth" Value="2" />
+                  </Style.Setters>
+                </Style>
+              </ResourceDictionary>
             </local:ProbeView.Resources>
             <local:ProbeCard x:Name="card" Style="{StaticResource Child}" />
             """);
@@ -167,13 +166,13 @@ public sealed class StyleXamlTests
         var diagnostic = AssertSingle(
             Wrap("""
                 <local:ProbeView.Resources>
-                  <v:ResourceDictionary>
-                    <v:Style x:Key="Bad">
-                      <v:Style.Setters>
-                        <v:Setter Property="BorderWidth" Value="2" />
-                      </v:Style.Setters>
-                    </v:Style>
-                  </v:ResourceDictionary>
+                  <ResourceDictionary>
+                    <Style x:Key="Bad">
+                      <Style.Setters>
+                        <Setter Property="BorderWidth" Value="2" />
+                      </Style.Setters>
+                    </Style>
+                  </ResourceDictionary>
                 </local:ProbeView.Resources>
                 """),
             "VELOX_XAML014");
@@ -203,9 +202,9 @@ public sealed class StyleXamlTests
     {
         var diagnostic = AssertSingle(
             StyleWithBody("""
-                <v:Style.Setters>
-                  <v:Setter Property="Bogus" Value="2" />
-                </v:Style.Setters>
+                <Style.Setters>
+                  <Setter Property="Bogus" Value="2" />
+                </Style.Setters>
                 """),
             "VELOX_XAML002");
 
@@ -218,9 +217,9 @@ public sealed class StyleXamlTests
     {
         var diagnostic = AssertSingle(
             StyleWithBody("""
-                <v:Style.Triggers>
-                  <v:Trigger Property="Bogus" Value="True" />
-                </v:Style.Triggers>
+                <Style.Triggers>
+                  <Trigger Property="Bogus" Value="True" />
+                </Style.Triggers>
                 """),
             "VELOX_XAML002");
 
@@ -232,7 +231,7 @@ public sealed class StyleXamlTests
     public void AnUnsupportedStyleMember_IsXaml004()
     {
         var diagnostic = AssertSingle(
-            StyleWithBody("<v:Style.Nonsense />"),
+            StyleWithBody("<Style.Nonsense />"),
             "VELOX_XAML004");
 
         Assert.AreEqual(DiagnosticSeverity.Warning, diagnostic.Severity);
@@ -245,9 +244,9 @@ public sealed class StyleXamlTests
         var diagnostic = AssertSingle(
             Wrap("""
                 <local:ProbeView.Resources>
-                  <v:ResourceDictionary>
-                    <v:Style x:Key="Bad" TargetType="local:ProbeCard" BasedOn="NodeStyle" />
-                  </v:ResourceDictionary>
+                  <ResourceDictionary>
+                    <Style x:Key="Bad" TargetType="local:ProbeCard" BasedOn="NodeStyle" />
+                  </ResourceDictionary>
                 </local:ProbeView.Resources>
                 """),
             "VELOX_XAML004");
@@ -258,52 +257,52 @@ public sealed class StyleXamlTests
 
     private static string ValidResources() => """
         <local:ProbeView.Resources>
-          <v:ResourceDictionary>
-            <v:Style x:Key="NodeStyle" TargetType="local:ProbeCard">
-              <v:Style.Setters>
-                <v:Setter Property="BorderWidth" Value="2" />
-                <v:Setter Property="Glow" Value="0.25" />
-              </v:Style.Setters>
-              <v:Style.Triggers>
-                <v:Trigger Property="IsHot" Value="True">
-                  <v:Trigger.Setters>
-                    <v:Setter Property="BorderWidth" Value="4" />
-                  </v:Trigger.Setters>
-                  <v:Trigger.EnterAction>
-                    <v:TransitionAction Property="Glow" To="1" Duration="0:0:0.1" />
-                  </v:Trigger.EnterAction>
-                </v:Trigger>
-              </v:Style.Triggers>
-            </v:Style>
-            <v:Style x:Key="ChildStyle" TargetType="{x:Type local:ProbeCard}" BasedOn="{StaticResource NodeStyle}">
-              <v:Style.Setters>
-                <v:Setter Property="StyleValue" Value="3" />
-              </v:Style.Setters>
-            </v:Style>
-          </v:ResourceDictionary>
+          <ResourceDictionary>
+            <Style x:Key="NodeStyle" TargetType="local:ProbeCard">
+              <Style.Setters>
+                <Setter Property="BorderWidth" Value="2" />
+                <Setter Property="Glow" Value="0.25" />
+              </Style.Setters>
+              <Style.Triggers>
+                <Trigger Property="IsHot" Value="True">
+                  <Trigger.Setters>
+                    <Setter Property="BorderWidth" Value="4" />
+                  </Trigger.Setters>
+                  <Trigger.EnterAction>
+                    <TransitionAction Property="Glow" To="1" Duration="0:0:0.1" />
+                  </Trigger.EnterAction>
+                </Trigger>
+              </Style.Triggers>
+            </Style>
+            <Style x:Key="ChildStyle" TargetType="{x:Type local:ProbeCard}" BasedOn="{StaticResource NodeStyle}">
+              <Style.Setters>
+                <Setter Property="StyleValue" Value="3" />
+              </Style.Setters>
+            </Style>
+          </ResourceDictionary>
         </local:ProbeView.Resources>
         <local:ProbeCard x:Name="card" Style="{StaticResource ChildStyle}" />
         """;
 
     private static string StyleWithTargetType(string targetType) => Wrap($"""
         <local:ProbeView.Resources>
-          <v:ResourceDictionary>
-            <v:Style x:Key="Bad" TargetType="{targetType}">
-              <v:Style.Setters>
-                <v:Setter Property="BorderWidth" Value="2" />
-              </v:Style.Setters>
-            </v:Style>
-          </v:ResourceDictionary>
+          <ResourceDictionary>
+            <Style x:Key="Bad" TargetType="{targetType}">
+              <Style.Setters>
+                <Setter Property="BorderWidth" Value="2" />
+              </Style.Setters>
+            </Style>
+          </ResourceDictionary>
         </local:ProbeView.Resources>
         """);
 
     private static string StyleWithBody(string body) => Wrap($"""
         <local:ProbeView.Resources>
-          <v:ResourceDictionary>
-            <v:Style x:Key="Bad" TargetType="local:ProbeCard">
+          <ResourceDictionary>
+            <Style x:Key="Bad" TargetType="local:ProbeCard">
               {body}
-            </v:Style>
-          </v:ResourceDictionary>
+            </Style>
+          </ResourceDictionary>
         </local:ProbeView.Resources>
         """);
 

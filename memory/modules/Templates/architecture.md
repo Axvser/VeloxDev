@@ -190,7 +190,7 @@ Jalium 的 36 **没有说明**（模板的 grid-decorator 只写「默认标尺�
 
 | 族 | 平台 | 依据 |
 |---|---|---|
-| **立即模式**：继承一个能覆写绘制入口的元素，XAML 只是空壳 | WPF、Avalonia、Jalium、WinForms | WPF `workflow-link-view/TemplateClass.xaml` 全文是一个空 `<UserControl>`，几何全在 `.xaml.cs` 的 `OnRender`；Avalonia 同理（`TemplateClass.axaml` 是空 `<Control>`，`Render` 在 code-behind）；Jalium 的模板也是空 `<UserControl>`，几何在 `.jalxaml.cs` 里算、自盒化（`WorkflowLinkBounds.Apply`）并 `PublishCurve`；WinForms 的**默认路径是单层**：`WorkflowLinkLayer` 在画布的 `Paint` 里画所有可见线并发布曲线（无每线窗口）；`workflow-link-view` 是 per-link 可选路径（`WorkflowLinkAttachment` 自盒化、雕窗口区域），视图模板是 XAML `v:UserControl` + `.xaml.cs`，只在显式选择每线一视图时使用 |
+| **立即模式**：继承一个能覆写绘制入口的元素，XAML 只是空壳 | WPF、Avalonia、Jalium、WinForms | WPF `workflow-link-view/TemplateClass.xaml` 全文是一个空 `<UserControl>`，几何全在 `.xaml.cs` 的 `OnRender`；Avalonia 同理（`TemplateClass.axaml` 是空 `<Control>`，`Render` 在 code-behind）；Jalium 的模板也是空 `<UserControl>`，几何在 `.jalxaml.cs` 里算、自盒化（`WorkflowLinkBounds.Apply`）并 `PublishCurve`；WinForms 的**默认路径是单层**：`WorkflowLinkLayer` 在画布的 `Paint` 里画所有可见线并发布曲线（无每线窗口）；`workflow-link-view` 是 per-link 可选路径（`WorkflowLinkAttachment` 自盒化、雕窗口区域），视图模板是 XAML `UserControl` + `.xaml.cs`，只在显式选择每线一视图时使用 |
 | **保留式几何在代码里构造**：XAML 是空壳，`Path` + `PathGeometry` 在构造函数里 new 出来 | WinUI | `workflow-link-view/TemplateClass.xaml` 几乎为空（`Clip="{x:Null}"` 是全部内容）；`TemplateClass.xaml.cs` 的 `_path` / `_pathGeometry` / `_pathFigure` 是 `Path` / `PathGeometry` / `PathFigure` 字段，构造函数里 new 并 `Children.Add`。原因是这一家**没有公共 `OnRender`**，理由见 `memory/modules/WorkflowSystem/adapters/winui.md` §二·L2，此处不抄 |
 | **标记语言里的元素 + 代码给几何字符串** | Razor | `workflow-link-view/TemplateClass.razor` 的 `<path d=…>`（虚线的 `stroke-dasharray="@dash"`，`dash` 在 code-behind 里按 `IsVirtual` 取 `"6 4"`）；`data-veloxdev-link-curve="1"` 是给适配器缩放 JS 认的标记，不是样式 —— 见 `adapters/razor.md` §2 |
 | **复用适配器的视口级图层** | MAUI | `workflow-link-view/TemplateClass.xaml` 直接放 `behaviors:WorkflowLinkOverlay`；文件头的注释写明取舍：**每条线一个 `GraphicsView` 会在深缩放下超出 Win2D 纹理上限并静默消失**，所以一个表面只放**一个** link 层 |
@@ -207,7 +207,7 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 WinForms 的小地图实现在适配器（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs`）；
 Jalium 的薄壳设四个颜色符号（`workflow-minimap-overlay/TemplateClass.cs`）。
 
-**WinForms 的七项不是「基类 + 派生」**：tree 是 `v:UserControl` + `WorkflowSurfaceBehavior`，node / slot / link 是 `v:UserControl` + attachment，grid / minimap / selector 是纯 `.cs`；调度与平台机制在适配器，调色板、卡片样子与选择器策略在模板。包内共用件是
+**WinForms 的七项不是「基类 + 派生」**：tree 是 `UserControl` + `WorkflowSurfaceBehavior`，node / slot / link 是 `UserControl` + attachment，grid / minimap / selector 是纯 `.cs`；调度与平台机制在适配器，调色板、卡片样子与选择器策略在模板。包内共用件是
 `WorkflowSurfaceColors` / `WorkflowSurfaceGraphics` / `WorkflowSurfaceGrid`。
 
 `node-view` 收掉的只有机制（绑定/定位/折叠/反射读名字），**卡片长什么样是用户的设计** —— Full demo 的卡片视觉仍留在模板/宿主。

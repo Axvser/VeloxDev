@@ -16,7 +16,7 @@
 
 | 角色 | 这家的实现 | 这家特有的形状 |
 |---|---|---|
-| 画布宿主 | `WorkflowSurfaceBehavior`（XAML `DependencyProperty.RegisterAttached` + `ConditionalWeakTable<Control, SurfaceState>`，`WorkflowSurfaceBehavior.cs`）。宿主是普通 `v:UserControl`，部件用 `ScrollViewerName` / `CanvasName` / `GridDecoratorName` / `MinimapOverlayName` / `PointerPressSourceName` 指定 | 同时是**滚轮、缩放、指针与空白平移的宿主**（`SurfaceState : IMessageFilter`）；`Attach` 时挂应用级过滤器（`EnsureMessageFilter`，`filterAdded` 守卫），看得见每一笔 `WM_MOUSEWHEEL` / `WM_MOUSEHWHEEL` |
+| 画布宿主 | `WorkflowSurfaceBehavior`（XAML `DependencyProperty.RegisterAttached` + `ConditionalWeakTable<Control, SurfaceState>`，`WorkflowSurfaceBehavior.cs`）。宿主是普通 `UserControl`，部件用 `ScrollViewerName` / `CanvasName` / `GridDecoratorName` / `MinimapOverlayName` / `PointerPressSourceName` 指定 | 同时是**滚轮、缩放、指针与空白平移的宿主**（`SurfaceState : IMessageFilter`）；`Attach` 时挂应用级过滤器（`EnsureMessageFilter`，`filterAdded` 守卫），看得见每一笔 `WM_MOUSEWHEEL` / `WM_MOUSEHWHEEL` |
 | 画布变换 | `WorkflowCanvasTransformBehavior`（`static class`，CWT 存一个 `Offset`，`WorkflowCanvasTransformBehavior.cs`） | 只是一个**值载体**，`ApplyPanCore` 末尾 `Apply(host, content)` 写入；仓库里没有读者（§4.2） |
 | 视图池 | `ViewPool`（挂点）+ `ViewHosting/ViewSourcePipeline`（Core `ViewSourcePipelineCore` 在这家的闭合），层实现是 `ViewHosting/` 下的 `ViewFactory` / `ViewContainer` / `ViewArranger` / `ViewScheduler` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` / `ViewMeasureHost`；节点走 `ViewFactory` 包住的通用 `VeloxDev.WinForms.Xaml.TemplateSelector` | 连线**不物化**：`ViewLinkLayer.IsActive => true` 把连线项挡在池外，`WorkflowLinkLayer` 在 `PART_Canvas` 的 `Paint` 里一趟画完；首次换源时 `BeginInitialReveal` 冻结表面到池排空（2 tick，2000ms 兜底）；调度走 `Control.BeginInvoke` 异步分批，`TPriorityCore` 是 `NonPriority` |
 | 节点拖拽 | `WorkflowNodeDragBehavior`（`WorkflowNodeDragBehavior.cs`） | 递归挂**整棵控件树**的 `MouseDown`（`HookControlTree`），不是一次命中测试 |
@@ -58,7 +58,7 @@
 
 - `WorkflowRulerOverlayForm.cs` 的类注释写明：WinForms 子控件总是画在父控件之上，画在视口里的半透明带压不住从下面滚过的不透明卡片，**唯一能压住的是 `WS_EX_LAYERED` 的顶层弹窗**。实现是 `UpdateLayeredWindow` 逐像素 alpha（还带 `WM_NCHITTEST → HTTRANSPARENT` 让下面的平移与拖拽继续可用）。浮层由 `WorkflowSurfaceBehavior.EnsureRulerOverlay` 在 `RulerBand > 0` 且宿主句柄已建时创建，`SyncRulerOverlay` 每次 `ApplyPanCore` 推偏移。
 - 节点卡片照这个结论写：整卡用**不透明**填充（`WorkflowNodeAttachment` 构造函数里 `Color.FromArgb(255, surfaceBackdrop)`，注释说明 .NET 10 给没有 `SupportsTransparentBackColor` 的控件设半透明 `BackColor` 会抛）。
-- 插槽视图走通用形态：`v:UserControl` 里一个 `v:Path`（`Stretch="Uniform"` 把 1024 图形缩到槽大小），`WorkflowSlotConnectionBehavior` 挂在 `Path` 上；code-behind 只订阅 `ViewModel.PropertyChanged` 的 `State` 并把颜色写到 `RootPath.Fill`。`WorkflowNodeRowsBehavior` 先写 `ViewModel` + `Tag`（`TrySetSlotViewModel`），没有该属性的旧式视图才回退 `WorkflowSlotAttachment`。
+- 插槽视图走通用形态：`UserControl` 里一个 `Path`（`Stretch="Uniform"` 把 1024 图形缩到槽大小），`WorkflowSlotConnectionBehavior` 挂在 `Path` 上；code-behind 只订阅 `ViewModel.PropertyChanged` 的 `State` 并把颜色写到 `RootPath.Fill`。`WorkflowNodeRowsBehavior` 先写 `ViewModel` + `Tag`（`TrySetSlotViewModel`），没有该属性的旧式视图才回退 `WorkflowSlotAttachment`。
 - ⇒ WPF/Avalonia/WinUI/MAUI 的透明叠加（半透明标尺、发光描边、阴影）在这家一律换成**不透明绘制**或**顶层分层窗口**，没有第三条路。
 
 ### 2.4 平移只有一套模型：`state.PanOffset` + 自绘滚动条
@@ -70,7 +70,7 @@
 
 ### 2.5 滚动只由 `PanOffset` 驱动，别开第二套
 
-`PART_ScrollViewer` 是 `v:ScrollViewer`，构造里 `AutoScroll = false`（`Xaml/Controls/ScrollViewer.cs`）；表面从不写 `AutoScrollPosition` / `AutoScrollMinSize`。在宿主上打开原生 `AutoScroll` 或另写一套平移，会与 `ApplyPan` 推的同一批子窗口位置打架；滚动范围只由 `PanOffset` 与 `CanvasLayout` 决定。
+`PART_ScrollViewer` 是 `ScrollViewer`，构造里 `AutoScroll = false`（`Xaml/Controls/ScrollViewer.cs`）；表面从不写 `AutoScrollPosition` / `AutoScrollMinSize`。在宿主上打开原生 `AutoScroll` 或另写一套平移，会与 `ApplyPan` 推的同一批子窗口位置打架；滚动范围只由 `PanOffset` 与 `CanvasLayout` 决定。
 
 ### 2.6 消除闪烁只能靠 Win32 窗口样式，而且句柄重建会丢掉
 
@@ -260,7 +260,7 @@ control is not TextBoxBase and not ComboBox and not ButtonBase and not CheckBox
 
 ## 四点五、画布滚动与表面级按键
 
-**滚轮被表面整笔接管**：`PART_ScrollViewer` 是 `v:ScrollViewer`，内容由 `PanOffset` 落位，滚轮在应用级 `IMessageFilter` 里接（画布自己的 `MouseWheel` 永远不触发：`WM_MOUSEWHEEL` 发给**指针底下**的那个窗口，限定条件见 §2.2）。形状是：路由 → 没人 `PreventDefault` 就 `state.Scroller.ScrollBy` 默认竖滚 → **吞掉消息**（`m.Result = IntPtr.Zero; return true`）。容器本身不滚，消息又被吞掉，所以泄漏 0。
+**滚轮被表面整笔接管**：`PART_ScrollViewer` 是 `ScrollViewer`，内容由 `PanOffset` 落位，滚轮在应用级 `IMessageFilter` 里接（画布自己的 `MouseWheel` 永远不触发：`WM_MOUSEWHEEL` 发给**指针底下**的那个窗口，限定条件见 §2.2）。形状是：路由 → 没人 `PreventDefault` 就 `state.Scroller.ScrollBy` 默认竖滚 → **吞掉消息**（`m.Result = IntPtr.Zero; return true`）。容器本身不滚，消息又被吞掉，所以泄漏 0。
 
 - **步长** `SystemInformation.MouseWheelScrollLines`（默认 3）× 16 = **48 px/格**，与 WPF 同源；`-1`（按页滚）退回视口尺寸。
 - **`ScrollBy` 就是平移画布** —— 走 `SurfaceScroller.ScrollBy` → `SetScrollOffset` → `ApplyPan`（小地图拖拽用的同一条路），两个轴都走它；没有独立的滚动偏移。

@@ -28,14 +28,16 @@ style, trigger, transition and binding pipeline applies.
 
 View selection is the generic `VeloxDev.WinForms.Xaml.TemplateSelector` (`object?` → `DataTemplate?`), not a workflow-specific base; derive it, expose the templates your host supports, and hand it to `WorkflowSurfaceBehavior.TemplateSelector` or `ViewPool.SetTemplateSelector`.
 
-Prefix rules are strict: `v:` means a VeloxDev type, `local:` means a template/Demo type, and **no
-prefix means native WinForms only**. An unprefixed VeloxDev type is `VELOX_XAML019`; the generator
-does not silently prefer the adapter over a same-named native control. Code-behind names its XAML
-base with the full namespace, for example
+Prefix rules are strict: **an unprefixed type is a VeloxDev type** (`Controls`, then
+`Controls.Shapes`, then `.Xaml`), `native:` means `System.Windows.Forms`, and `local:` means a
+template/Demo type. Declare `xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"`
+in files that use native controls. An unprefixed name that is not a VeloxDev type is
+`VELOX_XAML019`; write `native:` or `local:`. `v:` is still accepted as a legacy alias for VeloxDev.
+Code-behind names its XAML base with the full namespace, for example
 `public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserControl`.
 
-Attached coordinates use the same `v:` spelling: `v:Canvas.Left`, `v:Grid.Row`,
-`v:DockPanel.Dock`. `Width`, `Height`, `MinWidth`, `MinHeight`, `MaxWidth`, `MaxHeight`, `Margin`,
+Attached coordinates are unprefixed too: `Canvas.Left`, `Grid.Row`,
+`DockPanel.Dock`. `Width`, `Height`, `MinWidth`, `MinHeight`, `MaxWidth`, `MaxHeight`, `Margin`,
 `Padding`, `Background`, `Foreground`, `Font`, `Visibility`, `IsEnabled`, `HorizontalAlignment`
 and `VerticalAlignment` are dependency properties on every XAML control; native controls can still
 receive attached values but have no XAML property change pipeline.
@@ -53,32 +55,32 @@ A XAML control's dependency properties animate through the WinForms transition s
 put a `TransitionAction` under a trigger's `EnterAction` / `ExitAction`:
 
 ```xml
-<v:Button Content="Save">
-  <v:Button.Triggers>
-    <v:Trigger Property="IsPointerOver" Value="True">
-      <v:Trigger.EnterAction>
-        <v:TransitionAction Property="Background" To="#FF2B6CFF"
+<Button Content="Save">
+  <Button.Triggers>
+    <Trigger Property="IsPointerOver" Value="True">
+      <Trigger.EnterAction>
+        <TransitionAction Property="Background" To="#FF2B6CFF"
                             Duration="0:0:0.18" Ease="CubicOut" />
-      </v:Trigger.EnterAction>
-      <v:Trigger.ExitAction>
-        <v:TransitionAction Property="Background" To="#FF20242C"
+      </Trigger.EnterAction>
+      <Trigger.ExitAction>
+        <TransitionAction Property="Background" To="#FF20242C"
                             Duration="0:0:0.24" Ease="CubicOut" />
-      </v:Trigger.ExitAction>
-    </v:Trigger>
-  </v:Button.Triggers>
-</v:Button>
+      </Trigger.ExitAction>
+    </Trigger>
+  </Button.Triggers>
+</Button>
 ```
 
 For more than two stops, a `KeyFrameAnimation` chains one transition per adjacent frame pair:
 
 ```xml
-<v:Trigger.EnterAction>
-  <v:KeyFrameAnimation Property="Background" Duration="0:0:0.6" Ease="CubicInOut">
-    <v:KeyFrame Offset="0" Value="#FF20242C" />
-    <v:KeyFrame Offset="0.5" Value="#FF2B6CFF" />
-    <v:KeyFrame Offset="1" Value="#FF20242C" />
-  </v:KeyFrameAnimation>
-</v:Trigger.EnterAction>
+<Trigger.EnterAction>
+  <KeyFrameAnimation Property="Background" Duration="0:0:0.6" Ease="CubicInOut">
+    <KeyFrame Offset="0" Value="#FF20242C" />
+    <KeyFrame Offset="0.5" Value="#FF2B6CFF" />
+    <KeyFrame Offset="1" Value="#FF20242C" />
+  </KeyFrameAnimation>
+</Trigger.EnterAction>
 ```
 
 From code-behind, call `XamlTransition.Animate(control, property, value, effect)` for one segment or

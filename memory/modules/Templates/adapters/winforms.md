@@ -15,10 +15,10 @@
 
 | 条目 | 形状 | 关键锚点 |
 | --- | --- | --- |
-| tree-view | `TemplateClass.xaml` + `.xaml.cs`：根是 `v:UserControl`，XAML 声明 `PART_Surface` / `PART_GridDecorator` / `PART_ScrollViewer` / `PART_Canvas` / `PART_MinimapOverlay`，根上挂 `behaviors:WorkflowSurfaceBehavior.*`，画布上挂 `behaviors:WorkflowLinkLayer.*`；**code-behind 只有 `InitializeComponent()`** | 行为按 `Control.Name` 解析部件；资源里声明 `TemplateSelector` 与滚动条样式 |
+| tree-view | `TemplateClass.xaml` + `.xaml.cs`：根是 `UserControl`，XAML 声明 `PART_Surface` / `PART_GridDecorator` / `PART_ScrollViewer` / `PART_Canvas` / `PART_MinimapOverlay`，根上挂 `behaviors:WorkflowSurfaceBehavior.*`，画布上挂 `behaviors:WorkflowLinkLayer.*`；**code-behind 只有 `InitializeComponent()`** | 行为按 `Control.Name` 解析部件；资源里声明 `TemplateSelector` 与滚动条样式 |
 | node-view | `TemplateClass.xaml` + `.xaml.cs`：XAML 定义 `PART_Card` / `PART_Header` / `PART_Title` / `PART_OutputSlots`；行由行为生成 | `WorkflowNodeViewBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeRowsBehavior` |
 | link-view | `TemplateClass.xaml`（空壳 + 注释）+ `.xaml.cs`：**per-link 可选形态**；默认表面不池化连线，由 `WorkflowLinkLayer` 在 `PART_Canvas` 一趟画完 | `WorkflowLinkAttachment`（显式每线一视图时）；`WorkflowLinkLayer`（默认） |
-| slot-view | `TemplateClass.xaml` + `.xaml.cs`：`v:Path` 画字形，`WorkflowSlotConnectionBehavior` 管拖线；code-behind 只把 `SlotState` 映射成填充色 | `TemplateSlotPath`、状态色；`WorkflowNodeRowsBehavior` 通过 `ViewModel` 属性绑定 |
+| slot-view | `TemplateClass.xaml` + `.xaml.cs`：`Path` 画字形，`WorkflowSlotConnectionBehavior` 管拖线；code-behind 只把 `SlotState` 映射成填充色 | `TemplateSlotPath`、状态色；`WorkflowNodeRowsBehavior` 通过 `ViewModel` 属性绑定 |
 | grid-decorator | **纯 `.cs`**：`TemplateClass : Panel, IWorkflowGridDecorator`，同一文件还导出 `SurfaceScrollableControl` 与 `SurfaceCanvas`（tree 的 `local:` 类型） | 网格、标尺带、圆角表面 |
 | minimap-overlay | **纯 `.cs`**：`TemplateClass : WorkflowMinimapOverlay`，只给调色板 | 定位与拖拽映射在适配器 |
 | template-selector | **纯 `.cs`**：`TemplateClass : VeloxDev.WinForms.Xaml.TemplateSelector`，用 `DataTemplate` 属性按 item 类型返回模板 | tree 的资源按 `WorkflowTemplateSelector` 键引用它 |
@@ -34,7 +34,7 @@
 - **node / link / slot**：构造里调 attachment、设置调色板/字形/线宽；绘制逻辑留在自己的 `OnPaint`。
 - **grid / minimap**：只给调色板与间距；网格/标尺/小地图数学在适配器与模板的绘制代码里。
 
-⇒ **模板选择器接线与 WPF/Avalonia/Jalium 同形**：tree 的资源声明 `NodeTemplate`/`LinkTemplate` 两个 `v:DataTemplate` 与 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" … />`，根上 `behaviors:WorkflowSurfaceBehavior.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`。派生类继承通用 `TemplateSelector`；优先级高于 `NodeViewType` / `LinkViewType`（后两者是按类型名反射的内置兜底）。
+⇒ **模板选择器接线与 WPF/Avalonia/Jalium 同形**：tree 的资源声明 `NodeTemplate`/`LinkTemplate` 两个 `DataTemplate` 与 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" … />`，根上 `behaviors:WorkflowSurfaceBehavior.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`。派生类继承通用 `TemplateSelector`；优先级高于 `NodeViewType` / `LinkViewType`（后两者是按类型名反射的内置兜底）。
 
 ---
 

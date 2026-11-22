@@ -16,18 +16,19 @@ placeholder uses `EM_SETCUEBANNER` instead of a newer `TextBox` property.
 
 | Written in XAML | Resolves to |
 |---|---|
-| `v:Foo` | `VeloxDev.WinForms.Xaml.Controls.Foo`, then `.Controls.Shapes.Foo`, then `VeloxDev.WinForms.Xaml.Foo` |
+| `Foo` (no prefix) | VeloxDev: `VeloxDev.WinForms.Xaml.Controls.Foo`, then `.Controls.Shapes.Foo`, then `VeloxDev.WinForms.Xaml.Foo` |
+| `native:Foo` | `System.Windows.Forms.Foo` |
 | `local:Foo` | your own `clr-namespace` |
-| `Foo` (no prefix) | **native WinForms only** (`System.Windows.Forms.Label`, `Button`, `Panel`, …) |
+| `v:Foo` | legacy alias for unprefixed `Foo`; still accepted so older markup compiles |
 
-An unprefixed VeloxDev type is an error: `VELOX_XAML019`. The generator never silently prefers the
-adapter over a same-named native control. The root element is strict too: write `<v:UserControl>` or
-`<local:TreeView>`, never `<TreeView>`.
+An unprefixed name that is not a VeloxDev type is an error: `VELOX_XAML019`. Write `native:Foo` for a
+WinForms type or `local:Foo` for your own type. The root follows the same rule: `<UserControl>` (VeloxDev)
+or `<local:TreeView>`; a native root needs `<native:UserControl>`.
 
 The usual namespaces:
 
 ```xml
-xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml;assembly=VeloxDev.WinForms"
+xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
 xmlns:local="clr-namespace:MyApp.Views"
 xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WinForms"
 ```
@@ -50,7 +51,7 @@ Use the full namespace for the base type. `System.Windows.Forms.UserControl` and
 ## 3. Controls
 
 All of these derive from the XAML `Control`, so their properties are dependency properties and
-styles, triggers, bindings and animations work. Native controls written without `v:` do not get this
+styles, triggers, bindings and animations work. Native controls written with `native:` do not get this
 pipeline.
 
 | Family | Types |
@@ -80,31 +81,31 @@ Every XAML `Control` has these DPs:
 Attached layout properties:
 
 ```xml
-<v:StackPanel Spacing="4">
-  <v:Button Content="OK" />
-  <v:TextBlock>text bodies work too</v:TextBlock>
-</v:StackPanel>
+<StackPanel Spacing="4">
+  <Button Content="OK" />
+  <TextBlock>text bodies work too</TextBlock>
+</StackPanel>
 
-<v:Grid>
-  <v:Grid.RowDefinitions>
-    <v:RowDefinition Height="Auto" />
-    <v:RowDefinition Height="*" />
-  </v:Grid.RowDefinitions>
-  <v:Border v:Grid.Row="1" />
-</v:Grid>
+<Grid>
+  <Grid.RowDefinitions>
+    <RowDefinition Height="Auto" />
+    <RowDefinition Height="*" />
+  </Grid.RowDefinitions>
+  <Border Grid.Row="1" />
+</Grid>
 
-<v:Canvas>
-  <v:Border v:Canvas.Left="10" v:Canvas.Top="20" Width="80" Height="40" />
-</v:Canvas>
+<Canvas>
+  <Border Canvas.Left="10" Canvas.Top="20" Width="80" Height="40" />
+</Canvas>
 
-<v:DockPanel>
-  <v:Border v:DockPanel.Dock="Top" Height="36" />
-  <v:Border />
-</v:DockPanel>
+<DockPanel>
+  <Border DockPanel.Dock="Top" Height="36" />
+  <Border />
+</DockPanel>
 ```
 
 `GridLength` literals are `Auto`, `*`, `2*` and pixel counts. `Canvas` also supports `Right` and
-`Bottom`; `Grid` also supports `RowSpan` / `ColumnSpan`. `v:Panel.ZIndex` orders siblings: a higher
+`Bottom`; `Grid` also supports `RowSpan` / `ColumnSpan`. `Panel.ZIndex` orders siblings: a higher
 value moves the control toward the front. Native children are laid out by the same panels; attached
 coordinates work on them, but the native control itself has no DP pipeline.
 
@@ -126,10 +127,10 @@ inside a property callback.
 ## 5. Bindings and resources
 
 ```xml
-<v:TextBlock Text="{Binding Title}" />
-<v:TextBox Text="{Binding Name, Mode=TwoWay}" />
-<v:ContentControl Content="{Binding Selected}" ContentTemplate="{StaticResource CardTemplate}" />
-<v:Border Background="{StaticResource Accent}" />
+<TextBlock Text="{Binding Title}" />
+<TextBox Text="{Binding Name, Mode=TwoWay}" />
+<ContentControl Content="{Binding Selected}" ContentTemplate="{StaticResource CardTemplate}" />
+<Border Background="{StaticResource Accent}" />
 ```
 
 - Forms: `{Binding Path}`, `{Binding Path, Mode=OneWay|TwoWay|OneTime}`. The path supports dotted
@@ -165,21 +166,21 @@ inside a property callback.
 - `VisualStateManager.GoToState(control, state, useTransitions)` applies `VisualState` setters and
   enter/exit actions. The compiler has no state-group markup syntax yet.
 
-Resources live in a `v:ResourceDictionary`:
+Resources live in a `ResourceDictionary`:
 
 ```xml
-<v:UserControl.Resources>
-  <v:ResourceDictionary>
-    <v:DataTemplate x:Key="CardTemplate">
+<UserControl.Resources>
+  <ResourceDictionary>
+    <DataTemplate x:Key="CardTemplate">
       <local:CardView />
-    </v:DataTemplate>
-    <v:Style x:Key="CardStyle" TargetType="v:Border">
-      <v:Style.Setters>
-        <v:Setter Property="Background" Value="#FF20242C" />
-      </v:Style.Setters>
-    </v:Style>
-  </v:ResourceDictionary>
-</v:UserControl.Resources>
+    </DataTemplate>
+    <Style x:Key="CardStyle" TargetType="Border">
+      <Style.Setters>
+        <Setter Property="Background" Value="#FF20242C" />
+      </Style.Setters>
+    </Style>
+  </ResourceDictionary>
+</UserControl.Resources>
 ```
 
 An empty object resource is created and its properties are assigned, which is how a selector is
@@ -188,19 +189,19 @@ declared.
 ## 6. Styles and triggers
 
 ```xml
-<v:Style x:Key="CardStyle" TargetType="v:Border">
-  <v:Style.Setters>
-    <v:Setter Property="Background" Value="#FF20242C" />
-    <v:Setter Property="CornerRadius" Value="6" />
-  </v:Style.Setters>
-  <v:Style.Triggers>
-    <v:Trigger Property="IsPointerOver" Value="True">
-      <v:Trigger.Setters>
-        <v:Setter Property="BorderBrush" Value="#FF5B8CFF" />
-      </v:Trigger.Setters>
-    </v:Trigger>
-  </v:Style.Triggers>
-</v:Style>
+<Style x:Key="CardStyle" TargetType="Border">
+  <Style.Setters>
+    <Setter Property="Background" Value="#FF20242C" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style.Setters>
+  <Style.Triggers>
+    <Trigger Property="IsPointerOver" Value="True">
+      <Trigger.Setters>
+        <Setter Property="BorderBrush" Value="#FF5B8CFF" />
+      </Trigger.Setters>
+    </Trigger>
+  </Style.Triggers>
+</Style>
 ```
 
 - A XAML-control style setter targets a **dependency property**. Native-control styles support
@@ -227,38 +228,38 @@ one value with one effect.
 ### 7.1 From markup — trigger actions
 
 ```xml
-<v:Button Content="Save">
-  <v:Button.Triggers>
-    <v:Trigger Property="IsPointerOver" Value="True">
-      <v:Trigger.EnterAction>
-        <v:TransitionAction Property="Background"
+<Button Content="Save">
+  <Button.Triggers>
+    <Trigger Property="IsPointerOver" Value="True">
+      <Trigger.EnterAction>
+        <TransitionAction Property="Background"
                             To="#FF2B6CFF"
                             Duration="0:0:0.18"
                             Ease="CubicOut" />
-      </v:Trigger.EnterAction>
-      <v:Trigger.ExitAction>
-        <v:TransitionAction Property="Background"
+      </Trigger.EnterAction>
+      <Trigger.ExitAction>
+        <TransitionAction Property="Background"
                             To="#FF20242C"
                             Duration="0:0:0.24"
                             Ease="CubicOut" />
-      </v:Trigger.ExitAction>
-    </v:Trigger>
-  </v:Button.Triggers>
-</v:Button>
+      </Trigger.ExitAction>
+    </Trigger>
+  </Button.Triggers>
+</Button>
 ```
 
 The same shape works inside `Style.Triggers`:
 
 ```xml
-<v:Style x:Key="PulseToggle" TargetType="v:ToggleButton">
-  <v:Style.Triggers>
-    <v:Trigger Property="IsChecked" Value="True">
-      <v:Trigger.EnterAction>
-        <v:TransitionAction Property="CornerRadius" To="8" Duration="0:0:0.2" Ease="SineInOut" />
-      </v:Trigger.EnterAction>
-    </v:Trigger>
-  </v:Style.Triggers>
-</v:Style>
+<Style x:Key="PulseToggle" TargetType="ToggleButton">
+  <Style.Triggers>
+    <Trigger Property="IsChecked" Value="True">
+      <Trigger.EnterAction>
+        <TransitionAction Property="CornerRadius" To="8" Duration="0:0:0.2" Ease="SineInOut" />
+      </Trigger.EnterAction>
+    </Trigger>
+  </Style.Triggers>
+</Style>
 ```
 
 | Attribute | Meaning |
@@ -314,13 +315,13 @@ XamlTransition.Stop(this);
 A `KeyFrameAnimation` is a chain of ordinary transitions, one segment per adjacent pair of frames:
 
 ```xml
-<v:Trigger.EnterAction>
-  <v:KeyFrameAnimation Property="Background" Duration="0:0:0.6" Ease="CubicInOut">
-    <v:KeyFrame Offset="0" Value="#FF20242C" />
-    <v:KeyFrame Offset="0.5" Value="#FF2B6CFF" />
-    <v:KeyFrame Offset="1" Value="#FF20242C" />
-  </v:KeyFrameAnimation>
-</v:Trigger.EnterAction>
+<Trigger.EnterAction>
+  <KeyFrameAnimation Property="Background" Duration="0:0:0.6" Ease="CubicInOut">
+    <KeyFrame Offset="0" Value="#FF20242C" />
+    <KeyFrame Offset="0.5" Value="#FF2B6CFF" />
+    <KeyFrame Offset="1" Value="#FF20242C" />
+  </KeyFrameAnimation>
+</Trigger.EnterAction>
 ```
 
 - `Offset` is normalized to `0..1`; frames are sorted before building the chain.
@@ -375,7 +376,8 @@ public sealed class ShakeAction : TriggerAction
 }
 ```
 
-Declare it under `EnterAction` / `ExitAction` with a `local:`/`v:` prefix; literal and
+Declare it under `EnterAction` / `ExitAction` with a `local:` prefix (the owner is your own type);
+literal and
 `{StaticResource}` property values are supported. Nested content is not.
 
 ## 8. Templates and selectors
@@ -383,9 +385,9 @@ Declare it under `EnterAction` / `ExitAction` with a `local:`/`v:` prefix; liter
 `DataTemplate` is a factory that creates one control tree:
 
 ```xml
-<v:DataTemplate x:Key="NodeTemplate">
+<DataTemplate x:Key="NodeTemplate">
   <local:NodeView />
-</v:DataTemplate>
+</DataTemplate>
 ```
 
 A selector derives from the generic `VeloxDev.WinForms.Xaml.TemplateSelector`, not from any
@@ -432,14 +434,14 @@ authors expect:
 - `x:Name` inside the template is registered in the template's own `NameScope`; the templated control
   reads a part with `GetTemplateChild<T>("PART_...")`.
 - `ControlTemplate.Triggers` evaluate against the templated control. A trigger setter may name a
-  part with `TargetName`; use `TargetType="v:TextBlock"` when the property belongs to the part rather
+  part with `TargetName`; use `TargetType="TextBlock"` when the property belongs to the part rather
   than to the templated control.
 
 ### 8.2 ItemsControl panels, containers and views
 
 ### 8.3 Lightweight visual tree
 
-For non-interactive content that needs composition, `v:VisualHost` hosts a `Visual` tree painted in
+For non-interactive content that needs composition, `VisualHost` hosts a `Visual` tree painted in
 one pass with no child window per node:
 
 ```csharp
@@ -454,12 +456,12 @@ host.Root.Add(group);
 - `Transform`, `Opacity`, `Clip` and `Effect` apply to the subtree. Group opacity and effects render
   through a temporary bitmap; very large visuals fall back to one direct pass.
 - `VisualHost.HitTestVisual(point)` walks the visual tree. Visual nodes are not HWND controls: they
-  have no `DataContext`, focus, keyboard routing or accessibility. Keep native/`v:Control` controls
+  have no `DataContext`, focus, keyboard routing or accessibility. Keep native/`Control` controls
   as HWNDs and use this layer for decoration, text, shapes and connector batches.
 - `ContainerVisual`, `ShapeVisual`, `TextVisual` and `CurveBatchVisual` are the built-in nodes;
   derive from `Visual` and override `RenderContent` / `HitTestContent` for new content.
 
-`ItemsControl` supports `ItemsPanel` (a XAML container such as `v:StackPanel`), `ItemsPanelTemplate`,
+`ItemsControl` supports `ItemsPanel` (a XAML container such as `StackPanel`), `ItemsPanelTemplate`,
 `ItemContainerStyle`, `ItemContainerStyleSelector`, `ItemTemplateSelector`, and `Virtualizing` +
 `ItemHeight` for fixed-row virtualized lists inside a `ScrollViewer`. The visible range uses the
 viewer's client height when `ViewportHeight` is left at zero, so the control may be taller than the
@@ -499,12 +501,12 @@ current item and `Refresh`. They are not the WindowsBase `ICollectionView` inter
 `InputBindings` is a per-control collection:
 
 ```xml
-<v:Button Content="Save" Command="{Binding Save}">
-  <v:Button.InputBindings>
-    <v:KeyBinding Key="S" Modifiers="Control" Command="{Binding Save}" />
-    <v:MouseBinding Action="LeftDoubleClick" Command="{Binding Save}" />
-  </v:Button.InputBindings>
-</v:Button>
+<Button Content="Save" Command="{Binding Save}">
+  <Button.InputBindings>
+    <KeyBinding Key="S" Modifiers="Control" Command="{Binding Save}" />
+    <MouseBinding Action="LeftDoubleClick" Command="{Binding Save}" />
+  </Button.InputBindings>
+</Button>
 ```
 
 `KeyBinding`/`MouseBinding` are non-control objects, so their `Command` binding is routed through
@@ -513,14 +515,14 @@ mirror the native tab order; `FocusManager` exposes the currently focused XAML c
 
 ## 9.2 Declarative chrome
 
-`v:ContextMenu`, `v:MenuItem` and `v:Menu` wrap the native `ContextMenuStrip` / `MenuStrip`; child
+`ContextMenu`, `MenuItem` and `Menu` wrap the native `ContextMenuStrip` / `MenuStrip`; child
 `MenuItem` elements are added to the parent's item collection. `ContextMenu` can be used on a XAML
 control through the `ContextMenu` property and on a native control through `ContextMenuStrip`.
 
-`v:ToolTipService.ToolTip="text"` attaches a tooltip to any control; a XAML control also has a
-`ToolTip` property that accepts either a string or a `v:ToolTip` object.
+`ToolTipService.ToolTip="text"` attaches a tooltip to any control; a XAML control also has a
+`ToolTip` property that accepts either a string or a `ToolTip` object.
 
-`v:Popup` hosts one `Child` in a borderless top-level window. `IsOpen`, `PlacementTarget`,
+`Popup` hosts one `Child` in a borderless top-level window. `IsOpen`, `PlacementTarget`,
 `Placement` and the horizontal/vertical offsets control its position. A popup child is detached
 while the popup is closed.
 
@@ -561,7 +563,7 @@ The generator reports `VELOX_XAML001–019` and `VELOX_XAMLP001–004`. The most
 | `VELOX_XAML004` | unsupported construct |
 | `VELOX_XAML013` | unknown attached property |
 | `VELOX_XAML014` | invalid `Style.TargetType` |
-| `VELOX_XAML019` | unprefixed type is not native; write `v:` or `local:` |
+| `VELOX_XAML019` | unprefixed type is not a VeloxDev type; write `native:` or `local:` |
 
 ## 11. Workflow mapping
 
@@ -573,7 +575,7 @@ For the workflow surface, read [winforms.md](winforms.md). The XAML pieces it us
 - `WorkflowLinkLayer` on `PART_Canvas` for the single link pass
 - `WorkflowTemplateSelector` resource using the generic selector and `DataTemplate`s
 - `WorkflowSlotAttachment` only as a compatibility helper for old code-first slot views; the
-  generated slot template uses `v:Path` + `ViewModel` instead
+  generated slot template uses `Path` + `ViewModel` instead
 
 ## 12. Verification
 

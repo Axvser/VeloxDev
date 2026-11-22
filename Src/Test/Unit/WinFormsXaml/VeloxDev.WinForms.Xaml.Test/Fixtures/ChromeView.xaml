@@ -2,48 +2,47 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:VeloxDev.WinForms.Xaml.Test.Fixtures"
-    xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
     x:Class="VeloxDev.WinForms.Xaml.Test.Fixtures.ChromeView"
     Size="480, 360">
 
   <local:ChromeView.Resources>
-    <v:ResourceDictionary>
-      <v:DataTemplate x:Key="CardTemplate">
-        <v:Border Size="40, 20" />
-      </v:DataTemplate>
-    </v:ResourceDictionary>
+    <ResourceDictionary>
+      <DataTemplate x:Key="CardTemplate">
+        <Border Size="40, 20" />
+      </DataTemplate>
+    </ResourceDictionary>
   </local:ChromeView.Resources>
 
-  <v:Decorator x:Name="decorator" Size="80, 40">
-    <v:Border Size="20, 20" />
-  </v:Decorator>
+  <Decorator x:Name="decorator" Size="80, 40">
+    <Border Size="20, 20" />
+  </Decorator>
 
-  <v:AdornerDecorator x:Name="adornerHost" Size="80, 40">
-    <v:Border Size="20, 20" />
-  </v:AdornerDecorator>
+  <AdornerDecorator x:Name="adornerHost" Size="80, 40">
+    <Border Size="20, 20" />
+  </AdornerDecorator>
 
-  <v:HeaderedContentControl x:Name="headered" Header="Head" Size="160, 80">
-    <v:TextBlock Text="body" />
-  </v:HeaderedContentControl>
+  <HeaderedContentControl x:Name="headered" Header="Head" Size="160, 80">
+    <TextBlock Text="body" />
+  </HeaderedContentControl>
 
-  <v:ContentPresenter x:Name="presenter"
+  <ContentPresenter x:Name="presenter"
                       Content="{Binding Caption}"
                       ContentTemplate="{StaticResource CardTemplate}"
                       Size="80, 40" />
 
-  <v:ToolBar x:Name="toolbar" Size="200, 32">
-    <v:ToolBar.Items>
-      <v:Button Content="A" Size="40, 24" />
-    </v:ToolBar.Items>
-  </v:ToolBar>
+  <ToolBar x:Name="toolbar" Size="200, 32">
+    <ToolBar.Items>
+      <Button Content="A" Size="40, 24" />
+    </ToolBar.Items>
+  </ToolBar>
 
-  <v:StatusBar x:Name="status" Size="200, 24">
-    <v:StatusBar.Items>
-      <v:StatusBarItem Content="Ready" />
-    </v:StatusBar.Items>
-  </v:StatusBar>
+  <StatusBar x:Name="status" Size="200, 24">
+    <StatusBar.Items>
+      <StatusBarItem Content="Ready" />
+    </StatusBar.Items>
+  </StatusBar>
 
-  <v:VirtualizingStackPanel x:Name="virtualizing"
+  <VirtualizingStackPanel x:Name="virtualizing"
                             ItemsSource="{Binding Items}"
                             ItemHeight="20"
                             Size="200, 100" />

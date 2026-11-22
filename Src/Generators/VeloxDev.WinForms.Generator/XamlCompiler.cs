@@ -14,7 +14,9 @@ namespace VeloxDev.WinForms.Generator;
 /// <remarks>
 /// Supported subset:
 /// <list type="bullet">
-/// <item>Native WinForms controls and types resolved through a <c>clr-namespace:</c> prefix.</item>
+/// <item>VeloxDev types written unprefixed; native WinForms types through a <c>native:</c> prefix bound to
+/// <c>clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms</c>; local types through any
+/// <c>clr-namespace:</c> prefix such as <c>local:</c>. A legacy <c>v:</c> prefix still means VeloxDev.</item>
 /// <item>Direct child controls added to <c>Controls</c>.</item>
 /// <item>Property elements for scalar values, <c>Resources</c>, <c>Controls</c> and list properties.</item>
 /// <item>String, numeric, boolean, enum, color, padding, thickness, size, point and time-span literals.</item>
@@ -25,33 +27,6 @@ namespace VeloxDev.WinForms.Generator;
 /// </remarks>
 internal sealed class XamlCompiler
 {
-    private static readonly Dictionary<string, string> PresentationTypes = new(StringComparer.Ordinal)
-    {
-        ["Control"] = "System.Windows.Forms.Control",
-        ["UserControl"] = "System.Windows.Forms.UserControl",
-        ["Form"] = "System.Windows.Forms.Form",
-        ["Panel"] = "System.Windows.Forms.Panel",
-        ["ScrollableControl"] = "System.Windows.Forms.ScrollableControl",
-        ["FlowLayoutPanel"] = "System.Windows.Forms.FlowLayoutPanel",
-        ["TableLayoutPanel"] = "System.Windows.Forms.TableLayoutPanel",
-        ["GroupBox"] = "System.Windows.Forms.GroupBox",
-        ["SplitContainer"] = "System.Windows.Forms.SplitContainer",
-        ["TabControl"] = "System.Windows.Forms.TabControl",
-        ["Button"] = "System.Windows.Forms.Button",
-        ["Label"] = "System.Windows.Forms.Label",
-        ["LinkLabel"] = "System.Windows.Forms.LinkLabel",
-        ["TextBox"] = "System.Windows.Forms.TextBox",
-        ["RichTextBox"] = "System.Windows.Forms.RichTextBox",
-        ["CheckBox"] = "System.Windows.Forms.CheckBox",
-        ["RadioButton"] = "System.Windows.Forms.RadioButton",
-        ["PictureBox"] = "System.Windows.Forms.PictureBox",
-        ["ProgressBar"] = "System.Windows.Forms.ProgressBar",
-        ["ListBox"] = "System.Windows.Forms.ListBox",
-        ["ComboBox"] = "System.Windows.Forms.ComboBox",
-        ["NumericUpDown"] = "System.Windows.Forms.NumericUpDown",
-        ["TrackBar"] = "System.Windows.Forms.TrackBar",
-    };
-
     private readonly SourceProductionContext _production;
     private readonly string _filePath;
     private readonly string? _text;
@@ -62,7 +37,7 @@ internal sealed class XamlCompiler
     private readonly CodeBuilder _fields = new();
     private readonly HashSet<string> _declaredNames = new(StringComparer.Ordinal);
     private readonly HashSet<string> _templateNames = new(StringComparer.Ordinal);
-    private readonly HashSet<XObject> _ambiguousSources = [];
+    private readonly HashSet<XObject> _reportedSources = [];
     private readonly List<string> _deferredEvents = [];
 
     private CodeBuilder _current;
@@ -232,7 +207,7 @@ internal sealed class XamlCompiler
             var type = ResolveElementType(child);
             if (type is null)
             {
-                if (!IsAmbiguous(child))
+                if (!IsReported(child))
                 {
                     Report(Diagnostics.UnknownType, child, child.Name.LocalName);
                 }
@@ -364,7 +339,7 @@ internal sealed class XamlCompiler
             var childType = ResolveElementType(child);
             if (childType is null)
             {
-                if (!IsAmbiguous(child))
+                if (!IsReported(child))
                 {
                     Report(Diagnostics.UnknownType, child, child.Name.LocalName);
                 }
@@ -423,7 +398,7 @@ internal sealed class XamlCompiler
                 var childType = ResolveElementType(child);
                 if (childType is null)
                 {
-                    if (!IsAmbiguous(child))
+                    if (!IsReported(child))
                     {
                         Report(Diagnostics.UnknownType, child, child.Name.LocalName);
                     }
@@ -444,7 +419,7 @@ internal sealed class XamlCompiler
             var contentType = ResolveElementType(content);
             if (contentType is null)
             {
-                if (!IsAmbiguous(content))
+                if (!IsReported(content))
                 {
                     Report(Diagnostics.UnknownType, content, content.Name.LocalName);
                 }
@@ -1248,16 +1223,22 @@ internal sealed class XamlCompiler
             Report(
                 Diagnostics.UnsupportedConstruct,
                 attribute,
-                $"Attached XAML attribute '{localName}' must be written as 'prefix:Owner.Property'.");
+                $"Attached XAML attribute '{localName}' must be written as 'Owner.Property' or 'prefix:Owner.Property'.");
             return;
         }
 
-        var clrNamespace = GetClrNamespace(attribute.Name.NamespaceName);
-        if (clrNamespace is null
-            && attribute.Parent is XElement owner
-            && GetPrefixForNamespace(owner, attribute.Name.NamespaceName) == "v")
+        var namespaceName = attribute.Name.NamespaceName;
+        var clrNamespace = GetClrNamespace(namespaceName);
+        if (clrNamespace is null)
         {
-            clrNamespace = SyntaxHelpers.RuntimeNamespace;
+            // Unprefixed attributes carry no XML namespace and name a VeloxDev owner; a legacy `v:` prefix means
+            // the same. Explicit clr-namespace prefixes (local: / native: / behaviors:) keep resolving as written.
+            if (namespaceName.Length == 0
+                || (attribute.Parent is XElement ownerElement
+                    && GetPrefixForNamespace(ownerElement, namespaceName) == "v"))
+            {
+                clrNamespace = SyntaxHelpers.RuntimeNamespace;
+            }
         }
 
         if (clrNamespace is null)
@@ -1265,7 +1246,7 @@ internal sealed class XamlCompiler
             Report(
                 Diagnostics.UnsupportedConstruct,
                 attribute,
-                "An attached XAML attribute needs a clr-namespace prefix (for example xmlns:local=\"clr-namespace:My.Namespace\").");
+                "An attached XAML attribute needs a clr-namespace prefix (for example xmlns:local=\"clr-namespace:My.Namespace\" or xmlns:native=\"clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms\").");
             return;
         }
 
@@ -2108,7 +2089,7 @@ internal sealed class XamlCompiler
         var type = ResolveElementType(action);
         if (type is null)
         {
-            if (!IsAmbiguous(action))
+            if (!IsReported(action))
             {
                 Report(Diagnostics.UnknownType, action, action.Name.LocalName);
             }
@@ -2780,7 +2761,7 @@ internal sealed class XamlCompiler
                 var childType = ResolveElementType(child);
                 if (childType is null)
                 {
-                    if (!IsAmbiguous(child))
+                    if (!IsReported(child))
                     {
                         Report(Diagnostics.UnknownType, child, child.Name.LocalName);
                     }
@@ -2801,7 +2782,7 @@ internal sealed class XamlCompiler
             var contentType = ResolveElementType(content);
             if (contentType is null)
             {
-                if (!IsAmbiguous(content))
+                if (!IsReported(content))
                 {
                     Report(Diagnostics.UnknownType, content, content.Name.LocalName);
                 }
@@ -3265,7 +3246,9 @@ internal sealed class XamlCompiler
             return qualified;
         }
 
-        return ResolveUnprefixedType(typeName, contextElement);
+        // No prefix in a type reference means VeloxDev too. Unknown names stay null here so the caller can report
+        // its own diagnostic (InvalidStyleTargetType / UnknownType) instead of a duplicate VELOX_XAML019.
+        return ResolveAdapterType(typeName, contextElement);
     }
 
     private static string? GetNamespaceUriForPrefix(XElement element, string prefix)
@@ -3351,7 +3334,7 @@ internal sealed class XamlCompiler
         var resourceType = ResolveElementType(resource);
         if (resourceType is null)
         {
-            if (!IsAmbiguous(resource))
+            if (!IsReported(resource))
             {
                 Report(Diagnostics.UnknownType, resource, resource.Name.LocalName);
             }
@@ -3411,7 +3394,7 @@ internal sealed class XamlCompiler
         var type = ResolveElementType(content);
         if (type is null)
         {
-            if (!IsAmbiguous(content))
+            if (!IsReported(content))
             {
                 Report(Diagnostics.UnknownType, content, content.Name.LocalName);
             }
@@ -3483,7 +3466,7 @@ internal sealed class XamlCompiler
         var type = ResolveElementType(content);
         if (type is null)
         {
-            if (!IsAmbiguous(content))
+            if (!IsReported(content))
             {
                 Report(Diagnostics.UnknownType, content, content.Name.LocalName);
             }
@@ -3600,13 +3583,15 @@ internal sealed class XamlCompiler
             return null;
         }
 
+        // Unprefixed elements (and the empty namespace) mean VeloxDev types.
         if (uri.Length == 0 || uri == SyntaxHelpers.PresentationNamespace)
         {
             return ResolveUnprefixedType(localName, element);
         }
 
-        // `v:` always means the adapter namespaces: controls live in `.Xaml.Controls`, every other runtime type
-        // lives in `.Xaml`. This holds whether the prefix maps to `.Xaml`, `.Xaml.Controls` or a non-clr URI.
+        // A legacy `v:` prefix still means the adapter namespaces: controls live in `.Xaml.Controls`, every other
+        // runtime type lives in `.Xaml`. This holds whether the prefix maps to `.Xaml`, `.Xaml.Controls` or a
+        // non-clr URI.
         if (GetPrefixForNamespace(element, uri) == "v")
         {
             return ResolveAdapterType(localName, element);
@@ -3627,8 +3612,8 @@ internal sealed class XamlCompiler
     }
 
     /// <summary>
-    /// Resolves a type declared by the adapter: controls in <c>.Xaml.Controls</c> first, then every other runtime
-    /// type in <c>.Xaml</c>. A name declared in both is ambiguous and gets a diagnostic.
+    /// Resolves a type declared by the adapter: controls in <c>.Xaml.Controls</c> first, then shapes in
+    /// <c>.Xaml.Controls.Shapes</c>, then every other runtime type in <c>.Xaml</c>.
     /// </summary>
     private ITypeSymbol? ResolveAdapterType(string localName, XObject? source)
     {
@@ -3648,46 +3633,32 @@ internal sealed class XamlCompiler
     }
 
     /// <summary>
-    /// Resolves an unprefixed type name against the native WinForms presentation table only.
+    /// Resolves an unprefixed type name against the VeloxDev adapter namespaces.
     /// </summary>
     /// <remarks>
-    /// No prefix means native WinForms. A VeloxDev control needs <c>v:</c> and a template/Demo type needs
-    /// <c>local:</c>; letting an unprefixed name fall back to either would make the same markup mean different
-    /// things depending on which assemblies happen to be referenced.
+    /// No prefix means VeloxDev. A native WinForms type needs <c>native:</c> and a template/Demo type needs
+    /// <c>local:</c>; an unprefixed name that resolves to neither VeloxDev namespace is reported instead of
+    /// silently falling back, so the same markup cannot mean different things in different assemblies.
     /// </remarks>
     private ITypeSymbol? ResolveUnprefixedType(string localName, XObject? source)
     {
-        if (PresentationTypes.TryGetValue(localName, out var metadataName))
+        var type = ResolveAdapterType(localName, source);
+        if (type is not null)
         {
-            return _compilation.GetTypeByMetadataName(metadataName);
+            return type;
         }
 
-        if (ResolveAdapterType(localName, null) is not null || ResolveLocalType(localName) is not null)
+        if (source is not null)
         {
-            if (source is not null)
-            {
-                // 同一处不再补一条泛化的 UnknownType：两条诊断说的是同一件事。
-                _ambiguousSources.Add(source);
-            }
-
-            Report(Diagnostics.UnprefixedTypeNotNative, source, localName);
+            // 同一处不再补一条泛化的 UnknownType：两条诊断说的是同一件事。
+            _reportedSources.Add(source);
         }
 
+        Report(Diagnostics.UnprefixedTypeNotVeloxDev, source, localName);
         return null;
     }
 
-    private bool IsAmbiguous(XObject? source) => source is not null && _ambiguousSources.Contains(source);
-
-    private ITypeSymbol? ResolveLocalType(string localName)
-    {
-        if (_owner.ContainingNamespace is { IsGlobalNamespace: false })
-        {
-            return _compilation.GetTypeByMetadataName(
-                _owner.ContainingNamespace.ToDisplayString() + "." + localName);
-        }
-
-        return _compilation.GetTypeByMetadataName(localName);
-    }
+    private bool IsReported(XObject? source) => source is not null && _reportedSources.Contains(source);
 
     private static string? GetPrefixForNamespace(XElement element, string uri)
     {

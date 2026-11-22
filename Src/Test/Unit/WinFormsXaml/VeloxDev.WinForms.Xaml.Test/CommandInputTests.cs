@@ -267,14 +267,13 @@ public sealed class CommandInputTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
-                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
                 x:Class="Probe.ProbeView">
-              <v:Button x:Name="save" Command="{Binding SaveCommand}" CommandParameter="row">
-                <v:Button.InputBindings>
-                  <v:KeyBinding Key="S" Modifiers="Control" Command="{x:Static local:Commands.Save}" />
-                  <v:MouseBinding Action="LeftDoubleClick" Command="{x:Static local:Commands.Open}" />
-                </v:Button.InputBindings>
-              </v:Button>
+              <Button x:Name="save" Command="{Binding SaveCommand}" CommandParameter="row">
+                <Button.InputBindings>
+                  <KeyBinding Key="S" Modifiers="Control" Command="{x:Static local:Commands.Save}" />
+                  <MouseBinding Action="LeftDoubleClick" Command="{x:Static local:Commands.Open}" />
+                </Button.InputBindings>
+              </Button>
             </local:ProbeView>
             """;
 

@@ -45,27 +45,27 @@ public sealed class XamlCompilationTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+            xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
             x:Class="Probe.ProbeView"
             Size="300, 200">
 
           <local:ProbeView.Resources>
-            <v:ResourceDictionary>
+            <ResourceDictionary>
               <x:Color x:Key="Accent">#FF102030</x:Color>
-              <v:DataTemplate x:Key="CardTemplate">
+              <DataTemplate x:Key="CardTemplate">
                 <local:ProbeCard Title="{Binding Title}" />
-              </v:DataTemplate>
-            </v:ResourceDictionary>
+              </DataTemplate>
+            </ResourceDictionary>
           </local:ProbeView.Resources>
 
-          <Label x:Name="captionLabel" Text="{Binding Caption}" Size="200, 24" />
+          <native:Label x:Name="captionLabel" Text="{Binding Caption}" Size="200, 24" />
 
           <local:ProbeCard x:Name="card"
                            Title="{Binding Title}"
                            BackColor="{StaticResource Accent}"
                            Size="200, 80" />
 
-          <Button x:Name="probeButton" Text="Probe" Click="OnProbeClick" />
+          <native:Button x:Name="probeButton" Text="Probe" Click="OnProbeClick" />
 
         </local:ProbeView>
         """;
@@ -130,11 +130,10 @@ public sealed class XamlCompilationTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe2"
-                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
                 x:Class="Probe2.ThicknessView"
                 Size="200, 120">
 
-              <v:Border x:Name="card"
+              <Border x:Name="card"
                         Padding="1,2,3,4"
                         BorderThickness="8"
                         CornerRadius="6"
@@ -182,11 +181,10 @@ public sealed class XamlCompilationTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe3"
-                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
                 x:Class="Probe3.ScrollHostView"
                 Size="400, 300">
 
-              <v:ScrollViewer x:Name="viewer"
+              <ScrollViewer x:Name="viewer"
                               HorizontalScrollBarVisibility="Visible"
                               VerticalScrollBarVisibility="Hidden"
                               ExtentWidth="2000"
@@ -194,8 +192,8 @@ public sealed class XamlCompilationTests
                               ViewportWidth="400"
                               ViewportHeight="300"
                               ScrollOffset="10, 20">
-                <v:Canvas x:Name="content" />
-              </v:ScrollViewer>
+                <Canvas x:Name="content" />
+              </ScrollViewer>
 
             </local:ScrollHostView>
             """;
@@ -252,9 +250,9 @@ public sealed class XamlCompilationTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
-                xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+                xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
                 x:Class="Probe.BareView">
-              <Button x:Name="okButton" Text="OK" />
+              <native:Button x:Name="okButton" Text="OK" />
             </local:BareView>
             """;
 

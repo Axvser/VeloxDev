@@ -42,20 +42,20 @@ public sealed class AttachedXamlTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml"
+            xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
             x:Class="Probe.ProbeView">
           <local:ProbeView.Resources>
-            <v:ResourceDictionary>
+            <ResourceDictionary>
               <x:String x:Key="SomeKey">resource label</x:String>
-            </v:ResourceDictionary>
+            </ResourceDictionary>
           </local:ProbeView.Resources>
 
-          <Button x:Name="button"
-                  local:WorkflowPanel.Column="2"
-                  local:WorkflowPanel.Label="{StaticResource SomeKey}" />
+          <native:Button x:Name="button"
+                         local:WorkflowPanel.Column="2"
+                         local:WorkflowPanel.Label="{StaticResource SomeKey}" />
 
-          <Label x:Name="label"
-                 local:WorkflowPanel.Column="{Binding Column}" />
+          <native:Label x:Name="label"
+                        local:WorkflowPanel.Column="{Binding Column}" />
         </local:ProbeView>
         """;
 
