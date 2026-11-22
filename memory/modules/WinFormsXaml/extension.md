@@ -60,6 +60,7 @@
 | 静态内容要滚动 | 用 `ScrollableControl`（原生 AutoScroll）并给内容 `Dock=Top`；内容高度由 `GalleryLayout` 这类宿主量 | 把静态面板塞进 `ScrollViewer` 期待它自动平移 —— `ScrollViewer` 只报告偏移，不移动内容 |
 | 覆盖在兄弟窗口上的装饰层 | `AdornerDecorator`/`AdornerLayer`；层为空时自动隐藏 | 自己给层铺不透明底 —— 会盖住被装饰控件 |
 | 主题切换后的原生控件 | 进程启动时 `Application.SetColorMode(...)`；干净双色用 `--light` 重启 | 运行期切 `SetColorMode` 期待已建句柄的滚动条/下拉全部重绘 |
+| 祖先在子元素上悬停 | 让子控件走 `Control` 的 OnMouseEnter/Leave；原生子控件由 `OnControlAdded` 自动挂回调 | 用子控件自己的 `IsPointerOver` 判断祖先，或依赖 WinForms 的窗口级 MouseLeave |
 | 布局属性变化后重排 | 声明 `AffectsMeasure`（或 `AffectsArrange`）；失效从元数据扇出到根 | 在 DP 回调里手写 `Parent?.PerformLayout()`，仍只重排一层 |
 | 大量不交互图形/连线 | `VisualHost` + `Visual` 树，一趟绘制 | 每个元素一个 `Control`；HWND 数量和布局成本都上去 |
 | 新控件加进主题兜底 | 交互控件加 `ThemeStyles.SurfaceTypes`，容器不加 | 给所有控件塞不透明背景，盖住父级渐变/圆角 |

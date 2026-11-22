@@ -476,6 +476,9 @@ current item and `Refresh`. They are not the WindowsBase `ICollectionView` inter
 
 ## 9. Events and input
 
+- `IsPointerOver` follows the subtree: hovering a XAML child or a native child keeps every XAML ancestor's
+  hover state true (the runtime recomputes screen rectangles on Enter/Leave), so a hover trigger on a
+  `UserControl` fires while its content is hovered.
 - Native WinForms events (`Click`, `KeyDown`, `MouseDown`, …) are bound normally and win over the
   bridged names.
 - XAML `Control` exposes the standard pointer events (`PointerPressed`, `PointerMoved`,

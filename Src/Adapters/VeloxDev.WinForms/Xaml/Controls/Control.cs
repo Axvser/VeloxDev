@@ -47,7 +47,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
         typeof(bool),
         typeof(Control));
 
-    /// <summary>Whether the pointer is currently over this control; updated from the native mouse enter/leave callbacks.</summary>
+    /// <summary>Whether the pointer is currently over this control or one of its descendants.</summary>
     public static readonly DependencyProperty IsPointerOverProperty = DependencyProperty.Register(
         nameof(IsPointerOver),
         typeof(bool),
@@ -230,6 +230,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     private bool _applyingNativeBindings;
     private bool _pointerCaptured;
     private bool _disposed;
+    private readonly Dictionary<System.Windows.Forms.Control, EventHandler> _nativeHoverHandlers = [];
 
     // 本控件最近一次测量的结果。只有 availableSize 相同才命中；失效时沿祖先链清到根。
     private bool _measureCacheValid;
@@ -1703,7 +1704,7 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     protected override void OnMouseEnter(EventArgs e)
     {
         base.OnMouseEnter(e);
-        SetValue(IsPointerOverProperty, true);
+        UpdatePointerOver(Cursor.Position, forceFirst: true);
         XamlInput.RaisePointerEntered(XamlInput.CreatePointerEnteredArgs(this));
     }
 
@@ -1711,8 +1712,41 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
     protected override void OnMouseLeave(EventArgs e)
     {
         base.OnMouseLeave(e);
-        SetValue(IsPointerOverProperty, false);
+        UpdatePointerOver(Cursor.Position);
         XamlInput.RaisePointerExited(XamlInput.CreatePointerExitedArgs(this));
+    }
+
+    // WinForms 的悬停是逐子窗口的：指针进入子控件时父窗口会收到 MouseLeave。按屏幕矩形重算自己与整条
+    // XAML 祖先链，子控件上悬停才会被祖先视为 IsPointerOver（WPF 的 IsMouseOver 语义）。
+    private void UpdatePointerOver(Point screenPoint) => UpdatePointerOver(screenPoint, forceFirst: false);
+
+    private void UpdatePointerOver(Point screenPoint, bool forceFirst)
+    {
+        var first = true;
+        for (Control? current = this; current is not null; current = current.Parent as Control)
+        {
+            // MouseEnter 本身已经证明指针进了本控件；没有句柄的离屏/测试场景也要保留这一点。
+            var inside = first && forceFirst || current.ContainsScreenPoint(screenPoint);
+            current.SetValue(IsPointerOverProperty, inside);
+            first = false;
+        }
+    }
+
+    private bool ContainsScreenPoint(Point screenPoint)
+    {
+        if (!IsHandleCreated || IsDisposed || Disposing)
+        {
+            return false;
+        }
+
+        try
+        {
+            return RectangleToScreen(ClientRectangle).Contains(screenPoint);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ObjectDisposedException)
+        {
+            return false;
+        }
     }
 
     /// <inheritdoc />
@@ -1796,6 +1830,45 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
 
         // 子控件的 Panel.ZIndex 通常在加入前就写好了；加入这一趟把顺序定下来。
         XamlLayout.ApplyZOrder(this);
+
+        // 原生子控件不会走 XAML 的 MouseEnter/Leave；替它通知父链重算悬停状态。
+        if (e.Control is not null and not Control)
+        {
+            HookNativeHover(e.Control);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnControlRemoved(ControlEventArgs e)
+    {
+        if (e.Control is not null)
+        {
+            UnhookNativeHover(e.Control);
+        }
+
+        base.OnControlRemoved(e);
+    }
+
+    private void HookNativeHover(System.Windows.Forms.Control child)
+    {
+        if (_nativeHoverHandlers.ContainsKey(child))
+        {
+            return;
+        }
+
+        EventHandler handler = (_, _) => UpdatePointerOver(Cursor.Position);
+        _nativeHoverHandlers[child] = handler;
+        child.MouseEnter += handler;
+        child.MouseLeave += handler;
+    }
+
+    private void UnhookNativeHover(System.Windows.Forms.Control child)
+    {
+        if (_nativeHoverHandlers.Remove(child, out var handler))
+        {
+            child.MouseEnter -= handler;
+            child.MouseLeave -= handler;
+        }
     }
 
     /// <summary>Points this control and every XAML descendant at the control that owns the applied template.</summary>
@@ -1962,6 +2035,17 @@ public class Control : System.Windows.Forms.ScrollableControl, IInputElement
             DetachStyleResource();
             _resources.Changed -= OnResourcesChanged;
             XamlTransition.Stop(this);
+
+            foreach (var pair in _nativeHoverHandlers)
+            {
+                if (!pair.Key.IsDisposed)
+                {
+                    pair.Key.MouseEnter -= pair.Value;
+                    pair.Key.MouseLeave -= pair.Value;
+                }
+            }
+
+            _nativeHoverHandlers.Clear();
         }
 
         base.Dispose(disposing);

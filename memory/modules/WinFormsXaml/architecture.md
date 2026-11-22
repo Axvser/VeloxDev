@@ -110,6 +110,7 @@
 - `ControlTemplate` 创建的根控件以 `Dock=Fill` 挂进模板父，普通 `Control` 不需要自己排版模板；`ItemsControl` 虚拟模式的可见范围在 `ScrollViewer.ViewportHeight == 0` 时用 viewer 的客户区高度，而不是 `ItemsControl` 自身（后者通常撑满全部条目）。
 - `StringFormat` 的 XAML `{}` 转义在生成器里剥掉再写进 `Binding.StringFormat`；生成器不再把 `{}{0:N2}` 原样交给 `string.Format`。
 - `AdornerLayer` 没有 adorner 时 `Visible=false`，不盖住子控件；运行期给窗口加 `WS_EX_LAYERED` 后必须 `SetWindowPos(... SWP_FRAMECHANGED)` 再 `SetLayeredWindowAttributes`，否则色键不生效、整层会露出洋红。
+- **IsPointerOver 沿祖先链**：WinForms 的 Enter/Leave 是逐子窗口的，指针进入子控件时父窗口会收到 MouseLeave。`Control.UpdatePointerOver` 用屏幕矩形重算自己与整条 XAML 祖先链；原生子控件的 MouseEnter/Leave 由 `OnControlAdded` 挂上回调。子控件（含原生）上悬停时祖先的 `IsPointerOver` 保持 true，指针离开整棵子树才清掉。回归：`HoverTests.HoveringAChild_MarksTheAncestorPointerOver`。
 - **轻量视觉树是 opt-in，不是第二套控件**：`VisualHost` 的 `Root` 是 `ContainerVisual`；`ShapeVisual`/`TextVisual`/`CurveBatchVisual` 只画，不创建子窗口。`Opacity`/`Effect` 会把子树落到临时位图再合成（组透明度正确，超大视觉会退化为不合成）；`Transform` 用 GDI+ 矩阵，`Clip` 用本地矩形。命中测试沿视觉树走，原生/HWND 控件仍留在 WinForms 树里，二者不互通。
 - **默认主题是暗/浅两套中性调色板**（`Theme.CreateDark`/`CreateLight`）：近黑表面、单一强调色、8px 圆角、34px 控件高。`ThemeStyles` 只给交互控件表面/边框/前景；容器保持透明，显式值/样式仍优先。`Theme.Mode` 换成浅色时，原生 WinForms 控件的暗色模式不会随运行期切换完全重绘，干净的双色截图用 `--light` 从进程启动。
 - 动画走 WinForms 适配器的互斥调度器：同一控件上的新 trigger 动画会 supersede 旧动画。
