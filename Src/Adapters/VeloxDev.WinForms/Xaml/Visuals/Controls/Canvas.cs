@@ -19,7 +19,21 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// </remarks>
 public class Canvas : Panel
 {
-    private static readonly ConditionalWeakTable<VisualElement, CanvasPlacement> Placements = new();
+    /// <summary>The attached left offset; <see cref="double.NaN"/> leaves it unset.</summary>
+    public static readonly WinformsProperty<double> LeftProperty =
+        WinformsProperty.RegisterAttached<Canvas, double>("Left", double.NaN, affectsArrange: true);
+
+    /// <summary>The attached top offset; <see cref="double.NaN"/> leaves it unset.</summary>
+    public static readonly WinformsProperty<double> TopProperty =
+        WinformsProperty.RegisterAttached<Canvas, double>("Top", double.NaN, affectsArrange: true);
+
+    /// <summary>The attached right offset; <see cref="double.NaN"/> leaves it unset.</summary>
+    public static readonly WinformsProperty<double> RightProperty =
+        WinformsProperty.RegisterAttached<Canvas, double>("Right", double.NaN, affectsArrange: true);
+
+    /// <summary>The attached bottom offset; <see cref="double.NaN"/> leaves it unset.</summary>
+    public static readonly WinformsProperty<double> BottomProperty =
+        WinformsProperty.RegisterAttached<Canvas, double>("Bottom", double.NaN, affectsArrange: true);
 
     /// <summary>Reads the left offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element whose attached value is read.</param>
@@ -27,13 +41,13 @@ public class Canvas : Panel
     public static double GetLeft(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return PlacementOf(element).Left;
+        return LeftProperty.GetValue(element);
     }
 
     /// <summary>Writes the left offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element receiving the attached value.</param>
     /// <param name="value">The offset in pixels, or <see cref="double.NaN"/> to unset it.</param>
-    public static void SetLeft(VisualElement element, double value) => Set(element, value, static (state, offset) => state.Left = offset);
+    public static void SetLeft(VisualElement element, double value) => LeftProperty.SetValue(element, value);
 
     /// <summary>Reads the top offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element whose attached value is read.</param>
@@ -41,13 +55,13 @@ public class Canvas : Panel
     public static double GetTop(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return PlacementOf(element).Top;
+        return TopProperty.GetValue(element);
     }
 
     /// <summary>Writes the top offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element receiving the attached value.</param>
     /// <param name="value">The offset in pixels, or <see cref="double.NaN"/> to unset it.</param>
-    public static void SetTop(VisualElement element, double value) => Set(element, value, static (state, offset) => state.Top = offset);
+    public static void SetTop(VisualElement element, double value) => TopProperty.SetValue(element, value);
 
     /// <summary>Reads the right offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element whose attached value is read.</param>
@@ -55,13 +69,13 @@ public class Canvas : Panel
     public static double GetRight(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return PlacementOf(element).Right;
+        return RightProperty.GetValue(element);
     }
 
     /// <summary>Writes the right offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element receiving the attached value.</param>
     /// <param name="value">The offset in pixels, or <see cref="double.NaN"/> to unset it.</param>
-    public static void SetRight(VisualElement element, double value) => Set(element, value, static (state, offset) => state.Right = offset);
+    public static void SetRight(VisualElement element, double value) => RightProperty.SetValue(element, value);
 
     /// <summary>Reads the bottom offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element whose attached value is read.</param>
@@ -69,13 +83,13 @@ public class Canvas : Panel
     public static double GetBottom(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return PlacementOf(element).Bottom;
+        return BottomProperty.GetValue(element);
     }
 
     /// <summary>Writes the bottom offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element receiving the attached value.</param>
     /// <param name="value">The offset in pixels, or <see cref="double.NaN"/> to unset it.</param>
-    public static void SetBottom(VisualElement element, double value) => Set(element, value, static (state, offset) => state.Bottom = offset);
+    public static void SetBottom(VisualElement element, double value) => BottomProperty.SetValue(element, value);
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
@@ -119,15 +133,8 @@ public class Canvas : Panel
         }
     }
 
-    private static void Set(VisualElement element, double value, Action<CanvasPlacement, double> apply)
-    {
-        if (element is null) throw new ArgumentNullException(nameof(element));
-        apply(PlacementOf(element), value);
-        element.InvalidateMeasure();
-    }
-
-    private static CanvasPlacement PlacementOf(VisualElement element)
-        => Placements.GetValue(element, static _ => new CanvasPlacement());
+    private static (double Left, double Top, double Right, double Bottom) PlacementOf(VisualElement element)
+        => (GetLeft(element), GetTop(element), GetRight(element), GetBottom(element));
 
     private IEnumerable<VisualElement> ArrangedChildren()
     {
@@ -140,11 +147,4 @@ public class Canvas : Panel
         }
     }
 
-    private sealed class CanvasPlacement
-    {
-        public double Left = double.NaN;
-        public double Top = double.NaN;
-        public double Right = double.NaN;
-        public double Bottom = double.NaN;
-    }
 }

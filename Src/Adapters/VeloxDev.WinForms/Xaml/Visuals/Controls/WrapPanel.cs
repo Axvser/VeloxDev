@@ -12,73 +12,51 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// </remarks>
 public class WrapPanel : Panel
 {
-    private Orientation _orientation = Orientation.Horizontal;
-    private int _itemWidth;
-    private int _itemHeight;
-    private int _spacing;
+    /// <summary>The wrapping direction: horizontally by default.</summary>
+    public static readonly WinformsProperty<Orientation> OrientationProperty =
+        WinformsProperty.Register<WrapPanel, Orientation>(
+            nameof(Orientation),
+            Orientation.Horizontal,
+            affectsMeasure: true);
+
+    /// <summary>A fixed slot width for every child, in pixels; zero keeps the measured width.</summary>
+    public static readonly WinformsProperty<int> ItemWidthProperty =
+        WinformsProperty.Register<WrapPanel, int>(nameof(ItemWidth), 0, affectsMeasure: true);
+
+    /// <summary>A fixed slot height for every child, in pixels; zero keeps the measured height.</summary>
+    public static readonly WinformsProperty<int> ItemHeightProperty =
+        WinformsProperty.Register<WrapPanel, int>(nameof(ItemHeight), 0, affectsMeasure: true);
+
+    /// <summary>The gap between adjacent items and between lines, in pixels.</summary>
+    public static readonly WinformsProperty<int> SpacingProperty =
+        WinformsProperty.Register<WrapPanel, int>(nameof(Spacing), 0, affectsMeasure: true);
 
     /// <summary>The wrapping direction: horizontally by default.</summary>
     public Orientation Orientation
     {
-        get => _orientation;
-        set
-        {
-            if (_orientation == value)
-            {
-                return;
-            }
-
-            _orientation = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(OrientationProperty);
+        set => SetValue(OrientationProperty, value);
     }
 
     /// <summary>A fixed slot width for every child, in pixels; zero keeps the measured width.</summary>
     public int ItemWidth
     {
-        get => _itemWidth;
-        set
-        {
-            if (_itemWidth == value)
-            {
-                return;
-            }
-
-            _itemWidth = Math.Max(0, value);
-            InvalidateMeasure();
-        }
+        get => GetValue(ItemWidthProperty);
+        set => SetValue(ItemWidthProperty, Math.Max(0, value));
     }
 
     /// <summary>A fixed slot height for every child, in pixels; zero keeps the measured height.</summary>
     public int ItemHeight
     {
-        get => _itemHeight;
-        set
-        {
-            if (_itemHeight == value)
-            {
-                return;
-            }
-
-            _itemHeight = Math.Max(0, value);
-            InvalidateMeasure();
-        }
+        get => GetValue(ItemHeightProperty);
+        set => SetValue(ItemHeightProperty, Math.Max(0, value));
     }
 
     /// <summary>The gap between adjacent items and between lines, in pixels.</summary>
     public int Spacing
     {
-        get => _spacing;
-        set
-        {
-            if (_spacing == value)
-            {
-                return;
-            }
-
-            _spacing = Math.Max(0, value);
-            InvalidateMeasure();
-        }
+        get => GetValue(SpacingProperty);
+        set => SetValue(SpacingProperty, Math.Max(0, value));
     }
 
     /// <inheritdoc />
@@ -111,13 +89,13 @@ public class WrapPanel : Panel
     // 同一条流程既用于测量也用于摆放：测量时只统计行尺寸，摆放时把槽位交给子项。
     private Size ArrangeLines(int width, int height, bool arrange, PointF origin)
     {
-        var horizontal = _orientation == Orientation.Horizontal;
+        var horizontal = Orientation == Orientation.Horizontal;
         var mainLimit = horizontal
             ? width > 0 ? width : int.MaxValue
             : height > 0 ? height : int.MaxValue;
-        var fixedMain = horizontal ? _itemWidth : _itemHeight;
-        var fixedCross = horizontal ? _itemHeight : _itemWidth;
-        var spacing = Math.Max(0, _spacing);
+        var fixedMain = horizontal ? ItemWidth : ItemHeight;
+        var fixedCross = horizontal ? ItemHeight : ItemWidth;
+        var spacing = Math.Max(0, Spacing);
 
         var cursor = 0;
         var lineExtent = 0;

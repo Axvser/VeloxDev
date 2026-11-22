@@ -147,27 +147,19 @@ internal static class WorkbenchContent
 
     private static VisualBorder CreateCounterSection(ThemePalette theme)
     {
+        var state = new CounterState();
         var counter = new VisualTextBlock
         {
-            Text = "Clicks: 0",
             Font = new Font("Segoe UI Semibold", 11f),
             Foreground = theme.Foreground,
         };
+        counter.Bind(VisualTextBlock.TextProperty, state.GetObservable(CounterState.CaptionProperty));
 
-        var clicks = 0;
         var increment = new VisualButton { Text = "Increment" };
-        increment.Click += (_, _) =>
-        {
-            clicks++;
-            counter.Text = $"Clicks: {clicks}";
-        };
+        increment.Click += (_, _) => state.Count++;
 
         var reset = new VisualButton { Text = "Reset" };
-        reset.Click += (_, _) =>
-        {
-            clicks = 0;
-            counter.Text = "Clicks: 0";
-        };
+        reset.Click += (_, _) => state.Count = 0;
 
         var row = new VisualStackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         row.Add(increment);
@@ -297,5 +289,35 @@ internal static class WorkbenchContent
         using var pen = new System.Drawing.Pen(Color.White, 3f);
         graphics.DrawEllipse(pen, 16f, 16f, 32f, 32f);
         return bitmap;
+    }
+}
+
+/// <summary>A non-visual view model for the counter card; the label binds to its caption property.</summary>
+internal sealed class CounterState : WinformsObject
+{
+    /// <summary>The numeric click count.</summary>
+    public static readonly WinformsProperty<int> CountProperty =
+        WinformsProperty.Register<CounterState, int>(nameof(Count), 0);
+
+    /// <summary>The formatted caption shown by the label.</summary>
+    public static readonly WinformsProperty<string> CaptionProperty =
+        WinformsProperty.Register<CounterState, string>(nameof(Caption), "Clicks: 0");
+
+    /// <summary>Gets or sets the numeric click count and refreshes the caption.</summary>
+    public int Count
+    {
+        get => GetValue(CountProperty);
+        set
+        {
+            SetValue(CountProperty, value);
+            Caption = $"Clicks: {value}";
+        }
+    }
+
+    /// <summary>Gets or sets the formatted caption.</summary>
+    public string Caption
+    {
+        get => GetValue(CaptionProperty);
+        set => SetValue(CaptionProperty, value);
     }
 }

@@ -109,39 +109,29 @@ public class Border : VisualElement
 /// <summary>Stacks children vertically or horizontally with an explicit gap.</summary>
 public class StackPanel : Panel
 {
-    private Orientation _orientation = Orientation.Vertical;
-    private int _spacing;
+    /// <summary>Whether children stack vertically (default) or horizontally.</summary>
+    public static readonly WinformsProperty<Orientation> OrientationProperty =
+        WinformsProperty.Register<StackPanel, Orientation>(
+            nameof(Orientation),
+            Orientation.Vertical,
+            affectsMeasure: true);
+
+    /// <summary>The gap between adjacent children in pixels.</summary>
+    public static readonly WinformsProperty<int> SpacingProperty =
+        WinformsProperty.Register<StackPanel, int>(nameof(Spacing), 0, affectsMeasure: true);
 
     /// <summary>Whether children stack vertically (default) or horizontally.</summary>
     public Orientation Orientation
     {
-        get => _orientation;
-        set
-        {
-            if (_orientation == value)
-            {
-                return;
-            }
-
-            _orientation = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(OrientationProperty);
+        set => SetValue(OrientationProperty, value);
     }
 
     /// <summary>The gap between adjacent children in pixels.</summary>
     public int Spacing
     {
-        get => _spacing;
-        set
-        {
-            if (_spacing == value)
-            {
-                return;
-            }
-
-            _spacing = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(SpacingProperty);
+        set => SetValue(SpacingProperty, value);
     }
 
     /// <inheritdoc />
@@ -222,11 +212,40 @@ public class StackPanel : Panel
 /// <summary>Draws wrapped or single-line text without creating a native label.</summary>
 public class TextBlock : VisualElement
 {
-    private string _text = string.Empty;
-    private Font _font = DefaultFont;
-    private Color _foreground = Color.Empty;
-    private bool _wrap;
-    private XamlTextAlignment _textAlignment;
+    /// <summary>The text to draw.</summary>
+    public static readonly WinformsProperty<string> TextProperty =
+        WinformsProperty.Register<TextBlock, string>(
+            nameof(Text),
+            string.Empty,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>The font used to draw the text.</summary>
+    public static readonly WinformsProperty<Font> FontProperty =
+        WinformsProperty.Register<TextBlock, Font>(
+            nameof(Font),
+            DefaultFont,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>The text colour; empty uses the active theme.</summary>
+    public static readonly WinformsProperty<Color> ForegroundProperty =
+        WinformsProperty.Register<TextBlock, Color>(nameof(Foreground), Color.Empty, affectsRender: true);
+
+    /// <summary>Whether overlong text wraps at word boundaries.</summary>
+    public static readonly WinformsProperty<bool> WrapProperty =
+        WinformsProperty.Register<TextBlock, bool>(
+            nameof(Wrap),
+            false,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>How the text is aligned horizontally.</summary>
+    public static readonly WinformsProperty<XamlTextAlignment> TextAlignmentProperty =
+        WinformsProperty.Register<TextBlock, XamlTextAlignment>(
+            nameof(TextAlignment),
+            XamlTextAlignment.Left,
+            affectsRender: true);
 
     /// <summary>Creates a non-hit-testable text element.</summary>
     public TextBlock()
@@ -237,72 +256,42 @@ public class TextBlock : VisualElement
     /// <summary>The text to draw.</summary>
     public string Text
     {
-        get => _text;
-        set
-        {
-            value ??= string.Empty;
-            if (_text == value)
-            {
-                return;
-            }
-
-            _text = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(TextProperty);
+        set => SetValue(TextProperty, value ?? string.Empty);
     }
 
     /// <summary>The font used to draw the text.</summary>
     public Font Font
     {
-        get => _font;
+        get => GetValue(FontProperty);
         set
         {
-            if (ReferenceEquals(_font, value) || value is null)
+            if (value is not null)
             {
-                return;
+                SetValue(FontProperty, value);
             }
-
-            _font = value;
-            InvalidateMeasure();
         }
     }
 
     /// <summary>The text colour; empty uses the active theme.</summary>
     public Color Foreground
     {
-        get => _foreground;
-        set
-        {
-            _foreground = value;
-            InvalidateVisual();
-        }
+        get => GetValue(ForegroundProperty);
+        set => SetValue(ForegroundProperty, value);
     }
 
     /// <summary>Whether overlong text wraps at word boundaries.</summary>
     public bool Wrap
     {
-        get => _wrap;
-        set
-        {
-            if (_wrap == value)
-            {
-                return;
-            }
-
-            _wrap = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(WrapProperty);
+        set => SetValue(WrapProperty, value);
     }
 
     /// <summary>How the text is aligned horizontally.</summary>
     public XamlTextAlignment TextAlignment
     {
-        get => _textAlignment;
-        set
-        {
-            _textAlignment = value;
-            InvalidateVisual();
-        }
+        get => GetValue(TextAlignmentProperty);
+        set => SetValue(TextAlignmentProperty, value);
     }
 
     /// <inheritdoc />
@@ -311,8 +300,8 @@ public class TextBlock : VisualElement
         var width = availableSize.Width > 0
             ? Math.Max(0, availableSize.Width - (int)Math.Ceiling(Padding.Horizontal))
             : 0;
-        var sample = string.IsNullOrEmpty(_text) ? "M" : _text;
-        var measured = VisualText.Measure(sample, _font, _wrap ? width : 0f, _wrap, RenderDpi);
+        var sample = string.IsNullOrEmpty(Text) ? "M" : Text;
+        var measured = VisualText.Measure(sample, Font, Wrap ? width : 0f, Wrap, RenderDpi);
         return new Size(
             (int)Math.Ceiling(measured.Width + Padding.Horizontal),
             (int)Math.Ceiling(measured.Height + Padding.Vertical));
@@ -321,7 +310,7 @@ public class TextBlock : VisualElement
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
-        if (string.IsNullOrEmpty(_text))
+        if (string.IsNullOrEmpty(Text))
         {
             return;
         }
@@ -336,8 +325,8 @@ public class TextBlock : VisualElement
             return;
         }
 
-        var color = _foreground.IsEmpty ? Theme.Current.Foreground : _foreground;
-        var horizontal = _textAlignment switch
+        var color = Foreground.IsEmpty ? Theme.Current.Foreground : Foreground;
+        var horizontal = TextAlignment switch
         {
             XamlTextAlignment.Center => StringAlignment.Center,
             XamlTextAlignment.Right => StringAlignment.Far,
@@ -345,21 +334,34 @@ public class TextBlock : VisualElement
         };
         VisualText.Draw(
             graphics,
-            _text,
-            _font,
+            Text,
+            Font,
             color,
             bounds,
-            _wrap,
+            Wrap,
             horizontal,
-            _wrap ? StringAlignment.Near : StringAlignment.Center);
+            Wrap ? StringAlignment.Near : StringAlignment.Center);
     }
 }
 
 /// <summary>Draws a bitmap inside the visual tree.</summary>
 public class Image : VisualElement
 {
-    private System.Drawing.Image? _source;
-    private XamlStretch _stretch = XamlStretch.Uniform;
+    /// <summary>The bitmap or image to draw.</summary>
+    public static readonly WinformsProperty<System.Drawing.Image?> SourceProperty =
+        WinformsProperty.Register<Image, System.Drawing.Image?>(
+            nameof(Source),
+            null,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>How the source is fitted inside the bounds.</summary>
+    public static readonly WinformsProperty<XamlStretch> StretchProperty =
+        WinformsProperty.Register<Image, XamlStretch>(
+            nameof(Stretch),
+            XamlStretch.Uniform,
+            affectsMeasure: true,
+            affectsRender: true);
 
     /// <summary>Creates a non-hit-testable image element.</summary>
     public Image()
@@ -370,35 +372,27 @@ public class Image : VisualElement
     /// <summary>The bitmap or image to draw.</summary>
     public System.Drawing.Image? Source
     {
-        get => _source;
-        set
-        {
-            _source = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(SourceProperty);
+        set => SetValue(SourceProperty, value);
     }
 
     /// <summary>How the source is fitted inside the bounds.</summary>
     public XamlStretch Stretch
     {
-        get => _stretch;
-        set
-        {
-            _stretch = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(StretchProperty);
+        set => SetValue(StretchProperty, value);
     }
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
-        => _source is null
+        => Source is null
             ? Size.Empty
-            : new Size(_source.Width + (int)Math.Ceiling(Padding.Horizontal), _source.Height + (int)Math.Ceiling(Padding.Vertical));
+            : new Size(Source.Width + (int)Math.Ceiling(Padding.Horizontal), Source.Height + (int)Math.Ceiling(Padding.Vertical));
 
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
-        if (_source is null)
+        if (Source is null)
         {
             return;
         }
@@ -413,17 +407,17 @@ public class Image : VisualElement
             return;
         }
 
-        var source = new RectangleF(0f, 0f, _source.Width, _source.Height);
+        var source = new RectangleF(0f, 0f, Source.Width, Source.Height);
         var box = destination;
-        switch (_stretch)
+        switch (Stretch)
         {
             case XamlStretch.None:
-                destination = new RectangleF(destination.X, destination.Y, _source.Width, _source.Height);
+                destination = new RectangleF(destination.X, destination.Y, Source.Width, Source.Height);
                 break;
             case XamlStretch.Uniform:
             case XamlStretch.UniformToFill:
             {
-                var scale = _stretch == XamlStretch.Uniform
+                var scale = Stretch == XamlStretch.Uniform
                     ? Math.Min(destination.Width / source.Width, destination.Height / source.Height)
                     : Math.Max(destination.Width / source.Width, destination.Height / source.Height);
                 var width = source.Width * scale;
@@ -440,13 +434,13 @@ public class Image : VisualElement
         var state = graphics.Save();
         try
         {
-            if (_stretch == XamlStretch.UniformToFill)
+            if (Stretch == XamlStretch.UniformToFill)
             {
                 graphics.SetClip(box, CombineMode.Intersect);
             }
 
             graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            graphics.DrawImage(_source, destination, source, GraphicsUnit.Pixel);
+            graphics.DrawImage(Source, destination, source, GraphicsUnit.Pixel);
         }
         finally
         {

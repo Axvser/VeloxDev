@@ -29,220 +29,246 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>The font used by text-bearing elements that do not set one.</summary>
     public static readonly Font DefaultFont = new("Segoe UI", 9.5f);
 
+    /// <summary>The outer spacing around an element.</summary>
+    public static readonly WinformsProperty<XamlThickness> MarginProperty =
+        WinformsProperty.Register<VisualElement, XamlThickness>(nameof(Margin), XamlThickness.Empty, affectsMeasure: true);
+
+    /// <summary>The inner spacing between an element's edge and its children.</summary>
+    public static readonly WinformsProperty<XamlThickness> PaddingProperty =
+        WinformsProperty.Register<VisualElement, XamlThickness>(nameof(Padding), XamlThickness.Empty, affectsMeasure: true);
+
+    /// <summary>The requested width; <see cref="double.NaN"/> sizes to content and alignment.</summary>
+    public static readonly WinformsProperty<double> WidthProperty =
+        WinformsProperty.Register<VisualElement, double>(nameof(Width), double.NaN, affectsMeasure: true);
+
+    /// <summary>The requested height; <see cref="double.NaN"/> sizes to content and alignment.</summary>
+    public static readonly WinformsProperty<double> HeightProperty =
+        WinformsProperty.Register<VisualElement, double>(nameof(Height), double.NaN, affectsMeasure: true);
+
+    /// <summary>The smallest width layout may assign.</summary>
+    public static readonly WinformsProperty<double> MinWidthProperty =
+        WinformsProperty.Register<VisualElement, double>(nameof(MinWidth), 0d, affectsMeasure: true);
+
+    /// <summary>The smallest height layout may assign.</summary>
+    public static readonly WinformsProperty<double> MinHeightProperty =
+        WinformsProperty.Register<VisualElement, double>(nameof(MinHeight), 0d, affectsMeasure: true);
+
+    /// <summary>The largest width layout may assign.</summary>
+    public static readonly WinformsProperty<double> MaxWidthProperty =
+        WinformsProperty.Register<VisualElement, double>(nameof(MaxWidth), double.PositiveInfinity, affectsMeasure: true);
+
+    /// <summary>The largest height layout may assign.</summary>
+    public static readonly WinformsProperty<double> MaxHeightProperty =
+        WinformsProperty.Register<VisualElement, double>(nameof(MaxHeight), double.PositiveInfinity, affectsMeasure: true);
+
+    /// <summary>How an element is placed inside its slot horizontally.</summary>
+    public static readonly WinformsProperty<XamlHorizontalAlignment> HorizontalAlignmentProperty =
+        WinformsProperty.Register<VisualElement, XamlHorizontalAlignment>(
+            nameof(HorizontalAlignment),
+            XamlHorizontalAlignment.Stretch,
+            affectsArrange: true);
+
+    /// <summary>How an element is placed inside its slot vertically.</summary>
+    public static readonly WinformsProperty<XamlVerticalAlignment> VerticalAlignmentProperty =
+        WinformsProperty.Register<VisualElement, XamlVerticalAlignment>(
+            nameof(VerticalAlignment),
+            XamlVerticalAlignment.Stretch,
+            affectsArrange: true);
+
+    /// <summary>Whether an element is painted, laid out and hit-tested.</summary>
+    public static readonly WinformsProperty<XamlVisibility> VisibilityProperty =
+        WinformsProperty.Register<VisualElement, XamlVisibility>(
+            nameof(Visibility),
+            XamlVisibility.Visible,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>Whether an element accepts input and draws an enabled state.</summary>
+    public static readonly WinformsProperty<bool> IsEnabledProperty =
+        WinformsProperty.Register<VisualElement, bool>(nameof(IsEnabled), true, affectsRender: true);
+
+    /// <summary>Whether an element participates in the focus chain.</summary>
+    public static readonly WinformsProperty<bool> FocusableProperty =
+        WinformsProperty.Register<VisualElement, bool>(nameof(Focusable), false);
+
+    /// <summary>Whether a pointer hit lands on an element's own rectangle.</summary>
+    public static readonly WinformsProperty<bool> IsHitTestVisibleProperty =
+        WinformsProperty.Register<VisualElement, bool>(nameof(IsHitTestVisible), true);
+
+    /// <summary>The cursor shown while the pointer is over an element.</summary>
+    public static readonly WinformsProperty<Cursor?> CursorProperty =
+        WinformsProperty.Register<VisualElement, Cursor?>(nameof(Cursor), null);
+
+    /// <summary>The outline brush drawn around an element's rectangle.</summary>
+    public static readonly WinformsProperty<XamlBrush?> BorderBrushProperty =
+        WinformsProperty.Register<VisualElement, XamlBrush?>(nameof(BorderBrush), null, affectsRender: true);
+
+    /// <summary>The outline width per side, in pixels.</summary>
+    public static readonly WinformsProperty<XamlThickness> BorderThicknessProperty =
+        WinformsProperty.Register<VisualElement, XamlThickness>(
+            nameof(BorderThickness),
+            XamlThickness.Empty,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>The background brush painted behind an element's content.</summary>
+    public static readonly WinformsProperty<XamlBrush?> BackgroundProperty =
+        WinformsProperty.Register<VisualElement, XamlBrush?>(nameof(Background), null, affectsRender: true);
+
+    /// <summary>The background and border corner radius in pixels.</summary>
+    public static readonly WinformsProperty<float> CornerRadiusProperty =
+        WinformsProperty.Register<VisualElement, float>(nameof(CornerRadius), 0f, affectsRender: true);
+
+    /// <summary>The inherited data context used by bindings and templates.</summary>
+    public static readonly WinformsProperty<object?> DataContextProperty =
+        WinformsProperty.Register<VisualElement, object?>(nameof(DataContext), null, inherits: true);
+
     private bool _measureValid;
     private Size _measureAvailable;
     private Size _desiredSize;
     private VisualSurface? _surface;
     private bool _focused;
     private bool _pointerOver;
-    private XamlThickness _margin = XamlThickness.Empty;
-    private XamlThickness _padding = XamlThickness.Empty;
-    private double _width = double.NaN;
-    private double _height = double.NaN;
-    private double _minWidth;
-    private double _minHeight;
-    private double _maxWidth = double.PositiveInfinity;
-    private double _maxHeight = double.PositiveInfinity;
-    private XamlHorizontalAlignment _horizontalAlignment = XamlHorizontalAlignment.Stretch;
-    private XamlVerticalAlignment _verticalAlignment = XamlVerticalAlignment.Stretch;
-    private XamlVisibility _visibility = XamlVisibility.Visible;
-    private bool _isEnabled = true;
-    private XamlBrush? _borderBrush;
-    private XamlThickness _borderThickness = XamlThickness.Empty;
 
     /// <summary>The outer spacing around this element.</summary>
     public XamlThickness Margin
     {
-        get => _margin;
-        set
-        {
-            if (_margin.Equals(value))
-            {
-                return;
-            }
-
-            _margin = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(MarginProperty);
+        set => SetValue(MarginProperty, value);
     }
 
     /// <summary>The inner spacing between this element's edge and its children.</summary>
     public XamlThickness Padding
     {
-        get => _padding;
-        set
-        {
-            if (_padding.Equals(value))
-            {
-                return;
-            }
-
-            _padding = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(PaddingProperty);
+        set => SetValue(PaddingProperty, value);
     }
 
     /// <summary>The requested width; <see cref="double.NaN"/> sizes to content and alignment.</summary>
     public double Width
     {
-        get => _width;
-        set
-        {
-            if (_width.Equals(value))
-            {
-                return;
-            }
-
-            _width = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(WidthProperty);
+        set => SetValue(WidthProperty, value);
     }
 
     /// <summary>The requested height; <see cref="double.NaN"/> sizes to content and alignment.</summary>
     public double Height
     {
-        get => _height;
-        set
-        {
-            if (_height.Equals(value))
-            {
-                return;
-            }
-
-            _height = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(HeightProperty);
+        set => SetValue(HeightProperty, value);
     }
 
     /// <summary>The smallest width layout may assign.</summary>
     public double MinWidth
     {
-        get => _minWidth;
-        set
-        {
-            _minWidth = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(MinWidthProperty);
+        set => SetValue(MinWidthProperty, value);
     }
 
     /// <summary>The smallest height layout may assign.</summary>
     public double MinHeight
     {
-        get => _minHeight;
-        set
-        {
-            _minHeight = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(MinHeightProperty);
+        set => SetValue(MinHeightProperty, value);
     }
 
     /// <summary>The largest width layout may assign.</summary>
     public double MaxWidth
     {
-        get => _maxWidth;
-        set
-        {
-            _maxWidth = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(MaxWidthProperty);
+        set => SetValue(MaxWidthProperty, value);
     }
 
     /// <summary>The largest height layout may assign.</summary>
     public double MaxHeight
     {
-        get => _maxHeight;
-        set
-        {
-            _maxHeight = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(MaxHeightProperty);
+        set => SetValue(MaxHeightProperty, value);
     }
 
     /// <summary>How this element is placed inside its slot horizontally.</summary>
     public XamlHorizontalAlignment HorizontalAlignment
     {
-        get => _horizontalAlignment;
-        set
-        {
-            _horizontalAlignment = value;
-            InvalidateArrange();
-        }
+        get => GetValue(HorizontalAlignmentProperty);
+        set => SetValue(HorizontalAlignmentProperty, value);
     }
 
     /// <summary>How this element is placed inside its slot vertically.</summary>
     public XamlVerticalAlignment VerticalAlignment
     {
-        get => _verticalAlignment;
-        set
-        {
-            _verticalAlignment = value;
-            InvalidateArrange();
-        }
+        get => GetValue(VerticalAlignmentProperty);
+        set => SetValue(VerticalAlignmentProperty, value);
     }
 
     /// <summary>Whether this element is painted, laid out and hit-tested.</summary>
     public XamlVisibility Visibility
     {
-        get => _visibility;
-        set
-        {
-            if (_visibility == value)
-            {
-                return;
-            }
-
-            _visibility = value;
-            IsVisible = value == XamlVisibility.Visible;
-            InvalidateMeasure();
-        }
+        get => GetValue(VisibilityProperty);
+        set => SetValue(VisibilityProperty, value);
     }
 
     /// <summary>Whether this element accepts input and draws an enabled state.</summary>
     public bool IsEnabled
     {
-        get => _isEnabled;
-        set
-        {
-            if (_isEnabled == value)
-            {
-                return;
-            }
-
-            _isEnabled = value;
-            InvalidateVisual();
-        }
+        get => GetValue(IsEnabledProperty);
+        set => SetValue(IsEnabledProperty, value);
     }
 
     /// <summary>Whether this element participates in the focus chain.</summary>
-    public bool Focusable { get; set; }
+    public bool Focusable
+    {
+        get => GetValue(FocusableProperty);
+        set => SetValue(FocusableProperty, value);
+    }
 
     /// <summary>Whether a pointer hit lands on this element's own rectangle.</summary>
     /// <remarks>Panels set this to <see langword="false"/> when they have no background so content clicks pass through.</remarks>
-    public bool IsHitTestVisible { get; set; } = true;
+    public bool IsHitTestVisible
+    {
+        get => GetValue(IsHitTestVisibleProperty);
+        set => SetValue(IsHitTestVisibleProperty, value);
+    }
 
     /// <summary>The cursor shown while the pointer is over this element, or <see langword="null"/> for the default.</summary>
-    public Cursor? Cursor { get; set; }
+    public Cursor? Cursor
+    {
+        get => GetValue(CursorProperty);
+        set => SetValue(CursorProperty, value);
+    }
 
     /// <summary>The outline brush drawn around the element's rectangle.</summary>
     public XamlBrush? BorderBrush
     {
-        get => _borderBrush;
-        set
-        {
-            _borderBrush = value;
-            InvalidateVisual();
-        }
+        get => GetValue(BorderBrushProperty);
+        set => SetValue(BorderBrushProperty, value);
     }
 
     /// <summary>The outline width per side, in pixels.</summary>
     public XamlThickness BorderThickness
     {
-        get => _borderThickness;
-        set
-        {
-            _borderThickness = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(BorderThicknessProperty);
+        set => SetValue(BorderThicknessProperty, value);
+    }
+
+    /// <summary>The background brush painted behind the element's content.</summary>
+    public new XamlBrush? Background
+    {
+        get => GetValue(BackgroundProperty);
+        set => SetValue(BackgroundProperty, value);
+    }
+
+    /// <summary>The background and border corner radius in pixels.</summary>
+    public new float CornerRadius
+    {
+        get => GetValue(CornerRadiusProperty);
+        set => SetValue(CornerRadiusProperty, value);
+    }
+
+    /// <summary>The inherited data context used by bindings and templates.</summary>
+    public object? DataContext
+    {
+        get => GetValue(DataContextProperty);
+        set => SetValue(DataContextProperty, value);
     }
 
     /// <summary>The size this element wants inside <paramref name="availableSize"/>.</summary>
@@ -362,7 +388,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
             return _desiredSize;
         }
 
-        if (_visibility == XamlVisibility.Collapsed)
+        if (Visibility == XamlVisibility.Collapsed)
         {
             _measureValid = true;
             _measureAvailable = availableSize;
@@ -389,7 +415,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <param name="finalRect">The slot the parent assigns, including this element's margin.</param>
     public void Arrange(RectangleF finalRect)
     {
-        if (_visibility == XamlVisibility.Collapsed)
+        if (Visibility == XamlVisibility.Collapsed)
         {
             Bounds = RectangleF.Empty;
             return;
@@ -515,6 +541,56 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         }
 
         Children.Clear();
+    }
+
+    /// <inheritdoc />
+    protected override object? GetInheritedValue(WinformsProperty property)
+        => ReferenceEquals(property, DataContextProperty)
+            ? ParentElement?.DataContext
+            : base.GetInheritedValue(property);
+
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(WinformsPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        if (ReferenceEquals(e.Property, VisibilityProperty))
+        {
+            IsVisible = Visibility == XamlVisibility.Visible;
+        }
+        else if (ReferenceEquals(e.Property, DataContextProperty))
+        {
+            NotifyDataContextDescendants(this, e.OldValue, e.NewValue);
+        }
+
+        if (e.Property.AffectsMeasure)
+        {
+            InvalidateMeasure();
+        }
+        else if (e.Property.AffectsArrange)
+        {
+            InvalidateArrange();
+        }
+
+        if (e.Property.AffectsRender)
+        {
+            InvalidateVisual();
+        }
+    }
+
+    // 子元素自己写了 DataContext 就截断继承；其余后代要收到 inherited 变更，绑定在祖先切换时才能重读。
+    private static void NotifyDataContextDescendants(VisualElement parent, object? oldValue, object? newValue)
+    {
+        foreach (var child in parent.Children)
+        {
+            if (child is not VisualElement element || element.IsSet(DataContextProperty))
+            {
+                continue;
+            }
+
+            element.RaisePropertyChanged(DataContextProperty, oldValue, newValue, BindingPriority.Inherited);
+            NotifyDataContextDescendants(element, oldValue, newValue);
+        }
     }
 
     internal void SetSurfaceRoot(VisualSurface? surface) => _surface = surface;

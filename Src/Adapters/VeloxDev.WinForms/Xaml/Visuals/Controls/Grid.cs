@@ -22,7 +22,21 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// </remarks>
 public class Grid : Panel
 {
-    private static readonly ConditionalWeakTable<VisualElement, Placement> Placements = new();
+    /// <summary>The attached row index.</summary>
+    public static readonly WinformsProperty<int> RowProperty =
+        WinformsProperty.RegisterAttached<Grid, int>("Row", 0, affectsMeasure: true);
+
+    /// <summary>The attached column index.</summary>
+    public static readonly WinformsProperty<int> ColumnProperty =
+        WinformsProperty.RegisterAttached<Grid, int>("Column", 0, affectsMeasure: true);
+
+    /// <summary>The attached row span; values below one become one.</summary>
+    public static readonly WinformsProperty<int> RowSpanProperty =
+        WinformsProperty.RegisterAttached<Grid, int>("RowSpan", 1, affectsMeasure: true);
+
+    /// <summary>The attached column span; values below one become one.</summary>
+    public static readonly WinformsProperty<int> ColumnSpanProperty =
+        WinformsProperty.RegisterAttached<Grid, int>("ColumnSpan", 1, affectsMeasure: true);
 
     /// <summary>Creates an empty grid.</summary>
     public Grid()
@@ -43,7 +57,7 @@ public class Grid : Panel
     public static int GetRow(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return PlacementOf(element).Row;
+        return RowProperty.GetValue(element);
     }
 
     /// <summary>Writes the zero-based row of <paramref name="element"/>.</summary>
@@ -52,8 +66,7 @@ public class Grid : Panel
     public static void SetRow(VisualElement element, int value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        PlacementOf(element).Row = Math.Max(0, value);
-        element.InvalidateMeasure();
+        RowProperty.SetValue(element, Math.Max(0, value));
     }
 
     /// <summary>Reads the zero-based column of <paramref name="element"/>.</summary>
@@ -62,7 +75,7 @@ public class Grid : Panel
     public static int GetColumn(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return PlacementOf(element).Column;
+        return ColumnProperty.GetValue(element);
     }
 
     /// <summary>Writes the zero-based column of <paramref name="element"/>.</summary>
@@ -71,8 +84,7 @@ public class Grid : Panel
     public static void SetColumn(VisualElement element, int value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        PlacementOf(element).Column = Math.Max(0, value);
-        element.InvalidateMeasure();
+        ColumnProperty.SetValue(element, Math.Max(0, value));
     }
 
     /// <summary>Reads how many rows <paramref name="element"/> spans.</summary>
@@ -81,7 +93,7 @@ public class Grid : Panel
     public static int GetRowSpan(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return Math.Max(1, PlacementOf(element).RowSpan);
+        return Math.Max(1, RowSpanProperty.GetValue(element));
     }
 
     /// <summary>Writes how many rows <paramref name="element"/> spans.</summary>
@@ -90,8 +102,7 @@ public class Grid : Panel
     public static void SetRowSpan(VisualElement element, int value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        PlacementOf(element).RowSpan = Math.Max(1, value);
-        element.InvalidateMeasure();
+        RowSpanProperty.SetValue(element, Math.Max(1, value));
     }
 
     /// <summary>Reads how many columns <paramref name="element"/> spans.</summary>
@@ -100,7 +111,7 @@ public class Grid : Panel
     public static int GetColumnSpan(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return Math.Max(1, PlacementOf(element).ColumnSpan);
+        return Math.Max(1, ColumnSpanProperty.GetValue(element));
     }
 
     /// <summary>Writes how many columns <paramref name="element"/> spans.</summary>
@@ -109,8 +120,7 @@ public class Grid : Panel
     public static void SetColumnSpan(VisualElement element, int value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        PlacementOf(element).ColumnSpan = Math.Max(1, value);
-        element.InvalidateMeasure();
+        ColumnSpanProperty.SetValue(element, Math.Max(1, value));
     }
 
     /// <inheritdoc />
@@ -326,16 +336,8 @@ public class Grid : Panel
         return offsets;
     }
 
-    private static Placement PlacementOf(VisualElement element)
-        => Placements.GetValue(element, static _ => new Placement());
-
-    private sealed class Placement
-    {
-        public int Row;
-        public int Column;
-        public int RowSpan = 1;
-        public int ColumnSpan = 1;
-    }
+    private static (int Row, int Column, int RowSpan, int ColumnSpan) PlacementOf(VisualElement element)
+        => (GetRow(element), GetColumn(element), GetRowSpan(element), GetColumnSpan(element));
 
     // 定义集合被增删时让整个网格重新测量；修改已有定义的 Width/Height 不会触发通知。
     private sealed class TrackCollection<T>(Grid owner) : Collection<T>

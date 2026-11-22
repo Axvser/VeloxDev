@@ -19,24 +19,21 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// </remarks>
 public class DockPanel : Panel
 {
-    private static readonly ConditionalWeakTable<VisualElement, DockState> States = new();
+    /// <summary>The attached dock edge.</summary>
+    public static readonly WinformsProperty<XamlDockPlacement> DockProperty =
+        WinformsProperty.RegisterAttached<DockPanel, XamlDockPlacement>(
+            "Dock",
+            XamlDockPlacement.Left);
 
-    private bool _lastChildFill = true;
+    /// <summary>Whether the last visible child fills the room left by the docked children.</summary>
+    public static readonly WinformsProperty<bool> LastChildFillProperty =
+        WinformsProperty.Register<DockPanel, bool>(nameof(LastChildFill), true, affectsMeasure: true);
 
     /// <summary>Whether the last visible child fills the room left by the docked children.</summary>
     public bool LastChildFill
     {
-        get => _lastChildFill;
-        set
-        {
-            if (_lastChildFill == value)
-            {
-                return;
-            }
-
-            _lastChildFill = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(LastChildFillProperty);
+        set => SetValue(LastChildFillProperty, value);
     }
 
     /// <summary>Reads which edge <paramref name="element"/> docks to.</summary>
@@ -46,7 +43,7 @@ public class DockPanel : Panel
     public static XamlDockPlacement GetDock(VisualElement element)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return StateOf(element).Dock;
+        return DockProperty.GetValue(element);
     }
 
     /// <summary>Writes which edge <paramref name="element"/> docks to.</summary>
@@ -55,8 +52,7 @@ public class DockPanel : Panel
     public static void SetDock(VisualElement element, XamlDockPlacement value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        StateOf(element).Dock = value;
-        element.InvalidateMeasure();
+        DockProperty.SetValue(element, value);
     }
 
     /// <inheritdoc />
@@ -196,11 +192,4 @@ public class DockPanel : Panel
         }
     }
 
-    private static DockState StateOf(VisualElement element)
-        => States.GetValue(element, static _ => new DockState());
-
-    private sealed class DockState
-    {
-        public XamlDockPlacement Dock = XamlDockPlacement.Left;
-    }
 }

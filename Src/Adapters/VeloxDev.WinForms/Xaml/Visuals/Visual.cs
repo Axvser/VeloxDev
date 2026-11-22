@@ -21,7 +21,7 @@ namespace VeloxDev.WinForms.Xaml.Visuals;
 /// whole subtree through a temporary bitmap.
 /// </para>
 /// </remarks>
-public abstract class Visual
+public abstract class Visual : WinformsObject
 {
     /// <summary>The rectangle this visual occupies in its parent's coordinates.</summary>
     public RectangleF Bounds { get; set; }

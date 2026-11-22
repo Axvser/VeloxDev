@@ -12,9 +12,26 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// <summary>A self-drawn push button with hover, press and keyboard states.</summary>
 public class Button : VisualElement
 {
-    private string _text = string.Empty;
-    private Font _font = DefaultFont;
-    private Color _foreground = Color.Empty;
+    /// <summary>The text drawn inside the button.</summary>
+    public static readonly WinformsProperty<string> TextProperty =
+        WinformsProperty.Register<Button, string>(
+            nameof(Text),
+            string.Empty,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>The font used to draw the text.</summary>
+    public static readonly WinformsProperty<Font> FontProperty =
+        WinformsProperty.Register<Button, Font>(
+            nameof(Font),
+            DefaultFont,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>The text colour; empty uses the active theme.</summary>
+    public static readonly WinformsProperty<Color> ForegroundProperty =
+        WinformsProperty.Register<Button, Color>(nameof(Foreground), Color.Empty, affectsRender: true);
+
     private bool _hover;
     private bool _pressed;
     private bool _keyDown;
@@ -33,45 +50,28 @@ public class Button : VisualElement
     /// <summary>The text drawn inside the button.</summary>
     public string Text
     {
-        get => _text;
-        set
-        {
-            value ??= string.Empty;
-            if (_text == value)
-            {
-                return;
-            }
-
-            _text = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(TextProperty);
+        set => SetValue(TextProperty, value ?? string.Empty);
     }
 
     /// <summary>The font used to draw the text.</summary>
     public Font Font
     {
-        get => _font;
+        get => GetValue(FontProperty);
         set
         {
-            if (value is null || ReferenceEquals(_font, value))
+            if (value is not null)
             {
-                return;
+                SetValue(FontProperty, value);
             }
-
-            _font = value;
-            InvalidateMeasure();
         }
     }
 
     /// <summary>The text colour; empty uses the active theme.</summary>
     public Color Foreground
     {
-        get => _foreground;
-        set
-        {
-            _foreground = value;
-            InvalidateVisual();
-        }
+        get => GetValue(ForegroundProperty);
+        set => SetValue(ForegroundProperty, value);
     }
 
     /// <summary>Raised when the button is clicked by the pointer or the keyboard.</summary>
@@ -80,8 +80,8 @@ public class Button : VisualElement
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
-        var sample = string.IsNullOrEmpty(_text) ? "M" : _text;
-        var measured = VisualText.Measure(sample, _font, 0f, wrap: false, RenderDpi);
+        var sample = string.IsNullOrEmpty(Text) ? "M" : Text;
+        var measured = VisualText.Measure(sample, Font, 0f, wrap: false, RenderDpi);
         var width = (int)Math.Ceiling(measured.Width + Padding.Horizontal + 2);
         var height = Math.Max(
             Theme.Current.ControlHeight,
@@ -124,7 +124,7 @@ public class Button : VisualElement
             graphics.DrawPath(focusPen, focusPath);
         }
 
-        if (string.IsNullOrEmpty(_text))
+        if (string.IsNullOrEmpty(Text))
         {
             return;
         }
@@ -134,13 +134,13 @@ public class Button : VisualElement
             (int)Math.Ceiling(Padding.Top) + 1,
             Math.Max(0, bounds.Width - (int)Math.Ceiling(Padding.Horizontal) - 2),
             Math.Max(0, bounds.Height - (int)Math.Ceiling(Padding.Vertical) - 2));
-        var foreground = _foreground.IsEmpty
+        var foreground = Foreground.IsEmpty
             ? (IsEnabled ? theme.Foreground : theme.DisabledForeground)
-            : _foreground;
+            : Foreground;
         VisualText.Draw(
             graphics,
-            _text,
-            _font,
+            Text,
+            Font,
             foreground,
             content,
             wrap: false,
@@ -251,13 +251,47 @@ public class Button : VisualElement
 /// </remarks>
 public class TextBox : VisualElement
 {
+    /// <summary>The current text.</summary>
+    public static readonly WinformsProperty<string> TextProperty =
+        WinformsProperty.Register<TextBox, string>(
+            nameof(Text),
+            string.Empty,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>The text shown while the field is empty.</summary>
+    public static readonly WinformsProperty<string> PlaceholderProperty =
+        WinformsProperty.Register<TextBox, string>(
+            nameof(Placeholder),
+            string.Empty,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>The font used to draw the text.</summary>
+    public static readonly WinformsProperty<Font> FontProperty =
+        WinformsProperty.Register<TextBox, Font>(
+            nameof(Font),
+            DefaultFont,
+            affectsMeasure: true,
+            affectsRender: true);
+
+    /// <summary>The text colour; empty uses the active theme.</summary>
+    public static readonly WinformsProperty<Color> ForegroundProperty =
+        WinformsProperty.Register<TextBox, Color>(nameof(Foreground), Color.Empty, affectsRender: true);
+
+    /// <summary>Whether the text can be edited.</summary>
+    public static readonly WinformsProperty<bool> IsReadOnlyProperty =
+        WinformsProperty.Register<TextBox, bool>(nameof(IsReadOnly), false, affectsRender: true);
+
+    /// <summary>Whether the text is drawn as bullets.</summary>
+    public static readonly WinformsProperty<bool> IsPasswordProperty =
+        WinformsProperty.Register<TextBox, bool>(
+            nameof(IsPassword),
+            false,
+            affectsMeasure: true,
+            affectsRender: true);
+
     private readonly System.Windows.Forms.Timer _caretTimer;
-    private string _text = string.Empty;
-    private string _placeholder = string.Empty;
-    private Font _font = DefaultFont;
-    private Color _foreground = Color.Empty;
-    private bool _isReadOnly;
-    private bool _isPassword;
     private int _selectionAnchor;
     private int _caretIndex;
     private bool _dragging;
@@ -283,80 +317,49 @@ public class TextBox : VisualElement
     /// <summary>The current text.</summary>
     public string Text
     {
-        get => _text;
-        set
-        {
-            value ??= string.Empty;
-            if (_text == value)
-            {
-                return;
-            }
-
-            _text = value;
-            ClampSelection();
-            InvalidateMeasure();
-            InvalidateVisual();
-        }
+        get => GetValue(TextProperty);
+        set => SetValue(TextProperty, value ?? string.Empty);
     }
 
     /// <summary>The text shown while the field is empty.</summary>
     public string Placeholder
     {
-        get => _placeholder;
-        set
-        {
-            _placeholder = value ?? string.Empty;
-            InvalidateMeasure();
-        }
+        get => GetValue(PlaceholderProperty);
+        set => SetValue(PlaceholderProperty, value ?? string.Empty);
     }
 
     /// <summary>The font used to draw the text.</summary>
     public Font Font
     {
-        get => _font;
+        get => GetValue(FontProperty);
         set
         {
-            if (value is null || ReferenceEquals(_font, value))
+            if (value is not null)
             {
-                return;
+                SetValue(FontProperty, value);
             }
-
-            _font = value;
-            InvalidateMeasure();
         }
     }
 
     /// <summary>The text colour; empty uses the active theme.</summary>
     public Color Foreground
     {
-        get => _foreground;
-        set
-        {
-            _foreground = value;
-            InvalidateVisual();
-        }
+        get => GetValue(ForegroundProperty);
+        set => SetValue(ForegroundProperty, value);
     }
 
     /// <summary>Whether the text can be edited.</summary>
     public bool IsReadOnly
     {
-        get => _isReadOnly;
-        set
-        {
-            _isReadOnly = value;
-            InvalidateVisual();
-        }
+        get => GetValue(IsReadOnlyProperty);
+        set => SetValue(IsReadOnlyProperty, value);
     }
 
     /// <summary>Whether the text is drawn as bullets.</summary>
     public bool IsPassword
     {
-        get => _isPassword;
-        set
-        {
-            _isPassword = value;
-            InvalidateMeasure();
-        }
+        get => GetValue(IsPasswordProperty);
+        set => SetValue(IsPasswordProperty, value);
     }
 
     /// <summary>The first selected character.</summary>
@@ -368,15 +371,15 @@ public class TextBox : VisualElement
     /// <summary>The caret index, which can be either end of the selection.</summary>
     public int CaretIndex => _caretIndex;
 
-    private string DisplayText => _isPassword ? new string('●', _text.Length) : _text;
+    private string DisplayText => IsPassword ? new string('●', Text.Length) : Text;
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
-        var sample = string.IsNullOrEmpty(_text)
-            ? (string.IsNullOrEmpty(_placeholder) ? "M" : _placeholder)
+        var sample = string.IsNullOrEmpty(Text)
+            ? (string.IsNullOrEmpty(Placeholder) ? "M" : Placeholder)
             : DisplayText;
-        var measured = VisualText.Measure(sample, _font, 0f, wrap: false, RenderDpi);
+        var measured = VisualText.Measure(sample, Font, 0f, wrap: false, RenderDpi);
         var width = Math.Max(120, (int)Math.Ceiling(measured.Width + Padding.Horizontal + 2));
         var height = Math.Max(
             Theme.Current.ControlHeight,
@@ -417,9 +420,9 @@ public class TextBox : VisualElement
         try
         {
             graphics.SetClip(content, CombineMode.Intersect);
-            var foreground = _foreground.IsEmpty
+            var foreground = Foreground.IsEmpty
                 ? (IsEnabled ? theme.Foreground : theme.DisabledForeground)
-                : _foreground;
+                : Foreground;
 
             if (IsFocused && SelectionLength > 0)
             {
@@ -429,14 +432,14 @@ public class TextBox : VisualElement
                 graphics.FillRectangle(selection, content.Left + start, content.Top, Math.Max(1, end - start), content.Height);
             }
 
-            var text = string.IsNullOrEmpty(_text) ? _placeholder : DisplayText;
-            var textColor = string.IsNullOrEmpty(_text) ? theme.MutedForeground : foreground;
+            var text = string.IsNullOrEmpty(Text) ? Placeholder : DisplayText;
+            var textColor = string.IsNullOrEmpty(Text) ? theme.MutedForeground : foreground;
             if (!string.IsNullOrEmpty(text))
             {
                 VisualText.Draw(
                     graphics,
                     text,
-                    _font,
+                    Font,
                     textColor,
                     content,
                     wrap: false,
@@ -444,7 +447,7 @@ public class TextBox : VisualElement
                     StringAlignment.Center);
             }
 
-            if (IsFocused && _caretVisible && !_isReadOnly)
+            if (IsFocused && _caretVisible && !IsReadOnly)
             {
                 var caretX = content.Left + MeasurePrefix(CaretIndex);
                 using var pen = new Pen(foreground, 1f);
@@ -454,6 +457,17 @@ public class TextBox : VisualElement
         finally
         {
             graphics.Restore(state);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(WinformsPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (ReferenceEquals(e.Property, TextProperty))
+        {
+            ClampSelection();
+            ResetCaretBlink();
         }
     }
 
@@ -477,7 +491,7 @@ public class TextBox : VisualElement
     /// <inheritdoc />
     protected override void OnTextInput(VisualTextInputEventArgs args)
     {
-        if (!IsEnabled || _isReadOnly || string.IsNullOrEmpty(args.Text))
+        if (!IsEnabled || IsReadOnly || string.IsNullOrEmpty(args.Text))
         {
             return;
         }
@@ -545,7 +559,7 @@ public class TextBox : VisualElement
                 args.Handled = true;
                 break;
             case Keys.Right:
-                MoveCaret(Math.Min(_text.Length, CaretIndex + 1), shift);
+                MoveCaret(Math.Min(Text.Length, CaretIndex + 1), shift);
                 args.Handled = true;
                 break;
             case Keys.Home:
@@ -553,11 +567,11 @@ public class TextBox : VisualElement
                 args.Handled = true;
                 break;
             case Keys.End:
-                MoveCaret(_text.Length, shift);
+                MoveCaret(Text.Length, shift);
                 args.Handled = true;
                 break;
             case Keys.Back:
-                if (!_isReadOnly)
+                if (!IsReadOnly)
                 {
                     Backspace();
                     args.Handled = true;
@@ -565,7 +579,7 @@ public class TextBox : VisualElement
 
                 break;
             case Keys.Delete:
-                if (!_isReadOnly)
+                if (!IsReadOnly)
                 {
                     Delete();
                     args.Handled = true;
@@ -574,7 +588,7 @@ public class TextBox : VisualElement
                 break;
             case Keys.A when control:
                 _selectionAnchor = 0;
-                _caretIndex = _text.Length;
+                _caretIndex = Text.Length;
                 ResetCaretBlink();
                 InvalidateVisual();
                 args.Handled = true;
@@ -584,7 +598,7 @@ public class TextBox : VisualElement
                 args.Handled = true;
                 break;
             case Keys.X when control:
-                if (!_isReadOnly)
+                if (!IsReadOnly)
                 {
                     Copy();
                     ReplaceSelection(string.Empty);
@@ -593,7 +607,7 @@ public class TextBox : VisualElement
                 args.Handled = true;
                 break;
             case Keys.V when control:
-                if (!_isReadOnly && TryGetClipboardText(out var pasted))
+                if (!IsReadOnly && TryGetClipboardText(out var pasted))
                 {
                     ReplaceSelection(pasted);
                 }
@@ -615,7 +629,7 @@ public class TextBox : VisualElement
 
         var display = DisplayText;
         length = Math.Min(length, display.Length);
-        return (int)Math.Ceiling(VisualText.MeasureWidth(display.Substring(0, length), _font, RenderDpi));
+        return (int)Math.Ceiling(VisualText.MeasureWidth(display.Substring(0, length), Font, RenderDpi));
     }
 
     private int HitTestIndex(PointF local)
@@ -639,7 +653,7 @@ public class TextBox : VisualElement
 
     private void MoveCaret(int index, bool extend)
     {
-        _caretIndex = XamlMath.Clamp(index, 0, _text.Length);
+        _caretIndex = XamlMath.Clamp(index, 0, Text.Length);
         if (!extend)
         {
             _selectionAnchor = _caretIndex;
@@ -653,9 +667,9 @@ public class TextBox : VisualElement
     {
         var start = SelectionStart;
         var length = SelectionLength;
-        var before = _text.Substring(0, start);
-        var after = _text.Substring(start + length);
-        _text = before + replacement + after;
+        var before = Text.Substring(0, start);
+        var after = Text.Substring(start + length);
+        Text = before + replacement + after;
         _caretIndex = before.Length + replacement.Length;
         _selectionAnchor = _caretIndex;
         ResetCaretBlink();
@@ -676,7 +690,7 @@ public class TextBox : VisualElement
             return;
         }
 
-        _text = _text.Remove(_caretIndex - 1, 1);
+        Text = Text.Remove(_caretIndex - 1, 1);
         _caretIndex--;
         _selectionAnchor = _caretIndex;
         ResetCaretBlink();
@@ -692,12 +706,12 @@ public class TextBox : VisualElement
             return;
         }
 
-        if (_caretIndex >= _text.Length)
+        if (_caretIndex >= Text.Length)
         {
             return;
         }
 
-        _text = _text.Remove(_caretIndex, 1);
+        Text = Text.Remove(_caretIndex, 1);
         _selectionAnchor = _caretIndex;
         ResetCaretBlink();
         InvalidateMeasure();
@@ -706,11 +720,11 @@ public class TextBox : VisualElement
 
     private void Copy()
     {
-        if (SelectionLength > 0 && !_isPassword)
+        if (SelectionLength > 0 && !IsPassword)
         {
             try
             {
-                Clipboard.SetText(_text.Substring(SelectionStart, SelectionLength));
+                Clipboard.SetText(Text.Substring(SelectionStart, SelectionLength));
             }
             catch (ExternalException)
             {
@@ -740,8 +754,8 @@ public class TextBox : VisualElement
 
     private void ClampSelection()
     {
-        _selectionAnchor = XamlMath.Clamp(_selectionAnchor, 0, _text.Length);
-        _caretIndex = XamlMath.Clamp(_caretIndex, 0, _text.Length);
+        _selectionAnchor = XamlMath.Clamp(_selectionAnchor, 0, Text.Length);
+        _caretIndex = XamlMath.Clamp(_caretIndex, 0, Text.Length);
     }
 
     private void ResetCaretBlink()
