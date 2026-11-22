@@ -111,7 +111,7 @@ internal sealed class GalleryVisualInspector
         {
             Text = property.Name,
             Foreground = Theme.Current.MutedForeground,
-            Width = 136,
+            Width = 150,
             VerticalAlignment = VeloxDev.WinForms.Xaml.Controls.VerticalAlignment.Center,
         };
 
@@ -143,7 +143,7 @@ internal sealed class GalleryVisualInspector
     private static VisualElement CreateEnumEditor(VisualElement target, DependencyProperty property, object? value)
     {
         var names = Enum.GetNames(property.PropertyType);
-        var combo = new VC.ComboBox { Width = 150, SelectedIndex = Array.IndexOf(names, value?.ToString()) };
+        var combo = new VC.ComboBox { Width = 140, SelectedIndex = Array.IndexOf(names, value?.ToString()) };
         foreach (var name in names)
         {
             combo.Items.Add(name);
@@ -164,7 +164,7 @@ internal sealed class GalleryVisualInspector
         var text = property.PropertyType == typeof(Color)
             ? value is Color color ? $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}" : string.Empty
             : FormatValue(property.PropertyType, value);
-        var editor = new VC.TextBox { Width = 150, Text = text };
+        var editor = new VC.TextBox { Width = 140, Text = text };
         editor.PropertyChanged += (_, e) =>
         {
             if (!ReferenceEquals(e.Property, VC.TextBox.TextProperty))
