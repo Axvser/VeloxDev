@@ -5,17 +5,17 @@ namespace VeloxDev.WinForms.Xaml;
 /// <summary>Which palette the default control styles use.</summary>
 public enum ThemeMode
 {
-    /// <summary>A light neutral palette.</summary>
+    /// <summary>The Visual Studio Code Light+ palette.</summary>
     Light,
 
-    /// <summary>A dark neutral palette.</summary>
+    /// <summary>The Visual Studio Code Dark+ palette.</summary>
     Dark,
 }
 
 /// <summary>The colours and metrics a default control style reads.</summary>
 /// <remarks>
-/// The palette is deliberately neutral: surfaces are near-grey, the accent is the only saturated colour, and
-/// corners are gently rounded. A host may replace any entry by setting an explicit value or an implicit style.
+/// The built-in palettes follow Visual Studio Code's Dark+ and Light+ themes: near-grey surfaces, a single blue
+/// accent, and four-pixel corners. A host may replace any entry by setting an explicit value or an implicit style.
 /// </remarks>
 public sealed class ThemePalette
 {
@@ -65,10 +65,10 @@ public sealed class ThemePalette
     public Color Selection { get; set; }
 
     /// <summary>The default corner radius in pixels.</summary>
-    public float CornerRadius { get; set; } = 8f;
+    public float CornerRadius { get; set; } = 4f;
 
     /// <summary>The default interactive control height in pixels.</summary>
-    public int ControlHeight { get; set; } = 34;
+    public int ControlHeight { get; set; } = 28;
 }
 
 /// <summary>The active default palette for controls that do not set an explicit colour.</summary>
@@ -114,47 +114,47 @@ public static class Theme
     /// <param name="root">The view or window root.</param>
     public static void ApplyTo(System.Windows.Forms.Control root) => ThemeStyles.ApplyTo(root);
 
-    /// <summary>The built-in dark palette.</summary>
+    /// <summary>The built-in dark palette, matching Visual Studio Code Dark+.</summary>
     public static ThemePalette CreateDark() => new()
     {
-        WindowBackground = Color.FromArgb(0xFF, 0x0F, 0x11, 0x15),
-        Surface = Color.FromArgb(0xFF, 0x16, 0x19, 0x1F),
-        SurfaceAlt = Color.FromArgb(0xFF, 0x1D, 0x21, 0x29),
-        ControlBackground = Color.FromArgb(0xFF, 0x20, 0x24, 0x2D),
-        ControlBorder = Color.FromArgb(0xFF, 0x30, 0x37, 0x45),
-        ControlHover = Color.FromArgb(0xFF, 0x27, 0x2C, 0x36),
-        ControlPressed = Color.FromArgb(0xFF, 0x32, 0x39, 0x47),
-        Foreground = Color.FromArgb(0xFF, 0xE9, 0xEC, 0xF2),
-        MutedForeground = Color.FromArgb(0xFF, 0x98, 0xA2, 0xB3),
-        Accent = Color.FromArgb(0xFF, 0x5B, 0x8C, 0xFF),
+        WindowBackground = Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E),
+        Surface = Color.FromArgb(0xFF, 0x25, 0x25, 0x26),
+        SurfaceAlt = Color.FromArgb(0xFF, 0x3C, 0x3C, 0x3C),
+        ControlBackground = Color.FromArgb(0xFF, 0x3C, 0x3C, 0x3C),
+        ControlBorder = Color.FromArgb(0xFF, 0x3C, 0x3C, 0x3C),
+        ControlHover = Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A),
+        ControlPressed = Color.FromArgb(0xFF, 0x0E, 0x63, 0x9C),
+        Foreground = Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC),
+        MutedForeground = Color.FromArgb(0xFF, 0x85, 0x85, 0x85),
+        Accent = Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC),
         AccentForeground = Color.White,
-        FocusRing = Color.FromArgb(0xFF, 0x7F, 0xA6, 0xFF),
-        DisabledForeground = Color.FromArgb(0xFF, 0x6B, 0x72, 0x80),
-        DisabledBackground = Color.FromArgb(0xFF, 0x1B, 0x1F, 0x27),
-        Selection = Color.FromArgb(0xFF, 0x2B, 0x3F, 0x66),
-        CornerRadius = 8f,
-        ControlHeight = 34,
+        FocusRing = Color.FromArgb(0xFF, 0x00, 0x7F, 0xD4),
+        DisabledForeground = Color.FromArgb(0xFF, 0x5A, 0x5A, 0x5A),
+        DisabledBackground = Color.FromArgb(0xFF, 0x2D, 0x2D, 0x2D),
+        Selection = Color.FromArgb(0xFF, 0x26, 0x4F, 0x78),
+        CornerRadius = 4f,
+        ControlHeight = 28,
     };
 
-    /// <summary>The built-in light palette.</summary>
+    /// <summary>The built-in light palette, matching Visual Studio Code Light+.</summary>
     public static ThemePalette CreateLight() => new()
     {
-        WindowBackground = Color.FromArgb(0xFF, 0xF5, 0xF7, 0xFB),
-        Surface = Color.White,
-        SurfaceAlt = Color.FromArgb(0xFF, 0xEE, 0xF2, 0xF8),
+        WindowBackground = Color.White,
+        Surface = Color.FromArgb(0xFF, 0xF3, 0xF3, 0xF3),
+        SurfaceAlt = Color.FromArgb(0xFF, 0xDD, 0xDD, 0xDD),
         ControlBackground = Color.White,
-        ControlBorder = Color.FromArgb(0xFF, 0xD6, 0xDC, 0xE6),
-        ControlHover = Color.FromArgb(0xFF, 0xF1, 0xF4, 0xF9),
-        ControlPressed = Color.FromArgb(0xFF, 0xE4, 0xE9, 0xF2),
-        Foreground = Color.FromArgb(0xFF, 0x14, 0x18, 0x21),
-        MutedForeground = Color.FromArgb(0xFF, 0x5A, 0x64, 0x73),
-        Accent = Color.FromArgb(0xFF, 0x0B, 0x63, 0xCE),
+        ControlBorder = Color.FromArgb(0xFF, 0xCE, 0xCE, 0xCE),
+        ControlHover = Color.FromArgb(0xFF, 0xE8, 0xE8, 0xE8),
+        ControlPressed = Color.FromArgb(0xFF, 0x00, 0x62, 0xA3),
+        Foreground = Color.FromArgb(0xFF, 0x33, 0x33, 0x33),
+        MutedForeground = Color.FromArgb(0xFF, 0x6F, 0x6F, 0x6F),
+        Accent = Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC),
         AccentForeground = Color.White,
-        FocusRing = Color.FromArgb(0xFF, 0x0B, 0x63, 0xCE),
-        DisabledForeground = Color.FromArgb(0xFF, 0x9A, 0xA3, 0xB2),
-        DisabledBackground = Color.FromArgb(0xFF, 0xF0, 0xF3, 0xF8),
-        Selection = Color.FromArgb(0xFF, 0xD7, 0xE6, 0xFA),
-        CornerRadius = 8f,
-        ControlHeight = 34,
+        FocusRing = Color.FromArgb(0xFF, 0x00, 0x90, 0xF1),
+        DisabledForeground = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0),
+        DisabledBackground = Color.FromArgb(0xFF, 0xF3, 0xF3, 0xF3),
+        Selection = Color.FromArgb(0xFF, 0xAD, 0xD6, 0xFF),
+        CornerRadius = 4f,
+        ControlHeight = 28,
     };
 }

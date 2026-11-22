@@ -10,9 +10,16 @@ namespace VeloxDev.WinForms.Xaml;
 /// supplied one. The values come from <see cref="Theme.Current"/>, so switching theme changes the defaults.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The style is built for the control's exact runtime type. Containers deliberately keep a transparent
 /// background; only interactive controls receive a surface, border and foreground. An explicit value or an
 /// explicit/implicit style from the control tree always wins because this style is the last fallback.
+/// </para>
+/// <para>
+/// Resting tokens are applied as style setters. State tokens (hover, pressed, focus, selection and disabled)
+/// are read by the controls themselves from <see cref="Theme.Current"/> while they paint, so the palette is
+/// their only source.
+/// </para>
 /// </remarks>
 public static class ThemeStyles
 {
@@ -20,7 +27,7 @@ public static class ThemeStyles
     private static readonly HashSet<string> SurfaceTypes = new(StringComparer.Ordinal)
     {
         "Button", "RepeatButton", "ToggleButton",
-        "TextBox", "PasswordBox", "ListBox", "ComboBox", "Calendar", "DatePicker",
+        "TextBox", "PasswordBox", "RichTextBox", "ListBox", "ComboBox", "Calendar", "DatePicker",
         "TreeView", "ListView", "DataGrid", "TabControl",
     };
 
@@ -95,14 +102,16 @@ public static class ThemeStyles
             case "Slider":
                 Add(style, type, "BarBrush", palette.Accent);
                 Add(style, type, "TrackBrush", palette.SurfaceAlt);
-                Add(style, type, "ThumbBrush", palette.Foreground);
+                Add(style, type, "ThumbBrush", palette.Accent);
                 break;
 
             case "ScrollBar":
+                // VS Code 的滚动条滑杆是中性灰，强调色只留给按钮与选中态。
                 Add(style, type, "TrackBrush", palette.SurfaceAlt);
-                Add(style, type, "ThumbBrush", palette.ControlBorder);
-                Add(style, type, "ThumbHoverBrush", palette.Accent);
+                Add(style, type, "ThumbBrush", palette.MutedForeground);
+                Add(style, type, "ThumbHoverBrush", palette.Foreground);
                 Add(style, type, "ThumbBorderBrush", palette.Surface);
+                Add(style, type, "ThumbCornerRadius", palette.CornerRadius);
                 break;
         }
 
