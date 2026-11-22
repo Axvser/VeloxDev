@@ -11,7 +11,6 @@ using VeloxDev.AI.Safety;
 using VeloxDev.AI.SubAgents;
 using VeloxDev.MVVM;
 using VeloxDev.Serialization;
-using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo
 {
@@ -643,8 +642,7 @@ namespace Demo
             else
             {
                 workflowSurfaceControl.BringToFront();
-                WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(workflowSurfaceControl);
-            }
+                workflowSurfaceControl.Refresh();            }
 
             RefreshOutputHeader();
             UpdateActivityMarkers();
@@ -1116,10 +1114,8 @@ namespace Demo
             };
             toggle.Click += (_, _) =>
             {
-                var visible = !workflowSurfaceControl.MinimapOverlay.IsMinimapVisible;
-                workflowSurfaceControl.MinimapOverlay.IsMinimapVisible = visible;
-                workflowSurfaceControl.MinimapOverlay.Visible = visible;
-                workflowSurfaceControl.MinimapOverlay.Invalidate();
+                var visible = !workflowSurfaceControl.IsMinimapVisible;
+                workflowSurfaceControl.IsMinimapVisible = visible;
                 toggle.Text = visible ? "开" : "关";
                 toggle.TextColor = visible ? CardTheme.ActionCompile : CardTheme.DisabledText;
             };
@@ -1467,7 +1463,7 @@ namespace Demo
             // 这里的线程跳必须异步：BeginInvoke 只把委托排进消息泵，调用方立刻返回，
             // 排进去的刷新才有机会把中间那些请求吃掉。
             _surfaceRefresh ??= new CoalescedRefresh(
-                () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(workflowSurfaceControl),
+                () => workflowSurfaceControl.Refresh(),
                 action => BeginInvoke(action));
 
             helper.SelectionHandler = ShowSelectionDialogAsync;
