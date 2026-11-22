@@ -3,6 +3,7 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Visuals;
+using VisualWorkbench.Views;
 using VisualBorder = VeloxDev.WinForms.Xaml.Visuals.Controls.Border;
 using VisualButton = VeloxDev.WinForms.Xaml.Visuals.Controls.Button;
 using VisualGrid = VeloxDev.WinForms.Xaml.Visuals.Controls.Grid;
@@ -14,6 +15,7 @@ using VisualTextBlock = VeloxDev.WinForms.Xaml.Visuals.Controls.TextBlock;
 using VisualTextBox = VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox;
 using XamlColumnDefinition = VeloxDev.WinForms.Xaml.Controls.ColumnDefinition;
 using XamlGridLength = VeloxDev.WinForms.Xaml.Controls.GridLength;
+using XamlRowDefinition = VeloxDev.WinForms.Xaml.Controls.RowDefinition;
 using XamlHorizontalAlignment = VeloxDev.WinForms.Xaml.Controls.HorizontalAlignment;
 using XamlStretch = VeloxDev.WinForms.Xaml.Controls.Stretch;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
@@ -32,13 +34,15 @@ internal static class WorkbenchContent
         page.Add(CreateTitleBar(theme, rebuild));
         page.Add(CreateCards(theme));
         page.Add(CreateColumns(theme));
+        page.Add(CreateSection(theme, "Visual XAML · v: profile", new VisualSample()));
+        page.Add(CreateStyleSection(theme));
 
         return new VisualBorder
         {
             Background = theme.WindowBackground,
             CornerRadius = 0f,
             Padding = new XamlThickness(22f, 20f),
-            Child = page,
+            Child = new VisualScrollViewer { Content = page },
         };
     }
 
@@ -61,6 +65,7 @@ internal static class WorkbenchContent
         if (rebuild is not null)
         {
             var bar = new VisualGrid();
+            bar.RowDefinitions.Add(new XamlRowDefinition { Height = XamlGridLength.Auto });
             bar.ColumnDefinitions.Add(new XamlColumnDefinition { Width = XamlGridLength.Star });
             bar.ColumnDefinitions.Add(new XamlColumnDefinition { Width = XamlGridLength.Auto });
             VisualGrid.SetColumn(stack, 0);
@@ -274,6 +279,38 @@ internal static class WorkbenchContent
         });
         stack.Add(host);
         return CreateSection(theme, "Native control host", stack);
+    }
+
+    private static VisualBorder CreateStyleSection(ThemePalette theme)
+    {
+        var buttons = new VisualStackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+        buttons.Styles.Add(new VisualStyle
+        {
+            TargetType = typeof(VisualButton),
+            Setters =
+            {
+                new VisualSetter(VisualElement.BackgroundProperty, new SolidColorBrush(theme.Accent)),
+                new VisualSetter(VisualButton.ForegroundProperty, theme.AccentForeground),
+            },
+        });
+        buttons.Add(new VisualButton { Text = "Styled A", Height = 32 });
+        buttons.Add(new VisualButton { Text = "Styled B", Height = 32 });
+
+        var stack = new VisualStackPanel { Orientation = Orientation.Vertical, Spacing = 8 };
+        stack.Styles.Add(new VisualStyle
+        {
+            TargetType = typeof(VisualTextBlock),
+            Setters =
+            {
+                new VisualSetter(VisualTextBlock.ForegroundProperty, theme.MutedForeground),
+            },
+        });
+        stack.Add(new VisualTextBlock
+        {
+            Text = "Implicit styles write at the Style priority; local values still win.",
+        });
+        stack.Add(buttons);
+        return CreateSection(theme, "Styles · implicit setters", stack);
     }
 
     private static VisualBorder CreateSection(ThemePalette theme, string header, VisualElement content)

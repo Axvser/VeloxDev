@@ -32,14 +32,21 @@ internal static class Program
         }
 
         using var form = new WorkbenchForm();
+        var scroll = ReadScrollOffset(args);
         if (capturePath is not null)
         {
             form.Shown += (_, _) => form.BeginInvoke(() =>
             {
                 try
                 {
-                    // Let the surface paint a few frames before the window is captured.
+                    // Let the surface paint and lay out before scrolling or capturing.
                     Pump(frames: 12);
+                    if (scroll > 0)
+                    {
+                        form.SetScrollOffset(scroll);
+                        Pump(frames: 4);
+                    }
+
                     Capture(form, capturePath);
                 }
                 catch (Exception exception)
@@ -55,6 +62,14 @@ internal static class Program
         }
 
         Application.Run(form);
+    }
+
+    private static float ReadScrollOffset(string[] args)
+    {
+        var index = Array.FindIndex(args, value => string.Equals(value, "--scroll", StringComparison.OrdinalIgnoreCase));
+        return index >= 0 && index + 1 < args.Length && float.TryParse(args[index + 1], out var offset)
+            ? offset
+            : 0f;
     }
 
     private static string? ReadCapturePath(string[] args)

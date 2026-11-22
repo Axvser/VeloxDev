@@ -2,6 +2,8 @@ using System.Drawing;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Visuals;
+using VisualBorder = VeloxDev.WinForms.Xaml.Visuals.Controls.Border;
+using VisualScrollViewer = VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollViewer;
 
 namespace VisualWorkbench;
 
@@ -37,6 +39,16 @@ public sealed class WorkbenchForm : Form
     // Opening on the secondary screen should not pull the user away from what they are doing there.
     /// <inheritdoc />
     protected override bool ShowWithoutActivation => true;
+
+    /// <summary>Scrolls the outer content viewport to <paramref name="offset"/>; used by capture mode.</summary>
+    /// <param name="offset">The vertical pixel offset.</param>
+    public void SetScrollOffset(float offset)
+    {
+        if (_surface.Root is VisualBorder { Child: VisualScrollViewer scroll })
+        {
+            scroll.VerticalOffset = offset;
+        }
+    }
 
     private void ToggleTheme()
     {

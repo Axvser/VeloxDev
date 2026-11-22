@@ -90,10 +90,10 @@
                        Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="14">
             <Border Width="220" Height="84" Padding="0" BorderThickness="0" Background="{DynamicResource FieldBrush}">
-              <TextBlock Text="CornerRadius 8" TextAlignment="Center" VerticalAlignment="Center" />
+              <TextBlock Text="CornerRadius 4" TextAlignment="Center" VerticalAlignment="Center" />
             </Border>
             <Border Width="220" Height="84" Padding="0" BorderThickness="0" Background="{DynamicResource FieldBrush}">
-              <TextBlock Text="ControlHeight 34" TextAlignment="Center" VerticalAlignment="Center" />
+              <TextBlock Text="ControlHeight 28" TextAlignment="Center" VerticalAlignment="Center" />
             </Border>
             <StackPanel Spacing="8" VerticalAlignment="Center">
               <Button Content="Unstyled button" Height="34" />
