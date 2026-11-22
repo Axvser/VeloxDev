@@ -63,6 +63,8 @@
 | 自绘 1px 边框 | `XamlDrawing.PaintChrome`（`Color`）或 `PaintChromeWithBrushes`（`Brush`）；环的外轮廓已经压到 -0.5 | 自己用 `pen.DrawPath` 贴 0 / 0.5 画边框 —— 右、下各少半像素，或被不透明的子控件盖住 |
 | 需要无 HWND 的控件树 / 大量节点 | `VisualSurface` + `VisualElement`（`Xaml/Visuals/`）；元素继承 `ContainerVisual`，不是 `Control` | 继续用 `Xaml/Controls/*` 每个控件一个 HWND —— 结构切换必然逐窗口上屏，节点数也被 HWND 成本吃掉 |
 | 需要原生 WinForms 控件 | `NativeControlHost` 单子窗口岛；保持矩形、轴对齐，它永远浮在视觉树上方 | 把原生控件塞进需要 Transform/Opacity/Clip 的视觉子树 —— airspace，合成与裁剪都不成立 |
+| 视觉元素要新增一个会触发重排/重绘的属性 | `WinformsProperty.Register<TOwner, T>(..., affectsMeasure/Arrange/Render)` + CLR 包装；附加属性用 `RegisterAttached` | 写成普通 auto-property —— 改了不会失效，布局/绘制停在旧值 |
+| 视觉元素绑定一个视图模型属性 | `element.Bind(Element.PropProperty, vm.GetObservable(Vm.PropProperty))`；dispose 归还该优先级层 | 直接 `PropertyChanged +=` 手写回调 —— 失去优先级/清除/多源语义 |
 | 覆盖在兄弟窗口上的装饰层 | `AdornerDecorator`/`AdornerLayer`；层为空时自动隐藏 | 自己给层铺不透明底 —— 会盖住被装饰控件 |
 | 主题切换后的原生控件 | 进程启动时 `Application.SetColorMode(...)`；干净双色用 `--light` 重启 | 运行期切 `SetColorMode` 期待已建句柄的滚动条/下拉全部重绘 |
 | 祖先在子元素上悬停 | 让子控件走 `Control` 的 OnMouseEnter/Leave；原生子控件由 `OnControlAdded` 自动挂回调 | 用子控件自己的 `IsPointerOver` 判断祖先，或依赖 WinForms 的窗口级 MouseLeave |

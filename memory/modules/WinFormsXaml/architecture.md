@@ -9,7 +9,8 @@
 
 | 文件 | 类型 | 职责 |
 |---|---|---|
-| `DependencyProperty.cs` | `DependencyProperty` / `PropertyMetadata` | `Register` / `RegisterAttached`；本地值存 `XamlControl`，附加值存按控件弱键的侧表；变更/强制回调 |
+| `DependencyProperty.cs` | `DependencyProperty` / `PropertyMetadata` | HWND 后端的属性系统：`Register` / `RegisterAttached`；本地值存 `XamlControl`，附加值存按控件弱键的侧表；变更/强制回调 |
+| `WinformsProperty.cs` | `IWinformsObject` / `WinformsObject` / `WinformsProperty<T>` | 视觉后端的 AvaloniaObject 风格属性系统：优先级层（Animation→Local→StyleTrigger→Template→Style→Inherited）、附加属性、`GetObservable`/`Bind`、按祖先解析的 `DataContext`、`INotifyPropertyChanged` |
 | `Controls/Control.cs` | `Control : System.Windows.Forms.ScrollableControl, IInputElement` | 依赖属性宿主、继承 `DataContext`、绑定、Trigger 评估、资源查找、焦点/悬停/捕获；`NameScope`/`TemplatedParent`/`GetTemplateChild`；`ContextMenu`/`ToolTip` 属性；`UpdateSource`；`Margin`/`Padding` 是 `Thickness` DP 并同步原生属性；DP 变更经 `DependencyPropertyChanged` 供 ElementName/TemplateBinding 观察 |
 | `Controls/ControlBases.cs` | `Panel` / `ScrollableControl` / `Canvas` / `UserControl` | 基础控件层：全部继承 `Control`，统一在 `VeloxDev.WinForms.Xaml.Controls`；`Panel.ZIndex` 附加属性 |
 | `Controls/Border.cs` | `Border : Control` | 通用圆角背景/边框/单子内容；`Background` / `BorderBrush` / `BorderThickness`（`Thickness`）/ `CornerRadius` / `Backdrop` |
@@ -163,7 +164,9 @@
 - 布局：`VisualElement.Measure/Arrange` 管 Margin、显式尺寸、Min/Max、对齐与 Visibility；面板在 `MeasureOverride/ArrangeOverride` 里只算内容。`Hidden` 占位不绘制，`Collapsed` 不测量不占位。
 - 输入：Surface 命中测试最深元素，事件沿 `ParentElement` 冒泡；焦点是逻辑焦点，`FocusElement` 把原生焦点留在 Surface 上，Tab 在焦点链里走。指针捕获、Enter/Leave、滚轮、文本输入都集中在 Surface。
 - `ScrollViewer` 用 `Visual.Clip` 裁视口，内容按 `VerticalOffset` 负向摆放；滚轮沿祖先链冒泡到这里。`TextBox` 自绘插入符/选区/剪贴板；IME 与无障碍未实现（需要原生 EDIT 岛或 Imm/UIA 接入）。
-- 附加属性（Grid/Dock/Canvas）是静态 `Get/Set` + `ConditionalWeakTable`，不是 `DependencyProperty`；没有 XAML/绑定接入。DP 引擎目前绑死在 `System.Windows.Forms.Control` 上，这是下一步。
+- `Visual` 继承 `WinformsObject`；视觉元素自己的属性是 `WinformsProperty<T>`（`Margin`/`Padding`/`Width`/`Height`/对齐/Visibility/Border/Background/CornerRadius 等），`VisualElement.OnPropertyChanged` 按元数据的 `AffectsMeasure/Arrange/Render` 失效。`Grid.Row`、`DockPanel.Dock`、`Canvas.Left` 也是 `RegisterAttached` 的 `WinformsProperty`，存储在各元素的同一个属性表里。
+- `DataContext` 是 inherited 属性：没有本地层时从 `ParentElement` 解析，祖先切换会向没有本地值的后代补发 `Inherited` 变更；`Bind` 写进指定优先级层，dispose 时清掉该层。
+- HWND 后端仍用 `DependencyProperty`；两套属性系统互不替换。视觉后端没有 XAML/样式引擎接入，DP 引擎仍绑在 `System.Windows.Forms.Control` 上。
 
 ## 五、验证
 
