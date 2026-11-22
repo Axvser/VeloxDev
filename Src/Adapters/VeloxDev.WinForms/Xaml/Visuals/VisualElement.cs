@@ -281,6 +281,13 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         set => SetValue(CornerRadiusProperty, value);
     }
 
+    /// <summary>A caller-facing identifier, or <see langword="null"/> when none was assigned.</summary>
+    /// <remarks>
+    /// The visual backend has no <c>NameScope</c> for ordinary elements, so this is a plain label used by the gallery
+    /// inspector and tree dumps. Template parts are tracked by <see cref="VisualNameScope"/> instead.
+    /// </remarks>
+    public string? Name { get; set; }
+
     /// <summary>The inherited data context used by bindings and templates.</summary>
     public object? DataContext
     {

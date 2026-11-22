@@ -337,6 +337,12 @@ internal sealed class XamlCompiler
             }
         }
 
+        if (IsVisualElement(type) && !string.IsNullOrEmpty(name))
+        {
+            // 普通视觉元素没有 NameScope；Name 只是给检查器/树导出用的标签，模板部件另走 VisualNameScope。
+            _current.Line($"{expression}.Name = {SyntaxHelpers.Quote(name!)};");
+        }
+
         foreach (var child in element.Elements())
         {
             if (IsResourcesProperty(child))

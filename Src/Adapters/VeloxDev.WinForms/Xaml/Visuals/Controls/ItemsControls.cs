@@ -34,6 +34,12 @@ public class ItemsControl : Panel
             nameof(ItemFactory), typeof(Func<object, VisualElement>), typeof(ItemsControl),
             new PropertyMetadata(null) { AffectsMeasure = true, AffectsRender = false });
 
+    /// <summary>The property read from each item for its text; empty uses <see cref="object.ToString"/>.</summary>
+    public static readonly DependencyProperty DisplayMemberPathProperty =
+        DependencyProperty.Register(
+            nameof(DisplayMemberPath), typeof(string), typeof(ItemsControl),
+            new PropertyMetadata(string.Empty) { AffectsMeasure = true, AffectsRender = false });
+
     private readonly List<object?> _sourceItems = [];
     private readonly List<VisualElement> _items = [];
     private INotifyCollectionChanged? _observed;
@@ -56,6 +62,13 @@ public class ItemsControl : Panel
     {
         get => (Func<object, VisualElement>?)GetValue(ItemFactoryProperty);
         set => SetValue(ItemFactoryProperty, value);
+    }
+
+    /// <summary>The property read from each item for its text; empty uses <see cref="object.ToString"/>.</summary>
+    public string DisplayMemberPath
+    {
+        get => (string)GetValue(DisplayMemberPathProperty)!;
+        set => SetValue(DisplayMemberPathProperty, value ?? string.Empty);
     }
 
     /// <summary>The realized item visuals, in source order.</summary>
@@ -89,7 +102,7 @@ public class ItemsControl : Panel
             ? factory(item!)
             : new TextBlock
             {
-                Text = item?.ToString() ?? string.Empty,
+                Text = FormatItem(item),
                 Padding = new XamlThickness(8f, 4f),
             };
 
@@ -196,7 +209,8 @@ public class ItemsControl : Panel
             Observe(e.OldValue as INotifyCollectionChanged, e.NewValue as INotifyCollectionChanged);
             RebuildItems();
         }
-        else if (ReferenceEquals(e.Property, ItemFactoryProperty))
+        else if (ReferenceEquals(e.Property, ItemFactoryProperty)
+                 || ReferenceEquals(e.Property, DisplayMemberPathProperty))
         {
             RebuildItems();
         }
@@ -211,6 +225,25 @@ public class ItemsControl : Panel
         }
 
         base.Dispose(disposing);
+    }
+
+    private string FormatItem(object? item)
+    {
+        if (item is null)
+        {
+            return string.Empty;
+        }
+
+        if (!string.IsNullOrEmpty(DisplayMemberPath))
+        {
+            var property = item.GetType().GetProperty(DisplayMemberPath);
+            if (property?.GetValue(item) is { } value)
+            {
+                return value.ToString() ?? string.Empty;
+            }
+        }
+
+        return item.ToString() ?? string.Empty;
     }
 
     private void RebuildItems()

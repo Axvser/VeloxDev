@@ -148,17 +148,18 @@ public class VisualPopup : VisualElement
     /// <summary>Recomputes the popup's position and size from the target and the child's desired size.</summary>
     public void Reposition()
     {
-        if (!_open || _surface is null || Child is not { } child)
+        if (!_open || _surface is null)
         {
             return;
         }
 
         var client = _surface.ClientSize;
         var available = new Size(Math.Max(0, client.Width), Math.Max(0, client.Height));
-        var desired = child.Measure(available);
+        // 自绘弹层（菜单）没有 Child，Measure 走它自己的 MeasureOverride；有 Child 时由基类量 Child + Padding。
+        var desired = Measure(available);
         var target = PlacementTarget?.AbsoluteBounds ?? RectangleF.Empty;
-        var width = Math.Max(1f, Math.Max(target.Width, desired.Width + Padding.Horizontal));
-        var height = Math.Max(1f, desired.Height + Padding.Vertical);
+        var width = Math.Max(1f, Math.Max(target.Width, desired.Width));
+        var height = Math.Max(1f, desired.Height);
 
         var (x, y) = Placement switch
         {
@@ -318,7 +319,7 @@ public class VisualPopup : VisualElement
         }
 
         var surface = PlacementTarget?.Surface ?? Surface;
-        if (surface is null || Child is null)
+        if (surface is null)
         {
             return;
         }
@@ -349,6 +350,11 @@ public class VisualPopup : VisualElement
 
         _open = false;
         _surface?.UnregisterPopup(this);
+        if (_surface?.FocusedElement is { } focused && IsInside(focused))
+        {
+            _surface.FocusElement(null);
+        }
+
         if (Child is { } child)
         {
             child.ClearValue(VisualElement.DataContextProperty, BindingPriority.Inherited);
@@ -379,5 +385,19 @@ public class VisualPopup : VisualElement
         }
 
         Add(child);
+    }
+
+    // 关闭时把落在弹层里的逻辑焦点交还出去；调用方（ComboBox、菜单）决定接下来聚焦谁。
+    private bool IsInside(VisualElement element)
+    {
+        for (var current = element; current is not null; current = current.ParentElement)
+        {
+            if (ReferenceEquals(current, this))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
