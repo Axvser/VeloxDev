@@ -75,6 +75,10 @@ public sealed class VisualTrigger
     /// <summary>The value that activates the trigger.</summary>
     public object? Value { get; set; }
 
+    /// <summary>The named template part the setters write to, or <see langword="null"/> for the templated control.</summary>
+    /// <remarks>Only <see cref="VisualControlTemplate"/> triggers honour this name; style triggers always write the styled element.</remarks>
+    public string? TargetName { get; set; }
+
     /// <summary>The setters applied while <see cref="Property"/> equals <see cref="Value"/>.</summary>
     public IList<VisualSetter> Setters { get; } = new Collection<VisualSetter>();
 
@@ -113,6 +117,13 @@ public sealed class VisualStyle
 
     /// <summary>The triggers evaluated while the style is active.</summary>
     public IList<VisualTrigger> Triggers { get; } = new Collection<VisualTrigger>();
+
+    /// <summary>The control template created while the style is active, or <see langword="null"/>.</summary>
+    /// <remarks>
+    /// Only a <see cref="Controls.ContentControl"/> applies a style template; other elements ignore it. A template
+    /// assigned directly to <see cref="Controls.ContentControl.Template"/> wins over this one.
+    /// </remarks>
+    public VisualControlTemplate? Template { get; set; }
 
     /// <summary>Returns whether <see cref="TargetType"/> accepts <paramref name="target"/>.</summary>
     /// <param name="target">The object the style would be applied to.</param>
@@ -229,6 +240,22 @@ internal sealed class VisualStyleApplication
         _style = style;
         _triggers.Clear();
         _triggerProperties.Clear();
+
+        VisualControlTemplate? template = null;
+        if (style is not null)
+        {
+            // 模板跟 setter 一样按 BasedOn 链 base-first 展开，派生样式最后声明的那一个生效。
+            foreach (var link in style.Flatten())
+            {
+                if (link.Template is not null)
+                {
+                    template = link.Template;
+                }
+            }
+        }
+
+        _element.ApplyStyleTemplate(template);
+
         if (style is null)
         {
             return;

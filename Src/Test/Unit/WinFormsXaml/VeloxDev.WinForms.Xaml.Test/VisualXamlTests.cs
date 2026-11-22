@@ -120,7 +120,7 @@ public sealed class VisualXamlTests
     }
 
     [TestMethod]
-    public void VisualXaml_MarkupExtensionsAreReported()
+    public void VisualXaml_MarkupExtensionsCompileAgainstVisualDependencyProperties()
     {
         const string source = """
             namespace Probe;
@@ -141,24 +141,25 @@ public sealed class VisualXamlTests
             </v:StackPanel>
             """;
 
-        var (run, _) = GeneratorProbe.RunAndCompile(
+        var (run, output) = GeneratorProbe.RunAndCompile(
             [new XamlFileGenerator()],
             source,
             "VisualXamlMarkupProbe",
             new InMemoryAdditionalText("ProbeVisualView.xaml", xaml));
 
-        var diagnostics = run.Diagnostics
-            .Where(static diagnostic => diagnostic.Id == "VELOX_XAML004")
+        Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
+        var errors = output.GetDiagnostics()
+            .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
             .ToArray();
-        Assert.HasCount(2, diagnostics, GeneratorProbe.Describe(run.Diagnostics));
-        foreach (var diagnostic in diagnostics)
-        {
-            StringAssert.Contains(diagnostic.GetMessage(), "visual backend");
-        }
+        Assert.IsEmpty(errors, GeneratorProbe.Describe(errors));
+
+        var generated = run.GeneratedText();
+        StringAssert.Contains(generated, "VisualBindingOperations.Bind(");
+        StringAssert.Contains(generated, "VisualResourceLookup");
     }
 
     [TestMethod]
-    public void VisualXaml_ResourcesAreReported()
+    public void VisualXaml_ResourcesAreStoredInTheVisualDictionary()
     {
         const string source = """
             namespace Probe;
@@ -180,14 +181,19 @@ public sealed class VisualXamlTests
             </v:StackPanel>
             """;
 
-        var (run, _) = GeneratorProbe.RunAndCompile(
+        var (run, output) = GeneratorProbe.RunAndCompile(
             [new XamlFileGenerator()],
             source,
             "VisualXamlResourceProbe",
             new InMemoryAdditionalText("ProbeVisualView.xaml", xaml));
 
-        var diagnostic = AssertSingle(run, "VELOX_XAML010");
-        StringAssert.Contains(diagnostic.GetMessage(), "cannot own resources");
+        Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
+        var errors = output.GetDiagnostics()
+            .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray();
+        Assert.IsEmpty(errors, GeneratorProbe.Describe(errors));
+
+        StringAssert.Contains(run.GeneratedText(), ".Resources[\"Accent\"] = ");
     }
 
     private static Diagnostic AssertSingle(GeneratorDriverRunResult result, string id)

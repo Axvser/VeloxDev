@@ -322,8 +322,16 @@ internal sealed class XamlCompiler
             && _scopeExpression is not null
             && (inTemplate || expression == name))
         {
-            _current.Line(
-                $"{SyntaxHelpers.Fqn("XamlRuntime")}.RegisterName({_scopeExpression}, {SyntaxHelpers.Quote(name!)}, {expression});");
+            if (IsVisualElement(type))
+            {
+                // 视觉模板的 x:Name 是模板部件，不是字段；每实例一个 VisualNameScope，GetTemplateChild 从这里取。
+                _current.Line($"{_scopeExpression}.Register({SyntaxHelpers.Quote(name!)}, {expression});");
+            }
+            else
+            {
+                _current.Line(
+                    $"{SyntaxHelpers.Fqn("XamlRuntime")}.RegisterName({_scopeExpression}, {SyntaxHelpers.Quote(name!)}, {expression});");
+            }
         }
 
         foreach (var child in element.Elements())
@@ -551,10 +559,7 @@ internal sealed class XamlCompiler
             {
                 if (isVisual)
                 {
-                    Report(
-                        Diagnostics.UnsupportedConstruct,
-                        attribute,
-                        $"A style is not supported on the visual backend; '{type.Name}' accepts literal property values only.");
+                    EmitVisualStyleAttribute(attribute, targetExpression);
                     continue;
                 }
 
@@ -597,12 +602,9 @@ internal sealed class XamlCompiler
 
             if (property is not null)
             {
-                if (isVisual && TryParseMarkup(attribute.Value, out var extension, out _, out _))
+                if (isVisual)
                 {
-                    Report(
-                        Diagnostics.UnsupportedConstruct,
-                        attribute,
-                        $"Markup extension '{extension}' is not supported on the visual backend; use a literal value.");
+                    EmitVisualPropertyValue(attribute, targetExpression, property);
                     continue;
                 }
 
@@ -1428,13 +1430,72 @@ internal sealed class XamlCompiler
             return;
         }
 
-        if (TryParseMarkup(attribute.Value, out var extension, out _, out _))
+        if (TryParseMarkup(attribute.Value, out var extension, out var arguments, out var positional))
         {
-            Report(
-                Diagnostics.UnsupportedConstruct,
-                attribute,
-                $"Markup extension '{extension}' is not supported on a visual attached property; use a literal value.");
-            return;
+            switch (extension)
+            {
+                case "x:Null":
+                case "Null":
+                    _current.Line($"{targetExpression}.SetValue({dependencyProperty}, null);");
+                    return;
+
+                case "Binding":
+                case "TemplateBinding":
+                    var bindingExpression = BuildBindingExpression(
+                        attribute,
+                        valueType,
+                        arguments,
+                        positional,
+                        templateBinding: extension == "TemplateBinding",
+                        allowTwoWay: true);
+                    if (bindingExpression is not null)
+                    {
+                        _current.Line(
+                            $"{SyntaxHelpers.Fqn("VisualBindingOperations")}.Bind({targetExpression}, {dependencyProperty}, {bindingExpression});");
+                    }
+
+                    return;
+
+                case "StaticResource":
+                    var key = arguments.TryGetValue("Key", out var explicitKey) ? explicitKey : positional;
+                    if (string.IsNullOrEmpty(key))
+                    {
+                        Report(Diagnostics.UnsupportedResource, attribute, "A StaticResource reference needs a key.");
+                        return;
+                    }
+
+                    var resourceType = valueType is null ? "object" : SyntaxHelpers.TypeName(valueType);
+                    _current.Line(
+                        $"{targetExpression}.SetValue({dependencyProperty}, "
+                        + $"{VisualFqn("VisualResourceLookup")}.Get<{resourceType}>({targetExpression}, {SyntaxHelpers.Quote(key!) }));");
+                    return;
+
+                case "DynamicResource":
+                case "x:DynamicResource":
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        attribute,
+                        "DynamicResource is not implemented on the visual backend; use StaticResource.");
+                    return;
+
+                case "x:Static":
+                    var staticExpression = CreateStaticExpression(
+                        attribute,
+                        positional ?? (arguments.TryGetValue("Member", out var member) ? member : null));
+                    if (staticExpression is not null)
+                    {
+                        _current.Line($"{targetExpression}.SetValue({dependencyProperty}, {staticExpression});");
+                    }
+
+                    return;
+
+                default:
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        attribute,
+                        $"Markup extension '{extension}' is not supported on a visual attached property.");
+                    return;
+            }
         }
 
         var valueExpression = valueType is null
@@ -2844,17 +2905,24 @@ internal sealed class XamlCompiler
 
         if (memberName == "Resources")
         {
-            if (isVisual)
-            {
-                Report(
-                    Diagnostics.UnsupportedResource,
-                    propertyElement,
-                    $"'{ownerType.Name}' is a visual element and cannot own resources; use literal property values.");
-                return;
-            }
-
             EmitResources(propertyElement, ownerExpression, ownerType);
             return;
+        }
+
+        if (isVisual && memberName == "Template")
+        {
+            var templateElement = propertyElement.Elements()
+                .FirstOrDefault(child => ChildMemberName(child) is "ControlTemplate" or "VisualControlTemplate");
+            if (templateElement is not null)
+            {
+                var template = EmitVisualControlTemplate(templateElement, key: null);
+                if (template is not null)
+                {
+                    _current.Line($"{ownerExpression}.Template = {template};");
+                }
+
+                return;
+            }
         }
 
         if (memberName == "Controls")
@@ -2953,6 +3021,12 @@ internal sealed class XamlCompiler
 
     private void EmitResources(XElement propertyElement, string ownerExpression, ITypeSymbol ownerType)
     {
+        if (IsVisualElement(ownerType))
+        {
+            EmitVisualResources(propertyElement, ownerExpression, ownerType);
+            return;
+        }
+
         if (!IsXamlControl(ownerType))
         {
             Report(
@@ -3008,6 +3082,570 @@ internal sealed class XamlCompiler
         foreach (var line in deferredStyleLinks)
         {
             _current.Line(line);
+        }
+    }
+
+    // 视觉资源字典与 HWND 版同形，但资源类型是 VisualStyle / VisualControlTemplate；键仍走 x:Key。
+    private void EmitVisualResources(XElement propertyElement, string ownerExpression, ITypeSymbol ownerType)
+    {
+        var deferred = new List<string>();
+        foreach (var resource in FlattenResources(propertyElement))
+        {
+            var key = resource.Attribute(XName.Get("Key", SyntaxHelpers.XamlNamespace))?.Value;
+            var localName = resource.Name.LocalName;
+
+            if (localName is "Style" or "VisualStyle")
+            {
+                EmitVisualStyleResource(resource, key, ownerExpression, deferred);
+                continue;
+            }
+
+            if (localName is "ControlTemplate" or "VisualControlTemplate")
+            {
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    Report(
+                        Diagnostics.UnsupportedResource,
+                        resource,
+                        "Every visual ControlTemplate resource needs an x:Key.");
+                    continue;
+                }
+
+                var template = EmitVisualControlTemplate(resource, key);
+                if (template is not null)
+                {
+                    _current.Line($"{ownerExpression}.Resources[{SyntaxHelpers.Quote(key!)}] = {template};");
+                }
+
+                continue;
+            }
+
+            if (localName == "DataTemplate")
+            {
+                Report(
+                    Diagnostics.UnsupportedResource,
+                    resource,
+                    "DataTemplate builds HWND controls and is not supported on the visual backend.");
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                Report(Diagnostics.UnsupportedResource, resource, "Every visual resource needs an x:Key.");
+                continue;
+            }
+
+            if (!TryCreateResourceExpression(resource, out var expression))
+            {
+                continue;
+            }
+
+            _current.Line($"{ownerExpression}.Resources[{SyntaxHelpers.Quote(key!)}] = {expression};");
+        }
+
+        foreach (var line in deferred)
+        {
+            _current.Line(line);
+        }
+    }
+
+    private void EmitVisualStyleResource(
+        XElement styleElement,
+        string? key,
+        string ownerExpression,
+        List<string> deferred)
+    {
+        ITypeSymbol? targetType = null;
+        var targetTypeAttribute = styleElement.Attribute("TargetType");
+        if (targetTypeAttribute is not null)
+        {
+            targetType = ResolveVisualTypeReference(targetTypeAttribute.Value, styleElement);
+            if (targetType is null)
+            {
+                return;
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(key))
+        {
+            Report(
+                Diagnostics.InvalidStyleTargetType,
+                styleElement,
+                "An implicit visual style needs a TargetType.");
+            return;
+        }
+
+        var styleVariable = NextVariable();
+        _current.Line($"var {styleVariable} = new {VisualFqn("VisualStyle")}();");
+        if (targetType is not null)
+        {
+            _current.Line($"{styleVariable}.TargetType = typeof({SyntaxHelpers.TypeName(targetType)});");
+        }
+
+        var basedOn = styleElement.Attribute("BasedOn");
+        if (basedOn is not null)
+        {
+            if (TryReadStaticResourceKey(basedOn.Value, out var baseKey))
+            {
+                deferred.Add(
+                    $"{styleVariable}.BasedOn = {VisualFqn("VisualResourceLookup")}"
+                    + $".Get<{VisualFqn("VisualStyle")}>({ownerExpression}, {SyntaxHelpers.Quote(baseKey)});");
+            }
+            else
+            {
+                Report(Diagnostics.UnsupportedConstruct, basedOn, "BasedOn needs a {StaticResource Key}.");
+            }
+        }
+
+        foreach (var child in styleElement.Elements())
+        {
+            switch (ChildMemberName(child))
+            {
+                case "Setters":
+                    EmitVisualSetters(child, targetType, styleVariable);
+                    break;
+                case "Triggers":
+                    EmitVisualTriggers(child, targetType, styleVariable);
+                    break;
+                case "Template":
+                    EmitVisualStyleTemplate(child, targetType, styleVariable);
+                    break;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            _current.Line($"{ownerExpression}.Styles.Add({styleVariable});");
+        }
+        else
+        {
+            _current.Line($"{ownerExpression}.Resources[{SyntaxHelpers.Quote(key!)}] = {styleVariable};");
+        }
+    }
+
+    private ITypeSymbol? ResolveVisualTypeReference(string rawValue, XElement context)
+    {
+        var text = rawValue.Trim();
+        if (TryParseMarkup(text, out var extension, out var arguments, out var positional))
+        {
+            if (extension is not ("x:Type" or "Type"))
+            {
+                Report(Diagnostics.UnsupportedValue, context, text, "Type");
+                return null;
+            }
+
+            text = arguments.TryGetValue("TypeName", out var explicitType) ? explicitType : positional ?? string.Empty;
+        }
+
+        var resolved = ResolveTypeReference(text, context);
+        if (resolved is not null && IsVisualElement(resolved))
+        {
+            return resolved;
+        }
+
+        // 视觉类型来自 .Visuals.Controls（控件）或 .Visuals（样式/模板/辅助类型）；不带前缀时先按这两处找。
+        var name = text.Contains(':') ? text.Substring(text.IndexOf(':') + 1) : text;
+        var direct = _compilation.GetTypeByMetadataName("VeloxDev.WinForms.Xaml.Visuals.Controls." + name)
+            ?? _compilation.GetTypeByMetadataName("VeloxDev.WinForms.Xaml.Visuals." + name);
+        if (direct is not null && IsVisualElement(direct))
+        {
+            return direct;
+        }
+
+        Report(Diagnostics.InvalidStyleTargetType, context, $"'{text}' is not a visual element type.");
+        return null;
+    }
+
+    private void EmitVisualSetters(XElement settersElement, ITypeSymbol? targetType, string ownerVariable)
+    {
+        foreach (var setterElement in settersElement.Elements())
+        {
+            if (ChildMemberName(setterElement) is not ("Setter" or "VisualSetter"))
+            {
+                continue;
+            }
+
+            if (!TryResolveVisualProperty(setterElement, targetType, out var property))
+            {
+                continue;
+            }
+
+            if (!TryGetDependencyPropertyReference(property, out var dependencyProperty))
+            {
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    setterElement,
+                    $"'{property.Name}' is not a dependency property and cannot be styled on the visual backend.");
+                continue;
+            }
+
+            var valueAttribute = setterElement.Attribute("Value");
+            var valueExpression = valueAttribute is null
+                ? "null"
+                : CreateVisualSetterValue(valueAttribute, property);
+            if (valueExpression is null)
+            {
+                continue;
+            }
+
+            _current.Line(
+                $"{ownerVariable}.Setters.Add(new {VisualFqn("VisualSetter")}({dependencyProperty}, {valueExpression}));");
+        }
+    }
+
+    private string? CreateVisualSetterValue(XAttribute valueAttribute, IPropertySymbol property)
+    {
+        if (TryParseMarkup(valueAttribute.Value, out var extension, out var arguments, out var positional))
+        {
+            switch (extension)
+            {
+                case "x:Null":
+                case "Null":
+                    return "null";
+
+                case "x:Static":
+                    return CreateStaticExpression(
+                        valueAttribute,
+                        positional ?? (arguments.TryGetValue("Member", out var member) ? member : null));
+
+                case "StaticResource":
+                    Report(
+                        Diagnostics.UnsupportedResource,
+                        valueAttribute,
+                        "A StaticResource value in a visual setter is not implemented; declare the value inline.");
+                    return null;
+
+                default:
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        valueAttribute,
+                        $"Markup extension '{extension}' is not supported in a visual setter value.");
+                    return null;
+            }
+        }
+
+        return CreateLiteralExpression(property.Type, valueAttribute.Value, valueAttribute);
+    }
+
+    private bool TryResolveVisualProperty(
+        XElement element,
+        ITypeSymbol? targetType,
+        out IPropertySymbol property)
+    {
+        property = null!;
+        var raw = element.Attribute("Property")?.Value;
+        if (raw is null || string.IsNullOrWhiteSpace(raw))
+        {
+            Report(Diagnostics.UnsupportedConstruct, element, "A visual setter or trigger needs a Property.");
+            return false;
+        }
+
+        var text = raw.Trim();
+        var ownerType = targetType;
+        var memberName = text;
+        var dot = text.LastIndexOf('.');
+        if (dot > 0)
+        {
+            ownerType = ResolveVisualTypeReference(text.Substring(0, dot), element);
+            if (ownerType is null)
+            {
+                return false;
+            }
+
+            memberName = text.Substring(dot + 1);
+        }
+
+        if (ownerType is null)
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                element,
+                "A property name needs a style TargetType, or write it as 'Owner.Property'.");
+            return false;
+        }
+
+        var resolved = FindProperty(ownerType, memberName);
+        if (resolved is null)
+        {
+            Report(Diagnostics.UnknownMember, element, ownerType.Name, memberName);
+            return false;
+        }
+
+        property = resolved;
+        return true;
+    }
+
+    private void EmitVisualTriggers(XElement triggersElement, ITypeSymbol? targetType, string ownerVariable)
+    {
+        foreach (var triggerElement in triggersElement.Elements())
+        {
+            if (ChildMemberName(triggerElement) is not ("Trigger" or "VisualTrigger"))
+            {
+                continue;
+            }
+
+            if (!TryResolveVisualProperty(triggerElement, targetType, out var property))
+            {
+                continue;
+            }
+
+            if (!TryGetDependencyPropertyReference(property, out var dependencyProperty))
+            {
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    triggerElement,
+                    $"'{property.Name}' is not a dependency property and cannot drive a visual trigger.");
+                continue;
+            }
+
+            var valueExpression = "null";
+            var valueAttribute = triggerElement.Attribute("Value");
+            if (valueAttribute is not null)
+            {
+                valueExpression = CreateVisualSetterValue(valueAttribute, property);
+                if (valueExpression is null)
+                {
+                    continue;
+                }
+            }
+
+            var targetName = triggerElement.Attribute("TargetName")?.Value;
+            var initializer = string.IsNullOrWhiteSpace(targetName)
+                ? string.Empty
+                : $" {{ TargetName = {SyntaxHelpers.Quote(targetName!)} }}";
+            var triggerVariable = NextVariable();
+            _current.Line(
+                $"var {triggerVariable} = new {VisualFqn("VisualTrigger")}({dependencyProperty}, {valueExpression}){initializer};");
+
+            foreach (var child in triggerElement.Elements())
+            {
+                if (ChildMemberName(child) == "Setters")
+                {
+                    EmitVisualSetters(child, targetType, triggerVariable);
+                }
+            }
+
+            _current.Line($"{ownerVariable}.Triggers.Add({triggerVariable});");
+        }
+    }
+
+    private void EmitVisualStyleTemplate(XElement propertyElement, ITypeSymbol? targetType, string styleVariable)
+    {
+        var templateElement = propertyElement.Elements()
+            .FirstOrDefault(child => ChildMemberName(child) is "ControlTemplate" or "VisualControlTemplate");
+        if (templateElement is null)
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                propertyElement,
+                "Style.Template needs one ControlTemplate element.");
+            return;
+        }
+
+        var template = EmitVisualControlTemplate(templateElement, key: null, inheritedTargetType: targetType);
+        if (template is not null)
+        {
+            _current.Line($"{styleVariable}.Template = {template};");
+        }
+    }
+
+    private string? EmitVisualControlTemplate(
+        XElement templateElement,
+        string? key,
+        ITypeSymbol? inheritedTargetType = null)
+    {
+        if (_templateDepth > 0)
+        {
+            Report(Diagnostics.UnsupportedConstruct, templateElement, "Nested visual ControlTemplates are not supported.");
+            return null;
+        }
+
+        var content = templateElement.Elements().FirstOrDefault(child => !IsPropertyElement(child));
+        if (content is null)
+        {
+            Report(Diagnostics.UnsupportedConstruct, templateElement, "A visual ControlTemplate needs one root element.");
+            return null;
+        }
+
+        var type = ResolveElementType(content);
+        if (type is null || !IsVisualElement(type))
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                content,
+                "A visual ControlTemplate root must be a visual element.");
+            return null;
+        }
+
+        ITypeSymbol? targetType = null;
+        var targetTypeAttribute = templateElement.Attribute("TargetType");
+        if (targetTypeAttribute is not null)
+        {
+            targetType = ResolveVisualTypeReference(targetTypeAttribute.Value, templateElement);
+            if (targetType is null)
+            {
+                return null;
+            }
+        }
+        else
+        {
+            targetType = inheritedTargetType;
+        }
+
+        var methodName = "CreateVisualControlTemplate_"
+            + SyntaxHelpers.SanitizeIdentifier(string.IsNullOrWhiteSpace(key) ? "Inline" + _templateNames.Count : key!);
+        if (!_templateNames.Add(methodName))
+        {
+            Report(Diagnostics.DuplicateName, templateElement, key ?? methodName, _owner.Name);
+            return null;
+        }
+
+        _helpers.Open(
+            $"private {VisualFqn("VisualElement")} {methodName}({VisualFqn("VisualNameScope")} __xamlScope)");
+        var previous = _current;
+        var previousScope = _scopeExpression;
+        _current = _helpers;
+        _templateDepth++;
+        _scopeExpression = "__xamlScope";
+        string expression;
+        try
+        {
+            expression = EmitControl(content, type, null);
+        }
+        finally
+        {
+            _templateDepth--;
+            _scopeExpression = previousScope;
+            _current = previous;
+        }
+
+        _helpers.Line($"return {expression};");
+        _helpers.Close();
+
+        var templateVariable = NextVariable();
+        _current.Line(
+            $"var {templateVariable} = new {VisualFqn("VisualControlTemplate")}(__scope => this.{methodName}(__scope));");
+        if (targetType is not null)
+        {
+            _current.Line($"{templateVariable}.TargetType = typeof({SyntaxHelpers.TypeName(targetType)});");
+        }
+
+        foreach (var child in templateElement.Elements().Where(IsPropertyElement))
+        {
+            if (ChildMemberName(child) == "Triggers")
+            {
+                EmitVisualTriggers(child, targetType, templateVariable);
+            }
+        }
+
+        return templateVariable;
+    }
+
+    private void EmitVisualStyleAttribute(XAttribute attribute, string targetExpression)
+    {
+        if (!TryReadStaticResourceKey(attribute.Value, out var key))
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                attribute,
+                "A visual Style supports only {StaticResource Key}.");
+            return;
+        }
+
+        _current.Line(
+            $"{targetExpression}.Style = {VisualFqn("VisualResourceLookup")}"
+            + $".Get<{VisualFqn("VisualStyle")}>({targetExpression}, {SyntaxHelpers.Quote(key)});");
+    }
+
+    private void EmitVisualPropertyValue(XAttribute attribute, string targetExpression, IPropertySymbol property)
+    {
+        if (property.SetMethod is null)
+        {
+            Report(Diagnostics.UnsupportedConstruct, attribute, $"'{property.Name}' is read-only in XAML.");
+            return;
+        }
+
+        if (!TryParseMarkup(attribute.Value, out var extension, out var arguments, out var positional))
+        {
+            var literal = CreateLiteralExpression(property.Type, attribute.Value, attribute);
+            if (literal is not null)
+            {
+                _current.Line($"{targetExpression}.{property.Name} = {literal};");
+            }
+
+            return;
+        }
+
+        switch (extension)
+        {
+            case "x:Null":
+            case "Null":
+                _current.Line($"{targetExpression}.{property.Name} = null;");
+                return;
+
+            case "Binding":
+            case "TemplateBinding":
+                if (!TryGetDependencyPropertyReference(property, out var dependencyProperty))
+                {
+                    Report(
+                        Diagnostics.UnsupportedConstruct,
+                        attribute,
+                        $"A binding needs a dependency property; '{property.ContainingType.Name}.{property.Name}' is a CLR property.");
+                    return;
+                }
+
+                var bindingExpression = BuildBindingExpression(
+                    attribute,
+                    property.Type,
+                    arguments,
+                    positional,
+                    templateBinding: extension == "TemplateBinding",
+                    allowTwoWay: true);
+                if (bindingExpression is not null)
+                {
+                    _current.Line(
+                        $"{SyntaxHelpers.Fqn("VisualBindingOperations")}.Bind({targetExpression}, {dependencyProperty}, {bindingExpression});");
+                }
+
+                return;
+
+            case "StaticResource":
+                var key = arguments.TryGetValue("Key", out var explicitKey) ? explicitKey : positional;
+                if (string.IsNullOrEmpty(key))
+                {
+                    Report(Diagnostics.UnsupportedResource, attribute, "A StaticResource reference needs a key.");
+                    return;
+                }
+
+                _current.Line(
+                    $"{targetExpression}.{property.Name} = {VisualFqn("VisualResourceLookup")}"
+                    + $".Get<{SyntaxHelpers.TypeName(property.Type)}>({targetExpression}, {SyntaxHelpers.Quote(key!)});");
+                return;
+
+            case "DynamicResource":
+            case "x:DynamicResource":
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    attribute,
+                    "DynamicResource is not implemented on the visual backend; use StaticResource.");
+                return;
+
+            case "x:Static":
+                var staticExpression = CreateStaticExpression(
+                    attribute,
+                    positional ?? (arguments.TryGetValue("Member", out var member) ? member : null));
+                if (staticExpression is not null)
+                {
+                    _current.Line($"{targetExpression}.{property.Name} = {staticExpression};");
+                }
+
+                return;
+
+            default:
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    attribute,
+                    $"Markup extension '{extension}' is not supported on the visual backend.");
+                return;
         }
     }
 
@@ -3939,6 +4577,8 @@ internal sealed class XamlCompiler
 
     private static bool IsVisualElement(ITypeSymbol type)
         => SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.VisualElementMetadataName);
+
+    private static string VisualFqn(string simpleName) => $"global::VeloxDev.WinForms.Xaml.Visuals.{simpleName}";
 
     private static bool CanAssign(ITypeSymbol from, ITypeSymbol to)
     {

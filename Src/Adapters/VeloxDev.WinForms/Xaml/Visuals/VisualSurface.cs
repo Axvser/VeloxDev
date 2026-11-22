@@ -31,6 +31,7 @@ public class VisualSurface : System.Windows.Forms.Control
     private readonly Dictionary<NativeControlHost, System.Windows.Forms.Control> _nativeChildren = [];
     private readonly HashSet<NativeControlHost> _placedNative = [];
     private readonly VisualStyleCollection _styles = new();
+    private readonly ResourceDictionary _resources = new();
     private MouseButtons _buttons;
     private bool _layoutValid;
     private Size _layoutSize;
@@ -60,6 +61,9 @@ public class VisualSurface : System.Windows.Forms.Control
     /// re-resolved whenever this collection changes or the root is assigned.
     /// </remarks>
     public VisualStyleCollection Styles => _styles;
+
+    /// <summary>Resources offered to every element in this surface's tree after its own and its ancestors' dictionaries.</summary>
+    public ResourceDictionary Resources => _resources;
 
     /// <summary>The root element painted by this surface.</summary>
     public VisualElement? Root

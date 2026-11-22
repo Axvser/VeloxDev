@@ -140,6 +140,11 @@ internal sealed class VisualBindingExpression : IDisposable
             return _target;
         }
 
+        if (_binding.RelativeSource is { Mode: RelativeSourceMode.TemplatedParent })
+        {
+            return (_target as VisualElement)?.TemplatedParent;
+        }
+
         return (_target as VisualElement)?.DataContext;
     }
 
@@ -153,6 +158,19 @@ internal sealed class VisualBindingExpression : IDisposable
         }
 
         if (ReferenceEquals(e.Property, VisualElement.DataContextProperty))
+        {
+            if (_binding.Mode == BindingMode.OneTime)
+            {
+                return;
+            }
+
+            AttachSource();
+            UpdateTarget();
+            return;
+        }
+
+        // 模板根先建好绑定、后拿到 TemplatedParent；模板字段变化时必须重挂一次源，TemplateBinding 才不会永远为空。
+        if (ReferenceEquals(e.Property, VisualElement.TemplatedParentProperty))
         {
             if (_binding.Mode == BindingMode.OneTime)
             {

@@ -129,6 +129,11 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         nameof(DataContext), typeof(object), typeof(VisualElement),
         new PropertyMetadata(null) { Inherits = true, AffectsRender = false });
 
+    /// <summary>The control whose template created this element, or <see langword="null"/> outside a template.</summary>
+    public static readonly DependencyProperty TemplatedParentProperty = DependencyProperty.Register(
+        nameof(TemplatedParent), typeof(VisualElement), typeof(VisualElement),
+        new PropertyMetadata(null) { AffectsRender = false });
+
     private bool _measureValid;
     private Size _measureAvailable;
     private Size _desiredSize;
@@ -139,6 +144,8 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     private VisualStyle? _implicitStyle;
     private VisualStyleApplication? _styleApplication;
     private VisualStyleCollection? _styles;
+    private ResourceDictionary? _resources;
+    private VisualNameScope? _templateScope;
 
     /// <summary>The outer spacing around this element.</summary>
     public XamlThickness Margin
@@ -280,6 +287,21 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         get => GetValue(DataContextProperty);
         set => SetValue(DataContextProperty, value);
     }
+
+    /// <summary>The control whose template created this element, or <see langword="null"/> outside a template.</summary>
+    public VisualElement? TemplatedParent
+    {
+        get => (VisualElement?)GetValue(TemplatedParentProperty);
+        set => SetValue(TemplatedParentProperty, value);
+    }
+
+    /// <summary>Resources offered to this element and its descendants by name.</summary>
+    /// <remarks>
+    /// A lookup checks this dictionary first, then each ancestor's, then <see cref="VisualSurface.Resources"/>.
+    /// Style resources are ordinary entries; <see cref="VisualResourceLookup.Get{T}"/> converts a stored string to
+    /// the requested type.
+    /// </remarks>
+    public ResourceDictionary Resources => _resources ??= new ResourceDictionary();
 
     /// <summary>The size this element wants inside <paramref name="availableSize"/>.</summary>
     public Size DesiredSize => _desiredSize;
@@ -656,6 +678,33 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     }
 
     internal void SetSurfaceRoot(VisualSurface? surface) => _surface = surface;
+
+    // 模板里的每个后代都记着施模板的控件；TemplateBinding 靠它找源，模板触发器也写回它。
+    internal void SetTemplatedParentRecursive(VisualElement? parent)
+    {
+        TemplatedParent = parent;
+        foreach (var child in Children)
+        {
+            if (child is VisualElement element)
+            {
+                element.SetTemplatedParentRecursive(parent);
+            }
+        }
+    }
+
+    internal void SetTemplateScope(VisualNameScope? scope) => _templateScope = scope;
+
+    /// <summary>Returns the named template part created for this element, or <see langword="null"/>.</summary>
+    /// <typeparam name="T">The type the caller expects.</typeparam>
+    /// <param name="name">The <c>x:Name</c> the part was declared with inside the template.</param>
+    /// <remarks>The scope belongs to one template instance; parts of another instance never resolve here.</remarks>
+    public T? GetTemplateChild<T>(string name) where T : class
+        => _templateScope?.Find<T>(name);
+
+    // 样式有 Template 时由 VisualStyleApplication 回调；只有 ContentControl 覆写它。
+    internal virtual void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+    }
 
     // 显式样式压过隐式；两者都为空时把两个层清干净。
     private void ApplyEffectiveStyle()
