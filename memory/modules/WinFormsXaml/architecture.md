@@ -1,6 +1,6 @@
 # VeloxDev.WinForms.Xaml — 架构
 
-> 包结构：`VeloxDev.WinForms`（适配器 + XAML 运行时）与 `VeloxDev.WinForms.Generator`（专属生成器），都是 **11.2.0**。
+> 包结构：`VeloxDev.WinForms`（适配器 + XAML 运行时）与 `VeloxDev.WinForms.Generator`（专属生成器），都是 **12.0.0**。
 > 代码：`Src/Adapters/VeloxDev.WinForms/Xaml/`（运行时）、`Src/Generators/VeloxDev.WinForms.Generator/`（Roslyn 增量生成器）、`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`（Surface 行为基类）；Demo 在 `Examples/Workflow/WinForms Trimmed` 与 `Examples/Workflow/WinForms`；测试在 `Src/Test/Unit/WinFormsXaml/VeloxDev.WinForms.Xaml.Test/`。
 > 定位：WinForms 原生控件 + XAML 子集 + 依赖属性/绑定/Trigger/TransitionSystem 动画；不是 WPF 兼容层。
 > 面向消费者的完整运行时手册在 `skills/veloxdev-create-workflow/references/practices/gui/winforms-xaml.md`；动画专用在 `skills/veloxdev-create-animation/references/practices/winforms-xaml.md`。
@@ -168,6 +168,8 @@
 - `DataContext` 是 inherited 属性：没有本地层时从 `ParentElement` 解析，祖先切换会向没有本地值的后代补发 `Inherited` 变更；`Bind` 写进指定优先级层，dispose 时清掉该层。
 - 路径绑定：`element.SetBinding(Property, new Binding("Path") { Source/DataContext, Mode, Converter, StringFormat, FallbackValue, TargetNullValue })` 走 `VisualBindingOperations`；`OneWay`/`OneTime`/`TwoWay`、点路径与索引器可用，`ElementName`/`RelativeSource`/校验规则尚未接入视觉后端。
 - 视觉样式：`VisualStyle` / `VisualSetter` / `VisualTrigger`，显式 `VisualElement.Style` 优先，隐式 `Styles` 按「元素自身 → 祖先 → Surface」最近匹配、每个集合取第一个 `TargetType` 命中的样式；setter 写 `Style` 层、trigger 写 `StyleTrigger` 层，移除时只清自己那两层。样式是描述不是活对象，改已应用样式的 `Setters` 不会自动重应用。
+- 文本/滚动：`TextBox` 支持多行、换行、撤销/重做、词级导航、双击选词与横向偏移；聚焦时用 `NativeControlHost` + 原生 `TextBox` 岛处理 IME/无障碍，非聚焦时自绘。`ScrollViewer` 支持横/纵两轴、Shift+滚轮、双拇指拖拽、PageUp/PageDown/Home/End 与 `ScrollIntoView`。
+- 控件集：`CheckBox` / `RadioButton` / `ToggleButton`、`ItemsControl` / `ListBox` / `VirtualList`（固定行高、最近 `ScrollViewer` 驱动、无回收）。
 - 视觉 XAML：`xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"` 的显式 `v:` 前缀走视觉树，父级用 `Add`、根类派生自视觉根类型；`x:Name` 只生成字段（视觉元素没有 `NameScope`）；资源/模板/绑定标记还不支持，遇到会报诊断。
 - HWND 后端仍用 `DependencyProperty`；两套属性系统互不替换。视觉后端没有 XAML/样式引擎接入，DP 引擎仍绑在 `System.Windows.Forms.Control` 上。
 
