@@ -7,6 +7,9 @@ using VisualWorkbench.Views;
 using VisualBorder = VeloxDev.WinForms.Xaml.Visuals.Controls.Border;
 using VisualButton = VeloxDev.WinForms.Xaml.Visuals.Controls.Button;
 using VisualCanvas = VeloxDev.WinForms.Xaml.Visuals.Controls.Canvas;
+using VisualComboBox = VeloxDev.WinForms.Xaml.Visuals.Controls.ComboBox;
+using VisualContentControl = VeloxDev.WinForms.Xaml.Visuals.Controls.ContentControl;
+using VisualContentPresenter = VeloxDev.WinForms.Xaml.Visuals.Controls.ContentPresenter;
 using VisualGrid = VeloxDev.WinForms.Xaml.Visuals.Controls.Grid;
 using VisualImage = VeloxDev.WinForms.Xaml.Visuals.Controls.Image;
 using VisualNativeControlHost = VeloxDev.WinForms.Xaml.Visuals.Controls.NativeControlHost;
@@ -37,6 +40,8 @@ internal static class WorkbenchContent
         page.Add(CreateColumns(theme));
         page.Add(CreateSection(theme, "Visual XAML · v: profile", new VisualSample()));
         page.Add(CreateStyleSection(theme));
+        page.Add(CreateSelectorSection(theme));
+        page.Add(CreateTemplateSection(theme));
         page.Add(CreateGraphSection(theme));
 
         return new VisualBorder
@@ -354,6 +359,87 @@ internal static class WorkbenchContent
                 Bounds.Width,
                 Bounds.Height - 18f);
         }
+    }
+
+    private static VisualBorder CreateSelectorSection(ThemePalette theme)
+    {
+        var status = new VisualTextBlock
+        {
+            Text = "Selected: Balanced",
+            Foreground = theme.MutedForeground,
+            VerticalAlignment = XamlVerticalAlignment.Center,
+        };
+        var combo = new VisualComboBox
+        {
+            Width = 248,
+            SelectedIndex = 0,
+            Placeholder = "Pick a mode",
+        };
+        combo.Items.Add("Balanced");
+        combo.Items.Add("Throughput");
+        combo.Items.Add("Latency");
+        combo.Items.Add("Custom");
+        combo.SelectionChanged += (_, _) =>
+            status.Text = "Selected: " + (combo.SelectedItem?.ToString() ?? "—");
+
+        var row = new VisualStackPanel { Orientation = Orientation.Horizontal, Spacing = 14 };
+        row.Add(combo);
+        row.Add(status);
+        return CreateSection(theme, "Selector · visual ComboBox opens in the overlay", row);
+    }
+
+    private static VisualBorder CreateTemplateSection(ThemePalette theme)
+    {
+        var content = new VisualTextBlock
+        {
+            Text = "Rendered through a ContentPresenter inside a visual ControlTemplate.",
+            Foreground = theme.Foreground,
+            Wrap = true,
+        };
+        var host = new VisualContentControl { Width = 420, Content = content };
+
+        var template = new VisualControlTemplate(scope =>
+        {
+            var caption = new VisualTextBlock
+            {
+                Text = "ControlTemplate · PART_Frame",
+                Font = new Font("Segoe UI Semibold", 10.5f),
+                Foreground = theme.Accent,
+            };
+            var stack = new VisualStackPanel { Spacing = 6 };
+            stack.Add(caption);
+            stack.Add(new VisualContentPresenter());
+
+            var frame = new VisualBorder
+            {
+                Background = theme.SurfaceAlt,
+                BorderBrush = theme.ControlBorder,
+                BorderThickness = new XamlThickness(1f),
+                CornerRadius = 8f,
+                Padding = new XamlThickness(12f),
+                Child = stack,
+            };
+            scope.Register("PART_Frame", frame);
+            return frame;
+        })
+        {
+            TargetType = typeof(VisualContentControl),
+        };
+
+        var disabled = new VisualTrigger(VisualElement.IsEnabledProperty, false) { TargetName = "PART_Frame" };
+        disabled.Setters.Add(new VisualSetter(VisualElement.BackgroundProperty, theme.DisabledBackground));
+        template.Triggers.Add(disabled);
+        host.Template = template;
+
+        var hint = new VisualTextBlock
+        {
+            Text = "TemplateBinding, named parts and template triggers work without an HWND.",
+            Foreground = theme.MutedForeground,
+        };
+        var stackOuter = new VisualStackPanel { Spacing = 8 };
+        stackOuter.Add(host);
+        stackOuter.Add(hint);
+        return CreateSection(theme, "Templates · ContentControl and named parts", stackOuter);
     }
 
     private static VisualBorder CreateStyleSection(ThemePalette theme)

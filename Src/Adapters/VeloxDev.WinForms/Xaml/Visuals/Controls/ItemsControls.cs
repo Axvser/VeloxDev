@@ -67,6 +67,12 @@ public class ItemsControl : Panel
     /// <summary>The number of source items, independent of how many are realized.</summary>
     protected int ItemCount => _sourceItems.Count;
 
+    /// <summary>Rebuilds the realized item visuals from the current source and factory.</summary>
+    public void RefreshItems() => RebuildItems();
+
+    /// <summary>Raised after the realized item visuals were rebuilt.</summary>
+    public event EventHandler? ItemsRebuilt;
+
     /// <summary>Returns the source item at <paramref name="index"/>, or <see langword="null"/> when out of range.</summary>
     /// <param name="index">The zero-based source index.</param>
     protected object? GetItemAt(int index)
@@ -236,6 +242,7 @@ public class ItemsControl : Panel
 
         InvalidateMeasure();
         OnItemsRebuilt();
+        ItemsRebuilt?.Invoke(this, EventArgs.Empty);
     }
 
     private void Observe(INotifyCollectionChanged? previous, INotifyCollectionChanged? next)

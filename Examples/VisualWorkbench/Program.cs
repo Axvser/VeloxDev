@@ -47,6 +47,12 @@ internal static class Program
                         Pump(frames: 4);
                     }
 
+                    if (args.Contains("--open-combo", StringComparer.OrdinalIgnoreCase))
+                    {
+                        form.OpenFirstComboBox();
+                        Pump(frames: 4);
+                    }
+
                     Capture(form, capturePath);
                 }
                 catch (Exception exception)

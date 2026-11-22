@@ -32,6 +32,8 @@ public class VisualSurface : System.Windows.Forms.Control
     private readonly HashSet<NativeControlHost> _placedNative = [];
     private readonly VisualStyleCollection _styles = new();
     private readonly ResourceDictionary _resources = new();
+    private readonly OverlayLayer _overlay = new();
+    private readonly List<VisualPopup> _openPopups = [];
     private MouseButtons _buttons;
     private bool _layoutValid;
     private Size _layoutSize;
@@ -52,6 +54,7 @@ public class VisualSurface : System.Windows.Forms.Control
         DoubleBuffered = true;
         TabStop = true;
         _styles.Changed += (_, _) => RefreshStyles();
+        _overlay.SetSurfaceRoot(this);
     }
 
     /// <summary>Styles applied implicitly to matching elements in this surface's visual tree.</summary>
@@ -80,6 +83,7 @@ public class VisualSurface : System.Windows.Forms.Control
             _focused = null;
             _capture = null;
             _hoverChain.Clear();
+            CloseAllPopups();
             ClearNativeChildren();
             _root?.SetSurfaceRoot(null);
             _root?.RefreshImplicitStyles();
@@ -156,6 +160,7 @@ public class VisualSurface : System.Windows.Forms.Control
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
             EnsureLayout(size);
             _root.Render(graphics);
+            _overlay.Render(graphics);
         }
         finally
         {
@@ -203,6 +208,7 @@ public class VisualSurface : System.Windows.Forms.Control
     public bool ProcessPointerDown(PointF point, MouseButtons button, int clickCount = 1)
     {
         var target = FindElementAt(point);
+        DismissPopupsFor(target);
         if (target is not null)
         {
             var focusable = FindFocusableAncestor(target);
@@ -332,7 +338,7 @@ public class VisualSurface : System.Windows.Forms.Control
         }
 
         EnsureLayout(ClientSize);
-        var hit = _root.HitTestVisual(point);
+        var hit = _overlay.HitTestVisual(point) ?? _root.HitTestVisual(point);
         for (var current = hit; current is not null; current = current.Parent)
         {
             if (current is VisualElement element)
@@ -523,18 +529,58 @@ public class VisualSurface : System.Windows.Forms.Control
     {
         if (disposing)
         {
+            CloseAllPopups();
             ClearNativeChildren();
             _focused = null;
             _capture = null;
             _hoverChain.Clear();
             _root?.Dispose();
             _root = null;
+            _overlay.Dispose();
         }
 
         base.Dispose(disposing);
     }
 
-    private void RefreshStyles() => _root?.RefreshImplicitStyles();
+    private void RefreshStyles()
+    {
+        _root?.RefreshImplicitStyles();
+        _overlay.RefreshImplicitStyles();
+    }
+
+    internal VisualElement OverlayHost => _overlay;
+
+    internal void RegisterPopup(VisualPopup popup)
+    {
+        if (!_openPopups.Contains(popup))
+        {
+            _openPopups.Add(popup);
+        }
+    }
+
+    internal void UnregisterPopup(VisualPopup popup) => _openPopups.Remove(popup);
+
+    private void CloseAllPopups()
+    {
+        foreach (var popup in _openPopups.ToArray())
+        {
+            popup.Close();
+        }
+
+        _openPopups.Clear();
+    }
+
+    // 点击落在弹层或它的 PlacementTarget 里时保持打开；其余位置按 StaysOpen 关闭。
+    private void DismissPopupsFor(VisualElement? target)
+    {
+        foreach (var popup in _openPopups.ToArray())
+        {
+            if (!popup.StaysOpen && !popup.ShouldStayOpen(target))
+            {
+                popup.Close();
+            }
+        }
+    }
 
     private void ClearNativeChildren()
     {
@@ -591,6 +637,14 @@ public class VisualSurface : System.Windows.Forms.Control
         _placedNative.Clear();
         _root.Measure(size);
         _root.Arrange(new RectangleF(0f, 0f, size.Width, size.Height));
+
+        // 覆盖层不属于根树：它铺满客户区，子项（Popup）自己决定位置，不参与面板排版。
+        _overlay.Measure(size);
+        _overlay.Arrange(new RectangleF(0f, 0f, size.Width, size.Height));
+        foreach (var popup in _openPopups.ToArray())
+        {
+            popup.Reposition();
+        }
 
         // A host that was collapsed or removed from the tree never reaches ArrangeOverride, so its HWND would stay
         // floating above the surface. Anything not visited by this pass is detached.
@@ -658,5 +712,20 @@ public class VisualSurface : System.Windows.Forms.Control
                 CollectFocusable(elementChild, order);
             }
         }
+    }
+}
+
+// 覆盖层只承载弹层：它铺满客户区、自己不取命中，子项位置由 VisualPopup 直接写 Bounds。
+internal sealed class OverlayLayer : VisualElement
+{
+    internal OverlayLayer()
+    {
+        IsHitTestVisible = false;
+    }
+
+    protected override Size MeasureOverride(Size availableSize) => availableSize;
+
+    protected override void ArrangeOverride(Size finalSize)
+    {
     }
 }

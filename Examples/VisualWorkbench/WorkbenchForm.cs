@@ -50,6 +50,38 @@ public sealed class WorkbenchForm : Form
         }
     }
 
+    /// <summary>Opens the first combo box in the tree; used by capture mode to prove the overlay path.</summary>
+    public void OpenFirstComboBox()
+    {
+        if (FindComboBox(_surface.Root) is { } combo)
+        {
+            combo.IsDropDownOpen = true;
+        }
+    }
+
+    private static VeloxDev.WinForms.Xaml.Visuals.Controls.ComboBox? FindComboBox(VisualElement? element)
+    {
+        if (element is null)
+        {
+            return null;
+        }
+
+        if (element is VeloxDev.WinForms.Xaml.Visuals.Controls.ComboBox combo)
+        {
+            return combo;
+        }
+
+        foreach (var child in element.Children)
+        {
+            if (child is VisualElement childElement && FindComboBox(childElement) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     private void ToggleTheme()
     {
         Theme.Mode = Theme.Mode == ThemeMode.Dark ? ThemeMode.Light : ThemeMode.Dark;

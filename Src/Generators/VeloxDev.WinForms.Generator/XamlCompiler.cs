@@ -238,7 +238,10 @@ internal sealed class XamlCompiler
                 }
 
                 var visualExpression = EmitControl(child, type, hostExpression: null);
-                _current.Line($"{elementExpression}.Add({visualExpression});");
+                var items = FindItemsCollection(elementType);
+                _current.Line(items is null
+                    ? $"{elementExpression}.Add({visualExpression});"
+                    : $"{elementExpression}.{items.Name}.Add({visualExpression});");
                 continue;
             }
 
