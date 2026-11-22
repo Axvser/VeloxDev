@@ -29,18 +29,19 @@ public sealed class MainForm : Form
         LoadTree(tree);
         _treeView.ViewModel = tree;
 
-        // 视觉表面用 Pan 定位世界；首帧布局完成后把原点居中，四个象限的节点都在视口里。
-        var centered = false;
+        // 视觉表面用 Pan 定位世界；首帧布局完成后把世界原点放到 (320,260)，与其它六家的 Trimmed demo 一致。
+        var positioned = false;
         _treeView.Surface.Paint += (_, _) =>
         {
-            if (centered)
+            if (positioned)
             {
                 return;
             }
 
-            centered = true;
-            // Paint 事件早于表面的布局；排到消息队列末尾再居中，此时视口尺寸已经写入。
-            _treeView.Surface.BeginInvoke(new Action(() => _treeView.Surface.CenterOn(0d, 0d)));
+            positioned = true;
+            // Paint 事件早于表面的布局；排到消息队列末尾再定位，此时视口尺寸已经写入。
+            _treeView.Surface.BeginInvoke(
+                new Action(() => _treeView.Surface.SetPan(new System.Drawing.PointF(320f, 260f))));
         };
     }
 
@@ -67,21 +68,5 @@ public sealed class MainForm : Form
         nodes[1].InputSlot.SetChannelCommand.Execute(SlotChannel.MultipleSources);
         nodes[2].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
         nodes[3].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
-
-        // 端口默认 SlotChannel.None，不能收发连接；先给三个输出端口开 OneTarget，再走标准收发路径连线。
-        foreach (var node in nodes[..3])
-        {
-            node.OutputSlots[0].SetChannelCommand.Execute(SlotChannel.OneTarget);
-        }
-
-        Connect(tree, nodes[0].OutputSlots[0], nodes[1].InputSlot);
-        Connect(tree, nodes[1].OutputSlots[0], nodes[3].InputSlot);
-        Connect(tree, nodes[2].OutputSlots[0], nodes[0].InputSlot);
-    }
-
-    private static void Connect(TreeViewModel tree, SlotViewModel sender, SlotViewModel receiver)
-    {
-        tree.GetHelper().SendConnection(sender);
-        tree.GetHelper().ReceiveConnection(receiver);
     }
 }

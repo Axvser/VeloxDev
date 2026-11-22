@@ -16,9 +16,9 @@ namespace VeloxDev.WinForms.Xaml.Visuals;
 /// </para>
 /// <para>
 /// <see cref="Bounds"/> is expressed in the parent's coordinates; content is painted in the visual's own local
-/// coordinates <c>0..Width/Height</c>. <see cref="Transform"/> is applied after the bounds translation,
-/// <see cref="Clip"/> is applied in local coordinates, and <see cref="Opacity"/> and <see cref="Effect"/> compose the
-/// whole subtree through a temporary bitmap.
+/// coordinates <c>0..Width/Height</c>. <see cref="Transform"/> is applied in that local coordinate space before the
+/// bounds translation, <see cref="Clip"/> is applied in local coordinates, and <see cref="Opacity"/> and
+/// <see cref="Effect"/> compose the whole subtree through a temporary bitmap.
 /// </para>
 /// </remarks>
 public abstract class Visual : WinformsObject
@@ -88,7 +88,10 @@ public abstract class Visual : WinformsObject
             graphics.TranslateTransform(Bounds.X, Bounds.Y);
             if (!Transform.IsIdentity)
             {
-                graphics.MultiplyTransform(Transform, MatrixOrder.Append);
+                // The transform belongs to the visual's own coordinate space: prepending it keeps the Bounds
+                // translation (and every ancestor translation) unscaled. Appending would scale the card's
+                // position as well, which is what made a Viewbox's child drift at any zoom other than 1.
+                graphics.MultiplyTransform(Transform, MatrixOrder.Prepend);
             }
 
             if (Clip is { } clip)

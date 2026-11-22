@@ -11,14 +11,14 @@ namespace Demo.Views.Workflow;
 /// <summary>
 /// The demo's node card on the visual backend: the same title/subtitle language as the HWND card, without a window.
 /// </summary>
-internal sealed class DemoWorkflowNodeView : VisualWorkflowNodeView
+internal sealed class DemoWorkflowNodeView : VeloxDev.WinForms.Xaml.Visuals.Controls.Border, IVisualWorkflowNodeContent
 {
     private static readonly Font TitleFont = CardTheme.Font(CardTheme.TitleSize, FontStyle.Bold);
     private static readonly Font SubtitleFont = CardTheme.Font(CardTheme.LabelSize);
     private static readonly Dictionary<(Type Type, string Name), PropertyInfo?> Properties = [];
 
     /// <inheritdoc />
-    protected override VisualElement BuildContent(INodeComponent node)
+    public VisualElement? BuildContent(INodeComponent node)
     {
         var stack = new StackPanel { Spacing = 3 };
         stack.Add(new TextBlock

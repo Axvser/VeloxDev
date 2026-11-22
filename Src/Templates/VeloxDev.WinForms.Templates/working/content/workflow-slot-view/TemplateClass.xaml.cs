@@ -1,4 +1,4 @@
-// VeloxDev customization: the ring colour and the standby fill are the two colours to change here.
+// VeloxDev customization: the glyph is painted here; the surface binds the slot through VisualWorkflowSlotBehavior.
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using VeloxDev.WinForms.Xaml;
@@ -9,7 +9,7 @@ using DrawingPen = System.Drawing.Pen;
 namespace TemplateNamespace;
 
 /// <summary>A visual workflow slot glyph: a ring and a core whose fill follows the slot's connection state.</summary>
-public sealed partial class TemplateClass : VisualWorkflowSlotView
+public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
 {
     /// <summary>Creates the glyph and runs the generated initializer.</summary>
     public TemplateClass()
@@ -20,7 +20,7 @@ public sealed partial class TemplateClass : VisualWorkflowSlotView
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
-        if (Slot is not { } slot)
+        if (VisualWorkflowSlotBehavior.GetSlot(this) is not { } slot)
         {
             return;
         }

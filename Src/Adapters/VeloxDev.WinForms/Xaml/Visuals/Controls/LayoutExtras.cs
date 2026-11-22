@@ -169,14 +169,19 @@ public class Viewbox : VisualElement
         set => SetValue(StretchProperty, value);
     }
 
+    // XAML can put the child in either place: the explicit Child property or the first visual child. Both forms
+    // are treated as the scaled content, so `<Viewbox><Grid .../></Viewbox>` works like the other platforms.
+    private VisualElement? EffectiveChild
+        => Child ?? (Children.Count > 0 ? Children[0] as VisualElement : null);
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
-        => Child?.Measure(availableSize) ?? Size.Empty;
+        => EffectiveChild?.Measure(availableSize) ?? Size.Empty;
 
     /// <inheritdoc />
     protected override void ArrangeOverride(Size finalSize)
     {
-        if (Child is not { } child)
+        if (EffectiveChild is not { } child)
         {
             return;
         }

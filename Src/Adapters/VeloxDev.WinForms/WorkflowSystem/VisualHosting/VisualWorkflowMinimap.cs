@@ -11,28 +11,29 @@ using Wf = VeloxDev.WorkflowSystem;
 namespace VeloxDev.WorkflowSystem.VisualHosting;
 
 /// <summary>
-/// A visual overview of the whole tree with the current viewport rectangle, draggable to scroll the surface.
+/// A visual overview of the whole tree with the current viewport rectangle, clickable to recentre the surface.
 /// </summary>
 /// <remarks>
 /// The drawing reuses the shared minimap maths (<see cref="WorkflowSurfaceMath.MinimapFit"/>,
-/// <see cref="WorkflowSurfaceMath.MinimapLocal"/>, <see cref="WorkflowSurfaceMath.MinimapViewportRect"/>). A drag
-/// converts the pointer travel back to canvas-local units and asks the surface's
-/// <see cref="IWorkflowSurfaceScroller"/> to move by that amount — the minimap never writes the pan itself.
-/// Derive to change the palette or paint extra overview marks.
+/// <see cref="WorkflowSurfaceMath.MinimapLocal"/>, <see cref="WorkflowSurfaceMath.MinimapViewportRect"/>). A press
+/// places that content point at the viewport centre and every move keeps it there — the same "press anywhere"
+/// model as the other six adapters — by asking the surface's <see cref="IWorkflowSurfaceNavigator"/> to centre;
+/// the minimap never writes the pan itself. Derive to change the palette or paint extra overview marks.
 /// </remarks>
-public class VisualWorkflowMinimap : VisualElement
+public sealed class VisualWorkflowMinimap : VisualElement
 {
     /// <summary>The default width, in pixels.</summary>
-    public const float DefaultWidth = 168f;
+    public const float DefaultWidth = 200f;
 
     /// <summary>The default height, in pixels.</summary>
-    public const float DefaultHeight = 112f;
+    public const float DefaultHeight = 140f;
 
     private const double PaddingValue = 6d;
     private const double MinThumbSize = 2d;
 
     private ITreeComponent? _tree;
     private IWorkflowSurfaceScroller? _scroller;
+    private IWorkflowSurfaceNavigator? _navigator;
     private DrawingPointF _pan;
     private DrawingSize _viewport;
 
@@ -44,12 +45,12 @@ public class VisualWorkflowMinimap : VisualElement
     private bool _hasContent;
 
     private bool _dragging;
-    private DrawingPointF _lastContentPoint;
 
     /// <summary>Creates a minimap with the adapter's dark palette.</summary>
     public VisualWorkflowMinimap()
     {
         IsHitTestVisible = true;
+        Cursor = System.Windows.Forms.Cursors.SizeAll;
         Width = DefaultWidth;
         Height = DefaultHeight;
         Background = Color.FromArgb(0xD2, 0x1F, 0x1F, 0x1F);
@@ -93,6 +94,7 @@ public class VisualWorkflowMinimap : VisualElement
         _pan = pan;
         _viewport = viewport;
         _scroller = scroller;
+        _navigator = scroller as IWorkflowSurfaceNavigator;
         InvalidateVisual();
     }
 
@@ -163,38 +165,26 @@ public class VisualWorkflowMinimap : VisualElement
     protected override void OnPointerPressed(VisualPointerEventArgs args)
     {
         base.OnPointerPressed(args);
-        if (args.Button != MouseButtons.Left || !_hasContent)
+        if (args.Button != MouseButtons.Left || !EnsureFit())
         {
             return;
         }
 
         _dragging = true;
-        _lastContentPoint = ToContentPoint(args.Position);
+        CentreOn(args.Position);
     }
 
     /// <inheritdoc />
     protected override void OnPointerMoved(VisualPointerEventArgs args)
     {
         base.OnPointerMoved(args);
-        if (!_dragging || (args.Buttons & MouseButtons.Left) == 0 || !_hasContent)
+        if (!_dragging || (args.Buttons & MouseButtons.Left) == 0 || !EnsureFit())
         {
             _dragging = false;
             return;
         }
 
-        var current = ToContentPoint(args.Position);
-        var deltaX = current.X - _lastContentPoint.X;
-        var deltaY = current.Y - _lastContentPoint.Y;
-        _lastContentPoint = current;
-        if (Math.Abs(deltaX) < 0.001f && Math.Abs(deltaY) < 0.001f)
-        {
-            return;
-        }
-
-        // 拖动缩略图向右下 = 视口在内容里向右下走 = 画布 pan 反向移动。
-        _scroller?.ScrollBy(
-            -deltaX / VisualWorkflowSurface.WheelScrollStep,
-            -deltaY / VisualWorkflowSurface.WheelScrollStep);
+        CentreOn(args.Position);
     }
 
     /// <inheritdoc />
@@ -202,6 +192,42 @@ public class VisualWorkflowMinimap : VisualElement
     {
         base.OnPointerReleased(args);
         _dragging = false;
+    }
+
+    // Pressing anywhere moves that content point to the viewport centre, matching the other six adapters; the
+    // minimap asks the navigator rather than writing the pan itself so the surface stays the only owner.
+    private void CentreOn(DrawingPointF surfacePoint)
+    {
+        var content = ToContentPoint(surfacePoint);
+        if (_navigator is not null)
+        {
+            _navigator.CenterOn(content.X, content.Y);
+            return;
+        }
+
+        if (_scroller is null || _viewport.Width <= 0 || _viewport.Height <= 0)
+        {
+            return;
+        }
+
+        var targetX = (_viewport.Width / 2d) - content.X;
+        var targetY = (_viewport.Height / 2d) - content.Y;
+        _scroller.ScrollBy(
+            (targetX - _pan.X) / VisualWorkflowSurface.WheelScrollStep,
+            (targetY - _pan.Y) / VisualWorkflowSurface.WheelScrollStep);
+    }
+
+    private bool EnsureFit()
+    {
+        if (_hasContent)
+        {
+            return true;
+        }
+
+        var padding = Padding;
+        var drawWidth = Bounds.Width - padding.Horizontal;
+        var drawHeight = Bounds.Height - padding.Vertical;
+        return drawWidth > 0f && drawHeight > 0f && ComputeFit(drawWidth, drawHeight);
     }
 
     private bool ComputeFit(float drawWidth, float drawHeight)

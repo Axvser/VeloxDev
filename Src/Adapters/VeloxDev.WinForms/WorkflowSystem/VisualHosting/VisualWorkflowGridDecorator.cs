@@ -13,9 +13,10 @@ namespace VeloxDev.WorkflowSystem.VisualHosting;
 /// </summary>
 /// <remarks>
 /// The decorator never takes a pointer hit. It follows the canvas pan through <see cref="Pan"/>, so the grid lines
-/// stay anchored to the world instead of to the window. Derive to change the palette or paint extra world decoration.
+/// stay anchored to the world instead of to the window. It is the surface's sealed default; the grid item template
+/// is a plain visual control that draws its own lines.
 /// </remarks>
-public class VisualWorkflowGridDecorator : VisualElement
+public sealed class VisualWorkflowGridDecorator : VisualElement
 {
     private DrawingPointF _pan;
 
@@ -82,8 +83,8 @@ public class VisualWorkflowGridDecorator : VisualElement
             graphics.FillRectangle(fill, 0f, 0f, width, height);
         }
 
-        var spacing = Math.Max(8d, GridSpacing);
-        var majorStep = spacing * Math.Max(1, MajorLineEvery);
+        var step = Math.Max(8d, GridSpacing);
+        var majorStep = step * Math.Max(1, MajorLineEvery);
         var localLeft = WorkflowSurfaceMath.GridCanvasLeft(-_pan.X, 0d);
         var localTop = WorkflowSurfaceMath.GridCanvasTop(-_pan.Y, 0d);
 
@@ -91,16 +92,16 @@ public class VisualWorkflowGridDecorator : VisualElement
         using var majorPen = new Pen(MajorLineColor, 1f);
         using var axisPen = new Pen(AxisColor, 1.2f);
 
-        var firstVertical = WorkflowSurfaceMath.GridFirstLine(localLeft, spacing);
-        for (var value = firstVertical; value <= localLeft + width + spacing; value += spacing)
+        var firstVertical = WorkflowSurfaceMath.GridFirstLine(localLeft, step);
+        for (var value = firstVertical; value <= localLeft + width + step; value += step)
         {
             var x = (float)WorkflowSurfaceMath.GridX(value, localLeft, 0d);
             var pen = WorkflowSurfaceGrid.SelectPen(value, majorStep, minorPen, majorPen, axisPen);
             graphics.DrawLine(pen, x, 0f, x, height);
         }
 
-        var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(localTop, spacing);
-        for (var value = firstHorizontal; value <= localTop + height + spacing; value += spacing)
+        var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(localTop, step);
+        for (var value = firstHorizontal; value <= localTop + height + step; value += step)
         {
             var y = (float)WorkflowSurfaceMath.GridY(value, localTop, 0d);
             var pen = WorkflowSurfaceGrid.SelectPen(value, majorStep, minorPen, majorPen, axisPen);

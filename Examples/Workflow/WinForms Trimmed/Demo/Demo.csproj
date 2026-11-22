@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- The visual backend draws in 96-DPI coordinates; let Windows scale the whole window so a 100-unit
+         width is the same physical size as WPF's 100 DIP (the XamlGallery demo uses the same mode). -->
+    <ApplicationHighDpiMode>DpiUnawareGdiScaled</ApplicationHighDpiMode>
   </PropertyGroup>
 
   <ItemGroup>

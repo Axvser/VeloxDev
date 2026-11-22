@@ -22,7 +22,8 @@ public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserContr
         workflowHost.GridDecorator.BorderThickness = XamlRuntime.ParseThickness("1");
         workflowHost.GridDecorator.CornerRadius = 3f;
         workflowHost.LinkLayer.LineColor = XamlRuntime.ParseColor("#DDFFFFFF");
-        workflowHost.LinkLayer.HoverLineColor = XamlRuntime.ParseColor("#FFFFFFFF");        workflowHost.Minimap.NodeBrush = XamlRuntime.ParseColor("#DC38BDF8");
+        workflowHost.LinkLayer.HoverLineColor = XamlRuntime.ParseColor("#FFFFFFFF");
+        workflowHost.Minimap.NodeBrush = XamlRuntime.ParseColor("#DC38BDF8");
         workflowHost.Minimap.ViewportStroke = XamlRuntime.ParseColor("#F0FFFFFF");
 
         // 连线菜单归宿主：条目就是这里这几行。
@@ -38,6 +39,7 @@ public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Controls.UserContr
         workflowHost.TemplateSelector = new CustomTemplateSelector
         {
             NodeTemplate = new VisualDataTemplate(static () => new NodeView()),
+            SlotTemplate = new VisualDataTemplate(static () => new SlotView()),
         };
 
         // WinForms 把子控件追加到 z 序末尾（最下）；把 HUD 提上来。

@@ -74,6 +74,9 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
     /// <summary>The minimap overlay.</summary>
     public VisualWorkflowMinimap Minimap => _root.Minimap;
 
+    /// <summary>The floating ruler bands on the top and left edges.</summary>
+    public VisualWorkflowRulerOverlay RulerOverlay => _root.Ruler;
+
     /// <summary>Whether the minimap is shown.</summary>
     public bool IsMinimapVisible
     {
@@ -86,17 +89,17 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
     }
 
     /// <summary>
-    /// Creates a card for a node. The default is a <see cref="VisualWorkflowNodeView"/>; assign
-    /// <see cref="NodeViewFactory"/> or derive and override to keep a host's own card design.
+    /// Creates a card for a node. Any <see cref="VisualElement"/> is accepted; the surface installs its node
+    /// behavior for drag, slot glyphs and anchors on it. The default is the adapter's own card.
     /// </summary>
-    public Func<INodeComponent, VisualWorkflowNodeView>? NodeViewFactory { get; set; }
+    public Func<INodeComponent, VisualElement>? NodeViewFactory { get; set; }
 
     /// <summary>
     /// Chooses the card for a node before <see cref="NodeViewFactory"/> and the default card are consulted.
     /// </summary>
     /// <remarks>
-    /// A selection must be a <see cref="VisualWorkflowNodeView"/> to be placed on the canvas; any other element is
-    /// ignored and the next source is tried.
+    /// Any <see cref="VisualElement"/> is accepted. A card authors its own chrome and content; the surface attaches
+    /// the node behavior to it, so a template never derives from a workflow-specific view class.
     /// </remarks>
     public VisualTemplateSelector? TemplateSelector { get; set; }
 
@@ -130,7 +133,7 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
         }
 
         Canvas.RefreshFromTree();
-        GridDecorator.Pan = Canvas.Pan;
+        SyncSurfacePan();
         UpdateViewport();
         InvalidateSurface();
     }
@@ -162,7 +165,7 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
 
     /// <summary>Returns the card bound to <paramref name="node"/>, or <see langword="null"/>.</summary>
     /// <param name="node">The node to look up.</param>
-    public VisualWorkflowNodeView? FindNodeView(INodeComponent node) => Canvas.FindView(node);
+    public VisualElement? FindNodeView(INodeComponent node) => Canvas.FindView(node);
 
     /// <summary>Zooms around a surface point.</summary>
     /// <param name="surfacePoint">The point kept still, in surface coordinates.</param>
@@ -170,7 +173,7 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
     public void ZoomAt(DrawingPointF surfacePoint, double factor)
     {
         Canvas.ZoomAt(surfacePoint, factor);
-        GridDecorator.Pan = Canvas.Pan;
+        SyncSurfacePan();
         UpdateViewport();
         InvalidateSurface();
     }
@@ -220,14 +223,14 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
         base.Dispose(disposing);
     }
 
-    internal VisualWorkflowNodeView CreateNodeView(INodeComponent node)
-        => TemplateSelector?.SelectTemplate(node) as VisualWorkflowNodeView
+    internal VisualElement CreateNodeView(INodeComponent node)
+        => TemplateSelector?.SelectTemplate(node) as VisualElement
            ?? NodeViewFactory?.Invoke(node)
            ?? CreateDefaultNodeView(node);
 
     internal void OnCanvasGeometryChanged()
     {
-        GridDecorator.Pan = Canvas.Pan;
+        SyncSurfacePan();
         Minimap.UpdateFrame(_tree, Canvas.Pan, _viewport, this);
         UpdateViewport();
         InvalidateSurface();
@@ -236,7 +239,7 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
     internal void OnRootArranged(DrawingSize size)
     {
         _viewport = size;
-        GridDecorator.Pan = Canvas.Pan;
+        SyncSurfacePan();
         Minimap.UpdateFrame(_tree, Canvas.Pan, size, this);
         UpdateViewport();
     }
@@ -429,7 +432,7 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
 
     internal void HandleKeyUp(VisualKeyEventArgs args) => _router.RouteKeyUp(args);
 
-    private VisualWorkflowNodeView CreateDefaultNodeView(INodeComponent node) => new();
+    private VisualElement CreateDefaultNodeView(INodeComponent node) => new DefaultVisualWorkflowNodeView();
 
     private void SetTree(ITreeComponent? tree)
     {
@@ -476,7 +479,7 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
         _input.HitRadius = _router.HitRadius;
         _input.Scroller = this;
         _input.Navigator = this;
-        GridDecorator.Pan = Canvas.Pan;
+        SyncSurfacePan();
         Refresh();
     }
 
@@ -511,13 +514,23 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
         InvalidateSurface();
     }
 
-    private void SetPan(DrawingPointF pan)
+    /// <summary>Sets the canvas pan directly; the model point under the surface origin is shifted by the same amount.</summary>
+    /// <param name="pan">The new signed pan, in surface pixels.</param>
+    public void SetPan(DrawingPointF pan) => ApplyPan(pan);
+
+    private void ApplyPan(DrawingPointF pan)
     {
         Canvas.SetPan(pan);
-        GridDecorator.Pan = pan;
+        SyncSurfacePan();
         Minimap.UpdateFrame(_tree, pan, _viewport, this);
         UpdateViewport();
         InvalidateSurface();
+    }
+
+    private void SyncSurfacePan()
+    {
+        GridDecorator.Pan = Canvas.Pan;
+        RulerOverlay.Pan = Canvas.Pan;
     }
 
     private void SyncHover()
@@ -607,9 +620,11 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
             Focusable = true;
             Grid = new VisualWorkflowGridDecorator();
             Canvas = new VisualWorkflowCanvas(owner);
+            Ruler = new VisualWorkflowRulerOverlay();
             Minimap = new VisualWorkflowMinimap();
             Add(Grid);
             Add(Canvas);
+            Add(Ruler);
             Add(Minimap);
         }
 
@@ -617,12 +632,15 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
 
         internal VisualWorkflowCanvas Canvas { get; }
 
+        internal VisualWorkflowRulerOverlay Ruler { get; }
+
         internal VisualWorkflowMinimap Minimap { get; }
 
         protected override DrawingSize MeasureOverride(DrawingSize availableSize)
         {
             Grid.Measure(availableSize);
             Canvas.Measure(availableSize);
+            Ruler.Measure(availableSize);
             Minimap.Measure(new DrawingSize(
                 (int)Math.Ceiling(Minimap.Width),
                 (int)Math.Ceiling(Minimap.Height)));
@@ -633,6 +651,7 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
         {
             Grid.Arrange(new DrawingRectangleF(0f, 0f, finalSize.Width, finalSize.Height));
             Canvas.Arrange(new DrawingRectangleF(0f, 0f, finalSize.Width, finalSize.Height));
+            Ruler.Arrange(new DrawingRectangleF(0f, 0f, finalSize.Width, finalSize.Height));
 
             if (Minimap.IsVisible)
             {

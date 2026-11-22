@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml.Visuals;
+using VeloxDev.WinForms.Xaml.Visuals.Controls;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.VisualHosting;
 using Wf = VeloxDev.WorkflowSystem;
@@ -136,12 +137,12 @@ public sealed class VisualWorkflowHostTests
             NodeViewFactory = _ =>
             {
                 factoryCalls++;
-                return new VisualWorkflowNodeView();
+                return new Grid();
             },
             TemplateSelector = new NodeCardSelector(() =>
             {
                 selectorCalls++;
-                return new VisualWorkflowNodeView();
+                return new Grid();
             }),
         };
         surface.Tree = model.Tree;
@@ -196,11 +197,11 @@ public sealed class VisualWorkflowHostTests
         Assert.HasCount(1, tree.Links, "dragging from a sender slot onto a receiver slot creates a link");
     }
 
-    private static VisualWorkflowSlotView? FindSlotView(VisualElement root, ISlotComponent slot)
+    private static VisualElement? FindSlotView(VisualElement root, ISlotComponent slot)
     {
-        if (root is VisualWorkflowSlotView view && ReferenceEquals(view.Slot, slot))
+        if (ReferenceEquals(VisualWorkflowSlotBehavior.GetSlot(root), slot))
         {
-            return view;
+            return root;
         }
 
         foreach (var child in root.Children)

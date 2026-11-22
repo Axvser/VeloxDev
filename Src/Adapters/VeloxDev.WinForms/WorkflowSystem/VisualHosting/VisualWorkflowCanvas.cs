@@ -23,8 +23,8 @@ namespace VeloxDev.WorkflowSystem.VisualHosting;
 public sealed class VisualWorkflowCanvas : VisualCanvas
 {
     private readonly VisualWorkflowLinkLayer _linkLayer;
-    private readonly List<VisualWorkflowNodeView> _nodeViews = [];
-    private readonly Dictionary<INodeComponent, VisualWorkflowNodeView> _viewsByNode = [];
+    private readonly List<VisualElement> _nodeViews = [];
+    private readonly Dictionary<INodeComponent, VisualElement> _viewsByNode = [];
     private DrawingPointF _pan;
     private bool _syncing;
     private INotifyPropertyChanged? _layoutNotifier;
@@ -52,7 +52,7 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
     public ITreeComponent? Tree { get; private set; }
 
     /// <summary>The node views currently materialised on this canvas.</summary>
-    public IReadOnlyList<VisualWorkflowNodeView> NodeViews => _nodeViews;
+    public IReadOnlyList<VisualElement> NodeViews => _nodeViews;
 
     /// <summary>The signed pan translation applied to every node view and link curve, in pixels.</summary>
     public DrawingPointF Pan => _pan;
@@ -81,7 +81,7 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
 
     /// <summary>Returns the view bound to <paramref name="node"/>, or <see langword="null"/>.</summary>
     /// <param name="node">The node to look up.</param>
-    public VisualWorkflowNodeView? FindView(INodeComponent node)
+    public VisualElement? FindView(INodeComponent node)
         => _viewsByNode.TryGetValue(node, out var view) ? view : null;
 
     /// <summary>Moves the pan offset and re-places every node view.</summary>
@@ -169,9 +169,9 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
         InvalidateMeasure();
     }
 
-    internal void SyncViewGeometry(VisualWorkflowNodeView view)
+    internal void SyncViewGeometry(VisualElement view)
     {
-        if (view.Node is not { } node)
+        if (GetNode(view) is not { } node)
         {
             return;
         }
@@ -204,7 +204,7 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
         }
     }
 
-    internal void NotifyNodeGeometryChanged(VisualWorkflowNodeView view)
+    internal void NotifyNodeGeometryChanged(VisualElement view)
     {
         SyncViewGeometry(view);
         _linkLayer.Refresh();
@@ -245,6 +245,9 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
         InvalidateMeasure();
     }
 
+    private static INodeComponent? GetNode(VisualElement view)
+        => VisualWorkflowNodeBehavior.GetNode(view);
+
 
     /// <inheritdoc />
     protected override DrawingSize MeasureOverride(DrawingSize availableSize)
@@ -280,7 +283,12 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
         {
             foreach (var view in _nodeViews)
             {
-                VisualWorkflowSlotLayout.Sync(view);
+                VisualWorkflowNodeBehavior.ArrangeSlots(
+                    view,
+                    new DrawingSize(
+                        (int)Math.Ceiling(view.Bounds.Width),
+                        (int)Math.Ceiling(view.Bounds.Height)));
+                VisualWorkflowNodeBehavior.SyncAnchors(view);
             }
 
             _linkLayer.Refresh();
@@ -309,6 +317,7 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
     {
         foreach (var view in _nodeViews)
         {
+            DetachView(view);
             if (Children.Contains(view))
             {
                 RemoveChild(view);
@@ -328,11 +337,11 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
             return;
         }
 
-        var view = Owner?.CreateNodeView(node) ?? new VisualWorkflowNodeView();
-        view.Bind(node);
+        var view = Owner?.CreateNodeView(node) ?? new DefaultVisualWorkflowNodeView();
         Add(view);
         _nodeViews.Add(view);
         _viewsByNode[node] = view;
+        VisualWorkflowNodeBehavior.Attach(view, node, Owner?.TemplateSelector, this);
         SyncViewGeometry(view);
     }
 
@@ -345,6 +354,7 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
 
         _viewsByNode.Remove(node);
         _nodeViews.Remove(view);
+        DetachView(view);
         if (Children.Contains(view))
         {
             RemoveChild(view);
@@ -352,6 +362,9 @@ public sealed class VisualWorkflowCanvas : VisualCanvas
 
         view.Dispose();
     }
+
+    private static void DetachView(VisualElement view)
+        => VisualWorkflowNodeBehavior.Detach(view);
 
     private void RepositionViews()
     {

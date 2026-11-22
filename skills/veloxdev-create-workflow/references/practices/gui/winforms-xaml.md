@@ -524,7 +524,7 @@ surface.Root = root;
   It is always a rectangular child HWND above the visual tree and cannot be transformed, blended or
   clipped with its visual parent, and an overlay popup cannot cover it.
 - `VeloxDev.WorkflowSystem.VisualHosting.VisualWorkflowSurface` is the reusable single-HWND workflow
-  surface: grid + canvas + one link layer + node views + minimap, Core scroller/navigator, and
+  surface: grid + canvas + one link layer + node views + floating rulers + minimap, Core scroller/navigator, and
   `WorkflowInput` routing. Host it as `<hosting:VisualWorkflowSurface Dock="Fill" />`; use
   `NodeViewFactory`, `LinkMenuBuilder` and `NodeMenuBuilder` for policy.
 - `VisualSurface` routes pointer, wheel, keyboard and text input to the deepest hit element; focus is

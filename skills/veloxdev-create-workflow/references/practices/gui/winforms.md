@@ -239,20 +239,22 @@ The surface opens the strip on a right-press on a link, positions it, and suspen
 | Item | Shape | You supply |
 | --- | --- | --- |
 | tree | `UserControl` hosting one `VisualWorkflowSurface`; code-behind sets the palette and exposes `ViewModel` / `TemplateSelector` | the palette, selector wiring, link menu |
-| node | derived `VisualWorkflowNodeView`; XAML self-root sets the card chrome, `BuildContent` gives title/body | the card chrome and title layout |
-| slot | derived `VisualWorkflowSlotView`; `OnRender` draws the glyph | the glyph and its state colours |
+| node | plain visual `Grid`; a `Viewbox` around a fixed design grid gives the elastic layout, XAML bindings give title/body; the surface attaches `VisualWorkflowNodeBehavior` | the card chrome, design layout and bindings |
+| slot | plain visual control; `OnRender` draws the glyph and reads `VisualWorkflowSlotBehavior.GetSlot(this)`; **assign it to `TemplateSelector.SlotTemplate`** or the default glyph is used | the glyph and its state colours |
 | link | derived `VisualElement` — **per-link opt-in**; the default surface draws every link in one `VisualWorkflowLinkLayer` | the resting curve and palette |
-| minimap | derived `VisualWorkflowMinimap` | the four palette colours |
-| grid decorator | derived `VisualWorkflowGridDecorator` | grid palette and spacing |
+| minimap | plain visual `Border` composing the sealed `VisualWorkflowMinimap` | the four palette colours |
+| grid decorator | plain visual `Border` + `IWorkflowGridDecorator`; draws the grid and axes directly in `OnRender` | grid palette, spacing and offsets |
 | template selector | derived `VisualTemplateSelector` returning `VisualElement` views | a `VisualDataTemplate` per item kind |
 
-⚙ **The items no longer reference each other at compile time.** The tree only references the adapter's `VisualWorkflowSurface`; wire the selector yourself through `VisualWorkflowSurface.TemplateSelector`. The surface asks the selector first, then `NodeViewFactory`, then its default card — a selection that is not a `VisualWorkflowNodeView` falls through.
+⚙ **The items no longer reference each other at compile time.** The tree only references the adapter's `VisualWorkflowSurface`; wire the selector yourself through `VisualWorkflowSurface.TemplateSelector`. The surface asks the selector first, then `NodeViewFactory`, then its internal default card; any `VisualElement` is accepted and gets the node behavior attached.
 
-⚙ **The surface composes the grid, minimap and link layer itself.** The `workflow-grid-decorator` and `workflow-minimap-overlay` items are standalone extension points (or palette references); changing the tree's look means touching `workflowHost.GridDecorator` / `workflowHost.Minimap` / `workflowHost.LinkLayer`, not adding controls to the tree.
+⚙ **The surface composes the grid, floating rulers, minimap and link layer itself.** The `workflow-grid-decorator` and `workflow-minimap-overlay` items are standalone extension points (or palette references); changing the tree's look means touching `workflowHost.GridDecorator` / `workflowHost.RulerOverlay` / `workflowHost.Minimap` / `workflowHost.LinkLayer`, not adding controls to the tree. A minimap press recentres the viewport on that content point (same as the other six adapters).
 
 ⚙ **Give the tree a virtualised helper.** `LinkHitTestEx` walks `VisibleItems`; `new TreeHelper(200)` (or a subclass) is required for link hit testing. The surface writes `Viewport(-Pan.X, -Pan.Y, w, h)` on every arrange / pan / zoom.
 
 ⚙ **The visual surface handles Delete, Ctrl+Z/Y, Ctrl+wheel zoom and Shift+wheel scroll.** A host that also handles them must set `PreventDefault`, or a link is deleted twice.
+
+⚙ **Set `ApplicationHighDpiMode` to `DpiUnawareGdiScaled` in the host project.** The visual backend draws in 96-DPI coordinates; letting Windows scale the whole window makes a 100-unit width the same physical size as a 100-DIP width in WPF. Without it, high-DPI Windows renders the visual surface smaller than the other GUI demos (the XamlGallery demo uses the same mode).
 
 ## Pitfalls
 

@@ -1,10 +1,26 @@
-<!-- VeloxDev customization: the card chrome; override BuildContent in code-behind to change the title and body. -->
+<!-- VeloxDev customization: the card is a plain visual control; the surface attaches drag, slots and anchors. -->
 <local:NodeView
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:Demo.Views.Workflow"
-    x:Class="Demo.Views.Workflow.NodeView"
-    Background="#DDFFFFFF"
-    BorderBrush="#331E1E1E"
-    BorderThickness="1"
-    CornerRadius="6" />
+    xmlns:visuals="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"
+    x:Class="Demo.Views.Workflow.NodeView">
+
+  <visuals:Viewbox Stretch="Uniform">
+    <visuals:Grid Width="260" Height="180">
+      <visuals:Border Background="#DDFFFFFF"
+                       BorderBrush="#331E1E1E"
+                       BorderThickness="1"
+                       CornerRadius="6" />
+      <visuals:StackPanel Margin="12,9" Spacing="3">
+        <visuals:TextBlock x:Name="titleBlock"
+                           Text="{Binding Name}"
+                           Foreground="#DD1E1E1E" />
+        <visuals:TextBlock x:Name="subtitleBlock"
+                           Text="{Binding TypeName}"
+                           Foreground="#DD1E1E1E" />
+      </visuals:StackPanel>
+    </visuals:Grid>
+  </visuals:Viewbox>
+
+</local:NodeView>

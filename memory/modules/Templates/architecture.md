@@ -168,10 +168,10 @@
 
 | 值 | 平台 | 依据 |
 | --- | --- | --- |
-| **28** | WPF、Avalonia、WinUI、MAUI、Razor | WPF / Avalonia / WinUI / MAUI 各自 `workflow-grid-decorator/TemplateClass.cs` 的 `RulerThicknessProperty`；Razor 是 `workflow-grid-decorator/TemplateClass.razor.cs` 的 `RulerThickness`，tree-view 里又写死一份 `workflow-tree-view/TemplateClass.razor` 的 `RulerThickness="28"` |
-| **36** | Jalium | 定义在模板自己的 grid-decorator 里；没有说明（模板只写「默认标尺带厚度」） |
+| **28** | WPF、Avalonia、WinUI、MAUI、Razor、WinForms（视觉后端） | WPF / Avalonia / WinUI / MAUI 各自 `workflow-grid-decorator/TemplateClass.cs` 的 `RulerThicknessProperty`；Razor 是 `workflow-grid-decorator/TemplateClass.razor.cs` 的 `RulerThickness`，tree-view 里又写死一份 `workflow-tree-view/TemplateClass.razor` 的 `RulerThickness="28"`；WinForms 的 `VisualWorkflowRulerOverlay.RulerThickness` 默认 28 |
+| **36** | Jalium、WinForms（HWND 路径） | Jalium 定义在模板自己的 grid-decorator 里；WinForms 的 `WorkflowRulerOverlayForm`（HWND 池化路径）仍用 36 |
 
-⇒ **WinForms 没有标尺**：视觉后端的 `VisualWorkflowGridDecorator` 只画网格与轴，`workflow-grid-decorator` 条目也没有 `RulerThickness`。
+⇒ **WinForms 的视觉标尺在表面里，不在 grid-decorator 条目里**：视觉后端用 `VisualWorkflowRulerOverlay`（默认 28，和 WPF 一致）；`workflow-grid-decorator` 的 `RulerThickness` 符号没有消费者。
 
 ⇒ **这个数字在别处被引用，且引用方式分两派**：
 
@@ -200,14 +200,16 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 
 ### 轴 3 · minimap 是薄壳还是自带实现
 
-七家全是薄壳：继承/配置框架或适配器给的实现，只设颜色，模板只给调色板（各家 `workflow-minimap-overlay/TemplateClass.*`）。
-WinForms 的小地图实现在视觉后端（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/VisualHosting/VisualWorkflowMinimap.cs`），模板派生它并设四色；
+七家全是薄壳：继承/组合/配置框架或适配器给的实现，只设颜色，模板只给调色板（各家 `workflow-minimap-overlay/TemplateClass.*`）。
+WinForms 的小地图实现在视觉后端（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/VisualHosting/VisualWorkflowMinimap.cs`，sealed），模板用普通视觉 `Border` **组合**它并设四色；
 Jalium 的薄壳设四个颜色符号（`workflow-minimap-overlay/TemplateClass.cs`）。
 
-**WinForms 的七项都走「视觉基类 + 薄派生」**：tree 是 `UserControl` + `VisualWorkflowSurface`，
-node / slot / link / grid / minimap 分别派生 `VisualWorkflowNodeView` / `VisualWorkflowSlotView` /
-`VisualElement` / `VisualWorkflowGridDecorator` / `VisualWorkflowMinimap`，selector 派生 `VisualTemplateSelector`；
-调度与平台机制在适配器，调色板、卡片样子与选择器策略在模板。
+**WinForms 的条目都不再派生 WorkflowSystem 基类**：tree 是 `UserControl` + sealed `VisualWorkflowSurface`，
+node 是普通视觉 `Grid`（XAML 里 `Viewbox` + 固定设计 Grid），slot 是普通视觉 `Border`，grid 是普通视觉 `Border` +
+`IWorkflowGridDecorator` 自绘，minimap 是普通视觉 `Border` 组合 sealed `VisualWorkflowMinimap`。表面给 node 挂
+`VisualWorkflowNodeBehavior`，node 行为给每个 slot 挂 `VisualWorkflowSlotBehavior`，slot 通过
+`VisualWorkflowSlotBehavior.GetSlot(this)` 取状态。link 仍是 `VisualElement`，selector 派生 `VisualTemplateSelector`。
+调度与平台机制在适配器，卡片、字形、网格与选择器策略在模板。
 
 `node-view` 收掉的只有机制（绑定/定位/折叠/反射读名字），**卡片长什么样是用户的设计** —— Full demo 的卡片视觉仍留在模板/宿主。
 
@@ -286,7 +288,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 | MAUI | `BindableProperty` + 绑 `Slot.State` / `State` | `workflow-slot-view/TemplateClass.xaml.cs` 的 `SlotStateProperty`；`workflow-node-view/TemplateClass.xaml` 的输入/输出两行 |
 | Jalium | 模板 slot-view 自己在 code-behind 里按 `SlotState` 算 `Foreground`；node-view 绑 `SlotState="{Binding State}"` | `workflow-slot-view/TemplateClass.jalxaml.cs` 的 `UpdateForeground`；`workflow-node-view/TemplateClass.jalxaml` |
 | Razor | 不绑，slot-view 在 C# 里算 | `workflow-slot-view/TemplateClass.razor.cs` 的 `FillColor` / `SlotStateColor` |
-| WinForms | 模板 slot-view 在 `OnRender` 里按 `SlotState` 算填充（`FillFor`）；基类 `VisualWorkflowSlotView.OnRender` 是相同的默认画法 | `workflow-slot-view/TemplateClass.xaml.cs` 的 `FillFor`；`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/VisualHosting/VisualWorkflowSlotView.cs` |
+| WinForms | 模板 slot-view 在 `OnRender` 里按 `SlotState` 算填充（`FillFor`），state 从 `VisualWorkflowSlotBehavior.GetSlot(this)` 取；适配器的内部默认字形是相同画法 | `workflow-slot-view/TemplateClass.xaml.cs` 的 `FillFor`；`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/VisualHosting/DefaultVisualWorkflowSlotView.cs` |
 | **Avalonia** | **没有** —— slot-view 里搜 `SlotState` 零命中 | `workflow-slot-view/TemplateClass.axaml` 只把 `<Path Fill>` 绑到 `$parent[UserControl].Foreground`，而模板里没有任何地方写 `Foreground` |
 
 ⇒ 在 Avalonia 上，插槽**永远不会变色**，而且不会报错。要修就得给 slot-view 加一个状态属性再绑上去。
@@ -314,7 +316,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 
 `workflow-tree-view` 只引用适配器的 `VisualWorkflowSurface`；`NodeView` / `CustomTemplateSelector` 由宿主在
 code-behind 接进 `TemplateSelector`。⇒ `winforms-v-tree` 可以单独编译，代价是宿主不接选择器时只有默认卡片。
-选择器返回的元素必须是 `VisualWorkflowNodeView`，否则表面会落到 `NodeViewFactory` / 默认卡。
+选择器返回任意 `VisualElement` 都会被接受并挂上节点行为；返回 `null` 才落到 `NodeViewFactory` / 默认卡。
 
 ---
 

@@ -97,12 +97,13 @@ public sealed class VisualWorkflowInputRouter
 
         for (var current = element; current is not null; current = current.ParentElement)
         {
-            if (current is VisualWorkflowSlotView { Slot: { } slot })
+            if (VisualWorkflowSlotBehavior.GetSlot(current) is { } slot)
             {
                 return new VisualWorkflowHit(model, true, slot, slot.Parent, slot, null);
             }
 
-            if (current is VisualWorkflowNodeView { Node: { } node })
+            var node = VisualWorkflowNodeBehavior.GetNode(current);
+            if (node is not null)
             {
                 return new VisualWorkflowHit(model, true, node, node, null, null);
             }
