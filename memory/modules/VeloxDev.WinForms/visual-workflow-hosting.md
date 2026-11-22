@@ -29,6 +29,7 @@
 - 槽位按设计行排（标题下 72、行高 22、输入内缩 2 / 输出内缩 12），位置与字形都乘当前比例；字形最小 10px，避免缩得太小点不到。
 - 网格、刻度带、小地图三者共用 `Canvas.Pan`；`VisualWorkflowSurface.SyncSurfacePan` 是唯一同步点。
 - 视觉后端公开坐标是**逻辑 DIP**（96 DPI）：`VisualSurface` 自己把 `Graphics` 乘 `DeviceDpi / 96`，并把指针、原生、弹出与 damage 坐标换算到同一空间；宿主读 `DpiScale` / `LogicalClientSize`。宿主工程设 `ApplicationHighDpiMode=PerMonitorV2`（两个 WinForms workflow demo 同款；XamlGallery 是纯 XAML demo，仍用 `DpiUnawareGdiScaled`）。原生覆盖层（`InfoOverlay` 这类 Panel）的固定像素指标自己乘 `DeviceDpi / 96`，并在 `OnDpiChangedAfterParent` 重算；点制字体不手动缩放。原生外壳两家不同：trimmed demo 的窗体 `AutoScaleMode=None`、自己按 `DeviceDpi` 定客户区；全量 demo 交给 `AutoScaleMode.Font` 自动缩放。
+- 已人工验证：150% 主屏与 100% 副屏之间切换后，卡片、标尺、小地图与文字都按新 DPI 正确缩放，物理尺寸与 WPF Trimmed 一致。
 
 ## 三、必须知道的坑
 
