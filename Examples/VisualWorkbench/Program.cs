@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml;
 
 namespace VisualWorkbench;
 
@@ -11,7 +12,13 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
-        Application.SetColorMode(SystemColorMode.Dark);
+        var light = args.Contains("--light", StringComparer.OrdinalIgnoreCase);
+        if (light)
+        {
+            Theme.Mode = ThemeMode.Light;
+        }
+
+        Application.SetColorMode(light ? SystemColorMode.Classic : SystemColorMode.Dark);
 
         var capturePath = ReadCapturePath(args);
         if (capturePath is not null)

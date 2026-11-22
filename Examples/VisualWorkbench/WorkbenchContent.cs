@@ -5,15 +5,19 @@ using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Visuals;
 using VisualBorder = VeloxDev.WinForms.Xaml.Visuals.Controls.Border;
 using VisualButton = VeloxDev.WinForms.Xaml.Visuals.Controls.Button;
+using VisualGrid = VeloxDev.WinForms.Xaml.Visuals.Controls.Grid;
 using VisualImage = VeloxDev.WinForms.Xaml.Visuals.Controls.Image;
 using VisualNativeControlHost = VeloxDev.WinForms.Xaml.Visuals.Controls.NativeControlHost;
 using VisualScrollViewer = VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollViewer;
 using VisualStackPanel = VeloxDev.WinForms.Xaml.Visuals.Controls.StackPanel;
 using VisualTextBlock = VeloxDev.WinForms.Xaml.Visuals.Controls.TextBlock;
 using VisualTextBox = VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox;
+using XamlColumnDefinition = VeloxDev.WinForms.Xaml.Controls.ColumnDefinition;
+using XamlGridLength = VeloxDev.WinForms.Xaml.Controls.GridLength;
 using XamlHorizontalAlignment = VeloxDev.WinForms.Xaml.Controls.HorizontalAlignment;
 using XamlStretch = VeloxDev.WinForms.Xaml.Controls.Stretch;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
+using XamlVerticalAlignment = VeloxDev.WinForms.Xaml.Controls.VerticalAlignment;
 
 namespace VisualWorkbench;
 
@@ -21,11 +25,11 @@ namespace VisualWorkbench;
 internal static class WorkbenchContent
 {
     /// <summary>Creates the root border and every section below it.</summary>
-    public static VisualElement CreateRoot()
+    public static VisualElement CreateRoot(Action? rebuild = null)
     {
         var theme = Theme.Current;
         var page = new VisualStackPanel { Orientation = Orientation.Vertical, Spacing = 14 };
-        page.Add(CreateTitleBar(theme));
+        page.Add(CreateTitleBar(theme, rebuild));
         page.Add(CreateCards(theme));
         page.Add(CreateColumns(theme));
 
@@ -38,7 +42,7 @@ internal static class WorkbenchContent
         };
     }
 
-    private static VisualBorder CreateTitleBar(ThemePalette theme)
+    private static VisualBorder CreateTitleBar(ThemePalette theme, Action? rebuild)
     {
         var stack = new VisualStackPanel { Orientation = Orientation.Vertical, Spacing = 3 };
         stack.Add(new VisualTextBlock
@@ -53,6 +57,28 @@ internal static class WorkbenchContent
             Foreground = theme.MutedForeground,
         });
 
+        VisualElement content = stack;
+        if (rebuild is not null)
+        {
+            var bar = new VisualGrid();
+            bar.ColumnDefinitions.Add(new XamlColumnDefinition { Width = XamlGridLength.Star });
+            bar.ColumnDefinitions.Add(new XamlColumnDefinition { Width = XamlGridLength.Auto });
+            VisualGrid.SetColumn(stack, 0);
+            bar.Add(stack);
+
+            var toggle = new VisualButton
+            {
+                Text = Theme.Mode == ThemeMode.Dark ? "Light mode" : "Dark mode",
+                Height = 32,
+                HorizontalAlignment = XamlHorizontalAlignment.Right,
+                VerticalAlignment = XamlVerticalAlignment.Center,
+            };
+            toggle.Click += (_, _) => rebuild();
+            VisualGrid.SetColumn(toggle, 1);
+            bar.Add(toggle);
+            content = bar;
+        }
+
         return new VisualBorder
         {
             Background = theme.Surface,
@@ -60,7 +86,7 @@ internal static class WorkbenchContent
             BorderThickness = new XamlThickness(1f),
             CornerRadius = 12f,
             Padding = new XamlThickness(20f, 14f),
-            Child = stack,
+            Child = content,
         };
     }
 

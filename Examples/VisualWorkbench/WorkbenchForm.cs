@@ -31,12 +31,24 @@ public sealed class WorkbenchForm : Form
             BackColor = Theme.Current.WindowBackground,
         };
         Controls.Add(_surface);
-        _surface.Root = WorkbenchContent.CreateRoot();
+        _surface.Root = WorkbenchContent.CreateRoot(ToggleTheme);
     }
 
     // Opening on the secondary screen should not pull the user away from what they are doing there.
     /// <inheritdoc />
     protected override bool ShowWithoutActivation => true;
+
+    private void ToggleTheme()
+    {
+        Theme.Mode = Theme.Mode == ThemeMode.Dark ? ThemeMode.Light : ThemeMode.Dark;
+        Application.SetColorMode(Theme.Mode == ThemeMode.Dark ? SystemColorMode.Dark : SystemColorMode.Classic);
+        BackColor = Theme.Current.WindowBackground;
+        _surface.BackColor = Theme.Current.WindowBackground;
+
+        var previous = _surface.Root;
+        _surface.Root = WorkbenchContent.CreateRoot(ToggleTheme);
+        previous?.Dispose();
+    }
 
     /// <inheritdoc />
     protected override void OnLoad(EventArgs e)
