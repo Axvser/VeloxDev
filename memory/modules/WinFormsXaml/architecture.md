@@ -170,8 +170,13 @@
 - 视觉样式：`VisualStyle` / `VisualSetter` / `VisualTrigger`，显式 `VisualElement.Style` 优先，隐式 `Styles` 按「元素自身 → 祖先 → Surface」最近匹配、每个集合取第一个 `TargetType` 命中的样式；setter 写 `Style` 层、trigger 写 `StyleTrigger` 层，移除时只清自己那两层。样式是描述不是活对象，改已应用样式的 `Setters` 不会自动重应用。
 - 文本/滚动：`TextBox` 支持多行、换行、撤销/重做、词级导航、双击选词与横向偏移；聚焦时用 `NativeControlHost` + 原生 `TextBox` 岛处理 IME/无障碍，非聚焦时自绘。`ScrollViewer` 支持横/纵两轴、Shift+滚轮、双拇指拖拽、PageUp/PageDown/Home/End 与 `ScrollIntoView`。
 - 控件集：`CheckBox` / `RadioButton` / `ToggleButton`、`ItemsControl` / `ListBox` / `VirtualList`（固定行高、最近 `ScrollViewer` 驱动、无回收）。
-- 视觉 XAML：`xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"` 的显式 `v:` 前缀走视觉树，父级用 `Add`、根类派生自视觉根类型；`x:Name` 只生成字段（视觉元素没有 `NameScope`）；资源/模板/绑定标记还不支持，遇到会报诊断。
-- HWND 后端仍用 `DependencyProperty`；两套属性系统互不替换。视觉后端没有 XAML/样式引擎接入，DP 引擎仍绑在 `System.Windows.Forms.Control` 上。
+- 视觉 XAML：`xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"` 的显式 `v:` 前缀走视觉树，父级用 `Add`、根类派生自视觉根类型；`x:Name` 在普通视图里生成字段，在模板里注册进 `VisualNameScope`。`<Resources>` 的标量/空对象资源、`<Style>`/`<ControlTemplate>` 资源、`Style="{StaticResource}"`、`{Binding}` / `{TemplateBinding}` / `{StaticResource}` 都由生成器发射；`{DynamicResource}` 与 `<DataTemplate>` 仍报诊断。视觉父级的子元素若类型有 `Items` 集合（`ComboBox`），生成器写 `Items.Add` 而不是 `Add`。
+- 资源：`VisualElement.Resources` 与 `VisualSurface.Resources` 是普通 `ResourceDictionary`；`VisualResourceLookup.FindResource/Get<T>` 按「元素 → 祖先 → Surface」查找并在类型不符时转换。静态资源在构造期解析，没有 `DynamicResource`。
+- 模板：`ContentControl` 的 `Content` 可以是视觉元素或字符串，也可以由 `VisualControlTemplate` + `ContentPresenter` 呈现；`VisualStyle.Template` 由样式应用，直接赋给 `ContentControl.Template` 时优先。模板根及后代拿 `TemplatedParent`，`GetTemplateChild<T>` 从**每实例**的 `VisualNameScope` 取部件；模板触发器写 `BindingPriority.Template` 层，`TargetName` 指命名部件。
+- 覆盖层：`VisualSurface` 在根树之后绘制、之前命中一个铺满客户区的 `OverlayLayer`。`VisualPopup` 打开时把自己挂进去，因此不受祖先 `ScrollViewer.Clip` 裁切，也不被后续兄弟盖住；点击弹层与 `PlacementTarget` 之外、或在弹层内按 Escape 都会关闭。弹层脱离根树后继承链断开，打开时把目标 `DataContext` 以 `Inherited` 层推给内容。
+- `ComboBox`：组合 `ListBox` + `ScrollViewer`，逻辑焦点留在 ComboBox（列表与滚动器 `Focusable=false`），方向键/Home/End/PageUp/PageDown 转发给它们；Enter 提交、Escape 回滚到打开时的选择。`ItemsControl.ItemsRebuilt` 用于「先写 `SelectedIndex`、后加条目」的顺序：条目物化后把选择回推给列表。
+- 工作流 demo：`Examples/VisualWorkbench/Views/WorkflowGraphSample.cs` 用真实 `TreeDefaultComponent`，不碰模板/HWND。坐标不变量：节点 `Anchor`/`Size` 已按 `Layout.Scale` 坍缩；画布局部坐标 = surface 坐标 − 画布 `AbsoluteBounds.Location`；模型点 = 局部坐标 − 平移。连线在模型空间建并 `PublishCurve`，只在绘制时加平移。往 `tree.Links` 直接加线时必须同时写 `LinksMap`、`sender.Targets`、`receiver.Sources`，否则 `StandardDelete` 静默拒绝。
+- 两套属性系统共存：HWND 后端的值存在 `Control` 上，视觉后端用 `IWinformsObject`/`WinformsObject` 的优先级表；两者共用 `DependencyProperty`/`PropertyMetadata`，但 `PropertyMetadata` 的变更回调参数是 `System.Windows.Forms.Control`，视觉属性靠覆写 `VisualElement.OnPropertyChanged` 响应。
 
 ## 五、验证
 
