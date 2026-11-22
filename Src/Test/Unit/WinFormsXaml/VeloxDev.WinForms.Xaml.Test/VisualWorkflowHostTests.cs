@@ -151,6 +151,72 @@ public sealed class VisualWorkflowHostTests
         Assert.AreEqual(0, factoryCalls, "the factory is only consulted when the selector has no match");
     }
 
+    [TestMethod]
+    public void DraggingFromASlotToAnotherCreatesALink()
+    {
+        var tree = new TreeDefaultComponent
+        {
+            Layout = { OriginSize = new Wf.Size(1000d, 700d) },
+        };
+        tree.SetHelper(new TreeHelper(200d));
+        var helper = tree.GetHelper();
+
+        var sender = new NodeDefaultComponent
+        {
+            Anchor = new Wf.Anchor(40d, 40d, 0),
+            Size = new Wf.Size(120d, 60d),
+        };
+        var senderSlot = new SlotDefaultComponent { Channel = SlotChannel.OneTarget };
+        senderSlot.Parent = sender;
+        sender.Slots.Add(senderSlot);
+        helper.CreateNode(sender);
+
+        var receiver = new NodeDefaultComponent
+        {
+            Anchor = new Wf.Anchor(320d, 160d, 0),
+            Size = new Wf.Size(120d, 60d),
+        };
+        var receiverSlot = new SlotDefaultComponent { Channel = SlotChannel.OneSource };
+        receiverSlot.Parent = receiver;
+        receiver.Slots.Add(receiverSlot);
+        helper.CreateNode(receiver);
+
+        using var surface = CreateSurface(tree);
+        var senderGlyph = FindSlotView(surface.Root!, senderSlot);
+        var receiverGlyph = FindSlotView(surface.Root!, receiverSlot);
+        Assert.IsNotNull(senderGlyph);
+        Assert.IsNotNull(receiverGlyph);
+
+        var start = Center(senderGlyph!.AbsoluteBounds);
+        var end = Center(receiverGlyph!.AbsoluteBounds);
+        surface.ProcessPointerDown(start, MouseButtons.Left);
+        surface.ProcessPointerMove(end);
+        surface.ProcessPointerUp(end, MouseButtons.Left);
+
+        Assert.HasCount(1, tree.Links, "dragging from a sender slot onto a receiver slot creates a link");
+    }
+
+    private static VisualWorkflowSlotView? FindSlotView(VisualElement root, ISlotComponent slot)
+    {
+        if (root is VisualWorkflowSlotView view && ReferenceEquals(view.Slot, slot))
+        {
+            return view;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is VisualElement element && FindSlotView(element, slot) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static PointF Center(RectangleF bounds)
+        => new(bounds.X + (bounds.Width / 2f), bounds.Y + (bounds.Height / 2f));
+
     private sealed class NodeCardSelector(Func<VisualElement> factory) : VisualTemplateSelector
     {
         public override VisualElement? SelectTemplate(object? item)

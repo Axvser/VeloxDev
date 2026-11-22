@@ -7,7 +7,7 @@
 
 | 类型 | 职责 | 谁写状态 |
 | --- | --- | --- |
-| `VisualWorkflowSurface` | 单 HWND 宿主；组合 grid → canvas → 单连线层 → 节点卡；把视觉输入翻译进 `WorkflowInput`；实现 `IWorkflowSurfaceScroller` / `IWorkflowSurfaceNavigator` | `Tree`、`Pan`（经 `Canvas`）、`WorkflowInput.Scroller/Navigator` |
+| `VisualWorkflowSurface` | 单 HWND 宿主；组合 grid → canvas → 单连线层 → 节点卡；把视觉输入翻译进 `WorkflowInput`，并处理拖节点/平移/缩放/插槽连线；实现 `IWorkflowSurfaceScroller` / `IWorkflowSurfaceNavigator` | `Tree`、`Pan`（经 `Canvas`）、`WorkflowInput.Scroller/Navigator` |
 | `VisualWorkflowCanvas` | 定位节点卡、铺满连线层、arrange 后同步槽锚点与曲线 | `Pan`、节点视图集合 |
 | `VisualWorkflowLinkLayer` | 画布首个子项、`IsHitTestVisible=false`、一趟画完所有线并按模型空间 `PublishCurve` | 已发布曲线、`Hovered`、flow |
 | `VisualWorkflowNodeView` | 默认卡片；拖动走 `MoveCommand`；`BuildContent()` 是宿主换卡的点 | 槽视图集合、拖动状态 |
@@ -32,6 +32,7 @@
 - `VisualWorkflowSlotView` / `VisualWorkflowGridDecorator` / `VisualWorkflowMinimap` 可继承：槽位覆写 `OnRender`，网格/minimap 设调色板。`WinForms` 的对应 item template 就分别是这三种派生 + `VisualTemplateSelector` 派生。
 - 指针事件在根元素（`WorkflowRoot`）汇总后转发，所以直接调 `VisualSurface.ProcessPointerDown/Move/...`（无消息循环的测试）也会走完 Core 路由；键事件要求根元素持有逻辑焦点，`FocusSurface()` 是测试与宿主的显式入口。
 - Delete 的默认策略在表面里（悬停线存在且未被 `PreventDefault` 时执行 `DeleteCommand`）；demo 若自己删线必须置 `PreventDefault`，否则会删两次。
+- 插槽连线：在 sender 槽按下 → `SendConnectionCommand`；移动时 `SetPointerCommand` + `StandardSetPreviewReceiver`（槽命中用 `SlotHitTestEx`）；在接收槽上松手 → `ReceiveConnectionCommand`，否则 `ResetVirtualLinkCommand`；Escape 取消。模板 slot 只画字形，不再挂连接行为。
 
 ## 四、扩展点
 

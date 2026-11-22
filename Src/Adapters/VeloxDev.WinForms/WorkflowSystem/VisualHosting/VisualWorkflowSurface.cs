@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml.Visuals;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.StandardEx;
 using DrawingPointF = System.Drawing.PointF;
 using DrawingRectangleF = System.Drawing.RectangleF;
 using DrawingSize = System.Drawing.Size;
@@ -42,6 +43,7 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
     private ILinkComponent? _hoveredLink;
     private bool _panning;
     private DrawingPointF _panLast;
+    private ISlotComponent? _connectionSender;
     private DrawingSize _viewport;
 
     /// <summary>Creates an empty visual workflow surface.</summary>
@@ -261,6 +263,19 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
 
         if (args.Button == MouseButtons.Left
             && !result.Handle.PreventDefault
+            && result.Hit.Slot is { } slot
+            && slot.StandardCanBeSender()
+            && slot.SendConnectionCommand.CanExecute(null))
+        {
+            slot.SendConnectionCommand.Execute(null);
+            _connectionSender = slot;
+            UpdateConnection(args.Position);
+            args.Handled = true;
+            return;
+        }
+
+        if (args.Button == MouseButtons.Left
+            && !result.Handle.PreventDefault
             && result.Hit.InCanvas
             && result.Hit.Target is null)
         {
@@ -273,6 +288,19 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
     {
         _router.RouteMoved(args);
         SyncHover();
+
+        if (_connectionSender is not null)
+        {
+            if ((args.Buttons & MouseButtons.Left) == 0)
+            {
+                CancelConnection();
+                return;
+            }
+
+            UpdateConnection(args.Position);
+            args.Handled = true;
+            return;
+        }
 
         if (!_panning || (args.Buttons & MouseButtons.Left) == 0)
         {
@@ -296,6 +324,31 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
         _router.RouteReleased(args);
         SyncHover();
         _panning = false;
+
+        if (_connectionSender is { } sender)
+        {
+            _connectionSender = null;
+            if (_tree is { } tree)
+            {
+                var model = Canvas.SurfaceToModel(args.Position);
+                var target = SlotHitTestEx.HitTest(tree, model.Horizontal, model.Vertical);
+                if (target is not null
+                    && !ReferenceEquals(target, sender)
+                    && target.ReceiveConnectionCommand.CanExecute(null))
+                {
+                    target.ReceiveConnectionCommand.Execute(null);
+                }
+                else
+                {
+                    tree.ResetVirtualLinkCommand.Execute(null);
+                }
+
+                LinkLayer.Refresh();
+                InvalidateSurface();
+            }
+
+            args.Handled = true;
+        }
     }
 
     internal void HandlePointerWheel(VisualPointerEventArgs args)
@@ -349,6 +402,13 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
             return;
         }
 
+        if (key == Keys.Escape && _connectionSender is not null)
+        {
+            CancelConnection();
+            args.Handled = true;
+            return;
+        }
+
         if ((args.Modifiers & Keys.Control) == 0 || _input is not { } input)
         {
             return;
@@ -377,6 +437,8 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
         {
             return;
         }
+
+        CancelConnection();
 
         if (_tree is { } previous)
         {
@@ -416,6 +478,37 @@ public sealed class VisualWorkflowSurface : VisualSurface, IWorkflowSurfaceScrol
         _input.Navigator = this;
         GridDecorator.Pan = Canvas.Pan;
         Refresh();
+    }
+
+    private void UpdateConnection(DrawingPointF surfacePoint)
+    {
+        if (_connectionSender is null || _tree is not { } tree)
+        {
+            return;
+        }
+
+        var model = Canvas.SurfaceToModel(surfacePoint);
+        if (tree.SetPointerCommand.CanExecute(model))
+        {
+            tree.SetPointerCommand.Execute(model);
+        }
+
+        tree.StandardSetPreviewReceiver(SlotHitTestEx.HitTest(tree, model.Horizontal, model.Vertical));
+        LinkLayer.Refresh();
+        InvalidateSurface();
+    }
+
+    private void CancelConnection()
+    {
+        if (_connectionSender is null)
+        {
+            return;
+        }
+
+        _connectionSender = null;
+        _tree?.ResetVirtualLinkCommand.Execute(null);
+        LinkLayer.Refresh();
+        InvalidateSurface();
     }
 
     private void SetPan(DrawingPointF pan)

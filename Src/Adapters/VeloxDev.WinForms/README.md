@@ -125,7 +125,8 @@ surface.Root = root;
 `VeloxDev.WorkflowSystem.VisualHosting.VisualWorkflowSurface` is a single-HWND surface that composes a grid
 decorator, a `Canvas` of node views, one link layer and a minimap. It implements the Core
 `IWorkflowSurfaceScroller` / `IWorkflowSurfaceNavigator`, translates pointer/key/wheel into
-`WorkflowInput`, and exposes `NodeViewFactory`, `LinkMenuBuilder` and `NodeMenuBuilder` for host policy.
+`WorkflowInput` (including drag-to-connect between measured slot glyphs), and exposes `NodeViewFactory`,
+`TemplateSelector`, `LinkMenuBuilder` and `NodeMenuBuilder` for host policy.
 Host it directly in XAML:
 
 ```xml
