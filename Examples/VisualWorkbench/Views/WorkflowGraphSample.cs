@@ -106,7 +106,11 @@ internal sealed class WorkflowGraphSample : VisualCanvas
     }
 
     /// <summary>Zooms around a fixed point; used by capture automation to prove the layout collapse.</summary>
-    internal void ZoomDemo() => ZoomAt(new PointF(380f, 160f), 1d / 1.3d);
+    internal void ZoomDemo()
+    {
+        var origin = AbsoluteBounds.Location;
+        ZoomAt(new PointF(origin.X + 380f, origin.Y + 160f), 1d / 1.3d);
+    }
 
     /// <inheritdoc />
     protected override void ArrangeOverride(Size finalSize)
