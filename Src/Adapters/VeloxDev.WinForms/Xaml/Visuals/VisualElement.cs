@@ -442,6 +442,21 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         var innerAvailable = new Size(
             Math.Max(0, availableSize.Width - (int)Math.Ceiling(margin.Horizontal)),
             Math.Max(0, availableSize.Height - (int)Math.Ceiling(margin.Vertical)));
+
+        // 显式尺寸是内容可用的上限：固定宽的 Border/StackPanel 必须把宽度传给子项，
+        // 否则子项先按父级的宽量成一行，换行高度在 Arrange 时才需要，已经被裁掉。
+        var explicitWidth = (double)GetValue(WidthProperty)!;
+        var explicitHeight = (double)GetValue(HeightProperty)!;
+        if (!double.IsNaN(explicitWidth) && explicitWidth >= 0d)
+        {
+            innerAvailable.Width = (int)Math.Ceiling(explicitWidth);
+        }
+
+        if (!double.IsNaN(explicitHeight) && explicitHeight >= 0d)
+        {
+            innerAvailable.Height = (int)Math.Ceiling(explicitHeight);
+        }
+
         var desired = MeasureOverride(innerAvailable);
         var width = ResolveAxis(Width, desired.Width, MinWidth, MaxWidth);
         var height = ResolveAxis(Height, desired.Height, MinHeight, MaxHeight);

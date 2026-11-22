@@ -63,7 +63,7 @@ public class Border : VisualElement
             _child = value;
             if (value is not null)
             {
-                Add(value);
+                base.Add(value);
             }
 
             InvalidateMeasure();
@@ -72,6 +72,16 @@ public class Border : VisualElement
 
     /// <summary>The child currently arranged by this border.</summary>
     protected VisualElement? ChildCore => _child;
+
+    /// <summary>Adds the single child through <see cref="Child"/> so panels and XAML can treat every container alike.</summary>
+    /// <param name="child">The child to add.</param>
+    /// <typeparam name="T">The child's concrete type.</typeparam>
+    /// <returns>The added child.</returns>
+    public new T Add<T>(T child) where T : VisualElement
+    {
+        Child = child;
+        return child;
+    }
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
