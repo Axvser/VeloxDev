@@ -20,8 +20,14 @@
 - **系统主题**：`ThemeMode.System` 是运行时模式；`Theme.EffectiveMode` 解析为 Dark/Light/HighContrast。读取 `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme`（P/Invoke `RegGetValueW`，避免 Registry 包依赖），`SystemInformation.HighContrast` 优先；`SystemEvents.UserPreferenceChanged` 事件投递到选模式时捕获的 `SynchronizationContext`，再 `RefreshSystemTheme()` 换调色板并触发 `Changed`。
 - **资源引用**：`{StaticResource}` 只解析一次；`{DynamicResource}` 持续跟随字典增删改，并在资源消失时清回 DP 默认值。同一目标属性上的多个资源引用按“后写接管”处理：后到的静态引用会停掉先前的动态订阅，后到的动态引用重新接管。实现是 `VisualElement` 的 `RegisterResourceBinding(targetToken, binding)`；生成器把 DP 引用（或 CLR 属性字符串）作为 token 传给 `ApplyStatic/BindDynamic`。DynamicResource 仍只支持视觉/附加属性，Style/Trigger Setter 的值仍按声明期解析。
 - **GridSplitter**：按目标在 sash 的哪一侧决定 delta 符号（左/上不反转，右/下反转）；起始尺寸取 `Target.Bounds` 的已安排宽高，不用 `Width`/`Height`（Auto 时它们是 NaN）。横向/纵向都有回归测试。
-- **XAML**：`RectangleF` / `Rectangle` 字面量（`XamlRuntime.ParseRectangleF/ParseRectangle`，生成器 `IsRuntimeConvertedType`）；对 `Foreground` 这类 `Color` 访问器背后的 Brush DP，`StaticResource` 改用 `SetValue`，渐变笔刷能落到文本前景。
-- Easel 测试覆盖 3D 旋转/命中/失效、遮罩与渐变 XAML；VeloxDev 侧 `Src/Adapters/VeloxDev.WinForms/Xaml` 没有这些代码。
+- **XAML**：`RectangleF` / `Rectangle` 字面量（`XamlRuntime.ParseRectangleF/ParseRectangle`，生成器 `IsRuntimeConvertedType`）；资源字典支持 `x:FontWeight`、`x:Thickness`、`x:PointF`；对 `Foreground` 这类 `Color` 访问器背后的 Brush DP，`StaticResource` 改用 `SetValue`，渐变笔刷能落到文本前景。
+- **兜底主题覆盖**：`ThemePalette` 现在包含字体（Family/Size/Weight）、`ScrollBarThumb`/`Hover`/`Radius`、`ShapeStroke`/`ShapeStrokeThickness`、阴影 `ShadowColor/Offset/Blur/Opacity`、`TextVisual*`、`ControlBorderThickness`、`FocusThickness*` 等角色；所有原生控件的默认颜色、字体、边框/焦点宽度与滚动条拇指都从当前调色板读取，`VisualElement.DefaultFont` 也跟随 `Theme.Current.DefaultFont`。只剩布局 padding、箭头/刻度尺寸等算法常量保持字面量。Dark+/Light+ 的既有像素不变（对比截图无差异）。
+- Easel 测试覆盖 3D 旋转/命中/失效、遮罩与渐变 XAML、主题角色往返与自定义调色板传播；VeloxDev 侧 `Src/Adapters/VeloxDev.WinForms/Xaml` 没有这些代码。
+
+## Easel skill
+
+- `Easel/skills/easel-build-winforms-xaml-ui/` 是 Easel 自己的完整 WinForms-XAML 指南：`SKILL.md` + `references/{runtime,xaml,controls,layout-input,visuals,themes,mvvm,animation,recipes,pitfalls}.md`。公开 API、推荐写法、诊断、主题、3D/合成和动画注入都以这里为准。
+- VeloxDev 的 `veloxdev-create-workflow` / `veloxdev-create-animation` WinForms 页面只保留工作流专属内容（surface behavior、node/slot/link 模板、`ViewPool`、连接预览、VeloxDev 动画适配器），通用 UI 指南统一指向 Easel skill。
 
 ## Gallery（`Easel/Examples/XamlGallery`）
 

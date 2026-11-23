@@ -19,6 +19,13 @@ They are written for a developer who has added a NuGet package or cloned the rep
 
 The `veloxdev-create-workflow` skill's default canvas is the **whole item-template suite** — all seven roles, including the decorator (floating rulers) and the minimap. Its generated node view is the elastic `Viewbox`/layout-only container; extend that container rather than replacing it with a fixed or clipped layout.
 
+**WinForms XAML UI is documented by Easel, not by these skills.** The full WinForms XAML guide — controls,
+layout, resources/styles/templates, bindings, themes, visuals, 3D and the animation contract — lives at
+[`Easel/skills/easel-build-winforms-xaml-ui/SKILL.md`](../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md).
+The VeloxDev workflow/animation WinForms pages keep only the workflow-specific surface (attached behaviors,
+node/slot/link templates, `ViewPool`, connection previews, the VeloxDev transition adapter) and point there for
+everything generic.
+
 ## How a skill is organised
 
 A skill has one `SKILL.md` and, when it needs depth, a `references/` directory with two sides:
@@ -53,7 +60,7 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 
 | Skill | When it fires |
 | --- | --- |
-| `veloxdev-create-workflow` | Building a workflow editor — authoring Tree / Node / Slot / Link ViewModels, compiling and running a graph, arranging a graph, scaffolding all seven item-template views (floating rulers and minimap included), putting the canvas on screen on any of the seven supported GUIs, or designing an adapter and item templates for a GUI that has none |
+| `veloxdev-create-workflow` | Building a workflow editor — authoring Tree / Node / Slot / Link ViewModels, compiling and running a graph, arranging a graph, scaffolding all seven item-template views (floating rulers and minimap included), putting the canvas on screen on any of the seven supported GUIs, or designing an adapter and item templates for a GUI that has none. WinForms XAML UI itself is covered by [Easel's skill](../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md). |
 | `veloxdev-drive-workflow-with-ai` | Letting an LLM inspect, build and run a workflow graph — the Workflow Agent tool surface, host policy gates and call budgets, `[AgentContext]` documentation, switchable skills, MCP servers, and background sub-agents |
 | `veloxdev-create-animation` | Writing VeloxDev interpolation animations — which adapter package to reference, the canonical declaration layout, static-reuse versus create-and-discard, the index forms, flow animations, and building an adapter for a GUI with no official one |
 | `veloxdev-switch-themes` | Runtime themes that can animate when they change — declaring a theme, `[ThemeConfig]`, `InitializeTheme()`, and switching with `SetCurrent` / `Jump` / `Transition` |

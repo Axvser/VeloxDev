@@ -12,7 +12,7 @@ Produce animation code that is **readable as prose** and **correct on first run*
 Identify the project's GUI, then reference **one** package. Versions are deliberately not stated: take the latest published.
 
 | GUI | Package |
-|---|---|
+| --- | --- |
 | WPF | `VeloxDev.WPF` |
 | Avalonia | `VeloxDev.Avalonia` |
 | WinUI 3 / Windows App SDK | `VeloxDev.WinUI` |
@@ -25,7 +25,8 @@ The adapter package brings `VeloxDev.Core` in transitively, so that one referenc
 
 If the project's GUI is not in that table, read [references/practices/adapter.md](references/practices/adapter.md) before writing animation code.
 
-⚙ **WinForms' visual XAML uses visual trigger actions, not HWND controls.** `<Trigger.EnterAction>` / `<Trigger.ExitAction>` accept `TransitionAction`, `KeyFrameAnimation` and `TriggerActionGroup`, and a custom action derives `Easel.Visuals.VisualTriggerAction`. To animate from code-behind, use the element's CLR property wrappers with `Transition<T>` or `VisualTransition.Animate(...)`; `XamlTransition` is not part of the visual runtime. Read [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) first; the rest of this page applies to plain WinForms code and the other six adapters.
+⚙ **WinForms' visual XAML uses Easel's animation contract, not HWND controls.** The full trigger-action, keyframe, composition and no-backend guide is in
+[Easel's animation reference](../../Easel/skills/easel-build-winforms-xaml-ui/references/animation.md). The VeloxDev.WinForms owner injects `EaselVisualAnimator` and offers `Transition<T>` on `VisualElement` properties; the local page [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) covers only that adapter. The rest of this page applies to plain WinForms code and the other six adapters.
 
 `using VeloxDev.TransitionSystem;` covers the everyday API — `Transition<T>`, `TransitionEffect`, `Eases`, `TransitionEffects`, `PathIndex`, the event args and the path exceptions. The support types live one namespace down: `using VeloxDev.TransitionSystem.Abstractions;` is needed when you name `TransitionProperty` (`ReadableMembers` / `Members`), `InterpolatorCore`, or a scheduler / interpreter / host base. Every adapter exposes the same `VeloxDev.TransitionSystem` surface. Six of the seven also declare the generic `Property<TValue>` overload; **Razor offers typed overloads only** (`int`, `string?`, `double`, `float`, `decimal`, the `System.Drawing` structs and the `System.Numerics` types), so generic `Property` code does not compile there unchanged.
 
@@ -93,13 +94,13 @@ Transition<Border>.Create()
 ## Where to read next
 
 | You are about to… | Read |
-|---|---|
+| --- | --- |
 | Express an index (constant, live, frozen) | [references/practices/declarations.md](references/practices/declarations.md#indices) |
 | Chain segments, repeat, wait, add a frame hook | [references/practices/segments-and-effects.md](references/practices/segments-and-effects.md) |
 | Pause, resume, seek, set a rate, stop | [references/practices/control-and-samplers.md](references/practices/control-and-samplers.md#controlling-a-running-animation) |
 | Interpolate a custom type | [references/practices/control-and-samplers.md](references/practices/control-and-samplers.md#custom-samplers) |
 | Animate a link's travelling highlight / a flow | [references/practices/flow.md](references/practices/flow.md) |
-| Animate a WinForms visual XAML element (code-behind `Transition<T>` on a `VisualElement` property) | [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) |
+| Animate a WinForms visual XAML element (VeloxDev adapter `Transition<T>` / injected animator) | [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) · [Easel contract](../../Easel/skills/easel-build-winforms-xaml-ui/references/animation.md) |
 | Build an adapter for another GUI | [references/practices/adapter.md](references/practices/adapter.md) |
 
 ## Pitfalls
@@ -107,7 +108,7 @@ Transition<Border>.Create()
 Read the symptom first, then the pitfall file. Each entry is a failure the repository has actually hit.
 
 | Symptom | Read |
-|---|---|
+| --- | --- |
 | A cached declaration animates the first caller's value | [references/pitfalls/declarations.md](references/pitfalls/declarations.md) |
 | An index write does nothing, or lands on the wrong slot | [references/pitfalls/declarations.md](references/pitfalls/declarations.md) |
 | An animation stops early, loops forever, or cannot be stopped | [references/pitfalls/segments.md](references/pitfalls/segments.md) |

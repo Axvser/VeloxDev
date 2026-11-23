@@ -1,48 +1,42 @@
-# WinForms visual XAML animations
+# VeloxDev animation on the WinForms XAML surface
 
-`VeloxDev.WinForms` has two animation surfaces sharing `VeloxDev.TransitionSystem`: markup trigger
-actions and code-behind transitions on a `VisualElement`. Markup uses `TransitionAction`,
-`KeyFrameAnimation` and `TriggerActionGroup` inside `<Trigger.EnterAction>` / `<Trigger.ExitAction>`;
-the `XamlTransition` HWND helper is not part of the visual runtime.
+The Easel animation contract, markup trigger-action syntax, keyframes, composition timing and the
+no-backend behavior are documented by Easel:
+[`Easel/skills/easel-build-winforms-xaml-ui/references/animation.md`](../../../../Easel/skills/easel-build-winforms-xaml-ui/references/animation.md).
+This page only covers what **VeloxDev.WinForms** adds: injecting its transition engine and using `Transition<T>`
+on Easel elements.
 
-The visual runtime is documented in
-[the workflow skill's XAML reference](../../../veloxdev-create-workflow/references/practices/gui/winforms-xaml.md).
+## Injection
 
-## Markup trigger actions
+`VeloxDev.WinForms` contains `EaselVisualAnimator`, an `IVisualAnimator` bridge to
+`VeloxDev.TransitionSystem`. It is installed by a module initializer when the assembly loads:
 
-```xml
-<Trigger Property="IsEnabled" Value="False">
-  <Trigger.EnterAction>
-    <TransitionAction Property="Width" To="120" Duration="0:0:0.2" Ease="CubicOut" />
-  </Trigger.EnterAction>
-  <Trigger.ExitAction>
-    <KeyFrameAnimation Property="Width" Duration="0:0:0.3" Ease="Linear">
-      <KeyFrame Offset="0" Value="120" />
-      <KeyFrame Offset="1" Value="40" />
-    </KeyFrameAnimation>
-  </Trigger.ExitAction>
-</Trigger>
+```csharp
+[ModuleInitializer]
+internal static void Initialize() => AnimationRuntime.Animator = new EaselVisualAnimator();
 ```
 
-Several actions in one `EnterAction`/`ExitAction` are emitted as a `TriggerActionGroup`. A custom
-action derives `Easel.Visuals.VisualTriggerAction` and overrides
-`Invoke(VisualElement target)`; in a template trigger the target is the same `TargetName` part the
-setters write. The bridge is `VisualTransition.Animate(element, property, value, effect)` and
-`VisualTransition.AnimateKeyFrames(...)`; `VisualTransition.Stop(element)` ends the running
-animation. Frames write at `BindingPriority.Animation`, and a new animation on the same element
-supersedes the previous one.
+Consequences:
 
-## Animating a visual element
+- Load `VeloxDev.WinForms` before using markup trigger actions or `VisualTransition`; otherwise Easel's null
+  animator throws the explicit "No IVisualAnimator is registered" exception.
+- A host may overwrite `AnimationRuntime.Animator` with its own implementation. The most recently assigned
+  animator wins.
+- `CanAnimate` reflects VeloxDev's sampler table: a DP with no sampler is rejected at start, not silently held.
+- The bridge writes frames at `Easel.BindingPriority.Animation` and holds the reached value at local precedence
+  when the animation completes, is superseded or is stopped. It bridges `IEase` to VeloxDev's `IEaseCalculator`.
 
-A visual element's dependency properties are exposed as CLR wrappers (`Opacity`, `Transform`,
-`Margin`, `Width`, `Background`, `CornerRadius`, …). `Transition<T>` writes those wrappers, so the
-transition sets the element's local priority layer each frame:
+Markup trigger actions, `KeyFrameAnimation`, `TriggerActionGroup` and `VisualTransition` are the same Easel
+API described in the Easel skill. There is no separate VeloxDev markup dialect.
+
+## `Transition<T>` on an Easel element
+
+Use VeloxDev's transition builder for code-behind animations:
 
 ```csharp
 using VeloxDev.TransitionSystem;
-using Easel.Visuals;
 
-Transition<VisualElement>.Create()
+Transition<Easel.Visuals.VisualElement>.Create()
     .Property(v => v.Margin, new Easel.Controls.Thickness(0, 8, 0, 0))
     .Property(v => v.CornerRadius, 8f)
     .Effect(new TransitionEffect
@@ -53,74 +47,42 @@ Transition<VisualElement>.Create()
     .Execute(element);
 ```
 
-- `T` is the object the animation writes into. Use `VisualElement` (or the concrete control) and name
-  a DP-backed CLR property: `Margin`, `Padding`, `Width`, `Height`, `CornerRadius`, `Background`, or
-  your own `[XamlProperty]`. A DP-backed setter invalidates the tree through its
-  `AffectsMeasure`/`AffectsArrange`/`AffectsRender` metadata.
-- `Visual.Opacity`, `Transform`, `Clip` and `Effect` are plain visual properties with no invalidation.
-  To fade, expose a DP on your control that feeds `Opacity` and mark it `AffectsRender`.
-- A transition writes the local layer; a style or trigger value is overridden while it runs.
-- The visual tree is painted by one `VisualHost`; frames are posted through `Control.BeginInvoke`, so
-  start the first animation on the UI thread.
-- A declaration is immutable and reusable. Cache a fixed-endpoint one in `static readonly` and build
-  a computed one at the call site.
+- `T` is the object the transition writes. For an Easel element use `VisualElement` or the concrete control, and
+  name a DP-backed property: `Margin`, `Padding`, `Width`, `Height`, `CornerRadius`, `Background`, or a custom
+  `[XamlProperty]`.
+- A code-behind transition writes the local priority layer each frame; a style/trigger value is overridden while
+  it runs. Markup actions write `BindingPriority.Animation`.
+- A DP-backed setter invalidates through `AffectsMeasure`/`AffectsArrange`/`AffectsRender`. `Visual.Opacity`,
+  `Transform`, `Clip` and `Effect` are plain visual properties with no change notification; animate a DP that
+  feeds them or call `InvalidateVisual` yourself.
+- A declaration is immutable and reusable. Cache a fixed-endpoint one in `static readonly`; build a computed
+  one at the call site. A new animation on the same element supersedes the previous one.
+- Start the first animation on the UI thread; the WinForms adapter posts frames through `Control.BeginInvoke`.
 
-## Cache versus per-call
+## Sampled types
 
-Same shape and endpoint every time → cache it:
+VeloxDev's samplers cover `double`, `float`, `int`, `long`, `Color`, `Point`, `PointF`, `Size`, `SizeF`,
+`Rectangle`, `RectangleF`, `Vector2/3/4`, `Quaternion`, `Padding` and `Thickness`. `decimal`, `bool`, `string`
+and enums have no sampler and are rejected/unsampled; register an `ISampler` for a custom type before animating
+it.
 
-```csharp
-private static readonly Transition<VisualElement> GrowIn =
-    Transition<VisualElement>.Create()
-        .Property(v => v.CornerRadius, 8f)
-        .Effect(new TransitionEffect
-        {
-            Duration = TimeSpan.FromMilliseconds(160),
-            Ease = Eases.Sine.InOut,
-        });
+## Workflow-view specifics
 
-// …elsewhere
-GrowIn.Execute(border);
-```
-
-An endpoint read from a local is frozen when the declaration is built, so build that one per caller.
-
-## Animatable values
-
-Core samplers cover `double`, `float`, `int`, `long`, `Color`, `Point`, `PointF`, `Size`, `SizeF`,
-`Rectangle`, `RectangleF`, `Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Padding` and `Thickness`.
-`Thickness` covers `Margin` and `Padding`.
-
-`decimal`, `bool`, `string` and enums have no sampler. The transition engine skips an unsampled path
-instead of throwing, so an animation can "run" without changing anything. A custom type needs an
-`ISampler` registration before it will move.
-
-## Custom visual properties
-
-A custom visual control registers an animatable property with `DependencyProperty.Register` and a
-CLR wrapper, then animates the wrapper like any other property:
-
-```csharp
-public static readonly DependencyProperty GlowProperty = DependencyProperty.Register(
-    nameof(Glow), typeof(double), typeof(MyVisual),
-    new PropertyMetadata(0d) { AffectsRender = true });
-
-public double Glow
-{
-    get => (double)GetValue(GlowProperty)!;
-    set => SetValue(GlowProperty, value);
-}
-
-// Transition<MyVisual>.Create().Property(v => v.Glow, 1d)…
-```
-
-`AffectsRender` makes the tree repaint; without it the value changes but nothing redraws.
+- Animate node/link view DP-backed properties (`Opacity`, `BorderBrush`, `Margin`, `Width`/`Height` on a card).
+- `WorkflowSurfaceBehavior` writes the camera matrix to `PART_Canvas.Transform`; do not animate that matrix
+  concurrently with a pan/zoom gesture. Animate a card, not the camera, unless you own the gesture lifecycle.
+- The parent `Viewbox`/camera scales a node's design grid; an animation inside the node template runs in design
+  coordinates and is scaled with the card.
+- Native islands (a focused `TextBox` editor, `NativeControlHost`, the workflow minimap HUD) are not part of the
+  visual animation.
+- Stop/dispose animations when a pooled view is recycled; a reused view must not keep an animation writing its
+  old DataContext.
 
 ## Limits
 
-- Markup actions animate one dependency property each; there is no storyboard/timeline object, so
-  chain several actions with `TriggerActionGroup` or write a custom `VisualTriggerAction`.
-- `decimal`, `bool`, `string` and enums do not animate.
-- `NativeControlHost` content is a child HWND and is not part of the visual animation.
-- `Visual.Opacity`, `Transform`, `Clip` and `Effect` live on the visual base and are plain properties
-  with no change notification; animate a DP-backed element property or add a DP that feeds them.
+- Easel has no storyboard/timeline object; chain one-property actions with `TriggerActionGroup` or a custom
+  `VisualTriggerAction`.
+- Per-keyframe easing is not supported by `KeyFrameAnimation`; one ease applies to the chain.
+- A `Transform3D` animation re-warps the composed bitmap each frame; cache the pre-warp layer and keep the
+  projected area small.
+- The runtime's `VisualHost` remains the only HWND; animations never create child windows.

@@ -24,7 +24,7 @@ Everything else about this repository (how the adapters are built, how the demos
 ## Which packages
 
 | Need | Package |
-|---|---|
+| --- | --- |
 | Model, canvas math, execution engine, auto-layout | `VeloxDev.Core` |
 | The canvas on screen | one adapter: `VeloxDev.WPF` · `VeloxDev.Avalonia` · `VeloxDev.WinUI` · `VeloxDev.MAUI` · `VeloxDev.WinForms` · `VeloxDev.Razor` · `VeloxDev.Jalium` |
 | `Serialize()` / `Deserialize()` | `VeloxDev.Core` itself — the entry points are extension methods in `VeloxDev.Serialization` (backed by `VeloxJsonSerializer`); no extra package |
@@ -46,7 +46,7 @@ An adapter package brings `VeloxDev.Core` in transitively. Versions are delibera
 ## Where to read next
 
 | You are about to… | Read |
-|---|---|
+| --- | --- |
 | Write a node, slot, link or tree ViewModel | [references/practices/model.md](references/practices/model.md) |
 | Make a node actually compute something | [references/practices/execution.md](references/practices/execution.md) |
 | Run a chain, or ask "what would this node output?" | [references/practices/execution.md](references/practices/execution.md) |
@@ -58,19 +58,20 @@ An adapter package brings `VeloxDev.Core` in transitively. Versions are delibera
 | Paint a red/green connection preview while a drag is in progress | [references/practices/model.md](references/practices/model.md#the-connection-preview) |
 | Take over the wheel, or scroll the surface from your own handler | [references/practices/view-layer.md](references/practices/view-layer.md#wheel-and-scrolling) |
 | Hear pointer/key input, or resolve the component under the pointer | [references/practices/input.md](references/practices/input.md), [references/practices/view-layer.md](references/practices/view-layer.md#how-the-surface-picks-a-link) |
-| Write or debug the WinForms XAML runtime itself (styles, triggers, animations, custom controls) | [references/practices/gui/winforms-xaml.md](references/practices/gui/winforms-xaml.md) |
+| Write or debug the WinForms XAML **workflow surface** (behaviors, parts, `ViewPool`, previews) | [references/practices/gui/winforms-xaml.md](references/practices/gui/winforms-xaml.md) |
+| Write WinForms XAML UI, styles, triggers, resources, themes, visuals or animations | [Easel skill](../../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md) |
 | Support a GUI that has no adapter | [references/practices/new-adapter.md](references/practices/new-adapter.md) |
 | Drive the graph from an LLM | [../veloxdev-drive-workflow-with-ai/SKILL.md](../veloxdev-drive-workflow-with-ai/SKILL.md) |
 
 Open your GUI's reference alongside whichever of the above you are reading — it carries that framework's attached properties, extension points and template defaults.
 
 | GUI | Reference |
-|---|---|
+| --- | --- |
 | WPF | [references/practices/gui/wpf.md](references/practices/gui/wpf.md) |
 | Avalonia | [references/practices/gui/avalonia.md](references/practices/gui/avalonia.md) |
 | WinUI 3 / Windows App SDK | [references/practices/gui/winui.md](references/practices/gui/winui.md) |
 | .NET MAUI | [references/practices/gui/maui.md](references/practices/gui/maui.md) |
-| Windows Forms | [references/practices/gui/winforms.md](references/practices/gui/winforms.md) · [XAML runtime](references/practices/gui/winforms-xaml.md) |
+| Windows Forms | [workflow surface](references/practices/gui/winforms.md) · [Easel XAML skill](../../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md) |
 | Blazor / Razor | [references/practices/gui/razor.md](references/practices/gui/razor.md) |
 | Jalium | [references/practices/gui/jalium.md](references/practices/gui/jalium.md) |
 
@@ -99,7 +100,7 @@ Open your GUI's reference alongside whichever of the above you are reading — i
 VeloxDev is meant to be extended, and each of these is the seam the library expects you to use.
 
 | You want to… | The seam |
-|---|---|
+| --- | --- |
 | Give a node behaviour | your own `NodeHelper<T>` overriding `ReceiveAsync` / `AccessAsync` |
 | Use your own link type | override `TreeHelper.CreateLink` |
 | Constrain what may connect | override `TreeHelper.ValidateConnection(sender, receiver)` |
@@ -139,7 +140,7 @@ The behaviour that matters is visual and interactive, so check it in a running a
 Read the symptom first, then the pitfall file. Each file records a failure the repository has actually hit, the rule it violates, and the fix.
 
 | Symptom | Read |
-|---|---|
+| --- | --- |
 | Links are invisible, or attach to the wrong point | [references/pitfalls/geometry-and-viewport.md](references/pitfalls/geometry-and-viewport.md) |
 | A node drag or a zoom writes to the wrong place, or the camera drifts | [references/pitfalls/geometry-and-viewport.md](references/pitfalls/geometry-and-viewport.md) |
 | A connection succeeds but no link appears, or the channel rejects unexpectedly | [references/pitfalls/model-and-connections.md](references/pitfalls/model-and-connections.md) |
