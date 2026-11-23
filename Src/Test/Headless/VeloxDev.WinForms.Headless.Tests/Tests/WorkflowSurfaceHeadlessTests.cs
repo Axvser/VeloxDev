@@ -78,6 +78,23 @@ public sealed class WorkflowSurfaceHeadlessTests
     }
 
     [TestMethod]
+    public void FirstCanvasDrag_AppliesTheCameraBeforeTheRelease()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        var before = surface.View.Canvas.Transform?.Elements[4] ?? 0f;
+
+        surface.Press(new PointF(780f, 580f));
+        surface.View.RaiseHostMouseMove(700, 580);
+
+        var during = surface.View.Canvas.Transform?.Elements[4] ?? 0f;
+        Assert.AreNotEqual(before, during,
+            "the first canvas drag must apply the camera before the mouse is released");
+
+        surface.View.RaiseHostMouseUp(700, 580);
+    }
+
+    [TestMethod]
     public void SetPan_IsReportedByTheCamera()
     {
         var graph = TestGraph.Create();

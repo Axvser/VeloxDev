@@ -46,6 +46,14 @@ internal sealed class TestWorkflowSurface : VisualHost
 
     public VisualCanvas Canvas => SurfaceView.Canvas;
 
+    /// <summary>Raises the WinForms mouse-move event the surface behavior listens to.</summary>
+    public void RaiseHostMouseMove(int x, int y)
+        => OnMouseMove(new MouseEventArgs(MouseButtons.Left, 0, x, y, 0));
+
+    /// <summary>Raises the WinForms mouse-up event the surface behavior listens to.</summary>
+    public void RaiseHostMouseUp(int x, int y)
+        => OnMouseUp(new MouseEventArgs(MouseButtons.Left, 1, x, y, 0));
+
     public VisualScrollViewer ScrollViewer => SurfaceView.ScrollViewer;
 
     public TestVisualGridDecorator GridDecorator => SurfaceView.GridDecorator;

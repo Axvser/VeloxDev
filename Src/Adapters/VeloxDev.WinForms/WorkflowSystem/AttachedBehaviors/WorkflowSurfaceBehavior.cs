@@ -1862,7 +1862,9 @@ public sealed class WorkflowSurfaceBehavior
 
         private void ApplyCameraThrottled()
         {
-            if (_cameraClock.Elapsed.TotalMilliseconds >= 1000d / 60d)
+            // 首次拖拽时 Stopwatch 还没启动，Elapsed 恒为 0；若只比较帧间隔，首个手势会一直 pending，
+            // 直到 MouseUp 的 FlushCamera 才跳一下。首次调用必须立即应用并把时钟启动起来。
+            if (!_cameraClock.IsRunning || _cameraClock.Elapsed.TotalMilliseconds >= 1000d / 60d)
             {
                 _cameraClock.Restart();
                 _cameraPending = false;
