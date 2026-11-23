@@ -327,8 +327,18 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>Whether the pointer is over this element or one of its descendants.</summary>
     public bool IsPointerOver => _pointerOver;
 
+    /// <summary>Raised after this element is attached to or detached from a parent.</summary>
+    public event EventHandler? ParentChanged;
+
     /// <summary>The element that owns this one, or <see langword="null"/> for a root.</summary>
     public VisualElement? ParentElement => Parent as VisualElement;
+
+    /// <inheritdoc />
+    protected override void OnParentChanged(ContainerVisual? oldParent, ContainerVisual? newParent)
+    {
+        base.OnParentChanged(oldParent, newParent);
+        ParentChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>The surface that hosts this element, resolved through the parent chain.</summary>
     public VisualHost? Surface => _surface ?? ParentElement?.Surface;

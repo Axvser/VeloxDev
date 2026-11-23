@@ -41,6 +41,30 @@ public sealed class VisualBindingTests
     }
 
     [TestMethod]
+    public void DataContextBinding_FollowsTheParentContext()
+    {
+        var first = new Model { Name = "first" };
+        var second = new Model { Name = "second" };
+        var parent = new VC.Grid { DataContext = new ParentModel { Child = first } };
+        var child = new VC.TextBlock();
+        child.SetBinding(VC.TextBlock.TextProperty, new Binding(nameof(Model.Name)));
+        VisualBindingOperations.Bind(
+            child,
+            VisualElement.DataContextProperty,
+            new Binding(nameof(ParentModel.Child)));
+        parent.Add(child);
+
+        Assert.AreSame(first, child.DataContext);
+        Assert.AreEqual("first", child.Text);
+
+        // The child's DataContext binding resolves against the parent's context; a reused view must see the new one.
+        parent.DataContext = new ParentModel { Child = second };
+
+        Assert.AreSame(second, child.DataContext);
+        Assert.AreEqual("second", child.Text);
+    }
+
+    [TestMethod]
     public void TwoWayBinding_WritesBackToTheSource()
     {
         var model = new Model { Name = "source" };
@@ -105,6 +129,11 @@ public sealed class VisualBindingTests
             VC.TextBlock.TextProperty,
             new Binding(nameof(Model.Name)) { Source = model, TargetNullValue = "(none)" });
         Assert.AreEqual("(none)", name.Text);
+    }
+
+    private sealed class ParentModel
+    {
+        public Model? Child { get; set; }
     }
 
     private sealed class Model : INotifyPropertyChanged

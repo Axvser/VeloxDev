@@ -61,8 +61,29 @@ public abstract class Visual : WinformsObject
     /// </remarks>
     public bool CacheAsBitmap { get; set; }
 
+    private ContainerVisual? _parent;
+
     /// <summary>The container that owns this visual, or <see langword="null"/> for a root.</summary>
-    public ContainerVisual? Parent { get; internal set; }
+    public ContainerVisual? Parent
+    {
+        get => _parent;
+        internal set
+        {
+            if (ReferenceEquals(_parent, value))
+            {
+                return;
+            }
+
+            var previous = _parent;
+            _parent = value;
+            OnParentChanged(previous, value);
+        }
+    }
+
+    /// <summary>Called after <see cref="Parent"/> changes; a visual tree hook for bindings and behaviors.</summary>
+    protected virtual void OnParentChanged(ContainerVisual? oldParent, ContainerVisual? newParent)
+    {
+    }
 
     private Bitmap? _cache;
     private bool _cacheDirty = true;

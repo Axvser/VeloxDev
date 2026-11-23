@@ -70,6 +70,28 @@ public sealed class VisualViewPoolTests
     }
 
     [TestMethod]
+    public void ViewPool_ReusedViewRebindsItsLocalDataContextBinding()
+    {
+        var canvas = new VC.Canvas();
+        var items = new ObservableCollection<object> { new ReuseItem(new ReuseModel("first")), new ReuseItem(new ReuseModel("second")) };
+        ViewPool.SetTemplateSelector(canvas, new ReuseSelector());
+        ViewPool.SetItemsSource(canvas, items);
+        ViewPool.Refresh(canvas);
+
+        var firstView = (ReuseView)ViewAt(canvas, 0);
+        Assert.AreEqual("first", firstView.Inner.Text);
+
+        items.RemoveAt(0);
+        var third = new ReuseItem(new ReuseModel("third"));
+        items.Add(third);
+
+        var reused = canvas.Children.OfType<ReuseView>().Single(view => ReferenceEquals(view.DataContext, third));
+        Assert.AreSame(firstView, reused, "the pool reuses the view for the same item type");
+        Assert.AreEqual("third", reused.Inner.Text,
+            "the child's DataContext binding follows the reused view's new item");
+    }
+
+    [TestMethod]
     public void ViewPool_RemovesViewsWhenItemsLeaveTheSource()
     {
         var canvas = new VC.Canvas();
@@ -163,6 +185,38 @@ public sealed class VisualViewPoolTests
         Assert.AreSame(secondLink, secondView.DataContext);
         Assert.AreEqual(20d, secondView.StartLeft, 0.01d);
         Assert.AreEqual(95d, secondView.EndTop, 0.01d);
+    }
+
+    private sealed class ReuseItem(ReuseModel child)
+    {
+        public ReuseModel Child { get; } = child;
+    }
+
+    private sealed class ReuseModel(string name)
+    {
+        public string Name { get; } = name;
+    }
+
+    private sealed class ReuseSelector : VisualTemplateSelector
+    {
+        public override VisualElement? SelectTemplate(object? item)
+            => item is ReuseItem ? new ReuseView() : null;
+    }
+
+    private sealed class ReuseView : VC.Grid
+    {
+        public ReuseView()
+        {
+            Inner = new VC.TextBlock();
+            VisualBindingOperations.Bind(
+                Inner,
+                VisualElement.DataContextProperty,
+                new Binding(nameof(ReuseItem.Child)));
+            Inner.SetBinding(VC.TextBlock.TextProperty, new Binding(nameof(ReuseModel.Name)));
+            Add(Inner);
+        }
+
+        public VC.TextBlock Inner { get; }
     }
 
     private static VisualElement ViewAt(VC.Canvas canvas, int index)

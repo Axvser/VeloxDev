@@ -104,11 +104,15 @@ public sealed class ViewPool
 
         public List<object> Order { get; } = [];
 
+        private const int MaxRecycledPerType = 512;
+
+        private readonly Dictionary<Type, Stack<VisualElement>> recycled = [];
+
         public bool Syncing { get; set; }
 
-        public void Rebuild()
+        public void Rebuild(bool disposeAll = false)
         {
-            Clear();
+            Clear(disposeAll);
             if (SourceItems is null)
             {
                 return;
@@ -132,7 +136,13 @@ public sealed class ViewPool
                 return;
             }
 
-            var view = Selector?.SelectTemplate(item) ?? ItemTemplate?.Create();
+            VisualElement? view = null;
+            if (recycled.TryGetValue(item.GetType(), out var cache) && cache.Count > 0)
+            {
+                view = cache.Pop();
+            }
+
+            view ??= Selector?.SelectTemplate(item) ?? ItemTemplate?.Create();
             if (view is null)
             {
                 return;
@@ -163,24 +173,68 @@ public sealed class ViewPool
                 Host.RemoveChild(view);
             }
 
-            view.Dispose();
+            view.DataContext = null;
+            Recycle(item.GetType(), view);
         }
 
-        public void Clear()
+        public void Clear(bool disposeAll = false)
         {
-            foreach (var view in Views.Values)
+            foreach (var pair in Views.ToArray())
             {
+                var view = pair.Value;
                 view.PropertyChanged -= OnViewPropertyChanged;
                 if (ReferenceEquals(view.ParentElement, Host))
                 {
                     Host.RemoveChild(view);
                 }
 
-                view.Dispose();
+                if (disposeAll)
+                {
+                    view.Dispose();
+                }
+                else
+                {
+                    view.DataContext = null;
+                    Recycle(pair.Key.GetType(), view);
+                }
             }
 
             Views.Clear();
             Order.Clear();
+            if (disposeAll)
+            {
+                DisposeRecycled();
+            }
+        }
+
+        private void Recycle(Type itemType, VisualElement view)
+        {
+            if (!recycled.TryGetValue(itemType, out var cache))
+            {
+                cache = [];
+                recycled[itemType] = cache;
+            }
+
+            if (cache.Count < MaxRecycledPerType)
+            {
+                cache.Push(view);
+                return;
+            }
+
+            view.Dispose();
+        }
+
+        private void DisposeRecycled()
+        {
+            foreach (var cache in recycled.Values)
+            {
+                foreach (var view in cache)
+                {
+                    view.Dispose();
+                }
+            }
+
+            recycled.Clear();
         }
 
         public void Reorder()
@@ -275,7 +329,7 @@ public sealed class ViewPool
         state.ItemTemplate = GetItemTemplate(host);
         state.Source = GetItemsSource(host) as INotifyCollectionChanged;
         state.SourceItems = GetItemsSource(host) as IEnumerable;
-        state.Rebuild();
+        state.Rebuild(disposeAll: true);
         if (state.Source is not null)
         {
             state.Source.CollectionChanged += state.Handler;

@@ -58,6 +58,7 @@ internal sealed class VisualBindingExpression : IDisposable
     private readonly BindingPath _path;
     private readonly List<INotifyPropertyChanged> _nodes = [];
     private INotifyPropertyChanged? _source;
+    private VisualElement? _dataContextParent;
     private BindingLeaf? _leaf;
     private bool _updatingTarget;
     private bool _updatingSource;
@@ -76,6 +77,12 @@ internal sealed class VisualBindingExpression : IDisposable
         if (_target is WinformsObject visualTarget)
         {
             visualTarget.PropertyChanged += OnTargetPropertyChanged;
+        }
+
+        AttachDataContextParent();
+        if (_property == VisualElement.DataContextProperty && _target is VisualElement contextTarget)
+        {
+            contextTarget.ParentChanged += OnTargetParentChanged;
         }
 
         if (_binding.Mode != BindingMode.OneTime)
@@ -99,7 +106,60 @@ internal sealed class VisualBindingExpression : IDisposable
             visualTarget.PropertyChanged -= OnTargetPropertyChanged;
         }
 
+        if (_target is VisualElement contextTarget)
+        {
+            contextTarget.ParentChanged -= OnTargetParentChanged;
+        }
+
+        DetachDataContextParent();
         DetachSource();
+    }
+
+    // DataContext 绑定以父元素的 DataContext 为源；父上下文换了以后必须重求值，否则复用视图会停在旧槽位。
+    private void AttachDataContextParent()
+    {
+        if (!ReferenceEquals(_property, VisualElement.DataContextProperty) || _target is not VisualElement target)
+        {
+            return;
+        }
+
+        var parent = target.ParentElement;
+        if (ReferenceEquals(parent, _dataContextParent))
+        {
+            return;
+        }
+
+        DetachDataContextParent();
+        _dataContextParent = parent;
+        if (parent is not null)
+        {
+            parent.PropertyChanged += OnDataContextParentChanged;
+        }
+    }
+
+    private void DetachDataContextParent()
+    {
+        if (_dataContextParent is { } parent)
+        {
+            parent.PropertyChanged -= OnDataContextParentChanged;
+            _dataContextParent = null;
+        }
+    }
+
+    private void OnTargetParentChanged(object? sender, EventArgs e)
+    {
+        AttachDataContextParent();
+        AttachSource();
+        UpdateTarget();
+    }
+
+    private void OnDataContextParentChanged(object? sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (ReferenceEquals(e.Property, VisualElement.DataContextProperty))
+        {
+            AttachSource();
+            UpdateTarget();
+        }
     }
 
     private void AttachSource()
