@@ -5,6 +5,10 @@
       "longName": "namespace",
       "shortName": "ns"
     },
+    "surfaceBackground": {
+      "longName": "surface-background",
+      "shortName": "sb"
+    },
     "nodeBackground": {
       "longName": "background",
       "shortName": "bg"

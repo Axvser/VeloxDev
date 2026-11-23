@@ -17,7 +17,7 @@
 |---|---|---|
 | 画布宿主 | `WorkflowSurfaceBehavior`（`RegisterAttached` + `ConditionalWeakTable<Control, SurfaceState>`） | `VisualHost` 上按 `VisualElement.Name` 解析 `PART_*`；相机矩阵、Core 输入路由、布局、视口持久化、小地图接线 |
 | 视觉画布 | `ViewPool`（同目录）+ `WorkflowSystem/ViewHosting/` | `PART_Canvas` 上按 `Helper.VisibleItems` 经 Core 池建视觉子元素；节点/插槽/连线由 `DataTemplate` 定位与绘制 |
-| 小地图 / HUD | 模板派生 `WorkflowMinimapOverlay`（`VisualElement`）/ 直接用 `WorkflowInfoOverlay` | 与 `PART_SurfaceBorder` 同级进 tree 根 `Grid`；表面推 scroll/content/viewport，拖小地图经 `IWorkflowMinimapScrollSource` 反推 |
+| 小地图 / HUD | 模板派生 `WorkflowMinimapOverlay`（`VisualElement`）/ 直接用 `WorkflowInfoOverlay` | 与 `PART_SurfaceBorder` 同级进 tree 根 `Grid`；表面推 scroll/content/viewport，拖小地图经 `IWorkflowMinimapScrollSource` 反推；`WorkflowInfoOverlay.Lines` 把 HUD 文本交给宿主（宿主自己做复制按钮，适配器不含剪贴板 UI） |
 | 网格装饰器 | 模板条目实现 `IWorkflowGridDecorator` | 视觉 `VisualElement`；标尺带 `RulerBand` 同时喂虚拟化 inset 与内容偏移 |
 | item → 视图 | `VisualTemplateSelector` | 返回 `NodeView`/`SlotView`/`LinkView` 视觉元素 |
 | 槽/拖动/连接 | `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` | `VisualElement` 附着行为，由 `WorkflowSurfaceBehavior` 在每个视觉元素上 `Ensure`；自己测量槽、拖动节点、完成连接 |
@@ -64,17 +64,18 @@
 
 ### 2.6 连线：选择器给每条 link 一个 LinkView
 
-- `ViewPool` 通过 tree 的 `LinkTemplate` 为每条 link（含 virtual link）实例化一个视图；`DataTemplate` 把 `StartLeft/StartTop/EndLeft/EndTop` 绑到 `Sender.Anchor.*` / `Receiver.Anchor.*`，把 `CanRender` 绑到 `IsVisible`；表面 `ApplyLinkStyles` 再写 `LineColor`/`HighlightColor`/`IsVirtual`。视图 `OnRender` 画 cubic 并 `PublishCurve`。
+- `ViewPool` 通过 tree 的 `LinkTemplate` 为每条 link（含 virtual link）实例化一个视图；`DataTemplate` 把 `StartLeft/StartTop/EndLeft/EndTop` 绑到 `Sender.Anchor.*` / `Receiver.Anchor.*`，把 `CanRender` 绑到 `IsVisible`；表面 `ApplyLinkStyles` 再写 `LineColor`/`LineThickness`/`HighlightColor`/`HighlightThickness`/`IsVirtual`（视图 DP 与附着属性同型 `float`，缺属性就跳过）。视图 `OnRender` 画 cubic 并 `PublishCurve`。
 - **`LinkView` 的 `Bounds` 是整张画布，曲线可能画到负世界坐标**；`GetInvalidationBounds()` 必须按贝塞尔控制点的包围盒算脏区（Full 和 WinForms Trimmed 的 LinkView 都这样做）。默认 Bounds 只覆盖 0..画布，负象限的悬停高亮不会重画，整面重画（如系统截图）才“突然”完整。
 - **曲线是世界坐标**；相机变换只在绘制时加。`Start/End` 与发布给 Core 命中测试的是同一条曲线。
 - 命中在世界坐标里按半径判：半径取 `WorkflowInput.HitRadius`（demo 设 `LinkHitRadius = 6f`）。节点卡是不透明的，压在下面的那段线不画、也不应答，端口附近除外。
 - **WinForms 的 ViewPool 是 Core 池的闭包**：`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/ViewHosting/` 组合 `ViewSourcePipelineCore<Panel,VisualElement,IWorkflowComponent,NonPriority,…>`；`ViewFactory` 直接调 `VisualTemplateSelector`，`ViewContainer` 把视图留在画布上（`Deactivate` 清 DataContext + `Collapsed`，复用后重新 `Activate`），回收桶、批大小、Replace 归 Core（默认 `AdaptiveViewPoolPolicy`）。新视图先挂父级再写 DataContext，`ElementName`/祖先绑定才能解析；首次挂载按模板 `Panel.ZIndex` 插位（连线 -1 在节点前）。有句柄时调度用 `BeginInvoke`，无句柄同步排空；`Changed` 每批一次。
 - **基准**：`Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks/WinFormsViewPoolBenchmarks.cs`、`WinFormsVisualFrameBenchmarks.cs`，运行 `dotnet run --project ... -c Debug -p:Optimize=true -- --filter "*WinForms*" --job short --inProcess`。ShortRun+400 卡：冷建约 80ms/15MB；半视口 churn 回收后约 123ms/10.3MB；视觉层 15/50 卡静态帧约 4/7ms，400 卡重绘约 108ms（1200×800）。真实 Demo 2000×1292 节点移动帧 p50 约 18ms。
+- **Full/Trimmed demo 的交互对齐**：Full 的节点右键自动布局菜单走共享 `WorkflowLayoutDemo`，链接样式旋钮（厚度/悬停厚度/虚拟色/glow）由 `ApplyLinkStyles` 推到 LinkView，窗口级 Ctrl+S/O/Z/Y/Shift+P 走 `Form.ProcessCmdKey`；RulerThickness=28；HUD 复制是 demo-local 按钮，item template 不带剪贴板 UI。模板的 tree item 默认 LinkContextMenu 为空，Demo 用 `SetLinkMenuBuilder` 提供 Delete。
 - **流光由 demo 的 LinkView 自己驱动**：`LinkView` 静态构造函数向 `WorkflowFlowClock.RegisterDriver` 注册一个**线程池 `System.Threading.Timer`** 驱动（`Examples/Workflow/Common/Lib/.../WorkflowFlowClock.cs`），按树共享 30fps；tick 投递到 UI 线程后调 `WorkflowFlowClock.Sample()`。时钟按真实时间算相位，每次绘制都会采样并把 `BandHead/BandIntensity` 抄到视图，所以拖动/平移的重绘本身就让彗星前进。流光只重画旧/新彗星尾段的包围盒，不再每帧刷整面；定时帧用 `VisualHost.PaintCount`/`LastPaintWasClockDriven` 区分拖动重绘与定时重绘：上一拍是拖动重绘就让位，没有新重绘时照常推进，按住不动仍走 30fps。**不用 `Transition`**：它的 `await` 续体会把帧 Post 回 `WindowsFormsSynchronizationContext`，句柄状态变化时会在线程池上抛未处理异常；投递失败要吞掉（关闭中）。
 - 视图被池释放后绑定仍可能迟到一次锚点更新；`LinkView` 用 `_disposed` 或 `IsRenderReady`/`double.IsFinite` 拦住，否则 GDI+ `GraphicsPath` 进入无效状态后连 `Reset` 都会抛 `ArgumentException`。
 - **拖动时每帧重画是主要成本**：`InvalidateArrange` 不失效测量；`Arrange` 在尺寸不变且子树未失效时跳过 `ArrangeOverride`，`Canvas.Left/Top` 只让父级重排，节点拖动因此不再重排每张卡的内部。节点拖动按约 60Hz 合并位移，画布平移/小地图/外部条拖动按 60Hz 合并（`ApplyCameraThrottled`，松手 `FlushCamera`）；`OnLayoutUpdated` 只推相机，行为检查与连线样式在 `ViewPool.Changed` 后合并到一拍，不再每个视图扫一遍整树。
 - **滚动范围跟着内容走**：`ApplyCamera` 把 `PART_Canvas.Width/Height` 设成「（原点 ∪ 节点 ∪ 可见内容区）× zoom，至少视口大小」；`ScrollViewer` 的默认模板是 `ScrollContentPresenter` + 两条占 Auto 轨道的 `ScrollBar`，extent 由 presenter 测量内容得到，偏移仍由相机推（`SetExternalOffset`）。可见内容区并进来后，相机拖出原点/节点范围时 Canvas 会真实长大，条随之变长；扩展范围保存在 `SurfaceState.World*`，拖回不缩回，换树重置。拖动/缩放改变内容尺寸时也一样。
-- 右侧菜单：条目来自 tree 资源的 `VisualContextMenu`（`SetLinkMenuKey`），适配器从自己的 `PointerPressed(Right, link)` 打开；`SetLinkMenuBuilder` 只在没有视觉菜单键时回落为 `ContextMenuStrip`。**不挂 `Control.ContextMenuStrip`**。
+- 右侧菜单：**模板只声明空 `VisualContextMenu`**，条目归宿主 —— `SetLinkMenuBuilder` 给 `ContextMenuStrip` 加项（适配器订阅、定位、弹出、开合上报）；`SetLinkMenuKey` 仍可把条目声明成 tree 资源的视觉菜单，两者都有时视觉菜单优先。**不挂 `Control.ContextMenuStrip`**。
 
 ### 2.7 插槽锚点写在坐标宿主的局部坐标里
 

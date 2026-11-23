@@ -31,12 +31,8 @@
     <DataTemplate x:Key="SlotTemplate">
       <local:SlotView />
     </DataTemplate>
-    <!-- Right-click menu for a link; its DataContext is that link. CommandPath is resolved against it. -->
-    <VisualContextMenu x:Key="LinkContextMenu">
-      <VisualContextMenu.Items>
-        <VisualMenuItem Header="Delete" CommandPath="DeleteCommand" />
-      </VisualContextMenu.Items>
-    </VisualContextMenu>
+    <!-- VeloxDev customization: add or remove the link menu's entries; each item receives the pressed link. -->
+    <VisualContextMenu x:Key="LinkContextMenu" />
     <!-- The host resolves this key in the tree root's resources; no code-behind selector instance is needed. -->
     <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
                                   NodeTemplate="{StaticResource NodeTemplate}"

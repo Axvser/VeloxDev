@@ -4,6 +4,7 @@ using System.Windows.Forms;
 using Demo.ViewModels;
 using Demo.Workflow;
 using VeloxDev.WinForms.Xaml.Visuals;
+using VeloxDev.WinForms.Xaml.Visuals.Controls;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 using Wf = VeloxDev.WorkflowSystem;
@@ -12,18 +13,22 @@ namespace Demo.Views.Workflow;
 
 /// <summary>
 /// The workflow surface host. One <see cref="VisualHost"/> paints the whole graph; the heavy machinery — pan,
-/// zoom, viewport, node/slot pooling, slot layout and the rulers — belongs to
+/// zoom, viewport, node/slot pooling, slot layout, the rulers and the hover highlight — belongs to
 /// <see cref="WorkflowBehaviors.WorkflowSurfaceBehavior"/>.
-/// What stays here is this demo's policy: session wiring, the hover highlight, the delete gesture, the Ctrl-click
+/// What stays here is this demo's policy: session wiring, the node layout menu, the delete gesture, the Ctrl-click
 /// selection veto and the Shift-wheel mapping.
 /// </summary>
 public sealed class WorkflowCanvas : Control
 {
     private readonly VisualHost _host;
     private readonly WorkflowSurfaceView _surface;
+    private readonly List<(VisualMenuItem Item, double Tolerance)> _toleranceItems = [];
 
     private WorkflowDemoSession? _session;
     private WorkflowInput? _input;
+    private VisualContextMenu? _nodeMenu;
+    private INodeComponent? _nodeMenuTarget;
+    private double _nodeLayoutTolerance = 8d;
 
     /// <summary>The session whose tree this surface renders.</summary>
     [Browsable(false)]
@@ -44,6 +49,14 @@ public sealed class WorkflowCanvas : Control
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public MinimapOverlay MinimapOverlay => _surface.MinimapOverlay;
+
+    /// <summary>The canvas-info HUD, exposed so the host can copy its text.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public WorkflowBehaviors.WorkflowInfoOverlay InfoOverlay => _surface.InfoOverlay;
+
+    /// <summary>Raised with a one-line message for the host's status area after a surface gesture.</summary>
+    public event EventHandler<string>? StatusMessage;
 
     /// <summary>Creates the surface and its single visual host.</summary>
     public WorkflowCanvas()
@@ -83,6 +96,10 @@ public sealed class WorkflowCanvas : Control
             }
 
             DetachSession(_session);
+
+            _nodeMenu?.Close();
+            _nodeMenu?.Dispose();
+            _nodeMenu = null;
         }
 
         base.Dispose(disposing);
@@ -104,12 +121,14 @@ public sealed class WorkflowCanvas : Control
     {
         if (session is null) return;
 
+        _nodeMenu?.Close();
+        _nodeMenuTarget = null;
         DetachLinkInput();
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(_host, null);
         WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(_host);
     }
 
-    // ── Link input: hover highlight and delete ──────────────────────────────────
+    // ── Link input: delete, node menu and Shift-wheel ───────────────────────────
 
     private void AttachLinkInput(ITreeComponent tree)
     {
@@ -120,9 +139,7 @@ public sealed class WorkflowCanvas : Control
 
         if (tree.GetHelper() is Wf.IInputEvents events)
         {
-            events.Input.PointerMoved += OnInputPointerMoved;
-            events.Input.PointerEntered += OnInputPointerMoved;
-            events.Input.PointerExited += OnInputPointerExited;
+            events.Input.PointerPressed += OnNodeMenuPointerPressed;
             events.Input.KeyDown += OnInputKeyDown;
             events.Input.PointerWheelChanged += OnInputPointerWheel;
         }
@@ -134,9 +151,7 @@ public sealed class WorkflowCanvas : Control
 
         if (input.Tree.GetHelper() is Wf.IInputEvents events)
         {
-            events.Input.PointerMoved -= OnInputPointerMoved;
-            events.Input.PointerEntered -= OnInputPointerMoved;
-            events.Input.PointerExited -= OnInputPointerExited;
+            events.Input.PointerPressed -= OnNodeMenuPointerPressed;
             events.Input.KeyDown -= OnInputKeyDown;
             events.Input.PointerWheelChanged -= OnInputPointerWheel;
         }
@@ -146,13 +161,6 @@ public sealed class WorkflowCanvas : Control
             new Anchor(), Wf.InputModifiers.None, this, null, new WorkflowEventHandle()));
         _input = null;
     }
-
-    private void OnInputPointerMoved(object? sender, Wf.PointerEventArgs e) => UpdateLinkHighlights();
-
-    private void OnInputPointerExited(object? sender, Wf.PointerExitedEventArgs e) => UpdateLinkHighlights();
-
-    // 单层绘制从 WorkflowInput.HoveredLink 读悬停线；指针换目标时把整棵视觉树标脏就够了。
-    private void UpdateLinkHighlights() => _host.Invalidate();
 
     // 键也过输入路由：**删不删是这里的决定**。更靠前的一级（连线自己）可以在句柄上拒绝这一次。
     private void OnInputKeyDown(object? sender, Wf.KeyDownEventArgs e)
@@ -186,6 +194,145 @@ public sealed class WorkflowCanvas : Control
         e.Handle.PreventDefault = true;
         input.Scroller?.ScrollBy(-e.DeltaY, 0d);
     }
+
+    // ── Node right-click menu: the shared layout presets ────────────────────────
+
+    // 右键节点由这里弹菜单。订阅的是 Core 的按下事件：命中者不是节点就放行 —— 连线右键仍归适配器的
+    // LinkMenuKey，节点的左键拖动与端口连线也不经过这一支（它们只在左键上应答）。
+    private void OnNodeMenuPointerPressed(object? sender, Wf.PointerPressedEventArgs e)
+    {
+        if (e.Button != Wf.MouseButton.Right
+            || e.Target is not INodeComponent node
+            || e.Handle.PreventDefault)
+        {
+            return;
+        }
+
+        if (ShowNodeLayoutMenu(node, e.Position))
+        {
+            e.Handle.PreventDefault = true;
+        }
+    }
+
+    private bool ShowNodeLayoutMenu(INodeComponent node, Wf.Anchor position)
+    {
+        var surfacePoint = WorkflowBehaviors.WorkflowSurfaceBehavior.WorldToSurface(
+            _host, new PointF((float)position.Horizontal, (float)position.Vertical));
+
+        // 脚本框之类的文字输入保留自己的右键语义，与其余平台一致。
+        var hit = _host.FindElementAt(surfacePoint);
+        if (IsInsideTextInput(hit))
+        {
+            return false;
+        }
+
+        _nodeMenuTarget = node;
+        var menu = EnsureNodeMenu();
+        RefreshToleranceChecks();
+        menu.Refresh();
+        menu.OpenAt(ResolveNodeView(hit, node) ?? (VisualElement)_surface, surfacePoint);
+        return true;
+    }
+
+    // 菜单以节点卡为锚（与其余平台一致）；指针若落在已挂的弹层上，就退回表面原点。
+    private static VisualElement? ResolveNodeView(VisualElement? hit, INodeComponent node)
+    {
+        for (var current = hit; current is not null; current = current.ParentElement)
+        {
+            if (ReferenceEquals(current.DataContext, node))
+            {
+                return current;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsInsideTextInput(VisualElement? hit)
+    {
+        for (var current = hit; current is not null; current = current.ParentElement)
+        {
+            if (current is VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox
+                or VeloxDev.WinForms.Xaml.Visuals.Controls.RichTextBox)
+            {
+                return true;
+            }
+
+            if (current is WorkflowSurfaceView)
+            {
+                break;
+            }
+        }
+
+        return false;
+    }
+
+    // 菜单只建一次，点的是「当前右键的那个节点」；重建一次的只有容差勾选状态。
+    private VisualContextMenu EnsureNodeMenu()
+    {
+        if (_nodeMenu is not null)
+        {
+            return _nodeMenu;
+        }
+
+        var menu = new VisualContextMenu();
+
+        var layout = new VisualMenuItem { Header = "自动布局" };
+        foreach (var (label, traversal) in WorkflowLayoutDemo.Traversals)
+        {
+            var item = new VisualMenuItem { Header = label };
+            item.Click += (_, _) => ApplyNodeLayout(traversal);
+            layout.Items.Add(item);
+        }
+
+        menu.Items.Add(layout);
+        menu.Items.Add(new VisualMenuItem { IsSeparator = true });
+
+        var tolerance = new VisualMenuItem { Header = "布局容差" };
+        foreach (var (label, value) in WorkflowLayoutDemo.Tolerances)
+        {
+            var item = new VisualMenuItem { Header = label };
+            item.Click += (_, _) =>
+            {
+                _nodeLayoutTolerance = value;
+                RefreshToleranceChecks();
+                ReportStatus($"布局容差 = {value}");
+            };
+            _toleranceItems.Add((item, value));
+            tolerance.Items.Add(item);
+        }
+
+        menu.Items.Add(tolerance);
+        _nodeMenu = menu;
+        RefreshToleranceChecks();
+        return menu;
+    }
+
+    private void RefreshToleranceChecks()
+    {
+        foreach (var (item, value) in _toleranceItems)
+        {
+            item.IsChecked = Math.Abs(_nodeLayoutTolerance - value) < 1e-9d;
+        }
+    }
+
+    private void ApplyNodeLayout(WorkflowLayoutTraversal traversal)
+    {
+        if (_nodeMenuTarget is not { } node) return;
+
+        try
+        {
+            var result = WorkflowLayoutDemo.Arrange(node, traversal, _nodeLayoutTolerance);
+            ReportStatus(WorkflowLayoutDemo.Describe(result, $"从 {node.GetType().Name}"));
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(_host);
+        }
+        catch (Exception ex)
+        {
+            ReportStatus($"布局失败：{ex.Message}");
+        }
+    }
+
+    private void ReportStatus(string message) => StatusMessage?.Invoke(this, message);
 
     /// <summary>
     /// The presses this host has claimed: Ctrl-click toggles agent selection, Shift-drag on the empty canvas is

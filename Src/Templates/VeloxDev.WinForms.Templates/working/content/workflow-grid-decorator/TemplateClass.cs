@@ -26,7 +26,7 @@ public sealed class TemplateClass : VisualElement, IWorkflowGridDecorator
 
     /// <summary>Whether the decorator paints its own surface background (templates with a surface Border set this false).</summary>
     public static readonly DependencyProperty DrawSurfaceProperty = DependencyProperty.Register(
-        nameof(DrawSurface), typeof(bool), typeof(GridDecorator),
+        nameof(DrawSurface), typeof(bool), typeof(TemplateClass),
         new PropertyMetadata(true) { AffectsRender = true });
 
     public static readonly DependencyProperty RulerThicknessProperty = DependencyProperty.Register(
@@ -243,7 +243,6 @@ public sealed class TemplateClass : VisualElement, IWorkflowGridDecorator
         private readonly Color _rulerLabel = ParseColor("TemplateRulerLabelColor");
         private readonly Color _rulerTick = ParseColor("TemplateRulerTickColor");
         private readonly Color _rulerDivider = ParseColor("TemplateRulerDividerColor");
-        private readonly Color _surfaceBorder = Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF);
 
         /// <inheritdoc />
         protected override void OnRender(Graphics graphics)
@@ -368,9 +367,6 @@ public sealed class TemplateClass : VisualElement, IWorkflowGridDecorator
                         FormatGridValue(value), owner._labelFont, labelBrush, 3f, y + 2f);
                 }
             }
-
-            using var borderPen = new DrawingPen(_surfaceBorder, 1f);
-            graphics.DrawRectangle(borderPen, 0.5f, 0.5f, Math.Max(0f, width - 1f), Math.Max(0f, height - 1f));
         }
 
         private static bool IsMajorLine(double value, double majorStep)

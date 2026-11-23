@@ -71,28 +71,28 @@
     "rulerBackground": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Accepted for cross-GUI CLI parity; the WinForms surface draws its floating ruler in the adapter, which uses the same default.",
+      "description": "Ruler area background color.",
       "defaultValue": "#C8252526",
       "replaces": "TemplateRulerBackground"
     },
     "rulerTickColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Accepted for cross-GUI CLI parity; the WinForms surface draws its floating ruler in the adapter, which uses the same default.",
+      "description": "Ruler tick mark color.",
       "defaultValue": "#555555",
       "replaces": "TemplateRulerTickColor"
     },
     "rulerLabelColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Accepted for cross-GUI CLI parity; the WinForms surface draws its floating ruler in the adapter, which uses the same default.",
+      "description": "Ruler label text color.",
       "defaultValue": "#888888",
       "replaces": "TemplateRulerLabelColor"
     },
     "rulerDividerColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Accepted for cross-GUI CLI parity; the WinForms surface draws its floating ruler in the adapter, which uses the same default.",
+      "description": "Divider line between ruler and content area.",
       "defaultValue": "#3A3D40",
       "replaces": "TemplateRulerDividerColor"
     }

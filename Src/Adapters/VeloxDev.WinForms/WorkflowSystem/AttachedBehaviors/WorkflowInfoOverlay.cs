@@ -1,4 +1,5 @@
-﻿using System.Collections.Specialized;
+﻿using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -88,6 +89,9 @@ public sealed class WorkflowInfoOverlay : VisualElement
         get => (double)GetValue(ZoomProperty)!;
         set => SetValue(ZoomProperty, value);
     }
+
+    /// <summary>The lines the HUD is currently showing, in display order; a host can copy them as text.</summary>
+    public IReadOnlyList<string> Lines => BuildLines();
 
     /// <inheritdoc />
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)

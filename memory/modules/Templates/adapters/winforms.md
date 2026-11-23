@@ -15,11 +15,11 @@
 
 | 条目 | 形状 | 关键锚点 |
 | --- | --- | --- |
-| tree-view | 视觉 `UserControl` 根 `Grid`：`PART_SurfaceBorder`（`Background`/`BorderBrush`/`BorderThickness`/`CornerRadius` 令牌）> `PART_GridDecorator`（`GridSpacing=40`、`MajorLineEvery=5`、`RulerThickness=28`、`DrawSurface=False`）> `PART_ScrollViewer` > `PART_Canvas`（`behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`、`behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`）；同级的 `PART_MinimapOverlay` 与 `PART_InfoOverlay` 是视觉元素。资源里声明 `NodeTemplate` / `LinkTemplate` / `SlotTemplate`、`LinkContextMenu` 与 `CustomTemplateSelector x:Key="WorkflowTemplateSelector"`。**code-behind 只有 `InitializeComponent()`** | 行为挂在包住它的 `VisualHost` 上，按 `VisualElement.Name` 解析；`VisualTemplateSelectorKey` 默认就是 `WorkflowTemplateSelector`，宿主从 tree 根资源解析 |
-| node-view | 视觉 `UserControl`：`Viewbox > Grid 260×180`；`Border` 画卡面、标题 `TextBlock`、`PART_InputSlot` 与 `PART_OutputSlots`（`ItemsControl` + `DataTemplate` 行）。根挂 `WorkflowSlotLayoutBehavior`（`IsEnabled` / `SlotNames` / `SlotEnumeratorNames` / `CoordinateHostName`），标题行挂 `WorkflowNodeDragBehavior`（`IsEnabled` / `CoordinateHostName`） | `WorkflowSurfaceBehavior` 遍历视觉树对每个元素调 `Ensure`；行为自己测量命名槽、只允许标题拖动。没写 `IsEnabled` 就不生效，没有部件名回退 |
-| link-view | 视觉 `UserControl`（空壳）+ DP `StartLeft/StartTop/EndLeft/EndTop/CanRender/IsVirtual/LineColor/HighlightColor/IsHighlighted`；`OnRender` 画 cubic 并 `PublishCurve`；构造里 `IsHitTestVisible = false` | `LinkTemplate` 把端点绑到 `Sender.Anchor.*` / `Receiver.Anchor.*`、`CanRender` 绑 `IsVisible`，`Width`/`Height` 用 `{Binding Width/Height, ElementName=PART_Canvas}` 取画布实际尺寸；表面 `ApplyLinkStyles` 写颜色与 `IsVirtual` |
-| slot-view | 视觉 `UserControl`：`Viewbox > Shapes.Path PART_Glyph`；根挂 `WorkflowSlotConnectionBehavior.IsEnabled="True"`；**code-behind 只有 `InitializeComponent()`** | `TemplateSlotPath`、连接手势；`PART_Glyph.Fill` 经 `SlotStateBrushConverter` 绑模型 `State` |
-| grid-decorator | **纯 `.cs`**：`TemplateClass : VisualElement, IWorkflowGridDecorator`，三层：世界网格层、内容（ScrollViewer）、视口固定标尺层 | 网格、标尺带；`DrawSurface=False` 时让 `PART_SurfaceBorder` 画表面背景 |
+| tree-view | 视觉 `UserControl` 根 `Grid`：`PART_SurfaceBorder`（`Background`/`BorderBrush`/`BorderThickness`/`CornerRadius` 令牌）> `PART_GridDecorator`（`GridSpacing=40`、`MajorLineEvery=5`、`RulerThickness=28`、`DrawSurface=False`）> `PART_ScrollViewer` > `PART_Canvas`（`behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`、`behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`）；同级的 `PART_MinimapOverlay` 与 `PART_InfoOverlay` 是视觉元素。资源里声明 `NodeTemplate` / `LinkTemplate` / `SlotTemplate`、**空** `LinkContextMenu` 与 `CustomTemplateSelector x:Key="WorkflowTemplateSelector"`。**code-behind 只有 `InitializeComponent()`** | 行为挂在包住它的 `VisualHost` 上，按 `VisualElement.Name` 解析；`VisualTemplateSelectorKey` 默认就是 `WorkflowTemplateSelector`，宿主从 tree 根资源解析；连线条目由宿主 `SetLinkMenuBuilder` 提供 |
+| node-view | 视觉 `UserControl`：`Viewbox > Grid 260×180`；**backdrop `Border`（`TemplateSurfaceBackground`）** 与卡面 `Border`（`TemplateNodeBackground`）、标题 `TextBlock`（`FontWeight=SemiBold`）、`PART_InputSlot` 与 `PART_OutputSlots`（`ItemsControl` + `DataTemplate` 行，`Panel.ZIndex=6`）。根挂 `WorkflowSlotLayoutBehavior`（`IsEnabled` / `SlotNames` / `SlotEnumeratorNames` / `CoordinateHostName`），标题行挂 `WorkflowNodeDragBehavior`（`IsEnabled` / `CoordinateHostName`） | `WorkflowSurfaceBehavior` 遍历视觉树对每个元素调 `Ensure`；行为自己测量命名槽、只允许标题拖动。没写 `IsEnabled` 就不生效，没有部件名回退 |
+| link-view | 视觉 `UserControl`（空壳）+ DP `StartLeft/StartTop/EndLeft/EndTop/CanRender/IsVirtual/LineColor/LineThickness/HighlightColor/HighlightThickness/IsHighlighted`；`LineColor`/`LineThickness` 默认值来自 `TemplateLinkColor`/`TemplateLinkThickness`（`float`，与适配器附着属性同型）；`OnRender` 画 cubic 并 `PublishCurve`；构造里 `IsHitTestVisible = false` | `LinkTemplate` 把端点绑到 `Sender.Anchor.*` / `Receiver.Anchor.*`、`CanRender` 绑 `IsVisible`，`Width`/`Height` 用 `{Binding Width/Height, ElementName=PART_Canvas}` 取画布实际尺寸；表面 `ApplyLinkStyles` 写颜色、线宽与 `IsVirtual` |
+| slot-view | 视觉 `UserControl`：`Viewbox > Shapes.Path PART_Glyph`；根挂 `WorkflowSlotConnectionBehavior.IsEnabled="True"`；**code-behind 只有 `InitializeComponent()`** | `TemplateSlotPath`、连接手势；`PART_Glyph.Fill` 经 `SlotStateBrushConverter`（`StandByColor=TemplateSlotColor`）绑模型 `State`，`Stroke` 同转换器带 `ConverterParameter=Border`（`BorderColor=TemplateSlotBorderColor`），`StrokeThickness` 按 1024 artboard 单位给 48 |
+| grid-decorator | **纯 `.cs`**：`TemplateClass : VisualElement, IWorkflowGridDecorator`，三层：世界网格层、内容（ScrollViewer）、视口固定标尺层。**不画表面边框** | 网格、标尺带；`DrawSurface=False` 时让 `PART_SurfaceBorder` 画表面背景；表面边框只有 `PART_SurfaceBorder` 一处 |
 | minimap-overlay | **纯 `.cs`**：`TemplateClass : WorkflowMinimapOverlay`（`VisualElement`），只给调色板 | 与 `PART_SurfaceBorder` 同级放进 tree 根 `Grid`；定位与拖拽映射在适配器，拖小地图经 `IWorkflowMinimapScrollSource` 反推视口 |
 | template-selector | **纯 `.cs`**：`TemplateClass : Visuals.VisualTemplateSelector`，按 item 类型返回 `NodeTemplate?.Create()` / `SlotTemplate?.Create()` / `LinkTemplate?.Create()`（缺模板时回落 `new NodeView()` 等） | tree 资源按 `WorkflowTemplateSelector` 键引用它 |
 
@@ -29,15 +29,15 @@
 
 ## 二、模板里手写的是什么
 
-- **tree**：唯一代码是一行 `InitializeComponent()`；资源里用 `DataTemplate` 包住 `NodeView` / `LinkView` / `SlotView`，选择器资源 `WorkflowTemplateSelector` 把三者的 `DataTemplate` 属性接上；`PART_Canvas` 用 `behaviors:ViewPool` 把它绑到 `Helper.VisibleItems`。连线菜单是 tree 资源里的 `VisualContextMenu x:Key="LinkContextMenu"`，宿主只设 `SetLinkMenuKey`；键/滚轮策略属于宿主（树的 `IInputEvents`）。调色板由 `template.json` 的 `Template*` 符号替换进 XAML。
+- **tree**：唯一代码是一行 `InitializeComponent()`；资源里用 `DataTemplate` 包住 `NodeView` / `LinkView` / `SlotView`，选择器资源 `WorkflowTemplateSelector` 把三者的 `DataTemplate` 属性接上；`PART_Canvas` 用 `behaviors:ViewPool` 把它绑到 `Helper.VisibleItems`。连线菜单是 tree 资源里的**空** `VisualContextMenu x:Key="LinkContextMenu"`：条目由宿主给（WinForms 走 `SetLinkMenuBuilder`，视觉资源键仍可经 `SetLinkMenuKey` 解析）；键/滚轮策略属于宿主（树的 `IInputEvents`）。调色板由 `template.json` 的 `Template*` 符号替换进 XAML。
 - **selector**：只声明「哪个 item 用哪个视图」；返回 `NodeTemplate?.Create()` / `SlotTemplate?.Create()` / `LinkTemplate?.Create()`，缺模板时回落 `new NodeView()` 等。
-- **node / slot**：node 的行由模板 `ItemsControl` 生成；根上的 `WorkflowSlotLayoutBehavior` 声明槽名与坐标宿主，标题行的 `WorkflowNodeDragBehavior` 声明拖动区；slot 根上的 `WorkflowSlotConnectionBehavior` 声明连接手势。`ViewPool` 设 `DataContext`；`WorkflowSlotLayoutBehavior` 找部件、写锚点；slot 的 `PART_Glyph.Fill` 经 `SlotStateBrushConverter` 绑模型 `State`；slot code-behind 只有 `InitializeComponent()`。
-- **link**：`LinkTemplate` 为每条 link 建一个 `LinkView`，端点由绑定给出；它自己画并发布曲线。
+- **node / slot**：node 的行由模板 `ItemsControl` 生成；根上的 `WorkflowSlotLayoutBehavior` 声明槽名与坐标宿主，标题行的 `WorkflowNodeDragBehavior` 声明拖动区；slot 根上的 `WorkflowSlotConnectionBehavior` 声明连接手势。`ViewPool` 设 `DataContext`；`WorkflowSlotLayoutBehavior` 找部件、写锚点；slot 的 `PART_Glyph.Fill` 经 `SlotStateBrushConverter`（`StandByColor`）绑模型 `State`，`Stroke` 经同一转换器的 `Border` 参数取 `BorderColor`；slot code-behind 只有 `InitializeComponent()`。
+- **link**：`LinkTemplate` 为每条 link 建一个 `LinkView`，端点由绑定给出；它自己画并发布曲线。`linkColor`/`linkThickness` 只改 `LinkView` 的 `LineColor`/`LineThickness` 默认值；这条 link 没有 surface 背景符号，表面底色归 tree 的 `PART_SurfaceBorder`。
 - **grid / minimap**：只给调色板与间距；网格/标尺/小地图/HUD 数学在适配器视觉元素与模板的绘制代码里。
 
 **与 WPF tree 同构**：小地图 `PART_MinimapOverlay` 与 HUD `PART_InfoOverlay` 都在 tree 的视觉 `Grid` 里，与 `PART_SurfaceBorder` 同级；`PointerPressSourceName` 指向 `PART_SurfaceBorder`，空白画布拖动从该部件起算。没有 HWND 兄弟层。
 
-**Trimmed 默认画面与 WPF 对齐的基线**：`ClientSize=1085×683`、`RulerThickness=28`、`SurfaceCornerRadius=0`、标尺底 `#C8252526`、HUD 左 46 / 底 12、minimap `Margin=0,12,12,0`（200×140）、节点标题/端口行随整图相机矩阵缩放并在面板内垂直居中、slot 字形只填不描边；网格线在 `SmoothingMode.None` 下画。仍不同的是窗口非客户区、滚动条（自绘细条 vs WPF 原生带箭头）和文字光栅化（GDI+ vs WPF）。
+**Trimmed 默认画面与 WPF 对齐的基线**：`ClientSize=1085×683`、`RulerThickness=28`、`SurfaceCornerRadius=0`、标尺底 `#C8252526`、HUD 左 46 / 底 12、minimap `Margin=0,12,12,0`（200×140）、节点标题/端口行随整图相机矩阵缩放并在面板内垂直居中、slot 字形实心并在 glyph 空间描 `BorderColor` 一圈；网格线在 `SmoothingMode.None` 下画。仍不同的是窗口非客户区、滚动条（自绘细条 vs WPF 原生带箭头）和文字光栅化（GDI+ vs WPF）。
 
 ---
 
@@ -77,7 +77,7 @@ tree 资源里 `DataTemplate x:Key="NodeTemplate"` / `LinkTemplate` / `SlotTempl
 
 ### P7 · 视觉路径每线一个 LinkView
 
-`LinkTemplate` 为每条 link（含 virtual link）建一个 `LinkView`；端点由 `DataTemplate` 绑定到 `Sender.Anchor.*` / `Receiver.Anchor.*`，颜色与 `IsVirtual` 由表面 `ApplyLinkStyles` 写；`OnRender` 画 cubic 并 `PublishCurve`。
+`LinkTemplate` 为每条 link（含 virtual link）建一个 `LinkView`；端点由 `DataTemplate` 绑定到 `Sender.Anchor.*` / `Receiver.Anchor.*`，颜色、`LineThickness`/`HighlightThickness` 与 `IsVirtual` 由表面 `ApplyLinkStyles` 写（宿主属性是 `VisualLink*`，模板 DP 同型 `float`）；`OnRender` 画 cubic 并 `PublishCurve`。
 
 ---
 

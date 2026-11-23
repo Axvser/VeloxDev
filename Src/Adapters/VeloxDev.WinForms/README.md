@@ -170,7 +170,9 @@ WorkflowSurfaceBehavior.SetGridDecoratorName(host, "PART_GridDecorator");
 WorkflowSurfaceBehavior.SetScrollViewerName(host, "PART_ScrollViewer");
 WorkflowSurfaceBehavior.SetMinimapOverlayName(host, "PART_MinimapOverlay");
 WorkflowSurfaceBehavior.SetPointerPressSourceName(host, "PART_SurfaceBorder");
-WorkflowSurfaceBehavior.SetLinkMenuKey(host, "LinkContextMenu");
+// The tree ships an empty LinkContextMenu; the host supplies the entries.
+WorkflowSurfaceBehavior.SetLinkMenuBuilder(host, (menu, link) =>
+    menu.Items.Add("Delete", null, (_, _) => link.DeleteCommand.Execute(null)));
 // The tree declares its selector as x:Key="WorkflowTemplateSelector"; the surface resolves that key by default.
 WorkflowSurfaceBehavior.SetIsEnabled(host, true);
 WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);

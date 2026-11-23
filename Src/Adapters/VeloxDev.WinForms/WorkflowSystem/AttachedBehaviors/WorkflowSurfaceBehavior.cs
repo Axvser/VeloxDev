@@ -946,6 +946,10 @@ public sealed class WorkflowSurfaceBehavior
 
             var changed = SetIfPresent(view, "LineColor", GetVisualLinkColor(host));
             changed |= SetIfPresent(view, "HighlightColor", GetVisualLinkHoverColor(host));
+            changed |= SetIfPresent(view, "LineThickness", GetVisualLinkThickness(host));
+            changed |= SetIfPresent(view, "HighlightThickness", GetVisualLinkHoverThickness(host));
+            changed |= SetIfPresent(view, "VirtualColor", GetVisualLinkVirtualColor(host));
+            changed |= SetIfPresent(view, "IsGlow", GetVisualLinkGlow(host));
             changed |= SetIfPresent(view, "IsVirtual", ReferenceEquals(link, state.Tree?.VirtualLink));
             if (changed)
             {

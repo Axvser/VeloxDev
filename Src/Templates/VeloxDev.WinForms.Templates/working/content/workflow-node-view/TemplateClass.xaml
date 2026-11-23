@@ -20,6 +20,11 @@
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
 
+      <!-- Backdrop behind the semi-transparent card; the card background is the node background below. -->
+      <Border Grid.RowSpan="2"
+              Background="TemplateSurfaceBackground"
+              CornerRadius="TemplateNodeCornerRadius" />
+
       <Border Grid.RowSpan="2"
               Background="TemplateNodeBackground"
               BorderBrush="TemplateNodeBorderBrush"
@@ -31,11 +36,12 @@
               behaviors:WorkflowNodeDragBehavior.CoordinateHostName="PART_Canvas">
         <TextBlock Text="{Binding Name}"
                    Foreground="TemplateNodeForeground"
+                   FontWeight="SemiBold"
                    VerticalAlignment="Center"
                    Margin="12,0" />
       </Grid>
 
-      <Grid Grid.Row="1" ClipToBounds="False">
+      <Grid Grid.Row="1" Panel.ZIndex="6" ClipToBounds="False">
         <local:SlotView x:Name="PART_InputSlot"
                         DataContext="{Binding InputSlot}"
                         Width="18"

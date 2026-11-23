@@ -243,7 +243,6 @@ public sealed class GridDecorator : VisualElement, IWorkflowGridDecorator
         private readonly Color _rulerLabel = ParseColor("#888888");
         private readonly Color _rulerTick = ParseColor("#555555");
         private readonly Color _rulerDivider = ParseColor("#3A3D40");
-        private readonly Color _surfaceBorder = Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF);
 
         /// <inheritdoc />
         protected override void OnRender(Graphics graphics)
@@ -368,9 +367,6 @@ public sealed class GridDecorator : VisualElement, IWorkflowGridDecorator
                         FormatGridValue(value), owner._labelFont, labelBrush, 3f, y + 2f);
                 }
             }
-
-            using var borderPen = new DrawingPen(_surfaceBorder, 1f);
-            graphics.DrawRectangle(borderPen, 0.5f, 0.5f, Math.Max(0f, width - 1f), Math.Max(0f, height - 1f));
         }
 
         private static bool IsMajorLine(double value, double majorStep)

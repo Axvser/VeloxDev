@@ -5,6 +5,7 @@ using Demo.Views.Workflow;
 using Demo.Workflow;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using VeloxDev.AI;
 using VeloxDev.AI.Safety;
@@ -59,6 +60,7 @@ namespace Demo
         private WorkbenchTabButton _canvasTab = null!;
         private WorkbenchTabButton _outputTab = null!;
         private Label _mainHintLabel = null!;
+        private Label _hudCopyLabel = null!;
         private Label _outputRootLabel = null!;
         private Label _outputStateLabel = null!;
         private Label _outputProgressLabel = null!;
@@ -87,6 +89,7 @@ namespace Demo
         public Form1()
         {
             InitializeComponent();
+            KeyPreview = true;
             splitContainer.Panel1.Padding = Padding.Empty;
             splitContainer.Panel2.Padding = Padding.Empty;
             splitContainer.SplitterWidth = 4;
@@ -102,6 +105,8 @@ namespace Demo
 
             _uiTimer.Tick += OnUiTimerTick;
             _uiTimer.Start();
+
+            workflowSurfaceControl.StatusMessage += OnSurfaceStatus;
 
             LoadDemo(WorkflowDemoSession.Create());
             FormClosed += (_, _) =>
@@ -132,6 +137,46 @@ namespace Demo
                     RepaintShellDeferred();
                 }));
             }
+        }
+
+        // 菜单上印的手势必须与焦点无关：画布/输入框拿焦点时，那一层的 ProcessCmdKey 没接手就冒泡到这里。
+        // 文本框自己会先吃掉 Ctrl+Z/Ctrl+Y，其余情况由窗体统一执行，效果与画布内那条 Core 路由一致。
+        /// <inheritdoc />
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            var key = keyData & Keys.KeyCode;
+            var control = (keyData & Keys.Control) != 0;
+            var shift = (keyData & Keys.Shift) != 0;
+
+            if (control && shift && key == Keys.P)
+            {
+                ShowCommandCenter(null);
+                return true;
+            }
+
+            if (control && !shift)
+            {
+                switch (key)
+                {
+                    case Keys.S:
+                        SaveWorkflow(this, EventArgs.Empty);
+                        return true;
+                    case Keys.O:
+                        SelectWorkflow(this, EventArgs.Empty);
+                        return true;
+                    case Keys.Z:
+                        // 画布聚焦时让 Core 的按键路由照旧处理，这一层只补「焦点在别处」的缺口。
+                        if (workflowSurfaceControl.ContainsFocus) break;
+                        UndoWorkflow(this, EventArgs.Empty);
+                        return true;
+                    case Keys.Y:
+                        if (workflowSurfaceControl.ContainsFocus) break;
+                        RedoWorkflow(this, EventArgs.Empty);
+                        return true;
+                }
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         // The shell's cards and strips are custom-painted containers with child labels. WinForms can finish the
@@ -339,6 +384,8 @@ namespace Demo
             menu.AddItem("属性", null, () => SelectInspectorPage("properties"));
             menu.AddItem("AI 助手", null, () => SelectInspectorPage("agent"));
             menu.AddItem("执行输出", null, () => SelectMainTab("output"));
+            menu.AddSeparator();
+            menu.AddItem("复制画布信息", null, () => OnCopyHud(null, EventArgs.Empty));
             return menu;
         }
 
@@ -472,6 +519,19 @@ namespace Demo
             _canvasTab.Click += (_, _) => SelectMainTab("canvas");
             _outputTab.Click += (_, _) => SelectMainTab("output");
 
+            // 画布信息 HUD 是只画的；复制入口放在外壳上，不往 HUD/模板里塞可交互控件。
+            _hudCopyLabel = new Label
+            {
+                Text = "复制 HUD",
+                AutoSize = true,
+                ForeColor = WorkbenchPalette.TextTertiary,
+                BackColor = Color.Transparent,
+                Font = CardTheme.Font(8f),
+                Cursor = Cursors.Hand,
+                Margin = new Padding(12, 8, 4, 0),
+            };
+            _hudCopyLabel.Click += OnCopyHud;
+
             var tabs = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -485,6 +545,7 @@ namespace Demo
             };
             tabs.Controls.Add(_canvasTab);
             tabs.Controls.Add(_outputTab);
+            tabs.Controls.Add(_hudCopyLabel);
 
             _mainHintLabel = new Label
             {
@@ -875,6 +936,7 @@ namespace Demo
                 ShowAlways = true,
             };
             components.Add(_toolTip);
+            _toolTip.SetToolTip(_hudCopyLabel, "复制画布信息");
 
             splitContainer.Panel1.SuspendLayout();
             splitContainer.Panel1.Controls.Clear();
@@ -1345,6 +1407,33 @@ namespace Demo
 
         private void RedoWorkflow(object? sender, EventArgs e)
             => _demo?.Tree.RedoCommand.Execute(null);
+
+        // HUD 的每一行都来自适配器的只读快照；复制失败只换状态栏文字，不再弹窗打断画布操作。
+        private void OnCopyHud(object? sender, EventArgs e)
+        {
+            var lines = workflowSurfaceControl.InfoOverlay.Lines;
+            if (lines.Count == 0) return;
+
+            try
+            {
+                Clipboard.SetText(string.Join(Environment.NewLine, lines));
+                _statusBar.Hint.Text = "已复制画布信息";
+            }
+            catch (ExternalException)
+            {
+                _statusBar.Hint.Text = "复制失败：剪贴板被占用";
+            }
+            catch (ThreadStateException)
+            {
+                _statusBar.Hint.Text = "复制失败：剪贴板不可用";
+            }
+        }
+
+        private void OnSurfaceStatus(object? sender, string message)
+        {
+            if (IsDisposed) return;
+            _statusBar.Hint.Text = message;
+        }
 
         private void SaveWorkflow(object? sender, EventArgs e)
         {

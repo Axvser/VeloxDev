@@ -1,6 +1,7 @@
 ﻿using Demo.ViewModels.Workflow;
 using Demo.ViewModels.Workflow.Enums;
 using Demo.Views.Workflow;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml.Visuals;
 using VeloxDev.WorkflowSystem;
@@ -18,8 +19,10 @@ public sealed class MainForm : Form
     private static readonly Size s_logicalClientSize = new(1085, 683);
 
     private readonly VisualHost _host;
+    private readonly System.Windows.Forms.Timer _copyResetTimer = new() { Interval = 1500 };
     private ITreeComponent? _tree;
     private IInputEvents? _events;
+    private Button? _copyButton;
 
     public MainForm()
     {
@@ -36,19 +39,125 @@ public sealed class MainForm : Form
         var shell = new Panel { Dock = DockStyle.Fill };
         shell.Controls.Add(_host);
         Controls.Add(shell);
+        AddHudCopyButton(shell);
+        Resize += (_, _) => PositionHudCopyButton();
 
         WorkflowSurfaceBehavior.SetCanvasName(_host, "PART_Canvas");
         WorkflowSurfaceBehavior.SetScrollViewerName(_host, "PART_ScrollViewer");
         WorkflowSurfaceBehavior.SetGridDecoratorName(_host, "PART_GridDecorator");
         WorkflowSurfaceBehavior.SetMinimapOverlayName(_host, "PART_MinimapOverlay");
         WorkflowSurfaceBehavior.SetPointerPressSourceName(_host, "PART_SurfaceBorder");
-        WorkflowSurfaceBehavior.SetLinkMenuKey(_host, "LinkContextMenu");
+        WorkflowSurfaceBehavior.SetLinkMenuBuilder(_host, BuildLinkMenu);
         WorkflowSurfaceBehavior.SetZoomEnabled(_host, true);
         WorkflowSurfaceBehavior.SetIsEnabled(_host, true);
 
         var tree = new TreeViewModel();
         LoadTree(tree);
         BindTree(tree);
+    }
+
+    // 连线条目归宿主：模板只声明空的 LinkContextMenu 资源，条目由这里加。
+    private static void BuildLinkMenu(ContextMenuStrip menu, ILinkComponent link)
+    {
+        menu.Items.Add("Delete", null, (_, _) =>
+        {
+            if (link.DeleteCommand.CanExecute(null))
+            {
+                link.DeleteCommand.Execute(null);
+            }
+        });
+    }
+
+    // 演示层自己的 HUD 复制按钮：适配器只负责画 HUD 并提供 Lines，剪贴板留给宿主。
+    private void AddHudCopyButton(Control shell)
+    {
+        _copyButton = new Button
+        {
+            Text = "复制",
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(0x1E, 0x3A, 0x5F),
+            ForeColor = Color.FromArgb(0x7E, 0xC8, 0xFF),
+            TabStop = false,
+        };
+        _copyButton.FlatAppearance.BorderColor = Color.FromArgb(0x7E, 0xC8, 0xFF);
+        _copyButton.FlatAppearance.BorderSize = 1;
+        _copyButton.Click += OnCopyHudClicked;
+        _copyResetTimer.Tick += OnCopyResetTick;
+
+        shell.Controls.Add(_copyButton);
+        _copyButton.BringToFront();
+    }
+
+    // 贴在 HUD 右侧：HUD 左 46、宽 276、底 12（与 TreeView.xaml 一致），按当前 DPI 换算。
+    private void PositionHudCopyButton()
+    {
+        if (_copyButton is null)
+        {
+            return;
+        }
+
+        var scale = DeviceDpi / 96f;
+        const int hudLeft = 46, hudWidth = 276, hudBottom = 12, buttonWidth = 64, buttonHeight = 24, gap = 8;
+        _copyButton.Size = new Size(
+            (int)Math.Round(buttonWidth * scale),
+            (int)Math.Round(buttonHeight * scale));
+        _copyButton.Location = new Point(
+            (int)Math.Round((hudLeft + hudWidth + gap) * scale),
+            ClientSize.Height - (int)Math.Round((hudBottom + buttonHeight) * scale));
+    }
+
+    private void OnCopyHudClicked(object? sender, EventArgs e)
+    {
+        if (_copyButton is null || FindInfoOverlay(_host.Root) is not { } hud)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(string.Join(Environment.NewLine, hud.Lines));
+            _copyButton.Text = "已复制";
+            _copyResetTimer.Stop();
+            _copyResetTimer.Start();
+        }
+        catch (ExternalException)
+        {
+            _copyButton.Text = "复制失败";
+            _copyResetTimer.Stop();
+            _copyResetTimer.Start();
+        }
+    }
+
+    private void OnCopyResetTick(object? sender, EventArgs e)
+    {
+        _copyResetTimer.Stop();
+        if (_copyButton is not null)
+        {
+            _copyButton.Text = "复制";
+        }
+    }
+
+    private static WorkflowInfoOverlay? FindInfoOverlay(ContainerVisual? root)
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        if (root is WorkflowInfoOverlay info)
+        {
+            return info;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is ContainerVisual container && FindInfoOverlay(container) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private void BindTree(TreeViewModel tree)
@@ -154,6 +263,8 @@ public sealed class MainForm : Form
         {
             ClientSize = size;
         }
+
+        PositionHudCopyButton();
     }
 
     private static void LoadTree(TreeViewModel tree)

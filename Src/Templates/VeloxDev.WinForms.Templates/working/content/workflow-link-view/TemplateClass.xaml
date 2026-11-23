@@ -3,7 +3,5 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="clr-namespace:TemplateNamespace"
     x:Class="TemplateNamespace.TemplateClass">
-
   <!-- VeloxDev customization: this visual UserControl paints the link; line geometry, colour and hit-test curve are decided in the code-behind. -->
-
 </local:TemplateClass>

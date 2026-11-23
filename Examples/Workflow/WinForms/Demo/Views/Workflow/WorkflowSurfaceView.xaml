@@ -51,7 +51,6 @@
                       EndLeft="{Binding Receiver.Anchor.Horizontal}"
                       EndTop="{Binding Receiver.Anchor.Vertical}"
                       CanRender="{Binding IsVisible}"
-                      LineColor="#CC6E8BFF"
                       Width="{Binding Width, ElementName=PART_Canvas}"
                       Height="{Binding Height, ElementName=PART_Canvas}"
                       Panel.ZIndex="-1" />
@@ -82,7 +81,7 @@
       <local:GridDecorator x:Name="PART_GridDecorator"
                            GridSpacing="40"
                            MajorLineEvery="5"
-                           RulerThickness="36"
+                           RulerThickness="28"
                            DrawSurface="False"
                            ClipToBounds="False">
         <ScrollViewer x:Name="PART_ScrollViewer" IsScrollInputEnabled="False">

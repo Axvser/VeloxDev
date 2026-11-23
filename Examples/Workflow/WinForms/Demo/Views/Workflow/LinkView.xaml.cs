@@ -26,10 +26,11 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.U
     private const double TailFraction = 0.30d;
     private const int TailSegments = 16;
 
-    // 三段相位的时长：出发、行进、到达。
-    private const float LineWidth = 2f;
-    private const float LineWidthHighlighted = 3.5f;
+    // 静止/悬停线宽的默认值；宿主可经 LineThickness / HighlightThickness 覆盖。
+    private const float DefaultLineThickness = 2f;
+    private const float DefaultHighlightThickness = 3.5f;
 
+    // 三段相位的时长：出发、行进、到达。
     private static readonly TimeSpan EnterDuration = TimeSpan.FromMilliseconds(450);
     private static readonly TimeSpan TravelDuration = TimeSpan.FromMilliseconds(700);
     private static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(450);
@@ -119,6 +120,26 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.U
         nameof(IsHighlighted), typeof(bool), typeof(LinkView),
         new PropertyMetadata(false) { AffectsRender = true });
 
+    /// <summary>The resting stroke width.</summary>
+    public static readonly DependencyProperty LineThicknessProperty = DependencyProperty.Register(
+        nameof(LineThickness), typeof(float), typeof(LinkView),
+        new PropertyMetadata(DefaultLineThickness) { AffectsRender = true });
+
+    /// <summary>The stroke width while the link is the hovered one.</summary>
+    public static readonly DependencyProperty HighlightThicknessProperty = DependencyProperty.Register(
+        nameof(HighlightThickness), typeof(float), typeof(LinkView),
+        new PropertyMetadata(DefaultHighlightThickness) { AffectsRender = true });
+
+    /// <summary>The colour of the drag preview shown while a connection is being made.</summary>
+    public static readonly DependencyProperty VirtualColorProperty = DependencyProperty.Register(
+        nameof(VirtualColor), typeof(Color), typeof(LinkView),
+        new PropertyMetadata(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)) { AffectsRender = true });
+
+    /// <summary>Whether the line casts the two soft glow strokes under its body.</summary>
+    public static readonly DependencyProperty IsGlowProperty = DependencyProperty.Register(
+        nameof(IsGlow), typeof(bool), typeof(LinkView),
+        new PropertyMetadata(true) { AffectsRender = true });
+
     /// <summary>The horizontal position of the sender end.</summary>
     public double StartLeft { get => (double)GetValue(StartLeftProperty)!; set => SetValue(StartLeftProperty, value); }
 
@@ -145,6 +166,18 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.U
 
     /// <summary>Whether this link is the hovered one.</summary>
     public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty)!; set => SetValue(IsHighlightedProperty, value); }
+
+    /// <summary>The resting stroke width.</summary>
+    public float LineThickness { get => (float)GetValue(LineThicknessProperty)!; set => SetValue(LineThicknessProperty, value); }
+
+    /// <summary>The stroke width while the link is the hovered one.</summary>
+    public float HighlightThickness { get => (float)GetValue(HighlightThicknessProperty)!; set => SetValue(HighlightThicknessProperty, value); }
+
+    /// <summary>The colour of the drag preview shown while a connection is being made.</summary>
+    public Color VirtualColor { get => (Color)GetValue(VirtualColorProperty)!; set => SetValue(VirtualColorProperty, value); }
+
+    /// <summary>Whether the line casts the two soft glow strokes under its body.</summary>
+    public bool IsGlow { get => (bool)GetValue(IsGlowProperty)!; set => SetValue(IsGlowProperty, value); }
 
     /// <inheritdoc />
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
@@ -221,16 +254,20 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.U
             return;
         }
 
-        var color = IsHighlighted ? HighlightColor : LineColor;
         var isVirtual = IsVirtual || (link.Sender?.Parent is null && link.Receiver?.Parent is null);
-        var thickness = IsHighlighted ? LineWidthHighlighted : LineWidth;
+        var color = isVirtual ? VirtualColor : IsHighlighted ? HighlightColor : LineColor;
+        var thickness = IsHighlighted ? HighlightThickness : LineThickness;
 
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         EnsurePens(color, thickness, isVirtual);
 
         // 两层更宽的同色低透明描边垫在下面，整条线因此像在发光而不是贴在背景上。
-        graphics.DrawPath(_glowOuterPen!, _bodyPath);
-        graphics.DrawPath(_glowInnerPen!, _bodyPath);
+        // 宿主的 IsGlow 关掉时两笔都不画，钩子留着，宿主给值才有效果。
+        if (IsGlow)
+        {
+            graphics.DrawPath(_glowOuterPen!, _bodyPath);
+            graphics.DrawPath(_glowInnerPen!, _bodyPath);
+        }
 
         if (isVirtual)
         {
