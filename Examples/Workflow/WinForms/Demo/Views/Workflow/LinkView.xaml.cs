@@ -36,6 +36,7 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.U
 
     private ILinkComponent? _publishedLink;
     private LinkCurve? _curve;
+    private long _paintCountAtTick;
     private bool _disposed;
 
     // 一棵树共用一个时钟；本视图只订它，并在 tick 里把两个标量抄下来。
@@ -368,15 +369,20 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.U
             return;
         }
 
-        // 拖动/平移的重绘刚刚推进过彗星，定时帧让位给输入；按住不动时没有重绘，照常发帧。
+        // 拖动/平移的重绘会推进彗星；这类重绘之后的定时帧让位，停止移动后下一拍恢复，按住不动仍有帧。
         if (Surface is { } surface)
         {
-            var sincePaint = System.Diagnostics.Stopwatch.GetTimestamp() - surface.LastPaintTimestamp;
-            if (surface.LastPaintTimestamp != 0
-                && sincePaint < System.Diagnostics.Stopwatch.Frequency * 20L / 1000L)
+            var paintCount = surface.PaintCount;
+            if (paintCount != _paintCountAtTick)
             {
-                return;
+                _paintCountAtTick = paintCount;
+                if (!surface.LastPaintWasClockDriven)
+                {
+                    return;
+                }
             }
+
+            surface.MarkNextPaintAsClockDriven();
         }
 
         var previousHead = _bandHead;

@@ -2,6 +2,7 @@
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml.Controls;
+using VeloxDev.WinForms.Xaml.Visuals.Controls;
 using XamlBrush = VeloxDev.WinForms.Xaml.Brush;
 using XamlHorizontalAlignment = VeloxDev.WinForms.Xaml.Controls.HorizontalAlignment;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
@@ -135,6 +136,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         new PropertyMetadata(null) { AffectsRender = false });
 
     private bool _measureValid;
+    private bool _arrangeValid;
     private Size _measureAvailable;
     private Size _desiredSize;
     private VisualHost? _surface;
@@ -520,6 +522,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
             (int)Math.Ceiling(height + margin.Vertical));
         _measureAvailable = availableSize;
         _measureValid = true;
+        _arrangeValid = false;
         return _desiredSize;
     }
 
@@ -530,6 +533,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         if (Visibility == XamlVisibility.Collapsed)
         {
             Bounds = RectangleF.Empty;
+            _arrangeValid = false;
             return;
         }
 
@@ -561,14 +565,20 @@ public abstract class VisualElement : ContainerVisual, IDisposable
             _ => slot.Y,
         };
 
+        var sizeChanged = Math.Abs(Bounds.Width - width) > 0.01f || Math.Abs(Bounds.Height - height) > 0.01f;
         Bounds = new RectangleF(x, y, Math.Max(0f, width), Math.Max(0f, height));
-        ArrangeOverride(new Size((int)Math.Ceiling(width), (int)Math.Ceiling(height)));
+        if (sizeChanged || !_arrangeValid)
+        {
+            _arrangeValid = true;
+            ArrangeOverride(new Size((int)Math.Ceiling(width), (int)Math.Ceiling(height)));
+        }
     }
 
     /// <summary>Marks this element and its ancestors as needing a new measure pass.</summary>
     public void InvalidateMeasure()
     {
         _measureValid = false;
+        _arrangeValid = false;
         ParentElement?.InvalidateMeasure();
         Surface?.InvalidateSurface();
     }
@@ -581,6 +591,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// </remarks>
     public void InvalidateArrange()
     {
+        _arrangeValid = false;
         ParentElement?.InvalidateArrange();
         Surface?.InvalidateSurface();
     }
@@ -757,6 +768,12 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         else if (ReferenceEquals(e.Property, DataContextProperty))
         {
             NotifyDataContextDescendants(this, e.OldValue, e.NewValue);
+        }
+        else if (ReferenceEquals(e.Property, Canvas.LeftProperty)
+                 || ReferenceEquals(e.Property, Canvas.TopProperty))
+        {
+            // 画布坐标只让父级重新摆放这一项；子级内部不用重排。
+            ParentElement?.InvalidateArrange();
         }
 
         if (e.Property.Metadata.AffectsMeasure)

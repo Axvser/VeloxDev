@@ -1512,6 +1512,8 @@ public sealed class WorkflowSurfaceBehavior
 
         private readonly List<VisualElement> pressHandleKeys = [];
 
+        private bool poolRefreshPending;
+
         public SurfaceState(Control host)
         {
             Host = host;
@@ -1650,11 +1652,41 @@ public sealed class WorkflowSurfaceBehavior
         // now, otherwise a pooled title row never subscribes to the drag behavior.
         public void OnPoolChanged(object? sender, ViewPoolChangedEventArgs e)
         {
-            if (ReferenceEquals(e.Host, Canvas) || ReferenceEquals(e.Host, Root))
+            if (!ReferenceEquals(e.Host, Canvas) && !ReferenceEquals(e.Host, Root))
             {
-                EnsureAttachedBehaviors(Root);
-                ApplyLinkStyles(this);
+                return;
             }
+
+            // 一次批量物化会对每个视图各发一次 Changed；整棵树只扫一遍，留到本消息轮的下一拍。
+            if (poolRefreshPending)
+            {
+                return;
+            }
+
+            poolRefreshPending = true;
+            if (VisualHost is { IsHandleCreated: true, IsDisposed: false } visual)
+            {
+                try
+                {
+                    visual.BeginInvoke(new Action(() =>
+                    {
+                        poolRefreshPending = false;
+                        if (Attached)
+                        {
+                            EnsureAttachedBehaviors(Root);
+                            ApplyLinkStyles(this);
+                        }
+                    }));
+                    return;
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
+            poolRefreshPending = false;
+            EnsureAttachedBehaviors(Root);
+            ApplyLinkStyles(this);
         }
 
         public void OnHostMouseMove(object? sender, MouseEventArgs e)

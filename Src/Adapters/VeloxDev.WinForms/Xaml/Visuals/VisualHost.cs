@@ -1,5 +1,6 @@
 ﻿using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml.Visuals.Controls;
 using XamlVisibility = VeloxDev.WinForms.Xaml.Controls.Visibility;
@@ -45,6 +46,10 @@ public class VisualHost : System.Windows.Forms.Control
     private float _dpiScale;
     private bool _dpiScaleValid;
     private float _dpiScaleOverride;
+    private Bitmap? _motionBitmap;
+    private float _motionBitmapScale;
+    private bool _renderingMotion;
+    private bool _gestureDrewMotionFrame;
 
     /// <summary>Creates the surface with the double-buffered paint style it needs.</summary>
     public VisualHost()
@@ -69,6 +74,41 @@ public class VisualHost : System.Windows.Forms.Control
 
     /// <summary>The <see cref="System.Diagnostics.Stopwatch"/> timestamp of the last completed paint.</summary>
     public long LastPaintTimestamp { get; private set; }
+
+    /// <summary>The number of completed paints; animation drivers use it to tell whether a drag already advanced them.</summary>
+    public long PaintCount { get; private set; }
+
+    /// <summary>Whether the last completed paint was requested by an animation tick rather than input.</summary>
+    public bool LastPaintWasClockDriven { get; private set; }
+
+    private bool nextPaintClockDriven;
+
+    /// <summary>Marks the next paint as an animation tick, so a drag paint and a clock paint can be told apart.</summary>
+    public void MarkNextPaintAsClockDriven() => nextPaintClockDriven = true;
+
+    /// <summary>
+    /// The render scale used for frames painted while a pointer gesture is in progress; <c>1</c> disables it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// While <see cref="IsPointerGestureActive"/> is <see langword="true"/> and this value is below <c>1</c>, the
+    /// client area is painted into a reusable offscreen bitmap at this fraction of its logical resolution and then
+    /// stretched back to full size. Motion frames keep the flow animation ticking; the next frame after the gesture
+    /// ends is painted at full resolution.
+    /// </para>
+    /// <para>
+    /// Only the window paint path is affected: <see cref="RenderTo"/> always renders at full resolution. Values below
+    /// <c>0.1</c> are treated as <c>0.1</c>. The default is <c>0.65</c>.
+    /// </para>
+    /// </remarks>
+    public float MotionScale { get; set; } = 1f;
+
+    /// <summary>Whether a pointer press is still waiting for its release.</summary>
+    /// <remarks>
+    /// Set by <see cref="ProcessPointerDown"/>, cleared by <see cref="ProcessPointerUp"/> and when the native mouse
+    /// capture is lost. A synthesized press without a window handle stays active until an explicit release.
+    /// </remarks>
+    public bool IsPointerGestureActive { get; private set; }
 
     /// <summary>Styles applied implicitly to matching elements in this surface's visual tree.</summary>
     /// <remarks>
@@ -276,6 +316,7 @@ public class VisualHost : System.Windows.Forms.Control
             return;
         }
 
+        var logicalSize = LogicalClientSize;
         var state = graphics.Save();
         try
         {
@@ -286,12 +327,69 @@ public class VisualHost : System.Windows.Forms.Control
 
             // 裁剪区必须在缩放之后设置，才会和其余坐标一样按逻辑单位解释。
             graphics.SetClip(logicalClip);
-            RenderCore(graphics, LogicalClientSize, logicalClip);
+
+            // 手势期间按 MotionScale 降分辨率重画到离屏位图，再整体贴回逻辑矩形；目标已带 DPI 变换与裁剪。
+            if (IsPointerGestureActive && MotionScale < 0.999f && logicalSize.Width > 0 && logicalSize.Height > 0)
+            {
+                RenderMotion(graphics, logicalSize, logicalClip);
+            }
+            else
+            {
+                RenderCore(graphics, logicalSize, logicalClip);
+            }
         }
         finally
         {
             graphics.Restore(state);
         }
+    }
+
+    // 整面画进按 MotionScale 缩小的复用位图；DPI 缩放仍由目标 Graphics 承担，这里只处理逻辑坐标。
+    private void RenderMotion(Graphics target, Size logicalSize, Rectangle damage)
+    {
+        if (_renderingMotion)
+        {
+            RenderCore(target, logicalSize, damage);
+            return;
+        }
+
+        var motionScale = MotionScale;
+        if (motionScale < 0.1f)
+        {
+            motionScale = 0.1f;
+        }
+
+        var bitmapWidth = Math.Max(1, (int)Math.Ceiling(logicalSize.Width * motionScale));
+        var bitmapHeight = Math.Max(1, (int)Math.Ceiling(logicalSize.Height * motionScale));
+        var bitmap = _motionBitmap;
+        if (bitmap is null
+            || bitmap.Width != bitmapWidth
+            || bitmap.Height != bitmapHeight
+            || Math.Abs(_motionBitmapScale - motionScale) > 0.0001f)
+        {
+            _motionBitmap?.Dispose();
+            bitmap = new Bitmap(bitmapWidth, bitmapHeight, PixelFormat.Format32bppPArgb);
+            _motionBitmap = bitmap;
+            _motionBitmapScale = motionScale;
+        }
+
+        _renderingMotion = true;
+        try
+        {
+            using var offscreen = Graphics.FromImage(bitmap);
+            offscreen.ScaleTransform(motionScale, motionScale);
+            // 离屏装的是整张位图，damage 只用于剔除远端子树；位图外的旧像素由目标裁剪区遮住。
+            RenderCore(offscreen, logicalSize, damage);
+        }
+        finally
+        {
+            _renderingMotion = false;
+        }
+
+        _gestureDrewMotionFrame = true;
+        target.DrawImage(
+            bitmap,
+            new RectangleF(0f, 0f, logicalSize.Width, logicalSize.Height));
     }
 
     private void RenderCore(Graphics graphics, Size size, Rectangle clearArea)
@@ -303,6 +401,16 @@ public class VisualHost : System.Windows.Forms.Control
             return;
         }
 
+        // 脏区小于整面时才参与子树剔除；整面重画（RenderTo / 手势结束帧）照旧画完整棵树。
+        var damage = new RectangleF(clearArea.X, clearArea.Y, clearArea.Width, clearArea.Height);
+        var cull = clearArea.Left > 0
+                   || clearArea.Top > 0
+                   || clearArea.Right < size.Width
+                   || clearArea.Bottom < size.Height;
+        var previousDamage = Visual.RenderDamage;
+        var previousCull = Visual.CullToDamage;
+        Visual.PushRenderDamage(damage, cull);
+
         var state = graphics.Save();
         try
         {
@@ -311,10 +419,14 @@ public class VisualHost : System.Windows.Forms.Control
             _root.Render(graphics);
             _overlay.Render(graphics);
             LastPaintTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+            PaintCount++;
+            LastPaintWasClockDriven = nextPaintClockDriven;
+            nextPaintClockDriven = false;
         }
         finally
         {
             graphics.Restore(state);
+            Visual.PushRenderDamage(previousDamage, previousCull);
         }
     }
 
@@ -384,6 +496,12 @@ public class VisualHost : System.Windows.Forms.Control
         }
 
         _buttons |= button;
+        if (!IsPointerGestureActive)
+        {
+            _gestureDrewMotionFrame = false;
+        }
+
+        IsPointerGestureActive = true;
 
         if (target is not null)
         {
@@ -441,7 +559,24 @@ public class VisualHost : System.Windows.Forms.Control
             Capture = false;
         }
 
+        EndPointerGesture();
         return args.Handled;
+    }
+
+    // 手势结束：若期间画过低分辨率帧，排一次整面重画换回清晰帧。
+    private void EndPointerGesture()
+    {
+        if (!IsPointerGestureActive)
+        {
+            return;
+        }
+
+        IsPointerGestureActive = false;
+        if (_gestureDrewMotionFrame)
+        {
+            _gestureDrewMotionFrame = false;
+            InvalidatePaint();
+        }
     }
 
     /// <summary>Injects a wheel turn at a client point.</summary>
@@ -650,6 +785,17 @@ public class VisualHost : System.Windows.Forms.Control
         InvalidateSurface();
     }
 
+    /// <inheritdoc />
+    protected override void OnMouseCaptureChanged(EventArgs e)
+    {
+        base.OnMouseCaptureChanged(e);
+        // 捕获被系统或别的控件拿走时，按起事件的释放不会再到达；手势必须在这里收尾。
+        if (!Capture)
+        {
+            EndPointerGesture();
+        }
+    }
+
 #if !NETFRAMEWORK
     /// <inheritdoc />
     protected override void OnDpiChangedAfterParent(EventArgs e)
@@ -665,6 +811,8 @@ public class VisualHost : System.Windows.Forms.Control
     {
         base.OnResize(e);
         _dpiScaleValid = false;
+        _motionBitmap?.Dispose();
+        _motionBitmap = null;
         InvalidateSurface();
     }
 
@@ -800,6 +948,9 @@ public class VisualHost : System.Windows.Forms.Control
             _focused = null;
             _capture = null;
             _hoverChain.Clear();
+            IsPointerGestureActive = false;
+            _motionBitmap?.Dispose();
+            _motionBitmap = null;
             _rootElement?.Dispose();
             _rootElement = null;
             _root = null;

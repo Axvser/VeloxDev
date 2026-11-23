@@ -90,6 +90,118 @@ public abstract class Visual : WinformsObject
     private CacheKey _cacheKey;
     private Dictionary<(Font Font, int Dpi), Font>? _drawFonts;
 
+    // 当前帧的脏区（表面逻辑坐标）。只在 VisualHost 的 RenderCore 内推入，遍历结束即恢复。
+    [ThreadStatic] private static RectangleF _renderDamage;
+
+    // 是否按脏区剔除子树。整面重画时为 false。
+    [ThreadStatic] private static bool _cullToDamage;
+
+    // 阴影、槽环与连线端点会画出 Bounds 之外，剔除时统一外扩这个余量。
+    private const float DamageCullMargin = 32f;
+
+    internal static RectangleF RenderDamage => _renderDamage;
+
+    internal static bool CullToDamage => _cullToDamage;
+
+    internal static void PushRenderDamage(RectangleF damage, bool cull)
+    {
+        _renderDamage = damage;
+        _cullToDamage = cull;
+    }
+
+    // 子项整棵子树都落在脏区外才跳过；拿不准是否越界的一律照画。
+    internal static bool ShouldRenderChild(Visual? child)
+    {
+        if (child is null)
+        {
+            return false;
+        }
+
+        return !_cullToDamage || IntersectsRenderDamage(child, _renderDamage);
+    }
+
+    private static bool IntersectsRenderDamage(Visual visual, RectangleF damage)
+    {
+        if (!visual.IsVisible || visual.Opacity <= 0d)
+        {
+            return false;
+        }
+
+        // 位图缓存、效果与无界命中的绘制范围不受 Bounds 约束，保守起见照画。
+        if (visual.CacheAsBitmap || visual.Effect is not null || visual.UnboundedHitTest)
+        {
+            return true;
+        }
+
+        var bounds = visual.GetSurfaceBounds();
+        if (bounds.Width <= 0f || bounds.Height <= 0f)
+        {
+            return false;
+        }
+
+        bounds.Inflate(DamageCullMargin, DamageCullMargin);
+        if (bounds.IntersectsWith(damage))
+        {
+            return true;
+        }
+
+        // 未裁剪的容器允许子项越界绘制；只有整棵子树都在脏区外才算真正可跳过。
+        if (visual is ContainerVisual container && !visual.ClipToBounds)
+        {
+            foreach (var child in container.Children)
+            {
+                if (child is not null && IntersectsRenderDamage(child, damage))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    // 本视觉在表面坐标系里的轴对齐包围盒：逐层叠加 Transform 与 Bounds，不依赖 Graphics 的当前变换。
+    internal RectangleF GetSurfaceBounds()
+    {
+        var x0 = 0f;
+        var y0 = 0f;
+        var x1 = Bounds.Width;
+        var y1 = 0f;
+        var x2 = 0f;
+        var y2 = Bounds.Height;
+        var x3 = Bounds.Width;
+        var y3 = Bounds.Height;
+        TransformPointToSurface(ref x0, ref y0);
+        TransformPointToSurface(ref x1, ref y1);
+        TransformPointToSurface(ref x2, ref y2);
+        TransformPointToSurface(ref x3, ref y3);
+
+        var minX = Math.Min(Math.Min(x0, x1), Math.Min(x2, x3));
+        var minY = Math.Min(Math.Min(y0, y1), Math.Min(y2, y3));
+        var maxX = Math.Max(Math.Max(x0, x1), Math.Max(x2, x3));
+        var maxY = Math.Max(Math.Max(y0, y1), Math.Max(y2, y3));
+        return new RectangleF(minX, minY, Math.Max(0f, maxX - minX), Math.Max(0f, maxY - minY));
+    }
+
+    // 与 VisualElement.PointToSurface 同一套顺序：先 Transform，再叠加 Bounds。
+    private void TransformPointToSurface(ref float x, ref float y)
+    {
+        for (Visual? current = this; current is not null; current = current.Parent)
+        {
+            if (!current.Transform.IsIdentity)
+            {
+                var e = current.Transform.Elements;
+                var tx = (x * e[0]) + (y * e[2]) + e[4];
+                var ty = (x * e[1]) + (y * e[3]) + e[5];
+                x = tx;
+                y = ty;
+            }
+
+            x += current.Bounds.X;
+            y += current.Bounds.Y;
+        }
+    }
+
     /// <summary>Marks this visual's bitmap cache and every enclosing cache dirty.</summary>
     public void InvalidateCache()
     {
@@ -358,11 +470,23 @@ public abstract class Visual : WinformsObject
         {
             _cache?.Dispose();
             _cache = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
-            using (var graphics = Graphics.FromImage(_cache))
+            // 缓存必须按完整子树生成；脏区剔除只约束当前帧，不能写进位图，否则下一帧会缺内容。
+            var previousDamage = _renderDamage;
+            var previousCull = _cullToDamage;
+            _cullToDamage = false;
+            try
             {
-                graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                RenderContent(graphics);
-                RenderChildren(graphics);
+                using (var graphics = Graphics.FromImage(_cache))
+                {
+                    graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    RenderContent(graphics);
+                    RenderChildren(graphics);
+                }
+            }
+            finally
+            {
+                _renderDamage = previousDamage;
+                _cullToDamage = previousCull;
             }
 
             _cacheDirty = false;
@@ -507,7 +631,10 @@ public class ContainerVisual : Visual
     {
         foreach (var child in _children)
         {
-            child?.Render(graphics);
+            if (ShouldRenderChild(child))
+            {
+                child.Render(graphics);
+            }
         }
     }
 

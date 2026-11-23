@@ -23,25 +23,25 @@ public class Canvas : Panel
     public static readonly DependencyProperty LeftProperty =
         DependencyProperty.RegisterAttached(
             "Left", typeof(double), typeof(Canvas),
-            new PropertyMetadata(double.NaN) { AffectsRender = false, AffectsArrange = true });
+            new PropertyMetadata(double.NaN) { AffectsRender = false });
 
     /// <summary>The attached top offset; <see cref="double.NaN"/> leaves it unset.</summary>
     public static readonly DependencyProperty TopProperty =
         DependencyProperty.RegisterAttached(
             "Top", typeof(double), typeof(Canvas),
-            new PropertyMetadata(double.NaN) { AffectsRender = false, AffectsArrange = true });
+            new PropertyMetadata(double.NaN) { AffectsRender = false });
 
     /// <summary>The attached right offset; <see cref="double.NaN"/> leaves it unset.</summary>
     public static readonly DependencyProperty RightProperty =
         DependencyProperty.RegisterAttached(
             "Right", typeof(double), typeof(Canvas),
-            new PropertyMetadata(double.NaN) { AffectsRender = false, AffectsArrange = true });
+            new PropertyMetadata(double.NaN) { AffectsRender = false });
 
     /// <summary>The attached bottom offset; <see cref="double.NaN"/> leaves it unset.</summary>
     public static readonly DependencyProperty BottomProperty =
         DependencyProperty.RegisterAttached(
             "Bottom", typeof(double), typeof(Canvas),
-            new PropertyMetadata(double.NaN) { AffectsRender = false, AffectsArrange = true });
+            new PropertyMetadata(double.NaN) { AffectsRender = false });
 
     /// <summary>Reads the left offset of <paramref name="element"/>.</summary>
     /// <param name="element">The element whose attached value is read.</param>

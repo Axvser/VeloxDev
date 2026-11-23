@@ -16,6 +16,20 @@ namespace VeloxDev.WinForms.Xaml.Test;
 [STATestClass]
 public sealed class VisualViewPoolTests
 {
+    private SynchronizationContext? savedContext;
+
+    // 现有用例依赖「没有同步上下文就同步建视图」；测试宿主若装了上下文，先摘掉。
+    [TestInitialize]
+    public void ClearSynchronizationContext()
+    {
+        savedContext = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(null);
+    }
+
+    [TestCleanup]
+    public void RestoreSynchronizationContext()
+        => SynchronizationContext.SetSynchronizationContext(savedContext);
+
     [TestMethod]
     public void Surface_ViewPoolMaterializesVisibleItems()
     {
@@ -185,6 +199,233 @@ public sealed class VisualViewPoolTests
         Assert.AreSame(secondLink, secondView.DataContext);
         Assert.AreEqual(20d, secondView.StartLeft, 0.01d);
         Assert.AreEqual(95d, secondView.EndTop, 0.01d);
+    }
+
+    [TestMethod]
+    public void ViewPool_RoutesViewsIntoNodeAndLinkLayers()
+    {
+        var host = new VC.Canvas { Name = "PART_Canvas" };
+        var nodeLayer = new VC.Canvas { Name = "PART_NodeLayer" };
+        var linkLayer = new VC.Canvas { Name = "PART_LinkLayer" };
+        host.Add(nodeLayer);
+        host.Add(linkLayer);
+
+        var firstNode = new NodeDefaultComponent { Anchor = new Anchor(10d, 20d, layer: 5) };
+        var link = new LinkDefaultComponent();
+        var secondNode = new NodeDefaultComponent { Anchor = new Anchor(30d, 40d, layer: 1) };
+        var items = new ObservableCollection<object> { firstNode, link, secondNode };
+
+        ViewPool.SetNodeLayerName(host, "PART_NodeLayer");
+        ViewPool.SetLinkLayerName(host, "PART_LinkLayer");
+        ViewPool.SetTemplateSelector(host, new Selector());
+        ViewPool.SetItemsSource(host, items);
+        ViewPool.Refresh(host);
+
+        Assert.HasCount(2, host.Children, "the layer canvases stay direct children of the host");
+        Assert.AreSame(nodeLayer, host.Children[0]);
+        Assert.AreSame(linkLayer, host.Children[1]);
+        Assert.HasCount(2, nodeLayer.Children, "node views go into the node layer");
+        Assert.HasCount(1, linkLayer.Children, "the link view goes into the link layer");
+        Assert.AreSame(secondNode, LayerViewAt(nodeLayer, 0).DataContext,
+            "the lower z-index node paints first inside the node layer");
+        Assert.AreSame(firstNode, LayerViewAt(nodeLayer, 1).DataContext);
+        Assert.AreSame(link, LayerViewAt(linkLayer, 0).DataContext);
+        Assert.AreEqual(-1, VC.Panel.GetZIndex(LayerViewAt(linkLayer, 0)),
+            "the link view keeps its -1 z-index inside the link layer");
+
+        var thirdNode = new NodeDefaultComponent { Anchor = new Anchor(50d, 60d, layer: 0) };
+        items.Add(thirdNode);
+
+        Assert.HasCount(3, nodeLayer.Children);
+        Assert.AreSame(thirdNode, LayerViewAt(nodeLayer, 0).DataContext,
+            "a new node is reordered inside the node layer only");
+        Assert.HasCount(1, linkLayer.Children, "the link layer is untouched by a node addition");
+
+        ViewPool.Refresh(host);
+
+        Assert.HasCount(2, host.Children, "a refresh keeps the layer canvases");
+        Assert.HasCount(3, nodeLayer.Children, "a refresh re-creates the node views into the node layer");
+        Assert.HasCount(1, linkLayer.Children, "a refresh re-creates the link view into the link layer");
+
+        items.Remove(link);
+
+        Assert.HasCount(0, linkLayer.Children, "the link view leaves the link layer");
+        Assert.HasCount(3, nodeLayer.Children);
+        Assert.HasCount(2, host.Children, "the layer canvases remain after a view is removed");
+    }
+
+    [TestMethod]
+    public void ViewPool_FallsBackToTheHostWhenTheNamedLayerIsMissing()
+    {
+        var canvas = new VC.Canvas();
+        var items = new ObservableCollection<object> { new object() };
+
+        ViewPool.SetNodeLayerName(canvas, "PART_NodeLayer");
+        ViewPool.SetLinkLayerName(canvas, "PART_LinkLayer");
+        ViewPool.SetTemplateSelector(canvas, new Selector());
+        ViewPool.SetItemsSource(canvas, items);
+        ViewPool.Refresh(canvas);
+
+        Assert.HasCount(1, canvas.Children, "an unresolved layer name keeps the view on the host");
+        Assert.AreSame(items[0], ViewAt(canvas, 0).DataContext);
+    }
+
+    [TestMethod]
+    public void ViewPool_DefersAdditionsUntilTheContextPumps()
+    {
+        var canvas = new VC.Canvas();
+        var items = new ObservableCollection<object>();
+        ViewPool.SetTemplateSelector(canvas, new Selector());
+        ViewPool.SetItemsSource(canvas, items);
+        ViewPool.Refresh(canvas);
+
+        var context = new ManualSynchronizationContext();
+        var changed = 0;
+        EventHandler<ViewPoolChangedEventArgs> handler = (_, e) =>
+        {
+            if (ReferenceEquals(e.Host, canvas))
+            {
+                changed++;
+            }
+        };
+
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(context);
+            ViewPool.Changed += handler;
+
+            items.Add(new object());
+            items.Add(new object());
+            items.Add(new object());
+
+            Assert.AreEqual(3, ViewPool.GetPendingCount(canvas), "additions wait in the pending queue");
+            Assert.AreEqual(0, ViewPool.GetActiveViewCount(canvas));
+            Assert.HasCount(0, canvas.Children, "no view is created before the context pumps");
+
+            context.Pump();
+
+            Assert.AreEqual(0, ViewPool.GetPendingCount(canvas));
+            Assert.AreEqual(3, ViewPool.GetActiveViewCount(canvas));
+            Assert.HasCount(3, canvas.Children);
+            Assert.AreEqual(3, changed, "Changed fires once per materialized view");
+        }
+        finally
+        {
+            ViewPool.Changed -= handler;
+            SynchronizationContext.SetSynchronizationContext(null);
+        }
+    }
+
+    [TestMethod]
+    public void ViewPool_MaterializesMoreThanOneBatchAcrossPumps()
+    {
+        var canvas = new VC.Canvas();
+        var items = new ObservableCollection<object>();
+        ViewPool.SetTemplateSelector(canvas, new Selector());
+        ViewPool.SetItemsSource(canvas, items);
+        ViewPool.Refresh(canvas);
+
+        var context = new ManualSynchronizationContext();
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(context);
+            for (var index = 0; index < 20; index++)
+            {
+                items.Add(new object());
+            }
+
+            Assert.AreEqual(20, ViewPool.GetPendingCount(canvas));
+
+            context.PumpOne();
+            var pending = ViewPool.GetPendingCount(canvas);
+            Assert.IsTrue(pending > 0 && pending < 20,
+                "one batch does not drain a queue larger than the batch size");
+            Assert.AreEqual(20 - pending, ViewPool.GetActiveViewCount(canvas));
+
+            context.Pump();
+
+            Assert.AreEqual(0, ViewPool.GetPendingCount(canvas));
+            Assert.AreEqual(20, ViewPool.GetActiveViewCount(canvas));
+            Assert.HasCount(20, canvas.Children);
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(null);
+        }
+    }
+
+    [TestMethod]
+    public void ViewPool_FlushSkipsRemovedPendingItemsAndInvalidatesThePostedCallback()
+    {
+        var canvas = new VC.Canvas();
+        var items = new ObservableCollection<object>();
+        ViewPool.SetTemplateSelector(canvas, new Selector());
+        ViewPool.SetItemsSource(canvas, items);
+        ViewPool.Refresh(canvas);
+
+        var context = new ManualSynchronizationContext();
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(context);
+
+            var removed = new object();
+            var kept = new object();
+            items.Add(removed);
+            items.Add(kept);
+            Assert.AreEqual(2, ViewPool.GetPendingCount(canvas));
+
+            items.Remove(removed);
+            Assert.AreEqual(1, ViewPool.GetPendingCount(canvas),
+                "removing an item before it materializes tombstones it");
+
+            ViewPool.Flush(canvas);
+
+            Assert.AreEqual(0, ViewPool.GetPendingCount(canvas));
+            Assert.AreEqual(1, ViewPool.GetActiveViewCount(canvas));
+            Assert.HasCount(1, canvas.Children);
+            Assert.AreSame(kept, ((VisualElement)canvas.Children[0]).DataContext);
+
+            // Flush 之前投递的旧回调已经作废：泵它不会再给同一项建第二个视图。
+            context.Pump();
+            Assert.HasCount(1, canvas.Children);
+            Assert.AreEqual(1, ViewPool.GetActiveViewCount(canvas));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(null);
+        }
+    }
+
+    private static VisualElement LayerViewAt(VC.Canvas layer, int index)
+        => (VisualElement)layer.Children[index];
+
+    // 手动泵：Post 只入队，由测试决定何时、泵几条，避免依赖 WinForms 消息循环。
+    private sealed class ManualSynchronizationContext : SynchronizationContext
+    {
+        private readonly Queue<(SendOrPostCallback Callback, object? State)> queue = new();
+
+        public override void Post(SendOrPostCallback d, object? state)
+            => queue.Enqueue((d, state));
+
+        public void PumpOne()
+        {
+            if (queue.Count == 0)
+            {
+                return;
+            }
+
+            var (callback, state) = queue.Dequeue();
+            callback(state);
+        }
+
+        public void Pump()
+        {
+            while (queue.Count > 0)
+            {
+                var (callback, state) = queue.Dequeue();
+                callback(state);
+            }
+        }
     }
 
     private sealed class ReuseItem(ReuseModel child)
