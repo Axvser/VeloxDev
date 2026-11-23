@@ -8,8 +8,11 @@ on Easel elements.
 
 ## Injection
 
-`VeloxDev.WinForms` contains `EaselVisualAnimator`, an `IVisualAnimator` bridge to
-`VeloxDev.TransitionSystem`. It is installed by a module initializer when the assembly loads:
+**Install `VeloxDev.WinForms` 12.0.0 or later.** The package contains `EaselVisualAnimator`, an
+`IVisualAnimator` bridge to `VeloxDev.TransitionSystem`; its module initializer installs it as soon as the
+assembly loads, so any Easel trigger action or `VisualTransition` immediately has an engine. No separate
+animation package or manual `AnimationRuntime.Animator` assignment is needed. V12 is the minimum version that
+wires Easel animations automatically.
 
 ```csharp
 [ModuleInitializer]

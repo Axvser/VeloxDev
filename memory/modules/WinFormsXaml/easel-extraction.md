@@ -28,13 +28,15 @@
 
 - `Easel/skills/easel-build-winforms-xaml-ui/` 是 Easel 自己的完整 WinForms-XAML 指南：`SKILL.md` + `references/{runtime,xaml,controls,layout-input,visuals,themes,mvvm,animation,recipes,pitfalls}.md`。公开 API、推荐写法、诊断、主题、3D/合成和动画注入都以这里为准。
 - VeloxDev 的 `veloxdev-create-workflow` / `veloxdev-create-animation` WinForms 页面只保留工作流专属内容（surface behavior、node/slot/link 模板、`ViewPool`、连接预览、VeloxDev 动画适配器），通用 UI 指南统一指向 Easel skill。
+- 动画：Easel 只有 `IVisualAnimator` 契约；应用接受 VeloxDev 时安装 **`VeloxDev.WinForms` 12.0.0+**，模块初始化器自动接上 `EaselVisualAnimator`，无需额外动画包或手动注册。
 
 ## Gallery（`Easel/Examples/XamlGallery`）
 
-- 外壳是 `Views/GalleryVisualShell.xaml` + `GalleryShellViewModel`；页面内大标题是 **Modern WinForms Gallery**，原生窗口标题仍是 `Easel Demos`。目录根节点写作 `Demos`，`Scenarios` 组是 7 个整页（dashboard / settings / player / chat / gradients / composition / 3d），其余为组件组。
+- 外壳是 `Views/GalleryVisualShell.xaml` + `GalleryShellViewModel`；页面内大标题是 **Modern WinForms Gallery**，原生窗口标题仍是 `Easel Demos`。目录根节点写作 `Demos`，`Scenarios` 组是 8 个整页（dashboard / settings / player / video / chat / gradients / composition / 3d），其余为组件组。
 - 主题选择是四选一 ComboBox：Dark+ / Light+ / High contrast / Follow system。`ThemeMode.System` 解析 Windows 的 `AppsUseLightTheme`（高对比时用 HighContrast），并用 `SystemEvents.UserPreferenceChanged` 在选模式的那个线程上重读；`Theme.EffectiveMode` 给出实际调色板。
 - 兜底主题是库内的 `Src/Easel/Themes/{DarkTheme,LightTheme}.xaml`，根是 WPF 式 `<ResourceDictionary>`：调色板 Brush、`CornerRadius`/`ControlHeight` 与四个排版样式（Heading/Subheading/Body/Caption）。字体设置两者相同但每个文件都完整写一遍；`Theme.CreateDark/Light` 从这些 XAML 资源读回 `ThemePalette`，`Theme.CreateResourceDictionary(mode)` 给应用一份副本。High contrast 不是库内兜底：`Demo/Themes/HighContrastTheme.xaml` 是自定义主题示例，`ThemeService` 把它并入视图并用 `ThemePalette.FromResourceDictionary` 设为当前调色板；运行时仍有 `ThemeMode.HighContrast` 的 C# 调色板。生成器现在支持 `<ResourceDictionary>` 根、`x:Key` 资源、keyed Style/Template 与 `MergedDictionaries`（编译类型或内联；不支持文件 URI `Source`）。
-- 每张卡是 `Views/Cards/*.xaml`；code-behind 只做 `DataContext`、树节点、弹层、日历/日期、位图、滑块接线。`Catalog/Cards/<Group>Cards.cs` 按组拼卡，`Catalog/CardCatalog.cs` 的顺序就是目录顺序。Styling 组有 `DynamicResource`/`StaticResource` 对比卡（`style.dynamic-resource`）。
+- 每张卡是 `Views/Cards/*.xaml`；code-behind 只做 `DataContext`、树节点、弹层、日历/日期、位图、滑块/媒体接线。`Catalog/Cards/<Group>Cards.cs` 按组拼卡，`Catalog/CardCatalog.cs` 的顺序就是目录顺序。Styling 组有 `DynamicResource`/`StaticResource` 对比卡（`style.dynamic-resource`）。
+- 媒体页是真实的：3 首 MP3 + 12s H.264/AAC 作为 `EmbeddedResource` 放在 `Demo/Assets/Media`，首次解压到 temp；音频用 WPF `MediaPlayer` 轮询，视频用 `MediaElement` + `ElementHost` 放进唯一的 `NativeControlHost` 岛。Demo 开 `UseWPF` 时必须关掉 WPF 默认 Page/ApplicationDefinition，否则 WPF 会和 Easel 争着编译视图 `.xaml`；`ElementHost` 不能设 `Dock=Fill`（NativeControlHost 用 Bounds 摆放，Dock 会铺满整个 VisualHost）。`UseWPF` 还会改变隐式 using（缺 `System.IO`）并引入 `System.ComponentModel.SortDescription` 的歧义。
 - 整页固定 540 宽；`PreviewScroll` 与页内 `ScrollViewer` 横向禁用，窗口默认取工作区尺寸。3D/遮罩在 `graphics.*` 与 `scenario.*` 卡里演示。
 - 生成器把 Style/Trigger Setter 的 `{StaticResource}` 装成 `Get<object>`，由 `SetValue` 转成 DP 类型；写成 `Get<Color>` 会让 Brush 主题资源在 `Foreground` 上转换失败。
 
