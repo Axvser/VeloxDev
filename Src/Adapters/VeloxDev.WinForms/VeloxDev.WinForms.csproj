@@ -36,6 +36,20 @@
 		<AdditionalFiles Include="**/*.xaml" />
 	</ItemGroup>
 
+	<PropertyGroup>
+		<!-- Easel lives beside this checkout while the two libraries are developed together. The adapter is
+		     compiled only when that project is present; a package reference replaces this default later. -->
+		<EaselProject Condition="'$(EaselProject)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\Easel\Src\Easel\Easel.csproj</EaselProject>
+	</PropertyGroup>
+
+	<ItemGroup Condition="Exists('$(EaselProject)')">
+		<ProjectReference Include="$(EaselProject)" />
+	</ItemGroup>
+
+	<ItemGroup Condition="!Exists('$(EaselProject)')">
+		<Compile Remove="XamlAnimation/**/*.cs" />
+	</ItemGroup>
+
 	<ItemGroup>
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
 		<PackageReference Include="VeloxDev.Core" Version="12.0.0" Condition="'$(Configuration)' != 'Debug'" />
