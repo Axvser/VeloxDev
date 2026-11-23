@@ -118,4 +118,19 @@ public class AgentContextReaderTests
         var member = typeof(DecoratedType).GetProperty(nameof(DecoratedType.NoProp))!;
         Assert.IsFalse(AgentContextReader.HasAgentContext(member));
     }
+
+    [TestMethod]
+    public void AResourceFileReachesTheCompiledTree()
+    {
+        // 这一条走的是真实构建：XML 由 Src/Directory.Build.targets 收成 AdditionalFiles，
+        // 生成器写进目录，模块初始化器注册，最后从这里读回来。不带任何 [AgentContext] 特性。
+        CollectionAssert.Contains(
+            AgentContextReader.GetContexts(typeof(ResourceDescribedModel), AgentLanguages.Chinese),
+            "资源文件描述的类型");
+
+        var member = typeof(ResourceDescribedModel).GetProperty(nameof(ResourceDescribedModel.Value))!;
+        CollectionAssert.Contains(
+            AgentContextReader.GetContexts(member, AgentLanguages.Chinese),
+            "资源文件描述的属性");
+    }
 }

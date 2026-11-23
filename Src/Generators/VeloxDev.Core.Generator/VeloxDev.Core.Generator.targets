@@ -1,5 +1,15 @@
 <Project>
   <!--
+    Agent context resources are compile-time inputs to the AIContextTree generator, not runtime embedded
+    resources. A file named *.agentcontext.xml is picked up by convention so the author does not have to add
+    an AdditionalFiles item; an explicit item for the same file is harmless (the generator de-duplicates it).
+  -->
+  <ItemGroup>
+    <AdditionalFiles Include="**/*.agentcontext.xml"
+                     Exclude="**/bin/**/*.agentcontext.xml;**/obj/**/*.agentcontext.xml" />
+  </ItemGroup>
+
+  <!--
     Checks whether the host Roslyn version satisfies the minimum requirement for
     VeloxDev.Core.Generator source generators (Roslyn 4.0 / VS 2022 17.0+).
     Emits a warning and disables generators gracefully on older toolchains instead

@@ -21,11 +21,10 @@ namespace VeloxDev.Generators.Base
     /// </remarks>
     internal sealed class AIContextAssembly
     {
-        internal AIContextAssembly(string assemblyName, IReadOnlyList<AIContextType> types, IReadOnlyList<Diagnostic> notices)
+        internal AIContextAssembly(string assemblyName, IReadOnlyList<AIContextType> types)
         {
             AssemblyName = assemblyName;
             Types = types;
-            Notices = notices;
         }
 
         /// <summary>The assembly the fragment describes.</summary>
@@ -33,9 +32,6 @@ namespace VeloxDev.Generators.Base
 
         /// <summary>Every type the fragment carries an entry for.</summary>
         internal IReadOnlyList<AIContextType> Types { get; }
-
-        /// <summary>What the walk could not represent faithfully — reported rather than dropped in silence.</summary>
-        internal IReadOnlyList<Diagnostic> Notices { get; }
     }
 
     /// <summary>Which of the collector's shapes a type entry is rendered as.</summary>
@@ -275,13 +271,13 @@ namespace VeloxDev.Generators.Base
         internal static bool Applies(Compilation compilation)
             => compilation.GetTypeByMetadataName(AgentContextAttributeName) is not null;
 
-        /// <summary>
-        /// Walks <paramref name="compilation"/>'s own assembly and builds its fragment.
-        /// </summary>
-        /// <param name="compilation">The compilation being generated for.</param>
-        /// <param name="root">The tree root this fragment contributes under — <c>Framework</c> or <c>Customer</c>.</param>
-        /// <returns>The fragment, or <see langword="null"/> when the assembly contributes nothing.</returns>
-        internal static AIContextAssembly? Build(Compilation compilation, string root)
+        // 走一遍本程序集并建分片。notices 即使返回 null 也会填 —— 资源一条都没对上时，
+        // 正是没有分片可挂诊断的时候。
+        internal static AIContextAssembly? Build(
+            Compilation compilation,
+            string root,
+            AIContextXml? xml,
+            List<Diagnostic> notices)
         {
             var candidates = EnumerateTypes(compilation.Assembly.GlobalNamespace).ToList();
             var included = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
@@ -290,10 +286,12 @@ namespace VeloxDev.Generators.Base
             var declared = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
             var types = new List<AIContextType>();
 
+            var supplement = AIContextSupplement.Resolve(xml, candidates, notices);
+
             // 第一趟：直接参与的 —— 组件、被标注的类型、带标注成员的类型。
             foreach (var symbol in candidates)
             {
-                var type = BuildType(symbol, root);
+                var type = BuildType(symbol, root, supplement);
                 if (type is null) continue;
 
                 included.Add(symbol);
@@ -314,17 +312,20 @@ namespace VeloxDev.Generators.Base
                 if (symbol.TypeKind is not (TypeKind.Enum or TypeKind.Struct or TypeKind.Class)) continue;
                 if (!IsReachableFromMembers(symbol, compiledTypes: candidates)) continue;
 
-                var type = BuildType(symbol, root, force: true);
+                var type = BuildType(symbol, root, supplement, force: true);
                 if (type is null) continue;
 
                 included.Add(symbol);
                 types.Add(type);
             }
 
+            supplement?.Report(notices);
+
             if (types.Count == 0) return null;
 
             types.Sort(static (a, b) => string.CompareOrdinal(a.Path, b.Path));
-            return new AIContextAssembly(compilation.AssemblyName ?? "Assembly", types, DetectNotices(types, declared));
+            notices.AddRange(DetectNotices(types, declared));
+            return new AIContextAssembly(compilation.AssemblyName ?? "Assembly", types);
         }
 
         /// <summary>
@@ -433,7 +434,11 @@ namespace VeloxDev.Generators.Base
         /// Include the type even without annotations. Set when the type was reached through another entry's
         /// member type, which is how a plain enum ends up in the tree.
         /// </param>
-        private static AIContextType? BuildType(INamedTypeSymbol symbol, string root, bool force = false)
+        private static AIContextType? BuildType(
+            INamedTypeSymbol symbol,
+            string root,
+            AIContextSupplement? supplement,
+            bool force = false)
         {
             // 编译器生成的类型（闭包、迭代器、匿名类型）没有稳定的名字，也不该出现在给模型的目录里。
             if (symbol.IsImplicitlyDeclared || symbol.Name.StartsWith("<")) return null;
@@ -453,8 +458,8 @@ namespace VeloxDev.Generators.Base
             if (symbol.IsStatic) return null;
 
             var componentKind = ComponentKindOf(symbol);
-            var typeTexts = ReadTexts(symbol);
-            var members = symbol.TypeKind == TypeKind.Enum ? ReadEnumMembers(symbol) : ReadMembers(symbol);
+            var typeTexts = ReadTexts(symbol, null, symbol.Name, supplement);
+            var members = symbol.TypeKind == TypeKind.Enum ? ReadEnumMembers(symbol, supplement) : ReadMembers(symbol, supplement);
 
             // 只有「被标注过」的类型才主动进目录。仅因为它有公开成员就收录会把整个程序集倒进去 ——
             // 真正需要的是：它是个组件，或它（或它的某个成员）带着 Agent 相关的标注。
@@ -466,6 +471,9 @@ namespace VeloxDev.Generators.Base
                                                        || m.IsCommand);
 
             if (!force && componentKind is null && !annotated) return null;
+
+            // 走到这里类型确实会进目录，资源条目才算对上。
+            supplement?.MarkConsumed(symbol);
 
             var kind = symbol.TypeKind switch
             {
@@ -532,7 +540,7 @@ namespace VeloxDev.Generators.Base
         /// Nested types are joined with <c>+</c>, not <c>.</c> — and the tree's index key, the accessor's
         /// <c>TypeName</c> and the rendered <c>Type:</c> line all have to agree with what reflection prints.
         /// </remarks>
-        private static string ReflectionFullName(INamedTypeSymbol symbol)
+        internal static string ReflectionFullName(INamedTypeSymbol symbol)
         {
             var name = symbol.Name;
 
@@ -542,6 +550,13 @@ namespace VeloxDev.Generators.Base
             var ns = symbol.ContainingNamespace;
             return ns is null || ns.IsGlobalNamespace ? name : ns.ToDisplayString() + "." + name;
         }
+
+        // 源码写法的全名，嵌套用 `.`。资源是手写的，两种写法都认；
+        // 目录索引仍然用 ReflectionFullName 那个带 `+` 的形状。
+        internal static string DisplayFullName(INamedTypeSymbol symbol)
+            => symbol.ToDisplayString(new SymbolDisplayFormat(
+                typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+                genericsOptions: SymbolDisplayGenericsOptions.None));
 
         /// <summary>
         /// Which component directory the type belongs in, or null when it is not a component.
@@ -646,8 +661,24 @@ namespace VeloxDev.Generators.Base
                 i.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                  .Replace("global::", string.Empty) == interfaceMetadataName);
 
-        private static IReadOnlyList<AIContextText> ReadTexts(ISymbol symbol)
-            => ReadTexts(symbol.GetAttributes());
+        // 特性文字在前，资源文字在后。命令的标注以接口为准，但资源点名接口或实现成员都算数。
+        private static IReadOnlyList<AIContextText> ReadTexts(
+            ISymbol annotations,
+            ISymbol? also,
+            string treeName,
+            AIContextSupplement? supplement)
+        {
+            var texts = new List<AIContextText>(ReadTexts(annotations.GetAttributes()));
+
+            if (supplement is null) return texts;
+
+            supplement.AddTexts(annotations, treeName, texts);
+
+            if (also is not null && !SymbolEqualityComparer.Default.Equals(annotations, also))
+                supplement.AddTexts(also, treeName, texts);
+
+            return texts;
+        }
 
         private static IReadOnlyList<AIContextText> ReadTexts(IEnumerable<AttributeData> attributes)
         {
@@ -684,7 +715,7 @@ namespace VeloxDev.Generators.Base
         /// Enum members, which are const fields — the property/field walk deliberately skips consts, so an enum
         /// needs its own pass or it would come out with no members at all.
         /// </summary>
-        private static IReadOnlyList<AIContextMember> ReadEnumMembers(INamedTypeSymbol symbol)
+        private static IReadOnlyList<AIContextMember> ReadEnumMembers(INamedTypeSymbol symbol, AIContextSupplement? supplement)
         {
             var members = new List<AIContextMember>();
 
@@ -705,7 +736,7 @@ namespace VeloxDev.Generators.Base
                     hasVeloxCommand: false,
                     isPromotedField: false,
                     hasSlotSelectors: false,
-                    descriptions: ReadTexts(field),
+                    descriptions: ReadTexts(field, null, field.Name, supplement),
                     slotSelectorNames: [],
                     parameters: [])
                 {
@@ -720,7 +751,7 @@ namespace VeloxDev.Generators.Base
             return members;
         }
 
-        private static IReadOnlyList<AIContextMember> ReadMembers(INamedTypeSymbol symbol)
+        private static IReadOnlyList<AIContextMember> ReadMembers(INamedTypeSymbol symbol, AIContextSupplement? supplement)
         {
             var members = new List<AIContextMember>();
 
@@ -744,31 +775,32 @@ namespace VeloxDev.Generators.Base
                 switch (member)
                 {
                     case IPropertySymbol property when property.DeclaredAccessibility == Accessibility.Public && !property.IsIndexer:
-                        members.Add(BuildProperty(property));
+                        members.Add(BuildProperty(property, supplement));
                         break;
 
                     // [VeloxProperty] 字段由 MVVM 生成器提升成属性，Agent 面看到的是那个属性，不是字段。
                     // 自己写的字段（public 且没标注）才按字段收录。
                     case IFieldSymbol field when AIContextNaming.HasAttribute(field, VeloxPropertyAttributeName):
                         var promoted = AIContextNaming.PromotedPropertyName(field.Name);
-                        if (promoted.Length > 0) members.Add(BuildPromotedProperty(field, promoted));
+                        if (promoted.Length > 0) members.Add(BuildPromotedProperty(field, promoted, supplement));
                         break;
 
                     // 只带 [AgentContext] 的私有/受保护字段：会出现在描述表格里，但**没有生成属性**，
                     // 所以访问器够不着它 —— 描述-only，读写都标 false，否则生成的 `t.X` 编不过。
+                    // 资源文件里的同名条目也算数，否则把标注搬进 XML 就得反过来给字段贴一个空特性。
                     case IFieldSymbol field when field.DeclaredAccessibility != Accessibility.Public
                                                  && !field.IsConst
                                                  && field.AssociatedSymbol is null
-                                                 && AIContextNaming.HasAttribute(field, AgentContextAttributeName):
+                                                 && IsDescribedOnlyField(field, supplement):
                         var described = AIContextNaming.PromotedPropertyName(field.Name);
-                        if (described.Length > 0) members.Add(BuildDescribedOnlyField(field, described));
+                        if (described.Length > 0) members.Add(BuildDescribedOnlyField(field, described, supplement));
                         break;
 
                     case IFieldSymbol field when field.DeclaredAccessibility == Accessibility.Public
                                                  && !field.IsConst
                                                  && field.AssociatedSymbol is null
                                                  && field.Name != "value__":
-                        members.Add(BuildField(field));
+                        members.Add(BuildField(field, supplement));
                         break;
 
                     // 泛型方法跳过：自己的类型参数在生成的调用里没有绑定（`T byref0` 编不过），
@@ -781,11 +813,11 @@ namespace VeloxDev.Generators.Base
                         // [VeloxCommand] 提升出的命令属性是公开的，哪怕方法自己是 private ——
                         // 实现类里的命令体普遍写成 private，按方法可见性过滤会把整个命令面漏掉。
                         if (AIContextNaming.HasAttribute(method, VeloxCommandAttributeName))
-                            members.Add(BuildPromotedCommand(method));
+                            members.Add(BuildPromotedCommand(method, supplement));
 
                         // 方法本身只有公开时才对 Agent 可调；私有方法只经由上面那个命令暴露。
                         if (method.DeclaredAccessibility == Accessibility.Public)
-                            members.Add(BuildMethod(method));
+                            members.Add(BuildMethod(method, supplement));
                         break;
                 }
             }
@@ -793,7 +825,7 @@ namespace VeloxDev.Generators.Base
             return members;
         }
 
-        private static AIContextMember BuildProperty(IPropertySymbol property)
+        private static AIContextMember BuildProperty(IPropertySymbol property, AIContextSupplement? supplement)
         {
             var isCommand = IsCommandType(property.Type);
 
@@ -818,7 +850,7 @@ namespace VeloxDev.Generators.Base
                 hasVeloxCommand: false,
                 isPromotedField: false,
                 hasSlotSelectors: HasAttribute(property, SlotSelectorsAttributeName),
-                descriptions: ReadTexts(annotations),
+                descriptions: ReadTexts(annotations, property, property.Name, supplement),
                 slotSelectorNames: ReadSlotSelectorNames(property),
                 parameters: [])
             {
@@ -951,7 +983,7 @@ namespace VeloxDev.Generators.Base
                 : (null, null);
         }
 
-        private static AIContextMember BuildField(IFieldSymbol field)
+        private static AIContextMember BuildField(IFieldSymbol field, AIContextSupplement? supplement)
             => new(
                 field.Name,
                 field.Type,
@@ -965,10 +997,16 @@ namespace VeloxDev.Generators.Base
                 hasVeloxCommand: false,
                 isPromotedField: false,
                 hasSlotSelectors: HasAttribute(field, SlotSelectorsAttributeName),
-                descriptions: ReadTexts(field),
+                descriptions: ReadTexts(field, null, field.Name, supplement),
                 slotSelectorNames: ReadSlotSelectorNames(field),
                 parameters: [])
             { IsField = true, Symbol = field };
+
+        // 私有字段只带 [AgentContext]、或资源点名了它，都按「描述-only」收进目录。
+        private static bool IsDescribedOnlyField(IFieldSymbol field, AIContextSupplement? supplement)
+            => AIContextNaming.HasAttribute(field, AgentContextAttributeName)
+               || (supplement is not null
+                   && supplement.HasMemberTexts(field, AIContextNaming.PromotedPropertyName(field.Name)));
 
         /// <summary>
         /// A <c>[VeloxProperty]</c> field as the Agent meets it: the property the MVVM generator promotes it to.
@@ -978,7 +1016,7 @@ namespace VeloxDev.Generators.Base
         /// itself is private, and a private member of another type is not reachable from generated code even
         /// inside the same assembly.
         /// </remarks>
-        private static AIContextMember BuildPromotedProperty(IFieldSymbol field, string promotedName)
+        private static AIContextMember BuildPromotedProperty(IFieldSymbol field, string promotedName, AIContextSupplement? supplement)
             => new(
                 promotedName,
                 field.Type,
@@ -992,7 +1030,7 @@ namespace VeloxDev.Generators.Base
                 hasVeloxCommand: false,
                 isPromotedField: true,
                 hasSlotSelectors: AIContextNaming.HasAttribute(field, SlotSelectorsAttributeName),
-                descriptions: ReadTexts(field),
+                descriptions: ReadTexts(field, null, promotedName, supplement),
                 slotSelectorNames: ReadSlotSelectorNames(field),
                 parameters: [])
             {
@@ -1009,7 +1047,7 @@ namespace VeloxDev.Generators.Base
         /// Describable but not reachable: no generator promotes it to a property, so there is nothing for an
         /// accessor to read or write. Recorded so the rendered tables keep the row they print today.
         /// </remarks>
-        private static AIContextMember BuildDescribedOnlyField(IFieldSymbol field, string describedName)
+        private static AIContextMember BuildDescribedOnlyField(IFieldSymbol field, string describedName, AIContextSupplement? supplement)
             => new(
                 describedName,
                 field.Type,
@@ -1023,7 +1061,7 @@ namespace VeloxDev.Generators.Base
                 hasVeloxCommand: false,
                 isPromotedField: false,
                 hasSlotSelectors: false,
-                descriptions: ReadTexts(field),
+                descriptions: ReadTexts(field, null, describedName, supplement),
                 slotSelectorNames: [],
                 parameters: [])
             { IsField = true, Symbol = field };
@@ -1035,7 +1073,7 @@ namespace VeloxDev.Generators.Base
         /// The declared type is the framework command interface rather than the writer's own generated type —
         /// this generator cannot see that type, but every command property implements this one.
         /// </remarks>
-        private static AIContextMember BuildPromotedCommand(IMethodSymbol method)
+        private static AIContextMember BuildPromotedCommand(IMethodSymbol method, AIContextSupplement? supplement)
         {
             // 命令属性由 CommandWriter 产出，它实现的那个接口属性才带着标注 —— 接口上写了就用接口的。
             var name = AIContextNaming.CommandPropertyName(method);
@@ -1056,7 +1094,7 @@ namespace VeloxDev.Generators.Base
                 hasVeloxCommand: true,
                 isPromotedField: false,
                 hasSlotSelectors: false,
-                descriptions: ReadTexts(annotations),
+                descriptions: ReadTexts(annotations, method, name, supplement),
                 slotSelectorNames: [],
                 parameters: [])
             {
@@ -1066,7 +1104,7 @@ namespace VeloxDev.Generators.Base
             };
         }
 
-        private static AIContextMember BuildMethod(IMethodSymbol method)
+        private static AIContextMember BuildMethod(IMethodSymbol method, AIContextSupplement? supplement)
         {
             var commandParameter = ReadCommandParameterType(method);
 
@@ -1083,7 +1121,7 @@ namespace VeloxDev.Generators.Base
                 hasVeloxCommand: HasAttribute(method, VeloxCommandAttributeName),
                 isPromotedField: false,
                 hasSlotSelectors: false,
-                descriptions: ReadTexts(method),
+                descriptions: ReadTexts(method, null, method.Name, supplement),
                 slotSelectorNames: [],
                 parameters: [.. method.Parameters.Select(static p => new AIContextParameter(
                     p.Name,

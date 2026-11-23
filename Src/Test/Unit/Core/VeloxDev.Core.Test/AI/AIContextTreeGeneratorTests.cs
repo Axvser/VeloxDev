@@ -87,4 +87,300 @@ public class AIContextTreeGeneratorTests
 
         Assert.AreEqual(string.Empty, generated, "the generator must be inert where there is no agent surface");
     }
+
+    // ── 资源文件 ──
+
+    private static (string Path, string Text) Resource(string xml) => ("AgentContext.agentcontext.xml", xml);
+
+    [TestMethod]
+    public void AResourceCanDescribeATypeTheCodeDoesNotAnnotate()
+    {
+        var (_, generated) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public class Node { public int Title { get; set; } public void Run() { } }",
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Node">
+                        <Text language="Chinese">一个节点</Text>
+                        <Member name="Title">
+                          <Text language="Chinese">标题</Text>
+                        </Member>
+                        <Member name="Run">
+                          <Text language="English">Runs the node</Text>
+                        </Member>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        StringAssert.Contains(generated, "\"一个节点\"", "the type-level text must reach the fragment");
+        StringAssert.Contains(generated, "\"标题\"", "the member text must reach the fragment");
+        StringAssert.Contains(generated, "\"Runs the node\"", "a method can be described from the resource");
+        StringAssert.Contains(generated, "case \"Title\":", "the described property must be actionable");
+    }
+
+    [TestMethod]
+    public void AResourceAddressesAPromotedCommandByItsMethodName()
+    {
+        var (_, generated) = GeneratorProbe.Run(
+            new AIContextTree(),
+            """
+            namespace Probe;
+
+            public partial class Vm
+            {
+                [VeloxDev.MVVM.VeloxCommand]
+                private void Save() { }
+            }
+            """,
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Vm">
+                        <Member name="Save">
+                          <Text language="English">Saves the document</Text>
+                        </Member>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        StringAssert.Contains(generated, "\"SaveCommand\"", "the command node keeps its generated name");
+        StringAssert.Contains(generated, "\"Saves the document\"", "the resource matches the source method name");
+    }
+
+    [TestMethod]
+    public void AResourceAddressesAPromotedFieldByItsFieldName()
+    {
+        var (_, generated) = GeneratorProbe.Run(
+            new AIContextTree(),
+            """
+            namespace Probe;
+
+            public partial class Vm
+            {
+                [VeloxDev.MVVM.VeloxProperty]
+                private int _delay = 0;
+            }
+            """,
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Vm">
+                        <Member name="_delay">
+                          <Text language="English">Delay in milliseconds</Text>
+                        </Member>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        StringAssert.Contains(generated, "\"Delay\"", "the promoted property keeps its generated name");
+        StringAssert.Contains(generated, "\"Delay in milliseconds\"", "the resource matches the field name");
+    }
+
+    [TestMethod]
+    public void ANestedTypeCanBeNamedWithDots()
+    {
+        var (_, generated) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public class Outer { public class Inner { public int Value { get; set; } } }",
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Outer.Inner">
+                        <Member name="Value">
+                          <Text language="English">A value</Text>
+                        </Member>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        StringAssert.Contains(generated, "\"Probe.Outer+Inner\"", "the fragment indexes the reflection full name");
+        StringAssert.Contains(generated, "\"A value\"");
+    }
+
+    [TestMethod]
+    public void AResourceCanDescribeAnEnumMember()
+    {
+        var (_, generated) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public enum Mode { Fast, Slow }",
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Mode">
+                        <Member name="Fast">
+                          <Text language="English">Quick</Text>
+                        </Member>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        StringAssert.Contains(generated, "\"Quick\"");
+        StringAssert.Contains(generated, "global::VeloxDev.AI.AIContextNodeKind.EnumMember");
+    }
+
+    [TestMethod]
+    public void AResourceCanDescribeAPrivateFieldWithoutAnAttribute()
+    {
+        var (diagnostics, generated) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public class Node { private int _secret; public int Value { get; set; } }",
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Node">
+                        <Member name="_secret">
+                          <Text language="English">A private detail</Text>
+                        </Member>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        StringAssert.Contains(generated, "\"Secret\"", "the private field keeps its promoted name");
+        StringAssert.Contains(generated, "\"A private detail\"");
+        CollectionAssert.DoesNotContain(
+            diagnostics.Select(static d => d.Id).ToList(),
+            "VELOX_AI_TREE004",
+            GeneratorProbe.Describe(diagnostics));
+    }
+
+    [TestMethod]
+    public void AnUnknownMemberIsReported()
+    {
+        var (diagnostics, _) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public class Node { public int Title { get; set; } }",
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Node">
+                        <Text language="English">A node</Text>
+                        <Member name="Missing">
+                          <Text language="English">nope</Text>
+                        </Member>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        CollectionAssert.Contains(
+            diagnostics.Select(static d => d.Id).ToList(),
+            "VELOX_AI_TREE004",
+            GeneratorProbe.Describe(diagnostics));
+    }
+
+    [TestMethod]
+    public void AnUnknownTypeIsReportedEvenWhenNoTreeIsProduced()
+    {
+        var (diagnostics, generated) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public class Plain { public int Value { get; set; } }",
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Missing">
+                        <Text language="English">nope</Text>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        Assert.AreEqual(string.Empty, generated, "nothing matched, so there is no fragment");
+        CollectionAssert.Contains(
+            diagnostics.Select(static d => d.Id).ToList(),
+            "VELOX_AI_TREE003",
+            GeneratorProbe.Describe(diagnostics));
+    }
+
+    [TestMethod]
+    public void AnUnknownLanguageIsReported()
+    {
+        var (diagnostics, _) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public class Node { public int Title { get; set; } }",
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Node">
+                        <Text language="English">A node</Text>
+                        <Text language="Klingon">nope</Text>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        CollectionAssert.Contains(
+            diagnostics.Select(static d => d.Id).ToList(),
+            "VELOX_AI_TREE005",
+            GeneratorProbe.Describe(diagnostics));
+    }
+
+    [TestMethod]
+    public void AnEmptyTypeEntryDoesNotPullTheTypeIntoTheTree()
+    {
+        var (diagnostics, generated) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public class Node { public int Value { get; set; } }",
+            "Probe",
+            [Resource("""<AgentContext><Type name="Probe.Node" /></AgentContext>""")]);
+
+        Assert.AreEqual(string.Empty, generated, "an entry with no text describes nothing");
+        CollectionAssert.Contains(
+            diagnostics.Select(static d => d.Id).ToList(),
+            "VELOX_AI_TREE003",
+            GeneratorProbe.Describe(diagnostics));
+    }
+
+    [TestMethod]
+    public void AMalformedResourceIsReported()
+    {
+        var (diagnostics, _) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public class Node { public int Value { get; set; } }",
+            "Probe",
+            [Resource("<AgentContext><Type name=\"Probe.Node\"></AgentContext>")]);
+
+        CollectionAssert.Contains(
+            diagnostics.Select(static d => d.Id).ToList(),
+            "VELOX_AI_TREE002",
+            GeneratorProbe.Describe(diagnostics));
+    }
+
+    [TestMethod]
+    public void AMultiLineTextKeepsItsLinesAndLosesTheXmlIndentation()
+    {
+        var (_, generated) = GeneratorProbe.Run(
+            new AIContextTree(),
+            "namespace Probe; public class Node { public int Title { get; set; } }",
+            "Probe",
+            [
+                Resource("""
+                    <AgentContext>
+                      <Type name="Probe.Node">
+                        <Text language="English">
+                          First line
+                            indented second
+                        </Text>
+                      </Type>
+                    </AgentContext>
+                    """),
+            ]);
+
+        StringAssert.Contains(generated, "First line\\n  indented second");
+    }
 }

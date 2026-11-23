@@ -1,6 +1,15 @@
 <Project>
 
   <!--
+    Mirrors the generator package's convention for Debug (and VeloxDevLocalCore) builds, which use a
+    project reference and therefore do not import the package's targets.
+  -->
+  <ItemGroup>
+    <AdditionalFiles Include="**/*.agentcontext.xml"
+                     Exclude="**/bin/**/*.agentcontext.xml;**/obj/**/*.agentcontext.xml" />
+  </ItemGroup>
+
+  <!--
     Mirrors Src/Directory.Build.targets for the examples: with VeloxDevLocalCore=true, a Release
     build must use the working tree's generator instead of the package version that has not been
     published yet. The examples' generator references live in their own props/csproj files, so the

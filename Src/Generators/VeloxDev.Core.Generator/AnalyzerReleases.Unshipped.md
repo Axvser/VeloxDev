@@ -10,6 +10,11 @@ VELOX_MVVM_PROP001 | VeloxDev.MVVM | Error | Conflicting [VeloxProperty] declara
 VELOX_MVVM_PROP002 | VeloxDev.MVVM | Warning | Unusable [VeloxProperty] name
 VELOX_MVVM_PROP003 | VeloxDev.MVVM | Warning | Uncompletable [VeloxProperty] property
 VELOX_AI_TREE001 | VeloxDev.AI | Warning | Ambiguous method overload in the agent context tree
+VELOX_AI_TREE002 | VeloxDev.AI | Error | Unreadable agent context resource
+VELOX_AI_TREE003 | VeloxDev.AI | Warning | Type outside the agent context tree
+VELOX_AI_TREE004 | VeloxDev.AI | Warning | Member outside the agent context tree
+VELOX_AI_TREE005 | VeloxDev.AI | Warning | Unknown agent context language
+VELOX_AI_TREE006 | VeloxDev.AI | Warning | Unsupported agent context resource syntax
 VELOX_JSON_ARCH001 | VeloxDev.Serialization | Error | Unsupported [Archivable] root
 VELOX_JSON_HOOK001 | VeloxDev.Serialization | Warning | Ambiguous serialization callback
 VELOX_JSON_HOOK002 | VeloxDev.Serialization | Error | Unreachable serialization callback

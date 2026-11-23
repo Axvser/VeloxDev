@@ -122,6 +122,82 @@ namespace VeloxDev.Generators
             isEnabledByDefault: true);
 
         /// <summary>
+        /// An agent context resource the generator cannot read.
+        /// </summary>
+        /// <remarks>
+        /// Error rather than warning: the file is the author's declaration of the descriptions, and an unreadable
+        /// one would leave every entry it carries silently missing from the tree. The location is inside the file,
+        /// so the author lands on the offending line rather than on a generated one.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor UnreadableAgentContextResource = new(
+            id: "VELOX_AI_TREE002",
+            title: "Unreadable agent context resource",
+            messageFormat: "'{0}' cannot be read as an agent context resource: {1}",
+            category: "VeloxDev.AI",
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// A resource names a type the tree cannot hold.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error: the rest of the file still applies, and the usual causes — a typo, a private
+        /// or generic type, a type from another assembly — are each fixable without failing the build.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor UnknownAgentContextType = new(
+            id: "VELOX_AI_TREE003",
+            title: "Type outside the agent context tree",
+            messageFormat: "Type '{0}' is not part of the agent context tree; its descriptions are ignored",
+            category: "VeloxDev.AI",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// A resource names a member the tree does not expose for its type.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error, for the same reason as <see cref="UnknownAgentContextType"/>: the rest of
+        /// the type's descriptions still land.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor UnknownAgentContextMember = new(
+            id: "VELOX_AI_TREE004",
+            title: "Member outside the agent context tree",
+            messageFormat: "Member '{0}' on '{1}' is not part of the agent context tree; its descriptions are ignored",
+            category: "VeloxDev.AI",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// A resource names a language that is not an <c>AgentLanguages</c> value.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error: only the one text is dropped, and the author needs the pointer — a typo in
+        /// <c>language</c> would otherwise leave the text in whatever language the fallback picked.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor UnknownAgentContextLanguage = new(
+            id: "VELOX_AI_TREE005",
+            title: "Unknown agent context language",
+            messageFormat: "'{0}' is not an AgentLanguages value",
+            category: "VeloxDev.AI",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        /// <summary>
+        /// An element or attribute the agent context resource format does not define.
+        /// </summary>
+        /// <remarks>
+        /// Warning rather than error: unknown syntax is ignored rather than fatal, but a misspelled
+        /// <c>language</c> or <c>name</c> would otherwise change what the file means without a word.
+        /// </remarks>
+        public static readonly DiagnosticDescriptor UnsupportedAgentContextResourceSyntax = new(
+            id: "VELOX_AI_TREE006",
+            title: "Unsupported agent context resource syntax",
+            messageFormat: "'{0}' is not part of the agent context resource format",
+            category: "VeloxDev.AI",
+            defaultSeverity: DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        /// <summary>
         /// A type named by <c>[Archivable(typeof(…))]</c> that this assembly cannot emit an entry for.
         /// </summary>
         /// <remarks>

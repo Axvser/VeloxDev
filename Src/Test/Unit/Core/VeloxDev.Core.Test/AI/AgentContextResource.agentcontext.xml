@@ -1,0 +1,8 @@
+<AgentContext>
+  <Type name="VeloxDev.Core.Test.AI.ResourceDescribedModel">
+    <Text language="Chinese">资源文件描述的类型</Text>
+    <Member name="Value">
+      <Text language="Chinese">资源文件描述的属性</Text>
+    </Member>
+  </Type>
+</AgentContext>

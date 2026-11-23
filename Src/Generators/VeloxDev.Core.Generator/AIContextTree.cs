@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
+using System.Collections.Generic;
 using System.Text;
 using VeloxDev.Generators.Base;
 using VeloxDev.Generators.Writers;
@@ -44,30 +45,53 @@ namespace VeloxDev.Generators
                     Enabled: !string.Equals(enabled, "false", System.StringComparison.OrdinalIgnoreCase));
             });
 
+            // 资源文件是编译期输入，不是运行期内嵌资源：生成器读进来看，再把文字写进目录。
+            // 只订阅约定后缀，工程里别的 AdditionalFiles（XAML、AnalyzerReleases…）不会触发重跑。
+            var resources = context.AdditionalTextsProvider
+                .Where(static file => file.Path.EndsWith(
+                    AIContextXml.FileSuffix,
+                    System.StringComparison.OrdinalIgnoreCase))
+                .Collect();
+
             context.RegisterSourceOutput(
-                context.CompilationProvider.Combine(settings),
-                static (output, input) => Generate(output, input.Left, input.Right.Root, input.Right.Enabled));
+                context.CompilationProvider.Combine(settings).Combine(resources),
+                static (output, input) => Generate(
+                    output,
+                    input.Left.Left,
+                    input.Left.Right.Root,
+                    input.Left.Right.Enabled,
+                    input.Right));
         }
 
         private static void Generate(
             SourceProductionContext context,
             Compilation compilation,
             string root,
-            bool enabled)
+            bool enabled,
+            IEnumerable<AdditionalText> resources)
         {
             if (!enabled) return;
 
             // 没有引用 VeloxDev.AI 的工程不参与 Agent 面，连遍历都不做。
             if (!AIContextModelBuilder.Applies(compilation)) return;
 
-            var assembly = AIContextModelBuilder.Build(compilation, root);
-            if (assembly is null) return;
+            var xml = AIContextXml.Parse(resources, compilation, context.CancellationToken);
 
-            // 报告而不是静默丢弃：目录表达不了的东西，作者应该在自己那行看到。
-            foreach (var notice in assembly.Notices)
+            foreach (var diagnostic in xml.Diagnostics)
+            {
+                context.ReportDiagnostic(diagnostic);
+            }
+
+            // 诊断经列表返回：资源一条都没对上时 Build 返回 null，而那正是最该报出来的情况。
+            var notices = new List<Diagnostic>();
+            var assembly = AIContextModelBuilder.Build(compilation, root, xml, notices);
+
+            foreach (var notice in notices)
             {
                 context.ReportDiagnostic(notice);
             }
+
+            if (assembly is null) return;
 
             var source = AIContextTreeWriter.Write(assembly, root, context.CancellationToken);
 

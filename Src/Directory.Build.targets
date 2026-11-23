@@ -1,6 +1,16 @@
 <Project>
 
   <!--
+    Agent context resources are compile-time inputs to the AIContextTree generator. The generator package
+    ships the same convention in its own targets; a project-reference build does not import those, so the
+    working tree repeats it here. An explicit AdditionalFiles item for the same file is harmless.
+  -->
+  <ItemGroup>
+    <AdditionalFiles Include="**/*.agentcontext.xml"
+                     Exclude="**/bin/**/*.agentcontext.xml;**/obj/**/*.agentcontext.xml" />
+  </ItemGroup>
+
+  <!--
     A build-only release run packs the dependents in Release, but the versions that run is about to
     publish do not exist on NuGet yet. With VeloxDevLocalCore=true, swap the package references for
     the working tree's projects — Core and the generator both, because Core depends on the

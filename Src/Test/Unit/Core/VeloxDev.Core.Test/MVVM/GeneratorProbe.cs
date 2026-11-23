@@ -1,6 +1,8 @@
 using System.IO;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Text;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.Core.Test.MVVM;
@@ -10,9 +12,15 @@ namespace VeloxDev.Core.Test.MVVM;
 internal static class GeneratorProbe
 {
     internal static (IReadOnlyList<Diagnostic> Diagnostics, string Generated) Run(
-        IIncrementalGenerator generator, string source, string assemblyName)
+        IIncrementalGenerator generator,
+        string source,
+        string assemblyName,
+        IEnumerable<(string Path, string Text)>? additionalFiles = null)
     {
-        var result = CSharpGeneratorDriver.Create(generator)
+        var result = CSharpGeneratorDriver.Create(
+                [generator.AsSourceGenerator()],
+                additionalFiles?.Select(static file =>
+                    (AdditionalText)new InMemoryAdditionalText(file.Path, file.Text)))
             .RunGenerators(Build(source, assemblyName))
             .GetRunResult();
 
@@ -22,6 +30,15 @@ internal static class GeneratorProbe
                           .Select(static s => s.SourceText.ToString()));
 
         return (result.Diagnostics, generated);
+    }
+
+    private sealed class InMemoryAdditionalText(string path, string text) : AdditionalText
+    {
+        private readonly SourceText _text = SourceText.From(text, Encoding.UTF8);
+
+        public override string Path { get; } = path;
+
+        public override SourceText GetText(CancellationToken cancellationToken = default) => _text;
     }
 
     internal static CSharpCompilation Build(string source, string assemblyName)
