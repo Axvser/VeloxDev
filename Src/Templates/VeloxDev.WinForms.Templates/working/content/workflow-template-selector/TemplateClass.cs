@@ -1,10 +1,10 @@
-// VeloxDev customization: assign the DataTemplates your tree declares; add the slot/tree templates if the host pools them.
-using VeloxDev.WinForms.Xaml;
+﻿// VeloxDev customization: which visual each item kind gets.
+using VeloxDev.WinForms.Xaml.Visuals;
 using VeloxDev.WorkflowSystem;
 
 namespace TemplateNamespace;
 
-public sealed class TemplateClass : TemplateSelector
+public sealed class TemplateClass : VisualTemplateSelector
 {
     public DataTemplate? NodeTemplate { get; set; }
 
@@ -12,14 +12,11 @@ public sealed class TemplateClass : TemplateSelector
 
     public DataTemplate? LinkTemplate { get; set; }
 
-    public DataTemplate? TreeTemplate { get; set; }
-
-    public override DataTemplate? SelectTemplate(object? item) => item switch
+    public override VisualElement? SelectTemplate(object? item) => item switch
     {
-        ILinkComponent => LinkTemplate,
-        ISlotComponent => SlotTemplate,
-        INodeComponent => NodeTemplate,
-        ITreeComponent => TreeTemplate,
+        INodeComponent => NodeTemplate?.Create() ?? new NodeView(),
+        ISlotComponent => SlotTemplate?.Create() ?? new SlotView(),
+        ILinkComponent => LinkTemplate?.Create() ?? new LinkView(),
         _ => null,
     };
 }

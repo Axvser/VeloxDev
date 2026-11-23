@@ -1,6 +1,6 @@
-namespace Demo.Views;
+﻿namespace Demo.Views;
 
-/// <summary>A visual-backend view declared with the generated <c>v:</c> XAML profile.</summary>
+/// <summary>A visual-backend view declared with unprefixed visual XAML.</summary>
 public sealed partial class VisualSample : VeloxDev.WinForms.Xaml.Visuals.Controls.StackPanel
 {
     private int _clicks;

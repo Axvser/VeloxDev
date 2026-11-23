@@ -1,7 +1,7 @@
 # 插槽同步的共享调度批次
 
 > Core 在 `Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Scheduling/`：`WorkflowLayoutBatch`（合并 + 调度 + 暂停）与 `WorkflowLayoutStamp`（指纹）。
-> 适配器的 `WorkflowSlotLayoutBehavior` 只保留平台信号与一次改写；合并、去重、指纹比较都在 Core。
+> 适配器的 `WorkflowSlotLayoutBehavior` 只保留平台信号与一次改写；合并、去重、指纹比较都在 Core。WinForms 的 `WorkflowSlotLayoutBehavior` 不走这条批次：它在 `Sync` 里把部件中心换算到坐标宿主后写 `Anchor`。
 
 ## 一、它解决的问题
 

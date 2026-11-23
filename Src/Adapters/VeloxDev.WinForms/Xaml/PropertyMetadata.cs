@@ -1,4 +1,4 @@
-using System.Windows.Forms;
+﻿using System.Windows.Forms;
 
 namespace VeloxDev.WinForms.Xaml;
 
@@ -131,6 +131,6 @@ public class PropertyMetadata
     /// <summary>
     /// Whether an ancestor's value is used when the target has no value of its own.
     /// </summary>
-    /// <remarks>Used by the visual backend's <c>DataContext</c>; the HWND backend leaves it false.</remarks>
+    /// <remarks>Used by <c>DataContext</c> inheritance on visual elements.</remarks>
     public bool Inherits { get; init; }
 }

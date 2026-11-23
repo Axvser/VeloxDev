@@ -1,28 +1,27 @@
-<v:StackPanel
+<StackPanel
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:v="clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms"
     x:Class="VeloxDev.WinForms.Xaml.Test.Fixtures.VisualView"
     Orientation="Horizontal"
     Spacing="4"
     Padding="6">
 
-  <v:Border x:Name="frame"
-            v:Grid.Row="1"
-            Width="80"
-            Height="40"
-            Background="#FF102030"
-            BorderThickness="2"
-            CornerRadius="6" />
+  <Border x:Name="frame"
+          Grid.Row="1"
+          Width="80"
+          Height="40"
+          Background="#FF102030"
+          BorderThickness="2"
+          CornerRadius="6" />
 
-  <v:TextBlock x:Name="title"
-               Text="Visual title"
-               Width="120"
-               Foreground="#FF203040"
-               Wrap="True" />
+  <TextBlock x:Name="title"
+             Text="Visual title"
+             Width="120"
+             Foreground="#FF203040"
+             Wrap="True" />
 
-  <v:Button x:Name="actionButton"
-            Text="Run"
-            Click="OnActionClick" />
+  <Button x:Name="actionButton"
+          Text="Run"
+          Click="OnActionClick" />
 
-</v:StackPanel>
+</StackPanel>

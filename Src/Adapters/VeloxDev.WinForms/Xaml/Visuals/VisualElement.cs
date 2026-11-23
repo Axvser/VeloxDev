@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml.Controls;
@@ -16,7 +16,7 @@ namespace VeloxDev.WinForms.Xaml.Visuals;
 /// <remarks>
 /// <para>
 /// A <see cref="VisualElement"/> is a <see cref="ContainerVisual"/> with a measure/arrange pass, a background and
-/// border, pointer and keyboard events, and logical focus. It never creates a window; a <see cref="VisualSurface"/>
+/// border, pointer and keyboard events, and logical focus. It never creates a window; a <see cref="VisualHost"/>
 /// owns the single HWND and paints the whole tree in one pass.
 /// </para>
 /// <para>
@@ -137,8 +137,9 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     private bool _measureValid;
     private Size _measureAvailable;
     private Size _desiredSize;
-    private VisualSurface? _surface;
+    private VisualHost? _surface;
     private bool _focused;
+    private bool _focusVisible;
     private bool _pointerOver;
     private VisualStyle? _explicitStyle;
     private VisualStyle? _implicitStyle;
@@ -304,7 +305,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
 
     /// <summary>Resources offered to this element and its descendants by name.</summary>
     /// <remarks>
-    /// A lookup checks this dictionary first, then each ancestor's, then <see cref="VisualSurface.Resources"/>.
+    /// A lookup checks this dictionary first, then each ancestor's, then <see cref="VisualHost.Resources"/>.
     /// Style resources are ordinary entries; <see cref="VisualResourceLookup.Get{T}"/> converts a stored string to
     /// the requested type.
     /// </remarks>
@@ -316,6 +317,13 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>Whether this element currently has logical focus inside its surface.</summary>
     public bool IsFocused => _focused;
 
+    /// <summary>Whether focus was established by the keyboard, so the focus ring should be painted.</summary>
+    /// <remarks>
+    /// A pointer click focuses the control it lands on but does not raise this flag; it clears on the next pointer
+    /// press. This keeps the visual focus ring meaningful without drawing a blue box after every mouse click.
+    /// </remarks>
+    public bool IsFocusVisible => _focused && _focusVisible;
+
     /// <summary>Whether the pointer is over this element or one of its descendants.</summary>
     public bool IsPointerOver => _pointerOver;
 
@@ -323,7 +331,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     public VisualElement? ParentElement => Parent as VisualElement;
 
     /// <summary>The surface that hosts this element, resolved through the parent chain.</summary>
-    public VisualSurface? Surface => _surface ?? ParentElement?.Surface;
+    public VisualHost? Surface => _surface ?? ParentElement?.Surface;
 
     /// <summary>The DPI used to measure text.</summary>
     /// <remarks>
@@ -336,7 +344,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>The style explicitly assigned to this element, or <see langword="null"/>.</summary>
     /// <remarks>
     /// An explicit style takes precedence over any implicit style resolved from a <see cref="Styles"/> collection or
-    /// <see cref="VisualSurface.Styles"/>. Assigning <see langword="null"/> re-applies the implicit style, if any.
+    /// <see cref="VisualHost.Styles"/>. Assigning <see langword="null"/> re-applies the implicit style, if any.
     /// </remarks>
     public VisualStyle? Style
     {
@@ -356,7 +364,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>Styles offered implicitly to this element and its descendants.</summary>
     /// <remarks>
     /// The nearest collection wins: this element's own collection is consulted first, then each ancestor's, then
-    /// <see cref="VisualSurface.Styles"/>. Within a collection the first style whose
+    /// <see cref="VisualHost.Styles"/>. Within a collection the first style whose
     /// <see cref="VisualStyle.TargetType"/> accepts the element is used. The subtree is re-resolved when this
     /// collection changes, when a child is added through <see cref="Add{T}"/>, and when the surface root is assigned
     /// or replaced.
@@ -365,6 +373,9 @@ public abstract class VisualElement : ContainerVisual, IDisposable
 
     /// <summary>Raised after the pointer is pressed on this element or bubbles from a child.</summary>
     public event EventHandler<VisualPointerEventArgs>? PointerPressed;
+
+    /// <summary>Raised from the root down to the hit element before <see cref="PointerPressed"/>.</summary>
+    public event EventHandler<VisualPointerEventArgs>? PreviewPointerPressed;
 
     /// <summary>Raised after the pointer moves over this element or bubbles from a child.</summary>
     public event EventHandler<VisualPointerEventArgs>? PointerMoved;
@@ -616,39 +627,61 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <param name="surfacePoint">A point in the surface's client coordinates.</param>
     public PointF PointFromSurface(PointF surfacePoint)
     {
-        var x = surfacePoint.X;
-        var y = surfacePoint.Y;
+        var point = surfacePoint;
         for (var current = this; current is not null; current = current.ParentElement)
         {
-            x -= current.Bounds.X;
-            y -= current.Bounds.Y;
+            // Render applies Transform first, then Bounds translation; invert in the opposite order.
+            point.X -= current.Bounds.X;
+            point.Y -= current.Bounds.Y;
+            if (!current.Transform.IsIdentity)
+            {
+                using var inverse = current.Transform.Clone();
+                inverse.Invert();
+                var points = new[] { point };
+                inverse.TransformPoints(points);
+                point = points[0];
+            }
         }
 
-        return new PointF(x, y);
+        return point;
     }
 
     /// <summary>Converts this element's local point into the surface's client coordinates.</summary>
     /// <param name="localPoint">A point in this element's local coordinates.</param>
     public PointF PointToSurface(PointF localPoint)
     {
-        var x = localPoint.X;
-        var y = localPoint.Y;
+        var point = localPoint;
         for (var current = this; current is not null; current = current.ParentElement)
         {
-            x += current.Bounds.X;
-            y += current.Bounds.Y;
+            if (!current.Transform.IsIdentity)
+            {
+                var points = new[] { point };
+                current.Transform.TransformPoints(points);
+                point = points[0];
+            }
+
+            point.X += current.Bounds.X;
+            point.Y += current.Bounds.Y;
         }
 
-        return new PointF(x, y);
+        return point;
     }
 
-    /// <summary>Returns this element's rectangle in the surface's client coordinates.</summary>
+    /// <summary>Returns this element's transformed rectangle in the surface's client coordinates.</summary>
     public RectangleF AbsoluteBounds
     {
         get
         {
-            var origin = PointToSurface(PointF.Empty);
-            return new RectangleF(origin.X, origin.Y, Bounds.Width, Bounds.Height);
+            // A scaled/rotated element is no longer axis-aligned; use the transformed corners.
+            var topLeft = PointToSurface(PointF.Empty);
+            var topRight = PointToSurface(new PointF(Bounds.Width, 0f));
+            var bottomLeft = PointToSurface(new PointF(0f, Bounds.Height));
+            var bottomRight = PointToSurface(new PointF(Bounds.Width, Bounds.Height));
+            var minX = Math.Min(Math.Min(topLeft.X, topRight.X), Math.Min(bottomLeft.X, bottomRight.X));
+            var minY = Math.Min(Math.Min(topLeft.Y, topRight.Y), Math.Min(bottomLeft.Y, bottomRight.Y));
+            var maxX = Math.Max(Math.Max(topLeft.X, topRight.X), Math.Max(bottomLeft.X, bottomRight.X));
+            var maxY = Math.Max(Math.Max(topLeft.Y, topRight.Y), Math.Max(bottomLeft.Y, bottomRight.Y));
+            return new RectangleF(minX, minY, Math.Max(0f, maxX - minX), Math.Max(0f, maxY - minY));
         }
     }
 
@@ -739,7 +772,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         }
     }
 
-    internal void SetSurfaceRoot(VisualSurface? surface) => _surface = surface;
+    internal void SetSurfaceRoot(VisualHost? surface) => _surface = surface;
 
     // 模板里的每个后代都记着施模板的控件；TemplateBinding 靠它找源，模板触发器也写回它。
     internal void SetTemplatedParentRecursive(VisualElement? parent)
@@ -827,6 +860,11 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         }
 
         _focused = focused;
+        if (!focused)
+        {
+            _focusVisible = false;
+        }
+
         InvalidateVisual();
         if (focused)
         {
@@ -838,6 +876,17 @@ public abstract class VisualElement : ContainerVisual, IDisposable
             OnLostFocus();
             LostFocus?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    internal void SetFocusVisible(bool visible)
+    {
+        if (_focusVisible == visible)
+        {
+            return;
+        }
+
+        _focusVisible = visible;
+        InvalidateVisual();
     }
 
     internal void SetPointerOver(bool over, VisualPointerEventArgs? args)
@@ -860,6 +909,9 @@ public abstract class VisualElement : ContainerVisual, IDisposable
             PointerExited?.Invoke(this, args ?? new VisualPointerEventArgs(PointF.Empty, MouseButtons.None, MouseButtons.None, 1, 0, Keys.None));
         }
     }
+
+    internal void RaisePreviewPointerPressed(VisualPointerEventArgs args)
+        => PreviewPointerPressed?.Invoke(this, args);
 
     internal void RaisePointerPressed(VisualPointerEventArgs args)
     {

@@ -113,7 +113,7 @@ Use the framework's dispatcher-priority type when it has one, and `NonPriority` 
 
 Push is better. If the framework has bindings, bind the node's position and size to the collapsed `Anchor`/`Size` and let the binding re-evaluate; the only thing you must remember is re-raising those two properties after a re-virtualization — which Core's `BroadcastVisibleItemLayout()` already does for you.
 
-Pull is survivable but costly: the caller must refresh after every mutation, and you will need a synchronous escape hatch for the cases where a value must be correct in the same frame (see WinForms' `SyncNow`). WinForms is the mixed case to study: its XAML layer has bindings and DPs, yet card placement is written in code, so `Refresh` stays part of the contract; links are the exception because `WorkflowLinkLayer` subscribes to model changes itself.
+Pull is survivable but costly: the caller must refresh after every mutation, and you need a synchronous escape hatch when a value must be correct in the same frame. WinForms chose a notification-driven visual tree instead: the generic visual `ViewPool` subscribes `VisibleItems`, each template binds model geometry, and `Refresh(host)` only re-pushes viewport offsets and relayout after a wholesale change. A new adapter should prefer bindings or subscriptions over a per-pass pull.
 
 ## Writing the adapter
 

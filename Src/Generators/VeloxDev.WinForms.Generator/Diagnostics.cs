@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 
 namespace VeloxDev.WinForms.Generator;
 
@@ -95,12 +95,12 @@ internal static class Diagnostics
 
     public static readonly DiagnosticDescriptor AmbiguousType = new(
         "VELOX_XAML018", "Ambiguous XAML type",
-        "The XAML type '{0}' is ambiguous: both '{1}' and '{2}' define it; use an explicit prefix (for example 'local:{0}' or 'native:{0}')",
+        "The XAML type '{0}' is ambiguous: both '{1}' and '{2}' define it; use an explicit prefix (for example 'local:{0}')",
         XamlCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor UnprefixedTypeNotVeloxDev = new(
         "VELOX_XAML019", "Unprefixed type is not a VeloxDev type",
-        "The unprefixed type '{0}' is not a VeloxDev WinForms XAML type; unprefixed names resolve to VeloxDev, so write 'native:{0}' for a System.Windows.Forms type or 'local:{0}' for a type in your own namespace",
+        "The unprefixed type '{0}' is not a VeloxDev WinForms visual type; unprefixed names resolve to the visual backend, so write 'local:{0}' for a type in your own namespace",
         XamlCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor PropertyNotPartial = new(
@@ -110,7 +110,7 @@ internal static class Diagnostics
 
     public static readonly DiagnosticDescriptor PropertyOwnerUnsupported = new(
         "VELOX_XAMLP002", "XamlProperty owner unsupported",
-        "[XamlProperty] requires a partial type derived from VeloxDev.WinForms.Xaml.Controls.Control",
+        "[XamlProperty] requires a partial type derived from VeloxDev.WinForms.Xaml.Visuals.VisualElement",
         PropertyCategory, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor AttachedInvalid = new(

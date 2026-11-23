@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -69,7 +69,7 @@ public sealed class DependencyPropertyGenerator : IIncrementalGenerator
             return model;
         }
 
-        if (property.IsStatic || !SyntaxHelpers.DerivesFrom(owner, SyntaxHelpers.XamlControlMetadataName))
+        if (property.IsStatic || !SyntaxHelpers.DerivesFrom(owner, SyntaxHelpers.VisualElementMetadataName))
         {
             model.Diagnostic = Diagnostic.Create(Diagnostics.PropertyOwnerUnsupported, location);
             return model;
@@ -221,22 +221,22 @@ public sealed class DependencyPropertyGenerator : IIncrementalGenerator
         if (isGetter)
         {
             if (method.Parameters.Length != 1
-                || !SyntaxHelpers.DerivesFrom(method.Parameters[0].Type, SyntaxHelpers.ControlMetadataName))
+                || !SyntaxHelpers.DerivesFrom(method.Parameters[0].Type, SyntaxHelpers.VisualElementMetadataName))
             {
                 model.Diagnostic = Diagnostic.Create(
                     Diagnostics.AttachedInvalid,
                     location,
-                    "An attached property getter must take one Control parameter and return the property value.");
+                    "An attached property getter must take one VisualElement parameter and return the property value.");
                 return model;
             }
         }
         else if (method.Parameters.Length != 2
-            || !SyntaxHelpers.DerivesFrom(method.Parameters[0].Type, SyntaxHelpers.ControlMetadataName))
+            || !SyntaxHelpers.DerivesFrom(method.Parameters[0].Type, SyntaxHelpers.VisualElementMetadataName))
         {
             model.Diagnostic = Diagnostic.Create(
                 Diagnostics.AttachedInvalid,
                 location,
-                "An attached property setter must take a Control and a value, and return void.");
+                "An attached property setter must take a VisualElement and a value, and return void.");
             return model;
         }
 

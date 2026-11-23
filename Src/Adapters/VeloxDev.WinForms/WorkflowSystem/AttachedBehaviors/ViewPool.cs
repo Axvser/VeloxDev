@@ -1,134 +1,352 @@
-using System;
+﻿using System.Collections;
 using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
-using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
-using VeloxDev.WorkflowSystem.ViewHosting;
+using VeloxDev.WinForms.Xaml.Visuals;
+using VisualPanel = VeloxDev.WinForms.Xaml.Visuals.Controls.Panel;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// WinForms entry point for the Core-driven workflow view pool.
+/// A workflow-free visual view pool: keeps one visual child per item in an observable source, choosing the view
+/// through a <see cref="VisualTemplateSelector"/> or a single <see cref="DataTemplate"/>.
 /// </summary>
 /// <remarks>
-/// Mirrors the XAML adapters' <c>ViewPool.ItemsSource</c> / <c>ViewPool.TemplateSelector</c> attached properties.
-/// Because WinForms has no attached-property system, the values are stored per control in a
-/// <see cref="ConditionalWeakTable{TKey, TValue}"/>. When both an items source and an
-/// <see cref="TemplateSelector"/> are configured, a <see cref="ViewSourcePipeline"/> starts and the Core
-/// pool materializes one view per visible node into the host control. Link items are handled by
-/// <see cref="WorkflowLinkLayer"/> on the surface canvas instead; a host that uses this attached property directly
-/// must enable that layer, or links will not be drawn.
+/// <para>
+/// Attach it to a visual <see cref="Canvas"/> and bind <see cref="ItemsSourceProperty"/> to the virtualized item
+/// collection (normally <c>Helper.VisibleItems</c>). Each created view receives the item as its
+/// <see cref="VisualElement.DataContext"/>; the template owns all positioning and painting.
+/// </para>
+/// <para>
+/// Children are ordered by <see cref="VisualPanel.GetZIndex"/> and then by source order, so links can sit below cards
+/// through <c>Panel.ZIndex="-1"</c> without the pool knowing what a link is.
+/// </para>
 /// </remarks>
 public sealed class ViewPool
 {
+    private static readonly ConditionalWeakTable<VisualElement, PoolState> States = new();
+
+    /// <summary>Raised after the pool adds, removes or reorders views on a host.</summary>
+    /// <remarks>
+    /// A surface subscribes once so attached behaviors on newly materialized views can be ensured; the pool
+    /// itself stays workflow-free.
+    /// </remarks>
+    public static event EventHandler<ViewPoolChangedEventArgs>? Changed;
+
+    /// <summary>The observable item source, normally <c>Helper.VisibleItems</c>.</summary>
+    public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.RegisterAttached(
+        "ItemsSource", typeof(object), typeof(ViewPool),
+        new PropertyMetadata(null));
+
+    /// <summary>The selector that creates one visual per item.</summary>
+    public static readonly DependencyProperty TemplateSelectorProperty = DependencyProperty.RegisterAttached(
+        "TemplateSelector", typeof(VisualTemplateSelector), typeof(ViewPool),
+        new PropertyMetadata(null));
+
+    /// <summary>A single template used when no selector is set.</summary>
+    public static readonly DependencyProperty ItemTemplateProperty = DependencyProperty.RegisterAttached(
+        "ItemTemplate", typeof(DataTemplate), typeof(ViewPool),
+        new PropertyMetadata(null));
+
+    private ViewPool()
+    {
+    }
+
+    /// <summary>Reads the item source.</summary>
+    public static object? GetItemsSource(VisualElement element) => element.GetValue(ItemsSourceProperty);
+
+    /// <summary>Writes the item source.</summary>
+    public static void SetItemsSource(VisualElement element, object? value)
+    {
+        element.SetValue(ItemsSourceProperty, value);
+    }
+
+    /// <summary>Reads the selector.</summary>
+    public static VisualTemplateSelector? GetTemplateSelector(VisualElement element)
+        => (VisualTemplateSelector?)element.GetValue(TemplateSelectorProperty);
+
+    /// <summary>Writes the selector.</summary>
+    public static void SetTemplateSelector(VisualElement element, VisualTemplateSelector? value)
+    {
+        element.SetValue(TemplateSelectorProperty, value);
+    }
+
+    /// <summary>Reads the single template.</summary>
+    public static DataTemplate? GetItemTemplate(VisualElement element)
+        => (DataTemplate?)element.GetValue(ItemTemplateProperty);
+
+    /// <summary>Writes the single template.</summary>
+    public static void SetItemTemplate(VisualElement element, DataTemplate? value)
+    {
+        element.SetValue(ItemTemplateProperty, value);
+    }
+
     private sealed class PoolState
     {
-        public INotifyCollectionChanged? ItemsSource { get; set; }
-        public TemplateSelector? TemplateSelector { get; set; }
-    }
-
-    private static readonly ConditionalWeakTable<Control, PoolState> States = new();
-    private static readonly ConditionalWeakTable<Control, ViewSourcePipeline> Systems = new();
-
-    /// <summary>
-    /// Gets the configured pooled items source.
-    /// </summary>
-    public static INotifyCollectionChanged? GetItemsSource(Control element)
-    {
-        if (element is null)
+        public PoolState(VisualElement host)
         {
-            throw new ArgumentNullException(nameof(element));
+            Host = host;
         }
 
-        return GetState(element).ItemsSource;
-    }
+        public VisualElement Host { get; }
 
-    /// <summary>
-    /// Sets the configured pooled items source.
-    /// </summary>
-    public static void SetItemsSource(Control element, INotifyCollectionChanged? value)
-    {
-        if (element is null)
+        public INotifyCollectionChanged? Source { get; set; }
+
+        public IEnumerable? SourceItems { get; set; }
+
+        public VisualTemplateSelector? Selector { get; set; }
+
+        public DataTemplate? ItemTemplate { get; set; }
+
+        public NotifyCollectionChangedEventHandler? Handler { get; set; }
+
+        public Dictionary<object, VisualElement> Views { get; } = new(ReferenceComparer.Instance);
+
+        public List<object> Order { get; } = [];
+
+        public bool Syncing { get; set; }
+
+        public void Rebuild()
         {
-            throw new ArgumentNullException(nameof(element));
+            Clear();
+            if (SourceItems is null)
+            {
+                return;
+            }
+
+            foreach (var item in SourceItems)
+            {
+                if (item is not null)
+                {
+                    Add(item, Order.Count);
+                }
+            }
+
+            Reorder();
         }
 
-        GetState(element).ItemsSource = value;
-        UpdateSystem(element);
-    }
-
-    /// <summary>Gets the number of views still waiting to be materialized by the pool on <paramref name="element"/>.</summary>
-    public static int GetPendingViewCount(Control element)
-    {
-        if (element is null)
+        public void Add(object item, int index)
         {
-            throw new ArgumentNullException(nameof(element));
+            if (Views.ContainsKey(item))
+            {
+                return;
+            }
+
+            var view = Selector?.SelectTemplate(item) ?? ItemTemplate?.Create();
+            if (view is null)
+            {
+                return;
+            }
+
+            view.PropertyChanged += OnViewPropertyChanged;
+            Views[item] = view;
+            Order.Insert(index < 0 ? 0 : index > Order.Count ? Order.Count : index, item);
+            Host.Add(view);
+            // Set the data context after parenting so ElementName / ancestor-based bindings can resolve.
+            view.DataContext = item;
+            Changed?.Invoke(null, new ViewPoolChangedEventArgs(Host));
         }
 
-        return Systems.TryGetValue(element, out var system) ? system.Pool.PendingViewCount : 0;
-    }
-
-    /// <summary>
-    /// Gets the configured template selector.
-    /// </summary>
-    public static TemplateSelector? GetTemplateSelector(Control element)
-    {
-        if (element is null)
+        public void Remove(object item)
         {
-            throw new ArgumentNullException(nameof(element));
+            if (!Views.TryGetValue(item, out var view))
+            {
+                return;
+            }
+
+            Views.Remove(item);
+
+            Order.Remove(item);
+            view.PropertyChanged -= OnViewPropertyChanged;
+            if (ReferenceEquals(view.ParentElement, Host))
+            {
+                Host.RemoveChild(view);
+            }
+
+            view.Dispose();
         }
 
-        return GetState(element).TemplateSelector;
-    }
-
-    /// <summary>
-    /// Sets the configured template selector. Together with <see cref="SetItemsSource"/> this starts view pooling
-    /// for the host control.
-    /// </summary>
-    public static void SetTemplateSelector(Control element, TemplateSelector? value)
-    {
-        if (element is null)
+        public void Clear()
         {
-            throw new ArgumentNullException(nameof(element));
+            foreach (var view in Views.Values)
+            {
+                view.PropertyChanged -= OnViewPropertyChanged;
+                if (ReferenceEquals(view.ParentElement, Host))
+                {
+                    Host.RemoveChild(view);
+                }
+
+                view.Dispose();
+            }
+
+            Views.Clear();
+            Order.Clear();
         }
 
-        GetState(element).TemplateSelector = value;
-        UpdateSystem(element);
-    }
-
-    private static void UpdateSystem(Control element)
-    {
-        Cleanup(element);
-
-        var state = GetState(element);
-        if (state.ItemsSource is { } collection && state.TemplateSelector is { } selector)
+        public void Reorder()
         {
-            var system = new ViewSourcePipeline(element, selector, collection);
-            Systems.Add(element, system);
-            element.Disposed += OnHostDisposed;
+            if (Syncing || Order.Count == 0)
+            {
+                return;
+            }
+
+            Syncing = true;
+            try
+            {
+                var ordered = Order
+                    .Select((item, index) => (View: Views[item], Index: index))
+                    .OrderBy(static pair => VisualPanel.GetZIndex(pair.View))
+                    .ThenBy(static pair => pair.Index)
+                    .Select(static pair => pair.View)
+                    .ToArray();
+
+                for (var index = 0; index < ordered.Length; index++)
+                {
+                    var view = ordered[index];
+                    var current = Host.Children.IndexOf(view);
+                    if (current == index)
+                    {
+                        continue;
+                    }
+
+                    if (current >= 0)
+                    {
+                        Host.Children.RemoveAt(current);
+                    }
+
+                    if (index >= Host.Children.Count)
+                    {
+                        Host.Children.Add(view);
+                    }
+                    else
+                    {
+                        Host.Children.Insert(index, view);
+                    }
+                }
+            }
+            finally
+            {
+                Syncing = false;
+            }
+        }
+
+        private void OnViewPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (e.Property == VisualPanel.ZIndexProperty)
+            {
+                Reorder();
+            }
         }
     }
 
-    private static void OnHostDisposed(object? sender, EventArgs e)
-    {
-        if (sender is Control control)
+    private static PoolState GetState(VisualElement host)
+        => States.GetValue(host, static element =>
         {
-            control.Disposed -= OnHostDisposed;
-            Cleanup(control);
+            var state = new PoolState(element);
+            element.PropertyChanged += OnHostPropertyChanged;
+            return state;
+        });
+
+    private static void OnHostPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is VisualElement host
+            && (e.Property == ItemsSourceProperty
+                || e.Property == TemplateSelectorProperty
+                || e.Property == ItemTemplateProperty))
+        {
+            Refresh(host);
         }
     }
 
-    private static void Cleanup(Control element)
+    /// <summary>Re-creates the views for the current source and configuration.</summary>
+    public static void Refresh(VisualElement host)
     {
-        element.Disposed -= OnHostDisposed;
+        if (host is null) throw new ArgumentNullException(nameof(host));
 
-        if (Systems.TryGetValue(element, out var system))
+        var state = GetState(host);
+
+        state.Handler ??= (_, e) => Apply(host, e);
+        if (state.Source is not null)
         {
-            system.Dispose();
-            Systems.Remove(element);
+            state.Source.CollectionChanged -= state.Handler;
+        }
+
+        state.Selector = GetTemplateSelector(host);
+        state.ItemTemplate = GetItemTemplate(host);
+        state.Source = GetItemsSource(host) as INotifyCollectionChanged;
+        state.SourceItems = GetItemsSource(host) as IEnumerable;
+        state.Rebuild();
+        if (state.Source is not null)
+        {
+            state.Source.CollectionChanged += state.Handler;
         }
     }
 
-    private static PoolState GetState(Control element)
-        => States.GetValue(element, static _ => new PoolState());
+    private static void Apply(VisualElement host, NotifyCollectionChangedEventArgs e)
+    {
+        if (!States.TryGetValue(host, out var state) || state.Syncing)
+        {
+            return;
+        }
+
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add when e.NewItems is not null:
+                var insert = e.NewStartingIndex < 0 ? state.Order.Count : e.NewStartingIndex;
+                foreach (var item in e.NewItems)
+                {
+                    if (item is not null)
+                    {
+                        state.Add(item, insert++);
+                    }
+                }
+
+                state.Reorder();
+                break;
+
+            case NotifyCollectionChangedAction.Remove when e.OldItems is not null:
+                foreach (var item in e.OldItems)
+                {
+                    if (item is not null)
+                    {
+                        state.Remove(item);
+                    }
+                }
+
+                break;
+
+            case NotifyCollectionChangedAction.Replace when e.OldItems is not null && e.NewItems is not null:
+                for (var index = 0; index < Math.Min(e.OldItems.Count, e.NewItems.Count); index++)
+                {
+                    if (e.OldItems[index] is { } oldItem && e.NewItems[index] is { } newItem)
+                    {
+                        state.Remove(oldItem);
+                        state.Add(newItem, index);
+                    }
+                }
+
+                state.Reorder();
+                break;
+
+            case NotifyCollectionChangedAction.Reset:
+                state.Rebuild();
+                break;
+        }
+    }
+
+    private sealed class ReferenceComparer : IEqualityComparer<object>
+    {
+        public static readonly ReferenceComparer Instance = new();
+
+        public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(object obj) => RuntimeHelpers.GetHashCode(obj);
+    }
+}
+
+/// <summary>Identifies the visual Canvas whose pooled views changed.</summary>
+public sealed class ViewPoolChangedEventArgs(VisualElement host) : EventArgs
+{
+    /// <summary>The Canvas that owns the pool.</summary>
+    public VisualElement Host { get; } = host;
 }

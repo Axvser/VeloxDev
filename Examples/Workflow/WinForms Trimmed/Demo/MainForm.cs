@@ -1,34 +1,159 @@
 ﻿using Demo.ViewModels.Workflow;
 using Demo.ViewModels.Workflow.Enums;
+using Demo.Views.Workflow;
 using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml.Visuals;
 using VeloxDev.WorkflowSystem;
-// `TreeView` collides with System.Windows.Forms.TreeView; alias
-// the surface product so `new WorkflowSurface()` is unambiguous in code.
+using VeloxDev.WorkflowSystem.AttachedBehaviors;
+// `TreeView` collides with System.Windows.Forms.TreeView; alias the visual surface product.
 using WorkflowSurface = Demo.Views.Workflow.TreeView;
-// `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; the drawing
-// alias keeps `new Size(1200, 800)` (ClientSize) unambiguous.
+// `Size` collides between System.Drawing and VeloxDev.WorkflowSystem; the drawing alias keeps `new Size(...)` unambiguous.
 using Size = System.Drawing.Size;
 
 namespace Demo;
 
 public sealed class MainForm : Form
 {
-    private readonly WorkflowSurface _treeView;
+    // 窗口按 1085×683 逻辑 DIP 设计；无论当前监视器 DPI 是多少，客户区都表示这个逻辑尺寸。
+    private static readonly Size s_logicalClientSize = new(1085, 683);
+
+    private readonly VisualHost _host;
+    private ITreeComponent? _tree;
+    private IInputEvents? _events;
 
     public MainForm()
     {
         Text = "VeloxDev WinForms Trimmed";
-        ClientSize = new Size(1085, 683);
+
+        // 尺寸只由 ApplyLogicalClientSize 按当前 DPI 换算；关掉 WinForms 自己的 autoscale，避免两套缩放相乘。
+        AutoScaleMode = AutoScaleMode.None;
+        ClientSize = s_logicalClientSize; // 句柄创建前按 96 DPI 的临时尺寸
         BackColor = Color.FromArgb(30, 30, 30);
 
-        _treeView = new WorkflowSurface { Dock = DockStyle.Fill };
-        Controls.Add(_treeView);
+        _host = new VisualHost { Dock = DockStyle.Fill };
+        _host.Root = new WorkflowSurface();
 
-        // The grid decorator, minimap and HUD are PART_* controls declared in TreeView.xaml; the surface
-        // behavior resolves them by name and pushes the layout into them once the tree is bound.
+        var shell = new Panel { Dock = DockStyle.Fill };
+        shell.Controls.Add(_host);
+        Controls.Add(shell);
+
+        WorkflowSurfaceBehavior.SetCanvasName(_host, "PART_Canvas");
+        WorkflowSurfaceBehavior.SetScrollViewerName(_host, "PART_ScrollViewer");
+        WorkflowSurfaceBehavior.SetGridDecoratorName(_host, "PART_GridDecorator");
+        WorkflowSurfaceBehavior.SetMinimapOverlayName(_host, "PART_MinimapOverlay");
+        WorkflowSurfaceBehavior.SetPointerPressSourceName(_host, "PART_SurfaceBorder");
+        WorkflowSurfaceBehavior.SetLinkMenuKey(_host, "LinkContextMenu");
+        WorkflowSurfaceBehavior.SetZoomEnabled(_host, true);
+        WorkflowSurfaceBehavior.SetIsEnabled(_host, true);
+
         var tree = new TreeViewModel();
         LoadTree(tree);
-        _treeView.ViewModel = tree;
+        BindTree(tree);
+    }
+
+    private void BindTree(TreeViewModel tree)
+    {
+        _tree = tree;
+        WorkflowSurfaceBehavior.SetWorkflowTree(_host, tree);
+
+        Unwire();
+        if (tree.GetHelper() is IInputEvents events)
+        {
+            _events = events;
+            events.Input.KeyDown += OnKeyDown;
+            events.Input.PointerWheelChanged += OnWheel;
+        }
+    }
+
+    private void Unwire()
+    {
+        if (_events is not null)
+        {
+            _events.Input.KeyDown -= OnKeyDown;
+            _events.Input.PointerWheelChanged -= OnWheel;
+            _events = null;
+        }
+    }
+
+    // VeloxDev customization: 撤销/重做与删除都是宿主的 —— 库只把按键路由过来，做什么由这里写。
+    private void OnKeyDown(object? sender, KeyDownEventArgs e)
+    {
+        if (_tree is not { } tree) return;
+
+        if (e.Key == InputKey.Delete)
+        {
+            if (WorkflowInput.For(tree).HoveredLink is { } hovered && hovered.DeleteCommand.CanExecute(null))
+            {
+                hovered.DeleteCommand.Execute(null);
+                e.Handle.PreventDefault = true;
+            }
+
+            return;
+        }
+
+        if (!e.Modifiers.HasFlag(InputModifiers.Control)) return;
+
+        var redo = e.Modifiers.HasFlag(InputModifiers.Shift);
+        if (e.Key == InputKey.Z && !redo) tree.UndoCommand.Execute(null);
+        else if (e.Key == InputKey.Y || (e.Key == InputKey.Z && redo)) tree.RedoCommand.Execute(null);
+        else return;
+
+        e.Handle.PreventDefault = true;
+    }
+
+    // VeloxDev customization: 画布滚轮由适配器整笔接管，所以这里是唯一能改写它去哪的机会。
+    private void OnWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (!e.Modifiers.HasFlag(InputModifiers.Shift) || _tree is not { } tree) return;
+
+        e.Handle.PreventDefault = true;
+        // 竖轴正 = 远离用户，塞进横轴要取反 —— 横轴正 = 向右，而「远离用户」在画面上是向左。
+        WorkflowInput.For(tree).Scroller?.ScrollBy(-e.DeltaY, 0d);
+    }
+
+
+    /// <inheritdoc />
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        ApplyLogicalClientSize();
+    }
+
+    /// <inheritdoc />
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        ApplyLogicalClientSize();
+
+        // 框架会在本通知之后套用系统建议的物理矩形；排到消息队列末尾再校正一次，保证客户区精确等于逻辑尺寸。
+        if (IsHandleCreated && !IsDisposed)
+        {
+            BeginInvoke(new Action(ApplyLogicalClientSize));
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+        ApplyLogicalClientSize();
+    }
+
+    private void ApplyLogicalClientSize()
+    {
+        if (!IsHandleCreated || IsDisposed)
+        {
+            return;
+        }
+
+        var scale = DeviceDpi / 96f;
+        var size = new Size(
+            (int)Math.Round(s_logicalClientSize.Width * scale),
+            (int)Math.Round(s_logicalClientSize.Height * scale));
+        if (ClientSize != size)
+        {
+            ClientSize = size;
+        }
     }
 
     private static void LoadTree(TreeViewModel tree)
@@ -57,5 +182,16 @@ public sealed class MainForm : Form
         nodes[1].InputSlot.SetChannelCommand.Execute(SlotChannel.MultipleSources);
         nodes[2].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
         nodes[3].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
+
+        // One visible link so the trimmed demo exercises the visual link policy, not only the unit graph.
+        if (nodes[2].OutputSlots.Items.FirstOrDefault()?.Slot is { } sender)
+        {
+            tree.Links.Add(new LinkDefaultComponent
+            {
+                Sender = sender,
+                Receiver = nodes[3].InputSlot,
+                IsVisible = true,
+            });
+        }
     }
 }

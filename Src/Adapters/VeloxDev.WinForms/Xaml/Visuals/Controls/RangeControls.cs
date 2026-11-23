@@ -192,7 +192,7 @@ public class Slider : VisualElement
             graphics.FillEllipse(thumb, thumbX - ThumbRadius, center - ThumbRadius, ThumbRadius * 2f, ThumbRadius * 2f);
         }
 
-        if (IsFocused)
+        if (IsFocusVisible)
         {
             using var pen = new Pen(theme.FocusRing, 1.4f);
             graphics.DrawEllipse(pen, thumbX - ThumbRadius - 2f, center - ThumbRadius - 2f, (ThumbRadius * 2f) + 4f, (ThumbRadius * 2f) + 4f);

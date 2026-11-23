@@ -1,9 +1,9 @@
 using System.Drawing;
-using V = VeloxDev.WinForms.Xaml.Controls;
+using VC = VeloxDev.WinForms.Xaml.Visuals.Controls;
 
 namespace VeloxDev.WinForms.Xaml.Test;
 
-/// <summary>The built-in VS Code Dark+/Light+ palettes and the implicit fallback styles they feed.</summary>
+/// <summary>The built-in VS Code Dark+/Light+ palettes and the metrics the visual controls take from them.</summary>
 [STATestClass]
 public sealed class ThemeTests
 {
@@ -13,21 +13,21 @@ public sealed class ThemeTests
         var dark = VeloxDev.WinForms.Xaml.Theme.CreateDark();
         var light = VeloxDev.WinForms.Xaml.Theme.CreateLight();
 
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E), dark.WindowBackground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x14, 0x14, 0x14), dark.WindowBackground);
         Assert.AreEqual(Color.FromArgb(0xFF, 0x25, 0x25, 0x26), dark.Surface);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x3C, 0x3C, 0x3C), dark.SurfaceAlt);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x3C, 0x3C, 0x3C), dark.ControlBackground);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x3C, 0x3C, 0x3C), dark.ControlBorder);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A), dark.ControlHover);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x0E, 0x63, 0x9C), dark.ControlPressed);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC), dark.Foreground);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x85, 0x85, 0x85), dark.MutedForeground);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC), dark.Accent);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x2D, 0x2D, 0x2D), dark.SurfaceAlt);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A), dark.ControlBackground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x33, 0x33, 0x33), dark.ControlBorder);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x30, 0x30, 0x30), dark.ControlHover);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A), dark.ControlPressed);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0xE7, 0xE7, 0xE7), dark.Foreground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0), dark.MutedForeground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x78, 0xD4), dark.Accent);
         Assert.AreEqual(Color.White, dark.AccentForeground);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x7F, 0xD4), dark.FocusRing);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x26, 0x4F, 0x78), dark.Selection);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x5A, 0x5A, 0x5A), dark.DisabledForeground);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x2D, 0x2D, 0x2D), dark.DisabledBackground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x78, 0xD4), dark.FocusRing);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x09, 0x47, 0x71), dark.Selection);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x58, 0x58, 0x58), dark.DisabledForeground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x1F, 0x1F, 0x1F), dark.DisabledBackground);
         Assert.AreEqual(4f, dark.CornerRadius);
         Assert.AreEqual(28, dark.ControlHeight);
 
@@ -40,7 +40,7 @@ public sealed class ThemeTests
         Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x62, 0xA3), light.ControlPressed);
         Assert.AreEqual(Color.FromArgb(0xFF, 0x33, 0x33, 0x33), light.Foreground);
         Assert.AreEqual(Color.FromArgb(0xFF, 0x6F, 0x6F, 0x6F), light.MutedForeground);
-        Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC), light.Accent);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x78, 0xD4), light.Accent);
         Assert.AreEqual(Color.White, light.AccentForeground);
         Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x90, 0xF1), light.FocusRing);
         Assert.AreEqual(Color.FromArgb(0xFF, 0xAD, 0xD6, 0xFF), light.Selection);
@@ -90,109 +90,49 @@ public sealed class ThemeTests
         var dark = VeloxDev.WinForms.Xaml.Theme.CreateDark();
         var light = VeloxDev.WinForms.Xaml.Theme.CreateLight();
 
-        Assert.AreEqual(dark.WindowBackground.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#1E1E1E").ToArgb());
+        Assert.AreEqual(dark.WindowBackground.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#141414").ToArgb());
         Assert.AreEqual(dark.Surface.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#252526").ToArgb());
-        Assert.AreEqual(dark.ControlBackground.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#3C3C3C").ToArgb());
-        Assert.AreEqual(dark.ControlPressed.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#0E639C").ToArgb());
-        Assert.AreEqual(dark.Selection.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#FF264F78").ToArgb());
+        Assert.AreEqual(dark.ControlBackground.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#2A2A2A").ToArgb());
+        Assert.AreEqual(dark.ControlPressed.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#3A3A3A").ToArgb());
+        Assert.AreEqual(dark.Selection.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#FF094771").ToArgb());
         Assert.AreEqual(light.WindowBackground.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#FFFFFF").ToArgb());
         Assert.AreEqual(light.Selection.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#ADD6FF").ToArgb());
     }
 
     [TestMethod]
-    public void LibraryControls_GetTheThemeFallbackButDerivedControlsDoNot()
+    public void VisualControls_TakeTheirMetricsFromTheActivePalette()
     {
-        using var panel = new V.Panel();
-        using var button = new V.Button();
+        var palette = VeloxDev.WinForms.Xaml.Theme.Current;
+        using var button = new VC.Button();
+        using var textBox = new VC.TextBox();
+        using var border = new VC.Border();
 
-        panel.Controls.Add(button);
-
-        Assert.IsNotNull(button.Style);
-        Assert.AreEqual(VeloxDev.WinForms.Xaml.Theme.Current.ControlBackground, button.Background?.ApproximateColor);
+        Assert.AreEqual(palette.ControlHeight, button.MinHeight);
+        Assert.AreEqual(palette.CornerRadius, button.CornerRadius);
+        Assert.AreEqual(palette.ControlHeight, textBox.MinHeight);
+        Assert.AreEqual(palette.CornerRadius, textBox.CornerRadius);
+        Assert.AreEqual(palette.CornerRadius, border.CornerRadius);
     }
 
     [TestMethod]
-    public void ThemeModeChange_SwapsThePaletteAndReappliesTheTree()
+    public void ThemeModeChange_SwapsThePaletteForNewControls()
     {
         var original = VeloxDev.WinForms.Xaml.Theme.Mode;
-        using var panel = new V.Panel();
-        using var button = new V.Button();
-        panel.Controls.Add(button);
-
         try
         {
             VeloxDev.WinForms.Xaml.Theme.Mode = VeloxDev.WinForms.Xaml.ThemeMode.Light;
-            VeloxDev.WinForms.Xaml.Theme.ApplyTo(panel);
 
-            Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC), VeloxDev.WinForms.Xaml.Theme.Current.Accent);
+            Assert.AreEqual(Color.FromArgb(0xFF, 0x00, 0x78, 0xD4), VeloxDev.WinForms.Xaml.Theme.Current.Accent);
             Assert.AreEqual(Color.FromArgb(0xFF, 0x33, 0x33, 0x33), VeloxDev.WinForms.Xaml.Theme.Current.Foreground);
             Assert.AreEqual(4f, VeloxDev.WinForms.Xaml.Theme.Current.CornerRadius);
             Assert.AreEqual(28, VeloxDev.WinForms.Xaml.Theme.Current.ControlHeight);
-            Assert.AreEqual(VeloxDev.WinForms.Xaml.Theme.Current.ControlBackground, button.Background?.ApproximateColor);
+
+            using var button = new VC.Button();
+            Assert.AreEqual(VeloxDev.WinForms.Xaml.Theme.Current.ControlHeight, button.MinHeight);
         }
         finally
         {
             VeloxDev.WinForms.Xaml.Theme.Mode = original;
-        }
-    }
-
-    [TestMethod]
-    public void ThemeStyles_HandThePaletteTokensToInteractiveControls()
-    {
-        WithMode(VeloxDev.WinForms.Xaml.ThemeMode.Dark, () =>
-        {
-            var palette = VeloxDev.WinForms.Xaml.Theme.Current;
-            using var panel = new V.Panel();
-            using var button = new V.Button();
-            using var textBox = new V.TextBox();
-            using var richTextBox = new V.RichTextBox();
-            using var slider = new V.Slider();
-            using var progress = new V.ProgressBar();
-            using var scrollBar = new V.ScrollBar();
-
-            panel.Controls.AddRange([button, textBox, richTextBox, slider, progress, scrollBar]);
-
-            Assert.AreEqual(palette.ControlBackground, button.Background?.ApproximateColor);
-            Assert.AreEqual(palette.Foreground, button.Foreground?.ApproximateColor);
-            Assert.AreEqual(palette.ControlBorder, button.BorderBrush?.ApproximateColor);
-            Assert.AreEqual(palette.CornerRadius, button.CornerRadius);
-
-            Assert.AreEqual(palette.ControlBackground, textBox.Background?.ApproximateColor);
-            Assert.AreEqual(palette.Foreground, textBox.Foreground?.ApproximateColor);
-            Assert.AreEqual(palette.ControlBorder, textBox.BorderBrush?.ApproximateColor);
-
-            Assert.AreEqual(palette.ControlBackground, richTextBox.Background?.ApproximateColor);
-            Assert.AreEqual(palette.Foreground, richTextBox.Foreground?.ApproximateColor);
-            Assert.AreEqual(palette.ControlBorder, richTextBox.BorderBrush);
-
-            Assert.AreEqual(palette.Accent, slider.Foreground?.ApproximateColor);
-            Assert.AreEqual(palette.SurfaceAlt, slider.Background?.ApproximateColor);
-            Assert.AreEqual(palette.Accent, slider.ThumbBrush?.ApproximateColor);
-
-            Assert.AreEqual(palette.Accent, progress.Foreground?.ApproximateColor);
-            Assert.AreEqual(palette.SurfaceAlt, progress.Background?.ApproximateColor);
-
-            Assert.AreEqual(palette.SurfaceAlt, scrollBar.TrackBrush?.ApproximateColor);
-            Assert.AreEqual(palette.MutedForeground, scrollBar.ThumbBrush?.ApproximateColor);
-            Assert.AreEqual(palette.Foreground, scrollBar.ThumbHoverBrush?.ApproximateColor);
-            Assert.AreEqual(palette.Surface, scrollBar.ThumbBorderBrush?.ApproximateColor);
-            Assert.AreEqual(palette.CornerRadius, scrollBar.ThumbCornerRadius);
-        });
-    }
-
-    private static void WithMode(VeloxDev.WinForms.Xaml.ThemeMode mode, Action action)
-    {
-        var original = VeloxDev.WinForms.Xaml.Theme.Mode;
-        try
-        {
-            VeloxDev.WinForms.Xaml.Theme.Mode = mode;
-            VeloxDev.WinForms.Xaml.ThemeStyles.Invalidate();
-            action();
-        }
-        finally
-        {
-            VeloxDev.WinForms.Xaml.Theme.Mode = original;
-            VeloxDev.WinForms.Xaml.ThemeStyles.Invalidate();
         }
     }
 }

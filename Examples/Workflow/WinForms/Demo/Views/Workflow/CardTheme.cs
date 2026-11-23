@@ -53,6 +53,8 @@ internal static class CardTheme
 
     // ── Type accents (the 2px bar left of the title row) ─────────────────────────
     public static readonly Color AccentController = FromHex("#6E8BFF");
+    public static readonly Color AccentTimer = FromHex("#4FC1FF");
+    public static readonly Color AccentScript = FromHex("#00A7A7");
     public static readonly Color AccentAgent = FromHex("#4FC1FF");
     public static readonly Color AccentEnum = FromHex("#C99BFF");
     public static readonly Color AccentFallback = FromHex("#94A3B8");

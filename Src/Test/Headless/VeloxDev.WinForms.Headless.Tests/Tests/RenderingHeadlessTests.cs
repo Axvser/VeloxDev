@@ -1,27 +1,36 @@
-using System.ComponentModel;
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.AdapterTestKit;
+using VeloxDev.WinForms.Headless.Tests.Infrastructure;
+using VeloxDev.WinForms.Xaml.Visuals;
 using VeloxDev.WorkflowSystem;
-using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
-using VeloxDev.WorkflowSystem.Platform;
+using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
+using DrawingSize = System.Drawing.Size;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;
 
-// 自绘控件的 OnPaint/OnPaintBackground 可以在无窗口进程里用 DrawToBitmap 触发。
+// 视觉后端不需要窗口：VisualHost.RenderTo 直接把整棵视觉树画进位图，OnRender 在这里被触发。
 [STATestClass]
 public sealed class RenderingHeadlessTests
 {
     [TestMethod]
-    public void TemplateGridDecorator_PaintsWithoutAWindow()
+    public void VisualGridDecorator_RendersWithoutAWindow()
     {
-        using var decorator = new TemplateGridDecorator { Width = 200, Height = 100 };
-        decorator.CreateControl();
+        var decorator = new TemplateGridDecorator
+        {
+            Width = 200,
+            Height = 100,
+            ScrollOffsetX = -40,
+        };
+
+        using var host = new VisualHost { Size = new DrawingSize(200, 100), DpiScaleOverride = 1f };
+        host.Root = decorator;
 
         using var bitmap = new Bitmap(200, 100);
-        decorator.DrawToBitmap(bitmap, new Rectangle(0, 0, 200, 100));
+        using var graphics = Graphics.FromImage(bitmap);
+        host.RenderTo(graphics, new DrawingSize(200, 100));
 
         Assert.AreEqual(200, bitmap.Width);
     }
@@ -36,11 +45,36 @@ public sealed class RenderingHeadlessTests
             Height = 140,
             WorkflowTree = graph.Tree,
         };
-        minimap.CreateControl();
-
+        using var host = new VisualHost { Size = new DrawingSize(200, 140), DpiScaleOverride = 1f };
+        host.Root = minimap;
         using var bitmap = new Bitmap(200, 140);
-        minimap.DrawToBitmap(bitmap, new Rectangle(0, 0, 200, 140));
+        using var graphics = Graphics.FromImage(bitmap);
+        host.RenderTo(graphics, new DrawingSize(200, 140));
 
+        Assert.AreEqual(200, bitmap.Width);
+    }
+
+    [TestMethod]
+    public void Minimap_ReceivesTheCameraViewportFromTheSurface()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph, withMinimap: true);
+        var minimap = surface.Minimap!;
+
+        WorkflowSurfaceBehavior.SetWorldViewport(surface.View, new Offset(60d, 40d));
+        surface.Render();
+
+        Assert.AreSame(graph.Tree, minimap.WorkflowTree);
+        Assert.AreEqual(60d, minimap.ScrollOffsetX, 1d);
+        Assert.AreEqual(40d, minimap.ScrollOffsetY, 1d);
+        Assert.AreEqual(800d, minimap.ViewportWidth, 1d);
+        Assert.AreEqual(600d, minimap.ViewportHeight, 1d);
+
+        using var host = new VisualHost { Size = new DrawingSize(200, 140), DpiScaleOverride = 1f };
+        host.Root = minimap;
+        using var bitmap = new Bitmap(200, 140);
+        using var graphics = Graphics.FromImage(bitmap);
+        host.RenderTo(graphics, new DrawingSize(200, 140));
         Assert.AreEqual(200, bitmap.Width);
     }
 
@@ -52,43 +86,41 @@ public sealed class RenderingHeadlessTests
     }
 
     // 模板自有的完整装饰器：适配器只留 IWorkflowGridDecorator 契约与共享的网格数学。
-    private sealed class TemplateGridDecorator : Panel, IWorkflowGridDecorator
+    private sealed class TemplateGridDecorator : VisualElement, IWorkflowGridDecorator
     {
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public double ScrollOffsetX { get; set; }
 
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public double ScrollOffsetY { get; set; }
 
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public double ContentOffsetX { get; set; }
 
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public double ContentOffsetY { get; set; }
 
-        public double RulerBand => 36;
+        public double RulerBand => 36d;
 
-        protected override void OnPaintBackground(PaintEventArgs e)
+        protected override DrawingSize MeasureOverride(DrawingSize availableSize) => availableSize;
+
+        protected override void OnRender(Graphics graphics)
         {
-            base.OnPaintBackground(e);
-
-            var g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.FillRectangle(Brushes.Black, ClientRectangle);
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            graphics.FillRectangle(Brushes.Black, 0f, 0f, Bounds.Width, Bounds.Height);
 
             var worldLeft = WorkflowSurfaceMath.GridCanvasLeft(ScrollOffsetX, ContentOffsetX);
             var first = WorkflowSurfaceMath.GridFirstLine(worldLeft, 40);
-            for (var value = first; value <= worldLeft + Width + 40; value += 40)
+            for (var value = first; value <= worldLeft + Bounds.Width + 40; value += 40)
             {
                 var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, RulerBand);
-                using var pen = new Pen(
-                    WorkflowSurfaceGrid.IsMajorLine(value, 200) ? Color.Gray : Color.DimGray);
-                g.DrawLine(pen, x, 0, x, Height);
+                using var pen = new Pen(IsMajorLine(value, 200) ? Color.Gray : Color.DimGray);
+                graphics.DrawLine(pen, x, 0f, x, Bounds.Height);
             }
+        }
+
+        private static bool IsMajorLine(double value, double majorStep)
+        {
+            var remainder = value % majorStep;
+            return Math.Abs(remainder) < 0.001
+                   || Math.Abs(remainder - majorStep) < 0.001
+                   || Math.Abs(remainder + majorStep) < 0.001;
         }
     }
 }

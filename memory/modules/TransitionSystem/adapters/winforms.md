@@ -41,10 +41,7 @@
 
 ### 2.2 帧源不能是 WM_TIMER ⇒ 这家的 pacer 是「线程池定时器 + 投递到控件」
 
-**`WM_TIMER` 是这个平台上唯一不能用来当帧时钟的机制。** Windows 只在消息队列空无一物时才合成它，而那一刻只有一个「空闲时刻」——哪个到期定时器先被问到就归谁（这家进程里每个 `Transition` 都有一条自己的定时器）。两处实测（workflow demo，`Examples/Workflow/WinForms/Demo/`，16 ms 帧间隔）：
-
-- **拖画布期间 0 帧**：拖拽的每个 `WM_MOUSEMOVE` 都被回以一次同步重画（`WorkflowSurfaceBehavior.Refresh` 的 `host.Invalidate()` →（`host.Capture` 时）`host.Update()`、`WorkflowNodeDragBehavior.cs` 里 `host.Invalidate()` / `host.Update()`），队列里永远躺着下一条鼠标消息 ⇒ 3 秒拖拽里 **0 次 WM_TIMER、流光 0 次写入**，而同一期间的 BeginInvoke 投递保持 11–15 次/200 ms（≈64/s，与空闲时相同）—— 队列不忙，只有 WM_TIMER 被饿死。
-- **空闲时同一条规则把帧率压到 1/4**：该进程 ~16 条定时器（画布 1 + 每个 `SlotView` 波纹 1）分 ~57 次 WM_TIMER/200 ms ⇒ 画布流光的写入从 60/s 掉到 ~15/s。
+**`WM_TIMER` 是这个平台上唯一不能用来当帧时钟的机制。** Windows 只在消息队列空无一物时才合成它，而那一刻只有一个「空闲时刻」——哪个到期定时器先被问到就归谁（这家进程里每个 `Transition` 都有一条自己的定时器）。队列里持续有输入/重绘消息时它会饿死。视觉表面的重绘是异步 `VisualHost.InvalidateSurface()`，不再有逐笔 `WM_MOUSEMOVE` 的同步 `Update()`，但 pacer 仍不能退回 `WM_TIMER`：定时器到期时队列是否空由平台决定，不由本框架决定。
 
 所以 `CreateFramePacer` 是 `affinity.IsCurrent(target) ? new PostedFramePacer(target as Control) : null`（`TransitionInterpreter.cs` 的 `CreateFramePacer`）：续体由 `System.Threading.Timer` 到期后经 `Control.BeginInvoke` 投回目标窗口（`PostedFramePacer.OnDue`）。投递出去的消息按 FIFO 送达，不等队列空；续体仍在控件线程上恢复 ⇒ 属性写入照旧直写、`Update`/`LateUpdate` 仍在该线程（pacer 存在的理由不变）。
 

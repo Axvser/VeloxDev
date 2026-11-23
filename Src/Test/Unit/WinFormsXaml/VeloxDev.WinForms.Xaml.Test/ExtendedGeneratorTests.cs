@@ -4,12 +4,14 @@ using VeloxDev.WinForms.Xaml.Test.Infrastructure;
 
 namespace VeloxDev.WinForms.Xaml.Test;
 
-/// <summary>The extended markup subset: nested markup extensions, name/relative sources, template bindings and grouped actions.</summary>
+/// <summary>
+/// The extended markup subset on a visual root: nested markup extensions, name/relative sources, template bindings,
+/// visual style triggers, attached properties, shapes and an <c>ItemsControl.ItemTemplate</c>.
+/// </summary>
 [TestClass]
 public sealed class ExtendedGeneratorTests
 {
     private const string Source = """
-        using System.Drawing;
         using VeloxDev.WinForms.Xaml;
 
         namespace Probe;
@@ -19,32 +21,31 @@ public sealed class ExtendedGeneratorTests
             public static string Value => "static";
         }
 
-        public partial class ProbeCard : VeloxDev.WinForms.Xaml.Controls.Control
+        public partial class ProbeCard : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
         {
             public static readonly DependencyProperty TitleProperty =
-                DependencyProperty.Register(nameof(Title), typeof(string), typeof(ProbeCard));
+                DependencyProperty.Register(nameof(Title), typeof(string), typeof(ProbeCard), new PropertyMetadata(null));
             public static readonly DependencyProperty CaptionProperty =
-                DependencyProperty.Register(nameof(Caption), typeof(string), typeof(ProbeCard));
+                DependencyProperty.Register(nameof(Caption), typeof(string), typeof(ProbeCard), new PropertyMetadata(null));
             public static readonly DependencyProperty IsHotProperty =
                 DependencyProperty.Register(nameof(IsHot), typeof(bool), typeof(ProbeCard));
             public static readonly DependencyProperty GlowProperty =
                 DependencyProperty.Register(nameof(Glow), typeof(double), typeof(ProbeCard));
-            public static readonly DependencyProperty BorderWidthProperty =
-                DependencyProperty.Register(nameof(BorderWidth), typeof(int), typeof(ProbeCard));
 
             public string? Title { get => (string?)GetValue(TitleProperty); set => SetValue(TitleProperty, value); }
             public string? Caption { get => (string?)GetValue(CaptionProperty); set => SetValue(CaptionProperty, value); }
             public bool IsHot { get => (bool)GetValue(IsHotProperty)!; set => SetValue(IsHotProperty, value); }
             public double Glow { get => (double)GetValue(GlowProperty)!; set => SetValue(GlowProperty, value); }
-            public int BorderWidth { get => (int)GetValue(BorderWidthProperty)!; set => SetValue(BorderWidthProperty, value); }
         }
 
-        public partial class ProbeView : VeloxDev.WinForms.Xaml.Controls.Control
+        public partial class ProbeView : VeloxDev.WinForms.Xaml.Visuals.Controls.StackPanel
         {
         }
 
         public sealed class ProbeConverter : IValueConverter
         {
+            public static ProbeConverter Instance { get; } = new();
+
             public object? Convert(object? value, System.Type targetType) => value;
             public object? ConvertBack(object? value, System.Type sourceType) => value;
         }
@@ -55,56 +56,46 @@ public sealed class ExtendedGeneratorTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
             x:Class="Probe.ProbeView">
 
           <local:ProbeView.Resources>
-            <ResourceDictionary>
-              <local:ProbeConverter x:Key="Converter" />
-              <ControlTemplate x:Key="CardTemplate" TargetType="local:ProbeCard">
-                <Border>
-                  <TextBlock Text="{TemplateBinding Title}" />
-                </Border>
-              </ControlTemplate>
-              <Style x:Key="BoundStyle" TargetType="local:ProbeCard">
-                <Style.Setters>
-                  <Setter Property="Title"
-                            Value="{Binding Caption, Converter={StaticResource Converter}, StringFormat=N2, FallbackValue=fallback, TargetNullValue=none, UpdateSourceTrigger=LostFocus}" />
-                </Style.Setters>
-              </Style>
-            </ResourceDictionary>
+            <ControlTemplate x:Key="CardTemplate" TargetType="local:ProbeCard">
+              <Border>
+                <TextBlock Text="{TemplateBinding Title}" />
+              </Border>
+            </ControlTemplate>
+            <Style x:Key="HotStyle" TargetType="local:ProbeCard">
+              <Style.Triggers>
+                <Trigger Property="IsHot" Value="True">
+                  <Trigger.Setters>
+                    <Setter Property="Glow" Value="1" />
+                  </Trigger.Setters>
+                </Trigger>
+              </Style.Triggers>
+            </Style>
           </local:ProbeView.Resources>
 
           <local:ProbeCard x:Name="card"
-                           Title="{Binding ElementName=card, Path=Title}"
-                           Panel.ZIndex="5">
-            <local:ProbeCard.Triggers>
-              <Trigger Property="IsHot" Value="True">
-                <Trigger.EnterAction>
-                  <TransitionAction Property="Glow" To="1" Duration="0:0:0.1" LoopTime="2" IsAutoReverse="True" />
-                  <TransitionAction Property="BorderWidth" To="4" Duration="0:0:0.1" />
-                </Trigger.EnterAction>
-              </Trigger>
-            </local:ProbeCard.Triggers>
-          </local:ProbeCard>
+                           Title="{Binding Caption, Converter={x:Static local:ProbeConverter.Instance}, StringFormat=N2, FallbackValue=fallback, TargetNullValue=none, UpdateSourceTrigger=LostFocus}"
+                           IsHot="True"
+                           Style="{StaticResource HotStyle}"
+                           Grid.Row="5" />
 
           <TextBlock Text="{Binding Caption, RelativeSource={RelativeSource Self}}" />
           <TextBlock Text="{Binding Caption, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type local:ProbeCard}}}" />
           <TextBlock Text="{x:Static local:ProbeStatics.Value}" />
 
-          <native:Button x:Name="nativeButton" Text="Native">
-            <native:Button.ContextMenu>
-              <ContextMenu>
-                <MenuItem Header="Native" />
-              </ContextMenu>
-            </native:Button.ContextMenu>
-          </native:Button>
+          <Rectangle x:Name="shape" Width="40" Height="20" />
 
-          <Button x:Name="commandButton" Content="Go">
-            <Button.InputBindings>
-              <KeyBinding Key="F5" Command="{Binding Save}" />
-            </Button.InputBindings>
-          </Button>
+          <ItemsControl x:Name="list">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="row" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <ContentControl x:Name="host" Template="{StaticResource CardTemplate}" Content="Hello" />
 
         </local:ProbeView>
         """;
@@ -138,7 +129,7 @@ public sealed class ExtendedGeneratorTests
     }
 
     [TestMethod]
-    public void ExtendedMarkup_CompilesAndEmitsTheNewBindingAndActionShape()
+    public void ExtendedMarkup_CompilesAndEmitsTheNewBindingAndTriggerShape()
     {
         var (run, output) = GeneratorProbe.RunAndCompile(
             [new XamlFileGenerator()],
@@ -154,7 +145,6 @@ public sealed class ExtendedGeneratorTests
         Assert.IsEmpty(errors, GeneratorProbe.Describe(errors));
 
         var generated = run.GeneratedText();
-        StringAssert.Contains(generated, "ElementName = \"card\"");
         StringAssert.Contains(generated, "StringFormat = \"N2\"");
         StringAssert.Contains(generated, "FallbackValue = \"fallback\"");
         StringAssert.Contains(generated, "TargetNullValue = \"none\"");
@@ -164,11 +154,10 @@ public sealed class ExtendedGeneratorTests
         StringAssert.Contains(generated, "global::VeloxDev.WinForms.Xaml.RelativeSource.Self");
         StringAssert.Contains(generated, "AncestorType = typeof(global::Probe.ProbeCard)");
         StringAssert.Contains(generated, "global::Probe.ProbeStatics.Value");
-        StringAssert.Contains(generated, "new global::VeloxDev.WinForms.Xaml.TriggerActionGroup()");
-        StringAssert.Contains(generated, "LoopTime = 2");
-        StringAssert.Contains(generated, "IsAutoReverse = true");
-        StringAssert.Contains(generated, "global::VeloxDev.WinForms.Xaml.Controls.Panel.ZIndexProperty");
-        StringAssert.Contains(generated, "nativeButton.ContextMenuStrip =");
-        StringAssert.Contains(generated, "global::VeloxDev.WinForms.Xaml.XamlRuntime.SetObjectBinding(commandButton, __xaml");
+        StringAssert.Contains(generated, "new global::VeloxDev.WinForms.Xaml.Visuals.VisualTrigger(");
+        StringAssert.Contains(generated, ".Setters.Add(new global::VeloxDev.WinForms.Xaml.Visuals.VisualSetter(");
+        StringAssert.Contains(generated, "global::VeloxDev.WinForms.Xaml.Visuals.Controls.Grid.RowProperty");
+        StringAssert.Contains(generated, "list.ItemTemplate = new global::VeloxDev.WinForms.Xaml.Visuals.DataTemplate(");
+        StringAssert.Contains(generated, "host.Template = global::VeloxDev.WinForms.Xaml.Visuals.VisualResourceLookup");
     }
 }

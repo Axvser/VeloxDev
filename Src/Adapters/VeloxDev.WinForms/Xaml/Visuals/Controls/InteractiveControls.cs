@@ -10,7 +10,7 @@ using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
 namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 
 /// <summary>A self-drawn push button with hover, press and keyboard states.</summary>
-public class Button : VisualElement
+public class Button : ButtonBase
 {
     /// <summary>The text drawn inside the button.</summary>
     public static readonly DependencyProperty TextProperty =
@@ -113,7 +113,7 @@ public class Button : VisualElement
             thickness,
             CornerRadius > 0 ? CornerRadius : theme.CornerRadius);
 
-        if (IsFocused)
+        if (IsFocusVisible)
         {
             using var focusPath = XamlDrawing.RoundedRectangle(
                 new RectangleF(1.5f, 1.5f, Math.Max(0f, bounds.Width - 3f), Math.Max(0f, bounds.Height - 3f)),
@@ -231,13 +231,16 @@ public class Button : VisualElement
     /// <inheritdoc />
     protected override void OnLostFocus() => InvalidateVisual();
 
-    /// <summary>Raises <see cref="Click"/>.</summary>
+    /// <summary>Raises <see cref="Click"/> after executing <see cref="ButtonBase.Command"/>.</summary>
     protected virtual void OnClick()
     {
-        if (IsEnabled)
+        if (!IsEnabled)
         {
-            Click?.Invoke(this, EventArgs.Empty);
+            return;
         }
+
+        ExecuteCommand();
+        Click?.Invoke(this, EventArgs.Empty);
     }
 }
 
@@ -247,7 +250,7 @@ public class Button : VisualElement
 /// <remarks>
 /// <para>
 /// The field paints its own text, selection and caret, and receives characters through
-/// <see cref="VisualSurface.ProcessTextInput"/>. Navigation, editing and <c>Ctrl+Z</c>/<c>Ctrl+Y</c> are handled in
+/// <see cref="VisualHost.ProcessTextInput"/>. Navigation, editing and <c>Ctrl+Z</c>/<c>Ctrl+Y</c> are handled in
 /// <see cref="OnKeyDown"/>; the edit history is the self-drawn path's own snapshot stack.
 /// </para>
 /// <para>

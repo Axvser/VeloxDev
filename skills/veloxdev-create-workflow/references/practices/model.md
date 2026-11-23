@@ -190,7 +190,7 @@ tree.StandardSetPreviewReceiver(
 | WinUI | `WorkflowSurfaceBehavior.OnPointerMoved` |
 | Jalium | `WorkflowSurfaceBehavior.OnMouseMove` |
 | MAUI | `WorkflowSlotConnectionBehavior.UpdatePointer` |
-| WinForms | `WorkflowSlotConnectionBehavior.UpdatePointer` |
+| WinForms | `WorkflowSurfaceBehavior` (pointer move reports the receiver; `WorkflowSlotConnectionBehavior` completes on release) |
 | Razor | `WorkflowSlotConnectionBehavior.OnSlotConnectionMove` (`[JSInvokable]`) |
 
 A link view paints the stage by reading the virtual link, not by deciding anything:

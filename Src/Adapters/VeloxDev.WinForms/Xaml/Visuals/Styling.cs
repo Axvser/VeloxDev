@@ -40,9 +40,16 @@ public sealed class VisualSetter
 /// trigger's <see cref="Setters"/> are applied; when it no longer does, the values are removed again.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Trigger setters are written at <see cref="BindingPriority.StyleTrigger"/>, one step above
 /// <see cref="BindingPriority.Style"/>: a local value still wins, and exiting the trigger reveals the style setter
 /// that was underneath instead of the default value.
+/// </para>
+/// <para>
+/// <see cref="EnterAction"/> runs once when the condition starts matching and <see cref="ExitAction"/> once when it
+/// stops; neither runs again while the state is unchanged. In a template trigger both actions receive the same
+/// target as the setters: <see cref="TargetName"/> when set, otherwise the templated control.
+/// </para>
 /// </remarks>
 public sealed class VisualTrigger
 {
@@ -81,6 +88,12 @@ public sealed class VisualTrigger
 
     /// <summary>The setters applied while <see cref="Property"/> equals <see cref="Value"/>.</summary>
     public IList<VisualSetter> Setters { get; } = new Collection<VisualSetter>();
+
+    /// <summary>The action run when the trigger becomes active, or <see langword="null"/>.</summary>
+    public VisualTriggerAction? EnterAction { get; set; }
+
+    /// <summary>The action run when the trigger becomes inactive, or <see langword="null"/>.</summary>
+    public VisualTriggerAction? ExitAction { get; set; }
 
     internal bool Matches(IWinformsObject target)
         => Property is not null && Equals(target.GetValue(Property), Value);
@@ -216,6 +229,7 @@ internal sealed class VisualStyleApplication
     private readonly List<VisualTrigger> _triggers = [];
     private readonly HashSet<DependencyProperty> _styleProperties = [];
     private readonly HashSet<DependencyProperty> _triggerProperties = [];
+    private readonly HashSet<VisualTrigger> _activeTriggers = [];
     private VisualStyle? _style;
     private bool _subscribed;
     private bool _evaluating;
@@ -234,6 +248,7 @@ internal sealed class VisualStyleApplication
 
         // 先退订再摘层：摘层会发 PropertyChanged，若还挂着触发器会被当成一次真实变更重新求值。
         Unsubscribe();
+        ExitActiveTriggers();
         ClearTriggerLayer();
         ClearStyleLayer();
 
@@ -317,9 +332,12 @@ internal sealed class VisualStyleApplication
         }
 
         _evaluating = true;
+        List<VisualTrigger>? entered = null;
+        List<VisualTrigger>? exited = null;
         try
         {
             Dictionary<DependencyProperty, object?>? active = null;
+            var nowActive = new HashSet<VisualTrigger>();
             foreach (var trigger in _triggers)
             {
                 if (!trigger.Matches(_element))
@@ -327,6 +345,7 @@ internal sealed class VisualStyleApplication
                     continue;
                 }
 
+                nowActive.Add(trigger);
                 foreach (var setter in trigger.Setters)
                 {
                     if (setter?.Property is not null)
@@ -348,10 +367,62 @@ internal sealed class VisualStyleApplication
                     property.ClearValue(_element, BindingPriority.StyleTrigger);
                 }
             }
+
+            foreach (var trigger in nowActive)
+            {
+                if (!_activeTriggers.Contains(trigger))
+                {
+                    (entered ??= []).Add(trigger);
+                }
+            }
+
+            foreach (var trigger in _activeTriggers)
+            {
+                if (!nowActive.Contains(trigger))
+                {
+                    (exited ??= []).Add(trigger);
+                }
+            }
+
+            _activeTriggers.Clear();
+            _activeTriggers.UnionWith(nowActive);
         }
         finally
         {
             _evaluating = false;
+        }
+
+        // 动作放在求值标记之外：动作改属性时要能触发下一轮求值，而不是被当成重入吞掉。
+        if (exited is not null)
+        {
+            foreach (var trigger in exited)
+            {
+                trigger.ExitAction?.Invoke(_element);
+            }
+        }
+
+        if (entered is not null)
+        {
+            foreach (var trigger in entered)
+            {
+                trigger.EnterAction?.Invoke(_element);
+            }
+        }
+    }
+
+    // 卸载样式时把仍处于激活态的触发器补一次退出动作；集合先清空，动作里的属性变化不会再触发求值。
+    private void ExitActiveTriggers()
+    {
+        if (_activeTriggers.Count == 0)
+        {
+            return;
+        }
+
+        var active = _activeTriggers.ToArray();
+        _activeTriggers.Clear();
+        foreach (var trigger in active)
+        {
+            trigger.ExitAction?.Invoke(_element);
         }
     }
 

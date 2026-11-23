@@ -93,7 +93,6 @@ public static class Theme
 
             _mode = value;
             _current = value == ThemeMode.Dark ? CreateDark() : CreateLight();
-            ThemeStyles.Invalidate();
             Changed?.Invoke(null, EventArgs.Empty);
         }
     }
@@ -105,33 +104,28 @@ public static class Theme
         set
         {
             _current = value ?? throw new ArgumentNullException(nameof(value));
-            ThemeStyles.Invalidate();
             Changed?.Invoke(null, EventArgs.Empty);
         }
     }
 
-    /// <summary>Re-applies the active implicit styles over a control tree after a theme change.</summary>
-    /// <param name="root">The view or window root.</param>
-    public static void ApplyTo(System.Windows.Forms.Control root) => ThemeStyles.ApplyTo(root);
-
-    /// <summary>The built-in dark palette, matching Visual Studio Code Dark+.</summary>
+    /// <summary>The built-in dark palette, matching the VS Code workbench and the Scribalix tokens.</summary>
     public static ThemePalette CreateDark() => new()
     {
-        WindowBackground = Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E),
+        WindowBackground = Color.FromArgb(0xFF, 0x14, 0x14, 0x14),
         Surface = Color.FromArgb(0xFF, 0x25, 0x25, 0x26),
-        SurfaceAlt = Color.FromArgb(0xFF, 0x3C, 0x3C, 0x3C),
-        ControlBackground = Color.FromArgb(0xFF, 0x3C, 0x3C, 0x3C),
-        ControlBorder = Color.FromArgb(0xFF, 0x3C, 0x3C, 0x3C),
-        ControlHover = Color.FromArgb(0xFF, 0x4A, 0x4A, 0x4A),
-        ControlPressed = Color.FromArgb(0xFF, 0x0E, 0x63, 0x9C),
-        Foreground = Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC),
-        MutedForeground = Color.FromArgb(0xFF, 0x85, 0x85, 0x85),
-        Accent = Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC),
+        SurfaceAlt = Color.FromArgb(0xFF, 0x2D, 0x2D, 0x2D),
+        ControlBackground = Color.FromArgb(0xFF, 0x2A, 0x2A, 0x2A),
+        ControlBorder = Color.FromArgb(0xFF, 0x33, 0x33, 0x33),
+        ControlHover = Color.FromArgb(0xFF, 0x30, 0x30, 0x30),
+        ControlPressed = Color.FromArgb(0xFF, 0x3A, 0x3A, 0x3A),
+        Foreground = Color.FromArgb(0xFF, 0xE7, 0xE7, 0xE7),
+        MutedForeground = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0),
+        Accent = Color.FromArgb(0xFF, 0x00, 0x78, 0xD4),
         AccentForeground = Color.White,
-        FocusRing = Color.FromArgb(0xFF, 0x00, 0x7F, 0xD4),
-        DisabledForeground = Color.FromArgb(0xFF, 0x5A, 0x5A, 0x5A),
-        DisabledBackground = Color.FromArgb(0xFF, 0x2D, 0x2D, 0x2D),
-        Selection = Color.FromArgb(0xFF, 0x26, 0x4F, 0x78),
+        FocusRing = Color.FromArgb(0xFF, 0x00, 0x78, 0xD4),
+        DisabledForeground = Color.FromArgb(0xFF, 0x58, 0x58, 0x58),
+        DisabledBackground = Color.FromArgb(0xFF, 0x1F, 0x1F, 0x1F),
+        Selection = Color.FromArgb(0xFF, 0x09, 0x47, 0x71),
         CornerRadius = 4f,
         ControlHeight = 28,
     };
@@ -148,7 +142,7 @@ public static class Theme
         ControlPressed = Color.FromArgb(0xFF, 0x00, 0x62, 0xA3),
         Foreground = Color.FromArgb(0xFF, 0x33, 0x33, 0x33),
         MutedForeground = Color.FromArgb(0xFF, 0x6F, 0x6F, 0x6F),
-        Accent = Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC),
+        Accent = Color.FromArgb(0xFF, 0x00, 0x78, 0xD4),
         AccentForeground = Color.White,
         FocusRing = Color.FromArgb(0xFF, 0x00, 0x90, 0xF1),
         DisabledForeground = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0),

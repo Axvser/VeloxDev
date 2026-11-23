@@ -5,36 +5,34 @@ using VeloxDev.WinForms.Xaml.Test.Infrastructure;
 namespace VeloxDev.WinForms.Xaml.Test;
 
 /// <summary>
-/// Drives <see cref="XamlFileGenerator"/> over an in-memory XAML file: the subset covers native controls, a derived
-/// control, names, properties, events, bindings, static resources and a data template.
+/// Drives <see cref="XamlFileGenerator"/> over an in-memory XAML file against the visual backend: unprefixed controls,
+/// a <c>local:</c> derived type, names, properties, events, bindings, attached properties, static resources and a
+/// data template.
 /// </summary>
 [TestClass]
 public sealed class XamlCompilationTests
 {
     private const string Source = """
         using System;
-        using System.Drawing;
-        using System.Windows.Forms;
         using VeloxDev.WinForms.Xaml;
 
         namespace Probe;
 
-        public partial class ProbeCard : VeloxDev.WinForms.Xaml.Controls.Control
+        public partial class ProbeCard : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
         {
             public static readonly DependencyProperty TitleProperty =
                 DependencyProperty.Register(nameof(Title), typeof(string), typeof(ProbeCard));
 
-            public string Title
+            public string? Title
             {
-                get => (string)GetValue(TitleProperty)!;
+                get => (string?)GetValue(TitleProperty);
                 set => SetValue(TitleProperty, value);
             }
         }
 
-        public partial class ProbeView : VeloxDev.WinForms.Xaml.Controls.Control
+        public partial class ProbeView : VeloxDev.WinForms.Xaml.Visuals.Controls.StackPanel
         {
             public int Clicks { get; private set; }
-
 
             private void OnProbeClick(object? sender, EventArgs e) => Clicks++;
         }
@@ -45,38 +43,36 @@ public sealed class XamlCompilationTests
             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             xmlns:local="clr-namespace:Probe"
-            xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
             x:Class="Probe.ProbeView"
-            Size="300, 200">
+            Orientation="Horizontal"
+            Spacing="4"
+            Padding="6">
 
           <local:ProbeView.Resources>
-            <ResourceDictionary>
-              <x:Color x:Key="Accent">#FF102030</x:Color>
-              <DataTemplate x:Key="CardTemplate">
-                <local:ProbeCard Title="{Binding Title}" />
-              </DataTemplate>
-            </ResourceDictionary>
+            <x:Color x:Key="Accent">#FF102030</x:Color>
+            <DataTemplate x:Key="CardTemplate">
+              <local:ProbeCard Title="{Binding Title}" />
+            </DataTemplate>
           </local:ProbeView.Resources>
 
-          <native:Label x:Name="captionLabel" Text="{Binding Caption}" Size="200, 24" />
+          <Border x:Name="frame" Grid.Row="1" Background="{StaticResource Accent}" Width="80" Height="40" />
 
-          <local:ProbeCard x:Name="card"
-                           Title="{Binding Title}"
-                           BackColor="{StaticResource Accent}"
-                           Size="200, 80" />
+          <TextBlock x:Name="caption" Text="{Binding Caption}" Width="200" />
 
-          <native:Button x:Name="probeButton" Text="Probe" Click="OnProbeClick" />
+          <local:ProbeCard x:Name="card" Title="{Binding Title}" />
+
+          <Button x:Name="probeButton" Text="Probe" Click="OnProbeClick" />
 
         </local:ProbeView>
         """;
 
     [TestMethod]
-    public void AFullXamlFile_EmitsACompilableInitializeComponent()
+    public void AFullVisualXamlFile_EmitsACompilableInitializeComponent()
     {
         var (run, output) = GeneratorProbe.RunAndCompile(
             [new XamlFileGenerator()],
             Source,
-            "XamlCompilationProbe",
+            "VisualXamlCompilationProbe",
             new InMemoryAdditionalText("ProbeView.xaml", Xaml));
 
         Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
@@ -88,39 +84,32 @@ public sealed class XamlCompilationTests
 
         var generated = run.GeneratedText();
         StringAssert.Contains(generated, "private void InitializeComponent()");
-        StringAssert.Contains(generated, "this.SuspendLayout();");
-        StringAssert.Contains(generated, "this.ResumeLayout(false);");
 
-        // x:Name 变成字段，且字段与局部变量同名。
-        StringAssert.Contains(generated, "private global::System.Windows.Forms.Label captionLabel = null!;");
+        // x:Name becomes a field; the children are added with Add, never Controls.Add.
+        StringAssert.Contains(generated, "private global::VeloxDev.WinForms.Xaml.Visuals.Controls.Border frame = null!;");
         StringAssert.Contains(generated, "private global::Probe.ProbeCard card = null!;");
-        StringAssert.Contains(generated, "private global::System.Windows.Forms.Button probeButton = null!;");
-        StringAssert.Contains(generated, "this.captionLabel = captionLabel;");
-        StringAssert.Contains(generated, "this.Controls.Add(probeButton);");
+        StringAssert.Contains(generated, "private global::VeloxDev.WinForms.Xaml.Visuals.Controls.Button probeButton = null!;");
+        StringAssert.Contains(generated, "this.Add(frame);");
+        StringAssert.Contains(generated, "this.Add(probeButton);");
+        Assert.IsFalse(generated.Contains(".Controls.Add", StringComparison.Ordinal), "visual children must not use Controls");
 
-        // 原生属性、DP 绑定、原生绑定、事件与静态资源。
-        StringAssert.Contains(generated, "captionLabel.Size = global::VeloxDev.WinForms.Xaml.XamlRuntime.ParseSize(\"200, 24\");");
-        StringAssert.Contains(generated, "card.SetBinding(global::Probe.ProbeCard.TitleProperty, new global::VeloxDev.WinForms.Xaml.Binding(\"Title\"));");
-        StringAssert.Contains(generated, "this.SetNativeBinding(captionLabel, \"Text\", new global::VeloxDev.WinForms.Xaml.Binding(\"Caption\"));");
-        StringAssert.Contains(generated, "probeButton.Click += this.OnProbeClick;");
+        // Attached property, events, static resources and the data template resource.
         StringAssert.Contains(
             generated,
-            "card.BackColor = global::VeloxDev.WinForms.Xaml.XamlRuntime.GetResource<global::System.Drawing.Color>(this, \"Accent\");");
-
-        // 资源与 DataTemplate 工厂。
-        StringAssert.Contains(generated, "this.Resources[\"Accent\"] = global::VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor(\"#FF102030\");");
-        StringAssert.Contains(generated, "new global::VeloxDev.WinForms.Xaml.DataTemplate(this.CreateTemplate_CardTemplate)");
-        StringAssert.Contains(generated, "private global::System.Windows.Forms.Control CreateTemplate_CardTemplate()");
-        StringAssert.Contains(generated, "return __xaml1;");
+            "frame.SetValue(global::VeloxDev.WinForms.Xaml.Visuals.Controls.Grid.RowProperty, 1);");
+        StringAssert.Contains(generated, "probeButton.Click += this.OnProbeClick;");
+        StringAssert.Contains(generated, "VisualBindingOperations.Bind(");
+        StringAssert.Contains(generated, "this.Resources[\"Accent\"] =");
+        StringAssert.Contains(generated, "new global::VeloxDev.WinForms.Xaml.Visuals.DataTemplate(");
     }
 
     [TestMethod]
-    public void ThicknessLiterals_CompileOnPaddingAndBorderThickness()
+    public void ThicknessLiterals_CompileOnVisualPaddingAndBorderThickness()
     {
         const string source = """
             namespace Probe2;
 
-            public partial class ThicknessView : VeloxDev.WinForms.Xaml.Controls.Control
+            public partial class ThicknessView : VeloxDev.WinForms.Xaml.Visuals.Controls.StackPanel
             {
             }
             """;
@@ -130,15 +119,12 @@ public sealed class XamlCompilationTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe2"
-                x:Class="Probe2.ThicknessView"
-                Size="200, 120">
+                x:Class="Probe2.ThicknessView">
 
               <Border x:Name="card"
                         Padding="1,2,3,4"
                         BorderThickness="8"
-                        CornerRadius="6"
-                        Location="0, 0"
-                        Size="100, 100" />
+                        CornerRadius="6" />
 
             </local:ThicknessView>
             """;
@@ -146,7 +132,7 @@ public sealed class XamlCompilationTests
         var (run, output) = GeneratorProbe.RunAndCompile(
             [new XamlFileGenerator()],
             source,
-            "ThicknessLiteralProbe",
+            "VisualThicknessLiteralProbe",
             new InMemoryAdditionalText("ThicknessView.xaml", xaml));
 
         Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
@@ -163,15 +149,16 @@ public sealed class XamlCompilationTests
         StringAssert.Contains(
             generated,
             "card.BorderThickness = global::VeloxDev.WinForms.Xaml.XamlRuntime.ParseThickness(\"8\");");
+        StringAssert.Contains(generated, "card.CornerRadius = 6F;");
     }
 
     [TestMethod]
-    public void VScrollViewer_CompilesWithScrollBarProperties()
+    public void VisualScrollViewer_CompilesWithContent()
     {
         const string source = """
             namespace Probe3;
 
-            public partial class ScrollHostView : VeloxDev.WinForms.Xaml.Controls.Control
+            public partial class ScrollHostView : VeloxDev.WinForms.Xaml.Visuals.Controls.StackPanel
             {
             }
             """;
@@ -181,17 +168,9 @@ public sealed class XamlCompilationTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe3"
-                x:Class="Probe3.ScrollHostView"
-                Size="400, 300">
+                x:Class="Probe3.ScrollHostView">
 
-              <ScrollViewer x:Name="viewer"
-                              HorizontalScrollBarVisibility="Visible"
-                              VerticalScrollBarVisibility="Hidden"
-                              ExtentWidth="2000"
-                              ExtentHeight="1200"
-                              ViewportWidth="400"
-                              ViewportHeight="300"
-                              ScrollOffset="10, 20">
+              <ScrollViewer x:Name="viewer" IsScrollInputEnabled="False">
                 <Canvas x:Name="content" />
               </ScrollViewer>
 
@@ -201,7 +180,7 @@ public sealed class XamlCompilationTests
         var (run, output) = GeneratorProbe.RunAndCompile(
             [new XamlFileGenerator()],
             source,
-            "ScrollViewerProbe",
+            "VisualScrollViewerProbe",
             new InMemoryAdditionalText("ScrollHostView.xaml", xaml));
 
         Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
@@ -214,33 +193,18 @@ public sealed class XamlCompilationTests
         var generated = run.GeneratedText();
         StringAssert.Contains(
             generated,
-            "private global::VeloxDev.WinForms.Xaml.Controls.ScrollViewer viewer = null!;");
-        StringAssert.Contains(
-            generated,
-            "viewer.HorizontalScrollBarVisibility = global::VeloxDev.WinForms.Xaml.Controls.ScrollBarVisibility.Visible;");
-        StringAssert.Contains(
-            generated,
-            "viewer.VerticalScrollBarVisibility = global::VeloxDev.WinForms.Xaml.Controls.ScrollBarVisibility.Hidden;");
-        StringAssert.Contains(generated, "viewer.ExtentWidth = 2000D;");
-        StringAssert.Contains(generated, "viewer.ExtentHeight = 1200D;");
-        StringAssert.Contains(generated, "viewer.ViewportWidth = 400D;");
-        StringAssert.Contains(generated, "viewer.ViewportHeight = 300D;");
-        StringAssert.Contains(
-            generated,
-            "viewer.ScrollOffset = global::VeloxDev.WinForms.Xaml.XamlRuntime.ParsePoint(\"10, 20\");");
-        StringAssert.Contains(generated, "viewer.Controls.Add(content);");
+            "private global::VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollViewer viewer = null!;");
+        StringAssert.Contains(generated, "viewer.IsScrollInputEnabled = false;");
+        StringAssert.Contains(generated, "viewer.Content = content;");
     }
 
     [TestMethod]
     public void TheGeneratorEmitsAPrivateNonPartialInitializeComponent()
     {
         const string source = """
-            using System.Windows.Forms;
-            using VeloxDev.WinForms.Xaml;
-
             namespace Probe;
 
-            public partial class BareView : VeloxDev.WinForms.Xaml.Controls.Control
+            public partial class BareView : VeloxDev.WinForms.Xaml.Visuals.Controls.StackPanel
             {
             }
             """;
@@ -250,16 +214,15 @@ public sealed class XamlCompilationTests
                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                 xmlns:local="clr-namespace:Probe"
-                xmlns:native="clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms"
                 x:Class="Probe.BareView">
-              <native:Button x:Name="okButton" Text="OK" />
+              <Button x:Name="okButton" Text="OK" />
             </local:BareView>
             """;
 
         var (run, output) = GeneratorProbe.RunAndCompile(
             [new XamlFileGenerator()],
             source,
-            "XamlBareProbe",
+            "VisualXamlBareProbe",
             new InMemoryAdditionalText("BareView.xaml", xaml));
 
         Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));

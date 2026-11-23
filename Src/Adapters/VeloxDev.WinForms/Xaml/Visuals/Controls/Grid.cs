@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Drawing;
 using System.Runtime.CompilerServices;
 using XamlColumnDefinition = VeloxDev.WinForms.Xaml.Controls.ColumnDefinition;
@@ -184,6 +184,8 @@ public class Grid : Panel
 
         var widths = new double[columnDefinitions.Length];
         var heights = new double[rowDefinitions.Length];
+        var starWidths = new double[columnDefinitions.Length];
+        var starHeights = new double[rowDefinitions.Length];
 
         for (var index = 0; index < columnDefinitions.Length; index++)
         {
@@ -217,22 +219,54 @@ public class Grid : Panel
             {
                 heights[autoRow] = Math.Max(heights[autoRow], measured.Height);
             }
+
+            for (var index = column; index < column + columnSpan; index++)
+            {
+                if (columnDefinitions[index].Width.IsStar)
+                {
+                    starWidths[index] = Math.Max(starWidths[index], measured.Width);
+                }
+            }
+
+            for (var index = row; index < row + rowSpan; index++)
+            {
+                if (rowDefinitions[index].Height.IsStar)
+                {
+                    starHeights[index] = Math.Max(starHeights[index], measured.Height);
+                }
+            }
         }
 
         DistributeStars(
             columnDefinitions.Select(static definition => definition.Width).ToArray(),
             widths,
-            content.Width);
+            content.Width,
+            starWidths);
         DistributeStars(
             rowDefinitions.Select(static definition => definition.Height).ToArray(),
             heights,
-            content.Height);
+            content.Height,
+            starHeights);
         return (widths, heights);
     }
 
     // 星号轨道平分扣除像素与自动轨道后的剩余；最后一格吃掉取整误差，保证总宽等于可用宽。
-    private static void DistributeStars(XamlGridLength[] lengths, double[] sizes, double available)
+    private static void DistributeStars(XamlGridLength[] lengths, double[] sizes, double available, double[] contentSizes)
     {
+        // A star track measured with zero/infinite room has no share to divide; size it to its content.
+        if (available <= 0d || double.IsInfinity(available))
+        {
+            for (var index = 0; index < lengths.Length; index++)
+            {
+                if (lengths[index].IsStar)
+                {
+                    sizes[index] = Math.Max(0d, contentSizes[index]);
+                }
+            }
+
+            return;
+        }
+
         var totalWeight = 0d;
         var lastStar = -1;
         var fixedSize = 0d;

@@ -150,6 +150,27 @@ public sealed class VisualControlSetTests
     }
 
     [TestMethod]
+    public void PointerFocusDoesNotShowFocusRingButKeyboardFocusDoes()
+    {
+        using var surface = CreateSurface(120, 80);
+        var toggle = new VC.ToggleButton { Width = 68, Height = 34 };
+        surface.Root = toggle;
+        Layout(surface, 120, 80);
+
+        var bounds = toggle.AbsoluteBounds;
+        var center = new PointF(bounds.X + (bounds.Width / 2f), bounds.Y + (bounds.Height / 2f));
+        surface.ProcessPointerDown(center, MouseButtons.Left);
+        surface.ProcessPointerUp(center, MouseButtons.Left);
+
+        Assert.IsTrue(toggle.IsFocused);
+        Assert.IsFalse(toggle.IsFocusVisible, "a pointer click focuses without showing the ring");
+
+        surface.ProcessKeyDown(Keys.Space);
+        surface.ProcessKeyUp(Keys.Space);
+        Assert.IsTrue(toggle.IsFocusVisible, "keyboard activation shows the ring");
+    }
+
+    [TestMethod]
     public void ItemsControl_GeneratesItemsStacksThemAndFollowsCollectionChanges()
     {
         var source = new ObservableCollection<string> { "alpha", "beta" };
@@ -272,17 +293,17 @@ public sealed class VisualControlSetTests
         Assert.AreEqual(200f, list.Items[0].Bounds.Y, 0.1f, "row 10 stays at its absolute position");
     }
 
-    private static VisualSurface CreateSurface(int width, int height)
+    private static VisualHost CreateSurface(int width, int height)
         => new() { Size = new Size(width, height) };
 
-    private static void Layout(VisualSurface surface, int width, int height)
+    private static void Layout(VisualHost surface, int width, int height)
     {
         using var bitmap = new Bitmap(1, 1);
         using var graphics = Graphics.FromImage(bitmap);
         surface.RenderTo(graphics, new Size(width, height));
     }
 
-    private static void Click(VisualSurface surface, float x, float y)
+    private static void Click(VisualHost surface, float x, float y)
     {
         var point = new PointF(x, y);
         surface.ProcessPointerDown(point, MouseButtons.Left);

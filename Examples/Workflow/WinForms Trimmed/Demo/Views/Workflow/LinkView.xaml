@@ -1,8 +1,9 @@
-<UserControl
+<local:LinkView
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workflow"
     x:Class="Demo.Views.Workflow.LinkView">
 
-  <!-- VeloxDev customization: the curve is painted by this view; line colour and thickness live in code-behind. -->
+  <!-- VeloxDev customization: this visual UserControl paints the link; line geometry, colour and hit-test curve are decided in the code-behind. -->
 
-</UserControl>
+</local:LinkView>

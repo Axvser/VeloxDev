@@ -1,142 +1,126 @@
-# WinForms XAML animations
+# WinForms visual XAML animations
 
-`VeloxDev.WinForms` has two animation surfaces. Plain WinForms code uses the transition system
-directly. The XAML layer adds a thin bridge, because XAML authors do not have property expressions:
+`VeloxDev.WinForms` has two animation surfaces sharing `VeloxDev.TransitionSystem`: markup trigger
+actions and code-behind transitions on a `VisualElement`. Markup uses `TransitionAction`,
+`KeyFrameAnimation` and `TriggerActionGroup` inside `<Trigger.EnterAction>` / `<Trigger.ExitAction>`;
+the `XamlTransition` HWND helper is not part of the visual runtime.
 
-- `VeloxDev.WinForms.Xaml.XamlTransition.Animate(control, property, value, effect)` — code-behind.
-- `VeloxDev.WinForms.Xaml.TransitionAction` — a trigger action declared in XAML.
+The visual runtime is documented in
+[the workflow skill's XAML reference](../../../veloxdev-create-workflow/references/practices/gui/winforms-xaml.md).
 
-Both end in the same `Transition<VeloxDev.WinForms.Xaml.Controls.Control>` run through the WinForms
-adapter's scheduler and samplers. The full runtime is documented in
-[the workflow skill&#39;s XAML reference](../../../veloxdev-create-workflow/references/practices/gui/winforms-xaml.md).
-
-## Markup form
+## Markup trigger actions
 
 ```xml
-<v:Button Content="Save">
-  <v:Button.Triggers>
-    <v:Trigger Property="IsPointerOver" Value="True">
-      <v:Trigger.EnterAction>
-        <v:TransitionAction Property="Background"
-                            To="#FF2B6CFF"
-                            Duration="0:0:0.18"
-                            Ease="CubicOut" />
-      </v:Trigger.EnterAction>
-      <v:Trigger.ExitAction>
-        <v:TransitionAction Property="Background"
-                            To="#FF20242C"
-                            Duration="0:0:0.24"
-                            Ease="CubicOut" />
-      </v:Trigger.ExitAction>
-    </v:Trigger>
-  </v:Button.Triggers>
-</v:Button>
+<Trigger Property="IsEnabled" Value="False">
+  <Trigger.EnterAction>
+    <TransitionAction Property="Width" To="120" Duration="0:0:0.2" Ease="CubicOut" />
+  </Trigger.EnterAction>
+  <Trigger.ExitAction>
+    <KeyFrameAnimation Property="Width" Duration="0:0:0.3" Ease="Linear">
+      <KeyFrame Offset="0" Value="120" />
+      <KeyFrame Offset="1" Value="40" />
+    </KeyFrameAnimation>
+  </Trigger.ExitAction>
+</Trigger>
 ```
 
-The same action works inside `v:Style.Triggers`, `DataTrigger` and `MultiTrigger`.
+Several actions in one `EnterAction`/`ExitAction` are emitted as a `TriggerActionGroup`. A custom
+action derives `VeloxDev.WinForms.Xaml.Visuals.VisualTriggerAction` and overrides
+`Invoke(VisualElement target)`; in a template trigger the target is the same `TargetName` part the
+setters write. The bridge is `VisualTransition.Animate(element, property, value, effect)` and
+`VisualTransition.AnimateKeyFrames(...)`; `VisualTransition.Stop(element)` ends the running
+animation. Frames write at `BindingPriority.Animation`, and a new animation on the same element
+supersedes the previous one.
 
-| Attribute    | Meaning                                                                                                  |
-| ------------ | -------------------------------------------------------------------------------------------------------- |
-| `Property` | Required. A DP on the target, or `Owner.Property` for an attached DP                                   |
-| `To`       | End value converted to the property type; literal only                                                   |
-| `Duration` | `TimeSpan` literal such as `0:0:0.2`                                                                 |
-| `Ease`     | `Linear` / `Default`, or Sine/Quad/Cubic/Quart/Quint/Expo/Circ/Back/Elastic/Bounce with In/Out/InOut |
+## Animating a visual element
 
-**Default effect only when both are omitted.** With no action effect, `XamlTransition.Animate` uses
-240 ms `Cubic.Out`. An `Ease` without `Duration` creates a zero-length effect; a `Duration` without
-`Ease` uses the transition system's default ease. Specify both when customizing either.
-
-`EnterAction` runs when the trigger becomes active, `ExitAction` when it becomes inactive. Each action
-writes a local value; it does not restore the previous value on its own, so write both for a
-reversible hover/checked state.
-
-## Keyframes
-
-A `KeyFrameAnimation` chains ordinary transitions, one segment per adjacent pair:
-
-```xml
-<v:Trigger.EnterAction>
-  <v:KeyFrameAnimation Property="Background" Duration="0:0:0.6" Ease="CubicInOut">
-    <v:KeyFrame Offset="0" Value="#FF20242C" />
-    <v:KeyFrame Offset="0.5" Value="#FF2B6CFF" />
-    <v:KeyFrame Offset="1" Value="#FF20242C" />
-  </v:KeyFrameAnimation>
-</v:Trigger.EnterAction>
-```
-
-- `Offset` is `0..1`; frames are sorted, the first frame above zero animates from the current value,
-  and a zero first frame applies immediately.
-- Segment durations are proportional to offset deltas; the whole chain shares one `Ease` and one total
-  `Duration` (240 ms `Cubic.Out` by default). Per-keyframe easing is not supported yet.
-- The whole chain is one mutual run: a new animation supersedes it and `XamlTransition.Stop` ends it.
-- `Value` is converted to the animated property's type like a normal transition endpoint.
-
-Code-behind uses the same chain:
-
-```csharp
-XamlTransition.AnimateKeyFrames(
-    control,
-    MyControl.GlowProperty,
-    [
-        new KeyFrame { Offset = 0d, Value = 0d },
-        new KeyFrame { Offset = 0.5d, Value = 0.5d },
-        new KeyFrame { Offset = 1d, Value = 1d },
-    ],
-    TimeSpan.FromMilliseconds(300),
-    Eases.Cubic.Out);
-```
-
-## Code-behind form
+A visual element's dependency properties are exposed as CLR wrappers (`Opacity`, `Transform`,
+`Margin`, `Width`, `Background`, `CornerRadius`, …). `Transition<T>` writes those wrappers, so the
+transition sets the element's local priority layer each frame:
 
 ```csharp
 using VeloxDev.TransitionSystem;
-using VeloxDev.WinForms.Xaml;
+using VeloxDev.WinForms.Xaml.Visuals;
 
-XamlTransition.Animate(
-    this,
-    MyControl.GlowProperty,
-    1d,
-    new TransitionEffect
+Transition<VisualElement>.Create()
+    .Property(v => v.Margin, new VeloxDev.WinForms.Xaml.Controls.Thickness(0, 8, 0, 0))
+    .Property(v => v.CornerRadius, 8f)
+    .Effect(new TransitionEffect
     {
         Duration = TimeSpan.FromMilliseconds(180),
         Ease = Eases.Cubic.Out,
-    });
-
-XamlTransition.Stop(this);
+    })
+    .Execute(element);
 ```
 
-- Target must be a `VeloxDev.WinForms.Xaml.Controls.Control`, never a native `Control`.
-- A later `Animate` on the same target supersedes the earlier mutual run. `Stop` ends it where it
-  stands.
-- Start the first animation on the UI thread: frames are posted through `Control.BeginInvoke`.
-- `TransitionAction` and `KeyFrameAnimation` expose `Duration`, `Ease`, `LoopTime` and
-  `IsAutoReverse` in XAML. `FPS` still needs code-behind.
-- An `EnterAction` / `ExitAction` may contain several action elements. They run as one
-  `TriggerActionGroup` in declaration order.
+- `T` is the object the animation writes into. Use `VisualElement` (or the concrete control) and name
+  a DP-backed CLR property: `Margin`, `Padding`, `Width`, `Height`, `CornerRadius`, `Background`, or
+  your own `[XamlProperty]`. A DP-backed setter invalidates the tree through its
+  `AffectsMeasure`/`AffectsArrange`/`AffectsRender` metadata.
+- `Visual.Opacity`, `Transform`, `Clip` and `Effect` are plain visual properties with no invalidation.
+  To fade, expose a DP on your control that feeds `Opacity` and mark it `AffectsRender`.
+- A transition writes the local layer; a style or trigger value is overridden while it runs.
+- The visual tree is painted by one `VisualHost`; frames are posted through `Control.BeginInvoke`, so
+  start the first animation on the UI thread.
+- A declaration is immutable and reusable. Cache a fixed-endpoint one in `static readonly` and build
+  a computed one at the call site.
+
+## Cache versus per-call
+
+Same shape and endpoint every time → cache it:
+
+```csharp
+private static readonly Transition<VisualElement> GrowIn =
+    Transition<VisualElement>.Create()
+        .Property(v => v.CornerRadius, 8f)
+        .Effect(new TransitionEffect
+        {
+            Duration = TimeSpan.FromMilliseconds(160),
+            Ease = Eases.Sine.InOut,
+        });
+
+// …elsewhere
+GrowIn.Execute(border);
+```
+
+An endpoint read from a local is frozen when the declaration is built, so build that one per caller.
 
 ## Animatable values
 
 Core samplers cover `double`, `float`, `int`, `long`, `Color`, `Point`, `PointF`, `Size`, `SizeF`,
 `Rectangle`, `RectangleF`, `Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Padding` and `Thickness`.
-The WinForms adapter adds the `Thickness` sampler used by `Margin` / `Padding` /
-`BorderThickness`.
+`Thickness` covers `Margin` and `Padding`.
 
-`decimal`, `bool`, `string` and enums have no sampler. The transition engine warns and skips an
-unsampled path instead of throwing, so an animation can “run” without changing anything. A custom
-type needs an `ISampler` registration before it will move.
+`decimal`, `bool`, `string` and enums have no sampler. The transition engine skips an unsampled path
+instead of throwing, so an animation can "run" without changing anything. A custom type needs an
+`ISampler` registration before it will move.
 
-## Custom trigger actions
+## Custom visual properties
 
-Derive from `VeloxDev.WinForms.Xaml.TriggerAction`, give it a public parameterless constructor and
-public settable properties, then declare it under `EnterAction` / `ExitAction`. Nested content is not
-supported; literal and `{StaticResource}` property values are.
+A custom visual control registers an animatable property with `DependencyProperty.Register` and a
+CLR wrapper, then animates the wrapper like any other property:
+
+```csharp
+public static readonly DependencyProperty GlowProperty = DependencyProperty.Register(
+    nameof(Glow), typeof(double), typeof(MyVisual),
+    new PropertyMetadata(0d) { AffectsRender = true });
+
+public double Glow
+{
+    get => (double)GetValue(GlowProperty)!;
+    set => SetValue(GlowProperty, value);
+}
+
+// Transition<MyVisual>.Create().Property(v => v.Glow, 1d)…
+```
+
+`AffectsRender` makes the tree repaint; without it the value changes but nothing redraws.
 
 ## Limits
 
-- XAML triggers exist only on XAML `Control`; native controls can use style setters but not triggers
-  or `TransitionAction`.
-- There is no storyboard/timeline/keyframe API; one action animates one DP to one value with one
-  effect.
-- `To` accepts a literal, not `{Binding}` / `{StaticResource}`.
-- No implicit auto-reverse on trigger exit: provide the opposite `ExitAction`.
-- There is no built-in `Opacity` DP; add a custom DP if the control paints from it. WinForms child windows do not composite over siblings, so alpha alone is not a general fade.
+- Markup actions animate one dependency property each; there is no storyboard/timeline object, so
+  chain several actions with `TriggerActionGroup` or write a custom `VisualTriggerAction`.
+- `decimal`, `bool`, `string` and enums do not animate.
+- `NativeControlHost` content is a child HWND and is not part of the visual animation.
+- `Visual.Opacity`, `Transform`, `Clip` and `Effect` live on the visual base and are plain properties
+  with no change notification; animate a DP-backed element property or add a DP that feeds them.

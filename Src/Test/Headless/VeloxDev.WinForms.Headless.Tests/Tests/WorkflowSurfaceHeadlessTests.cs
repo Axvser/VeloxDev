@@ -1,32 +1,94 @@
-using System.Reflection;
+﻿using System.Drawing;
 using System.Windows.Forms;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.WinForms.Headless.Tests.Infrastructure;
-using VeloxDev.WorkflowSystem.StandardEx;
 using VeloxDev.WorkflowSystem;
+using DrawingPointF = System.Drawing.PointF;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using VeloxDev.WorkflowSystem.StandardEx;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;
 
-// The surface contract mirrors the WPF/Avalonia shape: a plain root control with named parts and the
-// surface behavior attached. Refresh does not check IsEnabled; disabling only clears the scroller.
+// The surface is a single VisualHost whose named parts are visual elements. The camera lives on the surface
+// behavior; ViewPool materializes Helper.VisibleItems; input is routed to Core through the visual hit test.
 [STATestClass]
 public sealed class WorkflowSurfaceHeadlessTests
 {
     [TestMethod]
-    public void Attach_PublishesTheCanvasTransform()
+    public void Attach_PublishesTheCameraAndTheDecoratorOffsets()
     {
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
 
-        var transform = WorkflowCanvasTransformBehavior.GetTransform(surface.View);
-
-        Assert.IsNotNull(transform);
+        Assert.AreEqual(1d, WorkflowSurfaceBehavior.GetZoom(surface.View), 1e-9);
         Assert.AreEqual(
             graph.Tree.Layout.ActualOffset.Horizontal,
-            transform!.Horizontal,
+            surface.View.GridDecorator.ContentOffsetX,
             1e-9,
-            "the surface must publish the layout's content offset as the canvas transform");
+            "the decorator must receive the same content offset the camera uses");
+        Assert.AreEqual(
+            graph.Tree.Layout.ActualOffset.Vertical,
+            surface.View.GridDecorator.ContentOffsetY,
+            1e-9);
+    }
+
+    [TestMethod]
+    public void Zoom_KeepsTheWorldPointUnderThePointer()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        var point = new PointF(320f, 240f);
+
+        var before = WorkflowSurfaceBehavior.SurfaceToWorld(surface.View, point);
+        WorkflowSurfaceBehavior.ZoomAt(surface.View, point, 2d);
+        var after = WorkflowSurfaceBehavior.SurfaceToWorld(surface.View, point);
+
+        Assert.AreEqual(2d, WorkflowSurfaceBehavior.GetZoom(surface.View), 1e-6);
+        Assert.AreEqual(before.X, after.X, 1e-3, "the point under the cursor must stay fixed");
+        Assert.AreEqual(before.Y, after.Y, 1e-3);
+    }
+
+    [TestMethod]
+    public void WorldToSurface_RoundTripsThroughSurfaceToWorld()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+
+        var world = new PointF(123.5f, 67.25f);
+        var surfacePoint = WorkflowSurfaceBehavior.WorldToSurface(surface.View, world);
+        var back = WorkflowSurfaceBehavior.SurfaceToWorld(surface.View, surfacePoint);
+
+        Assert.AreEqual(world.X, back.X, 1e-3);
+        Assert.AreEqual(world.Y, back.Y, 1e-3);
+    }
+
+    [TestMethod]
+    public void SetWorldViewport_RoundTripsThroughTheHelper()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+
+        WorkflowSurfaceBehavior.SetWorldViewport(surface.View, new Offset(150d, 90d));
+
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        Assert.AreEqual(150d, world.Horizontal, 1e-3);
+        Assert.AreEqual(90d, world.Vertical, 1e-3);
+        Assert.AreEqual(150d, graph.Tree.Helper.Viewport.Horizontal, 1e-3);
+        Assert.AreEqual(90d, graph.Tree.Helper.Viewport.Vertical, 1e-3);
+    }
+
+    [TestMethod]
+    public void SetPan_IsReportedByTheCamera()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+
+        WorkflowSurfaceBehavior.SetPan(surface.View, new PointF(24f, -36f));
+
+        var pan = WorkflowSurfaceBehavior.GetPan(surface.View);
+        Assert.AreEqual(24f, pan.X, 1e-3);
+        Assert.AreEqual(-36f, pan.Y, 1e-3);
+        Assert.AreEqual(-24d, WorkflowSurfaceBehavior.GetWorldViewport(surface.View).Horizontal, 1e-3);
     }
 
     [TestMethod]
@@ -35,13 +97,13 @@ public sealed class WorkflowSurfaceHeadlessTests
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
 
+        WorkflowSurfaceBehavior.Refresh(surface.View);
+
         Assert.IsTrue(graph.Tree.Helper.Viewport.Width > 0d);
         Assert.IsTrue(graph.Tree.Helper.Viewport.Height > 0d);
-        Assert.AreEqual(
-            graph.Tree.Helper.Viewport.Horizontal,
-            graph.Tree.Layout.ViewportOffset.Horizontal,
-            1e-9,
-            "the persisted offset must be written from the same viewport the helper received");
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        Assert.AreEqual(world.Horizontal, graph.Tree.Helper.Viewport.Horizontal, 1e-9);
+        Assert.AreEqual(world.Vertical, graph.Tree.Helper.Viewport.Vertical, 1e-9);
     }
 
     [TestMethod]
@@ -59,154 +121,6 @@ public sealed class WorkflowSurfaceHeadlessTests
     }
 
     [TestMethod]
-    public void ViewportRestore_IsAppliedAfterAttach()
-    {
-        var graph = TestGraph.Create();
-        graph.Tree.Layout.ViewportOffset = new Offset(150d, 90d);
-
-        using var surface = new WinFormsHeadlessSurface(graph);
-        Application.DoEvents();
-
-        Assert.AreEqual(150d, graph.Tree.Helper.Viewport.Horizontal, 2d);
-        Assert.AreEqual(90d, graph.Tree.Helper.Viewport.Vertical, 2d);
-    }
-
-    [TestMethod]
-    public void Virtualization_ExcludesNodesOutsideTheViewport()
-    {
-        var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph);
-
-        Assert.IsTrue(graph.Tree.Helper.VisibleItems.Contains(graph.Left));
-        Assert.IsTrue(graph.Tree.Helper.VisibleItems.Contains(graph.Right));
-        Assert.IsFalse(
-            graph.Tree.Helper.VisibleItems.Contains(graph.Far),
-            "the far node is outside the 800x600 viewport and must not be visible");
-    }
-
-    [TestMethod]
-    public void ViewPool_CreatesOneViewPerVisibleNode()
-    {
-        var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph);
-
-        var visibleNodes = graph.Tree.Helper.VisibleItems.Count(item => item is INodeComponent);
-
-        Assert.AreEqual(
-            visibleNodes,
-            surface.View.Canvas.Controls.Count,
-            "links are drawn by WorkflowLinkLayer; the pool only materializes nodes");
-        Assert.IsFalse(
-            surface.View.Canvas.Controls.OfType<HeadlessLinkView>().Any(),
-            "a link must not get a view of its own");
-    }
-
-    [TestMethod]
-    public void BuiltInSelector_ResolvesTheNodeViewTypeAndTheLinkLayerTakesOverLinks()
-    {
-        var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph, typedViews: true);
-
-        Assert.IsTrue(
-            surface.View.Canvas.Controls.OfType<HeadlessNodeView>().Any(),
-            "the named node view type must be materialized by the pool");
-        Assert.IsTrue(
-            WorkflowLinkLayer.GetIsEnabled(surface.View.Canvas),
-            "the surface must enable the single link layer on its canvas");
-    }
-
-    [TestMethod]
-    public void LinkLayer_PublishesTheCurveWithoutAPerLinkView()
-    {
-        var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph);
-
-        WorkflowLinkLayer.Refresh(surface.View.Canvas);
-
-        Assert.IsNotNull(
-            graph.Link!.HitTarget()?.Curve,
-            "the single layer must publish the curve the surface hit-tests against");
-        Assert.IsFalse(
-            surface.View.Canvas.Controls.OfType<HeadlessLinkView>().Any(),
-            "a pooled link view must not be created");
-    }
-
-    [TestMethod]
-    public void LinkLayer_KeepsTheModelCurveWhenTheSlotMeasurementIsStale()
-    {
-        var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph);
-        var canvas = surface.View.Canvas;
-
-        var link = graph.Link!;
-        WorkflowLinkLayer.Refresh(canvas);
-        var before = link.HitTarget()?.Curve;
-        Assert.IsNotNull(before);
-
-        // A pooled endpoint can stop being measured while the projection keeps moving. The layer must
-        // keep the model-space curve (and therefore the port's outward direction) and shift it with the pan.
-        surface.View.GridDecorator.ScrollOffsetX = -100;
-        WorkflowLinkLayer.Refresh(canvas);
-        var after = link.HitTarget()?.Curve;
-        Assert.IsNotNull(after);
-
-        Assert.AreEqual(before.XAt(0) + 100d, after.XAt(0), 1d);
-        Assert.AreEqual(before.YAt(0), after.YAt(0), 1d);
-    }
-
-    [TestMethod]
-    public void LinkLayer_FollowsANodeAnchorChange()
-    {
-        var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph);
-        var link = graph.Link!;
-
-        WorkflowLinkLayer.Refresh(surface.View.Canvas);
-        var before = link.HitTarget()?.Curve;
-        Assert.IsNotNull(before);
-
-        var anchor = graph.Left.Anchor;
-        graph.Left.Anchor = new Anchor(anchor.Horizontal + 50, anchor.Vertical, anchor.Layer);
-        WorkflowLinkLayer.Refresh(surface.View.Canvas);
-        var after = link.HitTarget()?.Curve;
-        Assert.IsNotNull(after);
-
-        Assert.AreEqual(before.XAt(0) + 50d, after.XAt(0), 1d);
-    }
-
-    [TestMethod]
-    public void ComponentPressAndRelease_ReachCoreWithTheNodeTarget()
-    {
-        var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph);
-        var press = typeof(WorkflowSurfaceBehavior).GetMethod(
-            "RouteComponentPress", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var release = typeof(WorkflowSurfaceBehavior).GetMethod(
-            "RouteComponentRelease", BindingFlags.NonPublic | BindingFlags.Static)!;
-
-        press.Invoke(null, [surface.View, graph.Left, MouseButtons.Left, 1]);
-        Assert.AreSame(graph.Left, WorkflowInput.For(graph.Tree).PointerTarget);
-
-        release.Invoke(null, [surface.View, graph.Left, MouseButtons.Left, 1]);
-        Assert.AreSame(graph.Left, WorkflowInput.For(graph.Tree).PointerTarget);
-    }
-
-    [TestMethod]
-    public void ResolveTarget_PrefersTheAttachmentTagOverAnInheritedDataContext()
-    {
-        var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph);
-        using var child = new Panel { Tag = graph.Left };
-        surface.View.Canvas.Controls.Add(child);
-
-        var resolve = typeof(WorkflowSurfaceBehavior).GetMethod(
-            "ResolveTarget", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var target = resolve.Invoke(null, [child, graph.Tree, 0d, 0d, 6d]);
-
-        Assert.AreSame(graph.Left, target);
-    }
-
-    [TestMethod]
     public void Disabling_ClearsTheScroller()
     {
         var graph = TestGraph.Create();
@@ -220,45 +134,184 @@ public sealed class WorkflowSurfaceHeadlessTests
     }
 
     [TestMethod]
-    public void XamlScrollViewer_ShowsBarsForALargerExtent()
+    public void Disabling_PersistsTheWorldViewport()
     {
         var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph, xamlScrollViewer: true);
+        using var surface = new WinFormsHeadlessSurface(graph);
 
-        var viewer = surface.View.XamlScrollViewer!;
-        var extent = graph.Tree.Layout.ActualSize;
+        WorkflowSurfaceBehavior.SetWorldViewport(surface.View, new Offset(120d, 80d));
+        WorkflowSurfaceBehavior.SetIsEnabled(surface.View, false);
 
-        Assert.IsTrue(
-            extent.Width > viewer.ClientSize.Width && extent.Height > viewer.ClientSize.Height,
-            "the default graph extent must exceed the viewport for the bars to matter");
-        Assert.IsTrue(viewer.HorizontalScrollBar.Visible, "a wider extent must show the horizontal bar");
-        Assert.IsTrue(viewer.VerticalScrollBar.Visible, "a taller extent must show the vertical bar");
-        Assert.IsTrue(
-            viewer.HorizontalScrollBar.Maximum > 0,
-            "the horizontal bar must carry the scrollable range");
+        Assert.AreEqual(120d, graph.Tree.Layout.ViewportOffset.Horizontal, 1e-3);
+        Assert.AreEqual(80d, graph.Tree.Layout.ViewportOffset.Vertical, 1e-3);
     }
 
     [TestMethod]
-    public void XamlScrollViewer_BarValueMovesTheViewport()
+    public void ViewportRestore_IsAppliedAfterAttach()
     {
         var graph = TestGraph.Create();
-        using var surface = new WinFormsHeadlessSurface(graph, xamlScrollViewer: true);
+        graph.Tree.Layout.ViewportOffset = new Offset(150d, 90d);
 
-        var viewer = surface.View.XamlScrollViewer!;
-        var before = graph.Tree.Helper.Viewport.Vertical;
+        using var surface = new WinFormsHeadlessSurface(graph);
+        surface.Render();
 
-        viewer.VerticalScrollBar.Value = 200;
-        Application.DoEvents();
-        WorkflowSurfaceBehavior.Refresh(surface.View);
-        Application.DoEvents();
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        Assert.AreEqual(150d, world.Horizontal, 1d);
+        Assert.AreEqual(90d, world.Vertical, 1d);
+        Assert.AreEqual(150d, graph.Tree.Helper.Viewport.Horizontal, 1d);
+        Assert.AreEqual(90d, graph.Tree.Helper.Viewport.Vertical, 1d);
+    }
 
+    [TestMethod]
+    public void Virtualization_ExcludesNodesOutsideTheViewport()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+
+        Assert.IsTrue(graph.Tree.Helper.VisibleItems.Contains(graph.Left));
+        Assert.IsTrue(graph.Tree.Helper.VisibleItems.Contains(graph.Right));
+        Assert.IsFalse(
+            graph.Tree.Helper.VisibleItems.Contains(graph.Far),
+            "the far node is outside the 800x600 viewport and must not be visible");
+
+        WorkflowSurfaceBehavior.SetWorldViewport(surface.View, new Offset(6000d, 4000d));
+        surface.Render();
+
+        Assert.IsTrue(
+            graph.Tree.Helper.VisibleItems.Contains(graph.Far),
+            "scrolling onto the far node must bring it into the visible set");
+        Assert.IsFalse(
+            graph.Tree.Helper.VisibleItems.Contains(graph.Left),
+            "the near nodes must leave the visible set once the viewport moves away");
+    }
+
+    [TestMethod]
+    public void ViewPool_MaterializesExactlyTheVisibleItems()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+
+        var visible = graph.Tree.GetHelper().VisibleItems;
+        Assert.IsTrue(visible.Count > 0);
         Assert.AreEqual(
-            200d, graph.Tree.Helper.Viewport.Vertical, 2d,
-            "the scroll bar offset must become the viewport offset");
-        Assert.IsTrue(graph.Tree.Helper.Viewport.Vertical > before, "the viewport must move down");
-        Assert.AreEqual(
-            200, viewer.ScrollOffset.Y, 1,
-            "the synced offset must survive the feedback pass unchanged");
+            visible.Count,
+            surface.View.Canvas.Children.Count,
+            "the pool must materialize exactly one view for each visible item");
+
+        var nodeView = surface.View.ViewFor(graph.Left);
+        Assert.IsNotNull(nodeView, "the left node must have a pooled view");
+        Assert.AreSame(graph.Left, nodeView!.DataContext);
+
+        var linkView = surface.View.ViewFor(graph.Link!);
+        Assert.IsNotNull(linkView, "the link must have its own pooled view");
+        Assert.IsTrue(
+            surface.View.Canvas.Children.IndexOf(linkView!) < surface.View.Canvas.Children.IndexOf(nodeView),
+            "links sit below the node cards");
+    }
+
+
+    [TestMethod]
+    public void LinkView_KeepsTheCanvasSizeAfterANodeMoves()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        var linkView = surface.View.ViewFor(graph.Link!);
+        Assert.IsNotNull(linkView);
+        Assert.AreEqual(surface.View.Canvas.Bounds.Width, linkView!.Bounds.Width, 1d,
+            "the link uses the canvas width, not a fixed box");
+
+        var anchor = graph.Left.Anchor;
+        graph.Left.Anchor = new Anchor(anchor.Horizontal + 80d, anchor.Vertical + 40d, anchor.Layer);
+        surface.Render();
+
+        Assert.AreSame(graph.Link, linkView.DataContext, "moving a node keeps the pooled link view");
+        Assert.AreEqual(surface.View.Canvas.Bounds.Width, linkView.Bounds.Width, 1d,
+            "the link keeps the canvas width after a node move");
+        Assert.IsTrue(linkView.Visibility == VeloxDev.WinForms.Xaml.Controls.Visibility.Visible);
+    }
+
+    [TestMethod]
+    public void LinkView_PublishesTheCurveTheSurfaceHitTests()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        var link = graph.Link!;
+
+        var curve = link.HitTarget()?.Curve;
+        Assert.IsNotNull(curve, "the per-link view must publish the curve it drew");
+
+        Assert.AreEqual(graph.LeftOutput.Anchor.Horizontal, curve!.XAt(0), 1d);
+        Assert.AreEqual(graph.LeftOutput.Anchor.Vertical, curve.YAt(0), 1d);
+        Assert.AreEqual(graph.RightInput.Anchor.Horizontal, curve.XAt(curve.Count - 1), 1d);
+        Assert.AreEqual(graph.RightInput.Anchor.Vertical, curve.YAt(curve.Count - 1), 1d);
+
+        var mid = curve.PointAtLength(curve.Length / 2d);
+        Assert.AreSame(
+            link,
+            graph.Tree.HitTestVisibleLinks(mid.X, mid.Y),
+            "a point on the published curve must resolve to that link");
+    }
+
+    [TestMethod]
+    public void LinkCurve_FollowsANodeAnchorChange()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        var link = graph.Link!;
+
+        var before = link.HitTarget()?.Curve;
+        Assert.IsNotNull(before);
+
+        var anchor = graph.Left.Anchor;
+        graph.Left.Anchor = new Anchor(anchor.Horizontal + 50d, anchor.Vertical, anchor.Layer);
+
+        // The node view moves through its binding; the slot anchors are re-measured during layout, which also
+        // republishes the curves.
+        surface.Render();
+
+        var after = link.HitTarget()?.Curve;
+        Assert.IsNotNull(after);
+        Assert.AreEqual(before!.XAt(0) + 50d, after!.XAt(0), 1d);
+        Assert.AreEqual(before.YAt(0), after.YAt(0), 1d);
+    }
+
+
+    [TestMethod]
+    public void HorizontalWheel_MovesXNotY_AndShiftWheelUsesTheSameAxis()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+        var point = new DrawingPointF(400f, 300f);
+        var before = WorkflowSurfaceBehavior.GetPan(surface.View);
+
+        surface.View.ProcessPointerHWheel(point, -120);
+        surface.Render();
+        var afterHorizontal = WorkflowSurfaceBehavior.GetPan(surface.View);
+        Assert.AreNotEqual(before.X, afterHorizontal.X, "a horizontal wheel moves the camera horizontally");
+        Assert.AreEqual(before.Y, afterHorizontal.Y, 1d, "a horizontal wheel does not move vertically");
+
+        WorkflowSurfaceBehavior.ProcessWheel(surface.View, point, 120, Keys.Shift);
+        surface.Render();
+        var afterShift = WorkflowSurfaceBehavior.GetPan(surface.View);
+        Assert.AreNotEqual(afterHorizontal.X, afterShift.X, "Shift+wheel moves the same horizontal axis");
+        Assert.AreEqual(afterHorizontal.Y, afterShift.Y, 1d);
+    }
+
+    [TestMethod]
+    public void CorePressAndRelease_ReachTheNodeUnderThePointer()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+
+        var leftCenter = NodeCenter(graph.Left);
+        surface.Press(surface.WorldToSurface(leftCenter));
+        Assert.AreSame(graph.Left, WorkflowInput.For(graph.Tree).PointerTarget,
+            "the press must reach Core with the node under it");
+
+        var rightCenter = NodeCenter(graph.Right);
+        surface.Release(surface.WorldToSurface(rightCenter));
+        Assert.AreSame(graph.Right, WorkflowInput.For(graph.Tree).PointerTarget,
+            "the release must be resolved at its own position, not the press's");
     }
 
     [TestMethod]
@@ -268,18 +321,24 @@ public sealed class WorkflowSurfaceHeadlessTests
         using var surface = new WinFormsHeadlessSurface(graph);
 
         var node = graph.Far;
-        var expectedX = node.Anchor.Horizontal + node.Size.Width / 2d - surface.View.ClientSize.Width / 2d;
-        var expectedY = node.Anchor.Vertical + node.Size.Height / 2d - surface.View.ClientSize.Height / 2d;
+        var client = surface.View.LogicalClientSize;
+        var expectedX = node.Anchor.Horizontal + (node.Size.Width / 2d) - (client.Width / 2d);
+        var expectedY = node.Anchor.Vertical + (node.Size.Height / 2d) - (client.Height / 2d);
 
         Assert.IsNotNull(WorkflowInput.For(graph.Tree).Navigator, "an attached surface registers a navigator");
         Assert.IsTrue(node.Locate());
-        Application.DoEvents();
-        WorkflowSurfaceBehavior.Refresh(surface.View);
-        Application.DoEvents();
+        surface.Render();
 
-        Assert.AreEqual(
-            System.Math.Max(0d, expectedX), graph.Tree.Helper.Viewport.Horizontal, 2d,
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        Assert.AreEqual(expectedX, world.Horizontal, 1d,
             "the far node's center must land at the viewport center");
-        Assert.AreEqual(System.Math.Max(0d, expectedY), graph.Tree.Helper.Viewport.Vertical, 2d);
+        Assert.AreEqual(expectedY, world.Vertical, 1d);
+        Assert.AreEqual(expectedX, graph.Tree.Helper.Viewport.Horizontal, 1d);
+        Assert.AreEqual(expectedY, graph.Tree.Helper.Viewport.Vertical, 1d);
     }
+
+    private static PointF NodeCenter(INodeComponent node)
+        => new(
+            (float)(node.Anchor.Horizontal + (node.Size.Width / 2d)),
+            (float)(node.Anchor.Vertical + (node.Size.Height / 2d)));
 }

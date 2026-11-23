@@ -38,12 +38,24 @@ public class ScrollViewer : VisualElement
     private float _dragStartAxis;
     private float _dragStartOffset;
 
+    /// <summary>Whether the wheel and drag gestures scroll the content; a camera host turns this off.</summary>
+    public static readonly DependencyProperty IsScrollInputEnabledProperty = DependencyProperty.Register(
+        nameof(IsScrollInputEnabled), typeof(bool), typeof(ScrollViewer),
+        new PropertyMetadata(true) { AffectsRender = false });
+
     /// <summary>Creates a focusable, hit-testable viewport.</summary>
     public ScrollViewer()
     {
         IsHitTestVisible = true;
         Focusable = true;
         Padding = new XamlThickness(0f);
+    }
+
+    /// <summary>Whether the wheel and drag gestures scroll the content.</summary>
+    public bool IsScrollInputEnabled
+    {
+        get => (bool)GetValue(IsScrollInputEnabledProperty)!;
+        set => SetValue(IsScrollInputEnabledProperty, value);
     }
 
     /// <summary>The scrolled content.</summary>
@@ -173,6 +185,11 @@ public class ScrollViewer : VisualElement
     /// <inheritdoc />
     protected override void OnPointerWheel(VisualPointerEventArgs args)
     {
+        if (!IsScrollInputEnabled)
+        {
+            return;
+        }
+
         var horizontal = (args.Modifiers & Keys.Shift) != 0;
         if (!horizontal && MaxVerticalOffset <= 0f && MaxHorizontalOffset > 0f)
         {
@@ -204,7 +221,7 @@ public class ScrollViewer : VisualElement
     /// <inheritdoc />
     protected override void OnPointerPressed(VisualPointerEventArgs args)
     {
-        if (args.Button != MouseButtons.Left)
+        if (!IsScrollInputEnabled || args.Button != MouseButtons.Left)
         {
             return;
         }
@@ -249,7 +266,7 @@ public class ScrollViewer : VisualElement
     /// <inheritdoc />
     protected override void OnPointerMoved(VisualPointerEventArgs args)
     {
-        if (_drag == ScrollDrag.None)
+        if (!IsScrollInputEnabled || _drag == ScrollDrag.None)
         {
             return;
         }

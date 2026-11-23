@@ -1,25 +1,37 @@
-// VeloxDev customization: which view each pooled item kind gets.
-using VeloxDev.WinForms.Xaml;
+// VeloxDev customization: which visual view each pooled item kind gets.
+using Demo.ViewModels;
+using VeloxDev.WinForms.Xaml.Visuals;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
-public sealed class CustomTemplateSelector : TemplateSelector
+/// <summary>Chooses the visual view for each item, preferring the tree's DataTemplate resources.</summary>
+public sealed class CustomTemplateSelector : VisualTemplateSelector
 {
+    public DataTemplate? ControllerTemplate { get; set; }
+
+    public DataTemplate? TimerTemplate { get; set; }
+
+    public DataTemplate? PythonTemplate { get; set; }
+
+    public DataTemplate? EnumTemplate { get; set; }
+
     public DataTemplate? NodeTemplate { get; set; }
 
     public DataTemplate? SlotTemplate { get; set; }
 
     public DataTemplate? LinkTemplate { get; set; }
 
-    public DataTemplate? TreeTemplate { get; set; }
-
-    public override DataTemplate? SelectTemplate(object? item) => item switch
+    /// <inheritdoc />
+    public override VisualElement? SelectTemplate(object? item) => item switch
     {
-        ILinkComponent => LinkTemplate,
-        ISlotComponent => SlotTemplate,
-        INodeComponent => NodeTemplate,
-        ITreeComponent => TreeTemplate,
+        ControllerViewModel => ControllerTemplate?.Create() ?? new ControllerView(),
+        TimerNodeViewModel => TimerTemplate?.Create() ?? new TimerNodeView(),
+        PythonScriptNodeViewModel => PythonTemplate?.Create() ?? new PythonNodeView(),
+        EnumSelectorNodeViewModel => EnumTemplate?.Create() ?? new EnumSelectorNodeView(),
+        INodeComponent => NodeTemplate?.Create() ?? new WorkflowNodeCard(),
+        ISlotComponent => SlotTemplate?.Create() ?? new FullSlotView(),
+        ILinkComponent => LinkTemplate?.Create() ?? new LinkView(),
         _ => null,
     };
 }

@@ -196,7 +196,7 @@ public class ComboBox : VisualElement
         var radius = CornerRadius > 0 ? CornerRadius : theme.CornerRadius;
         XamlDrawing.PaintChrome(graphics, bounds, background, border, thickness, radius);
 
-        if (IsFocused)
+        if (IsFocusVisible)
         {
             using var focusPath = XamlDrawing.RoundedRectangle(
                 new RectangleF(1.5f, 1.5f, Math.Max(0f, bounds.Width - 3f), Math.Max(0f, bounds.Height - 3f)),

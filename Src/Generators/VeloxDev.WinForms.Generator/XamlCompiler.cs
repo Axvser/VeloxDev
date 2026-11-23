@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
@@ -14,14 +14,14 @@ namespace VeloxDev.WinForms.Generator;
 /// <remarks>
 /// Supported subset:
 /// <list type="bullet">
-/// <item>VeloxDev types written unprefixed; native WinForms types through a <c>native:</c> prefix bound to
-/// <c>clr-namespace:System.Windows.Forms;assembly=System.Windows.Forms</c>; local types through any
-/// <c>clr-namespace:</c> prefix such as <c>local:</c>. A legacy <c>v:</c> prefix still means VeloxDev.</item>
+/// <item>VeloxDev visual types written unprefixed and resolved against the visual backend (the root must derive
+/// from <c>VisualElement</c>); local types through any <c>clr-namespace:</c> prefix such as <c>local:</c>. A legacy
+/// <c>v:</c> prefix still means the visual namespaces.</item>
 /// <item>Direct child controls added to <c>Controls</c>.</item>
 /// <item>Property elements for scalar values, <c>Resources</c>, <c>Controls</c> and list properties.</item>
 /// <item>String, numeric, boolean, enum, color, padding, thickness, size, point and time-span literals.</item>
 /// <item><c>{Binding Path, Mode}</c> and <c>{StaticResource Key}</c>.</item>
-/// <item><c>DataTemplate</c> resources whose root is a <see cref="Control"/>.</item>
+/// <item><c>DataTemplate</c> resources (inline or <c>x:Key</c>) whose body is a <c>VisualElement</c>.</item>
 /// </list>
 /// Anything else is reported as a diagnostic and skipped; there is no runtime XAML parser to fall back to.
 /// </remarks>
@@ -104,7 +104,7 @@ internal sealed class XamlCompiler
             return;
         }
 
-        if (!SyntaxHelpers.DerivesFrom(owner, SyntaxHelpers.ControlMetadataName) && !IsVisualElement(owner))
+        if (!IsVisualElement(owner))
         {
             Report(Diagnostics.UnsupportedRoot, root, root.Name.LocalName, owner.Name);
             return;
@@ -159,21 +159,7 @@ internal sealed class XamlCompiler
 
     private void EmitRoot(XElement root)
     {
-        // 视觉子树没有 HWND：不调用 SuspendLayout/ResumeLayout，也不建立 NameScope。
-        var visualRoot = IsVisualElement(_owner);
-        var host = !visualRoot && IsXamlControl(_owner) ? "this" : null;
-        _rootScope = host;
-
-        if (!visualRoot)
-        {
-            _current.Line("this.SuspendLayout();");
-        }
-
-        if (host is not null)
-        {
-            _current.Line("this.NameScope = new global::VeloxDev.WinForms.Xaml.NameScope();");
-            _scopeExpression = "this.NameScope";
-        }
+        _rootScope = null;
 
         foreach (var element in root.Elements())
         {
@@ -183,8 +169,8 @@ internal sealed class XamlCompiler
             }
         }
 
-        ApplyAttributes(root, _owner, "this", host);
-        ProcessChildren(root, _owner, "this", host);
+        ApplyAttributes(root, _owner, "this", null);
+        ProcessChildren(root, _owner, "this", null);
 
         foreach (var line in _deferredEvents)
         {
@@ -192,10 +178,6 @@ internal sealed class XamlCompiler
         }
 
         _deferredEvents.Clear();
-        if (!visualRoot)
-        {
-            _current.Line("this.ResumeLayout(false);");
-        }
     }
 
     private void ProcessChildren(XElement element, ITypeSymbol elementType, string elementExpression, string? hostExpression)
@@ -239,9 +221,24 @@ internal sealed class XamlCompiler
 
                 var visualExpression = EmitControl(child, type, hostExpression: null);
                 var items = FindItemsCollection(elementType);
-                _current.Line(items is null
-                    ? $"{elementExpression}.Add({visualExpression});"
-                    : $"{elementExpression}.{items.Name}.Add({visualExpression});");
+                if (items is not null)
+                {
+                    _current.Line($"{elementExpression}.{items.Name}.Add({visualExpression});");
+                    continue;
+                }
+
+                // Single-content containers (visual UserControl/ContentControl/ScrollViewer) expose Content;
+                // assigning it lets their own measure/arrange treat the child as the content slot.
+                var contentProperty = FindProperty(elementType, "Content");
+                if (contentProperty?.SetMethod is not null
+                    && !IsCollection(contentProperty.Type)
+                    && CanAssign(type, contentProperty.Type))
+                {
+                    _current.Line($"{elementExpression}.Content = {visualExpression};");
+                    continue;
+                }
+
+                _current.Line($"{elementExpression}.Add({visualExpression});");
                 continue;
             }
 
@@ -310,11 +307,6 @@ internal sealed class XamlCompiler
         }
 
         _current.Line($"var {expression} = new {SyntaxHelpers.TypeName(type)}();");
-        if (IsXamlControl(type) && _scopeExpression is not null)
-        {
-            // 让每个控件都记得自己所属的作用域：Popup.Child 这类未挂进树的控件也能解析 ElementName。
-            _current.Line($"{expression}.NameScope = {_scopeExpression};");
-        }
 
         if (!inTemplate && !string.IsNullOrEmpty(name) && expression == name)
         {
@@ -353,7 +345,7 @@ internal sealed class XamlCompiler
             }
         }
 
-        var childHost = IsXamlControl(type) ? expression : hostExpression;
+        string? childHost = null;
         ApplyAttributes(element, type, expression, childHost);
         ProcessChildren(element, type, expression, childHost);
         EmitTextContent(element, type, expression);
@@ -364,11 +356,6 @@ internal sealed class XamlCompiler
     {
         // 视觉元素必须走 EmitControl：只有它生成 x:Name 字段并递归用 Add 挂子项。
         if (IsVisualElement(type))
-        {
-            return EmitControl(element, type, hostExpression);
-        }
-
-        if (SyntaxHelpers.DerivesFrom(type, SyntaxHelpers.ControlMetadataName))
         {
             return EmitControl(element, type, hostExpression);
         }
@@ -1061,6 +1048,11 @@ internal sealed class XamlCompiler
                         return null;
                     }
 
+                    if (IsVisualElement(_owner))
+                    {
+                        return $"{VisualFqn("VisualResourceLookup")}.Get<object>(this, {SyntaxHelpers.Quote(key!)})";
+                    }
+
                     if (_rootScope is null)
                     {
                         Report(Diagnostics.UnsupportedConstruct, source, "A StaticResource reference needs a Control scope.");
@@ -1246,6 +1238,22 @@ internal sealed class XamlCompiler
             return;
         }
 
+        if (IsVisualElement(_owner))
+        {
+            if (property.Name == "Style")
+            {
+                _current.Line(
+                    $"{targetExpression}.Style = {VisualFqn("VisualResourceLookup")}"
+                    + $".Get<{VisualFqn("VisualStyle")}>(this, {SyntaxHelpers.Quote(key!)});");
+                return;
+            }
+
+            _current.Line(
+                $"{targetExpression}.{property.Name} = {VisualFqn("VisualResourceLookup")}"
+                + $".Get<{SyntaxHelpers.TypeName(property.Type)}>(this, {SyntaxHelpers.Quote(key!)});");
+            return;
+        }
+
         if (_rootScope is null)
         {
             Report(Diagnostics.UnsupportedConstruct, source, "A StaticResource reference needs a Control scope.");
@@ -1315,7 +1323,7 @@ internal sealed class XamlCompiler
         if (clrNamespace is null)
         {
             // Unprefixed attributes carry no XML namespace and name a VeloxDev owner; a legacy `v:` prefix means
-            // the same. Explicit clr-namespace prefixes (local: / native: / behaviors:) keep resolving as written.
+            // the same. Explicit clr-namespace prefixes (local: / behaviors:) keep resolving as written.
             if (namespaceName.Length == 0
                 || (attribute.Parent is XElement ownerElement
                     && GetPrefixForNamespace(ownerElement, namespaceName) == "v"))
@@ -1336,7 +1344,7 @@ internal sealed class XamlCompiler
         var ownerName = localName.Substring(0, dot);
         var propertyName = localName.Substring(dot + 1);
         var ownerType = string.Equals(clrNamespace, SyntaxHelpers.RuntimeNamespace, StringComparison.Ordinal)
-            ? ResolveAdapterType(ownerName, attribute)
+            ? ResolveVisualAdapterType(ownerName, attribute)
             : _compilation.GetTypeByMetadataName(clrNamespace + "." + ownerName);
         if (ownerType is null)
         {
@@ -1416,19 +1424,15 @@ internal sealed class XamlCompiler
             return;
         }
 
-        var clrNamespace = GetClrNamespace(attribute.Name.NamespaceName);
-        if (clrNamespace is null)
-        {
-            Report(
-                Diagnostics.UnsupportedConstruct,
-                attribute,
-                "An attached property on a visual element needs a clr-namespace prefix (for example xmlns:v=\"clr-namespace:VeloxDev.WinForms.Xaml.Visuals.Controls;assembly=VeloxDev.WinForms\").");
-            return;
-        }
-
         var ownerName = localName.Substring(0, dot);
         var propertyName = localName.Substring(dot + 1);
-        var ownerType = _compilation.GetTypeByMetadataName(clrNamespace + "." + ownerName);
+        var clrNamespace = GetClrNamespace(attribute.Name.NamespaceName);
+
+        // 视觉根的附加属性也允许无前缀（Grid.Row / Canvas.Left）；owner 按视觉层优先解析。
+        // 显式 clr-namespace 仍然优先，local: 等用户前缀不受影响。
+        var ownerType = clrNamespace is not null
+            ? _compilation.GetTypeByMetadataName(clrNamespace + "." + ownerName)
+            : ResolveVisualAdapterType(ownerName, attribute);
         if (ownerType is null)
         {
             Report(Diagnostics.UnknownType, attribute, ownerName);
@@ -1478,7 +1482,7 @@ internal sealed class XamlCompiler
                     var resourceType = valueType is null ? "object" : SyntaxHelpers.TypeName(valueType);
                     _current.Line(
                         $"{targetExpression}.SetValue({dependencyProperty}, "
-                        + $"{VisualFqn("VisualResourceLookup")}.Get<{resourceType}>({targetExpression}, {SyntaxHelpers.Quote(key!) }));");
+                        + $"{VisualFqn("VisualResourceLookup")}.Get<{resourceType}>(this, {SyntaxHelpers.Quote(key!) }));");
                     return;
 
                 case "DynamicResource":
@@ -2647,13 +2651,21 @@ internal sealed class XamlCompiler
         if (sourceNamespace is null)
         {
             // 样式 setter 的 Property="Grid.Row" 没有标记前缀；目标类型的命名空间也不一定和 owner 相同
-            // （形状在 .Controls.Shapes 里），所以最后按适配器命名空间找一次。
-            foreach (var adapterNamespace in new[]
-                     {
-                         SyntaxHelpers.ControlsNamespace,
-                         SyntaxHelpers.ShapesNamespace,
-                         SyntaxHelpers.RuntimeNamespace,
-                     })
+            // （形状在 .Controls.Shapes 里），所以最后按根类型对应的命名空间组找一次。
+            var adapterNamespaces = IsVisualElement(_owner)
+                ? new[]
+                {
+                    SyntaxHelpers.VisualControlsNamespace,
+                    SyntaxHelpers.VisualShapesNamespace,
+                    SyntaxHelpers.VisualsNamespace,
+                }
+                : new[]
+                {
+                    SyntaxHelpers.ControlsNamespace,
+                    SyntaxHelpers.ShapesNamespace,
+                    SyntaxHelpers.RuntimeNamespace,
+                };
+            foreach (var adapterNamespace in adapterNamespaces)
             {
                 var candidate = _compilation.GetTypeByMetadataName(adapterNamespace + "." + ownerName);
                 if (candidate is not null)
@@ -2667,7 +2679,7 @@ internal sealed class XamlCompiler
 
         if (string.Equals(sourceNamespace, SyntaxHelpers.RuntimeNamespace, StringComparison.Ordinal))
         {
-            return ResolveAdapterType(ownerName, source);
+            return ResolveVisualAdapterType(ownerName, source);
         }
 
         return _compilation.GetTypeByMetadataName(sourceNamespace + "." + ownerName);
@@ -2936,6 +2948,17 @@ internal sealed class XamlCompiler
             }
         }
 
+        if (isVisual && memberName == "ItemTemplate")
+        {
+            var templateElement = propertyElement.Elements()
+                .FirstOrDefault(child => ChildMemberName(child) == "DataTemplate");
+            if (templateElement is not null)
+            {
+                EmitVisualItemTemplate(templateElement, ownerExpression);
+                return;
+            }
+        }
+
         if (memberName == "Controls")
         {
             if (isVisual)
@@ -3133,10 +3156,18 @@ internal sealed class XamlCompiler
 
             if (localName == "DataTemplate")
             {
-                Report(
-                    Diagnostics.UnsupportedResource,
-                    resource,
-                    "DataTemplate builds HWND controls and is not supported on the visual backend.");
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    Report(Diagnostics.UnsupportedResource, resource, "Every visual DataTemplate resource needs an x:Key.");
+                    continue;
+                }
+
+                var template = EmitVisualDataTemplateResource(resource, key!);
+                if (template is not null)
+                {
+                    _current.Line($"{ownerExpression}.Resources[{SyntaxHelpers.Quote(key!)}] = {template};");
+                }
+
                 continue;
             }
 
@@ -3429,14 +3460,378 @@ internal sealed class XamlCompiler
 
             foreach (var child in triggerElement.Elements())
             {
-                if (ChildMemberName(child) == "Setters")
+                switch (ChildMemberName(child))
                 {
-                    EmitVisualSetters(child, targetType, triggerVariable);
+                    case "Setters":
+                        EmitVisualSetters(child, targetType, triggerVariable);
+                        break;
+
+                    case "EnterAction":
+                        EmitVisualTriggerAction(child, targetType, triggerVariable, isEnter: true);
+                        break;
+
+                    case "ExitAction":
+                        EmitVisualTriggerAction(child, targetType, triggerVariable, isEnter: false);
+                        break;
+
+                    default:
+                        Report(
+                            Diagnostics.UnsupportedConstruct,
+                            child,
+                            $"'{child.Name.LocalName}' is not a supported visual trigger member.");
+                        break;
                 }
             }
 
             _current.Line($"{ownerVariable}.Triggers.Add({triggerVariable});");
         }
+    }
+
+    private void EmitVisualTriggerAction(
+        XElement actionElement,
+        ITypeSymbol? targetType,
+        string triggerVariable,
+        bool isEnter)
+    {
+        var actions = actionElement.Elements().ToArray();
+        if (actions.Length == 0)
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                actionElement,
+                "An EnterAction or ExitAction needs at least one action element.");
+            return;
+        }
+
+        var variables = new List<string>();
+        foreach (var action in actions)
+        {
+            var variable = EmitVisualActionElement(action, targetType);
+            if (variable is not null)
+            {
+                variables.Add(variable);
+            }
+        }
+
+        if (variables.Count == 0)
+        {
+            return;
+        }
+
+        var member = isEnter ? "EnterAction" : "ExitAction";
+        if (variables.Count == 1)
+        {
+            _current.Line($"{triggerVariable}.{member} = {variables[0]};");
+            return;
+        }
+
+        var groupVariable = NextVariable();
+        _current.Line($"var {groupVariable} = new {VisualFqn("TriggerActionGroup")}();");
+        foreach (var variable in variables)
+        {
+            _current.Line($"{groupVariable}.Actions.Add({variable});");
+        }
+
+        _current.Line($"{triggerVariable}.{member} = {groupVariable};");
+    }
+
+    private string? EmitVisualActionElement(XElement action, ITypeSymbol? targetType)
+    {
+        switch (action.Name.LocalName)
+        {
+            case "TransitionAction":
+                return EmitVisualTransitionAction(action, targetType);
+
+            case "KeyFrameAnimation":
+                return EmitVisualKeyFrameAnimation(action, targetType);
+
+            case "TriggerActionGroup":
+                return EmitVisualActionGroup(action, targetType);
+
+            default:
+                return EmitCustomVisualTriggerAction(action);
+        }
+    }
+
+    private string? EmitVisualActionGroup(XElement groupElement, ITypeSymbol? targetType)
+    {
+        if (!groupElement.HasElements)
+        {
+            Report(Diagnostics.UnsupportedConstruct, groupElement, "A TriggerActionGroup needs at least one action.");
+            return null;
+        }
+
+        var groupVariable = NextVariable();
+        _current.Line($"var {groupVariable} = new {VisualFqn("TriggerActionGroup")}();");
+        foreach (var child in groupElement.Elements())
+        {
+            var variable = EmitVisualActionElement(child, targetType);
+            if (variable is not null)
+            {
+                _current.Line($"{groupVariable}.Actions.Add({variable});");
+            }
+        }
+
+        return groupVariable;
+    }
+
+    private string? EmitVisualTransitionAction(XElement action, ITypeSymbol? targetType)
+    {
+        if (!TryResolveVisualProperty(action, targetType, out var property))
+        {
+            return null;
+        }
+
+        if (!TryGetDependencyPropertyReference(property, out var dependencyProperty))
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                action,
+                $"'{property.Name}' is not a dependency property and cannot drive a visual action.");
+            return null;
+        }
+
+        var toAttribute = action.Attribute("To");
+        var toExpression = "null";
+        if (toAttribute is not null)
+        {
+            toExpression = CreateVisualSetterValue(toAttribute, property);
+            if (toExpression is null)
+            {
+                return null;
+            }
+        }
+
+        var effectParts = CollectVisualEffectParts(action);
+        if (effectParts is null)
+        {
+            return null;
+        }
+
+        var effect = effectParts.Count > 0
+            ? $", Effect = new global::VeloxDev.TransitionSystem.TransitionEffect {{ {string.Join(", ", effectParts)} }}"
+            : string.Empty;
+
+        var actionVariable = NextVariable();
+        _current.Line(
+            $"var {actionVariable} = new {VisualFqn("TransitionAction")} "
+            + $"{{ Property = {dependencyProperty}, To = {toExpression}{effect} }};");
+        return actionVariable;
+    }
+
+    private string? EmitVisualKeyFrameAnimation(XElement action, ITypeSymbol? targetType)
+    {
+        if (!TryResolveVisualProperty(action, targetType, out var property))
+        {
+            return null;
+        }
+
+        if (!TryGetDependencyPropertyReference(property, out var dependencyProperty))
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                action,
+                $"'{property.Name}' is not a dependency property and cannot drive a visual action.");
+            return null;
+        }
+
+        var effectParts = CollectVisualEffectParts(action);
+        if (effectParts is null)
+        {
+            return null;
+        }
+
+        var frames = action.Elements().Where(child => child.Name.LocalName == "KeyFrame").ToArray();
+        if (frames.Length == 0)
+        {
+            Report(Diagnostics.UnsupportedConstruct, action, "A KeyFrameAnimation needs at least one KeyFrame element.");
+            return null;
+        }
+
+        var actionVariable = NextVariable();
+        var initializer = $"Property = {dependencyProperty}";
+        if (effectParts.Count > 0)
+        {
+            initializer += ", " + string.Join(", ", effectParts);
+        }
+
+        _current.Line($"var {actionVariable} = new {VisualFqn("KeyFrameAnimation")} {{ {initializer} }};");
+
+        foreach (var frame in action.Elements())
+        {
+            if (frame.Name.LocalName != "KeyFrame")
+            {
+                Report(Diagnostics.UnsupportedConstruct, frame, "A KeyFrameAnimation accepts only KeyFrame children.");
+                continue;
+            }
+
+            var offsetAttribute = frame.Attribute("Offset");
+            if (offsetAttribute is null)
+            {
+                Report(Diagnostics.UnsupportedConstruct, frame, "A KeyFrame needs an Offset attribute.");
+                continue;
+            }
+
+            if (!double.TryParse(offsetAttribute.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var offset))
+            {
+                Report(Diagnostics.UnsupportedValue, frame, offsetAttribute.Value, "System.Double");
+                continue;
+            }
+
+            var valueAttribute = frame.Attribute("Value");
+            if (valueAttribute is null)
+            {
+                Report(Diagnostics.UnsupportedConstruct, frame, "A KeyFrame needs a Value attribute.");
+                continue;
+            }
+
+            var valueExpression = CreateVisualSetterValue(valueAttribute, property);
+            if (valueExpression is null)
+            {
+                continue;
+            }
+
+            _current.Line(
+                $"{actionVariable}.KeyFrames.Add(new {VisualFqn("KeyFrame")} "
+                + $"{{ Offset = {offset.ToString("R", CultureInfo.InvariantCulture)}D, Value = {valueExpression} }});");
+        }
+
+        return actionVariable;
+    }
+
+    private List<string>? CollectVisualEffectParts(XElement action)
+    {
+        var parts = new List<string>();
+
+        var durationAttribute = action.Attribute("Duration");
+        if (durationAttribute is not null)
+        {
+            if (!TimeSpan.TryParse(durationAttribute.Value, CultureInfo.InvariantCulture, out _))
+            {
+                Report(Diagnostics.UnsupportedValue, durationAttribute, durationAttribute.Value, "System.TimeSpan");
+                return null;
+            }
+
+            parts.Add(
+                $"Duration = global::System.TimeSpan.Parse({SyntaxHelpers.Quote(durationAttribute.Value)}, global::System.Globalization.CultureInfo.InvariantCulture)");
+        }
+
+        var easeAttribute = action.Attribute("Ease");
+        if (easeAttribute is not null)
+        {
+            if (TryMapEase(easeAttribute.Value, out var ease))
+            {
+                parts.Add($"Ease = {ease}");
+            }
+            else
+            {
+                Report(Diagnostics.UnsupportedValue, easeAttribute, easeAttribute.Value, "Ease");
+            }
+        }
+
+        var loopAttribute = action.Attribute("LoopTime");
+        if (loopAttribute is not null)
+        {
+            if (!int.TryParse(loopAttribute.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var loop))
+            {
+                Report(Diagnostics.UnsupportedValue, loopAttribute, loopAttribute.Value, "System.Int32");
+                return null;
+            }
+
+            parts.Add($"LoopTime = {loop}");
+        }
+
+        var reverseAttribute = action.Attribute("IsAutoReverse");
+        if (reverseAttribute is not null)
+        {
+            if (!bool.TryParse(reverseAttribute.Value, out var reverse))
+            {
+                Report(Diagnostics.UnsupportedValue, reverseAttribute, reverseAttribute.Value, "System.Boolean");
+                return null;
+            }
+
+            parts.Add($"IsAutoReverse = {(reverse ? "true" : "false")}");
+        }
+
+        return parts;
+    }
+
+    private string? EmitCustomVisualTriggerAction(XElement action)
+    {
+        var type = ResolveElementType(action);
+        if (type is null)
+        {
+            if (!IsReported(action))
+            {
+                Report(Diagnostics.UnknownType, action, action.Name.LocalName);
+            }
+
+            return null;
+        }
+
+        if (!SyntaxHelpers.DerivesFrom(type, "VeloxDev.WinForms.Xaml.Visuals.VisualTriggerAction"))
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                action,
+                $"'{type.Name}' does not derive from VeloxDev.WinForms.Xaml.Visuals.VisualTriggerAction.");
+            return null;
+        }
+
+        if (type is not INamedTypeSymbol namedType || namedType.IsGenericType)
+        {
+            Report(Diagnostics.UnsupportedConstruct, action, $"'{type.Name}' is not a usable trigger action type.");
+            return null;
+        }
+
+        if (type.IsAbstract || !HasPublicParameterlessConstructor(namedType))
+        {
+            Report(Diagnostics.UnsupportedConstruct, action, $"'{type.Name}' needs a public parameterless constructor.");
+            return null;
+        }
+
+        if (action.HasElements)
+        {
+            Report(Diagnostics.UnsupportedConstruct, action, "Nested content is not supported in a trigger action.");
+            return null;
+        }
+
+        var actionVariable = NextVariable();
+        _current.Line($"var {actionVariable} = new {SyntaxHelpers.TypeName(type)}();");
+
+        foreach (var attribute in action.Attributes())
+        {
+            if (attribute.IsNamespaceDeclaration || attribute.Name.NamespaceName == SyntaxHelpers.XamlNamespace)
+            {
+                continue;
+            }
+
+            var name = attribute.Name.LocalName;
+            if (name.IndexOf('.') >= 0)
+            {
+                Report(Diagnostics.UnsupportedConstruct, attribute, "Attached properties are not supported on a trigger action.");
+                continue;
+            }
+
+            var property = FindProperty(type, name);
+            if (property is null)
+            {
+                Report(Diagnostics.UnknownMember, attribute, type.Name, name);
+                continue;
+            }
+
+            if (property.IsStatic
+                || property.SetMethod is null
+                || property.SetMethod.DeclaredAccessibility != Accessibility.Public)
+            {
+                Report(Diagnostics.UnsupportedConstruct, attribute, $"'{name}' is not a public writable instance property.");
+                continue;
+            }
+
+            EmitCustomActionProperty(actionVariable, property, attribute);
+        }
+
+        return actionVariable;
     }
 
     private void EmitVisualStyleTemplate(XElement propertyElement, ITypeSymbol? targetType, string styleVariable)
@@ -3551,6 +3946,106 @@ internal sealed class XamlCompiler
         return templateVariable;
     }
 
+    // 视觉 DataTemplate 资源：与 item 模板同形，但作为命名资源存进 Resources，可被
+    // {StaticResource} 或模板选择器引用。
+    private string? EmitVisualDataTemplateResource(XElement templateElement, string key)
+    {
+        var content = templateElement.Elements().FirstOrDefault(child => !IsPropertyElement(child));
+        if (content is null)
+        {
+            Report(Diagnostics.UnsupportedResource, templateElement, "A visual DataTemplate needs one root element.");
+            return null;
+        }
+
+        var type = ResolveElementType(content);
+        if (type is null || !IsVisualElement(type))
+        {
+            Report(
+                Diagnostics.UnsupportedResource,
+                content,
+                "A visual DataTemplate root must be a visual element.");
+            return null;
+        }
+
+        var methodName = "CreateVisualDataTemplate_" + SyntaxHelpers.SanitizeIdentifier(key);
+        if (!_templateNames.Add(methodName))
+        {
+            Report(Diagnostics.DuplicateName, templateElement, key, _owner.Name);
+            return null;
+        }
+
+        _helpers.Open($"private {VisualFqn("VisualElement")} {methodName}()");
+        var previous = _current;
+        _current = _helpers;
+        _templateDepth++;
+        string expression;
+        try
+        {
+            expression = EmitControl(content, type, null);
+        }
+        finally
+        {
+            _templateDepth--;
+            _current = previous;
+        }
+
+        _helpers.Line($"return {expression};");
+        _helpers.Close();
+
+        return $"new {VisualFqn("DataTemplate")}(this.{methodName})";
+    }
+
+    // 视觉 ItemsControl 的 ItemTemplate：模板体编成一个返回 VisualElement 的私有工厂，交给
+    // 视觉 DataTemplate。模板内的 x:Name 是每实例部件、不生成宿主字段。
+    private void EmitVisualItemTemplate(XElement templateElement, string ownerExpression)
+    {
+        var content = templateElement.Elements().FirstOrDefault(child => !IsPropertyElement(child));
+        if (content is null)
+        {
+            Report(Diagnostics.UnsupportedConstruct, templateElement, "A visual ItemTemplate needs one root element.");
+            return;
+        }
+
+        var type = ResolveElementType(content);
+        if (type is null || !IsVisualElement(type))
+        {
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                content,
+                "A visual ItemTemplate root must be a visual element.");
+            return;
+        }
+
+        var methodName = "CreateVisualItemTemplate_" + _templateNames.Count;
+        if (!_templateNames.Add(methodName))
+        {
+            Report(Diagnostics.DuplicateName, templateElement, methodName, _owner.Name);
+            return;
+        }
+
+        _helpers.Open($"private {VisualFqn("VisualElement")} {methodName}()");
+        var previous = _current;
+        _current = _helpers;
+        _templateDepth++;
+        string expression;
+        try
+        {
+            expression = EmitControl(content, type, null);
+        }
+        finally
+        {
+            _templateDepth--;
+            _current = previous;
+        }
+
+        _helpers.Line($"return {expression};");
+        _helpers.Close();
+
+        _current.Line(
+            $"{ownerExpression}.ItemTemplate = new "
+            + $"{VisualFqn("DataTemplate")}(this.{methodName});");
+    }
+
     private void EmitVisualStyleAttribute(XAttribute attribute, string targetExpression)
     {
         if (!TryReadStaticResourceKey(attribute.Value, out var key))
@@ -3562,9 +4057,11 @@ internal sealed class XamlCompiler
             return;
         }
 
+        // Generated initializers assign attributes before the element is parented under the view root, so the
+        // ancestor resource chain is reachable only from the root.
         _current.Line(
             $"{targetExpression}.Style = {VisualFqn("VisualResourceLookup")}"
-            + $".Get<{VisualFqn("VisualStyle")}>({targetExpression}, {SyntaxHelpers.Quote(key)});");
+            + $".Get<{VisualFqn("VisualStyle")}>(this, {SyntaxHelpers.Quote(key)});");
     }
 
     private void EmitVisualPropertyValue(XAttribute attribute, string targetExpression, IPropertySymbol property)
@@ -3629,7 +4126,7 @@ internal sealed class XamlCompiler
 
                 _current.Line(
                     $"{targetExpression}.{property.Name} = {VisualFqn("VisualResourceLookup")}"
-                    + $".Get<{SyntaxHelpers.TypeName(property.Type)}>({targetExpression}, {SyntaxHelpers.Quote(key!)});");
+                    + $".Get<{SyntaxHelpers.TypeName(property.Type)}>(this, {SyntaxHelpers.Quote(key!)});");
                 return;
 
             case "DynamicResource":
@@ -4025,7 +4522,7 @@ internal sealed class XamlCompiler
             {
                 if (string.Equals(clrNamespace, SyntaxHelpers.RuntimeNamespace, StringComparison.Ordinal))
                 {
-                    return ResolveAdapterType(localName, contextElement);
+                    return ResolveVisualAdapterType(localName, contextElement);
                 }
 
                 return _compilation.GetTypeByMetadataName(clrNamespace + "." + localName);
@@ -4033,7 +4530,7 @@ internal sealed class XamlCompiler
 
             if (prefix == "v")
             {
-                return ResolveAdapterType(localName, contextElement);
+                return ResolveVisualAdapterType(localName, contextElement);
             }
 
             return null;
@@ -4048,7 +4545,7 @@ internal sealed class XamlCompiler
 
         // No prefix in a type reference means VeloxDev too. Unknown names stay null here so the caller can report
         // its own diagnostic (InvalidStyleTargetType / UnknownType) instead of a duplicate VELOX_XAML019.
-        return ResolveAdapterType(typeName, contextElement);
+        return ResolveDefaultType(typeName, contextElement);
     }
 
     private static string? GetNamespaceUriForPrefix(XElement element, string prefix)
@@ -4396,7 +4893,16 @@ internal sealed class XamlCompiler
         {
             if (string.Equals(clrNamespace, SyntaxHelpers.RuntimeNamespace, StringComparison.Ordinal))
             {
-                return ResolveAdapterType(localName, element);
+                return ResolveVisualAdapterType(localName, element);
+            }
+
+            if (clrNamespace.StartsWith("System.Windows.Forms", StringComparison.Ordinal))
+            {
+                Report(
+                    Diagnostics.UnsupportedConstruct,
+                    element,
+                    $"'{localName}' is a native WinForms type; the visual XAML runtime hosts only VisualElement controls.");
+                return null;
             }
 
             return _compilation.GetTypeByMetadataName(clrNamespace + "." + localName);
@@ -4406,44 +4912,49 @@ internal sealed class XamlCompiler
         // runtime type lives in `.Xaml`. This holds when the prefix maps to a non-clr URI.
         if (GetPrefixForNamespace(element, uri) == "v")
         {
-            return ResolveAdapterType(localName, element);
+            return ResolveVisualAdapterType(localName, element);
         }
 
         return null;
     }
 
-    /// <summary>
-    /// Resolves a type declared by the adapter: controls in <c>.Xaml.Controls</c> first, then shapes in
-    /// <c>.Xaml.Controls.Shapes</c>, then every other runtime type in <c>.Xaml</c>.
-    /// </summary>
-    private ITypeSymbol? ResolveAdapterType(string localName, XObject? source)
+    // 视觉运行时是唯一的 XAML 后端：控件在 .Visuals.Controls，形状在 .Visuals.Controls.Shapes，
+    // 其余辅助类型（如 DataTemplate）在 .Visuals。Thickness / GridLength / RowDefinition 这类共享原语
+    // 仍在 .Xaml.Controls（现只保留原语），作为最后回落。
+    private ITypeSymbol? ResolveVisualAdapterType(string localName, XObject? source)
     {
-        var controlType = _compilation.GetTypeByMetadataName(SyntaxHelpers.ControlsNamespace + "." + localName);
+        var controlType = _compilation.GetTypeByMetadataName(SyntaxHelpers.VisualControlsNamespace + "." + localName);
         if (controlType is not null)
         {
             return controlType;
         }
 
-        var shapeType = _compilation.GetTypeByMetadataName(SyntaxHelpers.ShapesNamespace + "." + localName);
+        var shapeType = _compilation.GetTypeByMetadataName(SyntaxHelpers.VisualShapesNamespace + "." + localName);
         if (shapeType is not null)
         {
             return shapeType;
         }
 
-        return _compilation.GetTypeByMetadataName(SyntaxHelpers.RuntimeNamespace + "." + localName);
+        return _compilation.GetTypeByMetadataName(SyntaxHelpers.VisualsNamespace + "." + localName)
+            ?? _compilation.GetTypeByMetadataName(SyntaxHelpers.ControlsNamespace + "." + localName)
+            ?? _compilation.GetTypeByMetadataName(SyntaxHelpers.ShapesNamespace + "." + localName)
+            ?? _compilation.GetTypeByMetadataName(SyntaxHelpers.RuntimeNamespace + "." + localName);
     }
 
+    private ITypeSymbol? ResolveDefaultType(string localName, XObject? source)
+        => ResolveVisualAdapterType(localName, source);
+
     /// <summary>
-    /// Resolves an unprefixed type name against the VeloxDev adapter namespaces.
+    /// Resolves an unprefixed type name against the VeloxDev namespaces selected by the root type.
     /// </summary>
     /// <remarks>
-    /// No prefix means VeloxDev. A native WinForms type needs <c>native:</c> and a template/Demo type needs
-    /// <c>local:</c>; an unprefixed name that resolves to neither VeloxDev namespace is reported instead of
+    /// No prefix means the VeloxDev visual backend. A template/Demo type needs
+    /// <c>local:</c>; an unprefixed name that resolves to no VeloxDev namespace is reported instead of
     /// silently falling back, so the same markup cannot mean different things in different assemblies.
     /// </remarks>
     private ITypeSymbol? ResolveUnprefixedType(string localName, XObject? source)
     {
-        var type = ResolveAdapterType(localName, source);
+        var type = ResolveDefaultType(localName, source);
         if (type is not null)
         {
             return type;

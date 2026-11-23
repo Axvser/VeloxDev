@@ -25,7 +25,7 @@ The adapter package brings `VeloxDev.Core` in transitively, so that one referenc
 
 If the project's GUI is not in that table, read [references/practices/adapter.md](references/practices/adapter.md) before writing animation code.
 
-⚙ **WinForms XAML is the exception to the expression layout below.** Its controls are XAML dependency-property hosts, so animations are declared as `v:TransitionAction` trigger actions or called through `XamlTransition.Animate(control, property, value, effect)`. Read [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) before writing either; the rest of this page applies to plain WinForms code and the other six adapters.
+⚙ **WinForms' visual XAML uses visual trigger actions, not HWND controls.** `<Trigger.EnterAction>` / `<Trigger.ExitAction>` accept `TransitionAction`, `KeyFrameAnimation` and `TriggerActionGroup`, and a custom action derives `VeloxDev.WinForms.Xaml.Visuals.VisualTriggerAction`. To animate from code-behind, use the element's CLR property wrappers with `Transition<T>` or `VisualTransition.Animate(...)`; `XamlTransition` is not part of the visual runtime. Read [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) first; the rest of this page applies to plain WinForms code and the other six adapters.
 
 `using VeloxDev.TransitionSystem;` covers the everyday API — `Transition<T>`, `TransitionEffect`, `Eases`, `TransitionEffects`, `PathIndex`, the event args and the path exceptions. The support types live one namespace down: `using VeloxDev.TransitionSystem.Abstractions;` is needed when you name `TransitionProperty` (`ReadableMembers` / `Members`), `InterpolatorCore`, or a scheduler / interpreter / host base. Every adapter exposes the same `VeloxDev.TransitionSystem` surface. Six of the seven also declare the generic `Property<TValue>` overload; **Razor offers typed overloads only** (`int`, `string?`, `double`, `float`, `decimal`, the `System.Drawing` structs and the `System.Numerics` types), so generic `Property` code does not compile there unchanged.
 
@@ -99,7 +99,7 @@ Transition<Border>.Create()
 | Pause, resume, seek, set a rate, stop | [references/practices/control-and-samplers.md](references/practices/control-and-samplers.md#controlling-a-running-animation) |
 | Interpolate a custom type | [references/practices/control-and-samplers.md](references/practices/control-and-samplers.md#custom-samplers) |
 | Animate a link's travelling highlight / a flow | [references/practices/flow.md](references/practices/flow.md) |
-| Animate a WinForms XAML control (unprefixed VeloxDev control, trigger action) | [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) |
+| Animate a WinForms visual XAML element (code-behind `Transition<T>` on a `VisualElement` property) | [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) |
 | Build an adapter for another GUI | [references/practices/adapter.md](references/practices/adapter.md) |
 
 ## Pitfalls

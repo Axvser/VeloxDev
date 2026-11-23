@@ -1,12 +1,12 @@
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml.Controls;
-using VeloxDev.WinForms.Xaml.Test.Fixtures;
+using VC = VeloxDev.WinForms.Xaml.Visuals.Controls;
 
 namespace VeloxDev.WinForms.Xaml.Test;
 
 /// <summary>
-/// The WinForms <see cref="Thickness"/> value type and the dependency properties that carry it: parsing, equality,
-/// native conversion, and the one-way sync into the native WinForms layout properties.
+/// The shared <see cref="Thickness"/> value type: parsing, equality, uniform conversions and the dependency properties
+/// the visual controls carry it on.
 /// </summary>
 [STATestClass]
 public sealed class ThicknessTests
@@ -62,81 +62,24 @@ public sealed class ThicknessTests
     }
 
     [TestMethod]
-    public void PaddingProperty_HasTheEmptyDefaultAndWritesTheNativePadding()
+    public void VisualBorder_CarriesPaddingAndBorderThicknessAsDependencyProperties()
     {
-        using var control = new ProbeControl();
-
-        Assert.AreEqual(Thickness.Empty, (Thickness)control.GetValue(VeloxDev.WinForms.Xaml.Controls.Control.PaddingProperty)!);
-        Assert.AreEqual(Padding.Empty, ((System.Windows.Forms.ScrollableControl)control).Padding);
-
-        control.Padding = new Thickness(1f, 2f, 3f, 4f);
-
-        Assert.AreEqual(new Thickness(1f, 2f, 3f, 4f), (Thickness)control.GetValue(VeloxDev.WinForms.Xaml.Controls.Control.PaddingProperty)!);
-        Assert.AreEqual(new Padding(1, 2, 3, 4), ((System.Windows.Forms.ScrollableControl)control).Padding);
-
-        control.ClearValue(VeloxDev.WinForms.Xaml.Controls.Control.PaddingProperty);
-
-        Assert.AreEqual(Thickness.Empty, (Thickness)control.GetValue(VeloxDev.WinForms.Xaml.Controls.Control.PaddingProperty)!);
-        Assert.AreEqual(Padding.Empty, ((System.Windows.Forms.ScrollableControl)control).Padding);
-    }
-
-    [TestMethod]
-    public void MarginProperty_DefaultsToZeroAndWritesTheNativeMargin()
-    {
-        using var control = new ProbeControl();
-
-        // XAML 的 Margin 是 0；原生 WinForms 默认的 3 已经在构造时同步掉。
-        Assert.AreEqual(Thickness.Empty, (Thickness)control.GetValue(VeloxDev.WinForms.Xaml.Controls.Control.MarginProperty)!);
-        Assert.AreEqual(Padding.Empty, ((System.Windows.Forms.Control)control).Margin);
-
-        control.Margin = new Thickness(6f, 8f, 10f, 12f);
-
-        Assert.AreEqual(new Padding(6, 8, 10, 12), ((System.Windows.Forms.Control)control).Margin);
-
-        control.ClearValue(VeloxDev.WinForms.Xaml.Controls.Control.MarginProperty);
-
-        Assert.AreEqual(Padding.Empty, ((System.Windows.Forms.Control)control).Margin);
-    }
-
-    [TestMethod]
-    public void UnsetProperties_ReadAValueWrittenThroughTheNativeBase()
-    {
-        using var control = new ProbeControl();
-
-        ((System.Windows.Forms.Control)control).Margin = new Padding(7);
-        ((System.Windows.Forms.ScrollableControl)control).Padding = new Padding(9);
-
-        Assert.AreEqual(new Thickness(7f), control.Margin);
-        Assert.AreEqual(new Thickness(9f), control.Padding);
-    }
-
-    [TestMethod]
-    public void AttachedPadding_AlsoWritesTheNativePaddingOnANativeControl()
-    {
-        using var label = new System.Windows.Forms.Label();
-
-        VeloxDev.WinForms.Xaml.Controls.Control.PaddingProperty.SetValue(label, new Thickness(2f, 4f, 6f, 8f));
-
-        Assert.AreEqual(new Padding(2, 4, 6, 8), label.Padding);
-        Assert.AreEqual(
-            new Thickness(2f, 4f, 6f, 8f),
-            (Thickness)VeloxDev.WinForms.Xaml.Controls.Control.PaddingProperty.GetValue(label)!);
-
-        VeloxDev.WinForms.Xaml.Controls.Control.PaddingProperty.ClearValue(label);
-
-        Assert.AreEqual(Padding.Empty, label.Padding);
-    }
-
-    [TestMethod]
-    public void BorderThickness_IsAThicknessProperty()
-    {
-        using var border = new Border();
+        using var border = new VC.Border();
 
         Assert.AreEqual(Thickness.Empty, border.BorderThickness);
 
+        border.Padding = new Thickness(1f, 2f, 3f, 4f);
         border.BorderThickness = new Thickness(1f, 2f, 3f, 4f);
 
+        Assert.AreEqual(new Thickness(1f, 2f, 3f, 4f), border.Padding);
         Assert.AreEqual(new Thickness(1f, 2f, 3f, 4f), border.BorderThickness);
-        Assert.AreEqual(new Thickness(1f, 2f, 3f, 4f), (Thickness)border.GetValue(Border.BorderThicknessProperty)!);
+        Assert.AreEqual(
+            new Thickness(1f, 2f, 3f, 4f),
+            (Thickness)border.GetValue(VC.Border.BorderThicknessProperty)!);
+
+        border.ClearValue(VC.Border.BorderThicknessProperty);
+
+        Assert.AreEqual(Thickness.Empty, border.BorderThickness);
+        Assert.AreEqual(new Thickness(1f, 2f, 3f, 4f), border.Padding, "clearing one property leaves the other alone");
     }
 }

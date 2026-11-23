@@ -1,12 +1,12 @@
 using System.Windows.Forms;
-using VeloxDev.WinForms.Xaml.Test.Fixtures;
-using VeloxDev.WinForms.Xaml.Test.Infrastructure;
+using VeloxDev.WinForms.Xaml;
+using VC = VeloxDev.WinForms.Xaml.Visuals.Controls;
 
 namespace VeloxDev.WinForms.Xaml.Test;
 
 /// <summary>
-/// The dependency-property core: defaults, callbacks, coercion, local-value lifetime and attached properties on
-/// controls that do not derive from <see cref="Control"/>.
+/// The dependency-property core: defaults, callbacks, coercion, local-value lifetime and attached properties on both
+/// native controls and visual elements.
 /// </summary>
 [STATestClass]
 public sealed class DependencyPropertyTests
@@ -19,75 +19,111 @@ public sealed class DependencyPropertyTests
             typeof(RegistrationOwner));
     }
 
+    /// <summary>A plain native control used to exercise the dependency-property store; it is not a XAML control.</summary>
+    private sealed class ProbeControl : Control
+    {
+        public static readonly DependencyProperty NumberProperty = DependencyProperty.Register(
+            nameof(Number),
+            typeof(int),
+            typeof(ProbeControl),
+            new PropertyMetadata(7, OnNumberChanged, CoerceNumber));
+
+        public static readonly DependencyProperty ConfigurationProperty = DependencyProperty.Register(
+            nameof(Configuration),
+            typeof(int),
+            typeof(ProbeControl),
+            new PropertyMetadata(0) { AffectsRender = false });
+
+        public static List<(DependencyProperty Property, object? OldValue, object? NewValue)> Changes { get; } = [];
+
+        public int Number
+        {
+            get => (int)NumberProperty.GetValue(this)!;
+            set => NumberProperty.SetValue(this, value);
+        }
+
+        public int Configuration
+        {
+            get => (int)ConfigurationProperty.GetValue(this)!;
+            set => ConfigurationProperty.SetValue(this, value);
+        }
+
+        private static object? CoerceNumber(Control target, object? baseValue)
+            => Math.Clamp((int)baseValue!, 0, 100);
+
+        private static void OnNumberChanged(Control target, DependencyPropertyChangedEventArgs e)
+            => Changes.Add((e.Property, e.OldValue, e.NewValue));
+    }
+
+    /// <summary>An attached property whose accessors take a visual element, as the generator requires.</summary>
+    private static class AttachedProbe
+    {
+        public static readonly DependencyProperty NoteProperty = DependencyProperty.RegisterAttached(
+            "Note",
+            typeof(string),
+            typeof(AttachedProbe),
+            new PropertyMetadata("(none)", OnNoteChanged));
+
+        public static List<(object Target, object? OldValue, object? NewValue)> Changes { get; } = [];
+
+        public static string? GetNote(VeloxDev.WinForms.Xaml.Visuals.VisualElement target)
+            => (string?)NoteProperty.GetValue(target);
+
+        public static void SetNote(VeloxDev.WinForms.Xaml.Visuals.VisualElement target, string? value)
+            => NoteProperty.SetValue(target, value);
+
+        public static void ClearNote(VeloxDev.WinForms.Xaml.Visuals.VisualElement target)
+            => NoteProperty.ClearValue(target);
+
+        public static void Reset() => Changes.Clear();
+
+        private static void OnNoteChanged(Control target, DependencyPropertyChangedEventArgs e)
+            => Changes.Add((target, e.OldValue, e.NewValue));
+    }
+
     [TestMethod]
-    public void DefaultValue_IsReadUntilALocalValueExists()
+    public void ClrWrapper_ReadsTheDefaultUntilALocalValueExists()
     {
         using var control = new ProbeControl();
 
         Assert.AreEqual(7, control.Number);
-        Assert.AreEqual("(none)", control.Name);
-        Assert.IsFalse(control.HasLocalValue(ProbeControl.NumberProperty));
-        Assert.AreEqual(ProbeControl.NumberProperty.DefaultValue, control.GetValue(ProbeControl.NumberProperty));
+        Assert.AreEqual(7, ProbeControl.NumberProperty.DefaultValue);
+        Assert.AreEqual(7, ProbeControl.NumberProperty.GetValue(control));
     }
 
     [TestMethod]
     public void SetValue_StoresTheValueAndRaisesTheChangeCallback()
     {
+        ProbeControl.Changes.Clear();
         using var control = new ProbeControl();
 
         control.Number = 42;
 
         Assert.AreEqual(42, control.Number);
-        Assert.IsTrue(control.HasLocalValue(ProbeControl.NumberProperty));
-        Assert.HasCount(1, control.Changes);
-        Assert.AreEqual(7, control.Changes[0].OldValue);
-        Assert.AreEqual(42, control.Changes[0].NewValue);
-        Assert.AreSame(ProbeControl.NumberProperty, control.Changes[0].Property);
+        Assert.HasCount(1, ProbeControl.Changes);
+        Assert.AreEqual(7, ProbeControl.Changes[0].OldValue);
+        Assert.AreEqual(42, ProbeControl.Changes[0].NewValue);
+        Assert.AreSame(ProbeControl.NumberProperty, ProbeControl.Changes[0].Property);
     }
 
     [TestMethod]
-    public void AVisualDependencyPropertyChange_InvalidatesTheXamlControl()
+    public void ClearValue_RestoresTheDefaultAndRaisesTheCallback()
     {
-        using var control = new ProbeControl();
-        XamlTestSurface.EnsureHandle(control);
-        var invalidations = 0;
-        control.Invalidated += (_, _) => invalidations++;
-
-        control.Number = 42;
-
-        Assert.AreEqual(1, invalidations);
-    }
-
-    [TestMethod]
-    public void ANonVisualDependencyPropertyChange_DoesNotInvalidateTheControl()
-    {
-        using var control = new ProbeControl();
-        XamlTestSurface.EnsureHandle(control);
-        var invalidations = 0;
-        control.Invalidated += (_, _) => invalidations++;
-
-        control.Configuration = 3;
-
-        Assert.AreEqual(0, invalidations);
-    }
-
-    [TestMethod]
-    public void ClearValue_RestoresTheDefaultAndRemovesTheLocalValue()
-    {
+        ProbeControl.Changes.Clear();
         using var control = new ProbeControl();
         control.Number = 42;
 
-        control.ClearValue(ProbeControl.NumberProperty);
+        ProbeControl.NumberProperty.ClearValue(control);
 
         Assert.AreEqual(7, control.Number);
-        Assert.IsFalse(control.HasLocalValue(ProbeControl.NumberProperty));
-        Assert.HasCount(2, control.Changes);
-        Assert.AreEqual(7, control.Changes[1].NewValue);
+        Assert.HasCount(2, ProbeControl.Changes);
+        Assert.AreEqual(7, ProbeControl.Changes[1].NewValue);
     }
 
     [TestMethod]
     public void Coerce_RunsBeforeTheValueIsStoredAndReported()
     {
+        ProbeControl.Changes.Clear();
         using var control = new ProbeControl();
 
         control.Number = 250;
@@ -96,23 +132,23 @@ public sealed class DependencyPropertyTests
         control.Number = -5;
         Assert.AreEqual(0, control.Number);
 
-        Assert.HasCount(2, control.Changes);
-        Assert.AreEqual(100, control.Changes[0].NewValue);
-        Assert.AreEqual(0, control.Changes[1].NewValue);
-        Assert.AreEqual(100, control.Changes[1].OldValue);
+        Assert.HasCount(2, ProbeControl.Changes);
+        Assert.AreEqual(100, ProbeControl.Changes[0].NewValue);
+        Assert.AreEqual(0, ProbeControl.Changes[1].NewValue);
+        Assert.AreEqual(100, ProbeControl.Changes[1].OldValue);
     }
 
     [TestMethod]
     public void SettingTheSameValueTwice_RaisesTheCallbackOnce()
     {
+        ProbeControl.Changes.Clear();
         using var control = new ProbeControl();
 
         control.Number = 7;
         control.Number = 7;
 
         // 第一次写入虽然等于默认值，但它是新的局部值；第二次才是真正的无变化。
-        Assert.HasCount(1, control.Changes);
-        Assert.IsTrue(control.HasLocalValue(ProbeControl.NumberProperty));
+        Assert.HasCount(1, ProbeControl.Changes);
     }
 
     [TestMethod]
@@ -120,7 +156,7 @@ public sealed class DependencyPropertyTests
     {
         using var control = new ProbeControl();
 
-        Assert.ThrowsExactly<ArgumentException>(() => control.SetValue(ProbeControl.NumberProperty, null));
+        Assert.ThrowsExactly<ArgumentException>(() => ProbeControl.NumberProperty.SetValue(control, null));
         Assert.AreEqual(7, control.Number);
     }
 
@@ -129,7 +165,7 @@ public sealed class DependencyPropertyTests
     {
         using var control = new ProbeControl();
 
-        control.SetValue(ProbeControl.NumberProperty, "42");
+        ProbeControl.NumberProperty.SetValue(control, "42");
 
         Assert.AreEqual(42, control.Number);
     }
@@ -137,7 +173,7 @@ public sealed class DependencyPropertyTests
     [TestMethod]
     public void Lookup_FindsThePropertyByOwnerAndName()
     {
-        Assert.AreSame(ProbeControl.NumberProperty, DependencyProperty.Lookup(typeof(ProbeControl), "Number"));
+        Assert.AreSame(ProbeControl.NumberProperty, DependencyProperty.Lookup(typeof(ProbeControl), nameof(ProbeControl.Number)));
         Assert.IsNull(DependencyProperty.Lookup(typeof(ProbeControl), "Missing"));
     }
 
@@ -150,81 +186,32 @@ public sealed class DependencyPropertyTests
     }
 
     [TestMethod]
-    public void AttachedProperty_RoundTripsOnANativeButtonAndPanel()
+    public void AttachedProperty_RoundTripsOnVisualElements()
     {
         AttachedProbe.Reset();
-        using var button = new Button();
-        using var panel = new VeloxDev.WinForms.Xaml.Controls.Panel();
+        using var first = new VC.Border();
+        using var second = new VC.Border();
 
-        AttachedProbe.SetNote(button, "on a button");
-        AttachedProbe.SetNote(panel, "on a panel");
-
-        Assert.AreEqual("on a button", AttachedProbe.GetNote(button));
-        Assert.AreEqual("on a panel", AttachedProbe.GetNote(panel));
-        Assert.HasCount(2, AttachedProbe.Changes);
-        Assert.AreSame(button, AttachedProbe.Changes[0].Target);
-        Assert.AreEqual("on a button", AttachedProbe.Changes[0].NewValue);
-    }
-
-    [TestMethod]
-    public void AttachedProperty_FirstSetReportsTheDefaultAsTheOldValue()
-    {
-        // 和 Control 的路径一致：写入前 GetValue 就是默认值，回调的 OldValue 必须是那个值。
-        AttachedProbe.Reset();
-        using var button = new Button();
-
-        Assert.AreEqual("(none)", AttachedProbe.GetNote(button));
-
-        AttachedProbe.SetNote(button, "value");
-
-        Assert.AreEqual("(none)", AttachedProbe.Changes[0].OldValue);
-        Assert.AreEqual("value", AttachedProbe.Changes[0].NewValue);
-    }
-
-    [TestMethod]
-    public void AttachedProperty_IsStoredPerControl()
-    {
-        AttachedProbe.Reset();
-        using var first = new Button();
-        using var second = new Button();
+        Assert.AreEqual("(none)", AttachedProbe.GetNote(first));
 
         AttachedProbe.SetNote(first, "first");
         AttachedProbe.SetNote(second, "second");
 
         Assert.AreEqual("first", AttachedProbe.GetNote(first));
         Assert.AreEqual("second", AttachedProbe.GetNote(second));
-
-        AttachedProbe.ClearNote(first);
-
-        Assert.AreEqual("(none)", AttachedProbe.GetNote(first));
-        Assert.AreEqual("second", AttachedProbe.GetNote(second));
+        Assert.IsTrue(first.IsSet(AttachedProbe.NoteProperty));
     }
 
     [TestMethod]
-    public void AttachedProperty_ClearRestoresTheDefaultAndRaisesTheCallback()
+    public void AttachedProperty_ClearRestoresTheDefault()
     {
-        AttachedProbe.Reset();
-        using var button = new Button();
-        AttachedProbe.SetNote(button, "value");
+        using var border = new VC.Border();
+        AttachedProbe.SetNote(border, "value");
 
-        AttachedProbe.ClearNote(button);
+        AttachedProbe.ClearNote(border);
 
-        Assert.AreEqual("(none)", AttachedProbe.GetNote(button));
-        Assert.HasCount(2, AttachedProbe.Changes);
-        Assert.AreEqual("value", AttachedProbe.Changes[1].OldValue);
-        Assert.AreEqual("(none)", AttachedProbe.Changes[1].NewValue);
-    }
-
-    [TestMethod]
-    public void AttachedProperty_AlsoWorksOnAControl()
-    {
-        AttachedProbe.Reset();
-        using var control = new ProbeControl();
-
-        AttachedProbe.SetNote(control, "xaml host");
-
-        Assert.AreEqual("xaml host", AttachedProbe.GetNote(control));
-        Assert.IsTrue(control.HasLocalValue(AttachedProbe.NoteProperty));
+        Assert.AreEqual("(none)", AttachedProbe.GetNote(border));
+        Assert.IsFalse(border.IsSet(AttachedProbe.NoteProperty));
     }
 
     [TestMethod]

@@ -40,6 +40,12 @@ public class ItemsControl : Panel
             nameof(DisplayMemberPath), typeof(string), typeof(ItemsControl),
             new PropertyMetadata(string.Empty) { AffectsMeasure = true, AffectsRender = false });
 
+    /// <summary>The template that creates each item visual; takes precedence over <see cref="ItemFactory"/>.</summary>
+    public static readonly DependencyProperty ItemTemplateProperty =
+        DependencyProperty.Register(
+            nameof(ItemTemplate), typeof(DataTemplate), typeof(ItemsControl),
+            new PropertyMetadata(null) { AffectsMeasure = true, AffectsRender = false });
+
     private readonly List<object?> _sourceItems = [];
     private readonly List<VisualElement> _items = [];
     private INotifyCollectionChanged? _observed;
@@ -71,6 +77,13 @@ public class ItemsControl : Panel
         set => SetValue(DisplayMemberPathProperty, value ?? string.Empty);
     }
 
+    /// <summary>The template that creates each item visual; takes precedence over <see cref="ItemFactory"/>.</summary>
+    public DataTemplate? ItemTemplate
+    {
+        get => (DataTemplate?)GetValue(ItemTemplateProperty);
+        set => SetValue(ItemTemplateProperty, value);
+    }
+
     /// <summary>The realized item visuals, in source order.</summary>
     public IReadOnlyList<VisualElement> Items => _items;
 
@@ -97,14 +110,17 @@ public class ItemsControl : Panel
     /// <exception cref="InvalidOperationException">The configured <see cref="ItemFactory"/> returned <see langword="null"/>.</exception>
     protected virtual VisualElement CreateItemVisual(object? item)
     {
+        var template = ItemTemplate;
         var factory = ItemFactory;
-        var visual = factory is not null
-            ? factory(item!)
-            : new TextBlock
-            {
-                Text = FormatItem(item),
-                Padding = new XamlThickness(8f, 4f),
-            };
+        var visual = template is not null
+            ? template.Create()
+            : factory is not null
+                ? factory(item!)
+                : new TextBlock
+                {
+                    Text = FormatItem(item),
+                    Padding = new XamlThickness(8f, 4f),
+                };
 
         if (visual is null)
         {
@@ -210,6 +226,7 @@ public class ItemsControl : Panel
             RebuildItems();
         }
         else if (ReferenceEquals(e.Property, ItemFactoryProperty)
+                 || ReferenceEquals(e.Property, ItemTemplateProperty)
                  || ReferenceEquals(e.Property, DisplayMemberPathProperty))
         {
             RebuildItems();

@@ -1,348 +1,391 @@
-﻿// VeloxDev customization: the grid palette and spacing live here.
-using System;
+﻿// VeloxDev customization: The workflow grid. This visual decorator layers a world grid, the surface content
+// (the scroll viewer and canvas supplied by the tree template) and the viewport-fixed ruler bands.
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using DrawingSize = System.Drawing.Size;
 using System.Globalization;
-using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml;
+using VeloxDev.WinForms.Xaml.Visuals;
 using VeloxDev.WorkflowSystem;
-using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
-using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using DrawingPen = System.Drawing.Pen;
 
 namespace TemplateNamespace;
 
-public sealed class TemplateClass : Panel, IWorkflowGridDecorator
+/// <summary>
+/// A workflow surface decorator with three explicit visual layers: the world grid behind the content, the
+/// content itself, and the ruler bands above it.
+/// </summary>
+public sealed class TemplateClass : VisualElement, IWorkflowGridDecorator
 {
     private const double MajorLineEpsilon = 0.001;
 
-    private const double DefaultRulerThickness = 28;
+    private readonly Layer _gridLayer;
+    private readonly Layer _rulerLayer;
+    private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
+    private VisualElement? _content;
 
-    private Color _gridBackground = XamlRuntime.ParseColor("TemplateGridBackground");
-    private Color _minorGridColor = XamlRuntime.ParseColor("TemplateMinorGridColor");
-    private Color _majorGridColor = XamlRuntime.ParseColor("TemplateMajorGridColor");
-    private Color _axisColor = XamlRuntime.ParseColor("TemplateAxisColor");
-    private Color _rulerBackground = XamlRuntime.ParseColor("TemplateRulerBackground");
-    private Color _rulerTickColor = XamlRuntime.ParseColor("TemplateRulerTickColor");
-    private Color _rulerLabelColor = XamlRuntime.ParseColor("TemplateRulerLabelColor");
-    private Color _rulerDividerColor = XamlRuntime.ParseColor("TemplateRulerDividerColor");
-    private Color _surfaceBorderBrush = XamlRuntime.ParseColor("#33FFFFFF");
-    private double _gridSpacing = ParseGridValue("TemplateGridSpacing");
-    private int _majorLineEvery = int.Parse("TemplateMajorLineEvery", CultureInfo.InvariantCulture);
-    private double _rulerThickness = DefaultRulerThickness;
-    private double _scrollOffsetX;
-    private double _scrollOffsetY;
-    private double _contentOffsetX;
-    private double _contentOffsetY;
-    private float _surfaceBorderThickness = 1f;
-    private float _surfaceCornerRadius = 3f;
+    /// <summary>Whether the decorator paints its own surface background (templates with a surface Border set this false).</summary>
+    public static readonly DependencyProperty DrawSurfaceProperty = DependencyProperty.Register(
+        nameof(DrawSurface), typeof(bool), typeof(GridDecorator),
+        new PropertyMetadata(true) { AffectsRender = true });
 
+    public static readonly DependencyProperty RulerThicknessProperty = DependencyProperty.Register(
+        nameof(RulerThickness), typeof(double), typeof(TemplateClass),
+        new PropertyMetadata(28d) { AffectsMeasure = true, AffectsRender = true });
+
+    public static readonly DependencyProperty GridSpacingProperty = DependencyProperty.Register(
+        nameof(GridSpacing), typeof(double), typeof(TemplateClass),
+        new PropertyMetadata(ParseGridValue("TemplateGridSpacing")) { AffectsRender = true });
+
+    public static readonly DependencyProperty MajorLineEveryProperty = DependencyProperty.Register(
+        nameof(MajorLineEvery), typeof(int), typeof(TemplateClass),
+        new PropertyMetadata(ParseInt("TemplateMajorLineEvery")) { AffectsRender = true });
+
+    public static readonly DependencyProperty ScrollOffsetXProperty = DependencyProperty.Register(
+        nameof(ScrollOffsetX), typeof(double), typeof(TemplateClass),
+        new PropertyMetadata(0d) { AffectsRender = true });
+
+    public static readonly DependencyProperty ScrollOffsetYProperty = DependencyProperty.Register(
+        nameof(ScrollOffsetY), typeof(double), typeof(TemplateClass),
+        new PropertyMetadata(0d) { AffectsRender = true });
+
+    public static readonly DependencyProperty ContentOffsetXProperty = DependencyProperty.Register(
+        nameof(ContentOffsetX), typeof(double), typeof(TemplateClass),
+        new PropertyMetadata(0d) { AffectsRender = true });
+
+    public static readonly DependencyProperty ContentOffsetYProperty = DependencyProperty.Register(
+        nameof(ContentOffsetY), typeof(double), typeof(TemplateClass),
+        new PropertyMetadata(0d) { AffectsRender = true });
+
+    /// <summary>Creates the decorator and its grid/ruler layers.</summary>
     public TemplateClass()
     {
-        DoubleBuffered = true;
-        BackColor = Opaque(_gridBackground);
-        SetStyle(
-            ControlStyles.UserPaint |
-            ControlStyles.AllPaintingInWmPaint |
-            ControlStyles.OptimizedDoubleBuffer |
-            ControlStyles.ResizeRedraw,
-            true);
+        _gridLayer = new Layer(this, grid: true) { IsHitTestVisible = false };
+        _rulerLayer = new Layer(this, grid: false) { IsHitTestVisible = false };
+        base.Add(_gridLayer);
+        base.Add(_rulerLayer);
     }
 
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Color GridBackground
+    /// <summary>Assigns the single content child and returns it.</summary>
+    public new T Add<T>(T child) where T : VisualElement
     {
-        get => _gridBackground;
+        Content = child;
+        return child;
+    }
+
+    /// <summary>The surface content, arranged between the grid and the rulers.</summary>
+    public VisualElement? Content
+    {
+        get => _content;
         set
         {
-            if (_gridBackground == value) return;
-            _gridBackground = value;
-            BackColor = Opaque(value);
-            Invalidate();
+            if (ReferenceEquals(_content, value))
+            {
+                return;
+            }
+
+            if (_content is not null)
+            {
+                RemoveChild(_content);
+            }
+
+            _content = value;
+            if (value is not null)
+            {
+                // grid (0), content (1), ruler (2): children render in insertion order.
+                base.Add(value);
+                Children.Remove(value);
+                Children.Insert(1, value);
+            }
+
+            InvalidateMeasure();
         }
     }
 
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Color MinorGridColor
+    /// <summary>Whether the decorator paints its own surface background.</summary>
+    public bool DrawSurface
     {
-        get => _minorGridColor;
-        set { if (_minorGridColor != value) { _minorGridColor = value; Invalidate(); } }
+        get => (bool)GetValue(DrawSurfaceProperty)!;
+        set => SetValue(DrawSurfaceProperty, value);
     }
 
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Color MajorGridColor
-    {
-        get => _majorGridColor;
-        set { if (_majorGridColor != value) { _majorGridColor = value; Invalidate(); } }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Color AxisColor
-    {
-        get => _axisColor;
-        set { if (_axisColor != value) { _axisColor = value; Invalidate(); } }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Color RulerBackground
-    {
-        get => _rulerBackground;
-        set { _rulerBackground = value; }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Color RulerTickColor
-    {
-        get => _rulerTickColor;
-        set { _rulerTickColor = value; }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Color RulerLabelColor
-    {
-        get => _rulerLabelColor;
-        set { _rulerLabelColor = value; }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Color RulerDividerColor
-    {
-        get => _rulerDividerColor;
-        set { _rulerDividerColor = value; }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public Color SurfaceBorderBrush
-    {
-        get => _surfaceBorderBrush;
-        set { if (_surfaceBorderBrush != value) { _surfaceBorderBrush = value; Invalidate(); } }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public float SurfaceBorderThickness
-    {
-        get => _surfaceBorderThickness;
-        set { if (_surfaceBorderThickness != value) { _surfaceBorderThickness = value; Invalidate(); } }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public float SurfaceCornerRadius
-    {
-        get => _surfaceCornerRadius;
-        set { if (_surfaceCornerRadius != value) { _surfaceCornerRadius = value; Invalidate(); } }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public double GridSpacing
-    {
-        get => _gridSpacing;
-        set { if (_gridSpacing != value) { _gridSpacing = value; Invalidate(); } }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
-    public int MajorLineEvery
-    {
-        get => _majorLineEvery;
-        set { if (_majorLineEvery != value) { _majorLineEvery = value; Invalidate(); } }
-    }
-
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    /// <summary>Ruler band thickness in logical pixels.</summary>
     public double RulerThickness
     {
-        get => _rulerThickness;
-        set { if (_rulerThickness != value) { _rulerThickness = value; Invalidate(); } }
+        get => (double)GetValue(RulerThicknessProperty)!;
+        set => SetValue(RulerThicknessProperty, value);
     }
 
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    /// <summary>World distance between minor grid lines.</summary>
+    public double GridSpacing
+    {
+        get => (double)GetValue(GridSpacingProperty)!;
+        set => SetValue(GridSpacingProperty, value);
+    }
+
+    /// <summary>How many minor lines make a major one.</summary>
+    public int MajorLineEvery
+    {
+        get => (int)GetValue(MajorLineEveryProperty)!;
+        set => SetValue(MajorLineEveryProperty, value);
+    }
+
+    /// <inheritdoc />
     public double ScrollOffsetX
     {
-        get => _scrollOffsetX;
-        set { if (_scrollOffsetX != value) { _scrollOffsetX = value; Invalidate(); } }
+        get => (double)GetValue(ScrollOffsetXProperty)!;
+        set => SetValue(ScrollOffsetXProperty, value);
     }
 
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    /// <inheritdoc />
     public double ScrollOffsetY
     {
-        get => _scrollOffsetY;
-        set { if (_scrollOffsetY != value) { _scrollOffsetY = value; Invalidate(); } }
+        get => (double)GetValue(ScrollOffsetYProperty)!;
+        set => SetValue(ScrollOffsetYProperty, value);
     }
 
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    /// <inheritdoc />
     public double ContentOffsetX
     {
-        get => _contentOffsetX;
-        set { if (_contentOffsetX != value) { _contentOffsetX = value; Invalidate(); } }
+        get => (double)GetValue(ContentOffsetXProperty)!;
+        set => SetValue(ContentOffsetXProperty, value);
     }
 
-    [System.ComponentModel.Browsable(false)]
-    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    /// <inheritdoc />
     public double ContentOffsetY
     {
-        get => _contentOffsetY;
-        set { if (_contentOffsetY != value) { _contentOffsetY = value; Invalidate(); } }
+        get => (double)GetValue(ContentOffsetYProperty)!;
+        set => SetValue(ContentOffsetYProperty, value);
     }
 
-    public double RulerBand => RulerThickness;
+    /// <inheritdoc />
+    public double RulerBand => Math.Max(0d, RulerThickness);
 
-    protected override void OnPaintBackground(PaintEventArgs e)
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
-        if (e is null) throw new ArgumentNullException(nameof(e));
-
-        base.OnPaintBackground(e);
-        Render(e.Graphics);
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-    }
-
-    private void Render(Graphics g)
-    {
-        var bounds = new RectangleF(0, 0, Width, Height);
-        if (bounds.Width <= 0 || bounds.Height <= 0)
+        base.OnPropertyChanged(e);
+        if (e.Property.Metadata.AffectsRender)
         {
-            return;
-        }
-
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-
-        using var background = new SolidBrush(_gridBackground);
-        g.FillRectangle(background, bounds);
-
-        g.SmoothingMode = SmoothingMode.None;
-        DrawGrid(g, bounds);
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        DrawSurfaceBorder(g, bounds);
-    }
-
-    private void DrawGrid(Graphics g, RectangleF bounds)
-    {
-        var spacing = Math.Max(8, _gridSpacing);
-        var majorStep = spacing * Math.Max(1, _majorLineEvery);
-
-        var worldLeft = WorkflowSurfaceMath.GridCanvasLeft(_scrollOffsetX, _contentOffsetX);
-        var worldTop = WorkflowSurfaceMath.GridCanvasTop(_scrollOffsetY, _contentOffsetY);
-        var worldRight = worldLeft + bounds.Width;
-        var worldBottom = worldTop + bounds.Height;
-
-        using var minorPen = new Pen(_minorGridColor, 1f);
-        using var majorPen = new Pen(_majorGridColor, 1f);
-        using var axisPen = new Pen(_axisColor, 1.2f);
-
-        var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
-        for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
-        {
-            var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, 0);
-            var pen = IsNearZero(value) ? axisPen : IsMajorLine(value, majorStep) ? majorPen : minorPen;
-            g.DrawLine(pen, x, 0, x, bounds.Height);
-        }
-
-        var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
-        for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
-        {
-            var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, 0);
-            var pen = IsNearZero(value) ? axisPen : IsMajorLine(value, majorStep) ? majorPen : minorPen;
-            g.DrawLine(pen, 0, y, bounds.Width, y);
+            _gridLayer.InvalidateVisual();
+            _rulerLayer.InvalidateVisual();
         }
     }
 
-    private void DrawSurfaceBorder(Graphics g, RectangleF bounds)
+    /// <inheritdoc />
+    protected override DrawingSize MeasureOverride(DrawingSize availableSize)
     {
-        if (_surfaceBorderThickness <= 0)
-        {
-            return;
-        }
-
-        var inset = _surfaceBorderThickness / 2f;
-        var borderBounds = new RectangleF(
-            inset,
-            inset,
-            Math.Max(0, bounds.Width - _surfaceBorderThickness),
-            Math.Max(0, bounds.Height - _surfaceBorderThickness));
-
-        using var path = RoundedRectangle(borderBounds, _surfaceCornerRadius);
-        using var pen = new Pen(_surfaceBorderBrush, _surfaceBorderThickness);
-        g.DrawPath(pen, path);
+        _content?.Measure(availableSize);
+        _gridLayer.Measure(availableSize);
+        _rulerLayer.Measure(availableSize);
+        return availableSize;
     }
 
-    private static bool IsMajorLine(double value, double majorStep)
+    /// <inheritdoc />
+    protected override void ArrangeOverride(DrawingSize finalSize)
     {
-        if (majorStep <= 0)
-        {
-            return false;
-        }
-
-        var remainder = value % majorStep;
-        return Math.Abs(remainder) < MajorLineEpsilon
-               || Math.Abs(remainder - majorStep) < MajorLineEpsilon
-               || Math.Abs(remainder + majorStep) < MajorLineEpsilon;
+        var bounds = new RectangleF(0f, 0f, finalSize.Width, finalSize.Height);
+        _gridLayer.Arrange(bounds);
+        _content?.Arrange(bounds);
+        _rulerLayer.Arrange(bounds);
     }
 
-    private static bool IsNearZero(double value)
-        => Math.Abs(value) < MajorLineEpsilon;
-
-    private static Color Opaque(Color color) => Color.FromArgb(255, color);
-
-    private static GraphicsPath RoundedRectangle(RectangleF bounds, float radius)
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
     {
-        var path = new GraphicsPath();
-        var r = Math.Min(radius, Math.Min(bounds.Width, bounds.Height) / 2f);
-        if (r <= 0f)
+        if (disposing)
         {
-            path.AddRectangle(bounds);
-            return path;
+            _labelFont.Dispose();
         }
 
-        var d = 2 * r;
-        path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-        path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-        path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-        path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
+        base.Dispose(disposing);
     }
 
-    private static double ParseGridValue(string value)
+    private static double ParseGridValue(string token)
     {
-        var text = value.Trim();
+        var text = token.Trim();
         if (text.EndsWith("d", StringComparison.OrdinalIgnoreCase))
         {
             text = text.Substring(0, text.Length - 1);
         }
 
-        return double.Parse(text, CultureInfo.InvariantCulture);
+        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : 40d;
     }
-}
 
-public sealed class SurfaceScrollableControl : VeloxDev.WinForms.Xaml.Controls.ScrollableControl
-{
-    public SurfaceScrollableControl()
+    private static int ParseInt(string token)
+        => int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 5;
+
+    private static string FormatGridValue(double value)
     {
-        SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-        Background = null;
+        var abs = Math.Abs(value);
+        if (abs < 10000d)
+        {
+            return Math.Round(value).ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (abs < 1000000d)
+        {
+            return Math.Round(value / 1000d, 1).ToString(CultureInfo.InvariantCulture) + "K";
+        }
+
+        return Math.Round(value / 1000000d, 1).ToString(CultureInfo.InvariantCulture) + "M";
     }
-}
 
-public sealed class SurfaceCanvas : VeloxDev.WinForms.Xaml.Controls.Canvas
-{
-    public SurfaceCanvas()
+    private static Color ParseColor(string token) => XamlRuntime.ParseColor(token);
+
+    private sealed class Layer(TemplateClass owner, bool grid) : VisualElement
     {
-        SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-        Background = null;
+        private readonly Color _surface = ParseColor("TemplateGridBackground");
+        private readonly Color _minor = ParseColor("TemplateMinorGridColor");
+        private readonly Color _major = ParseColor("TemplateMajorGridColor");
+        private readonly Color _axis = ParseColor("TemplateAxisColor");
+        private readonly Color _rulerBackground = ParseColor("TemplateRulerBackground");
+        private readonly Color _rulerLabel = ParseColor("TemplateRulerLabelColor");
+        private readonly Color _rulerTick = ParseColor("TemplateRulerTickColor");
+        private readonly Color _rulerDivider = ParseColor("TemplateRulerDividerColor");
+        private readonly Color _surfaceBorder = Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF);
+
+        /// <inheritdoc />
+        protected override void OnRender(Graphics graphics)
+        {
+            var width = Bounds.Width;
+            var height = Bounds.Height;
+            if (width <= 0f || height <= 0f)
+            {
+                return;
+            }
+
+            if (grid)
+            {
+                DrawGrid(graphics, width, height);
+            }
+            else
+            {
+                DrawRulers(graphics, width, height);
+            }
+        }
+
+        private void DrawGrid(Graphics graphics, float width, float height)
+        {
+            if (owner.DrawSurface)
+            {
+                using var background = new SolidBrush(_surface);
+                graphics.FillRectangle(background, 0f, 0f, width, height);
+            }
+
+            var spacing = Math.Max(8d, owner.GridSpacing);
+            var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
+            var worldLeft = WorkflowSurfaceMath.GridCanvasLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridCanvasTop(owner.ScrollOffsetY, owner.ContentOffsetY);
+            var worldRight = worldLeft + width;
+            var worldBottom = worldTop + height;
+
+            graphics.SmoothingMode = SmoothingMode.None;
+            using var minorPen = new DrawingPen(_minor, 1f);
+            using var majorPen = new DrawingPen(_major, 1f);
+            using var axisPen = new DrawingPen(_axis, 1.2f);
+
+            var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
+            for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
+            {
+                var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, 0);
+                var pen = IsNearZero(value) ? axisPen : IsMajorLine(value, majorStep) ? majorPen : minorPen;
+                graphics.DrawLine(pen, x, 0f, x, height);
+            }
+
+            var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
+            for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
+            {
+                var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, 0);
+                var pen = IsNearZero(value) ? axisPen : IsMajorLine(value, majorStep) ? majorPen : minorPen;
+                graphics.DrawLine(pen, 0f, y, width, y);
+            }
+        }
+
+        private void DrawRulers(Graphics graphics, float width, float height)
+        {
+            var ruler = (float)owner.RulerBand;
+            if (ruler <= 0f)
+            {
+                return;
+            }
+
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var rulerBrush = new SolidBrush(_rulerBackground);
+            using var dividerPen = new DrawingPen(_rulerDivider, 1f);
+            using var tickPen = new DrawingPen(_rulerTick, 1f);
+            using var axisPen = new DrawingPen(_axis, 1f);
+            using var labelBrush = new SolidBrush(_rulerLabel);
+
+            graphics.FillRectangle(rulerBrush, 0f, 0f, width, ruler);
+            graphics.FillRectangle(rulerBrush, 0f, 0f, ruler, height);
+            graphics.DrawLine(dividerPen, ruler, 0f, ruler, height);
+            graphics.DrawLine(dividerPen, 0f, ruler, width, ruler);
+
+            var spacing = Math.Max(8d, owner.GridSpacing);
+            var majorStep = spacing * Math.Max(1, owner.MajorLineEvery);
+            var worldLeft = WorkflowSurfaceMath.GridCanvasLeft(owner.ScrollOffsetX, owner.ContentOffsetX);
+            var worldTop = WorkflowSurfaceMath.GridCanvasTop(owner.ScrollOffsetY, owner.ContentOffsetY);
+            var worldRight = worldLeft + width;
+            var worldBottom = worldTop + height;
+
+            var firstVertical = WorkflowSurfaceMath.GridFirstLine(worldLeft, spacing);
+            for (var value = firstVertical; value <= worldRight + spacing; value += spacing)
+            {
+                var x = (float)WorkflowSurfaceMath.GridX(value, worldLeft, 0);
+                if (x < ruler)
+                {
+                    continue;
+                }
+
+                var isMajor = IsMajorLine(value, majorStep);
+                var tickLength = isMajor ? Math.Max(1f, ruler - 6f) : Math.Max(6f, ruler * 0.35f);
+                var pen = IsNearZero(value) ? axisPen : tickPen;
+                graphics.DrawLine(pen, x, ruler, x, ruler - tickLength);
+                if (isMajor)
+                {
+                    graphics.DrawString(
+                        FormatGridValue(value), owner._labelFont, labelBrush, x + 3f, 2f);
+                }
+            }
+
+            var firstHorizontal = WorkflowSurfaceMath.GridFirstLine(worldTop, spacing);
+            for (var value = firstHorizontal; value <= worldBottom + spacing; value += spacing)
+            {
+                var y = (float)WorkflowSurfaceMath.GridY(value, worldTop, 0);
+                if (y < ruler)
+                {
+                    continue;
+                }
+
+                var isMajor = IsMajorLine(value, majorStep);
+                var tickLength = isMajor ? Math.Max(1f, ruler - 6f) : Math.Max(6f, ruler * 0.35f);
+                var pen = IsNearZero(value) ? axisPen : tickPen;
+                graphics.DrawLine(pen, ruler, y, ruler - tickLength, y);
+                if (isMajor)
+                {
+                    graphics.DrawString(
+                        FormatGridValue(value), owner._labelFont, labelBrush, 3f, y + 2f);
+                }
+            }
+
+            using var borderPen = new DrawingPen(_surfaceBorder, 1f);
+            graphics.DrawRectangle(borderPen, 0.5f, 0.5f, Math.Max(0f, width - 1f), Math.Max(0f, height - 1f));
+        }
+
+        private static bool IsMajorLine(double value, double majorStep)
+        {
+            if (majorStep <= 0d)
+            {
+                return false;
+            }
+
+            var remainder = value % majorStep;
+            return Math.Abs(remainder) < MajorLineEpsilon
+                   || Math.Abs(remainder - majorStep) < MajorLineEpsilon
+                   || Math.Abs(remainder + majorStep) < MajorLineEpsilon;
+        }
+
+        private static bool IsNearZero(double value) => Math.Abs(value) < MajorLineEpsilon;
     }
 }

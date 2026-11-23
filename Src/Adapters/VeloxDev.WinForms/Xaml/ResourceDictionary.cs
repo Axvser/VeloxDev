@@ -1,10 +1,10 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.ObjectModel;
 
 namespace VeloxDev.WinForms.Xaml;
 
 /// <summary>
-/// The resource store behind <see cref="VeloxDev.WinForms.Xaml.Controls.Control.Resources"/>. It is a normal dictionary plus a change signal so
+/// The resource store behind <see cref="VeloxDev.WinForms.Xaml.Visuals.VisualElement.Resources"/> and <c>VisualHost.Resources</c>. It is a normal dictionary plus a change signal so
 /// implicit styles can be re-evaluated when the resource with their type key is added, replaced or removed.
 /// </summary>
 /// <remarks>

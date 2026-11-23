@@ -1,9 +1,10 @@
 # XamlGallery
 
-The living catalogue for the VeloxDev WinForms **visual backend** (`VeloxDev.WinForms.Xaml.Visuals`).
-The whole window is built from one `VisualSurface` — a single HWND — and a tree of visual elements;
-no card creates a child window. Native WinForms controls are not bridged: the only way to use one is
-an explicit `NativeControlHost` island.
+The living catalogue for the VeloxDev WinForms XAML runtime (`VeloxDev.WinForms.Xaml.Visuals`).
+The whole window is built from one `VisualHost` — a single HWND — and a tree of visual elements;
+no card creates a child window. Reactivity is visual: controls derive from `VisualElement`, not from a
+WinForms control. `NativeControlHost` is the one explicit native island; the focused visual `TextBox`
+uses a private one for IME and accessibility.
 
 The window is a three-pane workbench:
 
@@ -28,7 +29,7 @@ Useful switches:
 dotnet run --project Examples/XamlGallery/Demo/Demo.csproj -- --smoke
 
 # open one entry, a group, or the light palette
-dotnet run --project Examples/XamlGallery/Demo/Demo.csproj -- --entry layout.stack-panel
+dotnet run --project Examples/XamlGallery/Demo/Demo.csproj -- --entry defaults.controls
 dotnet run --project Examples/XamlGallery/Demo/Demo.csproj -- --group data --light
 
 # scroll the preview by pixels
@@ -51,6 +52,7 @@ each PNG. `--preview-only` hides the title, side panes and status strip for a co
 
 | Group | Shows |
 | --- | --- |
+| Defaults | The implicit fallback appearance: representative controls with no style, background or foreground set. This is the card the gallery opens on. |
 | Layout | `StackPanel`, `DockPanel`, `Grid`, `WrapPanel`, `Canvas`, `UniformGrid`, `Viewbox`, `GridSplitter`, `GroupBox`, `Expander`, `TabControl` |
 | Text | `TextBlock`, `TextBox`, password/multiline editing, `RichTextBox`, `Image` |
 | Data | `ListBox`, `ComboBox`, `VirtualList`, `TreeView`, `Calendar`, `DatePicker` |
@@ -60,10 +62,12 @@ each PNG. `--preview-only` hides the title, side panes and status strip for a co
 | Styling | Implicit/explicit `VisualStyle`, `VisualTrigger`, `VisualControlTemplate` with `ContentPresenter` and a named part, resources |
 | Binding | One-way/two-way path bindings, inherited `DataContext`, a converter |
 | Theme | Palette swatches, typography, palette rebuild |
-| Visuals | A generated `v:` XAML view and a real `WorkflowTree` graph on the visual backend |
+| Visuals | A generated XAML view and a real `WorkflowTree` graph on the visual runtime |
 
 ## Notes
 
+- The **Defaults** card sets no style, background, foreground or palette override on the controls it
+  shows, so it is the reference view for what a host gets without authored styling.
 - One `GalleryModel` is shared by every card; data cards bind to its sample collections and values.
 - Cards are factories in `GalleryVisualCards.cs`: selecting a card builds a fresh visual tree and
   disposes the previous one.
@@ -71,6 +75,6 @@ each PNG. `--preview-only` hides the title, side panes and status strip for a co
 - The inspector writes local dependency-property values on the card root; it does not edit template
   or child parts.
 - The workflow graph card is a demo-level surface (drag/pan/zoom/Delete) built directly on the visual
-  controls; the reusable workflow surface belongs to the attached-behavior host used by
+  controls; the reusable workflow surface is `WorkflowSurfaceBehavior` on a `VisualHost`, as used by
   `Examples/Workflow/WinForms` and `Examples/Workflow/WinForms Trimmed`.
 - Platform-wall controls (MediaElement, WebBrowser, InkCanvas, Viewport3D) are intentionally absent.

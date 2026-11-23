@@ -10,8 +10,9 @@ using VC = VeloxDev.WinForms.Xaml.Visuals.Controls;
 namespace VeloxDev.WinForms.Xaml.Test;
 
 /// <summary>
-/// The visual-backend XAML profile: a <c>v:*</c> root derives from a <see cref="VisualElement"/>, children are added
-/// with <c>Add</c>, properties stay literal CLR values and attached properties write the dependency property directly.
+/// The visual-backend XAML profile: a root deriving from <see cref="VisualElement"/> uses unprefixed controls, children
+/// are added with <c>Add</c>, properties stay literal CLR values and attached properties write the dependency property
+/// directly.
 /// </summary>
 [STATestClass]
 public sealed class VisualXamlTests
@@ -54,7 +55,7 @@ public sealed class VisualXamlTests
     public void VisualView_WiresTheGeneratedClickHandler()
     {
         using var view = new VisualView();
-        using var surface = new VisualSurface { Size = new Size(320, 200) };
+        using var surface = new VisualHost { Size = new Size(320, 200) };
         surface.Root = view;
         Layout(surface, 320, 200);
 
@@ -203,7 +204,7 @@ public sealed class VisualXamlTests
         return matches[0];
     }
 
-    private static void Layout(VisualSurface surface, int width, int height)
+    private static void Layout(VisualHost surface, int width, int height)
     {
         using var bitmap = new Bitmap(1, 1);
         using var graphics = Graphics.FromImage(bitmap);

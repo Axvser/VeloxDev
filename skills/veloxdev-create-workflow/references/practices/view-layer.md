@@ -1,8 +1,8 @@
-# Your views
+﻿# Your views
 
 The canvas you put on screen is assembled from seven view roles, and the item templates generate all seven for you — see [templates.md](templates.md). This file is what you need in order to **customize and debug** them: how they are composed, which attached properties and interfaces carry the contract, and where each extension point is.
 
-⚙ **Default: generate all seven roles from the item templates.** The decorator is the floating ruler; the minimap is the thumbnail. The generated node view is the elastic container (`Viewbox` on WPF/Avalonia/WinUI/Jalium, layout-only scaling on MAUI/WinForms, the CSS transform on Razor); keep that container when you add content. Each `gui/<gui>.md` has the code.
+⚙ **Default: generate all seven roles from the item templates.** The decorator is the floating ruler; the minimap is the thumbnail. The generated node view is the elastic container (`Viewbox` on WPF/Avalonia/WinUI/Jalium, the visual camera on WinForms, layout-only scaling on MAUI, the CSS transform on Razor); keep that container when you add content. Each `gui/<gui>.md` has the code.
 
 Open your GUI's reference alongside this one — it carries that framework's attached properties, parameters and template defaults.
 
@@ -10,15 +10,17 @@ Open your GUI's reference alongside this one — it carries that framework's att
 
 | Role | Class | Job |
 |---|---|---|
-| Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom, forwards link interaction and shows the link menu, and registers `WorkflowInput.Scroller` |
-| Canvas transform | `WorkflowCanvasTransformBehavior` — **Jalium spells it `WorkflowSurfaceBehavior.CanvasTransform`**; MAUI has no carrier | owns the pan offset your node and link views bind to |
-| View pool | `ViewPool` / `ViewManager` | object-pooled views over the visible-items collection |
+| Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom, forwards link interaction and shows the link menu, and registers `WorkflowInput.Scroller`. On WinForms the host is a `VisualHost`; the surface owns the camera matrix on `PART_Canvas` and `ViewPool` materializes the items |
+| Canvas transform | `WorkflowCanvasTransformBehavior` — **Jalium spells it `WorkflowSurfaceBehavior.CanvasTransform`**; MAUI has no carrier; **WinForms has no separate carrier — `WorkflowSurfaceBehavior`'s camera owns pan and zoom** | owns the pan offset your node and link views bind to |
+| View pool | `ViewPool` / `ViewManager` — **WinForms' visual backend uses a generic visual `ViewPool` attached to `PART_Canvas`; it is not the Core pool** | object-pooled views over the visible-items collection |
 | Node drag | `WorkflowNodeDragBehavior` | a drag on a node executes `MoveCommand` |
 | Slot connection | `WorkflowSlotConnectionBehavior` | press one slot, release on another, connect them; on the frameworks without a surface pointer-move hook it also reports the candidate receiver |
 | Slot layout | `WorkflowSlotLayoutBehavior` | measures each port and writes its anchor back |
 | Grid decorator / minimap | `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | grid, ruler and thumbnail |
 
 ⚙ **The first six roles are supplied by the adapter. The decorator and minimap implement Core interfaces and are written or generated for the host.** `IWorkflowGridDecorator` and `IWorkflowMinimapOverlay` live in Core (namespace `VeloxDev.WorkflowSystem`); the surface pushes scroll and content offsets into them each pass, and the minimap's interface derives from the decorator's because it needs the same numbers. `RulerBand` is the one member that affects more than drawing: the surface forwards it to the virtualizer so nodes under the floating ruler are not culled.
+
+⚙ **On WinForms the node drag, slot connection and slot layout roles are three separate `VisualElement` attached behaviors** (`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSlotLayoutBehavior`), each called by the surface's `Ensure` walk. The grid decorator and minimap are still template roles; the surface is `WorkflowSurfaceBehavior` on a `VisualHost`.
 
 ⚙ **A grid decorator draws the floating ruler bands as part of the surface chrome.** Draw them in a hit-test-transparent top layer (the templates use `ZIndex="100"`), return the band thickness from `RulerBand`, and offset the world canvas by that band. The XAML adapters do it with `Canvas.RenderTransform`; the grid maths use the same band as their content offset.
 
@@ -51,7 +53,9 @@ The surface is the control that owns the scroll viewer and the canvas. It resolv
 
 ⚙ **The names are the contract.** Rename a `PART_` element and update the attached property in the same edit; the surface performs a name lookup and a missing name disables that part silently. The templates emit `PART_ScrollViewer`, `PART_Canvas`, `PART_SurfaceBorder`, `PART_GridDecorator` and `PART_MinimapOverlay`; keep them unless you have a reason not to.
 
-⚙ **Use the attached-property API the platform gives you.** WinForms uses `WorkflowSurfaceBehavior.SetIsEnabled(control, true)` and friends; Blazor uses component parameters. Your GUI's reference has the exact spelling.
+⚙ **Use the attached-property API the platform gives you.** WinForms attaches `WorkflowSurfaceBehavior` to a `VisualHost` and uses `SetIsEnabled(host, true)` and friends; Blazor uses component parameters. Your GUI's reference has the exact spelling.
+
+⚙ **On WinForms the item views do not bind a transform.** The camera matrix lives on `PART_Canvas` and is applied to the whole visual tree, so there is no per-item `RenderTransform` binding; the "binding rule" below is for the markup adapters.
 
 ### The binding rule
 
@@ -86,7 +90,7 @@ outer collapsed box      positioned at the node's Anchor, sized to its Size
 
 ### Ports: the model ↔ view correspondence
 
-The model never computes a port's position. A slot's `Anchor` begins as `(NaN, NaN, 0)`; the only writer is `WorkflowSlotLayoutBehavior`, which measures a named control and stores its visual centre. The behaviour finds that control through the name lists on the node view:
+The model never computes a port's position. A slot's `Anchor` begins as `(NaN, NaN, 0)`; on the markup adapters the only writer is `WorkflowSlotLayoutBehavior`, which measures a named control and stores its visual centre. On WinForms the same behavior measures the named part and writes its centre in the coordinate host's local space (default the nearest visual `Canvas`). The behaviour finds the control through the name lists on the node view:
 
 | Model side | View side | Registered through |
 |---|---|---|
@@ -97,7 +101,7 @@ The model never computes a port's position. A slot's `Anchor` begins as `(NaN, N
 
 ⚙ **`SlotEnumeratorNames` is the collection counterpart, with the same comma-separated syntax.** Each name identifies an `ItemsControl`; the behaviour reads the realized item containers, takes each container's slot from its `DataContext`, and measures each one. An enumerator's items are generated by the selector, so the measurement follows the current selector's containers.
 
-⚙ **`CoordinateHostName` / `CoordinateHostType` name the coordinate host.** On the attached-property adapters, both `WorkflowNodeDragBehavior` and `WorkflowSlotLayoutBehavior` expose them; the default host type is `Canvas`. Razor expresses the same choice through component parameters. The measured point is converted into that host's coordinate space before it becomes a slot anchor. WPF names its canvas; Jalium names `PART_Canvas`; WinForms uses the canvas client area.
+⚙ **`CoordinateHostName` / `CoordinateHostType` name the coordinate host.** On the attached-property adapters, both `WorkflowNodeDragBehavior` and `WorkflowSlotLayoutBehavior` expose them; the default host type is `Canvas`. Razor expresses the same choice through component parameters. The measured point is converted into that host's coordinate space before it becomes a slot anchor. WPF names its canvas; Jalium names `PART_Canvas`; WinForms' `WorkflowSlotLayoutBehavior` does the same (`CoordinateHostName`, default the nearest visual `Canvas`).
 
 ⚙ **The correspondence is name-based and is the only path by which a slot becomes measured.** A slot whose control is not registered keeps a `NaN` anchor forever; there is no fallback that derives it from the node rectangle, and no diagnostic that says a name is missing.
 
@@ -240,7 +244,7 @@ link.Locate();   // the midpoint of its two endpoint nodes' centers
 
 ⚙ **`Locate()` reads model data only.** A slot targets its parent node (not its measured anchor), and a link targets the midpoint of its endpoints (not its published curve), so an element that is off-screen, unmeasured or not yet drawn still reaches the centre. It pans only — the zoom is untouched — and returns `false` without changing anything when the tree has no navigator or the target has no finite position.
 
-⚙ **A target outside the current extent grows the canvas.** Five surfaces (WPF / Avalonia / WinUI / MAUI / Razor) apply `ClampScrollOffset` with `extendRatio: 0`, then re-read the extent before scrolling; Jalium's `NavigateToCanvasLocal` grows by the same rule; WinForms' pan engine accepts signed targets and has no extent ceiling. An implementation that cannot grow clamps, so the point lands as close to the centre as it allows.
+⚙ **A target outside the current extent grows the canvas.** Five surfaces (WPF / Avalonia / WinUI / MAUI / Razor) apply `ClampScrollOffset` with `extendRatio: 0`, then re-read the extent before scrolling; Jalium's `NavigateToCanvasLocal` grows by the same rule; WinForms' pan accepts signed targets and has no extent ceiling. An implementation that cannot grow clamps, so the point lands as close to the centre as it allows.
 
 ⚙ **Ctrl+wheel is the zoom gesture, not a scroll.** It is routed first, so `PreventDefault` on `PointerWheelChanged` suppresses the zoom as well; without Ctrl the wheel never zooms.
 
@@ -250,7 +254,7 @@ link.Locate();   // the midpoint of its two endpoint nodes' centers
 
 A settled link carries a **travelling highlight**, so its direction is read from motion rather than from a mark a few pixels wide. Every full demo does this; the Trimmed suites leave it out because it is decoration rather than part of the editor.
 
-⚙ **Animate a scalar phase on the flow owner, and derive the drawing from it.** The WPF/Avalonia/WinUI link views read `BandHead` / `BandIntensity` from the tree's shared `WorkflowFlowClock`; the WinForms `WorkflowLinkLayer` owns `FlowHead` / `FlowIntensity` (one animation for every link) and the Jalium surface owns `FlowPhase`; the Blazor link is drawn by `flow.js`. Give the flow owner an animatable scalar that triggers a repaint, and compute geometry and colour from it in the draw pass. See [the animation skill's flow reference](../../../veloxdev-create-animation/references/practices/flow.md).
+⚙ **Animate a scalar phase on the flow owner, and derive the drawing from it.** The WPF/Avalonia/WinUI link views read `BandHead` / `BandIntensity` from the tree's shared `WorkflowFlowClock`; the Jalium surface owns `FlowPhase`; the Blazor link is drawn by `flow.js`; on WinForms each visual `LinkView` owns its own animatable scalar and repaints. Give the flow owner an animatable scalar that triggers a repaint, and compute geometry and colour from it in the draw pass. See [the animation skill's flow reference](../../../veloxdev-create-animation/references/practices/flow.md).
 
 ⚙ **The line rests dim and the band is the same colour at full strength.** Dim the resting line by alpha (about three fifths) and keep the hue; the contrast then sits where the eye finds it. Pushing the link's colour towards white changes one channel of three on a 2px line and is invisible.
 
@@ -276,11 +280,11 @@ The adapters fall into two camps, and which one you are in decides whether you m
 
 | | Notification-driven | Pull-driven |
 |---|---|---|
-| Frameworks | WPF, Avalonia, WinUI, MAUI, Jalium, Blazor | WinForms |
-| Node position | bound to the collapsed `Anchor`; the binding re-evaluates | repositioned in code, every pass |
+| Frameworks | WPF, Avalonia, WinUI, MAUI, Jalium, Blazor, WinForms | — |
+| Node position | bound to the collapsed `Anchor`, or arranged from it in the visual tree | repositioned in code, every pass |
 | After a mutation | automatic | you must call `Refresh(host)` |
 
-⚙ **WinForms is XAML-first now, but its placement is still pull-driven.** The tree has real DPs, bindings and attached properties, yet `WorkflowNodeAttachment` writes each card's `Location`/`Size` in code, so `Refresh(host)` remains part of the contract; `SyncNow` is the same-frame escape hatch for slot measurements. The link layer is different: it subscribes to node/link/slot changes and repaints from `WorkflowLinkLayer`, so links track a drag without a host refresh.
+⚙ **WinForms' visual backend is notification-driven.** `ViewPool` subscribes `VisibleItems`; each template binds model geometry under one camera matrix, and each `LinkView` republishes on render. `Refresh(host)` remains the entry to re-push viewport offsets and relayout after a wholesale change (new tree, host resize); there is no `SyncNow` and no per-card `Location` write.
 
 ## Checking your views
 

@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using VeloxDev.WinForms.Xaml.Visuals;
 
@@ -7,8 +7,7 @@ namespace VeloxDev.WinForms.Xaml;
 /// <summary>Path bindings for visual-backend objects; the source syntax is the existing WPF-style <see cref="Binding"/>.</summary>
 /// <remarks>
 /// <para>
-/// The HWND backend uses <see cref="BindingExpression"/> because its targets are <c>System.Windows.Forms.Control</c>.
-/// Visual elements implement <see cref="IWinformsObject"/> instead, so this expression resolves the same
+/// Visual elements implement <see cref="IWinformsObject"/>, so this expression resolves the same
 /// <see cref="Binding.Path"/> against the effective <see cref="VisualElement.DataContext"/> and writes the target
 /// through the priority store.
 /// </para>
@@ -16,7 +15,8 @@ namespace VeloxDev.WinForms.Xaml;
 /// Supported: <see cref="BindingMode.OneWay"/>/<see cref="BindingMode.OneTime"/>/<see cref="BindingMode.TwoWay"/>,
 /// simple dot paths with indexers, <see cref="Binding.Source"/>, converters, <see cref="Binding.StringFormat"/>,
 /// <see cref="Binding.FallbackValue"/> and <see cref="Binding.TargetNullValue"/>. <see cref="Binding.ElementName"/>
-/// and <see cref="Binding.RelativeSource"/> are not part of the first visual binding version.
+/// resolves a named element in the target's visual tree; <see cref="Binding.RelativeSource"/> supports
+/// <c>Self</c> and <c>TemplatedParent</c>.
 /// </para>
 /// </remarks>
 public static class VisualBindingOperations
@@ -135,6 +135,16 @@ internal sealed class VisualBindingExpression : IDisposable
             return _binding.Source;
         }
 
+        if (!string.IsNullOrWhiteSpace(_binding.ElementName) && _target is VisualElement namedTarget)
+        {
+            if (FindNamedElement(namedTarget, _binding.ElementName!) is { } named)
+            {
+                return named;
+            }
+
+            return null;
+        }
+
         if (_binding.RelativeSource is { Mode: RelativeSourceMode.Self })
         {
             return _target;
@@ -145,7 +155,41 @@ internal sealed class VisualBindingExpression : IDisposable
             return (_target as VisualElement)?.TemplatedParent;
         }
 
-        return (_target as VisualElement)?.DataContext;
+        // A binding whose target IS DataContext resolves against the inherited parent context. Reading the
+        // target's own DataContext would re-evaluate the path against the value it just produced.
+        var element = _target as VisualElement;
+        return ReferenceEquals(_property, VisualElement.DataContextProperty)
+            ? element?.ParentElement?.DataContext
+            : element?.DataContext;
+    }
+
+    private static VisualElement? FindNamedElement(VisualElement target, string name)
+    {
+        var root = target;
+        while (root.ParentElement is { } parent)
+        {
+            root = parent;
+        }
+
+        return Find(root);
+
+        VisualElement? Find(VisualElement element)
+        {
+            if (string.Equals(element.Name, name, StringComparison.Ordinal))
+            {
+                return element;
+            }
+
+            foreach (var child in element.Children)
+            {
+                if (child is VisualElement nested && Find(nested) is { } found)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
     }
 
     private void OnSourcePropertyChanged(object? sender, PropertyChangedEventArgs e) => UpdateTarget();
@@ -260,6 +304,13 @@ internal sealed class VisualBindingExpression : IDisposable
         _updatingTarget = true;
         try
         {
+            // A null DataContext binding must not create a local null: that blocks the inherited context.
+            if (value is null && ReferenceEquals(_property, VisualElement.DataContextProperty))
+            {
+                _target.ClearValue(_property);
+                return;
+            }
+
             if (value is null && _property.PropertyType.IsValueType && Nullable.GetUnderlyingType(_property.PropertyType) is null)
             {
                 _target.ClearValue(_property);

@@ -1,4 +1,4 @@
-namespace VeloxDev.Adapters.Benchmarks.Headed;
+﻿namespace VeloxDev.Adapters.Benchmarks.Headed;
 
 // 有头基准的分发口：一次进程只选一家，别家宿主不初始化。
 internal static class HeadedBenchmarkRunner
@@ -24,7 +24,6 @@ internal static class HeadedBenchmarkRunner
             {
                 "avalonia" => AvaloniaHeadedProgram.Run(options),
                 "wpf" => WpfHeadedProgram.Run(options),
-                "winforms" => WinFormsHeadedProgram.Run(options),
                 "jalium" => JaliumHeadedProgram.Run(options),
                 _ => UnknownAdapter(options.Adapter),
             };
@@ -39,7 +38,7 @@ internal static class HeadedBenchmarkRunner
     private static int UnknownAdapter(string adapter)
     {
         Console.Error.WriteLine(
-            $"No headed host is registered for '{adapter}'. Available: avalonia, wpf, winforms, jalium.\n" +
+            $"No headed host is registered for '{adapter}'. Available: avalonia, wpf, jalium.\n" +
             "WinUI, MAUI and Razor need their own executable host that references VeloxDev.Adapters.Benchmarks.Headed.\n" +
             HeadedOptions.Usage);
         return 2;

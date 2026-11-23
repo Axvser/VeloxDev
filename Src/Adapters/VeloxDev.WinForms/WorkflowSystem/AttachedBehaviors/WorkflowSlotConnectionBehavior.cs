@@ -1,436 +1,117 @@
-using System;
-using System.Drawing;
-using System.Reflection;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
-using VeloxDev.WorkflowSystem;
-using VeloxDev.WorkflowSystem.StandardEx;
+using VeloxDev.WinForms.Xaml.Visuals;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// WinForms workflow slot connection behavior.
+/// WPF-shaped attached behavior that starts and completes a slot connection from the marked slot view.
 /// </summary>
+/// <remarks>
+/// Attach it to the slot view root. Press sends the slot's connection command; release sends the receive
+/// command. The surface forwards pointer movement to the tree, so the preview receiver and the virtual link
+/// update while the pointer is captured.
+/// </remarks>
 public sealed class WorkflowSlotConnectionBehavior
 {
-    private sealed class ActiveConnectionState
-    {
-        public Control SenderControl { get; set; } = null!;
-        public Control SurfaceControl { get; set; } = null!;
-        public ISlotComponent SenderSlot { get; set; } = null!;
-        public ITreeComponent Tree { get; set; } = null!;
-        public Point StartScreenPoint { get; set; }
-        public Anchor StartAnchor { get; set; } = new Anchor();
-    }
-
-    private sealed class SlotConnectionState
-    {
-        public bool IsEnabled { get; set; }
-    }
-
-    private static readonly ConditionalWeakTable<Control, SlotConnectionState> States = new();
-    private static ConnectionMessageFilter? _messageFilter;
-    private static ActiveConnectionState? _activeConnection;
-
-    /// <summary>Whether the slot participates in drag-to-connect.</summary>
+    /// <summary>Whether this slot view starts and completes a connection drag.</summary>
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
-        "IsEnabled",
-        typeof(bool),
-        typeof(WorkflowSlotConnectionBehavior),
-        new PropertyMetadata(false, OnIsEnabledPropertyChanged));
+        "IsEnabled", typeof(bool), typeof(WorkflowSlotConnectionBehavior),
+        new PropertyMetadata(false));
 
-    /// <summary>
-    /// Gets whether workflow slot connection behavior is enabled for the specified control.
-    /// </summary>
-    public static bool GetIsEnabled(Control element)
+    private static readonly ConditionalWeakTable<VisualElement, ConnectionState> States = new();
+
+    private WorkflowSlotConnectionBehavior()
     {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return (bool)IsEnabledProperty.GetValue(element)!;
     }
 
-    /// <summary>
-    /// Sets whether workflow slot connection behavior is enabled for the specified control.
-    /// </summary>
-    public static void SetIsEnabled(Control element, bool value)
+    /// <summary>Reads the connection switch.</summary>
+    public static bool GetIsEnabled(VisualElement element) => (bool)element.GetValue(IsEnabledProperty)!;
+
+    /// <summary>Writes the connection switch.</summary>
+    public static void SetIsEnabled(VisualElement element, bool value) => element.SetValue(IsEnabledProperty, value);
+
+    /// <summary>Attaches or detaches the behavior according to the element's current attached values.</summary>
+    public static void Ensure(VisualElement element)
     {
-        if (element is null)
+        if (element.IsSet(IsEnabledProperty) && GetIsEnabled(element))
         {
-            throw new ArgumentNullException(nameof(element));
+            States.GetValue(element, static owner => new ConnectionState(owner)).Subscribe();
         }
-
-        IsEnabledProperty.SetValue(element, value);
-    }
-
-    private static void OnIsEnabledPropertyChanged(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (target is not Control control || e.NewValue is not bool value)
+        else if (States.TryGetValue(element, out var state))
         {
-            return;
-        }
-
-        var state = GetState(control);
-        if (state.IsEnabled == value)
-        {
-            return;
-        }
-
-        control.MouseDown -= OnMouseDown;
-        control.MouseUp -= OnMouseUp;
-        control.Disposed -= OnDisposed;
-
-        state.IsEnabled = value;
-        if (value)
-        {
-            control.MouseDown += OnMouseDown;
-            control.MouseUp += OnMouseUp;
-            control.Disposed += OnDisposed;
+            state.Unsubscribe();
         }
     }
 
-    private static void OnMouseDown(object? sender, MouseEventArgs e)
+    private sealed class ConnectionState
     {
-        if (sender is not Control control)
+        private readonly VisualElement owner;
+        private bool subscribed;
+
+        public ConnectionState(VisualElement owner)
         {
-            return;
+            this.owner = owner;
         }
 
-        if (HasInactiveConnection())
+        public void Subscribe()
         {
-            ClearActiveConnection();
-        }
-
-        var slot = ResolveSlot(control);
-        if (slot is null)
-        {
-            return;
-        }
-
-        // 每个按钮都过表面路由 —— 订阅者在插槽自己的 InputRelay 上置 PreventDefault 就是
-        // 「这一笔别连」，无论它是开始还是完成；右键/中键的动作也走同一套 Core 输入事件。
-        var press = WorkflowSurfaceBehavior.RouteComponentPress(control, slot, e.Button, e.Clicks);
-
-        if (e.Button != MouseButtons.Left || press?.PreventDefault == true)
-        {
-            return;
-        }
-
-        if (_activeConnection is not null)
-        {
-            TryCompleteConnection(control, slot);
-            return;
-        }
-
-        if (slot.Parent?.Parent is not ITreeComponent tree)
-        {
-            return;
-        }
-
-        if (!slot.SendConnectionCommand.CanExecute(null))
-        {
-            return;
-        }
-
-        slot.SendConnectionCommand.Execute(null);
-
-        var surface = FindSurfaceControl(control);
-        _activeConnection = new ActiveConnectionState
-        {
-            SenderControl = control,
-            SurfaceControl = surface,
-            SenderSlot = slot,
-            Tree = tree,
-            StartScreenPoint = Cursor.Position,
-            StartAnchor = slot.Anchor,
-        };
-
-        EnsureMessageFilter();
-        WorkflowSurfaceBehavior.Refresh(surface);
-    }
-
-    private static void OnMouseUp(object? sender, MouseEventArgs e)
-    {
-        if (sender is not Control control)
-        {
-            return;
-        }
-
-        var slot = ResolveSlot(control);
-        if (slot is not null)
-        {
-            WorkflowSurfaceBehavior.RouteComponentRelease(control, slot, e.Button, e.Clicks);
-        }
-    }
-
-    private static void OnDisposed(object? sender, EventArgs e)
-    {
-        if (sender is not Control control)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(_activeConnection?.SenderControl, control))
-        {
-            CancelConnection(_activeConnection);
-        }
-    }
-
-    private static void TryCompleteConnection(Control control, ISlotComponent slot)
-    {
-        var activeConnection = _activeConnection;
-        if (activeConnection is null)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(activeConnection.SenderControl, control) ||
-            ReferenceEquals(activeConnection.SenderSlot, slot))
-        {
-            return;
-        }
-
-        if (!slot.ReceiveConnectionCommand.CanExecute(null))
-        {
-            return;
-        }
-
-        slot.ReceiveConnectionCommand.Execute(null);
-        var surface = activeConnection.SurfaceControl;
-        ClearActiveConnection();
-        WorkflowSurfaceBehavior.Refresh(surface);
-    }
-
-    private static void EnsureMessageFilter()
-    {
-        if (_messageFilter is not null)
-        {
-            return;
-        }
-
-        _messageFilter = new ConnectionMessageFilter();
-        Application.AddMessageFilter(_messageFilter);
-    }
-
-    private static void DetachMessageFilter()
-    {
-        if (_messageFilter is null)
-        {
-            return;
-        }
-
-        Application.RemoveMessageFilter(_messageFilter);
-        _messageFilter = null;
-    }
-
-    private static void UpdatePointer()
-    {
-        var activeConnection = _activeConnection;
-        if (activeConnection is null)
-        {
-            ClearActiveConnection();
-            return;
-        }
-
-        // VirtualLink 是可写的模型属性；宿主可能在拖拽途中清空它（换文档/卸载会话）。
-        if (activeConnection.Tree.VirtualLink is not { IsVisible: true })
-        {
-            ClearActiveConnection();
-            return;
-        }
-
-        var current = Cursor.Position;
-        var pointer = new Anchor(
-            activeConnection.StartAnchor.Horizontal + (current.X - activeConnection.StartScreenPoint.X),
-            activeConnection.StartAnchor.Vertical + (current.Y - activeConnection.StartScreenPoint.Y),
-            activeConnection.StartAnchor.Layer);
-
-        if (activeConnection.Tree.SetPointerCommand.CanExecute(pointer))
-        {
-            activeConnection.Tree.SetPointerCommand.Execute(pointer);
-        }
-
-        // 拖拽中指针下的候选接收口：几何命中不看可视树，本家靠 WindowFromPoint 找目标的那一套只在松手时用。
-        activeConnection.Tree.StandardSetPreviewReceiver(
-            SlotHitTestEx.HitTest(activeConnection.Tree, pointer.Horizontal, pointer.Vertical));
-
-        WorkflowSurfaceBehavior.Refresh(activeConnection.SurfaceControl);
-    }
-
-    private static void TryCompleteFromMouseUp()
-    {
-        var activeConnection = _activeConnection;
-        if (activeConnection is null)
-        {
-            ClearActiveConnection();
-            return;
-        }
-
-        if (activeConnection.Tree.VirtualLink is not { IsVisible: true })
-        {
-            ClearActiveConnection();
-            return;
-        }
-
-        var targetControl = GetControlAtScreenPoint(Cursor.Position);
-        while (targetControl is not null)
-        {
-            if (GetIsEnabled(targetControl))
+            if (subscribed)
             {
-                var slot = ResolveSlot(targetControl);
-                if (slot is not null)
-                {
-                    if (ReferenceEquals(activeConnection.SenderControl, targetControl) ||
-                        ReferenceEquals(activeConnection.SenderSlot, slot))
-                    {
-                        return;
-                    }
-
-                    if (slot.ReceiveConnectionCommand.CanExecute(null))
-                    {
-                        slot.ReceiveConnectionCommand.Execute(null);
-                        var surface = activeConnection.SurfaceControl;
-                        ClearActiveConnection();
-                        WorkflowSurfaceBehavior.Refresh(surface);
-                        return;
-                    }
-                }
-
-                CancelConnection(activeConnection);
                 return;
             }
 
-            targetControl = targetControl.Parent;
+            subscribed = true;
+            owner.PointerPressed += OnPointerPressed;
+            owner.PointerReleased += OnPointerReleased;
         }
 
-        CancelConnection(activeConnection);
-    }
-
-    private static void CancelConnection(ActiveConnectionState activeConnection)
-    {
-        if (activeConnection.Tree.ResetVirtualLinkCommand.CanExecute(null))
+        public void Unsubscribe()
         {
-            activeConnection.Tree.ResetVirtualLinkCommand.Execute(null);
-        }
-
-        var surface = activeConnection.SurfaceControl;
-        ClearActiveConnection();
-        if (!surface.IsDisposed)
-        {
-            WorkflowSurfaceBehavior.Refresh(surface);
-        }
-    }
-
-    private static ISlotComponent? ResolveSlot(Control control)
-    {
-        if (control is null)
-        {
-            throw new ArgumentNullException(nameof(control));
-        }
-
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-        for (var current = control; current is not null; current = current.Parent)
-        {
-            if (current.Tag is ISlotComponent taggedSlot)
+            if (!subscribed)
             {
-                return taggedSlot;
+                return;
             }
 
-            foreach (var propertyName in new[] { "ViewModel", "DataContext", "BindingContext" })
+            subscribed = false;
+            owner.PointerPressed -= OnPointerPressed;
+            owner.PointerReleased -= OnPointerReleased;
+        }
+
+        private void OnPointerPressed(object? sender, VisualPointerEventArgs args)
+        {
+            if (args.Button != MouseButtons.Left
+                || owner.DataContext is not ISlotComponent slot
+                || WorkflowSurfaceBehavior.GetPressHandle(owner)?.PreventDefault == true)
             {
-                var property = current.GetType().GetProperty(propertyName, flags);
-                if (property?.CanRead != true || property.GetIndexParameters().Length != 0)
+                return;
+            }
+
+            slot.SendConnectionCommand.Execute(null);
+            args.Handled = true;
+        }
+
+        private void OnPointerReleased(object? sender, VisualPointerEventArgs args)
+        {
+            if (owner.DataContext is not ISlotComponent senderSlot || owner.Surface is not { } surface)
+            {
+                return;
+            }
+
+            // VisualHost captures the sender, so the release arrives here even when the pointer is over the
+            // receiver. Resolve the slot under the release point and let it accept the connection.
+            var hit = surface.FindElementAt(args.Position);
+            for (var current = hit; current is not null; current = current.ParentElement)
+            {
+                if (current.DataContext is ISlotComponent receiver
+                    && !ReferenceEquals(receiver, senderSlot))
                 {
-                    continue;
-                }
-
-                if (property.GetValue(current) is ISlotComponent slot)
-                {
-                    return slot;
+                    receiver.ReceiveConnectionCommand.Execute(null);
+                    args.Handled = true;
+                    return;
                 }
             }
         }
-
-        return null;
     }
-
-    private static Control FindSurfaceControl(Control control)
-    {
-        if (control is null)
-        {
-            throw new ArgumentNullException(nameof(control));
-        }
-
-        Control? current = control;
-        while (current is not null)
-        {
-            if (WorkflowSurfaceBehavior.GetIsEnabled(current))
-            {
-                return current;
-            }
-
-            current = current.Parent;
-        }
-
-        return control.TopLevelControl ?? control;
-    }
-
-    private static Control? GetControlAtScreenPoint(Point screenPoint)
-    {
-        var handle = NativeMethods.WindowFromPoint(screenPoint);
-        if (handle == IntPtr.Zero)
-        {
-            return null;
-        }
-
-        return Control.FromChildHandle(handle) ?? Control.FromHandle(handle);
-    }
-
-    private sealed class ConnectionMessageFilter : IMessageFilter
-    {
-        private const int WM_MOUSEMOVE = 0x0200;
-        private const int WM_LBUTTONUP = 0x0202;
-
-        public bool PreFilterMessage(ref Message m)
-        {
-            if (_activeConnection is null)
-            {
-                return false;
-            }
-
-            switch (m.Msg)
-            {
-                case WM_MOUSEMOVE:
-                    UpdatePointer();
-                    break;
-                case WM_LBUTTONUP:
-                    TryCompleteFromMouseUp();
-                    break;
-            }
-
-            return false;
-        }
-    }
-
-    private static bool HasInactiveConnection()
-        => _activeConnection is not null
-           && _activeConnection.Tree.VirtualLink is not { IsVisible: true };
-
-    private static void ClearActiveConnection()
-    {
-        _activeConnection = null;
-        DetachMessageFilter();
-    }
-
-    private static class NativeMethods
-    {
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        internal static extern IntPtr WindowFromPoint(Point point);
-    }
-
-    private static SlotConnectionState GetState(Control element)
-        => States.GetValue(element, static _ => new SlotConnectionState());
 }

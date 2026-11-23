@@ -1,9 +1,9 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Windows.Forms;
 
 namespace VeloxDev.WinForms.Xaml.Visuals;
 
-/// <summary>Pointer data routed through the visual tree of a <see cref="VisualSurface"/>.</summary>
+/// <summary>Pointer data routed through the visual tree of a <see cref="VisualHost"/>.</summary>
 public sealed class VisualPointerEventArgs : EventArgs
 {
     internal VisualPointerEventArgs(
@@ -12,7 +12,8 @@ public sealed class VisualPointerEventArgs : EventArgs
         MouseButtons button,
         int clickCount,
         int delta,
-        Keys modifiers)
+        Keys modifiers,
+        bool isHorizontal = false)
     {
         Position = position;
         Buttons = buttons;
@@ -20,6 +21,7 @@ public sealed class VisualPointerEventArgs : EventArgs
         ClickCount = Math.Max(1, clickCount);
         Delta = delta;
         Modifiers = modifiers;
+        IsHorizontal = isHorizontal;
     }
 
     /// <summary>The pointer position in the surface's client coordinates.</summary>
@@ -34,8 +36,11 @@ public sealed class VisualPointerEventArgs : EventArgs
     /// <summary>The number of clicks for a press; 1 for a single click.</summary>
     public int ClickCount { get; }
 
-    /// <summary>The wheel delta; positive scrolls up.</summary>
+    /// <summary>The wheel delta; positive scrolls up (or right for a horizontal wheel).</summary>
     public int Delta { get; }
+
+    /// <summary>Whether the wheel delta came from a horizontal wheel/pan gesture.</summary>
+    public bool IsHorizontal { get; }
 
     /// <summary>The modifier keys held.</summary>
     public Keys Modifiers { get; }
@@ -49,7 +54,7 @@ public sealed class VisualPointerEventArgs : EventArgs
         => element is null ? Position : element.PointFromSurface(Position);
 }
 
-/// <summary>Keyboard data routed to the focused element of a <see cref="VisualSurface"/>.</summary>
+/// <summary>Keyboard data routed to the focused element of a <see cref="VisualHost"/>.</summary>
 public sealed class VisualKeyEventArgs : EventArgs
 {
     internal VisualKeyEventArgs(Keys keyCode, Keys modifiers, bool isRepeat)
@@ -72,7 +77,7 @@ public sealed class VisualKeyEventArgs : EventArgs
     public bool Handled { get; set; }
 }
 
-/// <summary>Text input routed to the focused element of a <see cref="VisualSurface"/>.</summary>
+/// <summary>Text input routed to the focused element of a <see cref="VisualHost"/>.</summary>
 public sealed class VisualTextInputEventArgs : EventArgs
 {
     internal VisualTextInputEventArgs(string text)

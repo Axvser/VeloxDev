@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Windows.Forms;
 
 namespace VeloxDev.WinForms.Xaml;
@@ -19,7 +19,7 @@ internal enum XamlValueSource
 }
 
 /// <summary>
-/// A property registered against <see cref="VeloxDev.WinForms.Xaml.Controls.Control"/> (or attached to any <see cref="System.Windows.Forms.Control"/>) whose value
+/// A property registered against a visual element (or attached to any <see cref="System.Windows.Forms.Control"/>) whose value
 /// is stored by the runtime instead of by a backing field.
 /// </summary>
 /// <remarks>
@@ -109,11 +109,9 @@ public sealed partial class DependencyProperty
     public object? GetValue(System.Windows.Forms.Control target)
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
-        return target is VeloxDev.WinForms.Xaml.Controls.Control xaml
-            ? xaml.GetLocalValueOrDefault(this)
-            : AttachedStores.TryGetValue(target, out var store) && store.Values.TryGetValue(this, out var value)
-                ? value
-                : Metadata.DefaultValue;
+        return AttachedStores.TryGetValue(target, out var store) && store.Values.TryGetValue(this, out var value)
+            ? value
+            : Metadata.DefaultValue;
     }
 
     /// <summary>Stores <paramref name="value"/> locally on <paramref name="target"/>.</summary>
@@ -140,61 +138,29 @@ public sealed partial class DependencyProperty
     {
         value = CoerceAndValidate(target, value);
 
-        object? oldValue;
-        if (target is VeloxDev.WinForms.Xaml.Controls.Control xaml)
+        var store = AttachedStores.GetOrCreateValue(target);
+        // 第一次写入没有本地值，但回调里的 OldValue 仍应是 GetValue 会返回的默认值，而不是 null。
+        var oldValue = store.Values.TryGetValue(this, out var existing) ? existing : Metadata.DefaultValue;
+        if (store.Values.ContainsKey(this) && Equals(oldValue, value))
         {
-            oldValue = xaml.GetLocalValueOrDefault(this);
-            if (xaml.HasLocalValue(this) && Equals(oldValue, value))
-            {
-                return;
-            }
-
-            xaml.SetLocalValue(this, value);
+            return;
         }
-        else
-        {
-            var store = AttachedStores.GetOrCreateValue(target);
-            // 第一次写入没有本地值，但回调里的 OldValue 仍应是 GetValue 会返回的默认值，而不是 null。
-            oldValue = store.Values.TryGetValue(this, out var existing) ? existing : Metadata.DefaultValue;
-            if (store.Values.ContainsKey(this) && Equals(oldValue, value))
-            {
-                return;
-            }
 
-            store.Values[this] = value;
-        }
+        store.Values[this] = value;
 
         RaiseChanged(target, oldValue, value, source);
     }
 
     internal void ClearValueCore(System.Windows.Forms.Control target, XamlValueSource source)
     {
-        object? oldValue;
-        object? newValue;
-
-        if (target is VeloxDev.WinForms.Xaml.Controls.Control xaml)
+        if (!AttachedStores.TryGetValue(target, out var store) || !store.Values.TryGetValue(this, out var oldValue))
         {
-            if (!xaml.HasLocalValue(this))
-            {
-                return;
-            }
-
-            oldValue = xaml.GetLocalValueOrDefault(this);
-            xaml.RemoveLocalValue(this);
-            newValue = xaml.GetLocalValueOrDefault(this);
-        }
-        else
-        {
-            if (!AttachedStores.TryGetValue(target, out var store) || !store.Values.TryGetValue(this, out oldValue))
-            {
-                return;
-            }
-
-            store.Values.Remove(this);
-            newValue = Metadata.DefaultValue;
+            return;
         }
 
-        RaiseChanged(target, oldValue, newValue, source);
+        store.Values.Remove(this);
+
+        RaiseChanged(target, oldValue, Metadata.DefaultValue, source);
     }
 
     private object? CoerceAndValidate(System.Windows.Forms.Control target, object? value)
@@ -232,31 +198,6 @@ public sealed partial class DependencyProperty
     {
         var args = new DependencyPropertyChangedEventArgs(this, oldValue, newValue);
         Metadata.PropertyChangedCallback?.Invoke(target, args);
-        if (target is VeloxDev.WinForms.Xaml.Controls.Control xaml)
-        {
-            xaml.OnDependencyPropertyChangedCore(this, oldValue, newValue, source);
-
-            // 布局失效由元数据统一扇出：顺序 / 位置类属性只需声明 AffectsMeasure 或 AffectsArrange，
-            // 不必在每处回调里手写 Parent?.PerformLayout()。
-            if (!xaml.IsDisposed)
-            {
-                if (Metadata.AffectsMeasure)
-                {
-                    xaml.InvalidateMeasure();
-                }
-                else if (Metadata.AffectsArrange)
-                {
-                    xaml.InvalidateArrange();
-                }
-            }
-
-            // 现代 GUI 的自动脏标记：依赖属性变了，画它的控件就要重画。以前只有显式写了
-            // PropertyChangedCallback 的控件会 Invalidate，自定义视图的文本/颜色因此会停旧值。
-            if (Metadata.AffectsRender && !xaml.IsDisposed)
-            {
-                xaml.Invalidate();
-            }
-        }
     }
 
     /// <summary>Raises the change callbacks only when the effective value actually changed.</summary>

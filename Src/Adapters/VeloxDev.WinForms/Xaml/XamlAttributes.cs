@@ -1,7 +1,7 @@
-namespace VeloxDev.WinForms.Xaml;
+﻿namespace VeloxDev.WinForms.Xaml;
 
 /// <summary>
-/// Marks a partial property of a <see cref="VeloxDev.WinForms.Xaml.Controls.Control"/>-derived type for dependency-property generation.
+/// Marks a partial property of a <see cref="VeloxDev.WinForms.Xaml.Visuals.VisualElement"/>-derived type for dependency-property generation.
 /// </summary>
 /// <remarks>
 /// <para>

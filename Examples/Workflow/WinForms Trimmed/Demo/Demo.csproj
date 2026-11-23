@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- The visual backend lays out in logical DIPs and scales its own Graphics by DeviceDpi/96. Run per-monitor
+         aware so the window itself is laid out at the real monitor DPI instead of being bitmap-scaled. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
   <ItemGroup>

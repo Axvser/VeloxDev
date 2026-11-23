@@ -164,7 +164,7 @@ WPF 的 `ViewFactory.FindTemplate` 第三级是**扫 `Application.Current.Resour
 
 ### 7. 视图池 batching 与 WPF **相同**
 
-默认是 Core 的 `AdaptiveViewPoolPolicy`（初始 64/8ms，按吞吐收敛到 8/12/16ms）；固定 `ViewPoolPolicy` 是 1024/16ms 的对照。六家默认都用 `AdaptiveViewPoolPolicy`，区别只在 `ViewScheduler.BatchPriority`：WPF/Avalonia/Jalium 是 `DispatcherPriority.Background`，WinUI 是 `DispatcherQueuePriority.Low`，WinForms 走 `Control.BeginInvoke`、MAUI 走 16ms 一次性 `IDispatcherTimer`（两者都是 `NonPriority`）。
+默认是 Core 的 `AdaptiveViewPoolPolicy`（初始 64/8ms，按吞吐收敛到 8/12/16ms）；固定 `ViewPoolPolicy` 是 1024/16ms 的对照。走池的五家默认都用 `AdaptiveViewPoolPolicy`，区别只在 `ViewScheduler.BatchPriority`：WPF/Avalonia/Jalium 是 `DispatcherPriority.Background`，WinUI 是 `DispatcherQueuePriority.Low`，MAUI 走 16ms 一次性 `IDispatcherTimer`（`NonPriority`）。WinForms 已不走池。
 `ViewPool` 在 `DetachedFromVisualTree` 时 `Dispose` system 并摘处理器；管理器放 `ConditionalWeakTable`（`ViewPool.cs` 的 `Systems`）。
 
 ### 8. Core 视图系统：`ViewPool` + 九项

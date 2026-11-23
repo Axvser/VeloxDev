@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Imaging;
 using System.Text;
 using System.Windows.Forms;
@@ -125,7 +125,7 @@ internal static class GalleryCapture
                     {
                         var builder = new StringBuilder();
                         builder.AppendLine($"window {form.Bounds}");
-                        if (gallery.Surface.Root is { } root)
+                        if (gallery.Surface.Root is VisualElement root)
                         {
                             Dump(root, builder, 0);
                         }

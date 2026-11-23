@@ -1,4 +1,4 @@
-using Demo.ViewModels;
+﻿using Demo.ViewModels;
 using Demo.ViewModels.Workflow.Helper;
 using Demo.Views.Workbench;
 using Demo.Views.Workflow;
@@ -431,7 +431,7 @@ namespace Demo
             };
 
             workflowSurfaceControl.Dock = DockStyle.Fill;
-            workflowSurfaceControl.Margin = VeloxDev.WinForms.Xaml.Controls.Thickness.Empty;
+            workflowSurfaceControl.Margin = Padding.Empty;
             _mainContent.Controls.Add(workflowSurfaceControl);
 
             _outputPanel = BuildOutputPanel();
@@ -1137,8 +1137,10 @@ namespace Demo
             {
                 var visible = !workflowSurfaceControl.MinimapOverlay.IsMinimapVisible;
                 workflowSurfaceControl.MinimapOverlay.IsMinimapVisible = visible;
-                workflowSurfaceControl.MinimapOverlay.Visible = visible;
-                workflowSurfaceControl.MinimapOverlay.Invalidate();
+                workflowSurfaceControl.MinimapOverlay.Visibility = visible
+                    ? VeloxDev.WinForms.Xaml.Controls.Visibility.Visible
+                    : VeloxDev.WinForms.Xaml.Controls.Visibility.Collapsed;
+                workflowSurfaceControl.MinimapOverlay.InvalidateVisual();
                 toggle.Text = visible ? "开" : "关";
                 toggle.TextColor = visible ? CardTheme.ActionCompile : CardTheme.DisabledText;
             };

@@ -1,12 +1,11 @@
 using System.Reflection;
-using System.Windows.Forms;
-using VeloxDev.AdapterTestKit;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
-using VeloxDev.WorkflowSystem.ViewHosting;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;
 
-// WinForms 没有附着属性系统，契约由静态 Get/Set 方法承载；这里按方法名钉住表面与辅助角色。
+// WinForms has no attached-property system on plain controls; the contract is carried by the static Get/Set
+// methods. This pins the roles the visual backend exposes: the workflow-free pool, the surface camera/parts, and
+// the three per-view behaviors that replace the deleted content monolith.
 [TestClass]
 public sealed class SurfaceContractTests
 {
@@ -25,36 +24,50 @@ public sealed class SurfaceContractTests
             $"missing public API: {owner.Name}.{method}");
 
     [TestMethod]
-    public void Surface_ExposesTheWholeLifecycleAsStaticEntryPoints()
+    public void Surface_ExposesTheVisualRolesThatReplacedTheMonolith()
     {
-        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowSurfaceBehavior");
-        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowMinimapOverlay");
-        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowCanvasTransformBehavior");
         RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.ViewPool");
-        RequireType("VeloxDev.WorkflowSystem.Attachments.WorkflowNodeAttachment");
-        RequireType("VeloxDev.WorkflowSystem.Attachments.WorkflowSlotAttachment");
-        RequireType("VeloxDev.WorkflowSystem.Attachments.WorkflowLinkAttachment");
+        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowSurfaceBehavior");
+        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowSlotLayoutBehavior");
         RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowNodeDragBehavior");
         RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowSlotConnectionBehavior");
-        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowSlotLayoutBehavior");
+        RequireType("VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowMinimapOverlay");
     }
 
     [TestMethod]
-    public void Surface_ExposesEveryAttachedEntryPoint()
+    public void ViewPool_ExposesTheItemSourceTemplateAndSelector()
+    {
+        var pool = typeof(ViewPool);
+        foreach (var method in new[]
+                 {
+                     "GetItemsSource", "SetItemsSource",
+                     "GetTemplateSelector", "SetTemplateSelector",
+                     "GetItemTemplate", "SetItemTemplate",
+                     "Refresh",
+                 })
+        {
+            RequireMethod(pool, method);
+        }
+    }
+
+    [TestMethod]
+    public void Surface_ExposesPartsCameraAndInputEntryPoints()
     {
         var surface = typeof(WorkflowSurfaceBehavior);
         foreach (var method in new[]
                  {
-                     "GetIsEnabled", "SetIsEnabled", "GetZoomEnabled", "SetZoomEnabled",
-                     "GetScrollViewerName", "SetScrollViewerName", "GetCanvasName", "SetCanvasName",
+                     "GetIsEnabled", "SetIsEnabled",
+                     "GetZoomEnabled", "SetZoomEnabled",
+                     "GetScrollViewerName", "SetScrollViewerName",
+                     "GetCanvasName", "SetCanvasName",
                      "GetGridDecoratorName", "SetGridDecoratorName",
                      "GetMinimapOverlayName", "SetMinimapOverlayName",
-                     "GetPointerPressSourceName", "SetPointerPressSourceName",
-                     "GetNodeViewType", "SetNodeViewType", "GetLinkViewType", "SetLinkViewType",
-                     "GetTemplateSelector", "SetTemplateSelector",
+                     "GetVisualTemplateSelector", "SetVisualTemplateSelector",
                      "GetWorkflowTree", "SetWorkflowTree",
-                     "GetLinkMenuBuilder", "SetLinkMenuBuilder",
-                     "Refresh",
+                     "GetZoom", "GetPan", "SetPan",
+                     "SurfaceToWorld", "WorldToSurface",
+                     "GetWorldViewport", "SetWorldViewport",
+                     "ZoomAt", "ProcessWheel", "Refresh",
                  })
         {
             RequireMethod(surface, method);
@@ -62,43 +75,23 @@ public sealed class SurfaceContractTests
     }
 
     [TestMethod]
-    public void SupportingRoles_ExposeTheirStaticEntryPoints()
+    public void PerViewBehaviors_ExposeTheirSwitchAndCoordinateHost()
     {
-        RequireMethod(typeof(WorkflowCanvasTransformBehavior), "GetTransform");
-        RequireMethod(typeof(WorkflowCanvasTransformBehavior), "SetTransform");
+        foreach (var type in new[]
+                 {
+                     typeof(WorkflowSlotLayoutBehavior),
+                     typeof(WorkflowNodeDragBehavior),
+                     typeof(WorkflowSlotConnectionBehavior),
+                 })
+        {
+            RequireMethod(type, "GetIsEnabled");
+            RequireMethod(type, "SetIsEnabled");
+            RequireMethod(type, "Ensure");
+        }
 
-        RequireMethod(typeof(ViewPool), "SetItemsSource");
-        RequireMethod(typeof(ViewPool), "SetTemplateSelector");
-
-        RequireMethod(typeof(WorkflowNodeDragBehavior), "SetIsEnabled");
-        RequireMethod(typeof(WorkflowNodeDragBehavior), "SetCoordinateHostName");
-        RequireMethod(typeof(WorkflowNodeDragBehavior), "SetCoordinateHostType");
-
-        RequireMethod(typeof(WorkflowSlotConnectionBehavior), "SetIsEnabled");
-
-        RequireMethod(typeof(WorkflowSlotLayoutBehavior), "SetIsEnabled");
-        RequireMethod(typeof(WorkflowSlotLayoutBehavior), "SetSlotNames");
+        RequireMethod(typeof(WorkflowSlotLayoutBehavior), "GetSlotNames");
         RequireMethod(typeof(WorkflowSlotLayoutBehavior), "SetSlotEnumeratorNames");
-    }
-
-    [TestMethod]
-    public void ViewContainer_RestoresTheContextTagWhenAViewIsReactivatedForTheSameItem()
-    {
-        // 池回收只把视图藏起来并清掉 Tag；再次给同一个 item 时附件的 setter 会 ReferenceEquals 早退。
-        // Tag 不补回来，WorkflowNodeDragBehavior / WorkflowSlotLayoutBehavior 的 ResolveNode 就再也找不到节点。
-        var graph = TestGraph.Create(connect: false);
-        using var host = new Panel();
-        using var view = new Panel();
-        var container = new ViewContainer();
-
-        container.Attach(host, view);
-        container.Activate(view, graph.Left);
-        Assert.AreSame(graph.Left, view.Tag);
-
-        container.Deactivate(view);
-        Assert.IsNull(view.Tag);
-
-        container.Activate(view, graph.Left);
-        Assert.AreSame(graph.Left, view.Tag);
+        RequireMethod(typeof(WorkflowSlotLayoutBehavior), "SetCoordinateHostName");
+        RequireMethod(typeof(WorkflowNodeDragBehavior), "SetCoordinateHostName");
     }
 }

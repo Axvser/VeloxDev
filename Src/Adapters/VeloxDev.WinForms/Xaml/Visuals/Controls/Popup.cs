@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
@@ -70,7 +70,7 @@ public class VisualPopup : VisualElement
         nameof(StaysOpen), typeof(bool), typeof(VisualPopup),
         new PropertyMetadata(false) { AffectsRender = false });
 
-    private VisualSurface? _surface;
+    private VisualHost? _surface;
     private bool _open;
 
     /// <summary>Creates a closed, hit-testable popup.</summary>
@@ -103,6 +103,9 @@ public class VisualPopup : VisualElement
         get => (VisualElement?)GetValue(ChildProperty);
         set => SetValue(ChildProperty, value);
     }
+
+    /// <summary>Whether the popup is at least as wide as its placement target (a combo box, not a menu).</summary>
+    public bool MatchTargetWidth { get; set; } = true;
 
     /// <summary>The element the popup is positioned against.</summary>
     public VisualElement? PlacementTarget
@@ -159,7 +162,9 @@ public class VisualPopup : VisualElement
         // 自绘弹层（菜单）没有 Child，Measure 走它自己的 MeasureOverride；有 Child 时由基类量 Child + Padding。
         var desired = Measure(available);
         var target = PlacementTarget?.AbsoluteBounds ?? RectangleF.Empty;
-        var width = Math.Max(1f, Math.Max(target.Width, desired.Width));
+        var width = MatchTargetWidth
+            ? Math.Max(1f, Math.Max(target.Width, desired.Width))
+            : Math.Max(1f, desired.Width);
         var height = Math.Max(1f, desired.Height);
 
         var (x, y) = Placement switch

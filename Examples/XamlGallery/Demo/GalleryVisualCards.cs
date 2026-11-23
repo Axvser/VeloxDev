@@ -34,6 +34,7 @@ internal static class GalleryVisualCards
     public static IReadOnlyList<GalleryCard> Create(GalleryModel model, Action? rebuild)
     {
         var cards = new List<GalleryCard>();
+        cards.AddRange(DefaultCards(model));
         cards.AddRange(LayoutCards());
         cards.AddRange(TextCards());
         cards.AddRange(DataCards(model));
@@ -46,6 +47,125 @@ internal static class GalleryVisualCards
         cards.AddRange(VisualsCards());
         return cards;
     }
+
+    private static List<GalleryCard> DefaultCards(GalleryModel model) => new()
+    {
+        Card("defaults.controls", "Defaults", "Default controls",
+            "The implicit fallback style: no control below sets a style, background, foreground or palette override.",
+            "// no Style, Background or Foreground is set on any control",
+            _ => BuildDefaultControls(model)),
+    };
+
+    // 这组控件刻意不做任何外观设置：它们展示的就是宿主不写样式时的默认观感。
+    private static VC.StackPanel BuildDefaultControls(GalleryModel model)
+    {
+        var intro = Caption("Every control uses the implicit fallback style. Only text, control size and layout are authored.");
+        intro.Width = 660;
+
+        var buttons = Section("Button · RepeatButton · ToggleButton");
+        buttons.Add(Row(8,
+            new VC.Button { Text = "Button" },
+            new VC.RepeatButton { Text = "Repeat" },
+            new VC.ToggleButton { IsChecked = true }));
+
+        var selection = Section("CheckBox · RadioButton");
+        selection.Add(Row(10,
+            new VC.CheckBox { IsChecked = true },
+            new VC.RadioButton { GroupName = "defaults", IsChecked = true },
+            new VC.CheckBox()));
+
+        var editors = Section("TextBox · PasswordBox");
+        editors.Add(new VC.TextBox { Width = 200, Placeholder = "TextBox" });
+        editors.Add(new VC.TextBox { Width = 200, IsPassword = true, Placeholder = "PasswordBox" });
+
+        var range = Section("Slider · ProgressBar");
+        range.Add(new VC.Slider { Width = 200, Value = 40 });
+        range.Add(new VC.ProgressBar { Width = 200, Height = 8, Value = 65 });
+
+        var comboBox = new VC.ComboBox { Width = 200, SelectedIndex = 0 };
+        comboBox.Items.Add("Balanced");
+        comboBox.Items.Add("Throughput");
+        comboBox.Items.Add("Latency");
+        var combo = Section("ComboBox");
+        combo.Add(comboBox);
+
+        var left = new VC.StackPanel { Spacing = 12, Width = 210 };
+        left.Add(buttons);
+        left.Add(selection);
+        left.Add(editors);
+        left.Add(range);
+        left.Add(combo);
+
+        var listBox = new VC.ListBox { Width = 200, Height = 110, SelectedIndex = 0 };
+        listBox.ItemsSource = new[] { "Alpha", "Bravo", "Charlie", "Delta" };
+        var list = Section("ListBox");
+        list.Add(listBox);
+
+        var tree = new VC.TreeView { Width = 200, Height = 160 };
+        foreach (var node in model.TreeNodes)
+        {
+            tree.Items.Add(BuildTreeItem(node));
+        }
+
+        var treeView = Section("TreeView");
+        treeView.Add(tree);
+
+        var text = new VC.StackPanel { Spacing = 8, Width = 200 };
+        text.Add(new VC.TextBlock
+        {
+            Text = "TextBlock wraps its text inside the fallback width.",
+            Wrap = true,
+        });
+        text.Add(new VC.GroupBox
+        {
+            Header = "GroupBox",
+            Child = new VC.TextBlock { Text = "Content sits inside the frame.", Wrap = true },
+        });
+        text.Add(new VC.Expander
+        {
+            Header = "Expander",
+            IsExpanded = true,
+            Content = new VC.TextBlock { Text = "Content is measured only while expanded.", Wrap = true },
+        });
+        var textSection = Section("TextBlock · GroupBox · Expander");
+        textSection.Add(text);
+
+        var middle = new VC.StackPanel { Spacing = 12, Width = 200 };
+        middle.Add(list);
+        middle.Add(treeView);
+        middle.Add(textSection);
+
+        var calendar = new VC.Calendar { Width = 250, SelectedDate = DateTime.Today };
+        var calendarSection = Section("Calendar");
+        calendarSection.Add(calendar);
+
+        var datePicker = Section("DatePicker");
+        datePicker.Add(new VC.DatePicker { Width = 250, SelectedDate = DateTime.Today });
+
+        var right = new VC.StackPanel { Spacing = 12, Width = 250 };
+        right.Add(calendarSection);
+        right.Add(datePicker);
+
+        var root = new VC.StackPanel { Spacing = 14 };
+        root.Add(intro);
+        root.Add(Row(14, left, middle, right));
+        return root;
+    }
+
+    private static VC.StackPanel Section(string caption)
+    {
+        var section = new VC.StackPanel { Spacing = 5 };
+        section.Add(Caption(caption));
+        return section;
+    }
+
+    private static VC.TextBlock Caption(string text)
+        => new()
+        {
+            Text = text,
+            Foreground = Theme.Current.MutedForeground,
+            Font = new Font("Segoe UI", 9f),
+        };
 
     private static List<GalleryCard> LayoutCards() => new()
     {

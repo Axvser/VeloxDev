@@ -41,7 +41,7 @@ public sealed class VisualNameScope
 /// <summary>Resolves named resources for the visual backend through the element's ancestor chain and its surface.</summary>
 /// <remarks>
 /// The nearest dictionary wins: the element's own <see cref="VisualElement.Resources"/>, then each ancestor's, then
-/// <see cref="VisualSurface.Resources"/>. A key missing from every dictionary throws instead of returning a default,
+/// <see cref="VisualHost.Resources"/>. A key missing from every dictionary throws instead of returning a default,
 /// because a silently default value turns a typo into a blank control far from the mistake.
 /// </remarks>
 public static class VisualResourceLookup

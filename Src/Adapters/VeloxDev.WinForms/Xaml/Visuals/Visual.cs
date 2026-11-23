@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 
@@ -11,8 +11,8 @@ namespace VeloxDev.WinForms.Xaml.Visuals;
 /// <remarks>
 /// <para>
 /// This is the opt-in lightweight layer of the WinForms XAML runtime. It is intended for non-interactive content such
-/// as decoration, text, shapes and connector batches; native controls and <see cref="VeloxDev.WinForms.Xaml.Controls.Control"/> instances
-/// stay real child windows. A tree of visuals is hosted by <see cref="VeloxDev.WinForms.Xaml.Controls.VisualHost"/> and painted in one pass.
+/// as decoration, text, shapes and connector batches; native controls and WinForms controls
+/// stay real child windows. A tree of visuals is hosted by <see cref="VisualHost"/> and painted in one pass.
 /// </para>
 /// <para>
 /// <see cref="Bounds"/> is expressed in the parent's coordinates; content is painted in the visual's own local
@@ -35,11 +35,22 @@ public abstract class Visual : WinformsObject
     /// <summary>An optional clip rectangle in the visual's local coordinates.</summary>
     public RectangleF? Clip { get; set; }
 
+    /// <summary>Whether children are painted and hit-tested only inside this visual's local bounds.</summary>
+    /// <remarks>WPF's <c>UIElement.ClipToBounds</c> equivalent; defaults to <see langword="false"/>.</remarks>
+    public bool ClipToBounds { get; set; }
+
     /// <summary>An optional effect applied to the rendered subtree.</summary>
     public VisualEffect? Effect { get; set; }
 
     /// <summary>Whether this visual and its subtree are painted and hit-tested.</summary>
     public bool IsVisible { get; set; } = true;
+
+    /// <summary>Whether a hit outside <see cref="Bounds"/> still reaches this visual's content and children.</summary>
+    /// <remarks>
+    /// A camera container uses this: its children are painted in world coordinates far outside the viewport-sized
+    /// layout box, and the surface clip (not the camera rectangle) decides what is visible.
+    /// </remarks>
+    public bool UnboundedHitTest { get; set; }
 
     /// <summary>Whether the subtree is cached in a bitmap between frames.</summary>
     /// <remarks>
@@ -137,6 +148,11 @@ public abstract class Visual : WinformsObject
                 graphics.MultiplyTransform(Transform, MatrixOrder.Prepend);
             }
 
+            if (ClipToBounds)
+            {
+                graphics.SetClip(new RectangleF(0f, 0f, Bounds.Width, Bounds.Height), CombineMode.Intersect);
+            }
+
             if (Clip is { } clip)
             {
                 graphics.SetClip(clip, CombineMode.Intersect);
@@ -185,12 +201,17 @@ public abstract class Visual : WinformsObject
             local = points[0];
         }
 
-        if (local.X < 0f || local.Y < 0f || local.X > Bounds.Width || local.Y > Bounds.Height)
+        if (!UnboundedHitTest && (local.X < 0f || local.Y < 0f || local.X > Bounds.Width || local.Y > Bounds.Height))
         {
             return false;
         }
 
         if (Clip is { } clip && !clip.Contains(local))
+        {
+            return false;
+        }
+
+        if (ClipToBounds && (local.X < 0f || local.Y < 0f || local.X > Bounds.Width || local.Y > Bounds.Height))
         {
             return false;
         }
@@ -208,7 +229,11 @@ public abstract class Visual : WinformsObject
             return null;
         }
 
-        var local = ToLocal(point);
+        // An unclipped parent (ClipToBounds=false) does not swallow a child that straddles its bounds:
+        // the child is hit-tested first in the parent's local coordinates. The parent's own content still
+        // only answers inside its layout rectangle.
+        var allowOutside = !ClipToBounds;
+        var local = ToLocal(point, allowOutside);
         if (local is null)
         {
             return null;
@@ -217,6 +242,13 @@ public abstract class Visual : WinformsObject
         if (HitTestChildren(local.Value, out var child))
         {
             return child;
+        }
+
+        var outside = local.Value.X < 0f || local.Value.Y < 0f
+                      || local.Value.X > Bounds.Width || local.Value.Y > Bounds.Height;
+        if (outside && !UnboundedHitTest)
+        {
+            return null;
         }
 
         return HitTestContent(local.Value) ? this : null;
@@ -251,7 +283,7 @@ public abstract class Visual : WinformsObject
         return false;
     }
 
-    private PointF? ToLocal(PointF point)
+    private PointF? ToLocal(PointF point, bool allowOutside)
     {
         if (Bounds.Width <= 0f || Bounds.Height <= 0f)
         {
@@ -270,7 +302,8 @@ public abstract class Visual : WinformsObject
             local = points[0];
         }
 
-        if (local.X < 0f || local.Y < 0f || local.X > Bounds.Width || local.Y > Bounds.Height)
+        var outside = local.X < 0f || local.Y < 0f || local.X > Bounds.Width || local.Y > Bounds.Height;
+        if (!allowOutside && !UnboundedHitTest && outside)
         {
             return null;
         }
@@ -458,8 +491,9 @@ public class ContainerVisual : Visual
     }
 
     /// <inheritdoc />
+    /// <remarks>A non-null background is hit-testable even when transparent, matching WPF.</remarks>
     protected override bool HitTestContent(PointF point)
-        => Background is { } background && background.ApproximateColor.A > 0;
+        => Background is not null;
 
     /// <inheritdoc />
     protected override bool HitTestChildren(PointF point) => HitTestChildren(point, out _);

@@ -1,46 +1,82 @@
+﻿using System.Drawing;
 using System.Windows.Forms;
 using VeloxDev.AdapterTestKit;
+using VeloxDev.WinForms.Xaml.Visuals;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
+using DrawingPointF = System.Drawing.PointF;
 
 namespace VeloxDev.WinForms.Headless.Tests.Infrastructure;
 
-// WinForms 没有 Dispatcher/Headless 平台包：无头 = 建句柄但不 Show()。
-// 表面是普通根控件 + 命名部件，平移与视口回写由 WorkflowSurfaceBehavior 自己执行。
+// WinForms has no dispatcher/headless platform package: headless means "create the handle but never Show()".
+// The surface is one VisualHost; the camera, viewport write-back and virtualization all live in the behavior.
 internal sealed class WinFormsHeadlessSurface : IDisposable
 {
-    public WinFormsHeadlessSurface(
-        TestGraph graph, bool bind = true, bool typedViews = false, bool xamlScrollViewer = false)
+    public WinFormsHeadlessSurface(TestGraph graph, bool bind = true, bool withMinimap = false)
     {
         Graph = graph;
-        View = new TestWorkflowSurface(typedViews, xamlScrollViewer);
+        View = new TestWorkflowSurface();
 
         View.CreateControl();
         View.PerformLayout();
 
+        if (withMinimap)
+        {
+            Minimap = new WorkflowMinimapOverlay { Name = "PART_Minimap" };
+            View.RootContainer.Add(Minimap);
+            WorkflowSurfaceBehavior.SetMinimapOverlayName(View, "PART_Minimap");
+        }
+
         if (bind)
         {
             WorkflowSurfaceBehavior.SetWorkflowTree(View, graph.Tree);
+            // Bind the pool to the virtualized set the helper owns, exactly like the generated template.
+            ViewPool.SetItemsSource(View.Canvas, graph.Tree.GetHelper().VisibleItems);
         }
 
-        View.PerformLayout();
-        Application.DoEvents();
-        WorkflowSurfaceBehavior.Refresh(View);
-        Application.DoEvents();
+        WorkflowSurfaceBehavior.SetIsEnabled(View, true);
+        Render();
     }
 
     public TestGraph Graph { get; }
 
     public TestWorkflowSurface View { get; }
 
-    // 走适配器注册在树上的滚动口，而不是直接改私有平移字段：这条才是滚轮/外部滚动真正走的路。
+    public WorkflowMinimapOverlay? Minimap { get; }
+
+    /// <summary>Runs two layout/render passes and drains queued work.</summary>
+    /// <remarks>
+    /// The first pass measures pooled views that were added during virtualisation; slot anchors and link curves
+    /// are only stable after that measurement, so a second pass is what tests assert against.
+    /// </remarks>
+    public void Render()
+    {
+        View.RenderSurface();
+        View.RenderSurface();
+        Application.DoEvents();
+    }
+
+    // Goes through the adapter's registered scroll route, the one a wheel or an external host would drive.
     public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
     {
         WorkflowInput.For(Graph.Tree).Scroller?.ScrollBy(wheelDeltaX, wheelDeltaY);
-        Application.DoEvents();
-        WorkflowSurfaceBehavior.Refresh(View);
-        Application.DoEvents();
+        Render();
     }
+
+    public bool Press(DrawingPointF surfacePoint)
+        => View.ProcessPointerDown(surfacePoint, MouseButtons.Left);
+
+    public bool MoveTo(DrawingPointF surfacePoint)
+        => View.ProcessPointerMove(surfacePoint);
+
+    public bool Release(DrawingPointF surfacePoint)
+        => View.ProcessPointerUp(surfacePoint, MouseButtons.Left);
+
+    public DrawingPointF WorldToSurface(DrawingPointF worldPoint)
+        => WorkflowSurfaceBehavior.WorldToSurface(View, worldPoint);
+
+    public DrawingPointF SurfaceToWorld(DrawingPointF surfacePoint)
+        => WorkflowSurfaceBehavior.SurfaceToWorld(View, surfacePoint);
 
     public void Dispose()
     {

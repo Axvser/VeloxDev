@@ -96,7 +96,7 @@
    （`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/ViewPool.razor.cs` 的 `ItemTemplate`；这家 `ViewPool.razor.cs` 没有 `TemplateSelector` 参数，
    整个适配器也没有 `ViewManager`）⇒ 判定"这家接没接选择器"看 `<TemplateSelector>` 那一行即可，
    **搜 `ViewPool.TemplateSelector` 在本家恒空**。
-   同族对照见 `../architecture.md` §五（WinForms 由 `WorkflowSurfaceBehavior.EnsurePool` 把 `VisibleItems` 交给 `ViewPool`）。
+   同族对照见 `../architecture.md` §五（WinForms 由通用视觉 `ViewPool` 按 `VisibleItems` 建视觉元素）。
 
 7. **输入/输出插槽按通道拆的逻辑现在在适配器 `WorkflowPresentation`**：`InputSlotsOf`（只带 source 标志、
    排除任何 target 标志）与 `OutputSlotsOf`（带 target 标志）

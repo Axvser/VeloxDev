@@ -15,7 +15,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void TreeView_FlattensExpandedRowsAndSelectsByPointerAndKeyboard()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 240) };
+        using var surface = new VisualHost { Size = new Size(320, 240) };
         using var tree = new VC.TreeView();
         var group = new VC.TreeViewItem { Header = "Group", IsExpanded = true };
         var child = new VC.TreeViewItem { Header = "Child" };
@@ -48,7 +48,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void ContextMenu_InvokesAnItemAndClosesOnOutsidePress()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 240) };
+        using var surface = new VisualHost { Size = new Size(320, 240) };
         using var root = new VC.StackPanel();
         using var target = new VC.Border { Width = 80f, Height = 30f, Background = Color.Lime };
         root.Add(target);
@@ -78,7 +78,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void Calendar_KeyboardMovesTheSelection()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 280) };
+        using var surface = new VisualHost { Size = new Size(320, 280) };
         using var calendar = new VC.Calendar { Width = 250f, Height = 226f };
         surface.Root = calendar;
         Layout(surface, 320, 280);
@@ -94,7 +94,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void DatePicker_OpensCalendarSelectsAndCloses()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 280) };
+        using var surface = new VisualHost { Size = new Size(320, 280) };
         using var root = new VC.StackPanel();
         using var picker = new VC.DatePicker { Width = 180f };
         root.Add(picker);
@@ -118,7 +118,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void Expander_TogglesTheContentVisibilityAndHeight()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 240) };
+        using var surface = new VisualHost { Size = new Size(320, 240) };
         using var expander = new VC.Expander { Width = 240f, Header = "More" };
         var content = new VC.TextBlock { Text = "Body", Height = 60f };
         expander.Content = content;
@@ -144,7 +144,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void TabControl_SwitchesTheVisiblePage()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 240) };
+        using var surface = new VisualHost { Size = new Size(320, 240) };
         using var tabs = new VC.TabControl();
         var first = new VC.TextBlock { Text = "First" };
         var second = new VC.TextBlock { Text = "Second" };
@@ -169,7 +169,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void UniformGrid_PlacesChildrenIntoEqualCells()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 240) };
+        using var surface = new VisualHost { Size = new Size(320, 240) };
         using var grid = new VC.UniformGrid { Columns = 2, Width = 200f, Height = 100f };
         var a = new VC.Border();
         var b = new VC.Border();
@@ -189,7 +189,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void Viewbox_ScalesTheChildIntoTheBox()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 240) };
+        using var surface = new VisualHost { Size = new Size(320, 240) };
         using var viewbox = new VC.Viewbox { Width = 200f, Height = 200f };
         var child = new VC.Border { Width = 100f, Height = 50f };
         viewbox.Child = child;
@@ -204,7 +204,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void VisualPresenter_HostsAContainerVisual()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 240) };
+        using var surface = new VisualHost { Size = new Size(320, 240) };
         using var presenter = new VC.VisualPresenter { Width = 120f, Height = 60f };
         var container = new ContainerVisual();
         container.Add(new ShapeVisual
@@ -224,7 +224,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void Slider_PointerAndKeyboardChangeTheValue()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 240) };
+        using var surface = new VisualHost { Size = new Size(320, 240) };
         using var slider = new VC.Slider { Width = 200f, Minimum = 0d, Maximum = 100d };
         surface.Root = slider;
         Layout(surface, 320, 240);
@@ -244,7 +244,7 @@ public sealed class VisualExtendedControlTests
     [TestMethod]
     public void Shapes_MeasureAndRenderWithoutAnHwnd()
     {
-        using var surface = new VisualSurface { Size = new Size(320, 240) };
+        using var surface = new VisualHost { Size = new Size(320, 240) };
         using var root = new VC.StackPanel { Spacing = 4 };
         using var ellipse = new VS.Ellipse { Width = 40f, Height = 20f, Fill = Theme.Current.Accent };
         using var polygon = new VS.Polygon { Points = [new PointF(0, 20), new PointF(20, 0), new PointF(40, 20)] };
@@ -266,7 +266,7 @@ public sealed class VisualExtendedControlTests
     private static PointF Center(RectangleF bounds)
         => new(bounds.X + (bounds.Width / 2f), bounds.Y + (bounds.Height / 2f));
 
-    private static void Layout(VisualSurface surface, int width, int height)
+    private static void Layout(VisualHost surface, int width, int height)
     {
         using var bitmap = new Bitmap(1, 1);
         using var graphics = Graphics.FromImage(bitmap);

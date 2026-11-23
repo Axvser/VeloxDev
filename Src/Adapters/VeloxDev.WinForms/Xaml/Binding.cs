@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 
 namespace VeloxDev.WinForms.Xaml;
 
@@ -27,7 +27,7 @@ public enum UpdateSourceTrigger
     /// <summary>Write back when the target loses focus.</summary>
     LostFocus,
 
-    /// <summary>Write back only when the host calls <see cref="VeloxDev.WinForms.Xaml.Controls.Control.UpdateSource(DependencyProperty)"/>.</summary>
+    /// <summary>Write back when the host edits the value.</summary>
     Explicit,
 }
 
@@ -113,7 +113,7 @@ public interface IParameterizedValueConverter
 
 /// <summary>
 /// Describes a one-way, two-way or one-time link from a source object to one dependency property, or to one native
-/// WinForms property through <c>Control.DataBindings</c>.
+/// WinForms property through a binding sink.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -173,15 +173,10 @@ public class Binding
     /// <summary>When a two-way binding writes the target value back.</summary>
     public UpdateSourceTrigger UpdateSourceTrigger { get; set; }
 
-    /// <summary>The rules run over each converted value before the binding publishes its validation state.</summary>
-    /// <remarks>A failed rule never blocks the value write; it only marks the target through <see cref="Validation"/>.</remarks>
-    public IList<ValidationRule> ValidationRules { get; } = new List<ValidationRule>();
-
     /// <summary>Whether an exception thrown while converting or writing back becomes a validation error.</summary>
     public bool ValidatesOnExceptions { get; set; }
 
-    /// <summary>Whether <see cref="Validation.Error"/> is raised when this binding adds or removes an error.</summary>
-    /// <remarks>Errors are always published through <see cref="Validation"/>; this flag only controls the event.</remarks>
+    /// <summary>Whether binding errors are surfaced as events.</summary>
     public bool NotifyOnValidationError { get; set; }
 
     /// <summary>Whether a source implementing <see cref="System.ComponentModel.INotifyDataErrorInfo"/> contributes its errors.</summary>
@@ -192,7 +187,7 @@ public class Binding
 }
 
 /// <summary>
-/// A binding whose source is the control that owns the applied <see cref="ControlTemplate"/>.
+/// A binding whose source is the templated parent.
 /// </summary>
 public sealed class TemplateBinding : Binding
 {

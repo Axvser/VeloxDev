@@ -118,7 +118,7 @@ public sealed class WinformsObjectTests
     [TestMethod]
     public void TextBlock_TextChangeInvalidatesMeasure()
     {
-        using var surface = new VisualSurface { Size = new Size(400, 120) };
+        using var surface = new VisualHost { Size = new Size(400, 120) };
         var root = new VC.StackPanel();
         var text = new VC.TextBlock { Text = "short" };
         root.Add(text);
@@ -144,7 +144,7 @@ public sealed class WinformsObjectTests
         CollectionAssert.AreEqual(new[] { nameof(Model.Name) }, names);
     }
 
-    private static void Render(VisualSurface surface, int width, int height)
+    private static void Render(VisualHost surface, int width, int height)
     {
         using var bitmap = new Bitmap(1, 1);
         using var graphics = Graphics.FromImage(bitmap);

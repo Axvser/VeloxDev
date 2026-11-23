@@ -19,7 +19,7 @@ public sealed class VisualPopupComboBoxTests
     [TestMethod]
     public void Popup_RendersAboveTheRootAndHitTestsFirst()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         using var root = new VC.Border { Background = Color.Blue };
         var target = new VC.Border { Width = 80f, Height = 30f };
         root.Add(target);
@@ -55,7 +55,7 @@ public sealed class VisualPopupComboBoxTests
     [TestMethod]
     public void Popup_OutsidePressClosesAndInsideOrTargetPressKeepsItOpen()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         using var root = new VC.StackPanel();
         var target = new VC.Border { Width = 80f, Height = 30f, Background = Color.Lime };
         root.Add(target);
@@ -91,7 +91,7 @@ public sealed class VisualPopupComboBoxTests
     [TestMethod]
     public void Popup_StaysOpenIgnoresOutsidePressAndRootReplacementCloses()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         using var root = new VC.StackPanel();
         var target = new VC.Border { Width = 80f, Height = 30f };
         root.Add(target);
@@ -131,7 +131,7 @@ public sealed class VisualPopupComboBoxTests
     [TestMethod]
     public void ComboBox_PointerSelectionCommitsAndCloses()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         using var combo = CreateComboBox();
         var root = new VC.StackPanel();
         root.Add(combo);
@@ -159,7 +159,7 @@ public sealed class VisualPopupComboBoxTests
     [TestMethod]
     public void ComboBox_KeyboardMovesOpensCommitsAndEscapeReverts()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         using var combo = CreateComboBox();
         var root = new VC.StackPanel();
         root.Add(combo);
@@ -191,7 +191,7 @@ public sealed class VisualPopupComboBoxTests
     [TestMethod]
     public void ComboBox_OutsidePressClosesAndFocusesTheClickedElement()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         using var combo = CreateComboBox();
         var button = new VC.Button { Text = "Elsewhere" };
         var root = new VC.StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -216,7 +216,7 @@ public sealed class VisualPopupComboBoxTests
     [TestMethod]
     public void ComboBox_CreatesNoAdditionalWindows()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         using var combo = CreateComboBox();
         var root = new VC.StackPanel();
         root.Add(combo);
@@ -283,7 +283,7 @@ public sealed class VisualPopupComboBoxTests
     private static PointF Center(RectangleF bounds)
         => new(bounds.X + (bounds.Width / 2f), bounds.Y + (bounds.Height / 2f));
 
-    private static void Layout(VisualSurface surface, int width, int height)
+    private static void Layout(VisualHost surface, int width, int height)
     {
         surface.Size = new Size(width, height);
         using var bitmap = new Bitmap(1, 1);

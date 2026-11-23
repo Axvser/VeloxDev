@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
@@ -24,7 +24,7 @@ public sealed class GalleryForm : Form
         BackColor = Theme.Current.WindowBackground;
         AutoScaleMode = AutoScaleMode.None;
 
-        Surface = new VisualSurface
+        Surface = new VisualHost
         {
             Dock = DockStyle.Fill,
             BackColor = Theme.Current.WindowBackground,
@@ -36,7 +36,7 @@ public sealed class GalleryForm : Form
     }
 
     /// <summary>The single visual surface hosted by this window.</summary>
-    public VisualSurface Surface { get; }
+    public VisualHost Surface { get; }
 
     /// <summary>The visual shell (catalog, preview, inspector).</summary>
     internal GalleryVisualShell Shell => _shell;
@@ -97,11 +97,11 @@ public sealed class GalleryForm : Form
         if (IsHandleCreated)
         {
             // 事件处理器可能就在被替换的树里；等这一手返回后再释放旧根。
-            BeginInvoke(new Action(() => previous?.Dispose()));
+            BeginInvoke(new Action(() => (previous as IDisposable)?.Dispose()));
         }
         else
         {
-            previous?.Dispose();
+            (previous as IDisposable)?.Dispose();
         }
 
         Surface.InvalidateSurface();

@@ -3,6 +3,7 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Reflection;
 using V = VeloxDev.WinForms.Xaml.Controls;
+using VShapes = VeloxDev.WinForms.Xaml.Visuals.Controls.Shapes;
 
 namespace VeloxDev.WinForms.Xaml.Test;
 
@@ -223,7 +224,7 @@ public sealed class VisualPrimitiveTests
     [TestMethod]
     public void Polygon_And_Polyline_BuildTheirGeometryFromPoints()
     {
-        using var polygon = new V.Shapes.Polygon
+        using var polygon = new VShapes.Polygon
         {
             Points = [new PointF(0f, 0f), new PointF(10f, 0f), new PointF(5f, 10f)],
         };
@@ -231,7 +232,7 @@ public sealed class VisualPrimitiveTests
         Assert.AreEqual(3, polygonPath.PointCount);
         Assert.AreNotEqual(0, polygonPath.PathTypes[polygonPath.PathTypes.Length - 1] & 0x80);
 
-        using var polyline = new V.Shapes.Polyline
+        using var polyline = new VShapes.Polyline
         {
             Points = [new PointF(0f, 0f), new PointF(10f, 0f), new PointF(10f, 10f)],
         };

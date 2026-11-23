@@ -1,8 +1,8 @@
-// VeloxDev customization: The XAML owns the surface; give it an ITreeComponent as its data context.
+// VeloxDev customization: the tree is a visual view; host it in a VisualHost and attach WorkflowSurfaceBehavior there.
 
 namespace TemplateNamespace;
 
-public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Controls.UserControl
+public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
 {
     public TemplateClass()
     {

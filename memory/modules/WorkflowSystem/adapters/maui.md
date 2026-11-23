@@ -17,7 +17,7 @@
 ## 一、这家必须实现哪些契约成员，为什么是这些
 
 七角色的落点（定义见 `view-layer.md` §The seven roles）：画布宿主（解析命名控件、喂装饰器）、平移、缩放、可见区、右键菜单接线、组件输入转发的入口与「已路由」登记都在 `WorkflowSurfaceBehavior.cs`（§三·9）；视图池是 `ViewPool.cs`（附着属性）+ `WorkflowSystem/ViewHosting/`（`ViewSourcePipeline` 组合 Core 的池与各层，§二·1）；节点拖拽、插槽连接、插槽布局分别是 `WorkflowNodeDragBehavior.cs`（§三·5）、`WorkflowSlotConnectionBehavior.cs`（§三·6）、`WorkflowSlotLayoutBehavior.cs`（§二·5）。
-**没有 `WorkflowCanvasTransformBehavior`**（§三·1），职责由宿主 + `ViewHosting/ViewArranger` 分担。小地图有 `WorkflowMinimapOverlay.cs`；**装饰器适配器不提供**，由模板/demo 写（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/WorkflowGridDecorator.cs`），与 WPF/Avalonia/WinUI/Jalium 同；只有 Razor 与 WinForms 在适配器里自带一份。
+**没有 `WorkflowCanvasTransformBehavior`**（§三·1），职责由宿主 + `ViewHosting/ViewArranger` 分担。小地图有 `WorkflowMinimapOverlay.cs`；**装饰器适配器不提供**，由模板/demo 写（`Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/WorkflowGridDecorator.cs`），与 WPF/Avalonia/WinUI/Jalium/WinForms 同；只有 Razor 在适配器里自带一份。
 
 **契约外的类**：`WorkflowLinkOverlay.cs` —— 链接层（画 Core 的可见集），见 §三·2。
 

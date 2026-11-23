@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
@@ -15,15 +15,31 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// <summary>The base of elements that arrange children; empty space passes the pointer through.</summary>
 public abstract class Panel : VisualElement
 {
+    /// <summary>The paint order among siblings; a lower value paints first (below).</summary>
+    public static readonly DependencyProperty ZIndexProperty = DependencyProperty.RegisterAttached(
+        "ZIndex", typeof(int), typeof(Panel), new PropertyMetadata(0));
+
     /// <summary>Creates a panel whose uncovered area does not claim pointer hits.</summary>
     protected Panel()
     {
         IsHitTestVisible = false;
     }
 
+    /// <summary>Reads the paint order of <paramref name="element"/>.</summary>
+    public static int GetZIndex(VisualElement element)
+        => element is null ? throw new ArgumentNullException(nameof(element)) : (int)element.GetValue(ZIndexProperty)!;
+
+    /// <summary>Writes the paint order of <paramref name="element"/>.</summary>
+    public static void SetZIndex(VisualElement element, int value)
+        => (element ?? throw new ArgumentNullException(nameof(element))).SetValue(ZIndexProperty, value);
+
     /// <inheritdoc />
+    /// <remarks>
+    /// A non-null background is hit-testable even when its alpha is zero, matching WPF's
+    /// <c>Background="Transparent"</c> behavior; a null background lets the pointer through.
+    /// </remarks>
     protected override bool HitTestContent(PointF point)
-        => Background is { ApproximateColor.A: > 0 } || base.HitTestContent(point);
+        => Background is not null || base.HitTestContent(point);
 }
 
 /// <summary>A container with a background, a rounded outline and one child.</summary>
@@ -40,9 +56,12 @@ public class Border : VisualElement
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Non-null brushes are hit-testable even at alpha zero, matching WPF; only a null brush passes through.
+    /// </remarks>
     protected override bool HitTestContent(PointF point)
-        => (Background is { ApproximateColor.A: > 0 })
-           || (BorderBrush is { ApproximateColor.A: > 0 } && !BorderThickness.IsEmpty);
+        => Background is not null
+           || (BorderBrush is not null && !BorderThickness.IsEmpty);
 
     /// <summary>The single child arranged inside the padding and border.</summary>
     public VisualElement? Child

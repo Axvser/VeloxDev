@@ -1,8 +1,9 @@
-// VeloxDev customization: the card is composed in TemplateClass.xaml; this file only runs the generated initializer.
+// VeloxDev customization: the card is composed in XAML; the workflow surface binds it to the node model.
 
 namespace TemplateNamespace;
 
-public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Controls.UserControl
+/// <summary>A workflow node card composed entirely in XAML.</summary>
+public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
 {
     public TemplateClass()
     {

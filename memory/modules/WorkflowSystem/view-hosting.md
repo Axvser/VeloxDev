@@ -1,7 +1,7 @@
 # 可见集 → 视图：Core 视图系统
 
 > 把「虚拟化产出的 `VisibleItems` 如何变成 UI 视图」按 TransitionSystem 的分层方式组织：**接口定层次、抽象类/泛型类跑通用流程、适配器逐层实现、最后一个泛型类型组合成系统**。
-> WPF / Avalonia / WinUI / MAUI / WinForms / Jalium 都用 `ViewPool` 门面接入 `ViewSourcePipelineCore`；Razor 是 renderer-native 例外（§七）。所有七家的 XAML/组件语法保持 `ViewPool.*` 不变。
+> WPF / Avalonia / WinUI / MAUI / Jalium 用 `ViewPool` 门面接入 `ViewSourcePipelineCore`；Razor 是 renderer-native 例外（§七）；WinForms 不接 Core 管线 —— 它用适配器里的通用视觉 `ViewPool` 附着属性按 `VisibleItems` 建视觉子元素。
 
 ---
 
@@ -51,15 +51,16 @@
 
 入口仍是 `WorkflowSystem/AttachedBehaviors/ViewPool.cs` 的附着属性 `ViewPool.ItemsSource` / `ViewPool.TemplateSelector`；它只创建/销毁 `ViewSourcePipeline`。
 
-**其余五家**（路径均为 `Src/Adapters/VeloxDev.<GUI>/WorkflowSystem/ViewHosting/`，同样是那组层与 `ViewSourcePipeline`，默认 `AdaptiveViewPoolPolicy`）：
+**其余四家**（WPF / WinUI / MAUI / Jalium；路径均为 `Src/Adapters/VeloxDev.<GUI>/WorkflowSystem/ViewHosting/`，同样是那组层与 `ViewSourcePipeline`，默认 `AdaptiveViewPoolPolicy`）：
 
 | 平台 | `THost` / `TView` | 优先级 | 几何 | 连线 | 备注 |
 |---|---|---|---|---|---|
 | WPF | `Panel` / `FrameworkElement` | `DispatcherPriority.Background` | 绑定，`ViewArranger` no-op | 逐条池化 | 模板选择器 + 资源回退 |
 | WinUI | `Panel` / `FrameworkElement` | `DispatcherQueuePriority.Low` | 命令式 Canvas，`ViewLayoutTracker` 订阅属性变化 | 逐条池化 | `TryEnqueue` 拒绝时返回 false |
 | MAUI | `Layout` / `View` | `NonPriority` + 16ms 一次性 timer | `AbsoluteLayout` + 节点 Anchor/Size 订阅 | `ViewLinkLayer.IsActive=true`，overlay 继续画 | 池不物化 link |
-| WinForms | `Control` / `Control` | `NonPriority` + `Control.BeginInvoke` | Attachment 摆位 | `ViewLinkLayer.IsActive=true`，`WorkflowLinkLayer` 在画布 Paint 里一趟画完 | `TemplateSelector`（`DataTemplate` 回调）；Attach 时节点 `BringToFront`（不再有连线视图，`SendToBack` 路径空转） |
 | Jalium | `Panel` / `FrameworkElement` | `DispatcherPriority.Background` | 绑定，`ViewArranger` no-op | 逐条池化；`WorkflowLinkBounds` 自盒化不动 | 模板选择器 + 资源回退 |
+
+**WinForms 不接这条 Core 管线**：视觉后端没有 `ViewHosting/`；它在 `WorkflowSystem/AttachedBehaviors/ViewPool.cs` 提供一个与工作流无关的视觉池，附着到 `PART_Canvas` 上按 `Helper.VisibleItems` 建视觉子元素，每条 link 一个视觉 `LinkView`，用 `VisualTemplateSelector` 或单个 `DataTemplate`。
 
 **适配器类都是 `public sealed`**，不是 `internal` —— 它们是本家对外的开放面；类名也不带平台前缀（`ViewFactory` / `ViewContainer` / `ViewSourcePipeline` …）。七家不能同时安装，同名类型正是这套设计的前提。
 
@@ -140,18 +141,17 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 
 **Avalonia 的测量口径**（16 核 Windows、.NET 10.0.12、2000 节点 / 3000 条本地连线、视口 1200×800、20 步、5 轮、自适应策略；节点=Border+Text，连线=1×1 占位，因此是**管线下限**，不是完整 demo 视图的性能）：正常视口约 180–280 个可见项；全量是一次性物化 5001 个视图的最坏情况。
 
-**六家完整矩阵**（同一台 16 核 Windows、.NET 10.0.12、2000/3000、1200×800、20 步、5 轮、自适应；中位 ms，Full 分配 MB）：
+**五家完整矩阵**（同一台 16 核 Windows、.NET 10.0.12、2000/3000、1200×800、20 步、5 轮、自适应；中位 ms，Full 分配 MB）。WinForms 用自身的视觉 `ViewPool`、不在这条 Core 池管线内，不在矩阵内：
 
 | 适配器 | Initial | Scroll step | Full | Full 分配 |
 |---|---:|---:|---:|---:|
 | Avalonia | 12.28 | 11.98 | 232.52 | 61.8 |
 | WPF | 9.38 | 4.22 | 262.26 | 43.9 |
-| WinForms | 60.0 | 23.0 | 4137.0 | 438.8 |
 | Jalium | 3.38 | 1.00 | 302.70 | 66.3 |
 | WinUI | 29.40 | 6.00 | 392.53 | 10.0 |
 | MAUI | 286.46 | 37.54 | 5070.75 | 357.0 |
 
-WinForms 的 Full 是 **2000 个节点窗口** 的成本：`ViewLinkLayer` 把 3000 条连线挡在主池外，`WorkflowLinkLayer` 在画布 `Paint` 里一趟画完。剩余成本是节点 HWND 本身（裸 WinForms 探针：2000 个含子控件的视图 `Controls.Add` ≈ 2.3 s）。MAUI 的 Active 也只到 2000/5001，同样是 overlay 把连线挡在主池外。两者的 Full 不能与另外四家按视图数直接横比；单层连线的分配更高（每次几何变脏重发采样曲线），正确性优先。
+MAUI 的 Active 只到 2000/5001，是 overlay 把连线挡在主池外；它的 Full 不能与另外四家按视图数直接横比。WinForms 的视觉 `ViewPool` 按 `VisibleItems` 建视觉元素、每条 link 一个 `LinkView`，与这里的 Core 池记账不是同一套模型。
 
 当前管线的关键成本控制：pending 用 `Queue + HashSet`（增删查 O(1)，移除后留下 tombstone 由出队时跳过）；Avalonia `ViewContainer` 用引用比较 `HashSet<Control>` 做挂载去重，不再 `Children.Contains`；`LinkLayer.IsActive=false` 时完全跳过整集枚举；每批受 `BatchSize=1024` 与 16ms 双重限制。
 

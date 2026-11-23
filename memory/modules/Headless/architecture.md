@@ -1,4 +1,4 @@
-# Headless — 架构
+﻿# Headless — 架构
 
 > 代码：`Src/Test/Headless/`。共享夹具 `VeloxDev.AdapterTestKit`（`netstandard2.0`，只引用 Core），
 > 加五套测试 —— WPF（`net8.0-windows` + `UseWPF`）、Avalonia（`net8.0` + `Avalonia.Headless` 11.1.0）、
@@ -74,11 +74,11 @@
 `SurfaceContractTests`：按名字钉住七个角色与每个公共附着点/参数/静态入口 —— 这就是「契约 100%」的执行方式。
 
 1. `IsEnabled=false` 时 `Refresh` 是 no-op；
-2. attach 后命名部件被解析，`WorkflowCanvasTransformBehavior` 与网格装饰器拿到相同的内容偏移；
+2. attach 后命名部件被解析，相机/网格装饰器拿到相同的内容偏移；
 3. 滚动同时写 `TreeHelper.Viewport` 与 `Layout.ViewportOffset`；
 4. `Layout.ViewportOffset` 在 attach 后恢复到滚动条；
 5. 虚拟化的 `VisibleItems` 随视口进出节点；
-6. `ViewPool` 为每个可见项建一个视图；
+6. 视图系统为每个可见项建视图（WinForms 由通用视觉 `ViewPool` 建，其余家走各自的 `ViewPool` 实现）；
 7. detach 后表面不再写模型；
 8. （仅 Avalonia）Ctrl+滚轮的缩放方向与夹取。
 
@@ -93,7 +93,7 @@ Razor 41.9%、Jalium 35.6%；地板 44/55/35/41/35，只许上调（理由见 [e
 
 | 平台 | 状态 |
 | --- | --- |
-| WinForms | ✅ 已落地：`TestWorkflowSurface : VeloxDev.WinForms.Xaml.Controls.UserControl` + `CreateControl()`，不 `Show()` |
+| WinForms | ✅ 已落地：`TestWorkflowSurface : VisualHost` + 视觉 `PART_*`，`CreateControl()`，不 `Show()` |
 | Razor/Blazor | ✅ 已落地：`bunit` 渲染 + 直接驱动 `[JSInvokable]` |
 | Jalium | ✅ 已落地：控件可 `Measure/Arrange`，表面用 `NameScope` 认领部件 |
 | WinUI | ❌ 需要 Windows App SDK + XAML 线程/窗口，没有真正无头模式 |
@@ -101,16 +101,15 @@ Razor 41.9%、Jalium 35.6%；地板 44/55/35/41/35，只许上调（理由见 [e
 
 ---
 
-## 七、WinForms：普通 XAML 根 + 附着属性
+## 七、WinForms：一个 VisualHost + 视觉部件
 
-- 表面是 `VeloxDev.WinForms.Xaml.Controls.UserControl` 派生（`Infrastructure/TestWorkflowSurface.cs`）：ctor 里建 `PART_ScrollViewer` / `PART_Canvas` / `PART_GridDecorator`，再调 `WorkflowSurfaceBehavior.Set*Name` / `SetIsEnabled` / `SetZoomEnabled`；卡片/连线用最轻的 `Panel` 顶替。
-- `[STATestClass]` + `Size = new System.Drawing.Size(800,600)` + `CreateControl()` + `PerformLayout()`；
-  不 `Show()`。`BeginInvoke` 排的视口恢复用 `Application.DoEvents()` 泵。
+- 表面是 `TestWorkflowSurface : VisualHost`（`Infrastructure/WinFormsHeadlessSurface.cs` / `TestWorkflowSurface.cs`）：`Root` 是视觉 `Grid`，内含视觉 `UserControl`（`GridDecorator > ScrollViewer > Canvas`，三个 `Name` 就是 `PART_*`）与可选的 `PART_Minimap`，再调 `WorkflowSurfaceBehavior.Set*Name` / `SetIsEnabled` / `SetZoomEnabled`；模板选择器经 `ViewPool.SetTemplateSelector(canvas, …)` 或 tree 资源键。部件全是视觉元素，没有第二个 HWND。
+- `DpiScaleOverride = 1f` 把相机数学固定在逻辑单位；`RenderTo(graphics, size)` 走真实 measure/arrange/render，不建可见窗口。
+- `[STATestClass]` + `Size = new System.Drawing.Size(800,600)` + `CreateControl()` + `PerformLayout()`；不 `Show()`。排队的视口恢复/Refresh 用 `Application.DoEvents()` 泵。
 - **`Size` 有歧义**：`System.Drawing.Size` 与 `VeloxDev.WorkflowSystem.Size` 同时可见，必须全限定。
-- **滚动走 `WorkflowInput.For(tree).Scroller?.ScrollBy(...)`**，不要直接改平移字段；它经 `WorkflowSurfaceBehavior.SurfaceScroller` 走与拖画布/小地图同一套边界语义。
-- **`WorkflowSurfaceBehavior.Refresh` 不检查 `IsEnabled`**（与 WPF/Avalonia 不同）。禁用只清滚动口
-  （`ClearScroller`），所以 WinForms 套件不断言「禁用后 Refresh 不写模型」。
-- `ViewPool` 在 WinForms 是**异步分批**的（`ViewScheduler` 把每一批交给 `Control.BeginInvoke`，池在一批跑完后自己排下一批），套件要像视口恢复那样用 `Application.DoEvents()` 泵。
+- **滚动走 `WorkflowInput.For(tree).Scroller?.ScrollBy(...)`**，不要直接改平移字段；它的边界语义与拖画布/小地图一致。
+- **`WorkflowSurfaceBehavior.Refresh` 不检查 `IsEnabled`**（与 WPF/Avalonia 不同）。禁用只清滚动口（`ClearScroller`），所以 WinForms 套件不断言「禁用后 Refresh 不写模型」。
+- `ViewPool` 订阅 `VisibleItems` 的集合变更自建/回收视图，模板绑定模型几何；套件不需要泵分批物化，但换树/视口恢复仍在消息泵上落地。
 
 ## 八、Razor：bUnit 的 C# 半边
 
@@ -149,11 +148,10 @@ Razor 41.9%、Jalium 35.6%；地板 44/55/35/41/35，只许上调（理由见 [e
 - **转换器类名与框架撞名**：WPF 的 `Point/Thickness/CornerRadius/Color/BrushConverter` 与
   `System.Windows*` 同名；WinForms 的 `Point/Size/SizeF/Rectangle/Padding/ColorConverter` 与
   `System.Drawing*` 同名。测试文件必须用别名，否则 CS0104。
-- **WinForms 槽布局的坐标宿默认是 `Panel`**，走 `SlotAnchorFromCanvasLocal`：锚点 = 客户区中心，
-  **不是** node.Anchor + 中心；真实宿主里节点 Location 已含锚点。期望值别照抄 WPF 的 56/184。
+- **WinForms 槽布局的坐标宿默认是最近的视觉 `Canvas`**：`WorkflowSlotLayoutBehavior` 把命名部件的中心经 `PointToSurface`/`PointFromSurface` 写进 `Anchor`，不走 Core 的 `SlotAnchorFrom*`；期望值按部件实测中心算，别照抄 WPF 的 56/184。
 - **WinForms 自绘**：`DrawToBitmap` 会触发 `OnPaintBackground` + `OnPaint`，不需要显示窗体；
   小地图/网格装饰器因此可以直接覆盖绘制分支。
-- **WinForms 节点拖拽不可合成输入**：它读 `Control.MousePosition`（真实光标），不是 `MouseEventArgs.Location`；用假 `MouseEventArgs` 驱动无效。
+- **WinForms 节点拖拽走视觉指针事件**：`WorkflowNodeDragBehavior` 用 `VisualPointerEventArgs.GetPosition(坐标宿主)` 算增量，增量在相机映射后的画布坐标里；无头测试经 `VisualHost.ProcessPointer*` 驱动。
 - **Avalonia 无头输入要先 `MouseMove` 再 `MouseDown`**：否则命中/over 状态没建立，拖拽处理器不触发。
 - **WPF/Avalonia/Jalium 小地图**：`Measure/Arrange` + `RenderTargetBitmap.Render` 可触发 `OnRender`；
   WPF 用 `System.Windows.Media.Imaging.RenderTargetBitmap`，Avalonia 用

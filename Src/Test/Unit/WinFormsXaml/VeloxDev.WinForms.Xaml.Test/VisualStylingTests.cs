@@ -100,7 +100,7 @@ public sealed class VisualStylingTests
     [TestMethod]
     public void SurfaceStyles_ApplyImplicitlyToMatchingElements()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         var root = new VC.StackPanel();
         var first = new VC.Border();
         var second = new VC.Border();
@@ -121,7 +121,7 @@ public sealed class VisualStylingTests
     [TestMethod]
     public void ExplicitStyle_BeatsTheImplicitStyle()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         var root = new VC.StackPanel();
         var border = new VC.Border();
         root.Add(border);
@@ -144,7 +144,7 @@ public sealed class VisualStylingTests
     [TestMethod]
     public void NearestAncestorCollectionWins()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         var root = new VC.StackPanel();
         var middle = new VC.StackPanel();
         var border = new VC.Border();
@@ -183,7 +183,7 @@ public sealed class VisualStylingTests
     [TestMethod]
     public void RemovingTheElement_DetachesTheTriggerSubscription()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         var root = new VC.StackPanel();
         var button = new VC.Button();
         root.Add(button);
@@ -209,7 +209,7 @@ public sealed class VisualStylingTests
     [TestMethod]
     public void ReplacingTheRoot_RemovesTheSurfaceStyleFromTheOldTree()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         var oldRoot = new VC.Border();
         surface.Root = oldRoot;
         surface.Styles.Add(CreateWidthStyle(33d));

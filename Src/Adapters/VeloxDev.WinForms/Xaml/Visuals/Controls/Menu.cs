@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
@@ -32,6 +32,13 @@ public sealed class VisualMenuItem
     /// <summary>An optional command run after <see cref="Click"/>.</summary>
     public Action? Command { get; set; }
 
+    /// <summary>A property path resolved against the menu's data context; an <c>ICommand</c>-shaped value runs.</summary>
+    public string? CommandPath { get; set; }
+
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal VisualContextMenu? Owner { get; set; }
+
     /// <summary>The child rows; a non-empty list makes this row open a submenu.</summary>
     public IList<VisualMenuItem> Items { get; } = new List<VisualMenuItem>();
 
@@ -47,6 +54,20 @@ public sealed class VisualMenuItem
 
         Click?.Invoke(this, EventArgs.Empty);
         Command?.Invoke();
+        if (!string.IsNullOrWhiteSpace(CommandPath) && Owner?.DataContext is { } context)
+        {
+            var value = context;
+            foreach (var segment in CommandPath.Split('.'))
+            {
+                if (value is null) break;
+                value = value.GetType().GetProperty(segment)?.GetValue(value);
+            }
+
+            if (value is VeloxDev.MVVM.IVeloxCommand command && command.CanExecute(null))
+            {
+                command.Execute(null);
+            }
+        }
     }
 }
 
@@ -70,6 +91,7 @@ public class VisualContextMenu : VisualPopup
     /// <summary>Creates an empty menu with theme metrics.</summary>
     public VisualContextMenu()
     {
+        MatchTargetWidth = false;
         Focusable = true;
         Padding = new XamlThickness(4f);
         Background = Theme.Current.SurfaceAlt;
@@ -89,6 +111,7 @@ public class VisualContextMenu : VisualPopup
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
 
+        AttachOwners(Items);
         var local = target.PointFromSurface(surfacePoint);
         PlacementTarget = target;
         Placement = VisualPlacement.Bottom;
@@ -96,6 +119,15 @@ public class VisualContextMenu : VisualPopup
         VerticalOffset = local.Y;
         IsOpen = true;
         Focus();
+    }
+
+    private void AttachOwners(IEnumerable<VisualMenuItem> items)
+    {
+        foreach (var item in items)
+        {
+            item.Owner = this;
+            AttachOwners(item.Items);
+        }
     }
 
     /// <summary>Invalidates the measured rows after the item list changed.</summary>

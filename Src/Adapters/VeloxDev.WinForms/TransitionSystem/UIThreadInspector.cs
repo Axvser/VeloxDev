@@ -40,13 +40,15 @@ namespace VeloxDev.TransitionSystem
             System.Windows.Forms.Application.ApplicationExit += (_, _) => _isAppAlive = false;
         }
 
-        /// <summary>
-        /// The target object (<see cref="Control"/>) takes priority: the control itself knows its owning UI thread,
-        /// so it can be marshaled from any thread with <see cref="Control.Invoke(Delegate)"/> / <see cref="Control.BeginInvoke(Delegate)"/>
-        /// — no explicit capture is needed even for a background first start.
-        /// </summary>
+        // 目标优先用自身的 Control：它知道自己的 UI 线程，BeginInvoke 不必先抓 SynchronizationContext。
+        // 视觉元素不是窗口，投递交给它所属的 VisualHost；动画目标仍是元素本身，互斥动画按元素区分。
         private static Control? ControlDispatcher(object target)
-            => target is Control control && control.IsHandleCreated ? control : null;
+            => target switch
+            {
+                Control control when control.IsHandleCreated => control,
+                VeloxDev.WinForms.Xaml.Visuals.VisualElement { Surface: { IsHandleCreated: true } surface } => surface,
+                _ => null,
+            };
 
         /// <inheritdoc />
         public override bool IsAlive => _isAppAlive;

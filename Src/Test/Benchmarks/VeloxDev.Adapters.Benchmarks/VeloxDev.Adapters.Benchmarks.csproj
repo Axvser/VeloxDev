@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
@@ -38,7 +38,6 @@
 		<ProjectReference Include="..\..\..\Adapters\VeloxDev.WPF\VeloxDev.WPF.csproj" Aliases="wpf" />
 		<ProjectReference Include="..\..\..\Adapters\VeloxDev.Avalonia\VeloxDev.Avalonia.csproj" Aliases="ava" />
 		<ProjectReference Include="..\..\..\Adapters\VeloxDev.Jalium\VeloxDev.Jalium.csproj" Aliases="jal" />
-		<ProjectReference Include="..\..\..\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj" Aliases="wf" />
 	</ItemGroup>
 
   <ItemGroup>

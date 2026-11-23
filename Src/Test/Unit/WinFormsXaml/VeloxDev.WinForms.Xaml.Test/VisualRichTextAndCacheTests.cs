@@ -12,7 +12,7 @@ public sealed class VisualRichTextAndCacheTests
     [TestMethod]
     public void RichTextBox_EditsParagraphsAndUndoes()
     {
-        using var surface = new VisualSurface { Size = new Size(360, 260) };
+        using var surface = new VisualHost { Size = new Size(360, 260) };
         using var rich = new VC.RichTextBox { Width = 300f, Text = string.Empty };
         surface.Root = rich;
         Layout(surface, 360, 260);
@@ -35,7 +35,7 @@ public sealed class VisualRichTextAndCacheTests
     [TestMethod]
     public void RichTextBox_TogglesBoldOnTheSelection()
     {
-        using var surface = new VisualSurface { Size = new Size(360, 220) };
+        using var surface = new VisualHost { Size = new Size(360, 220) };
         using var rich = new VC.RichTextBox { Width = 300f };
         surface.Root = rich;
         Layout(surface, 360, 220);
@@ -52,7 +52,7 @@ public sealed class VisualRichTextAndCacheTests
     [TestMethod]
     public void RichTextBox_PaintsItsText()
     {
-        using var surface = new VisualSurface { Size = new Size(260, 120) };
+        using var surface = new VisualHost { Size = new Size(260, 120) };
         using var rich = new VC.RichTextBox
         {
             Width = 220f,
@@ -89,7 +89,7 @@ public sealed class VisualRichTextAndCacheTests
     [TestMethod]
     public void RichTextBox_PaintsTheGalleryCardDocument()
     {
-        using var surface = new VisualSurface { Size = new Size(520, 220) };
+        using var surface = new VisualHost { Size = new Size(520, 220) };
         using var rich = new VC.RichTextBox { Width = 440f, Height = 170f };
         rich.SetPlainText("VeloxDev RichTextBox\nSelect text, then press Ctrl+B / Ctrl+I / Ctrl+U.\nCtrl+Z and Ctrl+Y walk the edit history.");
         rich.Select(0, 8);
@@ -124,7 +124,7 @@ public sealed class VisualRichTextAndCacheTests
     [TestMethod]
     public void BitmapCache_RepaintsAfterAChildDependencyPropertyChange()
     {
-        using var surface = new VisualSurface { Size = new Size(220, 120) };
+        using var surface = new VisualHost { Size = new Size(220, 120) };
         using var root = new VC.Border
         {
             CacheAsBitmap = true,
@@ -154,7 +154,7 @@ public sealed class VisualRichTextAndCacheTests
             "a dependency-property change marks the enclosing bitmap cache dirty");
     }
 
-    private static Color Sample(VisualSurface surface, int width, int height, Point point)
+    private static Color Sample(VisualHost surface, int width, int height, Point point)
     {
         using var bitmap = new Bitmap(width, height);
         using (var graphics = Graphics.FromImage(bitmap))
@@ -165,7 +165,7 @@ public sealed class VisualRichTextAndCacheTests
         return bitmap.GetPixel(point.X, point.Y);
     }
 
-    private static void Layout(VisualSurface surface, int width, int height)
+    private static void Layout(VisualHost surface, int width, int height)
     {
         using var bitmap = new Bitmap(1, 1);
         using var graphics = Graphics.FromImage(bitmap);

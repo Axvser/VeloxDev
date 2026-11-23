@@ -90,18 +90,18 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Fix:** forward `RulerBand` to `SetVirtualizeInset` before writing `Viewport`; on a self-hosted surface pass the reserve explicitly. A decorator that covers a band must report its thickness.
 
-## A WinForms node does not move until something else repaints
+## A WinForms visual card stays at the origin or the camera does not follow
 
-**Symptom:** the model changed; the card is still drawn where it was.
+**Symptom:** the tree loads but every card is drawn at the top-left, or pan/zoom moves the grid but not the cards.
 
-**Cause:** WinForms is XAML-first, but placement is still pull-driven: `WorkflowNodeAttachment` writes each card's `Location`/`Size` in code, so the surface must be told to refresh.
+**Cause:** `ViewPool` creates a card view per item and the `DataTemplate` binds `Canvas.Left`/`Canvas.Top` to `node.Anchor` and `Width`/`Height` to `node.Size`; the surface applies one camera matrix on `PART_Canvas`. A card that is not a `VisualElement`, or a `PART_Canvas` named on the wrong element, is outside the camera subtree.
 
-**Fix:** call `WorkflowSurfaceBehavior.Refresh(host)` after a mutation. When a slot anchor must be correct in the same frame, use the adapter's `SyncNow` escape hatch.
+**Fix:** the template must be a visual `UserControl` with `Viewbox > Grid` content, and `PART_Canvas` must be a visual `Canvas` under the tree root. The surface also resets `Layout.Scale` to 1; zoom is the camera matrix, so do not write `Layout.Scale` for zoom. Call `WorkflowSurfaceBehavior.Refresh(host)` after replacing the whole tree. See [winforms.md](../practices/gui/winforms.md#writing-the-surface).
 
-## A WinForms link endpoint lags the node or flips its bend while dragging
+## A WinForms link draws to the wrong point or double-applies zoom
 
-**Symptom:** the card moves, the curve arrives a frame late; or a long link alternates between two bend directions as the canvas pans.
+**Symptom:** the link is offset from its ports, or scales twice as the graph zooms.
 
-**Cause:** the endpoint was derived from the measured `slot.Anchor` minus the current pan. When a node leaves the visible set its measurement stops while the projection keeps moving, so the model endpoint drifts and `PortOutward` can change edge; a canvas repaint that runs before the geometry refresh shows the previous frame.
+**Cause:** the link view transformed its endpoints by the camera, or published screen coordinates instead of world coordinates.
 
-**Fix:** use `WorkflowSlotLayoutBehavior.TryGetLocalAnchor(slot)` — the port's centre in the node's client coordinates — and add the current `node.Anchor`; it is pan-independent. The link layer must subscribe to the endpoint nodes' `PropertyChanged`, and `ApplyPanCore` must call `WorkflowLinkLayer.Refresh` before `canvas.Update()`. See [winforms.md](../practices/gui/winforms.md#links--one-layer-paints-the-whole-graph).
+**Fix:** the `LinkTemplate` binds `StartLeft` / `StartTop` / `EndLeft` / `EndTop` to `Sender.Anchor.*` / `Receiver.Anchor.*` in world coordinates; `OnRender` draws them as-is and the camera transform applies to the whole canvas only. Publish the same world curve you draw (`PublishCurve`). See [winforms.md](../practices/gui/winforms.md#links--one-linkview-per-link).

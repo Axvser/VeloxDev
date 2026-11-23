@@ -87,7 +87,7 @@ internal static class GeneratorProbe
         }
 
         // 生成代码直接引用这三个程序集；只给运行时不给它的依赖，符号解析会停在小程序集边界。
-        paths.Add(typeof(VeloxDev.WinForms.Xaml.Controls.Control).Assembly.Location);
+        paths.Add(typeof(VeloxDev.WinForms.Xaml.Visuals.VisualElement).Assembly.Location);
         paths.Add(typeof(VeloxDev.TransitionSystem.TransitionEffect).Assembly.Location);
         paths.Add(typeof(VeloxDev.Threading.ThreadRef).Assembly.Location);
 

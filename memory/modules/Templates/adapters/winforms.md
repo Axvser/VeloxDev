@@ -1,42 +1,43 @@
-# Templates — WinForms
+﻿# Templates — WinForms
 
 > 契约（七角色、附着属性、注册位置）在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；
 > **适配器侧**的硬限制与坑在 `memory/modules/WorkflowSystem/adapters/winforms.md`；
 > 包结构与跨平台族划分在 `../architecture.md` 与 `../extension.md`。
-> **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.WinForms.Templates/working/content/`；引用别处一律写全路径。
+> **路径写法**：下文裸文件名都相对 `Src/Templates/VeloxDev.WinForms.Templates/working/content/`。
 
 代码目录：`Src/Templates/VeloxDev.WinForms.Templates/working/content/workflow-<角色>/`。
 
 ---
 
-## 一、这一家的条目产出什么形状
+## 一、条目产出什么形状
 
-**XAML-first**：带标记的四个条目产出 `TemplateClass.xaml` + `TemplateClass.xaml.cs`（与其余六家同名的代码隐藏命名）；`grid-decorator` / `minimap-overlay` / `template-selector` 仍是纯 `.cs`。`InitializeComponent` 由生成器输出为 private 普通方法。
+**XAML-first，整棵是视觉树**：tree/node/slot/link 产出 `TemplateClass.xaml` + `.xaml.cs`（code-behind 基类 `VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl`）；grid-decorator / minimap-overlay / template-selector 是纯 `.cs`。`InitializeComponent` 由生成器输出为 private 普通方法。
 
 | 条目 | 形状 | 关键锚点 |
 | --- | --- | --- |
-| tree-view | `TemplateClass.xaml` + `.xaml.cs`：根是 `UserControl`，XAML 声明 `PART_Surface` / `PART_GridDecorator` / `PART_ScrollViewer` / `PART_Canvas` / `PART_MinimapOverlay`，根上挂 `behaviors:WorkflowSurfaceBehavior.*`，画布上挂 `behaviors:WorkflowLinkLayer.*`；**code-behind 只有 `InitializeComponent()`** | 行为按 `Control.Name` 解析部件；资源里声明 `TemplateSelector` 与滚动条样式 |
-| node-view | `TemplateClass.xaml` + `.xaml.cs`：`Border` 画卡面，`Panel` 里 `native:Label` 显示标题、`PART_OutputSlots` 由行行为生成端口行 | `WorkflowNodeViewBehavior` / `WorkflowNodeTitleBehavior` / `WorkflowNodeRowsBehavior`；行与输入口在面板内整体垂直居中 |
-| link-view | `TemplateClass.xaml`（空壳 + 注释）+ `.xaml.cs`：**per-link 可选形态**；默认表面不池化连线，由 `WorkflowLinkLayer` 在 `PART_Canvas` 一趟画完 | `WorkflowLinkAttachment`（显式每线一视图时）；`WorkflowLinkLayer`（默认） |
-| slot-view | `TemplateClass.xaml` + `.xaml.cs`：`Path` 画字形，`WorkflowSlotConnectionBehavior` 管拖线；code-behind 从 `DataContext` 取 slot 并把状态映射成填充色 | `TemplateSlotPath`、状态色；`WorkflowSlotConnectionBehavior` |
-| grid-decorator | **纯 `.cs`**：`TemplateClass : Panel, IWorkflowGridDecorator`，同一文件还导出 `SurfaceScrollableControl` 与 `SurfaceCanvas`（tree 的 `local:` 类型） | 网格、标尺带、圆角表面 |
-| minimap-overlay | **纯 `.cs`**：`TemplateClass : WorkflowMinimapOverlay`，只给调色板 | 定位与拖拽映射在适配器 |
-| template-selector | **纯 `.cs`**：`TemplateClass : VeloxDev.WinForms.Xaml.TemplateSelector`，用 `DataTemplate` 属性按 item 类型返回模板 | tree 的资源按 `WorkflowTemplateSelector` 键引用它 |
+| tree-view | 视觉 `UserControl` 根 `Grid`：`PART_SurfaceBorder`（`Background`/`BorderBrush`/`BorderThickness`/`CornerRadius` 令牌）> `PART_GridDecorator`（`GridSpacing=40`、`MajorLineEvery=5`、`RulerThickness=28`、`DrawSurface=False`）> `PART_ScrollViewer` > `PART_Canvas`（`behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`、`behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`）；同级的 `PART_MinimapOverlay` 与 `PART_InfoOverlay` 是视觉元素。资源里声明 `NodeTemplate` / `LinkTemplate` / `SlotTemplate`、`LinkContextMenu` 与 `CustomTemplateSelector x:Key="WorkflowTemplateSelector"`。**code-behind 只有 `InitializeComponent()`** | 行为挂在包住它的 `VisualHost` 上，按 `VisualElement.Name` 解析；`VisualTemplateSelectorKey` 默认就是 `WorkflowTemplateSelector`，宿主从 tree 根资源解析 |
+| node-view | 视觉 `UserControl`：`Viewbox > Grid 260×180`；`Border` 画卡面、标题 `TextBlock`、`PART_InputSlot` 与 `PART_OutputSlots`（`ItemsControl` + `DataTemplate` 行）。根挂 `WorkflowSlotLayoutBehavior`（`IsEnabled` / `SlotNames` / `SlotEnumeratorNames` / `CoordinateHostName`），标题行挂 `WorkflowNodeDragBehavior`（`IsEnabled` / `CoordinateHostName`） | `WorkflowSurfaceBehavior` 遍历视觉树对每个元素调 `Ensure`；行为自己测量命名槽、只允许标题拖动。没写 `IsEnabled` 就不生效，没有部件名回退 |
+| link-view | 视觉 `UserControl`（空壳）+ DP `StartLeft/StartTop/EndLeft/EndTop/CanRender/IsVirtual/LineColor/HighlightColor/IsHighlighted`；`OnRender` 画 cubic 并 `PublishCurve`；构造里 `IsHitTestVisible = false` | `LinkTemplate` 把端点绑到 `Sender.Anchor.*` / `Receiver.Anchor.*`、`CanRender` 绑 `IsVisible`，`Width`/`Height` 用 `{Binding Width/Height, ElementName=PART_Canvas}` 取画布实际尺寸；表面 `ApplyLinkStyles` 写颜色与 `IsVirtual` |
+| slot-view | 视觉 `UserControl`：`Viewbox > Shapes.Path PART_Glyph`；根挂 `WorkflowSlotConnectionBehavior.IsEnabled="True"`；**code-behind 只有 `InitializeComponent()`** | `TemplateSlotPath`、连接手势；`PART_Glyph.Fill` 经 `SlotStateBrushConverter` 绑模型 `State` |
+| grid-decorator | **纯 `.cs`**：`TemplateClass : VisualElement, IWorkflowGridDecorator`，三层：世界网格层、内容（ScrollViewer）、视口固定标尺层 | 网格、标尺带；`DrawSurface=False` 时让 `PART_SurfaceBorder` 画表面背景 |
+| minimap-overlay | **纯 `.cs`**：`TemplateClass : WorkflowMinimapOverlay`（`VisualElement`），只给调色板 | 与 `PART_SurfaceBorder` 同级放进 tree 根 `Grid`；定位与拖拽映射在适配器，拖小地图经 `IWorkflowMinimapScrollSource` 反推视口 |
+| template-selector | **纯 `.cs`**：`TemplateClass : Visuals.VisualTemplateSelector`，按 item 类型返回 `NodeTemplate?.Create()` / `SlotTemplate?.Create()` / `LinkTemplate?.Create()`（缺模板时回落 `new NodeView()` 等） | tree 资源按 `WorkflowTemplateSelector` 键引用它 |
 
-**四个 XAML 条目的 code-behind 基类写全名**：`TemplateClass : VeloxDev.WinForms.Xaml.Controls.UserControl`。WinForms 原生 `UserControl` 与 XAML 的同名基类在同一引用图里，短名分不清继承的是哪一层。纯 `.cs` 条目继承原生类型。
+**纯 `.cs` 条目继承视觉 `VisualElement` 或适配器基类**；XAML 条目的基类写全名。
 
 ---
 
 ## 二、模板里手写的是什么
 
-- **tree**：唯一的代码是一行 `InitializeComponent()`；一条注释指出连线菜单与键/滚轮策略属于宿主（`WorkflowSurfaceBehavior.SetLinkMenuBuilder`、树的 `IInputEvents`）。调色板由 `template.json` 的 `Template*` 符号替换进 XAML。
-- **selector**：只声明「哪个 item 用哪个视图」；dispatch、未设置工厂的诊断与接口实现都在适配器基类。
-- **node / link / slot**：node 由 `WorkflowNodeViewBehavior` 挂 attachment、拖动与槽布局，`WorkflowNodeTitleBehavior` / `WorkflowNodeRowsBehavior` 负责标题和端口行的缩放/居中；link/slot 在构造里调 attachment；绘制逻辑留在自己的 `OnPaint`。
-- **grid / minimap**：只给调色板与间距；网格/标尺/小地图数学在适配器与模板的绘制代码里。
+- **tree**：唯一代码是一行 `InitializeComponent()`；资源里用 `DataTemplate` 包住 `NodeView` / `LinkView` / `SlotView`，选择器资源 `WorkflowTemplateSelector` 把三者的 `DataTemplate` 属性接上；`PART_Canvas` 用 `behaviors:ViewPool` 把它绑到 `Helper.VisibleItems`。连线菜单是 tree 资源里的 `VisualContextMenu x:Key="LinkContextMenu"`，宿主只设 `SetLinkMenuKey`；键/滚轮策略属于宿主（树的 `IInputEvents`）。调色板由 `template.json` 的 `Template*` 符号替换进 XAML。
+- **selector**：只声明「哪个 item 用哪个视图」；返回 `NodeTemplate?.Create()` / `SlotTemplate?.Create()` / `LinkTemplate?.Create()`，缺模板时回落 `new NodeView()` 等。
+- **node / slot**：node 的行由模板 `ItemsControl` 生成；根上的 `WorkflowSlotLayoutBehavior` 声明槽名与坐标宿主，标题行的 `WorkflowNodeDragBehavior` 声明拖动区；slot 根上的 `WorkflowSlotConnectionBehavior` 声明连接手势。`ViewPool` 设 `DataContext`；`WorkflowSlotLayoutBehavior` 找部件、写锚点；slot 的 `PART_Glyph.Fill` 经 `SlotStateBrushConverter` 绑模型 `State`；slot code-behind 只有 `InitializeComponent()`。
+- **link**：`LinkTemplate` 为每条 link 建一个 `LinkView`，端点由绑定给出；它自己画并发布曲线。
+- **grid / minimap**：只给调色板与间距；网格/标尺/小地图/HUD 数学在适配器视觉元素与模板的绘制代码里。
 
-⇒ **模板选择器接线与 WPF/Avalonia/Jalium 同形**：tree 的资源声明 `NodeTemplate`/`LinkTemplate` 两个 `DataTemplate` 与 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" … />`，根上 `behaviors:WorkflowSurfaceBehavior.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`。派生类继承通用 `TemplateSelector`；优先级高于 `NodeViewType` / `LinkViewType`（后两者是按类型名反射的内置兜底）。
+**与 WPF tree 同构**：小地图 `PART_MinimapOverlay` 与 HUD `PART_InfoOverlay` 都在 tree 的视觉 `Grid` 里，与 `PART_SurfaceBorder` 同级；`PointerPressSourceName` 指向 `PART_SurfaceBorder`，空白画布拖动从该部件起算。没有 HWND 兄弟层。
 
-**Trimmed 默认画面与 WPF 对齐的基线**：`ClientSize=1085×683`（对应 WPF `Width=1100/Height=720` 的内容区）、`RulerThickness=28`、`SurfaceCornerRadius=0`、标尺底 `#C8252526`、HUD 左 46 / 底 12、minimap `Margin=0,12,12,0`（200×140）、节点标题/端口行按 collapse 缩放并在面板内整体垂直居中、slot 字形只填不描边；网格线在 `SmoothingMode.None` 下画，避免 GDI+ 抗锯齿把 1px 线画亮。仍不同的是窗口非客户区、滚动条（WinForms 自绘细条 vs WPF 原生带箭头）和文字光栅化（GDI+ vs WPF）。
+**Trimmed 默认画面与 WPF 对齐的基线**：`ClientSize=1085×683`、`RulerThickness=28`、`SurfaceCornerRadius=0`、标尺底 `#C8252526`、HUD 左 46 / 底 12、minimap `Margin=0,12,12,0`（200×140）、节点标题/端口行随整图相机矩阵缩放并在面板内垂直居中、slot 字形只填不描边；网格线在 `SmoothingMode.None` 下画。仍不同的是窗口非客户区、滚动条（自绘细条 vs WPF 原生带箭头）和文字光栅化（GDI+ vs WPF）。
 
 ---
 
@@ -44,35 +45,39 @@
 
 ### P1 · 七个条目有编译期兄弟依赖，必须一起生成
 
-tree 的 XAML 直接引用 `local:GridDecorator` / `local:SurfaceCanvas`（`grid-decorator` 条目）与 `local:CustomTemplateSelector`（`selector` 条目）；selector 又引用 `NodeView` / `LinkView`，node-view 引用 `SlotView`。**只生成 tree 会编译失败**。`verify-workflow-item-templates-all.ps1` 一次生成七个并编译；tree 的头部注释也写了「先生成兄弟条目」。
+tree 的 XAML 直接引用 `local:GridDecorator`、`local:NodeView`、`local:SlotView`、`local:LinkView` 与 `local:CustomTemplateSelector`（后三者包在资源 `DataTemplate` 里）。**只生成 tree 会因缺少这些兄弟类型编译失败**。`verify-workflow-item-templates-all.ps1` 一次生成七个并编译。
 
 ### P2 · `XamlRuntime.ParseColor` 会静默吃掉写错的颜色
 
-解析不出 `#RRGGBB` / `#AARRGGBB` 时走 `Color.FromName`；未知名字返回 ARGB 全 0 的透明黑。⇒ 占位符少一位或拼错时**不抛不报**，表现是这条线/这个背景不见了。模板里的颜色都是 `template.json` 的 `replaces` 符号；校验脚本会断言生成文件里没有残留占位符。
+解析不出 `#RRGGBB` / `#AARRGGBB` 时走 `Color.FromName`；未知名字返回 ARGB 全 0 的透明黑。⇒ 占位符少一位或拼错时不抛不报，表现是这条线/这个背景不见了。模板颜色都是 `template.json` 的 `replaces` 符号，校验脚本会断言生成文件里没有残留占位符。
 
 ### P3 · `SlotPath` 用 XAML 的 `Shapes.SvgPathParser`
 
-解析器是 `VeloxDev.WinForms.Xaml.Controls.Shapes.SvgPathParser.Parse`（`<Path Data>` 共用那份）；它支持 `M/L/C/Q/A/Z` 这一档常用命令，看不懂的字符就地停下，**图标只画出一部分而不报错**。坐标系是 1024 的 artboard 缩放到控件尺寸，`BorderColor` 的 1.5f 描边在 20px 端口上只剩约 0.03 设备像素。
+解析器是 `VeloxDev.WinForms.Xaml.Controls.Shapes.SvgPathParser.Parse`（`<Path Data>` 共用）；支持 `M/L/C/Q/A/Z` 常用命令，看不懂的字符就地停下，图标只画一部分而不报错。坐标系是 1024 artboard 缩放到控件尺寸。
 
-### P4 · 插槽行宿主名必须与槽布局行为同步
+### P1b · tree 资源就是 selector 的接线
 
-`PART_OutputSlots` 的 `x:Name` 必须同步到 `WorkflowNodeRowsBehavior.RowsHostName`，再经它传给 `WorkflowSlotLayoutBehavior.SlotEnumeratorNames`。行为在该宿主的后代里找 `DataContext` 是 `ISlotComponent` 的控件；名字对不上时 slot anchor 全 NaN、连线被隐藏。
+tree 资源里 `DataTemplate x:Key="NodeTemplate"` / `LinkTemplate` / `SlotTemplate` 包住兄弟视图，`CustomTemplateSelector x:Key="WorkflowTemplateSelector"` 引用它们。宿主不需要 `new` 选择器：`WorkflowSurfaceBehavior.VisualTemplateSelectorKey` 默认是 `WorkflowTemplateSelector`，先从 tree 根的 `VisualElement.Resources` 找，再找 `VisualHost.Resources`。显式 `SetVisualTemplateSelector` 仍优先。
 
-### P5 · `x:Name` 同时写原生 `Name`
+### P4 · 视觉节点的行属于模板
 
-生成器把 `x:Name` 写成三层：code-behind 字段、`NameScope` 注册、原生 `Control.Name`。行为按原生 `Control.Name` 解析 `PART_*`，所以模板只写 `x:Name="PART_Canvas"` 一次即可。显式 `Name="..."` 仍会在 `x:Name` 之后覆盖原生值；两者名字不同时，行为找的是后写的那个。
+`PART_OutputSlots` 是 `ItemsControl`，`ItemsSource="{Binding OutputSlots.Items}"`，`ItemTemplate` 是 `<DataTemplate>`。部件名由根上的 `WorkflowSlotLayoutBehavior.SlotNames` / `SlotEnumeratorNames` 声明（逗号分隔）；不写就不测量任何槽。`ViewPool` 设 `DataContext`，`WorkflowSlotLayoutBehavior` 发布 SlotView 锚点；`DataTemplate` 由生成器把模板体编成工厂。
 
-### P6 · 标尺是 `WorkflowRulerOverlayForm`，不是模板里的控件
+### P4b · 附着行为是 WPF 形状的，不是 HWND 行为
 
-适配器的 `WorkflowSurfaceBehavior` 在表面句柄建立后创建分层浮层窗（`WS_EX_LAYERED` + `UpdateLayeredWindow`），由 `IWorkflowGridDecorator.RulerBand` 驱动。tree 的 `RulerBand` 是 0（标尺不占内容内缩）；独立 `grid-decorator` 的 `RulerBand => RulerThickness`。两者语义不同，别按「一致性」把 tree 改成非 0。
+`WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` 只声明 `DependencyProperty.RegisterAttached`，由 `WorkflowSurfaceBehavior` 遍历视觉树对每个元素调 `Ensure`，行为自己读附着属性。模板里配了某个行为时，只有被标记的元素（及其后代）生效；没挂或没写 `IsEnabled` 就不生效（没有整卡可拖、全部插槽可连的回退）。
 
-### P7 · 默认连线是画布上的一笔，不是每线一个窗口
+### P5 · `x:Name` 写字段与视觉 `Name`
 
-`WorkflowLinkLayer` 挂在 `PART_Canvas` 上，在画布的 `Paint` 里按 `VisibleItems` 画所有可见线并 `PublishCurve`；表面行为在平移后调用 `WorkflowLinkLayer.Refresh` 重发几何（命中/悬停不读上一帧）。**这是 WinForms 的默认路径**：`ViewLinkLayer.IsActive=true`，池不再物化连线。端点模型坐标按 slot 缓存（节点内局部偏移），且 `ApplyPanCore` 先写 ScrollViewer Offset 再量插槽 —— 否则节点移出可见集、测量停住时，曲线出线方向会随平移翻转。
+生成器把 `x:Name` 写成 code-behind 字段并写 `VisualElement.Name`；表面行为按 `VisualElement.Name` 解析 `PART_*`，模板只写 `x:Name="PART_Canvas"` 一次即可。显式 `Name="..."` 仍会在其后覆盖。
 
-下面这段描述的是 **per-link 可选路径**（`workflow-link-view` 条目仍保留）：
+### P6 · 视觉 decorator 自己画标尺
 
-`WorkflowLinkAttachment` 把窗口区域雕成描边带：底色必须是画布网格底色（XAML 控件写 `Background`，原生控件写 `BackColor`），`RegionPad = 1.5f` 给抗锯齿留余量；零长度折线会让 `Widen` 抛 `ExternalException`，`IsDrawable` 兜住零长度与 NaN。改线宽/形状时三处一起看：`_thickness`、`RegionPad`、`IsDrawable`。
+`GridDecorator` 是视觉三层：网格层在内容下、标尺层在内容上，固定视口。`RulerBand => RulerThickness`，表面把它同时用于虚拟化 inset 与内容偏移。
+
+### P7 · 视觉路径每线一个 LinkView
+
+`LinkTemplate` 为每条 link（含 virtual link）建一个 `LinkView`；端点由 `DataTemplate` 绑定到 `Sender.Anchor.*` / `Receiver.Anchor.*`，颜色与 `IsVirtual` 由表面 `ApplyLinkStyles` 写；`OnRender` 画 cubic 并 `PublishCurve`。
 
 ---
 
@@ -80,7 +85,7 @@ tree 的 XAML 直接引用 `local:GridDecorator` / `local:SurfaceCanvas`（`grid
 
 | 结论 | 在哪 |
 |---|---|
-| 适配器侧的硬限制、平移与 `AutoScroll` 互斥、同步重画 | `memory/modules/WorkflowSystem/adapters/winforms.md` |
+| 适配器侧的硬限制、相机、输入、DPI | `memory/modules/WorkflowSystem/adapters/winforms.md` |
 | XAML 运行时、生成器、对象资源、`.xaml.cs` | `memory/modules/WinFormsXaml/architecture.md` |
 | 适配器项目结构与三条轴 | `memory/modules/VeloxDev.WinForms/architecture.md` |
-| 「怎么用这套模板搭一个 WinForms 工作流视图」 | `skills/veloxdev-create-workflow/references/gui/winforms.md` 的 `## Item templates` |
+| 「怎么用这套模板搭一个 WinForms 工作流视图」 | `skills/veloxdev-create-workflow/references/practices/gui/winforms.md` 的 `## Item templates` |

@@ -23,6 +23,96 @@ public sealed class VisualBackendTests
     }
 
     [TestMethod]
+    public void CheckBoxGlyphIsCenteredInsideTheControl()
+    {
+        using var surface = CreateSurface(28, 28);
+        surface.BackColor = Color.Black;
+        var box = new VC.CheckBox { Width = 28, Height = 28, IsChecked = true };
+        surface.Root = box;
+
+        using var bitmap = new Bitmap(28, 28);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            surface.RenderTo(graphics, new Size(28, 28));
+        }
+
+        var minX = 28;
+        var minY = 28;
+        for (var y = 0; y < 28; y++)
+        {
+            for (var x = 0; x < 28; x++)
+            {
+                var pixel = bitmap.GetPixel(x, y);
+                if (pixel.B > 150 && pixel.R < 80)
+                {
+                    minX = Math.Min(minX, x);
+                    minY = Math.Min(minY, y);
+                }
+            }
+        }
+
+        Assert.IsTrue(minX >= 2, "the chrome must not fall back to the control origin");
+        Assert.IsTrue(minY >= 2, "the chrome must not fall back to the control origin");
+        Assert.IsTrue(minX < 14 && minY < 14, "the chrome stays near the center of the control");
+    }
+
+    [TestMethod]
+    public void TransparentPanelBackgroundIsHitTestable()
+    {
+        using var surface = CreateSurface(100, 100);
+        var root = new VC.Canvas { Width = 100, Height = 100 };
+        var child = new VC.Grid { Width = 40, Height = 40, Background = new SolidColorBrush(Color.Transparent) };
+        root.Add(child);
+        surface.Root = root;
+        Layout(surface, 100, 100);
+
+        Assert.AreSame(child, surface.FindElementAt(new PointF(20f, 20f)));
+    }
+
+    [TestMethod]
+    public void ChildStraddlingParentBoundsStaysHitTestable()
+    {
+        using var surface = CreateSurface(100, 100);
+        var root = new VC.Canvas { Width = 100, Height = 100 };
+        var child = new VC.Button { Width = 20, Height = 20 };
+        VC.Canvas.SetLeft(child, -10);
+        VC.Canvas.SetTop(child, 40);
+        root.Add(child);
+        surface.Root = root;
+        Layout(surface, 100, 100);
+
+        Assert.AreSame(child, surface.FindElementAt(new PointF(5f, 50f)));
+    }
+
+    [TestMethod]
+    public void PointTransformsIncludeVisualTransforms()
+    {
+        using var surface = CreateSurface(200, 200);
+        var root = new VC.Canvas { Width = 200, Height = 200 };
+        var child = new VC.Border { Width = 20, Height = 20 };
+        VC.Canvas.SetLeft(child, 10);
+        VC.Canvas.SetTop(child, 20);
+        child.Transform = new System.Drawing.Drawing2D.Matrix(2f, 0f, 0f, 2f, 0f, 0f);
+        root.Add(child);
+        surface.Root = root;
+        Layout(surface, 200, 200);
+
+        var surfacePoint = child.PointToSurface(new PointF(20f, 20f));
+        Assert.AreEqual(50f, surfacePoint.X, 0.01f);
+        Assert.AreEqual(60f, surfacePoint.Y, 0.01f);
+
+        var local = child.PointFromSurface(surfacePoint);
+        Assert.AreEqual(20f, local.X, 0.01f);
+        Assert.AreEqual(20f, local.Y, 0.01f);
+
+        var bounds = child.AbsoluteBounds;
+        Assert.AreEqual(10f, bounds.X, 0.01f);
+        Assert.AreEqual(20f, bounds.Y, 0.01f);
+        Assert.AreEqual(40f, bounds.Width, 0.01f);
+        Assert.AreEqual(40f, bounds.Height, 0.01f);
+    }
+
+    [TestMethod]
     public void StackPanel_StacksWithSpacingAndAlignsTheCrossAxis()
     {
         using var surface = CreateSurface(200, 100);
@@ -317,17 +407,17 @@ public sealed class VisualBackendTests
         Assert.AreEqual(Color.Red.ToArgb(), bitmap.GetPixel(10, 10).ToArgb(), "body");
     }
 
-    private static VisualSurface CreateSurface(int width, int height)
+    private static VisualHost CreateSurface(int width, int height)
         => new() { Size = new Size(width, height) };
 
-    private static void Layout(VisualSurface surface, int width, int height)
+    private static void Layout(VisualHost surface, int width, int height)
     {
         using var bitmap = new Bitmap(1, 1);
         using var graphics = Graphics.FromImage(bitmap);
         surface.RenderTo(graphics, new Size(width, height));
     }
 
-    private static void SendKey(VisualSurface surface, Keys key)
+    private static void SendKey(VisualHost surface, Keys key)
     {
         SendMessage(surface.Handle, WmKeyDown, (IntPtr)key, IntPtr.Zero);
         SendMessage(surface.Handle, WmKeyUp, (IntPtr)key, IntPtr.Zero);

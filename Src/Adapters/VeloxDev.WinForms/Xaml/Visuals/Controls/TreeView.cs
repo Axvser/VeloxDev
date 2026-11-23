@@ -280,7 +280,7 @@ public class TreeView : Panel
             }
         }
 
-        if (IsFocused && SelectedItem is { } selectedRow)
+        if (IsFocusVisible && SelectedItem is { } selectedRow)
         {
             using var focus = new Pen(theme.FocusRing, 1f);
             graphics.DrawRectangle(

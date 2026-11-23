@@ -12,7 +12,7 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// <c>Space</c>/<c>Enter</c> activate it; <c>Enter</c> activates on key down and <c>Space</c> on key up, matching
 /// <see cref="Button"/>.
 /// </remarks>
-public abstract class ToggleButtonBase : VisualElement
+public abstract class ToggleButtonBase : ButtonBase
 {
     private bool _hover;
     private bool _pressed;
@@ -51,7 +51,7 @@ public abstract class ToggleButtonBase : VisualElement
 
         var bounds = new RectangleF(0f, 0f, Bounds.Width, Bounds.Height);
         RenderGlyph(graphics, bounds);
-        if (IsFocused)
+        if (IsFocusVisible)
         {
             DrawFocusRing(
                 graphics,
@@ -70,6 +70,18 @@ public abstract class ToggleButtonBase : VisualElement
 
     /// <summary>Raises <see cref="Checked"/>.</summary>
     protected void RaiseChecked() => Checked?.Invoke(this, EventArgs.Empty);
+
+    // 先翻转状态再执行命令：命令读 IsChecked 时看到的是本次激活后的值，与 WPF 的 ToggleButton 一致。
+    private void Activate()
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        ActivateFromInput();
+        ExecuteCommand();
+    }
 
     /// <summary>Draws the focus ring around <paramref name="bounds"/>.</summary>
     /// <param name="graphics">The target surface.</param>
@@ -123,7 +135,7 @@ public abstract class ToggleButtonBase : VisualElement
         args.Handled = true;
         if (IsEnabled && AbsoluteBounds.Contains(args.Position))
         {
-            ActivateFromInput();
+            Activate();
         }
     }
 
@@ -140,7 +152,7 @@ public abstract class ToggleButtonBase : VisualElement
             _keyDown = true;
             if (args.KeyCode == Keys.Enter)
             {
-                ActivateFromInput();
+                Activate();
             }
 
             args.Handled = true;
@@ -157,7 +169,7 @@ public abstract class ToggleButtonBase : VisualElement
             args.Handled = true;
             if (activate)
             {
-                ActivateFromInput();
+                Activate();
             }
         }
     }

@@ -405,7 +405,7 @@ public class DatePicker : VisualElement
             BorderThickness.IsEmpty ? new XamlThickness(1f) : BorderThickness,
             radius);
 
-        if (IsFocused)
+        if (IsFocusVisible)
         {
             using var focusPath = XamlDrawing.RoundedRectangle(
                 new RectangleF(1.5f, 1.5f, Math.Max(0f, bounds.Width - 3f), Math.Max(0f, bounds.Height - 3f)),

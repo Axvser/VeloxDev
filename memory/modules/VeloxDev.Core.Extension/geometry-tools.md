@@ -38,8 +38,8 @@
 - 连线模板直接绑 `Sender.Anchor.Horizontal` / `Receiver.Anchor.Horizontal`（
   `Src/Templates/VeloxDev.WPF.Templates/working/content/workflow-tree-view/TemplateClass.xaml` 的 `LinkTemplate`）——
   **link 自己不存坐标、不缓存**，端点就是两个 slot 的锚点。
-- slot 锚点**不是 Core 算的**，是各适配器的 `WorkflowSlotLayoutBehavior` 量出来的（用
-  `WorkflowSurfaceMath` 的三个函数之一）。所以**任何程序化的几何改动都必须让平台重算**，否则节点卡片动了、线还停在旧端点。
+- slot 锚点**不是 Core 算的**：标记类适配器由 `WorkflowSlotLayoutBehavior` 量出来（用
+  `WorkflowSurfaceMath` 的三个函数之一）；WinForms 的 `WorkflowSlotLayoutBehavior` 把命名部件中心换算到坐标宿主（默认最近的视觉 `Canvas`）后写 `Anchor`。所以**任何程序化的几何改动都必须让平台重算**，否则节点卡片动了、线还停在旧端点。
 - 重算的触发是**反应式**的：节点 `Anchor`/`Size` 的 `PropertyChanged` + 框架布局事件（WPF
   `WorkflowSlotLayoutBehavior` 的 `OnLayoutUpdated` / `OnSizeChanged` / `OnNodePropertyChanged`，监听的属性名集合由 `SlotPropertyNames` 维护，含 `"Anchor"`/`"Size"`）。
 - **`RefreshSlotAnchors(node)` 就是那个「重新发一次通知」的推手**（非变更、不产生 undo，`WorkflowAgentToolkit.RefreshSlotAnchors`）。

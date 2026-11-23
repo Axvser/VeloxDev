@@ -133,12 +133,13 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 而且早就在用：生成文件引用适配器程序集（`TemplateClass.xaml` 里 `xmlns:behaviors` 的 `assembly=VeloxDev.WPF`）本来就要
 用户自己装包，minimap 这个角色在六家就是「包里发控件 + 模板薄派生」（WPF / Avalonia / WinUI / MAUI / Jalium / Razor 各家都只剩薄薄一层）。
 
-**WinForms 的七项全部走这条**：适配器给行为与附件，模板只声明 XAML 根与部件。
+**WinForms 的七项全部走这条**：适配器给行为与转换器，模板只声明 XAML 根与部件。
 
 - WinForms（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`）：
-`WorkflowSurfaceBehavior`（装配、平移、输入路由、视图池、标尺浮层）、`WorkflowNodeAttachment`（绑定、定位、缩放折叠）、
-`WorkflowSlotAttachment`（字形用 XAML 的 `Shapes.SvgPathParser`）、`WorkflowLinkAttachment` / `WorkflowLinkLayer`（端点订阅与几何）、
-`WorkflowMinimapOverlay`；网格与标尺是模板条目的职责，选择器基类是 `VeloxDev.WinForms.Xaml.TemplateSelector`。模板因此只剩薄壳。
+`WorkflowSurfaceBehavior`（部件解析、相机、输入路由、视口持久化）、`ViewPool`（可见集 → 视觉元素）、
+`WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior`（槽测量、标题拖动、插槽连接）、
+`SlotStateBrushConverter`、`WorkflowMinimapOverlay`；网格与标尺、节点/插槽/连线的视觉外观是模板条目的职责，选择器基类是
+`VeloxDev.WinForms.Xaml.Visuals.VisualTemplateSelector`。模板因此只剩视觉 XAML 根与部件。
 - Jalium（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/`）**不走这条**：
 角色落成附着行为（`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` /
 `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds`）+ 小地图 `WorkflowMinimapOverlay` +
@@ -182,9 +183,9 @@ Razor 的 `slotBackground` 就是这一类的正面样本：它的 `description`
 
 | 常量 | 被复制到 |
 |---|---|
-| 标尺厚度（28 或 36） | 模板侧唯一副本是 **Razor**：`workflow-tree-view/TemplateClass.razor` 的 `RulerThickness="28"`。**WinForms 与 Jalium 都是单一来源**：WinForms 在**模板** `workflow-grid-decorator/TemplateClass.cs` 的 `DefaultRulerThickness = 36`（`SurfaceCanvas` 使用，标尺浮层由适配器的 `WorkflowRulerOverlayForm` 画）；Jalium 同样在 `workflow-grid-decorator/TemplateClass.cs`，模板其余文件零副本 |
+| 标尺厚度（28 或 36） | 模板侧唯一副本是 **Razor**：`workflow-tree-view/TemplateClass.razor` 的 `RulerThickness="28"`。**WinForms 与 Jalium 都是单一来源**：WinForms 在**模板** `workflow-grid-decorator/TemplateClass.cs` 的 `RulerThickness`（默认 28，`RulerBand => RulerThickness`，标尺由该视觉元素的视口固定层自己画）；Jalium 同样在 `workflow-grid-decorator/TemplateClass.cs`，模板其余文件零副本 |
 | 节点设计尺寸 `260×180` | WPF / WinUI `workflow-node-view/TemplateClass.xaml` 的 `Grid Width="260" Height="180"`、MAUI `workflow-node-view/TemplateClass.xaml.cs` 的 `DesignWidth`、Razor `workflow-node-view/TemplateClass.razor.cs` 的 `DesignWidth`、Jalium `workflow-node-view/TemplateClass.jalxaml` 的 `Grid Width="260"/Height="180"` |
-| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `workflow-link-view/TemplateClass.axaml.cs` 的 `PullMinimum`、WPF `workflow-link-view/TemplateClass.xaml.cs` 的 `MinimumPull`、WinUI `workflow-link-view/TemplateClass.xaml.cs` 的 `BuildCurve` 里字面量 `40`、Razor `workflow-link-view/TemplateClass.razor.cs` 的 `PullMinimum`；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js`）；WinForms 默认单层绘制的 `pullMinimum` 在 `WorkflowLinkLayer.cs`，per-link 路径另有 `WorkflowLinkAttachment.cs` 的一份；MAUI 在 `WorkflowLinkOverlay.cs` 的 `PullMinimum`，Jalium 在模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `MinimumPull = 40`。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
+| 连线控制点最小拉出量 `40`（配 `0.5·\|dx\|`） | 模板各自一份命名常量：Avalonia `workflow-link-view/TemplateClass.axaml.cs` 的 `PullMinimum`、WPF `workflow-link-view/TemplateClass.xaml.cs` 的 `MinimumPull`、WinUI `workflow-link-view/TemplateClass.xaml.cs` 的 `BuildCurve` 里字面量 `40`、Razor `workflow-link-view/TemplateClass.razor.cs` 的 `PullMinimum`；**Razor 再加适配器 JS 的 `LINK_PULL_MIN`**（`Src/Adapters/VeloxDev.Razor/wwwroot/veloxdev.workflow.js`）；WinForms 在视觉 `workflow-link-view/TemplateClass.xaml.cs` 的 `MinimumPull = 40`；MAUI 在 `WorkflowLinkOverlay.cs` 的 `PullMinimum`，Jalium 在模板 `workflow-link-view/TemplateClass.jalxaml.cs` 的 `MinimumPull = 40`。镜像 demo 各存对应的那一份。**Razor 那两份最危险**：JS 在缩放塌缩那一帧独立重算同一条曲线，两边公式一岔就闪回旧形状 |
 
 
 ---

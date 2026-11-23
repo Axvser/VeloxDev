@@ -1,4 +1,4 @@
-# Scaffolding your views with the item templates
+﻿# Scaffolding your views with the item templates
 
 Each adapter ships a `dotnet new` item-template pack that generates the seven view roles with the behaviours already wired, in your namespace and with your colours. This is the normal way to get a working canvas on screen — write the ViewModels yourself (see [model.md](model.md)) and let the templates produce the view layer.
 
@@ -14,9 +14,9 @@ Each adapter ships a `dotnet new` item-template pack that generates the seven vi
 |---|---|---|
 | node | `NodeView` | one node's visual |
 | slot | `SlotView` | one port's visual |
-| link | `LinkView` | one connection's visual — on MAUI and WinForms the default surface draws links in one layer, so the item is the opt-in per-link view |
+| link | `LinkView` | one connection's visual — on MAUI the default surface draws links in one layer; on WinForms the visual path instantiates one per link |
 | tree | `TreeView` | the surface: scroll viewer, canvas, items host, decorators |
-| selector | `TemplateSelector` (`CustomTemplateSelector` on WinForms) | picks the node / link template; WinForms derives from the generic `VeloxDev.WinForms.Xaml.TemplateSelector` |
+| selector | `TemplateSelector` (`CustomTemplateSelector` on WinForms) | picks the node / link template; WinForms derives from `VeloxDev.WinForms.Xaml.Visuals.VisualTemplateSelector` and returns visual UserControl instances |
 | decorator | `GridDecorator` | the grid and the ruler |
 | minimap | `MinimapOverlay` | thumbnail plus a draggable viewport indicator |
 
@@ -54,6 +54,8 @@ dotnet build
 ⚙ **`-n` is load-bearing.** The tree view references its siblings by the default class names through a namespace alias, so renaming one means editing the tree by hand. Generate with the defaults unless you are prepared to do that. On WinForms the selector's default name is **`CustomTemplateSelector`**, because `TemplateSelector` is the generic base it derives from; the tree template already references `local:CustomTemplateSelector`.
 
 ⚙ **All seven items go into one namespace.** That is how the tree resolves its siblings. Splitting them across two namespaces gives you a tree that cannot find its node view.
+
+⚙ **On WinForms the tree type-references `GridDecorator`, `CustomTemplateSelector`, and the node/slot/link views inside its `DataTemplate`s.** The minimap is a separate `WorkflowMinimapOverlay` assigned by name, so a missing minimap is a host-wiring gap rather than a tree compile error.
 
 ## The style contract
 

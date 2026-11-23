@@ -1,907 +1,322 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Linq;
-using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Windows.Forms;
-using NativeBinding = System.Windows.Forms.Binding;
 using VeloxDev.WinForms.Xaml;
-using VeloxDev.WorkflowSystem;
+using VeloxDev.WinForms.Xaml.Visuals;
+using VisualCanvas = VeloxDev.WinForms.Xaml.Visuals.Controls.Canvas;
+using VisualItemsControl = VeloxDev.WinForms.Xaml.Visuals.Controls.ItemsControl;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// WinForms workflow slot layout synchronization behavior.
+/// WPF-shaped attached behavior that measures the node template's declared slot parts and writes their
+/// world-space anchors back to the model.
 /// </summary>
+/// <remarks>
+/// Attach it to the node view root and name the parts with <see cref="SlotNamesProperty"/> and
+/// <see cref="SlotEnumeratorNamesProperty"/> (comma-separated <c>x:Name</c>s). The behavior reads the live visual
+/// tree; it does not own a host element and does not create slot views.
+/// </remarks>
 public sealed class WorkflowSlotLayoutBehavior
 {
-    private sealed class LayoutState
-    {
-        public bool IsEnabled { get; set; }
-        public INotifyPropertyChanged? PropertyChangedSource { get; set; }
-        public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
-        public string? SlotNames { get; set; }
-        public string? SlotEnumeratorNames { get; set; }
-        public string? CoordinateHostName { get; set; }
-        public Type? CoordinateHostType { get; set; }
-        public string? ParentHostName { get; set; }
-        public HashSet<string> SlotPropertyNames { get; } = [];
-
-        // 自动模式（没有命名插槽）每次同步都要遍历整棵子控件树并反射找 ViewModel —— 平移的每个鼠标
-        // 消息都会走一遍。树在两次行重建之间是稳定的，所以把解析结果缓存起来；ControlAdded/Removed
-        // 与 Refresh 把它置脏。
-        public List<Control>? CachedSlotControls { get; set; }
-        public bool SlotControlsDirty { get; set; } = true;
-    }
-
-    private static readonly ConditionalWeakTable<Control, LayoutState> States = new();
-    private static readonly ConditionalWeakTable<ISlotComponent, LocalAnchorBox> LocalAnchors = new();
-
-    /// <summary>Whether the slot-layout lifecycle is active on the control.</summary>
+    /// <summary>Whether the behavior measures the declared slot parts.</summary>
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
         "IsEnabled", typeof(bool), typeof(WorkflowSlotLayoutBehavior),
-        new PropertyMetadata(false, OnIsEnabledPropertyChanged));
+        new PropertyMetadata(false));
 
-    /// <summary>Comma-separated names of the controls that carry fixed slots.</summary>
+    /// <summary>Comma-separated names of visual elements whose data context is one slot.</summary>
     public static readonly DependencyProperty SlotNamesProperty = DependencyProperty.RegisterAttached(
         "SlotNames", typeof(string), typeof(WorkflowSlotLayoutBehavior),
-        new PropertyMetadata(null, OnSlotNamesPropertyChanged));
+        new PropertyMetadata(null));
 
-    /// <summary>Comma-separated names of the controls that host generated slot enumerators.</summary>
+    /// <summary>Comma-separated names of visual items controls whose realized items are slots.</summary>
     public static readonly DependencyProperty SlotEnumeratorNamesProperty = DependencyProperty.RegisterAttached(
         "SlotEnumeratorNames", typeof(string), typeof(WorkflowSlotLayoutBehavior),
-        new PropertyMetadata(null, OnSlotEnumeratorNamesPropertyChanged));
+        new PropertyMetadata(null));
 
-    /// <summary>Optional name of the canvas that supplies slot coordinates.</summary>
+    /// <summary>Name of the element that supplies the coordinate space for slot anchors.</summary>
     public static readonly DependencyProperty CoordinateHostNameProperty = DependencyProperty.RegisterAttached(
         "CoordinateHostName", typeof(string), typeof(WorkflowSlotLayoutBehavior),
-        new PropertyMetadata(null, OnCoordinateHostPropertyChanged));
+        new PropertyMetadata(null));
 
-    /// <summary>Optional type of the canvas that supplies slot coordinates.</summary>
-    public static readonly DependencyProperty CoordinateHostTypeProperty = DependencyProperty.RegisterAttached(
-        "CoordinateHostType", typeof(Type), typeof(WorkflowSlotLayoutBehavior),
-        new PropertyMetadata(null, OnCoordinateHostPropertyChanged));
+    private static readonly ConditionalWeakTable<VisualElement, SlotState> States = new();
 
-    /// <summary>Optional name of the control whose subtree holds the named slot controls.</summary>
-    public static readonly DependencyProperty ParentHostNameProperty = DependencyProperty.RegisterAttached(
-        "ParentHostName", typeof(string), typeof(WorkflowSlotLayoutBehavior),
-        new PropertyMetadata(null, OnParentHostNamePropertyChanged));
-
-    /// <summary>The slot's centre in its node view's client coordinates, in the same units as the node's Anchor/Size.</summary>
-    private sealed class LocalAnchorBox
+    private WorkflowSlotLayoutBehavior()
     {
-        public double X { get; set; }
-        public double Y { get; set; }
     }
 
-    // 曲线要的是「端口在节点内的局部位置」：它只随布局/缩放变，不随画布平移变。从控件左/上逐级
-    // 累加到节点根即可得到，完全不经过屏幕坐标，因此不会在测量滞后时把平移量混进来。
-    internal static bool TryGetLocalAnchor(ISlotComponent slot, out double x, out double y)
+    /// <summary>Reads the layout switch.</summary>
+    public static bool GetIsEnabled(VisualElement element) => (bool)element.GetValue(IsEnabledProperty)!;
+
+    /// <summary>Writes the layout switch.</summary>
+    public static void SetIsEnabled(VisualElement element, bool value) => element.SetValue(IsEnabledProperty, value);
+
+    /// <summary>Reads the named slot parts.</summary>
+    public static string? GetSlotNames(VisualElement element) => (string?)element.GetValue(SlotNamesProperty);
+
+    /// <summary>Writes the named slot parts.</summary>
+    public static void SetSlotNames(VisualElement element, string? value) => element.SetValue(SlotNamesProperty, value);
+
+    /// <summary>Reads the named slot enumerator parts.</summary>
+    public static string? GetSlotEnumeratorNames(VisualElement element)
+        => (string?)element.GetValue(SlotEnumeratorNamesProperty);
+
+    /// <summary>Writes the named slot enumerator parts.</summary>
+    public static void SetSlotEnumeratorNames(VisualElement element, string? value)
+        => element.SetValue(SlotEnumeratorNamesProperty, value);
+
+    /// <summary>Reads the coordinate-host name.</summary>
+    public static string? GetCoordinateHostName(VisualElement element)
+        => (string?)element.GetValue(CoordinateHostNameProperty);
+
+    /// <summary>Writes the coordinate-host name.</summary>
+    public static void SetCoordinateHostName(VisualElement element, string? value)
+        => element.SetValue(CoordinateHostNameProperty, value);
+
+    /// <summary>Attaches or detaches the behavior according to the element's current attached values.</summary>
+    public static void Ensure(VisualElement element)
     {
-        if (slot is not null && LocalAnchors.TryGetValue(slot, out var box))
+        var enabled = element.IsSet(IsEnabledProperty) && GetIsEnabled(element);
+        if (enabled)
         {
-            x = box.X;
-            y = box.Y;
-            return true;
+            Attach(element);
         }
-
-        x = 0d;
-        y = 0d;
-        return false;
-    }
-
-    /// <summary>
-    /// Gets whether workflow slot layout behavior is enabled for the specified control.
-    /// </summary>
-    public static bool GetIsEnabled(Control element)
-    {
-        if (element is null)
+        else
         {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return IsEnabledProperty.GetValue(element) is true;
-    }
-
-    /// <summary>
-    /// Sets whether workflow slot layout behavior is enabled for the specified control.
-    /// </summary>
-    public static void SetIsEnabled(Control element, bool value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        IsEnabledProperty.SetValue(element, value);
-    }
-
-    private static void OnIsEnabledPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
-    {
-        var state = GetState(target);
-        var value = e.NewValue is true;
-        if (state.IsEnabled == value)
-        {
-            return;
-        }
-
-        Detach(target);
-        state.IsEnabled = value;
-        if (value)
-        {
-            Attach(target);
+            Detach(element);
         }
     }
 
-    /// <summary>
-    /// Gets the configured named slot controls.
-    /// </summary>
-    public static string? GetSlotNames(Control element)
+    private static void Attach(VisualElement element)
     {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return SlotNamesProperty.GetValue(element) as string;
+        var state = States.GetValue(element, static owner => new SlotState(owner));
+        state.Subscribe();
     }
 
-    /// <summary>
-    /// Sets the configured named slot controls.
-    /// </summary>
-    public static void SetSlotNames(Control element, string? value)
+    private static void Detach(VisualElement element)
     {
-        if (element is null)
+        if (States.TryGetValue(element, out var state))
         {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        SlotNamesProperty.SetValue(element, value);
-    }
-
-    private static void OnSlotNamesPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
-    {
-        var state = GetState(target);
-        state.SlotNames = e.NewValue as string;
-        state.SlotControlsDirty = true;
-        RequestSync(target);
-    }
-
-    /// <summary>
-    /// Gets the configured slot enumerator member names.
-    /// </summary>
-    public static string? GetSlotEnumeratorNames(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return SlotEnumeratorNamesProperty.GetValue(element) as string;
-    }
-
-    /// <summary>
-    /// Sets the configured slot enumerator member names.
-    /// </summary>
-    public static void SetSlotEnumeratorNames(Control element, string? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        SlotEnumeratorNamesProperty.SetValue(element, value);
-    }
-
-    private static void OnSlotEnumeratorNamesPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
-    {
-        var state = GetState(target);
-        state.SlotEnumeratorNames = e.NewValue as string;
-        state.SlotControlsDirty = true;
-        RequestSync(target);
-    }
-
-    /// <summary>
-    /// Gets the configured coordinate host name.
-    /// </summary>
-    public static string? GetCoordinateHostName(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return CoordinateHostNameProperty.GetValue(element) as string;
-    }
-
-    /// <summary>
-    /// Sets the configured coordinate host name.
-    /// </summary>
-    public static void SetCoordinateHostName(Control element, string? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        CoordinateHostNameProperty.SetValue(element, value);
-    }
-
-    private static void OnCoordinateHostPropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
-    {
-        var state = GetState(target);
-        state.CoordinateHostName = CoordinateHostNameProperty.GetValue(target) as string;
-        state.CoordinateHostType = CoordinateHostTypeProperty.GetValue(target) as Type;
-        RequestSync(target);
-    }
-
-    /// <summary>
-    /// Gets the configured coordinate host type.
-    /// </summary>
-    public static Type? GetCoordinateHostType(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return CoordinateHostTypeProperty.GetValue(element) as Type;
-    }
-
-    /// <summary>
-    /// Sets the configured coordinate host type.
-    /// </summary>
-    public static void SetCoordinateHostType(Control element, Type? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        CoordinateHostTypeProperty.SetValue(element, value);
-    }
-
-    /// <summary>
-    /// Gets the configured parent host name.
-    /// </summary>
-    public static string? GetParentHostName(Control element)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        return ParentHostNameProperty.GetValue(element) as string;
-    }
-
-    /// <summary>
-    /// Sets the configured parent host name.
-    /// </summary>
-    public static void SetParentHostName(Control element, string? value)
-    {
-        if (element is null)
-        {
-            throw new ArgumentNullException(nameof(element));
-        }
-
-        ParentHostNameProperty.SetValue(element, value);
-    }
-
-    private static void OnParentHostNamePropertyChanged(Control target, DependencyPropertyChangedEventArgs e)
-    {
-        GetState(target).ParentHostName = e.NewValue as string;
-        RequestSync(target);
-    }
-
-    /// <summary>
-    /// Requests the control to refresh layout-related workflow visuals.
-    /// </summary>
-    public static void Refresh(Control control)
-    {
-        if (control is null)
-        {
-            throw new ArgumentNullException(nameof(control));
-        }
-
-        GetState(control).SlotControlsDirty = true;
-        RequestSync(control);
-    }
-
-    /// <summary>
-    /// Synchronously re-measures and writes back the slot anchors of a node view.
-    /// The deferred <see cref="Refresh"/> path coalesces to the message loop, which
-    /// drains after any forced synchronous repaint (e.g. a surface ApplyPan that
-    /// calls <c>Update()</c>) — so during zoom collapse / canvas expansion the links
-    /// repaint with stale endpoints for one frame. Call this right after the node
-    /// view's geometry has been moved or scaled so link endpoints refresh in the
-    /// same turn, before that forced repaint.
-    /// </summary>
-    /// <remarks>
-    /// Falls back to the deferred path when the control has no handle yet (nothing
-    /// to measure) or measurement throws because a descendant slot's geometry is
-    /// still settling.
-    /// </remarks>
-    public static void SyncNow(Control control)
-    {
-        if (control is null)
-        {
-            throw new ArgumentNullException(nameof(control));
-        }
-
-        if (!States.TryGetValue(control, out var state) || !state.IsEnabled || control.IsDisposed)
-        {
-            return;
-        }
-
-        if (!control.IsHandleCreated)
-        {
-            RequestSync(control);
-            return;
-        }
-
-        try
-        {
-            Sync(control);
-        }
-        catch (InvalidOperationException)
-        {
-            // 后代插槽控件还没有可用几何（例如在句柄创建期间、子句柄尚未存在时被调用）；重新排队，让锚点在布局落定后仍能落下。
-            RequestSync(control);
+            state.Unsubscribe();
         }
     }
 
-    private static void Attach(Control control)
+    private sealed class SlotState
     {
-        var state = GetState(control);
-        control.HandleCreated += OnHandleCreated;
-        control.VisibleChanged += OnVisibleChanged;
-        control.Layout += OnLayout;
-        control.SizeChanged += OnSizeChanged;
-        control.ControlAdded += OnControlCollectionChanged;
-        control.ControlRemoved += OnControlCollectionChanged;
-        control.Disposed += OnDisposed;
-        UpdatePropertyChangedSubscription(control, state);
-        RequestSync(control);
-    }
+        private readonly VisualElement owner;
+        private readonly List<VisualItemsControl> enumerators = [];
+        private VisualHost? surface;
 
-    private static void Detach(Control control)
-    {
-        if (!States.TryGetValue(control, out var state))
+        public SlotState(VisualElement owner)
         {
-            return;
+            this.owner = owner;
         }
 
-        control.HandleCreated -= OnHandleCreated;
-        control.VisibleChanged -= OnVisibleChanged;
-        control.Layout -= OnLayout;
-        control.SizeChanged -= OnSizeChanged;
-        control.ControlAdded -= OnControlCollectionChanged;
-        control.ControlRemoved -= OnControlCollectionChanged;
-        control.Disposed -= OnDisposed;
-
-        if (state.PropertyChangedSource is not null)
+        public void Subscribe()
         {
-            state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
-            state.PropertyChangedSource = null;
-            state.PropertyChangedHandler = null;
+            owner.PropertyChanged -= OnOwnerPropertyChanged;
+            owner.PropertyChanged += OnOwnerPropertyChanged;
+            HookSurface();
         }
 
-        // Disposed 也走这里；不置位的话，销毁前排队的同步仍会通过 IsEnabled 闸门。
-        state.IsEnabled = false;
-        state.CachedSlotControls = null;
-        state.SlotControlsDirty = true;
-        CancelSync(control);
-    }
-
-    private static void OnHandleCreated(object? sender, EventArgs e)
-    {
-        if (sender is Control control)
+        public void Unsubscribe()
         {
-            RequestSync(control);
-        }
-    }
-
-    private static void OnVisibleChanged(object? sender, EventArgs e)
-    {
-        if (sender is Control control && control.Visible)
-        {
-            RequestSync(control);
-        }
-    }
-
-    private static void OnLayout(object? sender, LayoutEventArgs e)
-    {
-        if (sender is Control control)
-        {
-            RequestSync(control);
-        }
-    }
-
-    private static void OnSizeChanged(object? sender, EventArgs e)
-    {
-        if (sender is Control control)
-        {
-            RequestSync(control);
-        }
-    }
-
-    private static void OnControlCollectionChanged(object? sender, ControlEventArgs e)
-    {
-        if (sender is Control control)
-        {
-            // 子树（含插槽行）变了：下一次同步重新解析，绝不沿用可能已经销毁的控件。
-            if (States.TryGetValue(control, out var state))
+            owner.PropertyChanged -= OnOwnerPropertyChanged;
+            foreach (var enumerator in enumerators)
             {
-                state.SlotControlsDirty = true;
+                enumerator.ItemsRebuilt -= OnItemsRebuilt;
             }
 
-            RequestSync(control);
-        }
-    }
-
-    private static void OnDisposed(object? sender, EventArgs e)
-    {
-        if (sender is Control control)
-        {
-            Detach(control);
-        }
-    }
-
-    private static void OnNodePropertyChanged(Control control, PropertyChangedEventArgs e)
-    {
-        if (!States.TryGetValue(control, out var state)
-            ||
-           (e.PropertyName is not null && !state.SlotPropertyNames.Contains(e.PropertyName)))
-        {
-            return;
-        }
-
-        RequestSync(control);
-    }
-
-    private static void UpdatePropertyChangedSubscription(Control control, LayoutState state)
-    {
-        var dataSource = ResolveDataSource(control);
-        if (ReferenceEquals(dataSource, state.PropertyChangedSource))
-        {
-            return;
-        }
-
-        if (state.PropertyChangedSource is not null)
-        {
-            state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
-            state.PropertyChangedSource = null;
-            state.PropertyChangedHandler = null;
-        }
-
-        if (dataSource is INotifyPropertyChanged notify)
-        {
-            PropertyChangedEventHandler handler = (_, e) => OnNodePropertyChanged(control, e);
-            state.PropertyChangedSource = notify;
-            state.PropertyChangedHandler = handler;
-            notify.PropertyChanged += handler;
-        }
-    }
-
-    // 同一棵树的请求并进共享批次，由一次 BeginInvoke 合并执行；句柄还没建好时留在队里，下一次触发再排。
-    private static void RequestSync(Control control)
-    {
-        if (!States.TryGetValue(control, out var state) || !state.IsEnabled)
-        {
-            return;
-        }
-
-        var node = ResolveNode(control);
-        object owner = node?.Parent ?? (object)control;
-        var target = control.FindForm() ?? control;
-        var batch = WorkflowLayoutBatch.For(owner, action => Post(target, action));
-
-        // 已排队的工作可能在行为被关掉之后才轮到：那一刻不要再量一次。
-        batch.Request(control, new Action(() =>
-        {
-            if (States.TryGetValue(control, out var current) && current.IsEnabled)
+            enumerators.Clear();
+            if (surface is not null)
             {
-                Sync(control);
+                surface.LayoutUpdated -= OnLayoutUpdated;
+                surface = null;
             }
-        }));
-        batch.Schedule();
-    }
-
-    private static void CancelSync(Control control)
-    {
-        object owner = ResolveNode(control)?.Parent ?? (object)control;
-        WorkflowLayoutBatch.For(owner).Cancel(control);
-    }
-
-    // 窗口正在销毁时 BeginInvoke 会抛 InvalidOperationException；返回 false 让批次保留队列、等下一个触发再试。
-    private static bool Post(Control target, Action flush)
-    {
-        if (target.IsDisposed || !target.IsHandleCreated)
-        {
-            return false;
         }
 
-        try
+        private void HookSurface()
         {
-            target.BeginInvoke(flush);
-            return true;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-    }
-
-    private static void Sync(Control control)
-    {
-        if (States.TryGetValue(control, out var state))
-        {
-            // 重新建立节点的 PropertyChanged 订阅：Attach 在构造时跑，那时节点 VM 还是 null，订阅是空操作；不在这里重跑，插槽锚点只会被量一次、连线永不跟随节点拖拽。
-            // UpdatePropertyChangedSubscription 里的 ReferenceEquals 防护让它在已订阅正确源后成为廉价空操作。
-            UpdatePropertyChangedSubscription(control, state);
-        }
-
-        var node = ResolveNode(control);
-        if (node is null)
-        {
-            return;
-        }
-
-        var parentHost = ResolveParentHost(control);
-        var coordinateHost = ResolveCoordinateHost(control, parentHost);
-
-        var slotNames = GetAllSlotNames(control);
-        var enumeratorNames = GetAllSlotEnumeratorNames(control);
-
-        // 重建「变化时该触发同步」的属性名集合。
-        if (state is not null)
-        {
-            state.SlotPropertyNames.Clear();
-            state.SlotPropertyNames.Add(nameof(INodeComponent.Anchor));
-            state.SlotPropertyNames.Add(nameof(INodeComponent.Size));
-            // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
-            // OnPropertyChanged("OutputSlots") 才匹配得上。
-            foreach (var name in slotNames)
+            var next = owner.Surface;
+            if (ReferenceEquals(next, surface))
             {
-                state.SlotPropertyNames.Add(name);
-                if (name.StartsWith("PART_"))
-                    state.SlotPropertyNames.Add(name.Substring(5));
+                return;
             }
-            foreach (var name in enumeratorNames)
+
+            if (surface is not null)
             {
-                state.SlotPropertyNames.Add(name);
-                if (name.StartsWith("PART_"))
-                    state.SlotPropertyNames.Add(name.Substring(5));
+                surface.LayoutUpdated -= OnLayoutUpdated;
             }
-            // 标准属性名一律带兜底默认值，覆盖 ViewModel 直接属性与 SlotEnumerator 成员。
-            state.SlotPropertyNames.Add("InputSlot");
-            state.SlotPropertyNames.Add("OutputSlot");
-            state.SlotPropertyNames.Add("OutputSlots");
+
+            surface = next;
+            if (surface is not null)
+            {
+                surface.LayoutUpdated += OnLayoutUpdated;
+            }
         }
 
-        if (slotNames.Length == 0 && enumeratorNames.Length == 0)
+        private void OnLayoutUpdated(object? sender, EventArgs e)
         {
-            var slotViews = ResolveAutoSlotControls(control, state);
-            foreach (var slotView in slotViews)
+            HookSurface();
+            Sync();
+        }
+
+        private void OnOwnerPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (ReferenceEquals(e.Property, VisualElement.DataContextProperty)
+                || ReferenceEquals(e.Property, SlotNamesProperty)
+                || ReferenceEquals(e.Property, SlotEnumeratorNamesProperty)
+                || ReferenceEquals(e.Property, CoordinateHostNameProperty)
+                || ReferenceEquals(e.Property, VisualElement.WidthProperty)
+                || ReferenceEquals(e.Property, VisualElement.HeightProperty))
             {
-                if (slotView.IsDisposed)
+                owner.InvalidateMeasure();
+            }
+        }
+
+        private void OnItemsRebuilt(object? sender, EventArgs e) => owner.InvalidateMeasure();
+
+        private void Sync()
+        {
+            if (owner.DataContext is not IWorkflowComponent)
+            {
+                return;
+            }
+
+            var coordinateHost = ResolveCoordinateHost();
+            if (coordinateHost is null)
+            {
+                return;
+            }
+
+            foreach (var name in ParseNames(GetSlotNames(owner)))
+            {
+                var found = FindNamed(owner, name);
+                if (found is not null && found.DataContext is ISlotComponent)
+                {
+                    WriteAnchor(found, coordinateHost);
+                }
+            }
+
+            foreach (var name in ParseNames(GetSlotEnumeratorNames(owner)))
+            {
+                if (FindNamed(owner, name) is not VisualItemsControl items)
                 {
                     continue;
                 }
 
-                SyncSlot(control, coordinateHost, slotView, node);
-            }
-
-            return;
-        }
-
-        foreach (var slotName in slotNames)
-        {
-            SyncNamedSlot(parentHost, control, coordinateHost, node, slotName);
-        }
-
-        foreach (var enumeratorName in enumeratorNames)
-        {
-            SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
-        }
-
-    }
-
-    // 自动模式下的插槽控件表。控件树在两次行重建之间稳定，所以只在脏标记或缓存失效时重新解析。
-    private static List<Control> ResolveAutoSlotControls(Control control, LayoutState? state)
-    {
-        if (state is not null
-            && !state.SlotControlsDirty
-            && state.CachedSlotControls is { } cached
-            && IsSlotCacheValid(cached, control))
-        {
-            return cached;
-        }
-
-        var list = new List<Control>();
-        foreach (var descendant in EnumerateDescendants(control))
-        {
-            if (ResolveSlot(descendant) is not null)
-            {
-                list.Add(descendant);
-            }
-        }
-
-        if (state is not null)
-        {
-            state.CachedSlotControls = list;
-            state.SlotControlsDirty = false;
-        }
-
-        return list;
-    }
-
-    private static bool IsSlotCacheValid(List<Control> cached, Control root)
-    {
-        for (var i = 0; i < cached.Count; i++)
-        {
-            var slot = cached[i];
-            if (slot is null || slot.IsDisposed)
-            {
-                return false;
-            }
-
-            var ancestor = slot.Parent;
-            while (ancestor is not null && !ReferenceEquals(ancestor, root))
-            {
-                ancestor = ancestor.Parent;
-            }
-
-            if (ancestor is null)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static void SyncNamedSlot(Control parentHost, Control host, Control? coordinateHost, INodeComponent node, string slotName)
-    {
-        var slotControl = FindControlByName(parentHost, slotName);
-        if (slotControl is null)
-        {
-            return;
-        }
-
-        // 命名控件可能是插槽视图本身，也可能是包含插槽视图的宿主面板（如节点模板里的 PART_InputSlot）。把它下面解析出的 SlotView 都同步 —— 否则被命名为插槽的容器其子插槽视图永不被测量、锚点停在 NaN，
-        // WorkflowSlotUpdateGate 的 NaN 检查会隐藏所有以此结尾的连线。
-        if (ResolveSlot(slotControl) is not null)
-        {
-            SyncSlot(host, coordinateHost, slotControl, node);
-            return;
-        }
-
-        foreach (var slotView in EnumerateDescendants(slotControl).Where(x => ResolveSlot(x) is not null))
-        {
-            SyncSlot(host, coordinateHost, slotView, node);
-        }
-    }
-
-    private static void SyncSlotEnumerator(Control parentHost, Control host, Control? coordinateHost, INodeComponent node, string enumeratorName)
-    {
-        var itemsHost = FindControlByName(parentHost, enumeratorName);
-        if (itemsHost is null)
-        {
-            return;
-        }
-
-        foreach (var slotView in EnumerateDescendants(itemsHost).Where(x => ResolveSlot(x) is not null))
-        {
-            SyncSlot(host, coordinateHost, slotView, node);
-        }
-    }
-
-    private static void SyncSlot(Control host, Control? coordinateHost, Control slotControl, INodeComponent node)
-    {
-        var slot = ResolveSlot(slotControl);
-        if (slot is null || slotControl.Width <= 0 || slotControl.Height <= 0)
-        {
-            return;
-        }
-
-        var center = new System.Drawing.Point(slotControl.Width / 2, slotControl.Height / 2);
-        if (ResolveLocalCenter(host, slotControl) is { } localCenter)
-        {
-            var box = LocalAnchors.GetValue(slot, static _ => new LocalAnchorBox());
-            box.X = localCenter.X;
-            box.Y = localCenter.Y;
-        }
-
-        var screenPoint = slotControl.PointToScreen(center);
-
-        if (coordinateHost is not null)
-        {
-            // PointToClient 得到的是坐标宿（画布）客户区里的中心，正是连线渲染所在的系 —— 节点的 Location 已含平移 + ActualOffset，所以不减偏移。
-            // 这里若用 SlotAnchorFromVisualCenter 会减掉 ActualOffset，让每条连线偏移 -ActualOffset（只要设了 NegativeOffset 就恒定左上移）。
-            var coordinatePoint = coordinateHost.PointToClient(screenPoint);
-            slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(
-                coordinatePoint.X, coordinatePoint.Y, slot.Anchor.Layer);
-            return;
-        }
-
-        var localPoint = host.PointToClient(screenPoint);
-        slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromNode(
-            node.Anchor.Horizontal, node.Anchor.Vertical, localPoint.X, localPoint.Y, slot.Anchor.Layer);
-    }
-
-    // 从插槽控件沿父链累加 Left/Top 到节点根，得到节点客户区里的中心点；不经过屏幕坐标。
-    private static System.Drawing.PointF? ResolveLocalCenter(Control host, Control slotControl)
-    {
-        var x = slotControl.Width / 2d;
-        var y = slotControl.Height / 2d;
-
-        for (var current = slotControl; current is not null; current = current.Parent)
-        {
-            if (ReferenceEquals(current, host))
-            {
-                return new System.Drawing.PointF((float)x, (float)y);
-            }
-
-            x += current.Left;
-            y += current.Top;
-        }
-
-        return null;
-    }
-
-    private static Control? ResolveCoordinateHost(Control control, Control parentHost)
-    {
-        var hostName = GetCoordinateHostName(control);
-        if (!string.IsNullOrWhiteSpace(hostName))
-        {
-            var namedHost = FindControlByName(parentHost, hostName!);
-            if (namedHost is not null)
-            {
-                return namedHost;
-            }
-        }
-
-        // 没有显式坐标宿时，先认表面行为手里那块画布；泛型 v:Canvas 不继承 Panel，按类型找不到。
-        if (WorkflowSurfaceBehavior.FindSurfaceCanvas(control) is { } surfaceCanvas)
-        {
-            return surfaceCanvas;
-        }
-
-        var hostType = GetCoordinateHostType(control) ?? typeof(Panel);
-        var current = parentHost;
-        while (current is not null)
-        {
-            if (hostType.IsAssignableFrom(current.GetType()))
-            {
-                return current;
-            }
-
-            current = current.Parent;
-        }
-
-        return parentHost;
-    }
-
-    private static Control ResolveParentHost(Control control)
-    {
-        var hostName = GetParentHostName(control);
-        if (string.IsNullOrWhiteSpace(hostName))
-        {
-            return control;
-        }
-
-        return FindControlByName(control, hostName!) ?? control;
-    }
-
-    private static string[] GetAllSlotNames(Control control)
-        => EnumerateConfiguredNames(GetSlotNames(control)).Distinct(StringComparer.Ordinal).ToArray();
-
-    private static string[] GetAllSlotEnumeratorNames(Control control)
-        => EnumerateConfiguredNames(GetSlotEnumeratorNames(control)).Distinct(StringComparer.Ordinal).ToArray();
-
-    private static IEnumerable<string> EnumerateConfiguredNames(string? names)
-    {
-        if (string.IsNullOrWhiteSpace(names))
-        {
-            return Enumerable.Empty<string>();
-        }
-
-        return names!.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0);
-    }
-
-    private static Control? FindControlByName(Control root, string name)
-    {
-        foreach (var control in EnumerateSelfAndDescendants(root))
-        {
-            if (string.Equals(control.Name, name, StringComparison.Ordinal))
-            {
-                return control;
-            }
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<Control> EnumerateSelfAndDescendants(Control root)
-    {
-        yield return root;
-        foreach (var descendant in EnumerateDescendants(root))
-        {
-            yield return descendant;
-        }
-    }
-
-    private static IEnumerable<Control> EnumerateDescendants(Control root)
-    {
-        foreach (var child in root.Controls.OfType<Control>())
-        {
-            yield return child;
-            foreach (var descendant in EnumerateDescendants(child))
-            {
-                yield return descendant;
-            }
-        }
-    }
-
-    private static object? ResolveDataSource(Control control)
-    {
-        if (control.DataBindings.Count > 0)
-        {
-            foreach (var binding in control.DataBindings.OfType<NativeBinding>())
-            {
-                if (binding.DataSource is not null)
+                if (!enumerators.Contains(items))
                 {
-                    return binding.DataSource;
+                    enumerators.Add(items);
+                    items.ItemsRebuilt += OnItemsRebuilt;
+                }
+
+                foreach (var element in EnumerateVisuals(items))
+                {
+                    if (element.DataContext is ISlotComponent)
+                    {
+                        WriteAnchor(element, coordinateHost);
+                    }
                 }
             }
         }
 
-        return ResolveValue(control, "ViewModel") ?? ResolveValue(control, "DataContext") ?? ResolveValue(control, "BindingContext") ?? control.Tag;
-    }
-
-    private static INodeComponent? ResolveNode(Control control)
-    {
-        var current = control;
-        while (current is not null)
+        private void WriteAnchor(VisualElement element, VisualElement coordinateHost)
         {
-            var node = ResolveValue(current, "ViewModel") as INodeComponent
-                ?? ResolveValue(current, "DataContext") as INodeComponent
-                ?? ResolveValue(current, "BindingContext") as INodeComponent
-                ?? current.Tag as INodeComponent;
-
-            if (node is not null)
+            if (element.DataContext is not ISlotComponent slot || element.Bounds.Width <= 0f || element.Bounds.Height <= 0f)
             {
-                return node;
+                return;
             }
 
-            current = current.Parent;
+            var surfacePoint = element.PointToSurface(new System.Drawing.PointF(
+                element.Bounds.Width / 2f, element.Bounds.Height / 2f));
+            var hostPoint = coordinateHost.PointFromSurface(surfacePoint);
+            var anchor = new Anchor(hostPoint.X, hostPoint.Y, slot.Anchor.Layer);
+            if (double.IsNaN(slot.Anchor.Horizontal)
+                || double.IsNaN(slot.Anchor.Vertical)
+                || Math.Abs(slot.Anchor.Horizontal - anchor.Horizontal) > 0.01d
+                || Math.Abs(slot.Anchor.Vertical - anchor.Vertical) > 0.01d
+                || slot.Anchor.Layer != anchor.Layer)
+            {
+                slot.Anchor = anchor;
+            }
+        }
+
+        private VisualElement? ResolveCoordinateHost()
+        {
+            var name = GetCoordinateHostName(owner);
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                for (var current = owner.ParentElement; current is not null; current = current.ParentElement)
+                {
+                    if (string.Equals(current.Name, name, StringComparison.Ordinal))
+                    {
+                        return current;
+                    }
+                }
+            }
+
+            for (var current = owner.ParentElement; current is not null; current = current.ParentElement)
+            {
+                if (current is VisualCanvas)
+                {
+                    return current;
+                }
+            }
+
+            return owner.Surface?.Root as VisualElement;
+        }
+    }
+
+    private static IEnumerable<VisualElement> EnumerateNamedSlots(VisualElement root, string? names)
+    {
+        foreach (var name in ParseNames(names))
+        {
+            if (FindNamed(root, name) is { } element && element.DataContext is ISlotComponent)
+            {
+                yield return element;
+            }
+        }
+    }
+
+    private static string[] ParseNames(string? text)
+        => string.IsNullOrWhiteSpace(text)
+            ? []
+            : text.Split([','], StringSplitOptions.RemoveEmptyEntries)
+                .Select(static name => name.Trim())
+                .Where(static name => name.Length > 0)
+                .ToArray();
+
+    private static VisualElement? FindNamed(VisualElement root, string name)
+    {
+        if (string.Equals(root.Name, name, StringComparison.Ordinal))
+        {
+            return root;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is VisualElement element && FindNamed(element, name) is { } found)
+            {
+                return found;
+            }
         }
 
         return null;
     }
 
-    private static ISlotComponent? ResolveSlot(Control control)
+    private static IEnumerable<VisualElement> EnumerateVisuals(VisualElement root)
     {
-        return control.Tag as ISlotComponent
-            ?? ResolveValue(control, "ViewModel") as ISlotComponent
-            ?? ResolveValue(control, "DataContext") as ISlotComponent
-            ?? ResolveValue(control, "BindingContext") as ISlotComponent;
-    }
-
-    private static object? ResolveValue(Control control, string propertyName)
-    {
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-        var property = control.GetType().GetProperty(propertyName, flags);
-        if (property?.CanRead != true || property.GetIndexParameters().Length != 0)
+        yield return root;
+        foreach (var child in root.Children)
         {
-            return null;
+            if (child is VisualElement element)
+            {
+                foreach (var nested in EnumerateVisuals(element))
+                {
+                    yield return nested;
+                }
+            }
         }
-
-        return property.GetValue(control);
     }
-
-    private static LayoutState GetState(Control element)
-        => States.GetValue(element, static _ => new LayoutState());
 }

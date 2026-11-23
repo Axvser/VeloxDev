@@ -18,7 +18,7 @@ public sealed class VisualResourceTemplateTests
     [TestMethod]
     public void Resources_ResolveNearestFirstAndConvert()
     {
-        using var surface = new VisualSurface();
+        using var surface = new VisualHost();
         var root = new VC.StackPanel();
         var middle = new VC.StackPanel();
         var text = new VC.TextBlock();

@@ -21,8 +21,8 @@ public readonly record struct VisualTemplateInstance(VisualElement Root, VisualN
 /// <para>
 /// <see cref="Triggers"/> are evaluated against the templated control while the template is applied. A trigger with
 /// <see cref="VisualTrigger.TargetName"/> writes to that named part; otherwise it writes to the templated control.
-/// Template trigger values go to <see cref="BindingPriority.Template"/>, below style triggers and above style
-/// setters.
+/// The trigger's enter and exit actions receive that same target. Template trigger values go to
+/// <see cref="BindingPriority.Template"/>, below style triggers and above style setters.
 /// </para>
 /// </remarks>
 public sealed class VisualControlTemplate
@@ -68,6 +68,7 @@ internal sealed class VisualTemplateTriggerApplication : IDisposable
     private readonly VisualNameScope _scope;
     private readonly IList<VisualTrigger> _triggers;
     private readonly List<(IWinformsObject Target, DependencyProperty Property)> _written = [];
+    private readonly HashSet<VisualTrigger> _activeTriggers = [];
     private bool _evaluating;
     private bool _disposed;
 
@@ -101,6 +102,7 @@ internal sealed class VisualTemplateTriggerApplication : IDisposable
             observable.PropertyChanged -= OnOwnerPropertyChanged;
         }
 
+        ExitActiveTriggers();
         ClearWritten();
     }
 
@@ -115,9 +117,12 @@ internal sealed class VisualTemplateTriggerApplication : IDisposable
         }
 
         _evaluating = true;
+        List<(VisualTrigger Trigger, IWinformsObject Target)>? entered = null;
+        List<(VisualTrigger Trigger, IWinformsObject Target)>? exited = null;
         try
         {
             Dictionary<(IWinformsObject Target, DependencyProperty Property), object?>? active = null;
+            var nowActive = new HashSet<VisualTrigger>();
             foreach (var trigger in _triggers)
             {
                 if (trigger?.Property is null || !trigger.Matches(_owner))
@@ -126,6 +131,7 @@ internal sealed class VisualTemplateTriggerApplication : IDisposable
                 }
 
                 var target = ResolveTarget(trigger) ?? _owner;
+                nowActive.Add(trigger);
                 foreach (var setter in trigger.Setters)
                 {
                     if (setter?.Property is not null)
@@ -145,20 +151,78 @@ internal sealed class VisualTemplateTriggerApplication : IDisposable
             }
 
             _written.Clear();
-            if (active is null)
+            if (active is not null)
             {
-                return;
+                foreach (var pair in active)
+                {
+                    pair.Key.Property.SetValue(pair.Key.Target, pair.Value, BindingPriority.Template);
+                    _written.Add(pair.Key);
+                }
             }
 
-            foreach (var pair in active)
+            foreach (var trigger in nowActive)
             {
-                pair.Key.Property.SetValue(pair.Key.Target, pair.Value, BindingPriority.Template);
-                _written.Add(pair.Key);
+                if (!_activeTriggers.Contains(trigger))
+                {
+                    (entered ??= []).Add((trigger, ResolveTarget(trigger) ?? _owner));
+                }
             }
+
+            foreach (var trigger in _activeTriggers)
+            {
+                if (!nowActive.Contains(trigger))
+                {
+                    (exited ??= []).Add((trigger, ResolveTarget(trigger) ?? _owner));
+                }
+            }
+
+            _activeTriggers.Clear();
+            _activeTriggers.UnionWith(nowActive);
         }
         finally
         {
             _evaluating = false;
+        }
+
+        // 动作放在求值标记之外：动作改属性时要能触发下一轮求值，而不是被当成重入吞掉。
+        if (exited is not null)
+        {
+            foreach (var pair in exited)
+            {
+                InvokeAction(pair.Trigger.ExitAction, pair.Target);
+            }
+        }
+
+        if (entered is not null)
+        {
+            foreach (var pair in entered)
+            {
+                InvokeAction(pair.Trigger.EnterAction, pair.Target);
+            }
+        }
+    }
+
+    private static void InvokeAction(VisualTriggerAction? action, IWinformsObject target)
+    {
+        if (action is not null && target is VisualElement element)
+        {
+            action.Invoke(element);
+        }
+    }
+
+    // 模板卸载时补一次退出动作；动作拿到的是与 setter 相同的目标（命名部件或施模板的控件）。
+    private void ExitActiveTriggers()
+    {
+        if (_activeTriggers.Count == 0)
+        {
+            return;
+        }
+
+        var active = _activeTriggers.ToArray();
+        _activeTriggers.Clear();
+        foreach (var trigger in active)
+        {
+            InvokeAction(trigger.ExitAction, ResolveTarget(trigger) ?? _owner);
         }
     }
 

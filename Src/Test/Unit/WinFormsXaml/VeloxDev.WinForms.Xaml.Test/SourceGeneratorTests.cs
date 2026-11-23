@@ -6,7 +6,8 @@ namespace VeloxDev.WinForms.Xaml.Test;
 
 /// <summary>
 /// Drives <see cref="DependencyPropertyGenerator"/> directly, so the emitted members and the refusal diagnostics can
-/// be asserted without a compiler round trip.
+/// be asserted without a compiler round trip. Properties are declared on visual elements, which is what the generator
+/// requires now.
 /// </summary>
 [TestClass]
 public sealed class SourceGeneratorTests
@@ -19,7 +20,7 @@ public sealed class SourceGeneratorTests
 
             namespace Probe;
 
-            public partial class Card : VeloxDev.WinForms.Xaml.Controls.Control
+            public partial class Card : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
             {
                 [XamlProperty]
                 public partial string Title { get; set; }
@@ -48,7 +49,7 @@ public sealed class SourceGeneratorTests
 
             namespace Probe;
 
-            public partial class Card : VeloxDev.WinForms.Xaml.Controls.Control
+            public partial class Card : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
             {
                 [XamlProperty]
                 public partial string Title { get; set; }
@@ -69,7 +70,7 @@ public sealed class SourceGeneratorTests
 
             namespace Probe;
 
-            public partial class Card : VeloxDev.WinForms.Xaml.Controls.Control
+            public partial class Card : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
             {
                 [XamlProperty]
                 public partial string? Title { get; set; }
@@ -87,7 +88,7 @@ public sealed class SourceGeneratorTests
 
             namespace Probe;
 
-            public partial class Card : VeloxDev.WinForms.Xaml.Controls.Control
+            public partial class Card : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
             {
                 [XamlProperty("Caption", DefaultValue = "hello")]
                 public partial string Text { get; set; }
@@ -106,7 +107,6 @@ public sealed class SourceGeneratorTests
     public void XamlAttachedProperty_EmitsRegisterAttachedAndBothAccessors()
     {
         var result = GeneratorProbe.Run(new DependencyPropertyGenerator(), """
-            using System.Windows.Forms;
             using VeloxDev.WinForms.Xaml;
 
             namespace Probe;
@@ -114,10 +114,10 @@ public sealed class SourceGeneratorTests
             public static partial class Attachments
             {
                 [XamlAttachedProperty]
-                public static partial string? GetNote(System.Windows.Forms.Control control);
+                public static partial string? GetNote(VeloxDev.WinForms.Xaml.Visuals.VisualElement target);
 
                 [XamlAttachedProperty]
-                public static partial void SetNote(System.Windows.Forms.Control control, string? value);
+                public static partial void SetNote(VeloxDev.WinForms.Xaml.Visuals.VisualElement target, string? value);
             }
             """, "XamlAttachedProbe");
 
@@ -131,12 +131,12 @@ public sealed class SourceGeneratorTests
         StringAssert.Contains(generated, "typeof(global::Probe.Attachments)");
         StringAssert.Contains(
             generated,
-            "public static partial global::System.String? GetNote(global::System.Windows.Forms.Control control)");
-        StringAssert.Contains(generated, "=> (global::System.String?)NoteProperty.GetValue(control)!;");
+            "public static partial global::System.String? GetNote(global::VeloxDev.WinForms.Xaml.Visuals.VisualElement target)");
+        StringAssert.Contains(generated, "=> (global::System.String?)NoteProperty.GetValue(target)!;");
         StringAssert.Contains(
             generated,
-            "public static partial void SetNote(global::System.Windows.Forms.Control control, global::System.String? value)");
-        StringAssert.Contains(generated, "=> NoteProperty.SetValue(control, value);");
+            "public static partial void SetNote(global::VeloxDev.WinForms.Xaml.Visuals.VisualElement target, global::System.String? value)");
+        StringAssert.Contains(generated, "=> NoteProperty.SetValue(target, value);");
     }
 
     [TestMethod]
@@ -147,7 +147,7 @@ public sealed class SourceGeneratorTests
 
             namespace Probe;
 
-            public partial class Card : VeloxDev.WinForms.Xaml.Controls.Control
+            public partial class Card : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
             {
                 [XamlProperty]
                 public string Title { get; set; } = string.Empty;
@@ -160,7 +160,7 @@ public sealed class SourceGeneratorTests
     }
 
     [TestMethod]
-    public void APropertyOnANonControl_IsRefusedWithXamlp002()
+    public void APropertyOnANonVisualType_IsRefusedWithXamlp002()
     {
         var result = GeneratorProbe.Run(new DependencyPropertyGenerator(), """
             using VeloxDev.WinForms.Xaml;
@@ -182,7 +182,6 @@ public sealed class SourceGeneratorTests
     public void ANonPartialAttachedAccessor_IsRefusedWithXamlp003()
     {
         var result = GeneratorProbe.Run(new DependencyPropertyGenerator(), """
-            using System.Windows.Forms;
             using VeloxDev.WinForms.Xaml;
 
             namespace Probe;
@@ -190,7 +189,7 @@ public sealed class SourceGeneratorTests
             public static partial class Attachments
             {
                 [XamlAttachedProperty]
-                public static string GetNote(System.Windows.Forms.Control control) => string.Empty;
+                public static string GetNote(VeloxDev.WinForms.Xaml.Visuals.VisualElement target) => string.Empty;
             }
             """, "XamlAttachedInvalidProbe");
 
@@ -206,7 +205,7 @@ public sealed class SourceGeneratorTests
 
             namespace Probe;
 
-            public partial class Card : VeloxDev.WinForms.Xaml.Controls.Control
+            public partial class Card : VeloxDev.WinForms.Xaml.Visuals.Controls.Border
             {
                 public static readonly DependencyProperty TitleProperty = null!;
 

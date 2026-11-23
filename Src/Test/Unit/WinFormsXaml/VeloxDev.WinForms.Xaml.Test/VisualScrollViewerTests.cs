@@ -124,10 +124,10 @@ public sealed class VisualScrollViewerTests
         Assert.AreEqual(340f, view.VerticalOffset, 0.6f);
     }
 
-    private static VisualSurface CreateSurface(int width, int height)
+    private static VisualHost CreateSurface(int width, int height)
         => new() { Size = new Size(width, height) };
 
-    private static void Layout(VisualSurface surface, int width, int height)
+    private static void Layout(VisualHost surface, int width, int height)
     {
         using var bitmap = new Bitmap(1, 1);
         using var graphics = Graphics.FromImage(bitmap);
