@@ -60,7 +60,6 @@ namespace Demo
         private WorkbenchTabButton _canvasTab = null!;
         private WorkbenchTabButton _outputTab = null!;
         private Label _mainHintLabel = null!;
-        private Label _hudCopyLabel = null!;
         private Label _outputRootLabel = null!;
         private Label _outputStateLabel = null!;
         private Label _outputProgressLabel = null!;
@@ -519,19 +518,7 @@ namespace Demo
             _canvasTab.Click += (_, _) => SelectMainTab("canvas");
             _outputTab.Click += (_, _) => SelectMainTab("output");
 
-            // 画布信息 HUD 是只画的；复制入口放在外壳上，不往 HUD/模板里塞可交互控件。
-            _hudCopyLabel = new Label
-            {
-                Text = "复制 HUD",
-                AutoSize = true,
-                ForeColor = WorkbenchPalette.TextTertiary,
-                BackColor = Color.Transparent,
-                Font = CardTheme.Font(8f),
-                Cursor = Cursors.Hand,
-                Margin = new Padding(12, 8, 4, 0),
-            };
-            _hudCopyLabel.Click += OnCopyHud;
-
+            // 画布信息 HUD 是只画的；复制按钮是 WorkflowCanvas 的 demo-local 原生覆盖层。
             var tabs = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -545,7 +532,6 @@ namespace Demo
             };
             tabs.Controls.Add(_canvasTab);
             tabs.Controls.Add(_outputTab);
-            tabs.Controls.Add(_hudCopyLabel);
 
             _mainHintLabel = new Label
             {
@@ -936,7 +922,6 @@ namespace Demo
                 ShowAlways = true,
             };
             components.Add(_toolTip);
-            _toolTip.SetToolTip(_hudCopyLabel, "复制画布信息");
 
             splitContainer.Panel1.SuspendLayout();
             splitContainer.Panel1.Controls.Clear();

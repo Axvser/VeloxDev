@@ -41,6 +41,7 @@ public sealed class MainForm : Form
         Controls.Add(shell);
         AddHudCopyButton(shell);
         Resize += (_, _) => PositionHudCopyButton();
+        _host.LayoutUpdated += (_, _) => PositionHudCopyButton();
 
         WorkflowSurfaceBehavior.SetCanvasName(_host, "PART_Canvas");
         WorkflowSurfaceBehavior.SetScrollViewerName(_host, "PART_ScrollViewer");
@@ -78,6 +79,7 @@ public sealed class MainForm : Form
             BackColor = Color.FromArgb(0x1E, 0x3A, 0x5F),
             ForeColor = Color.FromArgb(0x7E, 0xC8, 0xFF),
             TabStop = false,
+            Visible = false,
         };
         _copyButton.FlatAppearance.BorderColor = Color.FromArgb(0x7E, 0xC8, 0xFF);
         _copyButton.FlatAppearance.BorderSize = 1;
@@ -88,7 +90,7 @@ public sealed class MainForm : Form
         _copyButton.BringToFront();
     }
 
-    // 贴在 HUD 右侧：HUD 左 46、宽 276、底 12（与 TreeView.xaml 一致），按当前 DPI 换算。
+    // 放在 HUD 内部右下角（与 Avalonia/MAUI 的 InfoOverlay 同构）；位置从 HUD 实际边界来。
     private void PositionHudCopyButton()
     {
         if (_copyButton is null)
@@ -96,14 +98,23 @@ public sealed class MainForm : Form
             return;
         }
 
-        var scale = DeviceDpi / 96f;
-        const int hudLeft = 46, hudWidth = 276, hudBottom = 12, buttonWidth = 64, buttonHeight = 24, gap = 8;
-        _copyButton.Size = new Size(
-            (int)Math.Round(buttonWidth * scale),
-            (int)Math.Round(buttonHeight * scale));
-        _copyButton.Location = new Point(
-            (int)Math.Round((hudLeft + hudWidth + gap) * scale),
-            ClientSize.Height - (int)Math.Round((hudBottom + buttonHeight) * scale));
+        if (FindInfoOverlay(_host.Root) is not { } hud || hud.AbsoluteBounds.Width <= 0f || hud.AbsoluteBounds.Height <= 0f)
+        {
+            _copyButton.Visible = false;
+            return;
+        }
+
+        var scale = _host.DpiScale <= 0f ? 1f : _host.DpiScale;
+        var bounds = hud.AbsoluteBounds;
+        var width = Math.Max(1, (int)Math.Round(64 * scale));
+        var height = Math.Max(1, (int)Math.Round(24 * scale));
+        var gap = (int)Math.Round(8 * scale);
+        var left = _host.Left + (int)Math.Round(bounds.Right * scale) - width - gap;
+        var top = _host.Top + (int)Math.Round(bounds.Bottom * scale) - height - gap;
+
+        _copyButton.Bounds = new Rectangle(left, Math.Max(0, top), width, height);
+        _copyButton.Visible = true;
+        _copyButton.BringToFront();
     }
 
     private void OnCopyHudClicked(object? sender, EventArgs e)

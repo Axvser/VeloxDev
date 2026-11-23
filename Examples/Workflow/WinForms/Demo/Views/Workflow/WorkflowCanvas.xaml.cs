@@ -1,3 +1,5 @@
+using System.Threading;
+using System.Runtime.InteropServices;
 ﻿using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
@@ -23,6 +25,8 @@ public sealed class WorkflowCanvas : Control
     private readonly VisualHost _host;
     private readonly WorkflowSurfaceView _surface;
     private readonly List<(VisualMenuItem Item, double Tolerance)> _toleranceItems = [];
+    private readonly System.Windows.Forms.Timer _hudCopyResetTimer = new() { Interval = 1500 };
+    private System.Windows.Forms.Button? _hudCopyButton;
 
     private WorkflowDemoSession? _session;
     private WorkflowInput? _input;
@@ -65,6 +69,8 @@ public sealed class WorkflowCanvas : Control
         _host = new VisualHost { Dock = DockStyle.Fill, Root = _surface };
 
         Controls.Add(_host);
+        AddHudCopyButton();
+        _host.LayoutUpdated += (_, _) => PositionHudCopyButton();
 
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvasName(_host, "PART_Canvas");
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewerName(_host, "PART_ScrollViewer");
@@ -83,11 +89,94 @@ public sealed class WorkflowCanvas : Control
         WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(_host, true);
     }
 
+    // 演示层自己的 HUD 复制按钮：HUD 只画文本，剪贴板与按钮归宿主；位置从 HUD 的实际边界来。
+    private void AddHudCopyButton()
+    {
+        _hudCopyButton = new System.Windows.Forms.Button
+        {
+            Text = "复制",
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(0x1E, 0x3A, 0x5F),
+            ForeColor = Color.FromArgb(0x7E, 0xC8, 0xFF),
+            TabStop = false,
+            Visible = false,
+        };
+        _hudCopyButton.FlatAppearance.BorderColor = Color.FromArgb(0x7E, 0xC8, 0xFF);
+        _hudCopyButton.FlatAppearance.BorderSize = 1;
+        _hudCopyButton.Click += OnHudCopyClicked;
+        _hudCopyResetTimer.Tick += OnHudCopyReset;
+        Controls.Add(_hudCopyButton);
+        _hudCopyButton.BringToFront();
+    }
+
+    private void PositionHudCopyButton()
+    {
+        if (_hudCopyButton is null)
+        {
+            return;
+        }
+
+        var hud = InfoOverlay;
+        if (hud is null || hud.AbsoluteBounds.Width <= 0f || hud.AbsoluteBounds.Height <= 0f)
+        {
+            _hudCopyButton.Visible = false;
+            return;
+        }
+
+        var scale = _host.DpiScale <= 0f ? 1f : _host.DpiScale;
+        var bounds = hud.AbsoluteBounds;
+        var width = Math.Max(1, (int)Math.Round(64 * scale));
+        var height = Math.Max(1, (int)Math.Round(24 * scale));
+        var gap = (int)Math.Round(8 * scale);
+        var left = (int)Math.Round(bounds.Right * scale) - width - gap;
+        var top = (int)Math.Round(bounds.Bottom * scale) - height - gap;
+        _hudCopyButton.Bounds = new Rectangle(left, Math.Max(0, top), width, height);
+        _hudCopyButton.Visible = true;
+        _hudCopyButton.BringToFront();
+    }
+
+    private void OnHudCopyClicked(object? sender, EventArgs e)
+    {
+        var lines = InfoOverlay?.Lines;
+        if (lines is null || lines.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(string.Join(Environment.NewLine, lines));
+            StatusMessage?.Invoke(this, "已复制画布信息");
+            _hudCopyButton!.Text = "已复制";
+            _hudCopyResetTimer.Stop();
+            _hudCopyResetTimer.Start();
+        }
+        catch (ExternalException)
+        {
+            StatusMessage?.Invoke(this, "复制失败：剪贴板被占用");
+        }
+        catch (ThreadStateException)
+        {
+            StatusMessage?.Invoke(this, "复制失败：剪贴板不可用");
+        }
+    }
+
+    private void OnHudCopyReset(object? sender, EventArgs e)
+    {
+        _hudCopyResetTimer.Stop();
+        if (_hudCopyButton is not null)
+        {
+            _hudCopyButton.Text = "复制";
+        }
+    }
+
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            _hudCopyResetTimer.Stop();
+            _hudCopyResetTimer.Dispose();
             WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(_host, false);
 
             if (_session?.Tree.ResetVirtualLinkCommand.CanExecute(null) == true)
