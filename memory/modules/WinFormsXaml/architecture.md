@@ -4,6 +4,7 @@
 > 代码：`Src/Adapters/VeloxDev.WinForms/Xaml/`（运行时）、`Xaml/Primitives/`（共享原语，命名空间仍是 `...Xaml.Controls`）、`Xaml/Visuals/`（视觉基类、绑定、样式、资源、宿主）与 `Xaml/Visuals/Controls/`（视觉控件）；生成器在 `Src/Generators/VeloxDev.WinForms.Generator/`；工作流表面在 `WorkflowSystem/AttachedBehaviors/`。
 > 定位：**一套视觉 XAML 后端**。控件是 `VisualElement`，`VisualHost` 是唯一 HWND；不是 WPF 兼容层。
 > 面向消费者的运行时手册在 `skills/veloxdev-create-workflow/references/practices/gui/winforms-xaml.md`；动画在 `skills/veloxdev-create-animation/references/practices/winforms-xaml.md`。
+> 独立 Easel 仓的抽取与动画注入契约见 [easel-extraction.md](easel-extraction.md)。
 
 ## 一、运行时
 
