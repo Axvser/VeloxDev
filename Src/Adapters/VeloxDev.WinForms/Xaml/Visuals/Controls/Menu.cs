@@ -3,6 +3,7 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using XamlDrawing = VeloxDev.WinForms.Xaml.Controls.XamlDrawing;
+using XamlBrush = VeloxDev.WinForms.Xaml.Brush;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
 
 namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
@@ -88,6 +89,14 @@ public class VisualContextMenu : VisualPopup
     private int _highlight = -1;
     private VisualContextMenu? _submenu;
 
+    /// <summary>The item-text colour as a brush value; an empty colour uses the active theme.</summary>
+    public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
+        nameof(Foreground), typeof(XamlBrush), typeof(VisualContextMenu),
+        new PropertyMetadata(null, null, static (_, value) => ColorBrushCoercion.Coerce(value))
+        {
+            AffectsRender = true,
+        });
+
     /// <summary>Creates an empty menu with theme metrics.</summary>
     public VisualContextMenu()
     {
@@ -103,6 +112,23 @@ public class VisualContextMenu : VisualPopup
 
     /// <summary>The rows shown by this menu.</summary>
     public IList<VisualMenuItem> Items { get; } = new List<VisualMenuItem>();
+
+    /// <summary>The item-text colour; an empty colour uses the active theme.</summary>
+    public Color Foreground
+    {
+        get => GetValue(ForegroundProperty) is XamlBrush brush ? brush.ApproximateColor : Color.Empty;
+        set
+        {
+            if (value.IsEmpty)
+            {
+                ClearValue(ForegroundProperty);
+            }
+            else
+            {
+                SetValue(ForegroundProperty, new SolidColorBrush(value));
+            }
+        }
+    }
 
     /// <summary>Opens the menu at a surface point relative to <paramref name="target"/>.</summary>
     /// <param name="target">The element the point is measured against.</param>
@@ -143,6 +169,7 @@ public class VisualContextMenu : VisualPopup
     {
         var width = 180f;
         var height = Padding.Vertical;
+        var font = ResolveFont(DefaultFont);
         foreach (var item in Items)
         {
             if (item.IsSeparator)
@@ -151,10 +178,10 @@ public class VisualContextMenu : VisualPopup
                 continue;
             }
 
-            var measured = VisualText.Measure(item.Header, DefaultFont, 0f, wrap: false, RenderDpi);
+            var measured = VisualText.Measure(item.Header, font, 0f, wrap: false, RenderDpi);
             var gesture = string.IsNullOrEmpty(item.InputGestureText)
                 ? 0f
-                : VisualText.Measure(item.InputGestureText!, DefaultFont, 0f, wrap: false, RenderDpi).Width + 18f;
+                : VisualText.Measure(item.InputGestureText!, font, 0f, wrap: false, RenderDpi).Width + 18f;
             width = Math.Max(width, measured.Width + CheckColumn + ArrowColumn + gesture + Padding.Horizontal + 24f);
             height += RowHeight;
         }
@@ -183,6 +210,8 @@ public class VisualContextMenu : VisualPopup
     protected override void OnRender(Graphics graphics)
     {
         var theme = Theme.Current;
+        var font = ResolveFont(DefaultFont);
+        var normalForeground = Foreground.IsEmpty ? theme.Foreground : Foreground;
         for (var index = 0; index < Items.Count; index++)
         {
             var item = Items[index];
@@ -206,7 +235,7 @@ public class VisualContextMenu : VisualPopup
                 graphics.FillPath(background, path);
             }
 
-            var foreground = item.IsEnabled ? theme.Foreground : theme.DisabledForeground;
+            var foreground = item.IsEnabled ? normalForeground : theme.DisabledForeground;
             if (item.IsChecked)
             {
                 using var check = new Pen(theme.Accent, 1.6f);
@@ -226,7 +255,7 @@ public class VisualContextMenu : VisualPopup
             VisualText.Draw(this,
                 graphics,
                 item.Header,
-                DefaultFont,
+                font,
                 foreground,
                 text,
                 wrap: false,
@@ -243,7 +272,7 @@ public class VisualContextMenu : VisualPopup
                 VisualText.Draw(this,
                     graphics,
                     gestureText,
-                    DefaultFont,
+                    font,
                     theme.MutedForeground,
                     gesture,
                     wrap: false,
@@ -369,6 +398,19 @@ public class VisualContextMenu : VisualPopup
         base.Dispose(disposing);
     }
 
+    /// <summary>Rejects a control template: items are data and every row is painted by this presenter.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "VisualContextMenu draws its item rows from data; a ControlTemplate needs item containers that this "
+                + "presenter does not create. Style its background, border and foreground instead.");
+        }
+    }
+
     private int IndexAt(PointF point)
     {
         for (var index = 0; index < _rows.Count; index++)
@@ -455,6 +497,14 @@ public class VisualMenu : Panel
     private VisualContextMenu? _open;
     private int _hover = -1;
 
+    /// <summary>The header-text colour as a brush value; an empty colour uses the active theme.</summary>
+    public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
+        nameof(Foreground), typeof(XamlBrush), typeof(VisualMenu),
+        new PropertyMetadata(null, null, static (_, value) => ColorBrushCoercion.Coerce(value))
+        {
+            AffectsRender = true,
+        });
+
     /// <summary>Creates an empty menu bar.</summary>
     public VisualMenu()
     {
@@ -466,14 +516,32 @@ public class VisualMenu : Panel
     /// <summary>The top-level entries.</summary>
     public IList<VisualMenuItem> Items { get; } = new List<VisualMenuItem>();
 
+    /// <summary>The header-text colour; an empty colour uses the active theme.</summary>
+    public Color Foreground
+    {
+        get => GetValue(ForegroundProperty) is XamlBrush brush ? brush.ApproximateColor : Color.Empty;
+        set
+        {
+            if (value.IsEmpty)
+            {
+                ClearValue(ForegroundProperty);
+            }
+            else
+            {
+                SetValue(ForegroundProperty, new SolidColorBrush(value));
+            }
+        }
+    }
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
         var width = Padding.Horizontal;
         var height = (int)Math.Ceiling(Theme.Current.ControlHeight + Padding.Vertical);
+        var font = ResolveFont(DefaultFont);
         foreach (var item in Items)
         {
-            width += (int)Math.Ceiling(VisualText.Measure(item.Header, DefaultFont, 0f, wrap: false, RenderDpi).Width + 24f);
+            width += (int)Math.Ceiling(VisualText.Measure(item.Header, font, 0f, wrap: false, RenderDpi).Width + 24f);
         }
 
         return new Size((int)Math.Ceiling(width), height);
@@ -484,10 +552,11 @@ public class VisualMenu : Panel
     {
         _headers.Clear();
         var x = (float)Math.Ceiling(Padding.Left);
+        var font = ResolveFont(DefaultFont);
         foreach (var item in Items)
         {
             var width = (float)Math.Ceiling(
-                VisualText.Measure(item.Header, DefaultFont, 0f, wrap: false, RenderDpi).Width + 24f);
+                VisualText.Measure(item.Header, font, 0f, wrap: false, RenderDpi).Width + 24f);
             _headers.Add(new RectangleF(x, 0f, width, finalSize.Height));
             x += width;
         }
@@ -498,6 +567,8 @@ public class VisualMenu : Panel
     {
         base.RenderContent(graphics);
         var theme = Theme.Current;
+        var font = ResolveFont(DefaultFont);
+        var foreground = Foreground.IsEmpty ? theme.Foreground : Foreground;
         for (var index = 0; index < Items.Count; index++)
         {
             var header = _headers[index];
@@ -513,8 +584,8 @@ public class VisualMenu : Panel
             VisualText.Draw(this,
                 graphics,
                 Items[index].Header,
-                DefaultFont,
-                theme.Foreground,
+                font,
+                foreground,
                 new Rectangle(
                     (int)header.X,
                     (int)header.Y,
@@ -610,6 +681,19 @@ public class VisualMenu : Panel
         }
 
         base.Dispose(disposing);
+    }
+
+    /// <summary>Rejects a control template: the bar measures and paints its headers from item data.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "VisualMenu measures and paints its headers from item data; it cannot be re-skinned by a "
+                + "ControlTemplate. Style its font and foreground instead.");
+        }
     }
 
     private int _openIndex = -1;

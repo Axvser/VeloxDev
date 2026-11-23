@@ -150,6 +150,10 @@ public static class VisualTransition
     /// <param name="effect">The effect to run; omitted means a 240 ms ease-out.</param>
     /// <remarks>A new animation supersedes whatever is already running on <paramref name="target"/>.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="target"/> or <paramref name="property"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">
+    /// <paramref name="property"/> has no registered sampler (for example a <see cref="VisualEffect"/> or a string
+    /// property). The animation is rejected instead of being accepted and holding the current value for its duration.
+    /// </exception>
     public static void Animate(
         VisualElement target,
         DependencyProperty property,
@@ -158,6 +162,8 @@ public static class VisualTransition
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
         if (property is null) throw new ArgumentNullException(nameof(property));
+
+        EnsureAnimatable(target, property);
 
         // 调用方常把 1 / 1f 交给一个 Thickness 属性；在这一处统一成属性类型，sampler 就不必猜。
         if (to is not null && !property.PropertyType.IsInstanceOfType(to))
@@ -200,6 +206,7 @@ public static class VisualTransition
     /// <param name="loopTime">Additional full passes; zero runs once and <see cref="int.MaxValue"/> repeats forever.</param>
     /// <param name="isAutoReverse">Whether each pass also runs backwards.</param>
     /// <exception cref="ArgumentNullException"><paramref name="target"/>, <paramref name="property"/> or <paramref name="frames"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException"><paramref name="property"/> has no registered sampler.</exception>
     public static void AnimateKeyFrames(
         VisualElement target,
         DependencyProperty property,
@@ -230,6 +237,8 @@ public static class VisualTransition
         {
             return;
         }
+
+        EnsureAnimatable(target, property);
 
         ordered.Sort(static (left, right) => left.Offset.CompareTo(right.Offset));
 
@@ -304,6 +313,38 @@ public static class VisualTransition
         {
             animated.HoldCurrentValue();
         }
+    }
+
+    // 没有采样器的属性会整段停住当前值；在启动前直接拒绝，而不是开一趟什么也不写的动画。
+    private static void EnsureAnimatable(VisualElement target, DependencyProperty property)
+    {
+        // 适配器的采样器注册在 Interpolator 的静态构造里；只查 InterpolatorCore 会漏掉 Matrix/RectangleF 等。
+        RuntimeHelpers.RunClassConstructor(typeof(Interpolator).TypeHandle);
+
+        if (InterpolatorCore.TryGetInterpolator(property.PropertyType, out var sampler) && sampler is not null)
+        {
+            return;
+        }
+
+        if (property.PropertyType.IsValueType)
+        {
+            try
+            {
+                if (property.GetValue(target) is ISampleable)
+                {
+                    return;
+                }
+            }
+            catch (Exception)
+            {
+                // 读不到当前值就当作不可采样：下面统一报错。
+            }
+        }
+
+        throw new NotSupportedException(
+            $"'{property.Name}' of type '{property.PropertyType.Name}' has no interpolator in the WinForms visual "
+            + "backend, so it cannot be animated. Register an ISampler for the type or animate a supported property; "
+            + "a VisualEffect cannot be interpolated at all.");
     }
 
     // 按目标弱引用登记正在动画的属性；ConditionalWeakTable 保证表面释放后不滞留元素。

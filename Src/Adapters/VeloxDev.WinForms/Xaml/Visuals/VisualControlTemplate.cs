@@ -8,15 +8,20 @@ namespace VeloxDev.WinForms.Xaml.Visuals;
 public readonly record struct VisualTemplateInstance(VisualElement Root, VisualNameScope Scope);
 
 /// <summary>
-/// A visual-backend control template: one factory that creates the content shown in place of a
-/// <see cref="ContentControl"/>'s own children.
+/// A visual-backend control template: one factory that creates the chrome shown in place of a control's self-drawn
+/// appearance.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The factory receives a fresh <see cref="VisualNameScope"/>; every element named with <c>x:Name</c> inside the
-/// template registers itself there, and <see cref="ContentControl.GetTemplateChild{T}(string)"/> resolves those parts.
+/// template registers itself there, and <see cref="VisualElement.GetTemplateChild{T}(string)"/> resolves those parts.
 /// Every element of the created tree reports the applying control as its
 /// <see cref="VisualElement.TemplatedParent"/>, so <c>{TemplateBinding}</c> has a source.
+/// </para>
+/// <para>
+/// <see cref="Controls.ContentControl"/> and <see cref="Controls.TemplatedControl"/> (the button family and
+/// <see cref="Controls.ItemsControl"/>) apply a template. A control that paints and hit-tests its own rows or hosts a
+/// native island rejects one with <see cref="NotSupportedException"/> instead of leaving the appearance unchanged.
 /// </para>
 /// <para>
 /// <see cref="Triggers"/> are evaluated against the templated control while the template is applied. A trigger with

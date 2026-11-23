@@ -19,8 +19,13 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// <see cref="Items"/> exposes the realized visuals. The factory must return a new, unparented element; this panel
 /// owns the lifetime of whatever it returns.
 /// </para>
+/// <para>
+/// A control template hosts the realized items in the first <see cref="ItemsPresenter"/> or panel marked with
+/// <see cref="SetIsItemsHost"/> found inside the template root; a template root that is itself a panel acts as the
+/// host when it declares none. Applying or clearing a template re-parents the realized items into the new host.
+/// </para>
 /// </remarks>
-public class ItemsControl : Panel
+public class ItemsControl : TemplatedControl
 {
     /// <summary>The sequence whose items become child visuals.</summary>
     public static readonly DependencyProperty ItemsSourceProperty =
@@ -74,6 +79,8 @@ public class ItemsControl : Panel
     /// <summary>Creates an empty items panel.</summary>
     public ItemsControl()
     {
+        // Panel 的默认是不拦空白处的指针；模板根自己决定可命中区域。
+        IsHitTestVisible = false;
     }
 
     /// <summary>Reads whether <paramref name="element"/> is marked as an items host panel.</summary>
@@ -218,7 +225,7 @@ public class ItemsControl : Panel
         Add(visual);
     }
 
-    // ItemsPanel 优先；否则使用内容里声明的 ItemsPresenter（或 IsItemsHost 标记的面板）；都没有就由控件自己竖排。
+    // ItemsPanel 优先；否则使用模板里的 ItemsPresenter/IsItemsHost 面板；都没有就由控件自己竖排。
     private Panel? ResolveItemsHost()
     {
         var template = ItemsPanel;
@@ -249,6 +256,14 @@ public class ItemsControl : Panel
             _itemsHost = null;
         }
 
+        // 控件模板的宿主在模板根内部；先按显式标记找，找不到时把模板根本身当宿主。
+        if (TemplateRoot is { } templateRoot)
+        {
+            _itemsHost = FindTemplateItemsHost(templateRoot)
+                ?? (templateRoot as Panel);
+            return _itemsHost;
+        }
+
         foreach (var child in Children)
         {
             if (child is ItemsPresenter presenter)
@@ -271,6 +286,34 @@ public class ItemsControl : Panel
         return null;
     }
 
+    private static Panel? FindTemplateItemsHost(VisualElement root)
+    {
+        if (root is ItemsPresenter presenter)
+        {
+            return presenter;
+        }
+
+        if (root is Panel panel && GetIsItemsHost(panel))
+        {
+            return panel;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is not VisualElement element)
+            {
+                continue;
+            }
+
+            if (FindTemplateItemsHost(element) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Called after <see cref="ItemsSource"/> or <see cref="ItemFactory"/> rebuilt the realized items.</summary>
     protected virtual void OnItemsRebuilt()
     {
@@ -279,6 +322,11 @@ public class ItemsControl : Panel
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (IsTemplated)
+        {
+            return MeasureTemplate(availableSize);
+        }
+
         var padding = Padding;
         var contentWidth = Math.Max(0, availableSize.Width - (int)Math.Ceiling(padding.Horizontal));
         var contentHeight = Math.Max(0, availableSize.Height - (int)Math.Ceiling(padding.Vertical));
@@ -312,6 +360,12 @@ public class ItemsControl : Panel
     /// <inheritdoc />
     protected override void ArrangeOverride(Size finalSize)
     {
+        if (IsTemplated)
+        {
+            ArrangeTemplate(finalSize);
+            return;
+        }
+
         var padding = Padding;
         var content = new RectangleF(
             (int)Math.Ceiling(padding.Left),
@@ -336,6 +390,27 @@ public class ItemsControl : Panel
             child.Arrange(new RectangleF(content.Left, position, content.Width, desired.Height));
             position += desired.Height;
         }
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanging()
+    {
+        base.OnTemplateChanging();
+
+        // 模板根销毁前把已实现的 item 摘出来并释放；重建会创建新的 item 视觉，不能留在旧宿主里。
+        foreach (var item in _items.ToArray())
+        {
+            item.Dispose();
+        }
+
+        ClearRealizedItems();
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanged()
+    {
+        base.OnTemplateChanged();
+        RefreshItems();
     }
 
     /// <inheritdoc />
@@ -491,6 +566,12 @@ public class ListBox : ItemsControl
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
+        if (IsTemplated)
+        {
+            // 选中带属于自绘外观；模板用 SelectedIndex/SelectedItem 触发器表达选中态。
+            return;
+        }
+
         if (SelectedIndex < 0 || SelectedIndex >= Items.Count)
         {
             return;
@@ -602,9 +683,11 @@ public class ListBox : ItemsControl
 
     private int IndexAt(PointF local)
     {
+        // 模板里的 item 挂在 ItemsHost 下，Bounds 不是列表坐标；统一换到表面坐标再比。
+        var surfacePoint = PointToSurface(local);
         for (var index = 0; index < Items.Count; index++)
         {
-            if (Items[index].Bounds.Contains(local))
+            if (Items[index].AbsoluteBounds.Contains(surfacePoint))
             {
                 return index;
             }
@@ -740,6 +823,14 @@ public class VirtualList : ItemsControl
     /// <inheritdoc />
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
+        if (ReferenceEquals(e.Property, TemplatedControl.TemplateProperty) && e.NewValue is not null)
+        {
+            // 直接给 Template 也拒绝：虚拟化面板没有可供模板接管的行宿主。
+            ClearValue(TemplatedControl.TemplateProperty);
+            throw new NotSupportedException(
+                "VirtualList arranges a virtualized row window itself and cannot be re-skinned by a ControlTemplate.");
+        }
+
         base.OnPropertyChanged(e);
         if (ReferenceEquals(e.Property, ItemHeightProperty))
         {
@@ -795,5 +886,18 @@ public class VirtualList : ItemsControl
         }
 
         return (0f, finalHeight);
+    }
+
+    /// <summary>Rejects a control template: rows are virtualized and arranged by this panel.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "VirtualList arranges a virtualized row window itself; a ControlTemplate needs a recycling "
+                + "row-container model that this panel does not have. Style its item height and colors instead.");
+        }
     }
 }

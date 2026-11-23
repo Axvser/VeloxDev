@@ -83,7 +83,7 @@ public class TreeViewItem : VisualElement
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
-        var font = Font ?? (ParentElement as TreeView)?.Font ?? DefaultFont;
+        var font = ResolveFont(Font ?? (ParentElement as TreeView)?.Font ?? DefaultFont);
         var measured = VisualText.Measure(Header, font, 0f, wrap: false, RenderDpi);
         return new Size(
             (int)Math.Ceiling(measured.Width + Padding.Horizontal),
@@ -120,7 +120,7 @@ public class TreeViewItem : VisualElement
             return;
         }
 
-        var font = Font ?? (ParentElement as TreeView)?.Font ?? DefaultFont;
+        var font = ResolveFont(Font ?? (ParentElement as TreeView)?.Font ?? DefaultFont);
         var content = new Rectangle(
             (int)Math.Ceiling(Padding.Left),
             (int)Math.Ceiling(Padding.Top),
@@ -135,6 +135,19 @@ public class TreeViewItem : VisualElement
             wrap: false,
             StringAlignment.Near,
             StringAlignment.Center);
+    }
+
+    /// <summary>Rejects a control template: a row's expander and header are painted by the owning tree.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "TreeViewItem is painted by its owning TreeView and cannot be re-skinned by a ControlTemplate. "
+                + "Style its header font and foreground instead.");
+        }
     }
 }
 
@@ -204,7 +217,7 @@ public class TreeView : Panel
     /// <summary>The font used by rows that do not set one.</summary>
     public Font Font
     {
-        get => (Font)GetValue(FontProperty)!;
+        get => ResolveFont((Font)GetValue(FontProperty)!);
         set
         {
             if (value is not null)
@@ -434,6 +447,19 @@ public class TreeView : Panel
         }
 
         base.Dispose(disposing);
+    }
+
+    /// <summary>Rejects a control template: rows are owned and painted by the tree, not by template parts.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "TreeView paints its flattened rows itself; a ControlTemplate needs a row-container model that this "
+                + "control does not have. Style its font, foreground and row metrics instead.");
+        }
     }
 
     private void OnRootItemsChanged(object? sender, NotifyCollectionChangedEventArgs e) => Rebuild();

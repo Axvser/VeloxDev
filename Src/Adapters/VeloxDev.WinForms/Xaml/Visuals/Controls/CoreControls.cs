@@ -255,10 +255,17 @@ public class TextBlock : VisualElement
             new PropertyMetadata(DefaultFont) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>The text colour as a brush value; an empty colour uses the active theme.</summary>
+    /// <remarks>
+    /// Stored values are canonicalised to a colour-comparing brush, so a <see cref="VisualTrigger"/> written as
+    /// <c>Value="#FF203040"</c> matches a brush produced by a style, binding or local assignment.
+    /// </remarks>
     public static readonly DependencyProperty ForegroundProperty =
         DependencyProperty.Register(
             nameof(Foreground), typeof(XamlBrush), typeof(TextBlock),
-            new PropertyMetadata(null) { AffectsRender = true });
+            new PropertyMetadata(null, null, static (_, value) => ColorBrushCoercion.Coerce(value))
+            {
+                AffectsRender = true,
+            });
 
     /// <summary>Whether overlong text wraps at word boundaries.</summary>
     public static readonly DependencyProperty WrapProperty =
@@ -302,7 +309,9 @@ public class TextBlock : VisualElement
     /// <remarks>
     /// The dependency property stores a brush, so a style, trigger or binding may supply a
     /// <see cref="VeloxDev.WinForms.Xaml.Brush"/>, a hex colour string or a <see cref="Color"/>. The CLR wrapper
-    /// reads back the representative colour.
+    /// reads back the representative colour. A TwoWay binding writes the brush back to its source, so a source
+    /// property must be brush-typed (or supply a converter); a <see cref="Color"/> source reports a binding failure
+    /// on the write-back path instead of converting implicitly.
     /// </remarks>
     public Color Foreground
     {

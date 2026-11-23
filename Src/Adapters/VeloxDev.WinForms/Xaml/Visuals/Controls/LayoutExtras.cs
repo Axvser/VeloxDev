@@ -359,7 +359,7 @@ public class HeaderedContentControl : VisualElement
         => VisualText.Draw(this,
             graphics,
             Header,
-            DefaultFont,
+            ResolveFont(DefaultFont),
             Theme.Current.MutedForeground,
             new Rectangle(0, 0, Math.Max(0, (int)Bounds.Width), (int)HeaderHeight),
             wrap: false,

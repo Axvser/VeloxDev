@@ -47,6 +47,11 @@ public sealed class RichTextStyle
 /// Ctrl+B/I/U and Ctrl+Z/Y. The control measures its full height; put it inside a <see cref="ScrollViewer"/> for a
 /// fixed viewport.
 /// </para>
+/// <para>
+/// A control template is not supported: the document surface, caret and selection hit-testing live in this control,
+/// so template parts cannot own the text host without a document/host redesign. Applying a style template throws
+/// <see cref="NotSupportedException"/> rather than silently leaving the editor self-drawn.
+/// </para>
 /// </remarks>
 public class RichTextBox : VisualElement
 {
@@ -119,7 +124,7 @@ public class RichTextBox : VisualElement
     /// <summary>The base font; runs without a size use it.</summary>
     public Font Font
     {
-        get => (Font)GetValue(FontProperty)!;
+        get => ResolveFont((Font)GetValue(FontProperty)!);
         set
         {
             if (value is not null)
@@ -503,8 +508,41 @@ public class RichTextBox : VisualElement
             || ReferenceEquals(e.Property, WrapProperty)
             || ReferenceEquals(e.Property, PaddingProperty))
         {
+            ClearFontCache();
             InvalidateLayout();
         }
+        else if (ReferenceEquals(e.Property, VisualElement.FontSizeProperty)
+                 || ReferenceEquals(e.Property, VisualElement.FontFamilyProperty)
+                 || ReferenceEquals(e.Property, VisualElement.FontWeightProperty))
+        {
+            // 继承来的排版属性会换掉基础字体；按尺寸缓存的 run 字体必须一起失效。
+            ClearFontCache();
+            InvalidateLayout();
+        }
+    }
+
+    /// <summary>Rejects a control template: the document, caret and selection are drawn and hit-tested here.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "RichTextBox draws its document runs, caret and selection itself; a ControlTemplate would need a "
+                + "template-part text host that this editor does not have. Style its border, padding, font and "
+                + "foreground instead.");
+        }
+    }
+
+    private void ClearFontCache()
+    {
+        foreach (var font in _fonts.Values)
+        {
+            font.Dispose();
+        }
+
+        _fonts.Clear();
     }
 
     /// <inheritdoc />

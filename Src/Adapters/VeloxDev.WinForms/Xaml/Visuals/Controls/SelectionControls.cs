@@ -14,8 +14,6 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// </remarks>
 public abstract class ToggleButtonBase : ButtonBase
 {
-    private bool _hover;
-    private bool _pressed;
     private bool _keyDown;
 
     /// <summary>Creates a focusable toggle with theme metrics.</summary>
@@ -32,19 +30,20 @@ public abstract class ToggleButtonBase : ButtonBase
     public event EventHandler? Checked;
 
     /// <summary>Whether the pointer is currently over this control.</summary>
-    protected bool IsHovered => _hover;
-
-    /// <summary>Whether the left pointer button is currently held down on this control.</summary>
-    protected bool IsPressed => _pressed;
+    protected bool IsHovered => IsPointerOver;
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
-        => new(Theme.Current.ControlHeight, Theme.Current.ControlHeight);
+    {
+        return IsTemplated
+            ? MeasureTemplate(availableSize)
+            : new Size(Theme.Current.ControlHeight, Theme.Current.ControlHeight);
+    }
 
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
-        if (Bounds.Width <= 0f || Bounds.Height <= 0f)
+        if (IsTemplated || Bounds.Width <= 0f || Bounds.Height <= 0f)
         {
             return;
         }
@@ -97,14 +96,14 @@ public abstract class ToggleButtonBase : ButtonBase
     /// <inheritdoc />
     protected override void OnPointerEntered(VisualPointerEventArgs args)
     {
-        _hover = true;
+        SetIsPointerOver(true);
         InvalidateVisual();
     }
 
     /// <inheritdoc />
     protected override void OnPointerExited(VisualPointerEventArgs args)
     {
-        _hover = false;
+        SetIsPointerOver(false);
         InvalidateVisual();
     }
 
@@ -116,7 +115,7 @@ public abstract class ToggleButtonBase : ButtonBase
             return;
         }
 
-        _pressed = true;
+        SetIsPressed(true);
         Focus();
         InvalidateVisual();
         args.Handled = true;
@@ -125,12 +124,12 @@ public abstract class ToggleButtonBase : ButtonBase
     /// <inheritdoc />
     protected override void OnPointerReleased(VisualPointerEventArgs args)
     {
-        if (!_pressed)
+        if (!IsPressed)
         {
             return;
         }
 
-        _pressed = false;
+        SetIsPressed(false);
         InvalidateVisual();
         args.Handled = true;
         if (IsEnabled && AbsoluteBounds.Contains(args.Position))
@@ -204,7 +203,11 @@ public class ToggleButton : ToggleButtonBase
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
-        => new(Theme.Current.ControlHeight * 2, Theme.Current.ControlHeight);
+    {
+        return IsTemplated
+            ? MeasureTemplate(availableSize)
+            : new Size(Theme.Current.ControlHeight * 2, Theme.Current.ControlHeight);
+    }
 
     /// <inheritdoc />
     protected override void ActivateFromInput() => IsChecked = !IsChecked;

@@ -1205,7 +1205,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     public T? GetTemplateChild<T>(string name) where T : class
         => (_templateScope ?? _instanceScope)?.Find<T>(name);
 
-    // 样式有 Template 时由 VisualStyleApplication 回调；只有 ContentControl 覆写它。
+    // 样式有 Template 时由 VisualStyleApplication 回调；ContentControl 与 Controls.TemplatedControl 覆写它。
     internal virtual void ApplyStyleTemplate(VisualControlTemplate? template)
     {
     }

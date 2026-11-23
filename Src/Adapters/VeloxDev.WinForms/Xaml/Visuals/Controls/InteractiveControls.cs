@@ -26,13 +26,18 @@ public class Button : ButtonBase
             new PropertyMetadata(DefaultFont) { AffectsMeasure = true, AffectsRender = true });
 
     /// <summary>The text colour as a brush value; an empty colour uses the active theme.</summary>
+    /// <remarks>
+    /// Stored values are canonicalised to a colour-comparing brush, so a <see cref="VisualTrigger"/> written as
+    /// <c>Value="#FF203040"</c> matches a brush produced by a style, binding or local assignment.
+    /// </remarks>
     public static readonly DependencyProperty ForegroundProperty =
         DependencyProperty.Register(
             nameof(Foreground), typeof(XamlBrush), typeof(Button),
-            new PropertyMetadata(null) { AffectsRender = true });
+            new PropertyMetadata(null, null, static (_, value) => ColorBrushCoercion.Coerce(value))
+            {
+                AffectsRender = true,
+            });
 
-    private bool _hover;
-    private bool _pressed;
     private bool _keyDown;
 
     /// <summary>Creates a focusable button with theme metrics.</summary>
@@ -70,7 +75,9 @@ public class Button : ButtonBase
     /// <remarks>
     /// The dependency property stores a brush, so a style, trigger or binding may supply a
     /// <see cref="VeloxDev.WinForms.Xaml.Brush"/>, a hex colour string or a <see cref="Color"/>. The CLR wrapper
-    /// reads back the representative colour.
+    /// reads back the representative colour. A TwoWay binding writes the brush back to its source, so a source
+    /// property must be brush-typed (or supply a converter); a <see cref="Color"/> source reports a binding failure
+    /// on the write-back path instead of converting implicitly.
     /// </remarks>
     public Color Foreground
     {
@@ -94,6 +101,11 @@ public class Button : ButtonBase
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (IsTemplated)
+        {
+            return MeasureTemplate(availableSize);
+        }
+
         var sample = string.IsNullOrEmpty(Text) ? "M" : Text;
         var measured = VisualText.Measure(sample, Font, 0f, wrap: false, RenderDpi);
         var width = (int)Math.Ceiling(measured.Width + Padding.Horizontal + 2);
@@ -104,18 +116,29 @@ public class Button : ButtonBase
     }
 
     /// <inheritdoc />
-    protected override void RenderContent(Graphics graphics) => OnRender(graphics);
+    protected override void RenderContent(Graphics graphics)
+    {
+        if (!IsTemplated)
+        {
+            OnRender(graphics);
+        }
+    }
 
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
+        if (IsTemplated)
+        {
+            return;
+        }
+
         var theme = Theme.Current;
         var background = Background?.ApproximateColor
             ?? (!IsEnabled
                 ? theme.DisabledBackground
-                : _pressed
+                : IsPressed
                     ? theme.ControlPressed
-                    : _hover
+                    : IsPointerOver
                         ? theme.ControlHover
                         : theme.ControlBackground);
         var border = BorderBrush?.ApproximateColor ?? theme.ControlBorder;
@@ -165,14 +188,14 @@ public class Button : ButtonBase
     /// <inheritdoc />
     protected override void OnPointerEntered(VisualPointerEventArgs args)
     {
-        _hover = true;
+        SetIsPointerOver(true);
         InvalidateVisual();
     }
 
     /// <inheritdoc />
     protected override void OnPointerExited(VisualPointerEventArgs args)
     {
-        _hover = false;
+        SetIsPointerOver(false);
         InvalidateVisual();
     }
 
@@ -184,7 +207,7 @@ public class Button : ButtonBase
             return;
         }
 
-        _pressed = true;
+        SetIsPressed(true);
         InvalidateVisual();
         args.Handled = true;
     }
@@ -192,12 +215,12 @@ public class Button : ButtonBase
     /// <inheritdoc />
     protected override void OnPointerReleased(VisualPointerEventArgs args)
     {
-        if (!_pressed)
+        if (!IsPressed)
         {
             return;
         }
 
-        _pressed = false;
+        SetIsPressed(false);
         InvalidateVisual();
         args.Handled = true;
         if (IsEnabled && AbsoluteBounds.Contains(args.Position))
@@ -276,6 +299,12 @@ public class Button : ButtonBase
 /// it always paints above the visual tree and cannot be transformed, blended or clipped: multi-line overflow is
 /// clipped by the visual path, and only the content rectangle is covered — the border and padding stay visual.
 /// </para>
+/// <para>
+/// A control template is not supported. The native island owns a real HWND whose position is computed from the
+/// control's own editor rectangle; replacing the visual chrome with template parts would need a host redesign where
+/// the island is a template part with its own placement protocol. Applying a style template therefore throws
+/// <see cref="NotSupportedException"/> instead of silently leaving the editor self-drawn.
+/// </para>
 /// </remarks>
 public class TextBox : VisualElement
 {
@@ -301,7 +330,10 @@ public class TextBox : VisualElement
     public static readonly DependencyProperty ForegroundProperty =
         DependencyProperty.Register(
             nameof(Foreground), typeof(XamlBrush), typeof(TextBox),
-            new PropertyMetadata(null) { AffectsRender = true });
+            new PropertyMetadata(null, null, static (_, value) => ColorBrushCoercion.Coerce(value))
+            {
+                AffectsRender = true,
+            });
 
     /// <summary>Whether the text can be edited.</summary>
     public static readonly DependencyProperty IsReadOnlyProperty =
@@ -412,7 +444,9 @@ public class TextBox : VisualElement
     /// <remarks>
     /// The dependency property stores a brush, so a style, trigger or binding may supply a
     /// <see cref="VeloxDev.WinForms.Xaml.Brush"/>, a hex colour string or a <see cref="Color"/>. The CLR wrapper
-    /// reads back the representative colour.
+    /// reads back the representative colour. A TwoWay binding writes the brush back to its source, so a source
+    /// property must be brush-typed (or supply a converter); a <see cref="Color"/> source reports a binding failure
+    /// on the write-back path instead of converting implicitly.
     /// </remarks>
     public Color Foreground
     {
@@ -1593,6 +1627,19 @@ public class TextBox : VisualElement
         }
 
         base.Dispose(disposing);
+    }
+
+    /// <summary>Rejects a control template: the native editor island cannot be driven from template parts.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "TextBox hosts a native editor island and cannot be re-skinned by a ControlTemplate. "
+                + "Style its border, padding, font and foreground instead, or place it inside a templated container.");
+        }
     }
 
     private readonly struct TextLine(int start, int length)

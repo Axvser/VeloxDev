@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using XamlDrawing = VeloxDev.WinForms.Xaml.Controls.XamlDrawing;
+using XamlBrush = VeloxDev.WinForms.Xaml.Brush;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
 
 namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
@@ -28,6 +29,14 @@ public class Calendar : VisualElement
     public static readonly DependencyProperty FirstDayOfWeekProperty = DependencyProperty.Register(
         nameof(FirstDayOfWeek), typeof(DayOfWeek), typeof(Calendar),
         new PropertyMetadata(DayOfWeek.Monday) { AffectsRender = true });
+
+    /// <summary>The month title and day-number colour as a brush value; an empty colour uses the active theme.</summary>
+    public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
+        nameof(Foreground), typeof(XamlBrush), typeof(Calendar),
+        new PropertyMetadata(null, null, static (_, value) => ColorBrushCoercion.Coerce(value))
+        {
+            AffectsRender = true,
+        });
 
     private const float HeaderHeight = 34f;
     private const float WeekHeaderHeight = 22f;
@@ -75,6 +84,23 @@ public class Calendar : VisualElement
         set => SetValue(FirstDayOfWeekProperty, value);
     }
 
+    /// <summary>The month title and day-number colour; an empty colour uses the active theme.</summary>
+    public Color Foreground
+    {
+        get => GetValue(ForegroundProperty) is XamlBrush brush ? brush.ApproximateColor : Color.Empty;
+        set
+        {
+            if (value.IsEmpty)
+            {
+                ClearValue(ForegroundProperty);
+            }
+            else
+            {
+                SetValue(ForegroundProperty, new SolidColorBrush(value));
+            }
+        }
+    }
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
         => new(
@@ -85,6 +111,8 @@ public class Calendar : VisualElement
     protected override void OnRender(Graphics graphics)
     {
         var theme = Theme.Current;
+        var font = ResolveFont(DefaultFont);
+        var foreground = Foreground.IsEmpty ? theme.Foreground : Foreground;
         var left = Padding.Left;
         var top = Padding.Top;
         var gridWidth = CellWidth * 7f;
@@ -111,8 +139,8 @@ public class Calendar : VisualElement
         VisualText.Draw(this,
             graphics,
             monthTitle,
-            DefaultFont,
-            theme.Foreground,
+            font,
+            foreground,
             new Rectangle((int)left, (int)top, (int)gridWidth, (int)HeaderHeight),
             wrap: false,
             StringAlignment.Center,
@@ -128,7 +156,7 @@ public class Calendar : VisualElement
             VisualText.Draw(this,
                 graphics,
                 label,
-                DefaultFont,
+                font,
                 theme.MutedForeground,
                 new Rectangle(
                     (int)(left + (column * CellWidth)),
@@ -183,8 +211,8 @@ public class Calendar : VisualElement
             VisualText.Draw(this,
                 graphics,
                 dayNumber.ToString(CultureInfo.CurrentCulture),
-                DefaultFont,
-                selected ? theme.AccentForeground : theme.Foreground,
+                font,
+                selected ? theme.AccentForeground : foreground,
                 new Rectangle((int)cell.X, (int)cell.Y, (int)cell.Width, (int)cell.Height),
                 wrap: false,
                 StringAlignment.Center,
@@ -277,6 +305,19 @@ public class Calendar : VisualElement
             SelectedDateChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>Rejects a control template: the month grid and its hit cells are self-drawn.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "Calendar draws a fixed month grid and hit-tests its own cells; a ControlTemplate needs a part-based "
+                + "cell model that this control does not have. Style its background, border and foreground instead.");
+        }
+    }
 }
 
 /// <summary>A date field whose calendar opens in a <see cref="VisualPopup"/>.</summary>
@@ -296,6 +337,14 @@ public class DatePicker : VisualElement
     public static readonly DependencyProperty PlaceholderProperty = DependencyProperty.Register(
         nameof(Placeholder), typeof(string), typeof(DatePicker),
         new PropertyMetadata(string.Empty) { AffectsMeasure = true, AffectsRender = true });
+
+    /// <summary>The selected-date text colour as a brush value; an empty colour uses the active theme.</summary>
+    public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
+        nameof(Foreground), typeof(XamlBrush), typeof(DatePicker),
+        new PropertyMetadata(null, null, static (_, value) => ColorBrushCoercion.Coerce(value))
+        {
+            AffectsRender = true,
+        });
 
     private readonly Calendar _calendar = new();
     private readonly VisualPopup _popup = new();
@@ -346,6 +395,23 @@ public class DatePicker : VisualElement
         set => SetValue(PlaceholderProperty, value ?? string.Empty);
     }
 
+    /// <summary>The selected-date text colour; an empty colour uses the active theme.</summary>
+    public Color Foreground
+    {
+        get => GetValue(ForegroundProperty) is XamlBrush brush ? brush.ApproximateColor : Color.Empty;
+        set
+        {
+            if (value.IsEmpty)
+            {
+                ClearValue(ForegroundProperty);
+            }
+            else
+            {
+                SetValue(ForegroundProperty, new SolidColorBrush(value));
+            }
+        }
+    }
+
     /// <summary>Whether the calendar is open.</summary>
     public bool IsDropDownOpen
     {
@@ -383,7 +449,7 @@ public class DatePicker : VisualElement
     protected override Size MeasureOverride(Size availableSize)
     {
         var sample = string.IsNullOrEmpty(DisplayText) ? "yyyy-MM-dd" : DisplayText;
-        var measured = VisualText.Measure(sample, DefaultFont, 0f, wrap: false, RenderDpi);
+        var measured = VisualText.Measure(sample, ResolveFont(DefaultFont), 0f, wrap: false, RenderDpi);
         return new Size(
             (int)Math.Ceiling(measured.Width + Padding.Horizontal + 30),
             Math.Max(Theme.Current.ControlHeight, (int)Math.Ceiling(measured.Height + Padding.Vertical + 2)));
@@ -432,8 +498,10 @@ public class DatePicker : VisualElement
         VisualText.Draw(this,
             graphics,
             text,
-            DefaultFont,
-            SelectedDate is null ? theme.MutedForeground : theme.Foreground,
+            ResolveFont(DefaultFont),
+            SelectedDate is null
+                ? theme.MutedForeground
+                : Foreground.IsEmpty ? theme.Foreground : Foreground,
             new Rectangle(
                 (int)Math.Ceiling(Padding.Left),
                 (int)Math.Ceiling(Padding.Top),
@@ -535,6 +603,19 @@ public class DatePicker : VisualElement
             }
 
             SelectedDateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Rejects a control template: the popup calendar and the field chrome are self-drawn.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "DatePicker owns an overlay calendar popup; it cannot be re-skinned by a ControlTemplate. "
+                + "Style its background, border, padding and foreground instead.");
         }
     }
 }

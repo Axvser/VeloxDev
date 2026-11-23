@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using XamlDrawing = VeloxDev.WinForms.Xaml.Controls.XamlDrawing;
+using XamlBrush = VeloxDev.WinForms.Xaml.Brush;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
 
 namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
@@ -22,6 +23,11 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// Up/Down/Home/End/PageUp/PageDown are forwarded to them. Enter commits and closes, Escape restores the selection
 /// captured at open and closes.
 /// </para>
+/// <para>
+/// The closed chrome is self-drawn; a control template is not supported because the drop-down is an overlay popup
+/// whose list, scroll viewer and placement are owned by this control. A style template throws
+/// <see cref="NotSupportedException"/> rather than silently leaving the chrome unchanged.
+/// </para>
 /// </remarks>
 public class ComboBox : VisualElement
 {
@@ -29,6 +35,14 @@ public class ComboBox : VisualElement
     public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
         nameof(ItemsSource), typeof(IEnumerable), typeof(ComboBox),
         new PropertyMetadata(null) { AffectsMeasure = true, AffectsRender = true });
+
+    /// <summary>The text colour as a brush value; an empty colour uses the active theme.</summary>
+    public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
+        nameof(Foreground), typeof(XamlBrush), typeof(ComboBox),
+        new PropertyMetadata(null, null, static (_, value) => ColorBrushCoercion.Coerce(value))
+        {
+            AffectsRender = true,
+        });
 
     /// <summary>Creates an item visual; <see langword="null"/> projects each item to a <see cref="TextBlock"/>.</summary>
     public static readonly DependencyProperty ItemFactoryProperty = DependencyProperty.Register(
@@ -168,11 +182,32 @@ public class ComboBox : VisualElement
     /// <summary>The realized drop-down list; exposed for tests and hosts.</summary>
     public ListBox DropDownList => _list;
 
+    /// <summary>The text and chevron colour; an empty colour uses the active theme.</summary>
+    /// <remarks>
+    /// The dependency property stores a brush, so a hex string, a <see cref="Color"/> or a brush is accepted. A
+    /// TwoWay binding writes the brush back, so a <see cref="Color"/> source needs a converter on the write-back path.
+    /// </remarks>
+    public Color Foreground
+    {
+        get => GetValue(ForegroundProperty) is XamlBrush brush ? brush.ApproximateColor : Color.Empty;
+        set
+        {
+            if (value.IsEmpty)
+            {
+                ClearValue(ForegroundProperty);
+            }
+            else
+            {
+                SetValue(ForegroundProperty, new SolidColorBrush(value));
+            }
+        }
+    }
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
         var text = string.IsNullOrEmpty(DisplayText) ? "M" : DisplayText;
-        var measured = VisualText.Measure(text, DefaultFont, 0f, wrap: false, RenderDpi);
+        var measured = VisualText.Measure(text, ResolveFont(DefaultFont), 0f, wrap: false, RenderDpi);
         var width = (int)Math.Ceiling(measured.Width + Padding.Horizontal + 26);
         var height = Math.Max(
             Theme.Current.ControlHeight,
@@ -207,7 +242,9 @@ public class ComboBox : VisualElement
 
         var chevronRight = bounds.Width - 12f;
         var chevronCenter = bounds.Height / 2f;
-        var foreground = IsEnabled ? theme.Foreground : theme.DisabledForeground;
+        var foreground = !IsEnabled
+            ? theme.DisabledForeground
+            : Foreground.IsEmpty ? theme.Foreground : Foreground;
         using (var chevron = new SolidBrush(foreground))
         {
             graphics.FillPolygon(chevron, new[]
@@ -232,7 +269,7 @@ public class ComboBox : VisualElement
         VisualText.Draw(this,
             graphics,
             text,
-            DefaultFont,
+            ResolveFont(DefaultFont),
             foreground,
             content,
             wrap: false,
@@ -412,6 +449,19 @@ public class ComboBox : VisualElement
         }
 
         base.Dispose(disposing);
+    }
+
+    /// <summary>Rejects a control template: the drop-down popup and its selection projection are self-drawn.</summary>
+    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
+    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        if (template is not null)
+        {
+            throw new NotSupportedException(
+                "ComboBox owns an overlay popup and draws its closed chrome itself; it cannot be re-skinned by a "
+                + "ControlTemplate. Style its background, border, padding and foreground instead.");
+        }
     }
 
     private string DisplayText
