@@ -3,8 +3,11 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
+using System.Threading;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Visuals;
+using VisualButton = VeloxDev.WinForms.Xaml.Visuals.Controls.Button;
 using DrawingPen = System.Drawing.Pen;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -12,7 +15,8 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <summary>Realtime canvas-info HUD drawn by the visual backend inside the workflow tree.</summary>
 /// <remarks>
 /// The surface feeds the scroll/content offsets and the camera zoom; the HUD reads the Core tree for actual size and
-/// visible counts. It is hit-test transparent so drags fall through to the surface.
+/// visible counts. The text area is hit-test transparent so drags fall through; the built-in copy button is the
+/// only interactive region.
 /// </remarks>
 public sealed class WorkflowInfoOverlay : VisualElement
 {
@@ -45,15 +49,39 @@ public sealed class WorkflowInfoOverlay : VisualElement
 
     private ITreeComponent? _tree;
     private INotifyPropertyChanged? _layout;
+    private readonly System.Windows.Forms.Timer _copyResetTimer = new() { Interval = 1500 };
 
-    /// <summary>Creates the HUD at its design size and makes it hit-test transparent.</summary>
+    /// <summary>Creates the HUD, its built-in copy button and the model subscriptions.</summary>
     public WorkflowInfoOverlay()
     {
         Width = 276d;
         Height = 138d;
         IsHitTestVisible = false;
+
+        CopyButton = new VisualButton
+        {
+            Text = "复制",
+            Width = 58d,
+            Height = 22d,
+            FontSize = 11f,
+            Foreground = Color.FromArgb(0x7E, 0xC8, 0xFF),
+            Background = Color.FromArgb(0x1E, 0x3A, 0x5F),
+            BorderBrush = Color.FromArgb(0x7E, 0xC8, 0xFF),
+            BorderThickness = new VeloxDev.WinForms.Xaml.Controls.Thickness(1f),
+            Padding = new VeloxDev.WinForms.Xaml.Controls.Thickness(2f),
+            CornerRadius = 4f,
+        };
+        CopyButton.Click += OnCopyClicked;
+        _copyResetTimer.Tick += OnCopyResetTimerTick;
+        Add(CopyButton);
         SubscribeTree();
     }
+
+    /// <summary>The interactive copy button; the host can restyle it.</summary>
+    public VisualButton CopyButton { get; }
+
+    /// <summary>Raised with a short status message after a copy attempt.</summary>
+    public event EventHandler<string>? CopyFeedback;
 
     /// <summary>The horizontal scroll offset.</summary>
     public double ScrollOffsetX
@@ -146,6 +174,65 @@ public sealed class WorkflowInfoOverlay : VisualElement
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();
 
     /// <inheritdoc />
+    protected override System.Drawing.Size MeasureOverride(System.Drawing.Size availableSize)
+    {
+        var width = double.IsNaN(Width) ? availableSize.Width : (int)Math.Round(Width);
+        var height = double.IsNaN(Height) ? availableSize.Height : (int)Math.Round(Height);
+        CopyButton.Measure(new System.Drawing.Size((int)Math.Round(CopyButton.Width), (int)Math.Round(CopyButton.Height)));
+        return new System.Drawing.Size(width, height);
+    }
+
+    /// <inheritdoc />
+    protected override void ArrangeOverride(System.Drawing.Size finalSize)
+    {
+        var width = (float)Math.Round(CopyButton.Width);
+        var height = (float)Math.Round(CopyButton.Height);
+        CopyButton.Arrange(new System.Drawing.RectangleF(finalSize.Width - width - 8f, finalSize.Height - height - 8f, width, height));
+    }
+
+    private void OnCopyClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            Clipboard.SetText(string.Join(Environment.NewLine, Lines));
+            CopyButton.Text = "已复制";
+            CopyFeedback?.Invoke(this, "已复制画布信息");
+        }
+        catch (ExternalException)
+        {
+            CopyButton.Text = "复制失败";
+            CopyFeedback?.Invoke(this, "复制失败：剪贴板被占用");
+        }
+        catch (ThreadStateException)
+        {
+            CopyButton.Text = "复制失败";
+            CopyFeedback?.Invoke(this, "复制失败：剪贴板不可用");
+        }
+
+        _copyResetTimer.Stop();
+        _copyResetTimer.Start();
+    }
+
+    private void OnCopyResetTimerTick(object? sender, EventArgs e)
+    {
+        _copyResetTimer.Stop();
+        CopyButton.Text = "复制";
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _copyResetTimer.Stop();
+            _copyResetTimer.Dispose();
+            UnsubscribeTree();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
         var width = Bounds.Width;
@@ -170,7 +257,7 @@ public sealed class WorkflowInfoOverlay : VisualElement
                 line,
                 InfoFont,
                 Color.FromArgb(0xDD, 0xE4, 0xEA),
-                new RectangleF(10f, y, Math.Max(1f, width - 20f), 20f),
+                new RectangleF(10f, y, Math.Max(1f, width - 20f - 66f), 20f),
                 wrap: false,
                 StringAlignment.Near,
                 StringAlignment.Near);

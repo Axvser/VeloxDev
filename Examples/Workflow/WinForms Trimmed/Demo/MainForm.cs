@@ -1,7 +1,6 @@
 ﻿using Demo.ViewModels.Workflow;
 using Demo.ViewModels.Workflow.Enums;
 using Demo.Views.Workflow;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml.Visuals;
 using VeloxDev.WorkflowSystem;
@@ -19,10 +18,8 @@ public sealed class MainForm : Form
     private static readonly Size s_logicalClientSize = new(1085, 683);
 
     private readonly VisualHost _host;
-    private readonly System.Windows.Forms.Timer _copyResetTimer = new() { Interval = 1500 };
     private ITreeComponent? _tree;
     private IInputEvents? _events;
-    private Button? _copyButton;
 
     public MainForm()
     {
@@ -39,9 +36,6 @@ public sealed class MainForm : Form
         var shell = new Panel { Dock = DockStyle.Fill };
         shell.Controls.Add(_host);
         Controls.Add(shell);
-        AddHudCopyButton(shell);
-        Resize += (_, _) => PositionHudCopyButton();
-        _host.LayoutUpdated += (_, _) => PositionHudCopyButton();
 
         WorkflowSurfaceBehavior.SetCanvasName(_host, "PART_Canvas");
         WorkflowSurfaceBehavior.SetScrollViewerName(_host, "PART_ScrollViewer");
@@ -67,108 +61,6 @@ public sealed class MainForm : Form
                 link.DeleteCommand.Execute(null);
             }
         });
-    }
-
-    // 演示层自己的 HUD 复制按钮：适配器只负责画 HUD 并提供 Lines，剪贴板留给宿主。
-    private void AddHudCopyButton(Control shell)
-    {
-        _copyButton = new Button
-        {
-            Text = "复制",
-            FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(0x1E, 0x3A, 0x5F),
-            ForeColor = Color.FromArgb(0x7E, 0xC8, 0xFF),
-            TabStop = false,
-            Visible = false,
-        };
-        _copyButton.FlatAppearance.BorderColor = Color.FromArgb(0x7E, 0xC8, 0xFF);
-        _copyButton.FlatAppearance.BorderSize = 1;
-        _copyButton.Click += OnCopyHudClicked;
-        _copyResetTimer.Tick += OnCopyResetTick;
-
-        shell.Controls.Add(_copyButton);
-        _copyButton.BringToFront();
-    }
-
-    // 放在 HUD 内部右下角（与 Avalonia/MAUI 的 InfoOverlay 同构）；位置从 HUD 实际边界来。
-    private void PositionHudCopyButton()
-    {
-        if (_copyButton is null)
-        {
-            return;
-        }
-
-        if (FindInfoOverlay(_host.Root) is not { } hud || hud.AbsoluteBounds.Width <= 0f || hud.AbsoluteBounds.Height <= 0f)
-        {
-            _copyButton.Visible = false;
-            return;
-        }
-
-        var scale = _host.DpiScale <= 0f ? 1f : _host.DpiScale;
-        var bounds = hud.AbsoluteBounds;
-        var width = Math.Max(1, (int)Math.Round(64 * scale));
-        var height = Math.Max(1, (int)Math.Round(24 * scale));
-        var gap = (int)Math.Round(8 * scale);
-        var left = _host.Left + (int)Math.Round(bounds.Right * scale) - width - gap;
-        var top = _host.Top + (int)Math.Round(bounds.Bottom * scale) - height - gap;
-
-        _copyButton.Bounds = new Rectangle(left, Math.Max(0, top), width, height);
-        _copyButton.Visible = true;
-        _copyButton.BringToFront();
-    }
-
-    private void OnCopyHudClicked(object? sender, EventArgs e)
-    {
-        if (_copyButton is null || FindInfoOverlay(_host.Root) is not { } hud)
-        {
-            return;
-        }
-
-        try
-        {
-            Clipboard.SetText(string.Join(Environment.NewLine, hud.Lines));
-            _copyButton.Text = "已复制";
-            _copyResetTimer.Stop();
-            _copyResetTimer.Start();
-        }
-        catch (ExternalException)
-        {
-            _copyButton.Text = "复制失败";
-            _copyResetTimer.Stop();
-            _copyResetTimer.Start();
-        }
-    }
-
-    private void OnCopyResetTick(object? sender, EventArgs e)
-    {
-        _copyResetTimer.Stop();
-        if (_copyButton is not null)
-        {
-            _copyButton.Text = "复制";
-        }
-    }
-
-    private static WorkflowInfoOverlay? FindInfoOverlay(ContainerVisual? root)
-    {
-        if (root is null)
-        {
-            return null;
-        }
-
-        if (root is WorkflowInfoOverlay info)
-        {
-            return info;
-        }
-
-        foreach (var child in root.Children)
-        {
-            if (child is ContainerVisual container && FindInfoOverlay(container) is { } found)
-            {
-                return found;
-            }
-        }
-
-        return null;
     }
 
     private void BindTree(TreeViewModel tree)
@@ -275,7 +167,6 @@ public sealed class MainForm : Form
             ClientSize = size;
         }
 
-        PositionHudCopyButton();
     }
 
     private static void LoadTree(TreeViewModel tree)

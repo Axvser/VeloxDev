@@ -53,6 +53,36 @@ public sealed class VisualOverlayTests
     }
 
     [TestMethod]
+    public void InfoOverlay_HasABuiltInInteractiveCopyButton()
+    {
+        using var hud = new WorkflowInfoOverlay { Width = 276, Height = 138 };
+        using var host = new VisualHost { Size = new DrawingSize(400, 300), DpiScaleOverride = 1f };
+        host.Root = hud;
+
+        using (var bitmap = new Bitmap(400, 300))
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            host.RenderTo(graphics, new DrawingSize(400, 300));
+        }
+
+        var button = hud.CopyButton;
+        var bounds = button.AbsoluteBounds;
+        Assert.IsGreaterThan(0f, bounds.Width, "the HUD creates its copy button");
+        Assert.IsLessThanOrEqualTo(hud.AbsoluteBounds.Right, bounds.Right, "the button stays inside the HUD");
+        Assert.IsLessThanOrEqualTo(hud.AbsoluteBounds.Bottom, bounds.Bottom);
+        Assert.AreSame(button, host.FindElementAt(new PointF(bounds.X + (bounds.Width / 2f), bounds.Y + (bounds.Height / 2f))),
+            "the HUD background passes through but the copy button is hit-testable");
+
+        string? feedback = null;
+        hud.CopyFeedback += (_, message) => feedback = message;
+        host.ProcessPointerDown(new PointF(bounds.X + (bounds.Width / 2f), bounds.Y + (bounds.Height / 2f)), MouseButtons.Left);
+        host.ProcessPointerUp(new PointF(bounds.X + (bounds.Width / 2f), bounds.Y + (bounds.Height / 2f)), MouseButtons.Left);
+
+        Assert.AreEqual("已复制", button.Text);
+        Assert.AreEqual("已复制画布信息", feedback);
+    }
+
+    [TestMethod]
     public void Minimap_RendersItsThumbnailInsideTheVisualTree()
     {
         var tree = new TreeDefaultComponent();
