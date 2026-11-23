@@ -231,7 +231,7 @@ public class MyPortProvider : ISlotProvider { … }
 
 `GetTypeSchema` reports `jsonReadable`, and the tool names `[Archivable]` in its refusal.
 
-⚙ **An enum used as a selector carries `[AgentContext]`.** Naming it in `[SlotSelectors]` puts a *reference* into the compiled context tree, not a resolvable type entry, and `AgentTypeResolver` resolves through type entries. A member-typed enum gets an entry for free; one that is only ever named by `[SlotSelectors]` does not.
+⚙ **An enum used as a selector carries `[AgentContext]`.** Naming it in `[SlotSelectors]` puts a *reference* into the compiled context tree, not a resolvable type entry, and `AgentTypeResolver` resolves through type entries. A member-typed enum gets an entry for free; one that is only ever named by `[SlotSelectors]` does not. The same description can live in the project's `*.agentcontext.xml` resource instead — both forms feed the same compiled entry; see the `veloxdev-drive-workflow-with-ai` skill's `agent-context` practice.
 
 ⚙ **Re-setting a provider selector rebuilds the ports; re-setting an enum selector restores its remembered state.** The remembered-state cache is keyed by selector *type*, which fits an enum (its slots come from the type, and its wiring survives a switch away and back). A provider is a *value* — its port table lives on the instance — so a second `SetSelector` with a fresh provider replaces the ports.
 

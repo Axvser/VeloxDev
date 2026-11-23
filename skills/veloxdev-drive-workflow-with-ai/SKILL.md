@@ -1,6 +1,6 @@
 ---
 name: veloxdev-drive-workflow-with-ai
-description: Give an LLM control of a VeloxDev workflow graph — wire a WorkflowAgentScope onto a tree, hand the tools to an IChatClient through one context provider, set the host's policy gates and call budgets, document components for the model with [AgentContext], load switchable skills (embedded documents or Agent-Skills folders on disk), connect external MCP servers, and dispatch background sub-agents — including using the MCP or skill subsystem on its own, without the workflow layer. Use when connecting an LLM or agent to a workflow graph, or when adding MCP servers, agent skills or sub-agents.
+description: Give an LLM control of a VeloxDev workflow graph — wire a WorkflowAgentScope onto a tree, hand the tools to an IChatClient through one context provider, set the host's policy gates and call budgets, document components for the model with [AgentContext] or a *.agentcontext.xml resource, load switchable skills (embedded documents or Agent-Skills folders on disk), connect external MCP servers, and dispatch background sub-agents — including using the MCP or skill subsystem on its own, without the workflow layer. Use when connecting an LLM or agent to a workflow graph, or when adding MCP servers, agent skills or sub-agents.
 ---
 
 ## Responsibility
@@ -43,6 +43,8 @@ var response = await agent.RunAsync(message, session);
 ⚙ **`ProvideTools()` is a one-shot snapshot** for hosts that build the agent by hand; it does not pick up later registrations. `CreateToolkit()` returns one instance per scope, so the call counters and the snapshot history behind `GetChangesSinceSnapshot` stay consistent.
 
 ⚙ **`WithAutoDiscovery(AgentLanguages? language = null)` is how the model learns your node types.** It lists the compiled agent context tree's `Customer/` directories — components (filed by the four component interfaces), enums, interfaces and data types — and registers what the generator admitted for prompt rendering. There is no assembly scan behind it: a type nothing annotated, no component interface reaches and no member references is not in the tree. `ListCreatableTypes` and `CreateNode` resolve against that same compiled tree (framework and customer roots), independently of whether `WithAutoDiscovery` ran; `WithEnums` / `WithInterfaces` / `WithComponents` / `WithData` (each takes a `Type[]` and an optional `AgentLanguages?`) add its context block to the prompt.
+
+⚙ **Descriptions come from `[AgentContext]` or a `*.agentcontext.xml` resource; the model sees the same tree either way.** The XML is a compile-time input, not a runtime file. `GetComponentContext` and the prompt renderers read the compiled entries regardless of which form wrote them. See [references/practices/agent-context.md](references/practices/agent-context.md).
 
 ⚙ **Customer context and framework context take their language differently.** `ProvideCustomerContext()` and `ProvideCustomerDataContext()` take no argument — they render each registered type in the language it was registered under. `ProvideFrameworkContext(language)` and `ProvideFrameworkDataContext(language)` take one.
 
@@ -95,6 +97,7 @@ var response = await agent.RunAsync(message, session);
 | You are about to… | Read |
 |---|---|
 | Understand the provider composition, thread hand-off and prompt build | [references/practices/wiring-and-policy.md](references/practices/wiring-and-policy.md) |
+| Document a type or member for the model — with `[AgentContext]` or a `*.agentcontext.xml` resource | [references/practices/agent-context.md](references/practices/agent-context.md) |
 | Look up a built-in tool, its category and its result shape | [references/practices/tools.md](references/practices/tools.md) |
 | Add switchable skills (embedded or disk) | [references/practices/skills.md](references/practices/skills.md) |
 | Connect, reconfigure or gate MCP servers | [references/practices/mcp.md](references/practices/mcp.md) |

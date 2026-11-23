@@ -26,7 +26,7 @@
 | `ListSlotProperties(nodeIndex)` | single slots, slot collections and enumerators, with `allowedSelectorTypes` |
 | `GetEnumSlotByValue(nodeIndex, propertyName, conditionValue)` | the slot inside an enumerator for a given enum or bool value |
 | `GetTypeSchema(fullTypeName, maxChars?)` | a .NET type as a JSON schema — properties, types, current values. Over `maxChars` (default 32 KiB) the reply is a truncation envelope with a preview |
-| `GetComponentContext(fullTypeName, language, maxChars?)` | the runtime `[AgentContext]` documentation for a type. The tool maps a language name containing `Chinese` to Chinese and every other value to English. Same `maxChars` envelope |
+| `GetComponentContext(fullTypeName, language, maxChars?)` | the runtime agent-context documentation for a type, from `[AgentContext]` or a `*.agentcontext.xml` resource. The tool maps a language name containing `Chinese` to Chinese and every other value to English. Same `maxChars` envelope |
 | `ListComponentCommands(nodeIndex)` | command names and parameter types |
 | `ListCreatableTypes` | concrete node and slot types the compiled context tree carries (framework and customer roots) that have a public parameterless constructor |
 | `ValidateWorkflow` | structural lint: zero-size nodes, isolated nodes, slot-less nodes, duplicate links, cycles (one `error` per back edge), and SlotEnumerators with no selector |

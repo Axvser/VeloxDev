@@ -13,6 +13,7 @@
 | 我要扩展… | 扩展点 | 具体位置 |
 |---|---|---|
 | 给类型/属性/方法/命令补说明文字 | `[AgentContext]` | 声明 `AgentContextAttribute.cs` 的 `AgentContextAttribute`；**运行期没有读取点** —— 生成器在编译期把它渲染成 `AgentText` 存进目录；语言与回退规则只在 `AgentTextSelection.Select`（`AgentText.cs`），节点侧入口 `AIContextMembers.DescriptionsFor`，`Type`/`MemberInfo` 侧入口 `AgentContextReader`（`architecture.md` §二） |
+| 把说明从代码里搬进资源文件 | `*.agentcontext.xml` | 生成器读 `AdditionalFiles`（`Base/AIContextXml.cs`），`AIContextSupplement` 按符号解析后由 `ReadTexts` 接到特性文字后面；格式与匹配规则见 `architecture.md` §七·十四 |
 | 声明一个命令要吃什么参数 | `[AgentCommandParameter]` | 声明 `AgentCommandParameterAttribute.cs` 的 `AgentCommandParameterAttribute`；**只有生成器读**（`AIContextModelBuilder.ReadCommandParameterType`），存成节点上一条 `CommandParameterType` 引用 |
 | 限定 `SlotEnumerator<TSlot>` 允许哪些 selector 类型 | `[SlotSelectors]` | 声明 `SlotSelectorsAttribute.cs` 的 `SlotSelectorsAttribute`；**Core 零读取**（生成器读，存成 `SlotSelectorType` 引用），判断全在消费方 |
 | 控制 Agent 能写哪些属性 | `rejected` 集合 | `AgentPropertyAccessor.SetProperties`；由消费方构造时传（`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs` 的 `AgentObjectToolkit` 构造） |
@@ -124,6 +125,19 @@
 | 把选中集做成全局单例 | 每个树一份；`ConditionalWeakTable` 随树释放 | `WorkflowAgentSelection.States` |
 | 删除节点后不重设选中 | 快照仍会列出已删除的 `RuntimeId`；下一次 `SelectForAgent` / `ClearAgentSelection` 才更新 | 公开 API 的 remarks |
 
+### 9. 资源文件
+
+**官方**：把说明搬进 `*.agentcontext.xml`，作为 `AdditionalFiles` 进编译；生成器把文字写进目录，产物里没有 XML。
+
+| 捷径 | 为什么错 | 依据 |
+|---|---|---|
+| 以为它是运行期内嵌资源 | 只在**编译期**读；改 XML 要重新构建。目录仍是字面量，运行期没有任何资源查找 | `AIContextTree.cs` 的 `AdditionalTextsProvider`；`AIContextXml.Parse` |
+| 在 XML 里写 `zh-Hans` / `en` | 只认 `AgentLanguages` 的成员名，写错报 `VELOX_AI_TREE005` 并丢掉那条文字 | `AIContextXml.BuildLanguageMap` |
+| 在消费方 XML 里描述框架类型 | 每个程序集的分片由各自构建生成，本项目的 XML 只查本编译 | `AIContextSupplement.Resolve`（`candidates` 来自当前 `Compilation`） |
+| 在派生类条目下描述继承来的成员 | 成员条目归**声明类型**，写在派生类上会报 `TREE004` | `AIContextSupplement.AddTexts` 按 `symbol.ContainingType` 查条目 |
+| 只写一个空 `<Type>` | 没有文字、没有成员，类型不会因此进目录；报 `VELOX_AI_TREE003` | `BuildType` 的 `annotated` 判据 |
+| 指望资源**覆盖**特性文字 | 文字是追加的（特性在前、资源在后）；迁移时把原特性删掉 | `AIContextModelBuilder.ReadTexts` |
+
 ---
 
 ## 三、步骤清单
@@ -169,6 +183,14 @@
 5. 自检：`scope.BuildDynamicInstructions()` 出现 `## Current Node Selection` 或 `## 当前选中的节点`；`BuildDynamicTools()` 前后同名同数；删除或重父后该 `RuntimeId` 自动消失、其余节点顺序不变。
 
 **Demo 侧接线（全量 demo）**：`Examples/Workflow/Common/Lib/.../AgentSelection.cs` 的 `Toggle` 调扩展并广播静态 `Changed` 事件；各家的 `VetoFrameworkGestures`、Jalium 的 `OnLinkPointerPressed` 在 Ctrl+左键时调用它。卡片视觉：WPF `CardBorderStyle` DataTrigger、Avalonia `.agent-selected Border.card`（⚠ 必须用类选择器，`UserControl.agent-selected` 不命中派生视图）、WinUI/MAUI 直接改卡 Border、Jalium `NodeViewBase` ring、WinForms `WorkflowNodeCard.OnPaintBackground`、Blazor `.wf-card.agent-selected`。不往节点模型写伪属性 —— 静态事件就够了。
+
+### G. 用资源文件写 Agent 说明
+
+1. 在项目里放 `*.agentcontext.xml`。包 targets 与 `Src` / `Examples` 的 `Directory.Build.targets` 已按后缀自动收成 `AdditionalFiles`；显式再写一条也无妨（生成器按路径去重）。
+2. 类型写 `<Type name="Namespace.Type">`，成员写 `<Member name="...">`。类型名两种写法都认（`A.B.C` 与 `A.B+C`）；成员名同时比对目录名与源码名（`SaveCommand`/`Save`、`Payload`/`_payload`）。
+3. 每种语言一段 `<Text language="Chinese">…</Text>`；省略 `language` 为 English，值只认 `AgentLanguages` 成员名。
+4. 资源与特性并存时文字**追加**，特性在前；搬完把原特性删掉。
+5. 自检：`VELOX_AI_TREE003` / `004` 是类型/成员名没对上，`005` 是语言名写错，`002` 是 XML 本身坏了，`006` 是元素/属性名写错。
 
 ---
 

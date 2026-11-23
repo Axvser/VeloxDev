@@ -80,7 +80,7 @@ These are failures the repository has actually hit. Each entry names the symptom
 
 **Cause:** a compiler-created selector node starts with no ports; the slots exist only after a selector is set.
 
-**Fix:** call `SetEnumSlotCollection` / `SetSelector` before connecting. For a non-enum provider, annotate the provider type with `[Archivable]`; for an enum selector, annotate the enum with `[AgentContext]`.
+**Fix:** call `SetEnumSlotCollection` / `SetSelector` before connecting. For a non-enum provider, annotate the provider type with `[Archivable]`; for an enum selector, document the enum with `[AgentContext]` or in the project's `*.agentcontext.xml`.
 
 ## `PatchNodeProperties` refuses a `[SlotSelectors]` property
 

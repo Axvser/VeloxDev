@@ -61,7 +61,7 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 | Skill | When it fires |
 | --- | --- |
 | `veloxdev-create-workflow` | Building a workflow editor — authoring Tree / Node / Slot / Link ViewModels, compiling and running a graph, arranging a graph, scaffolding all seven item-template views (floating rulers and minimap included), putting the canvas on screen on any of the seven supported GUIs, or designing an adapter and item templates for a GUI that has none. WinForms XAML UI itself is covered by [Easel's skill](../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md). |
-| `veloxdev-drive-workflow-with-ai` | Letting an LLM inspect, build and run a workflow graph — the Workflow Agent tool surface, host policy gates and call budgets, `[AgentContext]` documentation, switchable skills, MCP servers, and background sub-agents |
+| `veloxdev-drive-workflow-with-ai` | Letting an LLM inspect, build and run a workflow graph — the Workflow Agent tool surface, host policy gates and call budgets, `[AgentContext]` / `*.agentcontext.xml` documentation, switchable skills, MCP servers, and background sub-agents |
 | `veloxdev-create-animation` | Writing VeloxDev interpolation animations — which adapter package to reference, the canonical declaration layout, static-reuse versus create-and-discard, the index forms, flow animations, and building an adapter for a GUI with no official one |
 | `veloxdev-switch-themes` | Runtime themes that can animate when they change — declaring a theme, `[ThemeConfig]`, `InitializeTheme()`, and switching with `SetCurrent` / `Jump` / `Transition` |
 | `veloxdev-add-aspects` | Wrapping behaviour around an existing member without editing it — `[AspectOriented]`, `Aop()`, and the before / instead-of / after hooks |
@@ -74,7 +74,7 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 | Skill | Practices | Pitfalls |
 | --- | --- | --- |
 | `veloxdev-create-workflow` | model, canvas math, execution, view layer, input, templates, auto-layout, new adapter, `gui/<gui>` × 7 | model/connections, geometry/viewport, execution, view/input, templates |
-| `veloxdev-drive-workflow-with-ai` | wiring/policy, tools, skills, MCP, sub-agents, framework providers, Agent layout | wiring, permissions/budget, MCP, skills/sub-agents |
+| `veloxdev-drive-workflow-with-ai` | wiring/policy, tools, agent context, skills, MCP, sub-agents, framework providers, Agent layout | wiring, permissions/budget, MCP, skills/sub-agents |
 | `veloxdev-create-animation` | declarations, segments/effects, control/samplers, flow, adapter | declarations, segments, samplers, flow, adapter |
 | `veloxdev-switch-themes` | declaring, switching, converters/platforms | theme |
 | `veloxdev-add-aspects` | marking/proxies, hooks | aspects |

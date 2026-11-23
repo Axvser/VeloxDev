@@ -69,7 +69,7 @@ not flow across project references, so that project also needs `VeloxDev.Core.Ge
 ⚙ **The generator emits four pieces, and all four matter.** The node's ViewModel half, its MVVM partial,
 the VeloxJson reader/writer registration (without it the archive cannot be read), and the AIContextTree
 entry (without it `ListCreatableTypes` and `CreateNode` cannot see the type). Component types enter the
-context tree automatically; `[AgentContext]` only adds descriptions to the agent surface.
+context tree automatically; `[AgentContext]` / `*.agentcontext.xml` only adds descriptions to the agent surface.
 
 ⚙ **Every node class is `partial`, calls `InitializeWorkflow()` from its own constructor, and has a public
 parameterless constructor.** `CreateNode` requires the constructor; a missing `partial` produces no file and

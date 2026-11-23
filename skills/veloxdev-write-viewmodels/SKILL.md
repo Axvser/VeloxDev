@@ -44,6 +44,7 @@ The workflow idiom is **fields for plain state, `partial` properties for anythin
 | Understand the generated property, naming, setter order and collection hooks | [references/practices/properties.md](references/practices/properties.md) |
 | Write a typed, async, cancellable or validating command | [references/practices/commands.md](references/practices/commands.md) |
 | Read the result channel, lifecycle, diagnostics or framework interop | [references/practices/interop-and-diagnostics.md](references/practices/interop-and-diagnostics.md) |
+| Document a property or command for the Agent — with `[AgentContext]` or a `*.agentcontext.xml` resource | [the Agent skill's agent-context practice](../veloxdev-drive-workflow-with-ai/references/practices/agent-context.md) |
 
 ## Pitfalls
 

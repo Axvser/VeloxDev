@@ -22,7 +22,7 @@
 | 弹窗、用户点「同意/拒绝」的 UI | 各 demo，例如 `Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml.cs`（`ShowConfirmationDialogAsync`）。Core 只给 `AgentConfirmationEventArgs`/`AgentSelectionEventArgs` 两个 DTO |
 | 「等用户点完」的异步握手 | **不在 Core**。`EventHandler` 是同步的，所以 `IAgentConfirmationNotifier` / `IAgentSelectionNotifier` 从未被实现，现在也标了 `[Obsolete]`；真正做这件事的是消费方的 `Func<..., Task>` 形状（`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs` 的 `WithSelectionHandler` / `WithConfirmationHandler`） |
 | 线程编组 | **不在 Core**。目录读写与访问器调用都在**调用方线程**上跑；`AgentObjectToolkit` 明说它刻意不注册编组（`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs` 的 `Tools` 注释「It registers no thread marshalling on purpose」） |
-| 语言包 / 翻译 | 只有 `AgentLanguages` 枚举与码表，**没有一条文案**。文案由作者写在 `[AgentContext]` 上 |
+| 语言包 / 翻译 | 只有 `AgentLanguages` 枚举与码表，**没有一条文案**。文案由作者写在 `[AgentContext]` 或 `*.agentcontext.xml` 上（§七·十四） |
 | 类型 schema（属性列表、枚举值、默认实例） | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/TypeIntrospector.cs`（`GetTypeSchema`）；Core 的 `AgentTypeResolver` 只做「字符串 → `Type`」 |
 
 ### 本模块**不是**唯一的实现路径
@@ -47,6 +47,8 @@
 | `SlotSelectorsAttribute` | `SlotSelectorsAttribute.cs` 的 `SlotSelectorsAttribute` | **没有。Core 一处都不读它**（生成器读，存成 `SlotSelectorType` 引用 + `HasSlotSelectors` 标志） | `.../Agent/Workflow/Functions/WorkflowAgentToolkit.cs` 的 `ListSlotProperties`（展示白名单）、`SetEnumSlotCollection` 的 `IsEnumTypeAllowed` 校验；`.../Functions/ComponentPatcher.cs` 的 `ApplyPatch`（拒绝直接 patch） |
 
 **结论**：`SlotSelectorsAttribute` 住在 Core/AI，但它是**给消费方的 Workflow 工具箱用的**（语义属于 `SlotEnumerator<TSlot>` 的校验白名单）。Core 只是提供了一个「编译器保证的常量容器」。动它的语义 = 动 Extension，Core 无感。
+
+说明文字有两条来源：`[AgentContext]` 特性与 `*.agentcontext.xml` 资源文件。两者在 `AIContextModelBuilder.ReadTexts` 合并，资源文件的格式与匹配规则见 §七·十四。
 
 ### `[AgentContext]` 的四条硬规则（读代码得出，不是读注释得出）
 
@@ -364,7 +366,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 ### 七·十三、提升条目属于**字段**，不属于生成出来的属性
 
-`AgentContextReader.EntryFor(MemberInfo)` 不能只按成员自己的名字查一次：`[VeloxProperty]` 字段在目录里存的是**提升后的**名字（`payload` → `Payload`），**拿着 `FieldInfo` 按 `payload` 查是 null** —— `GetAgentContext(field, lang)` 对每个 `[VeloxProperty]` 字段都返回空。**Framework 分片里没有一个 `[VeloxProperty]` 字段带 `[AgentContext]`，所以 parity 看不到这一档。**
+`AgentContextReader.EntryFor(MemberInfo)` 不能只按成员自己的名字查一次：`[VeloxProperty]` 字段在目录里存的是**提升后的**名字（`payload` → `Payload`），**拿着 `FieldInfo` 按 `payload` 查是 null** —— `GetAgentContext(field, lang)` 对每个 `[VeloxProperty]` 字段都返回空。Framework 分片里这些字段的说明现在来自 `Assets/VeloxDev.Core.agentcontext.xml`；parity 只比较两种渲染，不验证这条字段查找路径。
 
 **修法是两半，缺一不可**：
 
@@ -376,10 +378,36 @@ Customer/                           ← 每个消费者程序集一个分片（�
 **只修前半会让 parity 当场红**：同一个条目会被字段和属性各认领一次，两条路都算「有描述」，于是每一行变成两行 —— `Data`（`Anchor` / `Offset` / `Size` 的提升字段）与 `Class` 两档都会翻倍。
 
 **判据是 `Kind` + flag，不是「在哪个目录」**：`AIContextNodeKind.Field`（普通公开字段、以及只带
-`[AgentContext]` 的私有字段）与 `Kind == Property && IsPromotedField`（提升出来的属性）都算「字段承载」。
-只带 `[AgentContext]` 的私有字段**也按提升名收录**（`BuildDescribedOnlyField(field, PromotedPropertyName(...))`），所以它和提升字段一样按名字查不到。
+`[AgentContext]` 或资源点名的私有字段）与 `Kind == Property && IsPromotedField`（提升出来的属性）都算「字段承载」。
+只带 `[AgentContext]` 或资源点名的私有字段**也按提升名收录**（`BuildDescribedOnlyField(field, PromotedPropertyName(...))`），所以它和提升字段一样按名字查不到。
 
 **歧义时答空**：`volume` 与 `_volume` 会提升成同一个名字，两个都命中就返回 null，不猜。
+
+### 七·十四、说明可以写在 `*.agentcontext.xml` 里
+
+`AIContextTree.cs` 订阅 `AdditionalTextsProvider`，只收后缀 `.agentcontext.xml` 的文件，交给 `AIContextXml.Parse`；`AIContextModelBuilder.Build` 用 `AIContextSupplement` 把条目按符号解析，`ReadTexts` 把资源文字接在特性文字后面。**只在编译期读**：产物里没有 XML，目录仍只装字面量。
+
+格式：
+
+```xml
+<AgentContext>
+  <Type name="A.B">
+    <Text language="Chinese">类型说明</Text>
+    <Member name="Save">
+      <Text language="English">Member description</Text>
+    </Member>
+  </Type>
+</AgentContext>
+```
+
+- `language` 是 `AgentLanguages` 的成员名（大小写不敏感），省略为 `English`；不是枚举名报 `VELOX_AI_TREE005`。
+- 类型名两种写法都认：元数据形状 `A.B+C` 与源码形状 `A.B.C`；都查不到报 `VELOX_AI_TREE003`。
+- 成员名同时比对目录里的名字与源码符号名：`SaveCommand` / `Save`、`Payload` / `_payload` 都行；都对不上报 `VELOX_AI_TREE004`。成员条目归**声明它的类型** —— 继承来的成员写在基类的 `<Type>` 下，写在派生类上会报 `TREE004`。
+- 文字是**追加**的：特性在前、资源在后；同一语言可写多条，顺序保留。
+- 类型/成员只靠资源描述也能进目录；私有字段只有资源点名时按描述-only 收录（同 `[AgentContext]`，读写都 false）。
+- 语法错误 `VELOX_AI_TREE002`（Error），未知元素/属性 `VELOX_AI_TREE006`（Warning）。
+
+资源是**每个程序集各自**的：生成器只遍历当前编译，别家的类型解析不到。`VeloxDev.Core.Generator.targets`、`Src/Directory.Build.targets`、`Examples/Directory.Build.targets` 按 `**/*.agentcontext.xml` 收成 `AdditionalFiles`；同一路径被加两次时 `AIContextXml.Parse` 去重。框架自己的说明在 `Assets/VeloxDev.Core.agentcontext.xml`，由 `VeloxDev.Core.csproj` 显式收 —— `Assets` 在项目目录外，约定 glob 覆盖不到。
 
 ## 八、Agent 节点选中：动态提示词，不是新工具
 
