@@ -7,8 +7,6 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[AgentContext(AgentLanguages.Chinese, "枚举选择器节点，可将输入按枚举成员路由到多个执行路径。默认大小为 280×380。")]
-[AgentContext(AgentLanguages.English, "Enum selector node that routes input to multiple execution paths based on enum members. Default size: 280×380.")]
 [WorkflowBuilder.Node<EnumSelectorHelper>(workSemaphore: 1)]
 [DefaultSize(280, 380)]
 public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTimeAware
@@ -19,12 +17,8 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         OutputSlots.SetSelector(typeof(VoltageRange));
     }
 
-    [AgentContext(AgentLanguages.Chinese, "输入口（接收端）")]
-    [AgentContext(AgentLanguages.English, "Input slot (receiver)")]
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese, "输出口（发送端）")]
-    [AgentContext(AgentLanguages.English, "Output slot (sender). Supports the demo's VoltageRange routing enum.")]
     [VeloxProperty]
     [SlotSelectors(typeof(VoltageRange))]
     public partial SlotEnumerator<SlotViewModel> OutputSlots { get; set; }
@@ -61,15 +55,10 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
         }
     }
 
-    [AgentContext(AgentLanguages.Chinese, "标题")]
     [VeloxProperty] private string title = "Enum Selector";
 
-    [AgentContext(AgentLanguages.Chinese, "是否自动广播给下游节点")]
-    [AgentContext(AgentLanguages.English, "When true, the node automatically forwards the result to all connected downstream nodes after execution.")]
     [VeloxProperty] private bool autoBroadcast = true;
 
-    [AgentContext(AgentLanguages.Chinese, "当前选中的枚举值，决定路由到哪个输出口")]
-    [AgentContext(AgentLanguages.English, "Currently selected enum value. Determines which output slot receives the routed input. Set to the desired enum member name (string) or its underlying integer value.")]
     public object? SelectedValue
     {
         get => OutputSlots?.CurrentValue;
@@ -156,8 +145,6 @@ public partial class EnumSelectorNodeViewModel : ICompileTimeRouter, ICompileTim
     /// Compile mode: Static returns only the currently selected branch at compile time; Dynamic returns all branches (key decided at runtime).
     /// The dictionary returned by <see cref="GetRouteTable"/> differs by mode.
     /// </summary>
-    [AgentContext(AgentLanguages.Chinese, "编译模式：Static 编译期锁定当前选中分支（未选中分支被剪除，其下游节点 Order = -1 绝对停止）；Dynamic 运行期按数据负载重新选分支（全部分支存活，编译期 payload 为 null 时 ResolveRouteKey 返回 null）。通过 PatchNodeProperties 设置，如 {\"CompileMode\":\"Static\"}。")]
-    [AgentContext(AgentLanguages.English, "Compile mode: Static locks the currently selected branch at compile time (unselected branches are pruned; their downstream nodes get Order = -1 / absolute stop); Dynamic re-selects the branch at runtime from the data payload (all branches stay alive; ResolveRouteKey returns null for a null compile-time payload). Set via PatchNodeProperties, e.g. {\"CompileMode\":\"Static\"}.")]
     [VeloxProperty] private RouterCompileMode _compileMode = RouterCompileMode.Dynamic;
 
     /// <summary>Options for the compile-mode dropdown.</summary>

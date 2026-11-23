@@ -5,7 +5,6 @@ using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
-using VeloxDev.AI;
 using VeloxDev.AI.Workflow;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
@@ -14,8 +13,6 @@ using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[AgentContext(AgentLanguages.Chinese, "派生的Tree组件之一")]
-[AgentContext(AgentLanguages.English, "The workflow tree (canvas). Contains all nodes, slots, and connections. This is the root scope the Agent operates on.")]
 [WorkflowBuilder.Tree<AgentHelper>]
 public partial class TreeViewModel
 {

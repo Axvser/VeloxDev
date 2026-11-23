@@ -1,5 +1,4 @@
 using Demo.ViewModels.Workflow.Helper;
-using VeloxDev.AI;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
@@ -11,32 +10,20 @@ namespace Demo.ViewModels;
 /// downstream target through a single route key ("tick") — the compiler turns that fan-out into a
 /// ParallelSegment so two Python workers run against the same tick and their outputs join downstream.
 /// </summary>
-[AgentContext(AgentLanguages.Chinese, "定时器节点：作为数据源，每次执行产出当前时间戳，并通过单一路由键 tick 扇出到所有下游（供并行计算与汇合演示）。默认大小 200×140")]
-[AgentContext(AgentLanguages.English, "Timer node: acts as a data source that emits the current timestamp each run and fans out to all downstream targets via the single route key 'tick' (for parallel computation and join demos). Default size: 200×140")]
 [WorkflowBuilder.Node<TimerHelper>(workSemaphore: 1)]
 [DefaultSize(200, 140)]
 public partial class TimerNodeViewModel : ICompileTimeRouter, ICompileTimeAware
 {
     public TimerNodeViewModel() => InitializeWorkflow();
 
-    [AgentContext(AgentLanguages.Chinese, "输入口（接收端），接上游触发节点")]
-    [AgentContext(AgentLanguages.English, "Input slot (receiver). Connect an upstream trigger here.")]
     [VeloxProperty] public partial SlotViewModel InputSlot { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese, "输出口（发送端），图上设为 MultipleTargets 以扇出到多个下游")]
-    [AgentContext(AgentLanguages.English, "Output slot (sender). Set it to MultipleTargets on the graph to fan out to several downstream nodes.")]
     [VeloxProperty] public partial SlotViewModel OutputSlot { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese, "标题")]
-    [AgentContext(AgentLanguages.English, "Display title shown in the node header.")]
     [VeloxProperty] private string title = "Timer";
 
-    [AgentContext(AgentLanguages.Chinese, "定时器间隔（毫秒），仅作展示，不影响执行")]
-    [AgentContext(AgentLanguages.English, "Timer interval in milliseconds (display only; does not affect execution).")]
     [VeloxProperty] private int intervalMilliseconds = 1000;
 
-    [AgentContext(AgentLanguages.Chinese, "最近一次 tick 的时间戳")]
-    [AgentContext(AgentLanguages.English, "Timestamp of the most recent tick.")]
     [VeloxProperty] private string lastTick = "-";
 
     public bool HasInputSlot => _inputSlot is not null;

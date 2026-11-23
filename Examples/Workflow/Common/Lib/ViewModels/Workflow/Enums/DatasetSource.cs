@@ -1,4 +1,3 @@
-using VeloxDev.AI;
 
 namespace Demo.ViewModels;
 
@@ -7,7 +6,6 @@ namespace Demo.ViewModels;
 /// doubles as the compile-time pruning showcase: the option that is not selected is cut from the compiled graph and
 /// its downstream nodes stop at <c>Order = -1</c>.
 /// </summary>
-[AgentContext(AgentLanguages.English, "Dataset source: Synthetic generates samples in-process, SampleFile reads a recorded set.")]
 internal enum DatasetSource
 {
     /// <summary>Generate the samples with a script.</summary>

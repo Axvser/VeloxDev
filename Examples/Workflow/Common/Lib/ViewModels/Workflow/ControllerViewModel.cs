@@ -1,12 +1,9 @@
-using VeloxDev.AI;
 using VeloxDev.Core.WorkflowSystem.CompilerEx;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.ViewModels;
 
-[AgentContext(AgentLanguages.Chinese, "派生的Node组件之一，作为任务发起者")]
-[AgentContext(AgentLanguages.English, "A derived Node component that acts as a workflow initiator/controller. Default size: 230×170. Never use Size(0,0).")]
 [WorkflowBuilder.Node<NodeHelper>]
 [DefaultSize(230, 170)]
 public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
@@ -65,8 +62,6 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     /// <summary>Whether at least one graph has been compiled (enables the Run button).</summary>
     public bool HasCompiledGraphs => Compiler.Graphs.Count > 0;
 
-    [AgentContext(AgentLanguages.Chinese, "编译：以自身为起点，把可达子图分解成编译图，并给各节点注入编译身份")]
-    [AgentContext(AgentLanguages.English, "Compile: decompose the reachable subgraph from this controller into compiled graphs.")]
     [VeloxCommand]
     private async Task Compile(object? parameters, CancellationToken ct)
     {
@@ -95,8 +90,6 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     /// </remarks>
     internal Func<CancellationToken, Task<ExecutionCheckpoint?>>? CheckpointSource { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese, "运行：用编译图 + 执行引擎驱动整条链")]
-    [AgentContext(AgentLanguages.English, "Run: drive the compiled graph with the execution engine.")]
     [VeloxCommand]
     private Task Run(object? parameters, CancellationToken ct) => DriveAsync(resume: false, ct);
 
@@ -105,8 +98,6 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
     /// The same graph, a fresh session, and the place a previous run wrote down: the nodes that place
     /// records as done are not driven again, and what they produced is restored for the nodes behind them.
     /// </remarks>
-    [AgentContext(AgentLanguages.Chinese, "继续：从上次运行的检查点接着跑（已完成的节点不再驱动，产物照旧交给下游）")]
-    [AgentContext(AgentLanguages.English, "Resume: carry on from the previous run's checkpoint — done nodes are not driven again, their outputs are restored.")]
     [VeloxCommand]
     private Task Resume(object? parameters, CancellationToken ct) => DriveAsync(resume: true, ct);
 
@@ -115,7 +106,7 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         var graph = Compiler.Graphs.FirstOrDefault();
         if (graph is null) return;
 
-        // 种子必须在这里进会话。`SeedPayload` 的契约（见它自己的 AgentContext 文本）是「执行开始时注入工作流
+        // 种子必须在这里进会话。`SeedPayload` 的契约（见它自己的 agent context 说明）是「执行开始时注入工作流
         // 上下文」，可它此前从没被写进 RuntimeContext —— 七个平台的输入框都双向绑着它，却对运行没有任何影响；
         // 而 Agent 侧的 RunCompiledWorkflow 是传的（WorkflowAgentToolkit 的 `Data = seed`）。现在两边一致：
         // 原样传入，空串就是空负载（与给 Agent 传 seed: "" 等价），不做 null 转换。
@@ -216,8 +207,6 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         }
     }
 
-    [AgentContext(AgentLanguages.Chinese, "停止：取消当前运行")]
-    [AgentContext(AgentLanguages.English, "Stop: cancel the current run.")]
     [VeloxCommand]
     private Task Stop(object? parameters, CancellationToken ct)
     {
@@ -225,8 +214,6 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         return Task.CompletedTask;
     }
 
-    [AgentContext(AgentLanguages.Chinese, "关闭工作流，释放所有正在运行的任务")]
-    [AgentContext(AgentLanguages.English, "Closes the workflow and releases all in-progress work items.")]
     [VeloxCommand]
     private async Task CloseWorkflow(object? parameters, CancellationToken ct)
     {
@@ -262,15 +249,9 @@ public partial class ControllerViewModel : ICompileTimeAware, IRuntimeAware
         OnPropertyChanged(nameof(RuntimeContext));
     }
 
-    [AgentContext(AgentLanguages.Chinese, "输出口")]
-    [AgentContext(AgentLanguages.English, "Output slot (sender). Connect this to the first downstream node's input slot to start the execution chain.")]
     [VeloxProperty] public partial SlotViewModel OutputSlot { get; set; }
 
-    [AgentContext(AgentLanguages.Chinese, "是否处于活跃状态")]
-    [AgentContext(AgentLanguages.English, "Indicates whether the workflow is currently running.")]
     [VeloxProperty] private bool isActive = false;
 
-    [AgentContext(AgentLanguages.Chinese, "种子负载，工作流执行时的初始数据")]
-    [AgentContext(AgentLanguages.English, "Initial payload string injected into the workflow context when execution starts.")]
     [VeloxProperty] private string seedPayload = "demo-request-chain";
 }

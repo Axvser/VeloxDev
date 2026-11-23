@@ -1,0 +1,149 @@
+<AgentContext>
+  <Type name="Demo.ViewModels.ControllerViewModel">
+    <Text language="Chinese">派生的Node组件之一，作为任务发起者</Text>
+    <Text language="English">A derived Node component that acts as a workflow initiator/controller. Default size: 230×170. Never use Size(0,0).</Text>
+    <Member name="Compile">
+      <Text language="Chinese">编译：以自身为起点，把可达子图分解成编译图，并给各节点注入编译身份</Text>
+      <Text language="English">Compile: decompose the reachable subgraph from this controller into compiled graphs.</Text>
+    </Member>
+    <Member name="Run">
+      <Text language="Chinese">运行：用编译图 + 执行引擎驱动整条链</Text>
+      <Text language="English">Run: drive the compiled graph with the execution engine.</Text>
+    </Member>
+    <Member name="Resume">
+      <Text language="Chinese">继续：从上次运行的检查点接着跑（已完成的节点不再驱动，产物照旧交给下游）</Text>
+      <Text language="English">Resume: carry on from the previous run's checkpoint — done nodes are not driven again, their outputs are restored.</Text>
+    </Member>
+    <Member name="Stop">
+      <Text language="Chinese">停止：取消当前运行</Text>
+      <Text language="English">Stop: cancel the current run.</Text>
+    </Member>
+    <Member name="CloseWorkflow">
+      <Text language="Chinese">关闭工作流，释放所有正在运行的任务</Text>
+      <Text language="English">Closes the workflow and releases all in-progress work items.</Text>
+    </Member>
+    <Member name="OutputSlot">
+      <Text language="Chinese">输出口</Text>
+      <Text language="English">Output slot (sender). Connect this to the first downstream node's input slot to start the execution chain.</Text>
+    </Member>
+    <Member name="isActive">
+      <Text language="Chinese">是否处于活跃状态</Text>
+      <Text language="English">Indicates whether the workflow is currently running.</Text>
+    </Member>
+    <Member name="seedPayload">
+      <Text language="Chinese">种子负载，工作流执行时的初始数据</Text>
+      <Text language="English">Initial payload string injected into the workflow context when execution starts.</Text>
+    </Member>
+  </Type>
+  <Type name="Demo.ViewModels.EnumSelectorNodeViewModel">
+    <Text language="Chinese">枚举选择器节点，可将输入按枚举成员路由到多个执行路径。默认大小为 280×380。</Text>
+    <Text language="English">Enum selector node that routes input to multiple execution paths based on enum members. Default size: 280×380.</Text>
+    <Member name="InputSlot">
+      <Text language="Chinese">输入口（接收端）</Text>
+      <Text language="English">Input slot (receiver)</Text>
+    </Member>
+    <Member name="OutputSlots">
+      <Text language="Chinese">输出口（发送端）</Text>
+      <Text language="English">Output slot (sender). Supports the demo's VoltageRange routing enum.</Text>
+    </Member>
+    <Member name="title">
+      <Text language="Chinese">标题</Text>
+    </Member>
+    <Member name="autoBroadcast">
+      <Text language="Chinese">是否自动广播给下游节点</Text>
+      <Text language="English">When true, the node automatically forwards the result to all connected downstream nodes after execution.</Text>
+    </Member>
+    <Member name="SelectedValue">
+      <Text language="Chinese">当前选中的枚举值，决定路由到哪个输出口</Text>
+      <Text language="English">Currently selected enum value. Determines which output slot receives the routed input. Set to the desired enum member name (string) or its underlying integer value.</Text>
+    </Member>
+    <Member name="_compileMode">
+      <Text language="Chinese">编译模式：Static 编译期锁定当前选中分支（未选中分支被剪除，其下游节点 Order = -1 绝对停止）；Dynamic 运行期按数据负载重新选分支（全部分支存活，编译期 payload 为 null 时 ResolveRouteKey 返回 null）。通过 PatchNodeProperties 设置，如 {"CompileMode":"Static"}。</Text>
+      <Text language="English">Compile mode: Static locks the currently selected branch at compile time (unselected branches are pruned; their downstream nodes get Order = -1 / absolute stop); Dynamic re-selects the branch at runtime from the data payload (all branches stay alive; ResolveRouteKey returns null for a null compile-time payload). Set via PatchNodeProperties, e.g. {"CompileMode":"Static"}.</Text>
+    </Member>
+  </Type>
+  <Type name="Demo.ViewModels.DatasetSource">
+    <Text language="English">Dataset source: Synthetic generates samples in-process, SampleFile reads a recorded set.</Text>
+  </Type>
+  <Type name="Demo.ViewModels.VoltageRange">
+    <Text language="English">Voltage range enumeration</Text>
+  </Type>
+  <Type name="Demo.ViewModels.LinkViewModel">
+    <Text language="Chinese">派生的Link组件之一</Text>
+    <Member name="usePolyline">
+      <Text language="Chinese">True表示使用折线连接两个节点</Text>
+    </Member>
+  </Type>
+  <Type name="Demo.ViewModels.PythonPortProvider">
+    <Text language="Chinese">Python 节点的动态端口提供器（实现 ISlotProvider）。先用 GetTypeSchema('Demo.ViewModels.PythonPortProvider') 查看属性结构，再构造 JSON 传给 SetEnumSlotCollection 重建输入/输出口。</Text>
+    <Text language="English">Python node dynamic port provider (implements ISlotProvider). Call GetTypeSchema('Demo.ViewModels.PythonPortProvider') first to inspect the property structure, then construct the JSON and pass it to SetEnumSlotCollection to rebuild the input/output ports.</Text>
+  </Type>
+  <Type name="Demo.ViewModels.PythonPort">
+    <Text language="Chinese">单个动态端口定义，当前仅包含名称 Name。</Text>
+    <Text language="English">One dynamic port definition; currently only carries the port Name.</Text>
+    <Member name="Name">
+      <Text language="Chinese">端口名称（也是路由键，以及脚本 input.json 中该上游产物对应的字段名）</Text>
+      <Text language="English">Port name (also the routing key, and the field name under which this upstream's output arrives in the script's input.json).</Text>
+    </Member>
+  </Type>
+  <Type name="Demo.ViewModels.PythonScriptNodeViewModel">
+    <Text language="Chinese">Python 脚本节点：把上游数据（单值或汇合字典）写成 input.json，用 CliWrap 执行 Script 里的 Python 代码，读回 output.json 作为结果传给下游。输入/输出口由 PythonPortProvider 动态生成。默认大小 280×240</Text>
+    <Text language="English">Python script node: writes the upstream payload (single value or joined dictionary) to input.json, executes the Python code in Script via CliWrap, and feeds the parsed output.json result downstream. Input/output ports are dynamically generated by PythonPortProvider. Default size: 280×240</Text>
+    <Member name="InputSlots">
+      <Text language="Chinese">输入口（动态，由 PythonPortProvider 生成）。用 SetEnumSlotCollection 重建：selectorTypeOrJson=PythonPortProvider 的 JSON，nonEnumTypeName='Demo.ViewModels.PythonPortProvider'</Text>
+      <Text language="English">Input slots (dynamic, generated by PythonPortProvider). Rebuild via SetEnumSlotCollection: pass the provider's JSON to 'selectorTypeOrJson' and 'Demo.ViewModels.PythonPortProvider' to 'nonEnumTypeName'.</Text>
+    </Member>
+    <Member name="OutputSlots">
+      <Text language="Chinese">输出口（动态，由 PythonPortProvider 生成）。用 SetEnumSlotCollection 重建，方式同输入口</Text>
+      <Text language="English">Output slots (dynamic, generated by PythonPortProvider). Rebuild via SetEnumSlotCollection, same as the input slots.</Text>
+    </Member>
+    <Member name="script">
+      <Text language="Chinese">Python 源码文本。执行契约：python &lt;script.py&gt; &lt;input.json&gt; &lt;output.json&gt;。脚本读 input.json：线性输入为上游产物原样；汇合输入为 {端口名: 上游产物} 字典。脚本把结果 JSON 写入 output.json（或直接打印到 stdout）。示例：import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); json.dump({'pass':1}, open(sys.argv[2],'w',encoding='utf-8'))。</Text>
+      <Text language="English">Python source text. Execution contract: python &lt;script.py&gt; &lt;input.json&gt; &lt;output.json&gt;. The script reads input.json: on a linear chain the upstream output is passed as-is; at a join it is a {portName: upstreamOutput} dictionary. The script writes its result JSON to output.json (or prints it to stdout). Example: import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); json.dump({'pass':1}, open(sys.argv[2],'w',encoding='utf-8')).</Text>
+    </Member>
+    <Member name="title">
+      <Text language="Chinese">标题</Text>
+      <Text language="English">Display title shown in the node header.</Text>
+    </Member>
+    <Member name="pythonExecutable">
+      <Text language="Chinese">Python 可执行文件（默认 python，也可填完整路径）</Text>
+      <Text language="English">Python executable (default 'python'; may be a full path).</Text>
+    </Member>
+    <Member name="description">
+      <Text language="Chinese">节点作用描述：说明这个 Python 节点做什么（输入/输出、计算逻辑、用途），供 Agent 理解并在画布上展示。可用 PatchNodeProperties 修改。</Text>
+      <Text language="English">Description of what this Python node does (inputs/outputs, computation, purpose) — helps the Agent and is shown on the canvas. Editable via PatchNodeProperties.</Text>
+    </Member>
+  </Type>
+  <Type name="Demo.ViewModels.SlotViewModel">
+    <Text language="Chinese">派生的Slot组件之一</Text>
+    <Text language="English">A derived Slot component. Used as the sender (output) or receiver (input) endpoint of a connection.</Text>
+  </Type>
+  <Type name="Demo.ViewModels.TimerNodeViewModel">
+    <Text language="Chinese">定时器节点：作为数据源，每次执行产出当前时间戳，并通过单一路由键 tick 扇出到所有下游（供并行计算与汇合演示）。默认大小 200×140</Text>
+    <Text language="English">Timer node: acts as a data source that emits the current timestamp each run and fans out to all downstream targets via the single route key 'tick' (for parallel computation and join demos). Default size: 200×140</Text>
+    <Member name="InputSlot">
+      <Text language="Chinese">输入口（接收端），接上游触发节点</Text>
+      <Text language="English">Input slot (receiver). Connect an upstream trigger here.</Text>
+    </Member>
+    <Member name="OutputSlot">
+      <Text language="Chinese">输出口（发送端），图上设为 MultipleTargets 以扇出到多个下游</Text>
+      <Text language="English">Output slot (sender). Set it to MultipleTargets on the graph to fan out to several downstream nodes.</Text>
+    </Member>
+    <Member name="title">
+      <Text language="Chinese">标题</Text>
+      <Text language="English">Display title shown in the node header.</Text>
+    </Member>
+    <Member name="intervalMilliseconds">
+      <Text language="Chinese">定时器间隔（毫秒），仅作展示，不影响执行</Text>
+      <Text language="English">Timer interval in milliseconds (display only; does not affect execution).</Text>
+    </Member>
+    <Member name="lastTick">
+      <Text language="Chinese">最近一次 tick 的时间戳</Text>
+      <Text language="English">Timestamp of the most recent tick.</Text>
+    </Member>
+  </Type>
+  <Type name="Demo.ViewModels.TreeViewModel">
+    <Text language="Chinese">派生的Tree组件之一</Text>
+    <Text language="English">The workflow tree (canvas). Contains all nodes, slots, and connections. This is the root scope the Agent operates on.</Text>
+  </Type>
+</AgentContext>
