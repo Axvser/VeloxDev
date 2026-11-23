@@ -1,0 +1,22 @@
+<local:SmokeView
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Compat"
+    x:Class="Compat.SmokeView">
+  <Border Background="#FF202020" Padding="16">
+    <StackPanel>
+      <TextBlock x:Name="Heading" Text="net48 visual backend" FontSize="22" />
+      <Button x:Name="Run" Text="Run" Width="120" Height="30" Margin="0,12,0,0" />
+      <TextBox x:Name="SeedBox" Width="240" Height="30" Text="net48" Margin="0,12,0,0" />
+      <ScrollViewer Width="240" Height="90" Margin="0,12,0,0">
+        <StackPanel>
+          <TextBlock Text="scroll line 1" />
+          <TextBlock Text="scroll line 2" />
+          <TextBlock Text="scroll line 3" />
+          <TextBlock Text="scroll line 4" />
+          <TextBlock Text="scroll line 5" />
+        </StackPanel>
+      </ScrollViewer>
+    </StackPanel>
+  </Border>
+</local:SmokeView>

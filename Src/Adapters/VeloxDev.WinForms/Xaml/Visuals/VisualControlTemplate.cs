@@ -19,9 +19,10 @@ public readonly record struct VisualTemplateInstance(VisualElement Root, VisualN
 /// <see cref="VisualElement.TemplatedParent"/>, so <c>{TemplateBinding}</c> has a source.
 /// </para>
 /// <para>
-/// <see cref="Controls.ContentControl"/> and <see cref="Controls.TemplatedControl"/> (the button family and
-/// <see cref="Controls.ItemsControl"/>) apply a template. A control that paints and hit-tests its own rows or hosts a
-/// native island rejects one with <see cref="NotSupportedException"/> instead of leaving the appearance unchanged.
+/// <see cref="Controls.ContentControl"/> and <see cref="Controls.TemplatedControl"/> (the button/items/text/menu/
+/// calendar/tree families) apply a template. A required part that is missing throws an
+/// <see cref="InvalidOperationException"/> naming it instead of leaving a half-templated control. A native editor
+/// island can only be positioned over a content part; it cannot be transformed or clipped with the visual tree.
 /// </para>
 /// <para>
 /// <see cref="Triggers"/> are evaluated against the templated control while the template is applied. A trigger with

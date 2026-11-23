@@ -48,12 +48,15 @@ public sealed class RichTextStyle
 /// fixed viewport.
 /// </para>
 /// <para>
-/// A control template is not supported: the document surface, caret and selection hit-testing live in this control,
-/// so template parts cannot own the text host without a document/host redesign. Applying a style template throws
-/// <see cref="NotSupportedException"/> rather than silently leaving the editor self-drawn.
+/// A control template replaces the self-drawn border and background. The template must contain a
+/// <see cref="RichTextContentHost"/> named <c>PART_ContentHost</c>; that part paints the document, selection and
+/// caret, and may sit inside a <c>PART_ScrollViewer</c> whose offsets keep the caret in view.
+/// <see cref="TemplateDiagnostic"/> reports a template that has no such part. Editing state and hit-testing stay in
+/// this control, so the part cannot take over the document model. Focus is disabled on the scroll part and its
+/// descendants, so typing always reaches the editor.
 /// </para>
 /// </remarks>
-public class RichTextBox : VisualElement
+public class RichTextBox : TemplatedControl
 {
     private const float CaretWidth = 1.5f;
     private const int UndoLimit = 100;
@@ -72,6 +75,12 @@ public class RichTextBox : VisualElement
     public static readonly DependencyProperty IsReadOnlyProperty = DependencyProperty.Register(
         nameof(IsReadOnly), typeof(bool), typeof(RichTextBox),
         new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>Whether the editor currently owns focus.</summary>
+    /// <remarks>A control template trigger reads this property; the CLR <see cref="VisualElement.IsFocused"/> stays the surface-level flag.</remarks>
+    public static readonly DependencyProperty IsFocusedProperty = DependencyProperty.Register(
+        nameof(IsFocused), typeof(bool), typeof(RichTextBox),
+        new PropertyMetadata(false) { AffectsRender = false });
 
     /// <summary>Whether long lines wrap at the content width.</summary>
     public static readonly DependencyProperty WrapProperty = DependencyProperty.Register(
@@ -93,6 +102,9 @@ public class RichTextBox : VisualElement
     private bool _layoutValid;
     private float _layoutWidth = -1f;
     private bool _dragging;
+    private RichTextContentHost? _contentHost;
+    private ScrollViewer? _scrollViewerPart;
+    private string? _templateDiagnostic;
 
     /// <summary>Creates an empty, focusable editor.</summary>
     public RichTextBox()
@@ -154,6 +166,9 @@ public class RichTextBox : VisualElement
         get => (bool)GetValue(WrapProperty)!;
         set => SetValue(WrapProperty, value);
     }
+
+    /// <summary>Why the applied control template cannot host the document, or <see langword="null"/> when the template is usable.</summary>
+    public string? TemplateDiagnostic => _templateDiagnostic;
 
     /// <summary>The caret index in the flat character buffer.</summary>
     public int CaretIndex => _caret;
@@ -226,6 +241,7 @@ public class RichTextBox : VisualElement
         _selectionEnd = XamlMath.Clamp(start + length, 0, _chars.Count);
         _selectionAnchor = _selectionStart;
         _caret = _selectionEnd;
+        EnsureCaretVisible();
         InvalidateVisual();
     }
 
@@ -240,6 +256,10 @@ public class RichTextBox : VisualElement
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
+        => IsTemplated ? MeasureTemplate(availableSize) : MeasureSelf(availableSize);
+
+    // 无模板时按自身文档量期望尺寸，含内边距。
+    internal Size MeasureSelf(Size availableSize)
     {
         var padding = Padding;
         var contentWidth = Math.Max(0, availableSize.Width - (int)Math.Ceiling(padding.Horizontal));
@@ -253,9 +273,27 @@ public class RichTextBox : VisualElement
             (int)Math.Ceiling(height + padding.Vertical));
     }
 
+    // 模板 ContentHost 用部件矩形当整块文字区域，这里只量文档本身。
+    internal Size MeasureDocument(Size availableSize)
+    {
+        var contentWidth = Math.Max(0, availableSize.Width);
+        EnsureLayout(contentWidth);
+        var height = _lines.Count == 0 ? 0f : _lines[_lines.Count - 1].Top + _lines[_lines.Count - 1].Height;
+        var width = Wrap && contentWidth > 0
+            ? contentWidth
+            : _lines.Count == 0 ? 0f : _lines.Max(static line => line.Width);
+        return new Size((int)Math.Ceiling(width), (int)Math.Ceiling(height));
+    }
+
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
+        // 模板根负责外观，文档由 PART_ContentHost 在自己的局部坐标里绘制。
+        if (IsTemplated)
+        {
+            return;
+        }
+
         var theme = Theme.Current;
         var bounds = new Rectangle(0, 0, Math.Max(1, (int)Math.Ceiling(Bounds.Width)), Math.Max(1, (int)Math.Ceiling(Bounds.Height)));
         var radius = CornerRadius > 0 ? CornerRadius : theme.CornerRadius;
@@ -276,7 +314,13 @@ public class RichTextBox : VisualElement
             graphics.DrawPath(focusPen, focusPath);
         }
 
-        var content = ContentRectangle();
+        RenderDocument(graphics, ContentRectangle());
+    }
+
+    // 在给定矩形里画文档 runs、选区与插入符；自绘路径和模板 ContentHost 共用。
+    internal void RenderDocument(Graphics graphics, RectangleF content)
+    {
+        var theme = Theme.Current;
         EnsureLayout(content.Width);
         if (_lines.Count == 0)
         {
@@ -351,7 +395,7 @@ public class RichTextBox : VisualElement
         }
 
         Focus();
-        var index = HitTestText(args.GetPosition(this));
+        var index = HitTestText(ContentPoint(args), ActiveContentRectangle());
         if (args.ClickCount >= 2)
         {
             SelectWord(index);
@@ -377,7 +421,7 @@ public class RichTextBox : VisualElement
             return;
         }
 
-        var index = HitTestText(args.GetPosition(this));
+        var index = HitTestText(ContentPoint(args), ActiveContentRectangle());
         _selectionStart = Math.Min(_selectionAnchor, index);
         _selectionEnd = Math.Max(_selectionAnchor, index);
         _caret = index;
@@ -423,11 +467,11 @@ public class RichTextBox : VisualElement
                 args.Handled = true;
                 break;
             case Keys.Up:
-                MoveCaret(VerticalTarget(ContentRectangle().Width, -1), shift);
+                MoveCaret(VerticalTarget(ActiveContentRectangle(), -1), shift);
                 args.Handled = true;
                 break;
             case Keys.Down:
-                MoveCaret(VerticalTarget(ContentRectangle().Width, 1), shift);
+                MoveCaret(VerticalTarget(ActiveContentRectangle(), 1), shift);
                 args.Handled = true;
                 break;
             case Keys.Home:
@@ -494,11 +538,16 @@ public class RichTextBox : VisualElement
     protected override void OnGotFocus()
     {
         _caretVisible = true;
+        SetValue(IsFocusedProperty, true);
         InvalidateVisual();
     }
 
     /// <inheritdoc />
-    protected override void OnLostFocus() => InvalidateVisual();
+    protected override void OnLostFocus()
+    {
+        SetValue(IsFocusedProperty, false);
+        InvalidateVisual();
+    }
 
     /// <inheritdoc />
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
@@ -521,18 +570,74 @@ public class RichTextBox : VisualElement
         }
     }
 
-    /// <summary>Rejects a control template: the document, caret and selection are drawn and hit-tested here.</summary>
-    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
-    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
-    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    /// <inheritdoc />
+    protected override void OnTemplateChanging()
     {
-        if (template is not null)
+        _contentHost = null;
+        _scrollViewerPart = null;
+        _templateDiagnostic = null;
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanged()
+    {
+        _contentHost = GetTemplateChild<RichTextContentHost>("PART_ContentHost")
+                       ?? GetTemplateChild<RichTextContentHost>("PART_EditorHost");
+        _scrollViewerPart = GetTemplateChild<ScrollViewer>("PART_ScrollViewer")
+                            ?? FindFirst<ScrollViewer>(TemplateRoot);
+        if (_scrollViewerPart is { } viewer)
         {
-            throw new NotSupportedException(
-                "RichTextBox draws its document runs, caret and selection itself; a ControlTemplate would need a "
-                + "template-part text host that this editor does not have. Style its border, padding, font and "
-                + "foreground instead.");
+            // 模板内的滚动部件与滚动条不能截走焦点；焦点必须留在编辑器上，按键与文字输入才到得了它。
+            DisablePartFocus(viewer);
         }
+
+        _templateDiagnostic = null;
+        if (IsTemplated && _contentHost is null)
+        {
+            // 缺 ContentHost 时模板只剩外壳，文档没有落点；留可见诊断而不是静默降级。
+            _templateDiagnostic =
+                "The RichTextBox control template must contain a RichTextContentHost named "
+                + "PART_ContentHost or PART_EditorHost.";
+            System.Diagnostics.Trace.TraceWarning(_templateDiagnostic);
+        }
+
+        InvalidateLayout();
+    }
+
+    private static void DisablePartFocus(VisualElement root)
+    {
+        root.Focusable = false;
+        root.IsTabStop = false;
+        foreach (var child in root.Children)
+        {
+            if (child is VisualElement element)
+            {
+                DisablePartFocus(element);
+            }
+        }
+    }
+
+    private static T? FindFirst<T>(VisualElement? root) where T : VisualElement
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        if (root is T match)
+        {
+            return match;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is VisualElement element && FindFirst<T>(element) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private void ClearFontCache()
@@ -620,6 +725,7 @@ public class RichTextBox : VisualElement
         _selectionStart = _selectionEnd = _selectionAnchor = _caret;
         InvalidateLayout();
         DocumentChanged?.Invoke(this, EventArgs.Empty);
+        EnsureCaretVisible();
     }
 
     private void Backspace()
@@ -630,6 +736,7 @@ public class RichTextBox : VisualElement
             DeleteSelectionCore();
             InvalidateLayout();
             DocumentChanged?.Invoke(this, EventArgs.Empty);
+            EnsureCaretVisible();
             return;
         }
 
@@ -644,6 +751,7 @@ public class RichTextBox : VisualElement
         _selectionStart = _selectionEnd = _selectionAnchor = _caret;
         InvalidateLayout();
         DocumentChanged?.Invoke(this, EventArgs.Empty);
+        EnsureCaretVisible();
     }
 
     private void DeleteForward()
@@ -654,6 +762,7 @@ public class RichTextBox : VisualElement
             DeleteSelectionCore();
             InvalidateLayout();
             DocumentChanged?.Invoke(this, EventArgs.Empty);
+            EnsureCaretVisible();
             return;
         }
 
@@ -679,6 +788,7 @@ public class RichTextBox : VisualElement
         DeleteSelectionCore();
         InvalidateLayout();
         DocumentChanged?.Invoke(this, EventArgs.Empty);
+        EnsureCaretVisible();
     }
 
     private void DeleteSelectionCore()
@@ -736,6 +846,7 @@ public class RichTextBox : VisualElement
         _caret = index;
         AdoptTypingStyle();
         _caretVisible = true;
+        EnsureCaretVisible();
         InvalidateVisual();
     }
 
@@ -794,6 +905,7 @@ public class RichTextBox : VisualElement
         _selectionStart = _selectionEnd = _selectionAnchor = _caret;
         InvalidateLayout();
         DocumentChanged?.Invoke(this, EventArgs.Empty);
+        EnsureCaretVisible();
     }
 
     private int PreviousWord(int index)
@@ -871,9 +983,9 @@ public class RichTextBox : VisualElement
         InvalidateVisual();
     }
 
-    private int VerticalTarget(float contentWidth, int direction)
+    private int VerticalTarget(RectangleF content, int direction)
     {
-        EnsureLayout(contentWidth);
+        EnsureLayout(content.Width);
         if (_lines.Count == 0)
         {
             return _caret;
@@ -885,7 +997,7 @@ public class RichTextBox : VisualElement
             lineIndex = 0;
         }
 
-        var x = CaretPoint(ContentRectangle()).X - ContentRectangle().Left;
+        var x = CaretPoint(content).X - content.Left;
         var targetLine = XamlMath.Clamp(lineIndex + direction, 0, _lines.Count - 1);
         var line = _lines[targetLine];
         foreach (var cell in line.Cells)
@@ -922,9 +1034,8 @@ public class RichTextBox : VisualElement
         return (x, content.Top + line.Top, Math.Max(12f, line.Height));
     }
 
-    private int HitTestText(PointF point)
+    private int HitTestText(PointF point, RectangleF content)
     {
-        var content = ContentRectangle();
         EnsureLayout(content.Width);
         var localY = point.Y - content.Top;
         var line = _lines.FirstOrDefault(candidate => localY >= candidate.Top && localY < candidate.Top + candidate.Height)
@@ -949,6 +1060,63 @@ public class RichTextBox : VisualElement
             (int)Math.Ceiling(padding.Top),
             Math.Max(0f, Bounds.Width - padding.Horizontal),
             Math.Max(0f, Bounds.Height - padding.Vertical));
+    }
+
+    // 模板下文档区域就是部件自身的局部矩形；模板负责自己的内边距。
+    private RectangleF ActiveContentRectangle()
+    {
+        if (IsTemplated && _contentHost is { } host)
+        {
+            return new RectangleF(0f, 0f, Math.Max(0f, host.Bounds.Width), Math.Max(0f, host.Bounds.Height));
+        }
+
+        return ContentRectangle();
+    }
+
+    private PointF ContentPoint(VisualPointerEventArgs args)
+        => IsTemplated && _contentHost is { } host ? args.GetPosition(host) : args.GetPosition(this);
+
+    // 只在模板提供了 PART_ScrollViewer 时接管滚动；滚动条部件自己负责范围与视口。
+    private void EnsureCaretVisible()
+    {
+        if (!IsTemplated || _contentHost is null || _scrollViewerPart is not { } viewer)
+        {
+            return;
+        }
+
+        var content = ActiveContentRectangle();
+        if (content.Width <= 0f || content.Height <= 0f)
+        {
+            return;
+        }
+
+        EnsureLayout(content.Width);
+        var (x, y, height) = CaretPoint(content);
+        if (viewer.ViewportHeight > 0f)
+        {
+            var offset = viewer.VerticalOffset;
+            if (y < offset)
+            {
+                viewer.VerticalOffset = y;
+            }
+            else if (y + height > offset + viewer.ViewportHeight)
+            {
+                viewer.VerticalOffset = y + height - viewer.ViewportHeight;
+            }
+        }
+
+        if (!Wrap && viewer.ViewportWidth > 0f)
+        {
+            var offset = viewer.HorizontalOffset;
+            if (x < offset)
+            {
+                viewer.HorizontalOffset = x;
+            }
+            else if (x > offset + viewer.ViewportWidth)
+            {
+                viewer.HorizontalOffset = x - viewer.ViewportWidth;
+            }
+        }
     }
 
     private void InvalidateLayout()

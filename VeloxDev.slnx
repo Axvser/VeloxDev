@@ -203,4 +203,7 @@
     <Project Path="Src/Test/Benchmarks/VeloxDev.Maui.Benchmarks/VeloxDev.Maui.Benchmarks.csproj" />
     <Project Path="Src/Test/Benchmarks/VeloxDev.Serialization.Benchmarks/VeloxDev.Serialization.Benchmarks.csproj" />
   </Folder>
+  <Folder Name="/Test/Compatibility/">
+    <Project Path="Src/Test/Compatibility/VeloxDev.WinForms.Net48.Smoke/VeloxDev.WinForms.Net48.Smoke.csproj" />
+  </Folder>
 </Solution>

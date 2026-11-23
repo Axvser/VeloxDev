@@ -10,8 +10,8 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 
 /// <summary>One entry in a <see cref="VisualContextMenu"/> or <see cref="VisualMenu"/>.</summary>
 /// <remarks>
-/// Items are data, not visuals: the presenter measures and draws every row, so a menu has one bounds and one input
-/// surface. A submenu is another <see cref="VisualContextMenu"/> opened on the row.
+/// Items are data, not visuals: without a template the presenter measures and draws every row, so a menu has one
+/// bounds and one input surface. A submenu is another <see cref="VisualContextMenu"/> opened on the row.
 /// </remarks>
 public sealed class VisualMenuItem
 {
@@ -72,22 +72,275 @@ public sealed class VisualMenuItem
     }
 }
 
+/// <summary>One realized row of a templated menu, hosted by the template's items presenter.</summary>
+/// <remarks>
+/// The container draws the row itself while it has no template of its own. A menu template can still style a
+/// container through an implicit style; <see cref="IsHighlighted"/>, <see cref="IsPressed"/> and
+/// <see cref="IsEnabled"/> are dependency properties so triggers can observe the interactive state.
+/// </remarks>
+public class VisualMenuItemContainer : TemplatedControl
+{
+    internal const float RowHeight = 28f;
+    internal const float SeparatorHeight = 9f;
+    internal const float CheckColumn = 20f;
+    internal const float ArrowColumn = 18f;
+    internal const float MinimumWidth = 180f;
+
+    /// <summary>The item data this container presents.</summary>
+    public static readonly DependencyProperty ItemProperty = DependencyProperty.Register(
+        nameof(Item), typeof(VisualMenuItem), typeof(VisualMenuItemContainer),
+        new PropertyMetadata(null) { AffectsMeasure = true, AffectsRender = true });
+
+    /// <summary>Whether this row is the current pointer or keyboard selection.</summary>
+    public static readonly DependencyProperty IsHighlightedProperty = DependencyProperty.Register(
+        nameof(IsHighlighted), typeof(bool), typeof(VisualMenuItemContainer),
+        new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>Whether the left pointer button is held on this row.</summary>
+    public static readonly DependencyProperty IsPressedProperty = DependencyProperty.Register(
+        nameof(IsPressed), typeof(bool), typeof(VisualMenuItemContainer),
+        new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>Whether this container is a menu-bar header rather than a drop-down row.</summary>
+    public static readonly DependencyProperty IsTopLevelProperty = DependencyProperty.Register(
+        nameof(IsTopLevel), typeof(bool), typeof(VisualMenuItemContainer),
+        new PropertyMetadata(false) { AffectsMeasure = true, AffectsRender = true });
+
+    /// <summary>Creates an unhighlighted container that passes uncovered pointer hits to its menu.</summary>
+    public VisualMenuItemContainer()
+    {
+        IsHitTestVisible = false;
+        Padding = default;
+    }
+
+    /// <summary>The item data this container presents.</summary>
+    public VisualMenuItem? Item
+    {
+        get => (VisualMenuItem?)GetValue(ItemProperty);
+        set => SetValue(ItemProperty, value);
+    }
+
+    /// <summary>Whether this row is the current pointer or keyboard selection.</summary>
+    public bool IsHighlighted
+    {
+        get => (bool)GetValue(IsHighlightedProperty)!;
+        set => SetValue(IsHighlightedProperty, value);
+    }
+
+    /// <summary>Whether the left pointer button is held on this row.</summary>
+    public bool IsPressed
+    {
+        get => (bool)GetValue(IsPressedProperty)!;
+        set => SetValue(IsPressedProperty, value);
+    }
+
+    /// <summary>Whether this container is a menu-bar header rather than a drop-down row.</summary>
+    public bool IsTopLevel
+    {
+        get => (bool)GetValue(IsTopLevelProperty)!;
+        set => SetValue(IsTopLevelProperty, value);
+    }
+
+    /// <summary>The row-text colour; an empty colour uses the active theme.</summary>
+    public Color Foreground { get; set; } = Color.Empty;
+
+    /// <inheritdoc />
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        if (IsTemplated)
+        {
+            return MeasureTemplate(availableSize);
+        }
+
+        if (Item is not { } item)
+        {
+            return Size.Empty;
+        }
+
+        var font = ResolveFont(DefaultFont);
+        var header = VisualText.Measure(item.Header, font, 0f, wrap: false, RenderDpi);
+        if (IsTopLevel)
+        {
+            // Math.Ceiling 没有 int 重载；net461 上 int→double 与 int→decimal 都会命中，必须显式转 double。
+            return new Size(
+                (int)Math.Ceiling((double)header.Width + 24d),
+                Math.Max(
+                    Theme.Current.ControlHeight,
+                    (int)Math.Ceiling((double)header.Height + 8d)));
+        }
+
+        if (item.IsSeparator)
+        {
+            return new Size((int)Math.Ceiling((double)MinimumWidth), (int)Math.Ceiling((double)SeparatorHeight));
+        }
+
+        var gesture = string.IsNullOrEmpty(item.InputGestureText)
+            ? 0f
+            : VisualText.Measure(item.InputGestureText!, font, 0f, wrap: false, RenderDpi).Width + 18f;
+        return new Size(
+            (int)Math.Ceiling(Math.Max(
+                (double)MinimumWidth,
+                (double)header.Width + CheckColumn + ArrowColumn + gesture + 24d)),
+            (int)Math.Ceiling((double)RowHeight));
+    }
+
+    /// <inheritdoc />
+    protected override void OnRender(Graphics graphics)
+    {
+        if (IsTemplated || Item is not { } item)
+        {
+            return;
+        }
+
+        var theme = Theme.Current;
+        var font = ResolveFont(DefaultFont);
+        var bounds = new RectangleF(
+            0f,
+            0f,
+            Math.Max(0f, (float)Math.Ceiling(Bounds.Width)),
+            Math.Max(0f, (float)Math.Ceiling(Bounds.Height)));
+        var foreground = item.IsEnabled
+            ? (Foreground.IsEmpty ? theme.Foreground : Foreground)
+            : theme.DisabledForeground;
+
+        if (IsTopLevel)
+        {
+            if (IsHighlighted)
+            {
+                using var background = new SolidBrush(theme.Selection);
+                using var path = XamlDrawing.RoundedRectangle(
+                    new RectangleF(bounds.X, bounds.Y + 2f, bounds.Width, Math.Max(0f, bounds.Height - 4f)),
+                    3f);
+                graphics.FillPath(background, path);
+            }
+
+            VisualText.Draw(this,
+                graphics,
+                item.Header,
+                font,
+                foreground,
+                new Rectangle(0, 0, (int)bounds.Width, (int)bounds.Height),
+                wrap: false,
+                StringAlignment.Center,
+                StringAlignment.Center);
+            return;
+        }
+
+        if (item.IsSeparator)
+        {
+            using var separator = new Pen(theme.ControlBorder, 1f);
+            var middle = bounds.Top + (bounds.Height / 2f);
+            graphics.DrawLine(separator, bounds.Left + 6f, middle, Math.Max(bounds.Left + 6f, bounds.Right - 6f), middle);
+            return;
+        }
+
+        if (IsHighlighted && item.IsEnabled)
+        {
+            using var background = new SolidBrush(theme.Selection);
+            using var path = XamlDrawing.RoundedRectangle(
+                new RectangleF(bounds.X, bounds.Y + 1f, bounds.Width, Math.Max(0f, bounds.Height - 2f)),
+                3f);
+            graphics.FillPath(background, path);
+        }
+
+        if (item.IsChecked)
+        {
+            using var check = new Pen(theme.Accent, 1.6f);
+            graphics.DrawLines(check, new[]
+            {
+                new PointF(bounds.Left + 5f, bounds.Top + 14f),
+                new PointF(bounds.Left + 9f, bounds.Top + 18f),
+                new PointF(bounds.Left + 16f, bounds.Top + 9f),
+            });
+        }
+
+        var text = new Rectangle(
+            (int)Math.Ceiling(bounds.Left + CheckColumn),
+            (int)Math.Ceiling(bounds.Top),
+            Math.Max(0, (int)Math.Ceiling(bounds.Width - CheckColumn - ArrowColumn - 8f)),
+            (int)Math.Ceiling(bounds.Height));
+        VisualText.Draw(this,
+            graphics,
+            item.Header,
+            font,
+            foreground,
+            text,
+            wrap: false,
+            StringAlignment.Near,
+            StringAlignment.Center);
+
+        if (item.InputGestureText is { Length: > 0 } gestureText)
+        {
+            var gesture = new Rectangle(
+                (int)Math.Ceiling(bounds.Left),
+                (int)Math.Ceiling(bounds.Top),
+                Math.Max(0, (int)Math.Ceiling(bounds.Width - ArrowColumn - 8f)),
+                (int)Math.Ceiling(bounds.Height));
+            VisualText.Draw(this,
+                graphics,
+                gestureText,
+                font,
+                theme.MutedForeground,
+                gesture,
+                wrap: false,
+                StringAlignment.Far,
+                StringAlignment.Center);
+        }
+
+        if (item.Items.Count > 0)
+        {
+            using var arrow = new SolidBrush(foreground);
+            var x = bounds.Right - 9f;
+            var y = bounds.Top + (bounds.Height / 2f);
+            graphics.FillPolygon(arrow, new[]
+            {
+                new PointF(x - 3f, y - 4f),
+                new PointF(x + 2f, y),
+                new PointF(x - 3f, y + 4f),
+            });
+        }
+    }
+}
+
 /// <summary>A layered menu of <see cref="VisualMenuItem"/> rows, opened in the surface overlay.</summary>
 /// <remarks>
-/// The menu keeps one bounds and draws every row itself. A row with children opens a nested menu anchored to the
-/// right of the row; closing this menu closes the nested one. A press outside the menu and its placement target
-/// closes it through <see cref="VisualPopup"/>.
+/// <para>
+/// Without a template the menu keeps one bounds and draws every row itself. A row with children opens a nested menu
+/// anchored to the right of the row; closing this menu closes the nested one. A press outside the menu and its
+/// placement target closes it through <see cref="VisualPopup"/>.
+/// </para>
+/// <para>
+/// A template replaces the self-drawn rows. The menu realizes one <see cref="VisualMenuItemContainer"/> per row into
+/// the part named <c>PART_ItemsPresenter</c> (or a panel marked with <see cref="ItemsControl.SetIsItemsHost"/>);
+/// submenu popups reuse the same template. A missing items host throws <see cref="InvalidOperationException"/>.
+/// </para>
 /// </remarks>
 public class VisualContextMenu : VisualPopup
 {
-    private const float RowHeight = 28f;
-    private const float SeparatorHeight = 9f;
-    private const float CheckColumn = 20f;
-    private const float ArrowColumn = 18f;
+    /// <summary>A control template applied directly to this menu, or <see langword="null"/> to use the style's.</summary>
+    public static readonly DependencyProperty TemplateProperty = DependencyProperty.Register(
+        nameof(Template), typeof(VisualControlTemplate), typeof(VisualContextMenu),
+        new PropertyMetadata(null) { AffectsMeasure = true, AffectsRender = false });
+
+    /// <summary>Whether the pointer is over the menu; template triggers can observe it.</summary>
+    public static readonly DependencyProperty IsPointerOverProperty = DependencyProperty.Register(
+        nameof(IsPointerOver), typeof(bool), typeof(VisualContextMenu),
+        new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>Whether the left pointer button is held on the menu.</summary>
+    public static readonly DependencyProperty IsPressedProperty = DependencyProperty.Register(
+        nameof(IsPressed), typeof(bool), typeof(VisualContextMenu),
+        new PropertyMetadata(false) { AffectsRender = true });
 
     private readonly List<RectangleF> _rows = [];
+    private readonly List<VisualMenuItemContainer> _containers = [];
     private int _highlight = -1;
     private VisualContextMenu? _submenu;
+    private VisualControlTemplate? _styleTemplate;
+    private VisualControlTemplate? _appliedTemplate;
+    private VisualElement? _templateRoot;
+    private VisualTemplateTriggerApplication? _templateTriggers;
+    private bool _disposed;
 
     /// <summary>The item-text colour as a brush value; an empty colour uses the active theme.</summary>
     public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
@@ -107,11 +360,33 @@ public class VisualContextMenu : VisualPopup
         BorderBrush = Theme.Current.ControlBorder;
         BorderThickness = new XamlThickness(1f);
         CornerRadius = Theme.Current.CornerRadius;
-        Closed += (_, _) => CloseSubmenu();
+        Closed += (_, _) =>
+        {
+            CloseSubmenu();
+            SetValue(IsPressedProperty, false);
+            SetValue(IsPointerOverProperty, false);
+        };
     }
 
     /// <summary>The rows shown by this menu.</summary>
     public IList<VisualMenuItem> Items { get; } = new List<VisualMenuItem>();
+
+    /// <summary>A control template applied directly to this menu, or <see langword="null"/> to use the style's.</summary>
+    public VisualControlTemplate? Template
+    {
+        get => (VisualControlTemplate?)GetValue(TemplateProperty);
+        set => SetValue(TemplateProperty, value);
+    }
+
+    /// <summary>The template root currently applied, or <see langword="null"/> while the menu draws its rows.</summary>
+    public VisualElement? TemplateRoot => _templateRoot;
+
+    /// <summary>Whether the pointer is over the menu; template triggers can observe it.</summary>
+    /// <remarks>Shadows <see cref="VisualElement.IsPointerOver"/> so a template trigger can observe hover.</remarks>
+    public new bool IsPointerOver => (bool)GetValue(IsPointerOverProperty)!;
+
+    /// <summary>Whether the left pointer button is held on the menu.</summary>
+    public bool IsPressed => (bool)GetValue(IsPressedProperty)!;
 
     /// <summary>The item-text colour; an empty colour uses the active theme.</summary>
     public Color Foreground
@@ -129,6 +404,12 @@ public class VisualContextMenu : VisualPopup
             }
         }
     }
+
+    /// <summary>The realized row containers when a template is applied; empty while the menu draws itself.</summary>
+    public IReadOnlyList<VisualMenuItemContainer> Containers => _containers;
+
+    /// <summary>The open submenu, or <see langword="null"/> while no row with children is open.</summary>
+    public VisualContextMenu? Submenu => _submenu;
 
     /// <summary>Opens the menu at a surface point relative to <paramref name="target"/>.</summary>
     /// <param name="target">The element the point is measured against.</param>
@@ -161,12 +442,29 @@ public class VisualContextMenu : VisualPopup
     {
         _highlight = -1;
         _rows.Clear();
+        if (_templateRoot is not null)
+        {
+            RebuildContainers();
+        }
+
         InvalidateMeasure();
+    }
+
+    // 样式模板与直接赋值走同一入口；模板根与触发器归本菜单自己持有。
+    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    {
+        _styleTemplate = template;
+        UpdateTemplate();
     }
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (_templateRoot is not null)
+        {
+            return _templateRoot.Measure(availableSize);
+        }
+
         var width = 180f;
         var height = Padding.Vertical;
         var font = ResolveFont(DefaultFont);
@@ -174,7 +472,7 @@ public class VisualContextMenu : VisualPopup
         {
             if (item.IsSeparator)
             {
-                height += SeparatorHeight;
+                height += VisualMenuItemContainer.SeparatorHeight;
                 continue;
             }
 
@@ -182,21 +480,33 @@ public class VisualContextMenu : VisualPopup
             var gesture = string.IsNullOrEmpty(item.InputGestureText)
                 ? 0f
                 : VisualText.Measure(item.InputGestureText!, font, 0f, wrap: false, RenderDpi).Width + 18f;
-            width = Math.Max(width, measured.Width + CheckColumn + ArrowColumn + gesture + Padding.Horizontal + 24f);
-            height += RowHeight;
+            width = Math.Max(
+                width,
+                measured.Width + VisualMenuItemContainer.CheckColumn + VisualMenuItemContainer.ArrowColumn
+                + gesture + Padding.Horizontal + 24f);
+            height += VisualMenuItemContainer.RowHeight;
         }
 
-        return new Size((int)Math.Ceiling(Math.Min(width, Math.Max(120f, availableSize.Width))), (int)Math.Ceiling(height));
+        // width/availableSize 的 int/float 混合在 net461 的 Math.Min/Max 上也要显式统一成 double。
+        return new Size(
+            (int)Math.Ceiling(Math.Min((double)width, Math.Max(120d, (double)availableSize.Width))),
+            (int)Math.Ceiling(height));
     }
 
     /// <inheritdoc />
     protected override void ArrangeOverride(Size finalSize)
     {
+        if (_templateRoot is { } root)
+        {
+            root.Arrange(new RectangleF(0f, 0f, finalSize.Width, finalSize.Height));
+            return;
+        }
+
         _rows.Clear();
         var y = (float)Math.Ceiling(Padding.Top);
         foreach (var item in Items)
         {
-            var height = item.IsSeparator ? SeparatorHeight : RowHeight;
+            var height = item.IsSeparator ? VisualMenuItemContainer.SeparatorHeight : VisualMenuItemContainer.RowHeight;
             _rows.Add(new RectangleF(
                 (int)Math.Ceiling(Padding.Left),
                 y,
@@ -207,8 +517,25 @@ public class VisualContextMenu : VisualPopup
     }
 
     /// <inheritdoc />
+    protected override void RenderContent(Graphics graphics)
+    {
+        // 模板根负责整块外观；自绘的行与弹层底色都退出。
+        if (_templateRoot is not null)
+        {
+            return;
+        }
+
+        base.RenderContent(graphics);
+    }
+
+    /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
+        if (_templateRoot is not null)
+        {
+            return;
+        }
+
         var theme = Theme.Current;
         var font = ResolveFont(DefaultFont);
         var normalForeground = Foreground.IsEmpty ? theme.Foreground : Foreground;
@@ -248,9 +575,12 @@ public class VisualContextMenu : VisualPopup
             }
 
             var text = new Rectangle(
-                (int)Math.Ceiling(row.Left + CheckColumn),
+                (int)Math.Ceiling(row.Left + VisualMenuItemContainer.CheckColumn),
                 (int)Math.Ceiling(row.Top),
-                Math.Max(0, (int)Math.Ceiling(row.Width - CheckColumn - ArrowColumn - 8f)),
+                Math.Max(
+                    0,
+                    (int)Math.Ceiling(
+                        row.Width - VisualMenuItemContainer.CheckColumn - VisualMenuItemContainer.ArrowColumn - 8f)),
                 (int)Math.Ceiling(row.Height));
             VisualText.Draw(this,
                 graphics,
@@ -267,7 +597,7 @@ public class VisualContextMenu : VisualPopup
                 var gesture = new Rectangle(
                     (int)Math.Ceiling(row.Left),
                     (int)Math.Ceiling(row.Top),
-                    Math.Max(0, (int)Math.Ceiling(row.Width - ArrowColumn - 8f)),
+                    Math.Max(0, (int)Math.Ceiling(row.Width - VisualMenuItemContainer.ArrowColumn - 8f)),
                     (int)Math.Ceiling(row.Height));
                 VisualText.Draw(this,
                     graphics,
@@ -296,6 +626,20 @@ public class VisualContextMenu : VisualPopup
     }
 
     /// <inheritdoc />
+    protected override void OnPointerEntered(VisualPointerEventArgs args)
+    {
+        base.OnPointerEntered(args);
+        SetValue(IsPointerOverProperty, true);
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerExited(VisualPointerEventArgs args)
+    {
+        base.OnPointerExited(args);
+        SetValue(IsPointerOverProperty, false);
+    }
+
+    /// <inheritdoc />
     protected override void OnPointerMoved(VisualPointerEventArgs args)
     {
         base.OnPointerMoved(args);
@@ -305,8 +649,7 @@ public class VisualContextMenu : VisualPopup
             return;
         }
 
-        _highlight = index;
-        InvalidateVisual();
+        SetHighlight(index);
         if (index >= 0 && Items[index].IsEnabled)
         {
             if (Items[index].Items.Count > 0)
@@ -335,6 +678,10 @@ public class VisualContextMenu : VisualPopup
             return;
         }
 
+        SetValue(IsPressedProperty, true);
+        SetHighlight(index);
+        SetContainerPressed(index, true);
+
         var item = Items[index];
         if (item.Items.Count > 0)
         {
@@ -347,6 +694,14 @@ public class VisualContextMenu : VisualPopup
         }
 
         args.Handled = true;
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerReleased(VisualPointerEventArgs args)
+    {
+        base.OnPointerReleased(args);
+        SetValue(IsPressedProperty, false);
+        SetContainerPressed(-1, false);
     }
 
     /// <inheritdoc />
@@ -387,10 +742,36 @@ public class VisualContextMenu : VisualPopup
     }
 
     /// <inheritdoc />
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        if (ReferenceEquals(e.Property, TemplateProperty))
+        {
+            UpdateTemplate();
+        }
+        else if (ReferenceEquals(e.Property, ForegroundProperty))
+        {
+            foreach (var container in _containers)
+            {
+                container.Foreground = Foreground;
+                container.InvalidateVisual();
+            }
+        }
+    }
+
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            _disposed = true;
+            DetachContainers();
+            _templateTriggers?.Dispose();
+            _templateTriggers = null;
+            SetTemplateScope(null);
+            _templateRoot = null;
+            _appliedTemplate = null;
             _submenu?.Dispose();
             _submenu = null;
         }
@@ -398,21 +779,23 @@ public class VisualContextMenu : VisualPopup
         base.Dispose(disposing);
     }
 
-    /// <summary>Rejects a control template: items are data and every row is painted by this presenter.</summary>
-    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
-    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
-    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
-    {
-        if (template is not null)
-        {
-            throw new NotSupportedException(
-                "VisualContextMenu draws its item rows from data; a ControlTemplate needs item containers that this "
-                + "presenter does not create. Style its background, border and foreground instead.");
-        }
-    }
-
     private int IndexAt(PointF point)
     {
+        if (_templateRoot is not null)
+        {
+            // 模板行挂在 ItemsPresenter 下，Bounds 不是菜单坐标；统一换到表面坐标再比。
+            var surfacePoint = PointToSurface(point);
+            for (var index = 0; index < _containers.Count; index++)
+            {
+                if (_containers[index].AbsoluteBounds.Contains(surfacePoint))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
         for (var index = 0; index < _rows.Count; index++)
         {
             if (_rows[index].Contains(point))
@@ -422,6 +805,25 @@ public class VisualContextMenu : VisualPopup
         }
 
         return -1;
+    }
+
+    private void SetHighlight(int index)
+    {
+        _highlight = index;
+        for (var candidate = 0; candidate < _containers.Count; candidate++)
+        {
+            _containers[candidate].IsHighlighted = candidate == index;
+        }
+
+        InvalidateVisual();
+    }
+
+    private void SetContainerPressed(int index, bool pressed)
+    {
+        if (index >= 0 && index < _containers.Count)
+        {
+            _containers[index].IsPressed = pressed;
+        }
     }
 
     private void MoveHighlight(int delta)
@@ -437,8 +839,7 @@ public class VisualContextMenu : VisualPopup
             index = (index + delta + Items.Count) % Items.Count;
             if (!Items[index].IsSeparator)
             {
-                _highlight = index;
-                InvalidateVisual();
+                SetHighlight(index);
                 return;
             }
         }
@@ -457,16 +858,37 @@ public class VisualContextMenu : VisualPopup
         {
             PlacementTarget = this,
             Placement = VisualPlacement.Right,
-            VerticalOffset = _rows[index].Top - Padding.Top,
+            VerticalOffset = SubmenuOffset(index),
+            Foreground = Foreground,
         };
+        if (_appliedTemplate is { } template)
+        {
+            submenu.Template = template;
+        }
+
         foreach (var child in item.Items)
         {
             submenu.Items.Add(child);
         }
 
+        if (submenu.TemplateRoot is not null)
+        {
+            submenu.Refresh();
+        }
+
         submenu.IsOpen = true;
         submenu.Focus();
         _submenu = submenu;
+    }
+
+    private float SubmenuOffset(int index)
+    {
+        if (_templateRoot is not null && index < _containers.Count)
+        {
+            return _containers[index].AbsoluteBounds.Y - AbsoluteBounds.Y;
+        }
+
+        return index < _rows.Count ? _rows[index].Top - Padding.Top : 0f;
     }
 
     private void CloseSubmenu()
@@ -488,14 +910,168 @@ public class VisualContextMenu : VisualPopup
         CloseSubmenu();
         Close();
     }
+
+    private void UpdateTemplate()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var effective = Template ?? _styleTemplate;
+        if (ReferenceEquals(effective, _appliedTemplate))
+        {
+            return;
+        }
+
+        DetachContainers();
+        RemoveTemplate();
+        _appliedTemplate = effective;
+        if (effective is not null)
+        {
+            var instance = effective.CreateContent(this);
+            _templateRoot = instance.Root;
+            SetTemplateScope(instance.Scope);
+            Add(instance.Root);
+            _templateTriggers = new VisualTemplateTriggerApplication(this, instance.Scope, effective.Triggers);
+        }
+
+        if (_templateRoot is not null)
+        {
+            RebuildContainers();
+        }
+
+        InvalidateMeasure();
+        InvalidateVisual();
+        if (IsOpen)
+        {
+            Reposition();
+        }
+    }
+
+    private void RemoveTemplate()
+    {
+        _templateTriggers?.Dispose();
+        _templateTriggers = null;
+        _appliedTemplate = null;
+        SetTemplateScope(null);
+
+        if (_templateRoot is null)
+        {
+            return;
+        }
+
+        if (Children.Contains(_templateRoot))
+        {
+            RemoveChild(_templateRoot);
+        }
+
+        _templateRoot.Dispose();
+        _templateRoot = null;
+    }
+
+    private void RebuildContainers()
+    {
+        if (_templateRoot is null)
+        {
+            return;
+        }
+
+        DetachContainers();
+        var host = ResolveItemsHost();
+        if (host is null)
+        {
+            throw new InvalidOperationException(
+                "The VisualContextMenu ControlTemplate must declare a part named 'PART_ItemsPresenter' "
+                + "(an ItemsPresenter or a panel marked IsItemsHost).");
+        }
+
+        foreach (var item in Items)
+        {
+            var container = new VisualMenuItemContainer
+            {
+                Item = item,
+                Foreground = Foreground,
+            };
+            host.Add(container);
+            _containers.Add(container);
+        }
+    }
+
+    private void DetachContainers()
+    {
+        foreach (var container in _containers)
+        {
+            container.ParentElement?.RemoveChild(container);
+            container.Dispose();
+        }
+
+        _containers.Clear();
+        _highlight = -1;
+    }
+
+    private Panel? ResolveItemsHost()
+    {
+        var named = GetTemplateChild<VisualElement>("PART_ItemsPresenter");
+        if (named is not null)
+        {
+            return named as Panel
+                ?? throw new InvalidOperationException(
+                    $"The VisualContextMenu ControlTemplate part 'PART_ItemsPresenter' must be a Panel, but was "
+                    + $"'{named.GetType().Name}'.");
+        }
+
+        return FindItemsHost(_templateRoot);
+    }
+
+    private static Panel? FindItemsHost(VisualElement? root)
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        if (root is Panel panel && (root is ItemsPresenter || ItemsControl.GetIsItemsHost(panel)))
+        {
+            return panel;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is VisualElement element && FindItemsHost(element) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
 }
 
 /// <summary>A horizontal menu bar whose top-level entries open a <see cref="VisualContextMenu"/>.</summary>
-public class VisualMenu : Panel
+/// <remarks>
+/// A template replaces the self-drawn headers: one <see cref="VisualMenuItemContainer"/> is realized per top-level
+/// entry into <c>PART_ItemsPresenter</c> (or a panel marked with <see cref="ItemsControl.SetIsItemsHost"/>). The
+/// drop-down menus opened from the bar remain self-drawn. A missing items host throws
+/// <see cref="InvalidOperationException"/>.
+/// </remarks>
+public class VisualMenu : TemplatedControl
 {
+    /// <summary>Whether the pointer is over the bar; template triggers can observe it.</summary>
+    public static readonly DependencyProperty IsPointerOverProperty = DependencyProperty.Register(
+        nameof(IsPointerOver), typeof(bool), typeof(VisualMenu),
+        new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>Whether the left pointer button is held on the bar.</summary>
+    public static readonly DependencyProperty IsPressedProperty = DependencyProperty.Register(
+        nameof(IsPressed), typeof(bool), typeof(VisualMenu),
+        new PropertyMetadata(false) { AffectsRender = true });
+
     private readonly List<RectangleF> _headers = [];
+    private readonly List<VisualMenuItemContainer> _containers = [];
     private VisualContextMenu? _open;
     private int _hover = -1;
+    private int _openIndex = -1;
 
     /// <summary>The header-text colour as a brush value; an empty colour uses the active theme.</summary>
     public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
@@ -516,6 +1092,13 @@ public class VisualMenu : Panel
     /// <summary>The top-level entries.</summary>
     public IList<VisualMenuItem> Items { get; } = new List<VisualMenuItem>();
 
+    /// <summary>Whether the pointer is over the bar; template triggers can observe it.</summary>
+    /// <remarks>Shadows <see cref="VisualElement.IsPointerOver"/> so a template trigger can observe hover.</remarks>
+    public new bool IsPointerOver => (bool)GetValue(IsPointerOverProperty)!;
+
+    /// <summary>Whether the left pointer button is held on the bar.</summary>
+    public bool IsPressed => (bool)GetValue(IsPressedProperty)!;
+
     /// <summary>The header-text colour; an empty colour uses the active theme.</summary>
     public Color Foreground
     {
@@ -533,23 +1116,40 @@ public class VisualMenu : Panel
         }
     }
 
+    /// <summary>The realized header containers when a template is applied; empty while the bar draws itself.</summary>
+    public IReadOnlyList<VisualMenuItemContainer> Containers => _containers;
+
+    /// <summary>The drop-down menu opened from the bar, or <see langword="null"/>.</summary>
+    public VisualContextMenu? OpenedMenu => _open;
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (IsTemplated)
+        {
+            return MeasureTemplate(availableSize);
+        }
+
         var width = Padding.Horizontal;
-        var height = (int)Math.Ceiling(Theme.Current.ControlHeight + Padding.Vertical);
+        var height = (int)Math.Ceiling((double)Theme.Current.ControlHeight + Padding.Vertical);
         var font = ResolveFont(DefaultFont);
         foreach (var item in Items)
         {
-            width += (int)Math.Ceiling(VisualText.Measure(item.Header, font, 0f, wrap: false, RenderDpi).Width + 24f);
+            width += (int)Math.Ceiling((double)VisualText.Measure(item.Header, font, 0f, wrap: false, RenderDpi).Width + 24d);
         }
 
-        return new Size((int)Math.Ceiling(width), height);
+        return new Size((int)Math.Ceiling((double)width), height);
     }
 
     /// <inheritdoc />
     protected override void ArrangeOverride(Size finalSize)
     {
+        if (IsTemplated)
+        {
+            ArrangeTemplate(finalSize);
+            return;
+        }
+
         _headers.Clear();
         var x = (float)Math.Ceiling(Padding.Left);
         var font = ResolveFont(DefaultFont);
@@ -566,6 +1166,11 @@ public class VisualMenu : Panel
     protected override void RenderContent(Graphics graphics)
     {
         base.RenderContent(graphics);
+        if (IsTemplated)
+        {
+            return;
+        }
+
         var theme = Theme.Current;
         var font = ResolveFont(DefaultFont);
         var foreground = Foreground.IsEmpty ? theme.Foreground : Foreground;
@@ -598,6 +1203,13 @@ public class VisualMenu : Panel
     }
 
     /// <inheritdoc />
+    protected override void OnPointerEntered(VisualPointerEventArgs args)
+    {
+        base.OnPointerEntered(args);
+        SetValue(IsPointerOverProperty, true);
+    }
+
+    /// <inheritdoc />
     protected override void OnPointerMoved(VisualPointerEventArgs args)
     {
         base.OnPointerMoved(args);
@@ -608,6 +1220,7 @@ public class VisualMenu : Panel
         }
 
         _hover = index;
+        UpdateContainerStates();
         InvalidateVisual();
         if (_open is not null && index >= 0 && index != _openIndex)
         {
@@ -619,7 +1232,9 @@ public class VisualMenu : Panel
     protected override void OnPointerExited(VisualPointerEventArgs args)
     {
         base.OnPointerExited(args);
+        SetValue(IsPointerOverProperty, false);
         _hover = -1;
+        UpdateContainerStates();
         InvalidateVisual();
     }
 
@@ -638,6 +1253,7 @@ public class VisualMenu : Panel
             return;
         }
 
+        SetValue(IsPressedProperty, true);
         if (_open is not null && index == _openIndex)
         {
             CloseMenu();
@@ -648,6 +1264,13 @@ public class VisualMenu : Panel
         }
 
         args.Handled = true;
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerReleased(VisualPointerEventArgs args)
+    {
+        base.OnPointerReleased(args);
+        SetValue(IsPressedProperty, false);
     }
 
     /// <inheritdoc />
@@ -672,8 +1295,40 @@ public class VisualMenu : Panel
     }
 
     /// <inheritdoc />
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (ReferenceEquals(e.Property, ForegroundProperty))
+        {
+            foreach (var container in _containers)
+            {
+                container.Foreground = Foreground;
+                container.InvalidateVisual();
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanging()
+    {
+        DetachContainers();
+        base.OnTemplateChanging();
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanged()
+    {
+        base.OnTemplateChanged();
+        if (IsTemplated)
+        {
+            RebuildContainers();
+        }
+    }
+
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
+        DetachContainers();
         if (disposing)
         {
             _open?.Dispose();
@@ -683,23 +1338,22 @@ public class VisualMenu : Panel
         base.Dispose(disposing);
     }
 
-    /// <summary>Rejects a control template: the bar measures and paints its headers from item data.</summary>
-    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
-    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
-    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
-    {
-        if (template is not null)
-        {
-            throw new NotSupportedException(
-                "VisualMenu measures and paints its headers from item data; it cannot be re-skinned by a "
-                + "ControlTemplate. Style its font and foreground instead.");
-        }
-    }
-
-    private int _openIndex = -1;
-
     private int IndexAt(PointF point)
     {
+        if (IsTemplated)
+        {
+            var surfacePoint = PointToSurface(point);
+            for (var index = 0; index < _containers.Count; index++)
+            {
+                if (_containers[index].AbsoluteBounds.Contains(surfacePoint))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
         for (var index = 0; index < _headers.Count; index++)
         {
             if (_headers[index].Contains(point))
@@ -709,6 +1363,88 @@ public class VisualMenu : Panel
         }
 
         return -1;
+    }
+
+    private void UpdateContainerStates()
+    {
+        for (var index = 0; index < _containers.Count; index++)
+        {
+            _containers[index].IsHighlighted = index == _hover || (_open is not null && index == _openIndex);
+        }
+    }
+
+    private void RebuildContainers()
+    {
+        DetachContainers();
+        var host = ResolveItemsHost();
+        if (host is null)
+        {
+            throw new InvalidOperationException(
+                "The VisualMenu ControlTemplate must declare a part named 'PART_ItemsPresenter' "
+                + "(an ItemsPresenter or a panel marked IsItemsHost).");
+        }
+
+        foreach (var item in Items)
+        {
+            var container = new VisualMenuItemContainer
+            {
+                Item = item,
+                IsTopLevel = true,
+                Foreground = Foreground,
+            };
+            host.Add(container);
+            _containers.Add(container);
+        }
+
+        UpdateContainerStates();
+    }
+
+    private void DetachContainers()
+    {
+        foreach (var container in _containers)
+        {
+            container.ParentElement?.RemoveChild(container);
+            container.Dispose();
+        }
+
+        _containers.Clear();
+    }
+
+    private Panel? ResolveItemsHost()
+    {
+        var named = GetTemplateChild<VisualElement>("PART_ItemsPresenter");
+        if (named is not null)
+        {
+            return named as Panel
+                ?? throw new InvalidOperationException(
+                    $"The VisualMenu ControlTemplate part 'PART_ItemsPresenter' must be a Panel, but was "
+                    + $"'{named.GetType().Name}'.");
+        }
+
+        return FindItemsHost(TemplateRoot);
+    }
+
+    private static Panel? FindItemsHost(VisualElement? root)
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        if (root is Panel panel && (root is ItemsPresenter || ItemsControl.GetIsItemsHost(panel)))
+        {
+            return panel;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is VisualElement element && FindItemsHost(element) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private void OpenMenu(int index)
@@ -725,8 +1461,9 @@ public class VisualMenu : Panel
         {
             PlacementTarget = this,
             Placement = VisualPlacement.Bottom,
-            HorizontalOffset = _headers[index].Left,
+            HorizontalOffset = HeaderOffset(index),
             VerticalOffset = 0f,
+            Foreground = Foreground,
         };
         foreach (var child in item.Items)
         {
@@ -740,13 +1477,25 @@ public class VisualMenu : Panel
                 _open = null;
                 _openIndex = -1;
                 Focus();
+                UpdateContainerStates();
                 InvalidateVisual();
             }
         };
         menu.IsOpen = true;
         menu.Focus();
         _open = menu;
+        UpdateContainerStates();
         InvalidateVisual();
+    }
+
+    private float HeaderOffset(int index)
+    {
+        if (IsTemplated && index < _containers.Count)
+        {
+            return _containers[index].AbsoluteBounds.X - AbsoluteBounds.X;
+        }
+
+        return index < _headers.Count ? _headers[index].Left : 0f;
     }
 
     private void CloseMenu()
@@ -755,6 +1504,7 @@ public class VisualMenu : Panel
         _open?.Dispose();
         _open = null;
         _openIndex = -1;
+        UpdateContainerStates();
         InvalidateVisual();
     }
 }

@@ -8,15 +8,17 @@ using VeloxDev.WinForms.Xaml;
 using XamlDrawing = VeloxDev.WinForms.Xaml.Controls.XamlDrawing;
 using XamlBrush = VeloxDev.WinForms.Xaml.Brush;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
+using VisualButton = VeloxDev.WinForms.Xaml.Visuals.Controls.Button;
+using VisualTextBox = VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox;
 
 namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 
-/// <summary>A non-editable drop-down selector for the visual backend.</summary>
+/// <summary>A drop-down selector whose chrome can be replaced by a <see cref="VisualControlTemplate"/>.</summary>
 /// <remarks>
 /// <para>
-/// The closed control draws the selected item itself. Opening moves a <see cref="VisualPopup"/> holding a
-/// <see cref="ScrollViewer"/> and a <see cref="ListBox"/> into the surface overlay, so the list is neither clipped by
-/// an ancestor <see cref="ScrollViewer"/> nor painted under later siblings.
+/// Without a template the closed control draws the selected item itself. Opening moves a <see cref="VisualPopup"/>
+/// holding a <see cref="ScrollViewer"/> and a <see cref="ListBox"/> into the surface overlay, so the list is neither
+/// clipped by an ancestor <see cref="ScrollViewer"/> nor painted under later siblings.
 /// </para>
 /// <para>
 /// Logical focus stays on the combo box while the drop-down is open: the list and its viewer are not focusable, and
@@ -24,13 +26,32 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// captured at open and closes.
 /// </para>
 /// <para>
-/// The closed chrome is self-drawn; a control template is not supported because the drop-down is an overlay popup
-/// whose list, scroll viewer and placement are owned by this control. A style template throws
-/// <see cref="NotSupportedException"/> rather than silently leaving the chrome unchanged.
+/// With a template the self-drawn chrome is suppressed. The template must declare <c>PART_Popup</c> (a
+/// <see cref="VisualPopup"/>) and an items host named <c>PART_ItemsPresenter</c> or marked with
+/// <see cref="ItemsControl.SetIsItemsHost"/>; the realized list is parented into that host. An editable template may
+/// declare <c>PART_EditableTextBox</c> (a <see cref="VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox"/>) and a toggle
+/// named <c>PART_ToggleButton</c> or
+/// <c>PART_Arrow</c>. A missing required part throws <see cref="InvalidOperationException"/> instead of leaving the
+/// chrome unchanged.
 /// </para>
 /// </remarks>
-public class ComboBox : VisualElement
+public class ComboBox : TemplatedControl
 {
+    /// <summary>Whether the text may be edited in the template's <c>PART_EditableTextBox</c>.</summary>
+    public static readonly DependencyProperty IsEditableProperty = DependencyProperty.Register(
+        nameof(IsEditable), typeof(bool), typeof(ComboBox),
+        new PropertyMetadata(false) { AffectsMeasure = false, AffectsRender = false });
+
+    /// <summary>The editable text, kept in sync with the selected item.</summary>
+    public static readonly DependencyProperty TextProperty = DependencyProperty.Register(
+        nameof(Text), typeof(string), typeof(ComboBox),
+        new PropertyMetadata(string.Empty) { AffectsMeasure = true, AffectsRender = true });
+
+    /// <summary>Whether the pointer is currently over the control; template triggers can observe it.</summary>
+    public static readonly DependencyProperty IsPointerOverProperty = DependencyProperty.Register(
+        nameof(IsPointerOver), typeof(bool), typeof(ComboBox),
+        new PropertyMetadata(false) { AffectsRender = true });
+
     /// <summary>The sequence whose items fill the drop-down.</summary>
     public static readonly DependencyProperty ItemsSourceProperty = DependencyProperty.Register(
         nameof(ItemsSource), typeof(IEnumerable), typeof(ComboBox),
@@ -83,9 +104,14 @@ public class ComboBox : VisualElement
     private readonly ListBox _list = new();
     private readonly ScrollViewer _scroll = new();
     private readonly VisualPopup _popup = new();
-    private bool _hover;
+    private VisualPopup? _templatePopup;
+    private ScrollViewer? _templateScroll;
+    private VisualTextBox? _editablePart;
+    private VisualButton? _toggleButton;
+    private ToggleButton? _toggleSwitch;
     private bool _syncingSelection;
     private bool _syncingOpen;
+    private bool _syncingText;
     private int _selectionAtOpen = -1;
 
     /// <summary>Creates an empty, focusable selector with theme metrics.</summary>
@@ -179,8 +205,32 @@ public class ComboBox : VisualElement
         set => SetValue(PlaceholderProperty, value ?? string.Empty);
     }
 
+    /// <summary>Whether the text may be edited in the template's <c>PART_EditableTextBox</c>.</summary>
+    public bool IsEditable
+    {
+        get => (bool)GetValue(IsEditableProperty)!;
+        set => SetValue(IsEditableProperty, value);
+    }
+
+    /// <summary>The editable text; a selected item's display text wins when the selection changes.</summary>
+    public string Text
+    {
+        get => (string)GetValue(TextProperty)!;
+        set => SetValue(TextProperty, value ?? string.Empty);
+    }
+
+    /// <summary>Whether the pointer is currently over the control; template triggers can observe it.</summary>
+    /// <remarks>Shadows <see cref="VisualElement.IsPointerOver"/> so a template trigger can observe hover.</remarks>
+    public new bool IsPointerOver => (bool)GetValue(IsPointerOverProperty)!;
+
     /// <summary>The realized drop-down list; exposed for tests and hosts.</summary>
     public ListBox DropDownList => _list;
+
+    /// <summary>The template's editable text field, or <see langword="null"/> when the template declares none.</summary>
+    public VisualTextBox? EditableTextBox => _editablePart;
+
+    /// <summary>The template's drop-down popup, or <see langword="null"/> while the control draws itself.</summary>
+    public VisualPopup? TemplatePopup => _templatePopup;
 
     /// <summary>The text and chevron colour; an empty colour uses the active theme.</summary>
     /// <remarks>
@@ -206,6 +256,11 @@ public class ComboBox : VisualElement
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (IsTemplated)
+        {
+            return MeasureTemplate(availableSize);
+        }
+
         var text = string.IsNullOrEmpty(DisplayText) ? "M" : DisplayText;
         var measured = VisualText.Measure(text, ResolveFont(DefaultFont), 0f, wrap: false, RenderDpi);
         var width = (int)Math.Ceiling(measured.Width + Padding.Horizontal + 26);
@@ -218,11 +273,17 @@ public class ComboBox : VisualElement
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
+        if (IsTemplated)
+        {
+            // 模板根负责整块外观。
+            return;
+        }
+
         var theme = Theme.Current;
         var background = Background?.ApproximateColor
             ?? (!IsEnabled
                 ? theme.DisabledBackground
-                : _hover || IsDropDownOpen
+                : IsPointerOver || IsDropDownOpen
                     ? theme.ControlHover
                     : theme.ControlBackground);
         var border = BorderBrush?.ApproximateColor ?? theme.ControlBorder;
@@ -281,7 +342,7 @@ public class ComboBox : VisualElement
     protected override void OnPointerEntered(VisualPointerEventArgs args)
     {
         base.OnPointerEntered(args);
-        _hover = true;
+        SetValue(IsPointerOverProperty, true);
         InvalidateVisual();
     }
 
@@ -289,7 +350,7 @@ public class ComboBox : VisualElement
     protected override void OnPointerExited(VisualPointerEventArgs args)
     {
         base.OnPointerExited(args);
-        _hover = false;
+        SetValue(IsPointerOverProperty, false);
         InvalidateVisual();
     }
 
@@ -311,6 +372,13 @@ public class ComboBox : VisualElement
     {
         if (!IsEnabled)
         {
+            return;
+        }
+
+        if (IsEditable && _editablePart is not null
+            && args.KeyCode == Keys.Enter && TryCommitEditableText())
+        {
+            args.Handled = true;
             return;
         }
 
@@ -345,7 +413,7 @@ public class ComboBox : VisualElement
                 break;
 
             case Keys.PageUp or Keys.PageDown when IsDropDownOpen:
-                _scroll.RaiseKeyDown(args);
+                ActiveScroll?.RaiseKeyDown(args);
                 break;
 
             case Keys.Down:
@@ -364,6 +432,35 @@ public class ComboBox : VisualElement
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
+
+        if (ReferenceEquals(e.Property, IsEditableProperty))
+        {
+            if (IsEditable && IsTemplated && _editablePart is null)
+            {
+                throw MissingPart("PART_EditableTextBox", "TextBox");
+            }
+
+            SyncEditableText();
+            return;
+        }
+
+        if (ReferenceEquals(e.Property, TextProperty))
+        {
+            if (!_syncingText && _editablePart is not null && _editablePart.Text != Text)
+            {
+                _syncingText = true;
+                try
+                {
+                    _editablePart.Text = Text;
+                }
+                finally
+                {
+                    _syncingText = false;
+                }
+            }
+
+            return;
+        }
 
         if (ReferenceEquals(e.Property, ItemsSourceProperty))
         {
@@ -387,10 +484,16 @@ public class ComboBox : VisualElement
 
         if (ReferenceEquals(e.Property, MaxDropDownHeightProperty))
         {
-            _scroll.MaxHeight = Math.Max(Theme.Current.ControlHeight, MaxDropDownHeight);
+            var maxHeight = Math.Max(Theme.Current.ControlHeight, MaxDropDownHeight);
+            _scroll.MaxHeight = maxHeight;
+            if (_templateScroll is not null)
+            {
+                _templateScroll.MaxHeight = maxHeight;
+            }
+
             if (IsDropDownOpen)
             {
-                _popup.Reposition();
+                ActivePopup.Reposition();
             }
 
             return;
@@ -400,6 +503,7 @@ public class ComboBox : VisualElement
         {
             SyncSelectedFromIndex();
             SyncListSelection();
+            SyncEditableText();
             InvalidateMeasure();
             SelectionChanged?.Invoke(this, EventArgs.Empty);
             return;
@@ -409,6 +513,7 @@ public class ComboBox : VisualElement
         {
             SyncSelectedIndexFromItem();
             SyncListSelection();
+            SyncEditableText();
             InvalidateMeasure();
             SelectionChanged?.Invoke(this, EventArgs.Empty);
             return;
@@ -425,13 +530,15 @@ public class ComboBox : VisualElement
             {
                 _selectionAtOpen = SelectedIndex;
                 SyncListSelection();
-                _popup.IsOpen = true;
+                ActivePopup.IsOpen = true;
                 ScrollSelectionIntoView();
             }
             else
             {
-                _popup.IsOpen = false;
+                ActivePopup.IsOpen = false;
             }
+
+            SyncToggleChecked();
         }
     }
 
@@ -445,24 +552,61 @@ public class ComboBox : VisualElement
             _list.ItemsRebuilt -= OnListItemsRebuilt;
             _list.PointerPressed -= OnListPointerPressed;
             _popup.Closed -= OnPopupClosed;
+        }
+
+        // 先让基类拆模板（会把列表送回 _scroll），再释放控件自己持有的弹层与列表。
+        base.Dispose(disposing);
+        if (disposing)
+        {
+            DetachTemplateParts();
             _popup.Dispose();
         }
-
-        base.Dispose(disposing);
     }
 
-    /// <summary>Rejects a control template: the drop-down popup and its selection projection are self-drawn.</summary>
-    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
-    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
-    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    /// <inheritdoc />
+    protected override void OnTemplateChanging()
     {
-        if (template is not null)
+        // 模板根销毁前先收掉开放的弹层与挂在模板树里的列表。
+        var active = ActivePopup;
+        if (active.IsOpen)
         {
-            throw new NotSupportedException(
-                "ComboBox owns an overlay popup and draws its closed chrome itself; it cannot be re-skinned by a "
-                + "ControlTemplate. Style its background, border, padding and foreground instead.");
+            active.IsOpen = false;
         }
+
+        if (IsDropDownOpen)
+        {
+            _syncingOpen = true;
+            try
+            {
+                IsDropDownOpen = false;
+            }
+            finally
+            {
+                _syncingOpen = false;
+            }
+        }
+
+        DetachTemplateParts();
+        base.OnTemplateChanging();
     }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanged()
+    {
+        base.OnTemplateChanged();
+
+        if (IsTemplated)
+        {
+            ResolveTemplateParts();
+            return;
+        }
+
+        RestoreUntemplatedList();
+    }
+
+    private VisualPopup ActivePopup => _templatePopup ?? _popup;
+
+    private ScrollViewer ActiveScroll => _templateScroll ?? _scroll;
 
     private string DisplayText
     {
@@ -480,6 +624,368 @@ public class ComboBox : VisualElement
 
     // ItemsSource 非空时压过 Items；ListBox 直接观察这个集合，集合变化会重建行。
     private IEnumerable EffectiveItems => ItemsSource ?? _items;
+
+    private void ResolveTemplateParts()
+    {
+        var popupElement = GetTemplateChild<VisualElement>("PART_Popup");
+        if (popupElement is null)
+        {
+            throw MissingPart("PART_Popup", "VisualPopup");
+        }
+
+        if (popupElement is not VisualPopup popup)
+        {
+            throw WrongPart("PART_Popup", popupElement, "VisualPopup");
+        }
+
+        _templatePopup = popup;
+
+        // 弹层一旦打开会把自己挂到表面的 overlay；模板树里不能再留着同一个父级。
+        popup.ParentElement?.RemoveChild(popup);
+        popup.PlacementTarget = this;
+        popup.Placement = VisualPlacement.Bottom;
+        popup.StaysOpen = false;
+        popup.MatchTargetWidth = true;
+        popup.Closed -= OnPopupClosed;
+        popup.Closed += OnPopupClosed;
+
+        var host = ResolveItemsHost(popup);
+        if (host is null)
+        {
+            throw MissingPart("PART_ItemsPresenter", "ItemsPresenter or a panel marked IsItemsHost");
+        }
+
+        if (popup.Child is null)
+        {
+            host.ParentElement?.RemoveChild(host);
+            popup.Child = host;
+        }
+        else if (popup.Child is { } content
+                 && !ReferenceEquals(host, content)
+                 && !IsDescendant(host, content))
+        {
+            if (host.ParentElement is not null)
+            {
+                throw new InvalidOperationException(
+                    "ComboBox requires 'PART_ItemsPresenter' to live inside the 'PART_Popup' content; "
+                    + "move the presenter into the popup's Child.");
+            }
+
+            if (content is Panel panel)
+            {
+                panel.Add(host);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "ComboBox requires the 'PART_Popup' Child to be a Panel when 'PART_ItemsPresenter' is declared "
+                    + "outside it; set the popup's Child to the panel that contains the presenter.");
+            }
+        }
+
+        AttachList(host);
+        _templateScroll = FindAncestor<ScrollViewer>(host);
+        if (_templateScroll is not null)
+        {
+            _templateScroll.MaxHeight = Math.Max(Theme.Current.ControlHeight, MaxDropDownHeight);
+        }
+
+        AttachEditable();
+        AttachToggle();
+    }
+
+    private Panel? ResolveItemsHost(VisualPopup popup)
+    {
+        var named = GetTemplateChild<VisualElement>("PART_ItemsPresenter");
+        if (named is not null)
+        {
+            return named as Panel
+                ?? throw WrongPart("PART_ItemsPresenter", named, "Panel");
+        }
+
+        return FindItemsHost(TemplateRoot) ?? FindItemsHost(popup.Child);
+    }
+
+    private void AttachList(Panel host)
+    {
+        if (ReferenceEquals(_list.ParentElement, host))
+        {
+            return;
+        }
+
+        // 滚动视图用默认模板的 ContentPresenter 承载内容；先清空 Content 让 presenter 放掉列表。
+        if (ReferenceEquals(_scroll.Content, _list))
+        {
+            _scroll.Content = null;
+        }
+
+        _list.ParentElement?.RemoveChild(_list);
+        host.Add(_list);
+    }
+
+    private void AttachEditable()
+    {
+        var part = GetTemplateChild<VisualElement>("PART_EditableTextBox");
+        if (part is null)
+        {
+            if (IsEditable)
+            {
+                throw MissingPart("PART_EditableTextBox", "TextBox");
+            }
+
+            return;
+        }
+
+        if (part is not VisualTextBox editable)
+        {
+            throw WrongPart("PART_EditableTextBox", part, "TextBox");
+        }
+
+        _editablePart = editable;
+        _editablePart.PropertyChanged -= OnEditablePropertyChanged;
+        _editablePart.PropertyChanged += OnEditablePropertyChanged;
+        SyncEditableText();
+    }
+
+    private void AttachToggle()
+    {
+        var part = GetTemplateChild<VisualElement>("PART_ToggleButton")
+            ?? GetTemplateChild<VisualElement>("PART_Arrow");
+        switch (part)
+        {
+            case VisualButton button:
+                _toggleButton = button;
+                button.Click -= OnToggleClick;
+                button.Click += OnToggleClick;
+                break;
+            case ToggleButton toggle:
+                _toggleSwitch = toggle;
+                toggle.PropertyChanged -= OnTogglePropertyChanged;
+                toggle.PropertyChanged += OnTogglePropertyChanged;
+                SyncToggleChecked();
+                break;
+            case ButtonBase other:
+                throw new InvalidOperationException(
+                    $"ComboBox toggle part '{other.GetType().Name}' must be a Button or ToggleButton so the "
+                    + "drop-down state can be driven.");
+        }
+    }
+
+    private void DetachTemplateParts()
+    {
+        DetachEditable();
+        DetachToggle();
+        RestoreUntemplatedList();
+
+        if (_templatePopup is { } popup)
+        {
+            popup.Closed -= OnPopupClosed;
+            if (popup.IsOpen)
+            {
+                popup.IsOpen = false;
+            }
+
+            popup.ParentElement?.RemoveChild(popup);
+            popup.Dispose();
+            _templatePopup = null;
+        }
+
+        _templateScroll = null;
+    }
+
+    private void DetachEditable()
+    {
+        if (_editablePart is { } editable)
+        {
+            editable.PropertyChanged -= OnEditablePropertyChanged;
+            _editablePart = null;
+        }
+    }
+
+    private void DetachToggle()
+    {
+        if (_toggleButton is { } button)
+        {
+            button.Click -= OnToggleClick;
+            _toggleButton = null;
+        }
+
+        if (_toggleSwitch is { } toggle)
+        {
+            toggle.PropertyChanged -= OnTogglePropertyChanged;
+            _toggleSwitch = null;
+        }
+    }
+
+    private void RestoreUntemplatedList()
+    {
+        for (var current = _list.ParentElement; current is not null; current = current.ParentElement)
+        {
+            if (ReferenceEquals(current, _scroll))
+            {
+                return;
+            }
+        }
+
+        _list.ParentElement?.RemoveChild(_list);
+        // Content 值可能本来就是列表；先清空再写回，才会重走 ContentControl 的呈现路径。
+        _scroll.Content = null;
+        _scroll.Content = _list;
+    }
+
+    private void SyncEditableText()
+    {
+        if (_editablePart is null)
+        {
+            return;
+        }
+
+        _syncingText = true;
+        try
+        {
+            _editablePart.Text = DisplayText;
+        }
+        finally
+        {
+            _syncingText = false;
+        }
+    }
+
+    private void SyncToggleChecked()
+    {
+        if (_toggleSwitch is null)
+        {
+            return;
+        }
+
+        _syncingOpen = true;
+        try
+        {
+            _toggleSwitch.IsChecked = IsDropDownOpen;
+        }
+        finally
+        {
+            _syncingOpen = false;
+        }
+    }
+
+    private void OnEditablePropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_syncingText || !ReferenceEquals(e.Property, VisualTextBox.TextProperty))
+        {
+            return;
+        }
+
+        var text = _editablePart?.Text ?? string.Empty;
+        if (!string.Equals(Text, text, StringComparison.Ordinal))
+        {
+            _syncingText = true;
+            try
+            {
+                Text = text;
+            }
+            finally
+            {
+                _syncingText = false;
+            }
+        }
+    }
+
+    private bool TryCommitEditableText()
+    {
+        var text = _editablePart?.Text;
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var items = EffectiveItems;
+        var count = Count(items);
+        for (var index = 0; index < count; index++)
+        {
+            if (ItemAt(items, index) is { } item
+                && string.Equals(FormatItem(item), text, StringComparison.CurrentCultureIgnoreCase))
+            {
+                SelectedIndex = index;
+                IsDropDownOpen = false;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void OnToggleClick(object? sender, EventArgs e)
+    {
+        Focus();
+        IsDropDownOpen = !IsDropDownOpen;
+    }
+
+    private void OnTogglePropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_syncingOpen || !ReferenceEquals(e.Property, ToggleButton.IsCheckedProperty))
+        {
+            return;
+        }
+
+        IsDropDownOpen = _toggleSwitch?.IsChecked == true;
+    }
+
+    private static Panel? FindItemsHost(VisualElement? root)
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        if (root is Panel panel && (root is ItemsPresenter || ItemsControl.GetIsItemsHost(panel)))
+        {
+            return panel;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is VisualElement element && FindItemsHost(element) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsDescendant(VisualElement element, VisualElement ancestor)
+    {
+        for (var current = element.ParentElement; current is not null; current = current.ParentElement)
+        {
+            if (ReferenceEquals(current, ancestor))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static T? FindAncestor<T>(VisualElement element) where T : class
+    {
+        for (var current = element.ParentElement; current is not null; current = current.ParentElement)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    private static InvalidOperationException MissingPart(string name, string expected)
+        => new($"The ComboBox ControlTemplate must declare a part named '{name}' ({expected}).");
+
+    private static InvalidOperationException WrongPart(string name, object part, string expected)
+        => new(
+            $"The ComboBox ControlTemplate part '{name}' must be a {expected}, but was '{part.GetType().Name}'.");
 
     private VisualElement CreateItemVisual(object item)
     {
@@ -695,9 +1201,9 @@ public class ComboBox : VisualElement
     private void ScrollSelectionIntoView()
     {
         var index = SelectedIndex;
-        if (_popup.IsOpen && index >= 0 && index < _list.Items.Count)
+        if (ActivePopup.IsOpen && index >= 0 && index < _list.Items.Count)
         {
-            _scroll.ScrollIntoView(_list.Items[index]);
+            ActiveScroll.ScrollIntoView(_list.Items[index]);
         }
     }
 

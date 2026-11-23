@@ -214,3 +214,10 @@ WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);
 | `GetZoom` · `GetPan` · `SetPan` · `SurfaceToWorld` · `WorldToSurface` · `GetWorldViewport` · `SetWorldViewport` · `ZoomAt` · `ProcessWheel` | The camera and world/surface conversions. |
 
 The minimap is restyled by deriving `WorkflowMinimapOverlay` and setting its palette; the HUD is `WorkflowInfoOverlay`. Both draw in the same camera surface; neither owns a window.
+
+## Compatibility
+
+- Runtime assemblies target `netframework4.6.1`, `netcoreapp3.0`, `net5.0-windows` and `net8.0-windows`; .NET Framework 4.8 uses the `net461` asset.
+- Item-template source and generated XAML code require **C# 10** (`<LangVersion>latest</LangVersion>`): the templates use file-scoped namespaces and nullable annotations. A default .NET Framework project with C# 7.3 will not compile them.
+- `Src/Test/Compatibility/VeloxDev.WinForms.Net48.Smoke` is the runtime smoke for .NET Framework 4.8; it opens a real window, renders a XAML view, focuses the native TextBox and exits.
+- Live per-monitor DPI changes are available on the modern TFMs; the .NET Framework path falls back to the `Graphics` DPI at paint time and needs a DPI-aware application manifest for crisp output.

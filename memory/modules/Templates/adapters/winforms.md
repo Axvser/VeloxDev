@@ -79,6 +79,8 @@ tree 资源里 `DataTemplate x:Key="NodeTemplate"` / `LinkTemplate` / `SlotTempl
 
 `LinkTemplate` 为每条 link（含 virtual link）建一个 `LinkView`；端点由 `DataTemplate` 绑定到 `Sender.Anchor.*` / `Receiver.Anchor.*`，颜色、`LineThickness`/`HighlightThickness` 与 `IsVirtual` 由表面 `ApplyLinkStyles` 写（宿主属性是 `VisualLink*`，模板 DP 同型 `float`）；`OnRender` 画 cubic 并 `PublishCurve`。
 
+- **语言/运行时基线**：runtime 资产含 net461/netcoreapp3.0/net5/net8；Item Template 源码与生成代码要求 C# 10（`LangVersion latest`），默认 C# 7.3 的 .NET Framework 项目不能编译。net48 运行 smoke 在 `Src/Test/Compatibility/VeloxDev.WinForms.Net48.Smoke`；.NET Framework 的实时 per-monitor DPI 弱于现代 TFM。
+
 ---
 
 ## 四、指路

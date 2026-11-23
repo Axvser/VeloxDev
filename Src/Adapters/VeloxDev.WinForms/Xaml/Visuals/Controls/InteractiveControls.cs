@@ -300,13 +300,14 @@ public class Button : ButtonBase
 /// clipped by the visual path, and only the content rectangle is covered — the border and padding stay visual.
 /// </para>
 /// <para>
-/// A control template is not supported. The native island owns a real HWND whose position is computed from the
-/// control's own editor rectangle; replacing the visual chrome with template parts would need a host redesign where
-/// the island is a template part with its own placement protocol. Applying a style template therefore throws
-/// <see cref="NotSupportedException"/> instead of silently leaving the editor self-drawn.
+/// A control template replaces the self-drawn border and background. The template must contain a
+/// <see cref="TextBoxContentHost"/> named <c>PART_ContentHost</c> (or <c>PART_EditorHost</c>): that part paints the
+/// text surface, and the native island is positioned over its rectangle while the field has focus.
+/// <see cref="TemplateDiagnostic"/> reports a template that has no such part. The island is still a real HWND owned
+/// by the surface, so it cannot become a visual child of the part or be transformed with it.
 /// </para>
 /// </remarks>
-public class TextBox : VisualElement
+public class TextBox : TemplatedControl
 {
     /// <summary>The current text.</summary>
     public static readonly DependencyProperty TextProperty =
@@ -340,6 +341,13 @@ public class TextBox : VisualElement
         DependencyProperty.Register(
             nameof(IsReadOnly), typeof(bool), typeof(TextBox),
             new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>Whether the field currently owns focus, including while its native editor island holds the keyboard focus.</summary>
+    /// <remarks>A control template trigger reads this property; the CLR <see cref="VisualElement.IsFocused"/> stays the surface-level flag.</remarks>
+    public static readonly DependencyProperty IsFocusedProperty =
+        DependencyProperty.Register(
+            nameof(IsFocused), typeof(bool), typeof(TextBox),
+            new PropertyMetadata(false) { AffectsRender = false });
 
     /// <summary>Whether the text is drawn as bullets.</summary>
     public static readonly DependencyProperty IsPasswordProperty =
@@ -377,6 +385,8 @@ public class TextBox : VisualElement
     private float _lineHeight = 16f;
     private float _laidOutWidth = -1f;
     private bool _layoutDirty = true;
+    private TextBoxContentHost? _contentHost;
+    private string? _templateDiagnostic;
 
     /// <summary>Creates a focusable text field with theme metrics and its native editor island.</summary>
     public TextBox()
@@ -518,7 +528,7 @@ public class TextBox : VisualElement
                 return 0f;
             }
 
-            var content = ContentRectangle();
+            var content = ActiveContentRectangle();
             var textWidth = (float)Math.Ceiling(VisualText.MeasureWidth(DisplayText, Font, RenderDpi));
             return Math.Max(0f, textWidth - content.Width);
         }
@@ -531,12 +541,19 @@ public class TextBox : VisualElement
     /// <summary>Whether the native editor island is currently shown over the content rectangle.</summary>
     public bool IsUsingNativeEditor => _nativeActive;
 
+    /// <summary>Why the applied control template cannot host the editor, or <see langword="null"/> when the template is usable.</summary>
+    public string? TemplateDiagnostic => _templateDiagnostic;
+
     private bool MultiLine => AcceptsReturn || Wrap;
 
     private string DisplayText => IsPassword ? new string('●', Text.Length) : Text;
 
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
+        => IsTemplated ? MeasureTemplate(availableSize) : MeasureEditor(availableSize);
+
+    // 按自身文字量期望尺寸；模板下改由模板决定尺寸。
+    internal Size MeasureEditor(Size availableSize)
     {
         var contentWidth = Math.Max(0, availableSize.Width - (int)Math.Ceiling(Padding.Horizontal));
         var sample = string.IsNullOrEmpty(Text)
@@ -562,11 +579,23 @@ public class TextBox : VisualElement
     }
 
     /// <inheritdoc />
-    protected override void RenderContent(Graphics graphics) => OnRender(graphics);
+    protected override void RenderContent(Graphics graphics)
+    {
+        // 模板根负责外观，文字交给 PART_ContentHost；只有无模板时才走整块自绘。
+        if (!IsTemplated)
+        {
+            OnRender(graphics);
+        }
+    }
 
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
+        if (IsTemplated)
+        {
+            return;
+        }
+
         var theme = Theme.Current;
         var focused = IsFocused || _nativeActive;
         var bounds = new Rectangle(0, 0, Math.Max(1, (int)Math.Ceiling(Bounds.Width)), Math.Max(1, (int)Math.Ceiling(Bounds.Height)));
@@ -581,7 +610,12 @@ public class TextBox : VisualElement
             thickness,
             CornerRadius > 0 ? CornerRadius : theme.CornerRadius);
 
-        var content = ContentRectangle();
+        RenderEditorSurface(graphics, ContentRectangle());
+    }
+
+    // 在给定矩形里画文字、选区、占位符与插入符；自绘路径和模板 ContentHost 共用。
+    internal void RenderEditorSurface(Graphics graphics, Rectangle content)
+    {
         if (content.Width <= 0 || content.Height <= 0)
         {
             return;
@@ -593,6 +627,7 @@ public class TextBox : VisualElement
             return;
         }
 
+        var theme = Theme.Current;
         EnsureLines(content.Width);
         var foreground = Foreground.IsEmpty
             ? (IsEnabled ? theme.Foreground : theme.DisabledForeground)
@@ -693,6 +728,7 @@ public class TextBox : VisualElement
         _caretVisible = true;
         _caretTimer.Start();
         ShowNativeEditor();
+        UpdateFocusState();
         InvalidateVisual();
     }
 
@@ -709,6 +745,7 @@ public class TextBox : VisualElement
             HideNativeEditor();
         }
 
+        UpdateFocusState();
         InvalidateVisual();
     }
 
@@ -732,7 +769,7 @@ public class TextBox : VisualElement
             return;
         }
 
-        var index = HitTestIndex(args.GetPosition(this));
+        var index = HitTestIndex(ContentPoint(args), ActiveContentRectangle());
         if (args.ClickCount >= 2)
         {
             var range = WordRange(Text, index);
@@ -762,7 +799,7 @@ public class TextBox : VisualElement
             return;
         }
 
-        _caretIndex = HitTestIndex(args.GetPosition(this));
+        _caretIndex = HitTestIndex(ContentPoint(args), ActiveContentRectangle());
         ResetCaretBlink();
         EnsureCaretVisible();
         InvalidateVisual();
@@ -973,6 +1010,24 @@ public class TextBox : VisualElement
             Math.Max(0, bounds.Height - (int)Math.Ceiling(Padding.Vertical) - 2));
     }
 
+    // 模板下文字区域就是部件自身的局部矩形；模板负责自己的内边距。
+    private Rectangle ActiveContentRectangle()
+    {
+        if (IsTemplated && _contentHost is { } host)
+        {
+            return new Rectangle(
+                0,
+                0,
+                Math.Max(1, (int)Math.Ceiling(host.Bounds.Width)),
+                Math.Max(1, (int)Math.Ceiling(host.Bounds.Height)));
+        }
+
+        return ContentRectangle();
+    }
+
+    private PointF ContentPoint(VisualPointerEventArgs args)
+        => IsTemplated && _contentHost is { } host ? args.GetPosition(host) : args.GetPosition(this);
+
     private void EnsureLines(float contentWidth)
     {
         if (!_layoutDirty && Math.Abs(contentWidth - _laidOutWidth) < 0.5f)
@@ -1167,9 +1222,8 @@ public class TextBox : VisualElement
         graphics.DrawLine(pen, caretX + 0.5f, top, caretX + 0.5f, top + Math.Max(1f, _lineHeight - 4f));
     }
 
-    private int HitTestIndex(PointF local)
+    private int HitTestIndex(PointF local, Rectangle content)
     {
-        var content = ContentRectangle();
         EnsureLines(content.Width);
         if (_lines.Count == 0)
         {
@@ -1198,13 +1252,13 @@ public class TextBox : VisualElement
 
     private int CurrentLineStart()
     {
-        EnsureLines(ContentRectangle().Width);
+        EnsureLines(ActiveContentRectangle().Width);
         return _lines[FindLineIndex(CaretIndex)].Start;
     }
 
     private int CurrentLineEnd()
     {
-        EnsureLines(ContentRectangle().Width);
+        EnsureLines(ActiveContentRectangle().Width);
         var line = _lines[FindLineIndex(CaretIndex)];
         return line.Start + line.Length;
     }
@@ -1230,7 +1284,7 @@ public class TextBox : VisualElement
             return;
         }
 
-        var content = ContentRectangle();
+        var content = ActiveContentRectangle();
         if (content.Width <= 0)
         {
             return;
@@ -1450,6 +1504,7 @@ public class TextBox : VisualElement
         SyncEditorFromVisual();
         _nativeHost.Visibility = VeloxDev.WinForms.Xaml.Controls.Visibility.Visible;
         ArrangeNativeEditor();
+        UpdateFocusState();
 
         _focusHandoff = true;
         try
@@ -1482,16 +1537,36 @@ public class TextBox : VisualElement
             _editor.Visible = false;
         }
 
+        UpdateFocusState();
         InvalidateVisual();
     }
 
     private void ArrangeNativeEditor()
     {
-        var content = ContentRectangle();
+        var content = ActiveEditorRectangle();
         var size = new Size(Math.Max(0, content.Width), Math.Max(0, content.Height));
         _nativeHost.Measure(size);
         _nativeHost.Arrange(new RectangleF(content.Left, content.Top, size.Width, size.Height));
     }
+
+    // 模板下原生岛盖住 PART_ContentHost；无模板时还是控件自己的内容矩形。
+    private Rectangle ActiveEditorRectangle()
+    {
+        if (IsTemplated && _contentHost is { } host)
+        {
+            var origin = PointFromSurface(host.AbsoluteBounds.Location);
+            return new Rectangle(
+                (int)Math.Round(origin.X),
+                (int)Math.Round(origin.Y),
+                Math.Max(0, (int)Math.Round(host.AbsoluteBounds.Width)),
+                Math.Max(0, (int)Math.Round(host.AbsoluteBounds.Height)));
+        }
+
+        return ContentRectangle();
+    }
+
+    private void UpdateFocusState()
+        => SetValue(IsFocusedProperty, IsFocused || _nativeActive);
 
     private void ApplyNativeProperties()
     {
@@ -1518,12 +1593,9 @@ public class TextBox : VisualElement
     // 原生 TextBox 不支持透明背景色；视觉层的 Transparent 要落到最近一层不透明祖先或主题底色上。
     private Color ResolveNativeBackground()
     {
-        if (Background?.ApproximateColor is Color own && own.A > 0)
-        {
-            return Color.FromArgb(255, own.R, own.G, own.B);
-        }
-
-        for (var current = ParentElement; current is not null; current = current.ParentElement)
+        // 模板下从内容部件向上找：模板的边框/底色才是岛该落的那一层。
+        VisualElement? origin = _contentHost;
+        for (VisualElement? current = origin ?? this; current is not null; current = current.ParentElement)
         {
             if (current.Background?.ApproximateColor is Color inherited && inherited.A > 0)
             {
@@ -1612,6 +1684,8 @@ public class TextBox : VisualElement
         {
             HideNativeEditor();
         }
+
+        UpdateFocusState();
     }
 
     /// <inheritdoc />
@@ -1629,17 +1703,35 @@ public class TextBox : VisualElement
         base.Dispose(disposing);
     }
 
-    /// <summary>Rejects a control template: the native editor island cannot be driven from template parts.</summary>
-    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
-    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
-    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    /// <inheritdoc />
+    protected override void OnTemplateChanging()
     {
-        if (template is not null)
+        _contentHost = null;
+        _templateDiagnostic = null;
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanged()
+    {
+        _contentHost = GetTemplateChild<TextBoxContentHost>("PART_ContentHost")
+                       ?? GetTemplateChild<TextBoxContentHost>("PART_EditorHost");
+        _templateDiagnostic = null;
+        if (IsTemplated && _contentHost is null)
         {
-            throw new NotSupportedException(
-                "TextBox hosts a native editor island and cannot be re-skinned by a ControlTemplate. "
-                + "Style its border, padding, font and foreground instead, or place it inside a templated container.");
+            // 缺 ContentHost 时模板只剩外壳，文字与原生岛都没有落点；留可见诊断而不是静默降级。
+            _templateDiagnostic =
+                "The TextBox control template must contain a TextBoxContentHost named "
+                + "PART_ContentHost or PART_EditorHost.";
+            System.Diagnostics.Trace.TraceWarning(_templateDiagnostic);
         }
+
+        _layoutDirty = true;
+        if (_nativeActive)
+        {
+            ArrangeNativeEditor();
+        }
+
+        InvalidateVisual();
     }
 
     private readonly struct TextLine(int start, int length)

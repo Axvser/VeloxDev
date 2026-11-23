@@ -746,6 +746,13 @@ public class ListBox : ItemsControl
 /// panel treats its arranged height as the viewport with no offset.
 /// </para>
 /// <para>
+/// A <see cref="TemplatedControl.Template"/> may replace the panel's own layout: the template root must contain an
+/// <see cref="ItemsPresenter"/> (conventionally named <c>PART_ItemsPresenter</c>) or a panel marked with
+/// <see cref="ItemsControl.SetIsItemsHost"/>, and the realized rows are positioned inside that host. An
+/// <see cref="ItemsControl.ItemsPanel"/> still wins over a template host, as on the base control. The extent, the
+/// visible range and row positions stay fixed-row and vertical-only.
+/// </para>
+/// <para>
 /// The limitation is deliberate: every row has the same <see cref="ItemHeight"/>, scrolling is vertical only, and a
 /// change of the visible range rebuilds those visuals instead of recycling them. Use <see cref="ItemsControl"/> when
 /// the list is small or its rows vary in height.
@@ -759,12 +766,28 @@ public class VirtualList : ItemsControl
             nameof(ItemHeight), typeof(double), typeof(VirtualList),
             new PropertyMetadata(24d) { AffectsMeasure = true, AffectsRender = false });
 
+    /// <summary>The zero-based index of the selected row, or -1 when nothing is selected.</summary>
+    public static readonly DependencyProperty SelectedIndexProperty =
+        DependencyProperty.Register(
+            nameof(SelectedIndex), typeof(int), typeof(VirtualList),
+            new PropertyMetadata(-1) { AffectsRender = true });
+
+    /// <summary>The selected source item, or <see langword="null"/> when nothing is selected.</summary>
+    public static readonly DependencyProperty SelectedItemProperty =
+        DependencyProperty.Register(
+            nameof(SelectedItem), typeof(object), typeof(VirtualList),
+            new PropertyMetadata(null) { AffectsRender = true });
+
     private int _firstRealized = -1;
     private int _lastRealized = -1;
+    private Panel? _itemsHost;
+    private bool _syncingSelection;
 
     /// <summary>Creates an empty virtualizing panel.</summary>
     public VirtualList()
     {
+        IsHitTestVisible = true;
+        Focusable = true;
     }
 
     /// <summary>The fixed height of one row, in pixels.</summary>
@@ -773,6 +796,23 @@ public class VirtualList : ItemsControl
         get => (double)GetValue(ItemHeightProperty)!;
         set => SetValue(ItemHeightProperty, value);
     }
+
+    /// <summary>The zero-based index of the selected row, or -1 when nothing is selected.</summary>
+    public int SelectedIndex
+    {
+        get => (int)GetValue(SelectedIndexProperty)!;
+        set => SetValue(SelectedIndexProperty, value);
+    }
+
+    /// <summary>The selected source item, or <see langword="null"/> when nothing is selected.</summary>
+    public object? SelectedItem
+    {
+        get => GetValue(SelectedItemProperty);
+        set => SetValue(SelectedItemProperty, value);
+    }
+
+    /// <summary>Raised after <see cref="SelectedIndex"/> or <see cref="SelectedItem"/> changes.</summary>
+    public event EventHandler? SelectionChanged;
 
     /// <summary>The source index of the first realized row, or -1 when nothing is realized.</summary>
     public int FirstRealizedIndex => _firstRealized;
@@ -785,9 +825,16 @@ public class VirtualList : ItemsControl
     {
         var padding = Padding;
         var rowHeight = Math.Max(1d, ItemHeight);
-        return new Size(
+        var full = new Size(
             Math.Max(0, availableSize.Width),
             (int)Math.Ceiling(SourceItems.Count * rowHeight + padding.Vertical));
+        if (IsTemplated)
+        {
+            // 模板部件要拿到布局，但 extent 仍由行数与固定行高决定。
+            MeasureTemplate(availableSize);
+        }
+
+        return full;
     }
 
     /// <inheritdoc />
@@ -795,14 +842,28 @@ public class VirtualList : ItemsControl
     {
         var padding = Padding;
         var rowHeight = (float)Math.Max(1d, ItemHeight);
-        var contentWidth = Math.Max(0f, finalSize.Width - padding.Horizontal);
-        var (offset, viewport) = ResolveViewport(finalSize.Height);
-        var (first, last) = ComputeRange(rowHeight, viewport, offset, padding.Top);
-        EnsureRange(first, last);
 
-        for (var index = first; index < last; index++)
+        if (IsTemplated)
         {
-            var visual = Items[index - first];
+            ArrangeTemplate(finalSize);
+            var host = EnsureItemsHost();
+            ArrangeDetachedHost(host, finalSize, padding);
+            var hostTop = ResolveHostTop(host) + host.Padding.Top;
+            var (offset, viewport) = ResolveViewport(finalSize.Height);
+            var (first, last) = ComputeRange(rowHeight, viewport, offset, hostTop);
+            EnsureRange(first, last);
+            ArrangeRealized(host, finalSize, first, rowHeight);
+            return;
+        }
+
+        var contentWidth = Math.Max(0f, finalSize.Width - padding.Horizontal);
+        var (plainOffset, plainViewport) = ResolveViewport(finalSize.Height);
+        var (plainFirst, plainLast) = ComputeRange(rowHeight, plainViewport, plainOffset, padding.Top);
+        EnsureRange(plainFirst, plainLast);
+
+        for (var index = plainFirst; index < plainLast; index++)
+        {
+            var visual = Items[index - plainFirst];
             visual.Measure(new Size((int)Math.Ceiling(contentWidth), (int)Math.Ceiling(rowHeight)));
             visual.Arrange(new RectangleF(
                 (int)Math.Ceiling(padding.Left),
@@ -823,19 +884,355 @@ public class VirtualList : ItemsControl
     /// <inheritdoc />
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
-        if (ReferenceEquals(e.Property, TemplatedControl.TemplateProperty) && e.NewValue is not null)
-        {
-            // 直接给 Template 也拒绝：虚拟化面板没有可供模板接管的行宿主。
-            ClearValue(TemplatedControl.TemplateProperty);
-            throw new NotSupportedException(
-                "VirtualList arranges a virtualized row window itself and cannot be re-skinned by a ControlTemplate.");
-        }
-
         base.OnPropertyChanged(e);
-        if (ReferenceEquals(e.Property, ItemHeightProperty))
+        if (ReferenceEquals(e.Property, ItemHeightProperty)
+            || ReferenceEquals(e.Property, ItemsPanelProperty))
         {
             _firstRealized = -1;
             _lastRealized = -1;
+            _itemsHost = null;
+        }
+
+        if (_syncingSelection)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(e.Property, SelectedIndexProperty))
+        {
+            SyncSelectedItemFromIndex();
+            InvalidateVisual();
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+        else if (ReferenceEquals(e.Property, SelectedItemProperty))
+        {
+            SyncSelectedIndexFromItem();
+            InvalidateVisual();
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnItemsRebuilt()
+    {
+        base.OnItemsRebuilt();
+        if (SelectedIndex >= ItemCount)
+        {
+            SelectedIndex = -1;
+        }
+        else if (SelectedIndex >= 0)
+        {
+            SyncSelectedItemFromIndex();
+        }
+        else if (SelectedItem is not null)
+        {
+            SyncSelectedIndexFromItem();
+        }
+
+        InvalidateVisual();
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanging()
+    {
+        base.OnTemplateChanging();
+        _itemsHost = null;
+        _firstRealized = -1;
+        _lastRealized = -1;
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanged()
+    {
+        base.OnTemplateChanged();
+        if (IsTemplated)
+        {
+            EnsureItemsHost();
+        }
+
+        InvalidateMeasure();
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerPressed(VisualPointerEventArgs args)
+    {
+        if (!IsEnabled || args.Button != MouseButtons.Left)
+        {
+            return;
+        }
+
+        var index = IndexAt(args.Position);
+        if (index < 0)
+        {
+            return;
+        }
+
+        Focus();
+        SelectedIndex = index;
+        args.Handled = true;
+    }
+
+    /// <inheritdoc />
+    protected override void OnKeyDown(VisualKeyEventArgs args)
+    {
+        if (!IsEnabled || ItemCount == 0)
+        {
+            return;
+        }
+
+        var index = SelectedIndex;
+        switch (args.KeyCode)
+        {
+            case Keys.Up:
+                index = index <= 0 ? 0 : index - 1;
+                break;
+            case Keys.Down:
+                index = index < 0 ? 0 : index + 1;
+                break;
+            case Keys.Home:
+                index = 0;
+                break;
+            case Keys.End:
+                index = ItemCount - 1;
+                break;
+            default:
+                return;
+        }
+
+        SelectedIndex = XamlMath.Clamp(index, 0, ItemCount - 1);
+        args.Handled = true;
+    }
+
+    /// <inheritdoc />
+    protected override void OnRender(Graphics graphics)
+    {
+        // 模板负责选中外观；无模板时在已实现的行上自绘选中带。
+        if (IsTemplated || _firstRealized < 0 || SelectedIndex < 0)
+        {
+            return;
+        }
+
+        var offset = SelectedIndex - _firstRealized;
+        if (offset < 0 || offset >= Items.Count)
+        {
+            return;
+        }
+
+        var visual = Items[offset];
+        // 行可能挂在 ItemsPanel 宿主里；绝对矩形换回控件坐标再画。
+        var absolute = visual.AbsoluteBounds;
+        var bounds = new RectangleF(PointFromSurface(absolute.Location), absolute.Size);
+        if (bounds.Width <= 0f || bounds.Height <= 0f)
+        {
+            return;
+        }
+
+        using var path = XamlDrawing.RoundedRectangle(bounds, 4f);
+        using var brush = new SolidBrush(Theme.Current.Selection);
+        graphics.FillPath(brush, path);
+    }
+
+    private int IndexAt(PointF surfacePoint)
+    {
+        if (_firstRealized < 0)
+        {
+            return -1;
+        }
+
+        for (var index = 0; index < Items.Count; index++)
+        {
+            if (Items[index].AbsoluteBounds.Contains(surfacePoint))
+            {
+                return _firstRealized + index;
+            }
+        }
+
+        return -1;
+    }
+
+    private void SyncSelectedItemFromIndex()
+    {
+        _syncingSelection = true;
+        try
+        {
+            var index = SelectedIndex;
+            SelectedItem = index >= 0 && index < ItemCount ? GetItemAt(index) : null;
+        }
+        finally
+        {
+            _syncingSelection = false;
+        }
+    }
+
+    private void SyncSelectedIndexFromItem()
+    {
+        _syncingSelection = true;
+        try
+        {
+            var index = -1;
+            if (SelectedItem is { } item)
+            {
+                for (var candidate = 0; candidate < ItemCount; candidate++)
+                {
+                    if (Equals(GetItemAt(candidate), item))
+                    {
+                        index = candidate;
+                        break;
+                    }
+                }
+            }
+
+            SelectedIndex = index;
+        }
+        finally
+        {
+            _syncingSelection = false;
+        }
+    }
+
+    private Panel EnsureItemsHost()
+    {
+        if (_itemsHost is not null)
+        {
+            return _itemsHost;
+        }
+
+        // ItemsPanel 优先于模板宿主；ItemsControl 已把它作为直接子项挂进来。
+        if (ItemsPanel is not null)
+        {
+            foreach (var child in Children)
+            {
+                if (child is Panel panel && !ReferenceEquals(panel, TemplateRoot))
+                {
+                    _itemsHost = panel;
+                    return panel;
+                }
+            }
+        }
+
+        // 命名为 PART_ItemsPresenter 的普通面板也接受：补上 IsItemsHost，ItemsControl 才会把行放进去。
+        var named = GetTemplateChild<Panel>("PART_ItemsPresenter");
+        if (named is not null)
+        {
+            if (named is not ItemsPresenter && !ItemsControl.GetIsItemsHost(named))
+            {
+                ItemsControl.SetIsItemsHost(named, true);
+            }
+
+            _itemsHost = named;
+            return named;
+        }
+
+        _itemsHost = FindItemsHost(TemplateRoot);
+        if (_itemsHost is null)
+        {
+            throw new InvalidOperationException(
+                "VirtualList ControlTemplate must contain an ItemsPresenter or a panel marked with "
+                + "ItemsControl.IsItemsHost.");
+        }
+
+        return _itemsHost;
+    }
+
+    // 与 ItemsControl 的模板宿主解析保持一致：ItemsPresenter 或 IsItemsHost 面板。
+    private static Panel? FindItemsHost(VisualElement? root)
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        if (root is ItemsPresenter presenter)
+        {
+            return presenter;
+        }
+
+        if (root is Panel panel && ItemsControl.GetIsItemsHost(panel))
+        {
+            return panel;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is VisualElement element && FindItemsHost(element) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    // 模板根里的宿主已经由模板排好；ItemsPanel 宿主是控件的直接子项，需要在这里测量并摆放。
+    private void ArrangeDetachedHost(Panel host, Size finalSize, XamlThickness padding)
+    {
+        if (IsInsideTemplateRoot(host))
+        {
+            return;
+        }
+
+        var rect = new RectangleF(
+            (int)Math.Ceiling(padding.Left),
+            (int)Math.Ceiling(padding.Top),
+            Math.Max(0f, finalSize.Width - padding.Horizontal),
+            Math.Max(0f, finalSize.Height - padding.Vertical));
+        host.Measure(new Size((int)Math.Ceiling(rect.Width), (int)Math.Ceiling(rect.Height)));
+        host.Arrange(rect);
+    }
+
+    private bool IsInsideTemplateRoot(VisualElement element)
+    {
+        if (TemplateRoot is null)
+        {
+            return false;
+        }
+
+        for (var current = element; current is not null; current = current.ParentElement)
+        {
+            if (ReferenceEquals(current, TemplateRoot))
+            {
+                return true;
+            }
+
+            if (ReferenceEquals(current, this))
+            {
+                break;
+            }
+        }
+
+        return false;
+    }
+
+    private float ResolveHostTop(VisualElement host)
+    {
+        var y = 0f;
+        for (var current = host; current is not null && !ReferenceEquals(current, this); current = current.ParentElement)
+        {
+            y += current.Bounds.Y;
+        }
+
+        return y;
+    }
+
+    private void ArrangeRealized(Panel host, Size finalSize, int first, float rowHeight)
+    {
+        var hostPadding = host.Padding;
+        var width = host.Bounds.Width - hostPadding.Horizontal;
+        if (width <= 0f)
+        {
+            width = finalSize.Width - Padding.Horizontal - hostPadding.Horizontal;
+        }
+
+        width = Math.Max(0f, width);
+        for (var index = 0; index < Items.Count; index++)
+        {
+            var visual = Items[index];
+            visual.Measure(new Size((int)Math.Ceiling(width), (int)Math.Ceiling(rowHeight)));
+            visual.Arrange(new RectangleF(
+                hostPadding.Left,
+                hostPadding.Top + ((first + index) * rowHeight),
+                width,
+                rowHeight));
         }
     }
 
@@ -888,16 +1285,4 @@ public class VirtualList : ItemsControl
         return (0f, finalHeight);
     }
 
-    /// <summary>Rejects a control template: rows are virtualized and arranged by this panel.</summary>
-    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
-    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
-    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
-    {
-        if (template is not null)
-        {
-            throw new NotSupportedException(
-                "VirtualList arranges a virtualized row window itself; a ControlTemplate needs a recycling "
-                + "row-container model that this panel does not have. Style its item height and colors instead.");
-        }
-    }
 }

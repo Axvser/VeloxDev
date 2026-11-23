@@ -152,8 +152,8 @@ public sealed class VisualStyle
 
     /// <summary>The control template created while the style is active, or <see langword="null"/>.</summary>
     /// <remarks>
-    /// Only a <see cref="Controls.ContentControl"/> applies a style template; other elements ignore it. A template
-    /// assigned directly to <see cref="Controls.ContentControl.Template"/> wins over this one.
+    /// A <see cref="Controls.ContentControl"/> or <see cref="Controls.TemplatedControl"/> applies a style template;
+    /// other elements ignore it. A template assigned directly to the control's <c>Template</c> wins over this one.
     /// </remarks>
     public VisualControlTemplate? Template { get; set; }
 

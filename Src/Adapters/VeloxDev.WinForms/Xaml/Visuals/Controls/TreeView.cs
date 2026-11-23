@@ -10,11 +10,19 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 
 /// <summary>One row in a <see cref="TreeView"/>: a header, an expanded state and child items.</summary>
 /// <remarks>
-/// The item is painted as a row by its owning <see cref="TreeView"/> and never creates a window. Its
-/// <see cref="Bounds"/> start at the depth indentation; the tree draws the selection and hover bands across the full
-/// row before the item paints itself.
+/// <para>
+/// Without a control template the row is painted by its owning <see cref="TreeView"/>: the tree draws the selection
+/// and hover bands and the item draws its header and disclosure triangle. A row never creates a window.
+/// </para>
+/// <para>
+/// With a <see cref="TemplatedControl.Template"/> the row's template root replaces the self-drawn header. The template must contain a
+/// part named <c>PART_Header</c>, which receives <see cref="Header"/>; an optional <c>PART_Expander</c> part is kept in
+/// sync with <see cref="IsExpanded"/> and an optional <c>PART_ItemsPresenter</c> panel hosts this row's child rows.
+/// <see cref="IsSelected"/>, <see cref="IsPointerOver"/> and <see cref="IsPressed"/> are dependency properties, so a
+/// template trigger can paint the row's interactive state.
+/// </para>
 /// </remarks>
-public class TreeViewItem : VisualElement
+public class TreeViewItem : TemplatedControl
 {
     /// <summary>The text shown in the row.</summary>
     public static readonly DependencyProperty HeaderProperty = DependencyProperty.Register(
@@ -35,6 +43,29 @@ public class TreeViewItem : VisualElement
     public static readonly DependencyProperty ForegroundProperty = DependencyProperty.Register(
         nameof(Foreground), typeof(Color), typeof(TreeViewItem),
         new PropertyMetadata(Color.Empty) { AffectsRender = true });
+
+    /// <summary>Whether the row is the owning tree's selected row.</summary>
+    public static readonly DependencyProperty IsSelectedProperty = DependencyProperty.Register(
+        nameof(IsSelected), typeof(bool), typeof(TreeViewItem),
+        new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>Whether the pointer is over the row.</summary>
+    public static readonly DependencyProperty IsPointerOverProperty = DependencyProperty.Register(
+        nameof(IsPointerOver), typeof(bool), typeof(TreeViewItem),
+        new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>Whether the left pointer button is held down on the row.</summary>
+    public static readonly DependencyProperty IsPressedProperty = DependencyProperty.Register(
+        nameof(IsPressed), typeof(bool), typeof(TreeViewItem),
+        new PropertyMetadata(false) { AffectsRender = true });
+
+    private VisualElement? _headerPart;
+    private VisualElement? _expanderPart;
+    private Panel? _childPresenter;
+    private bool _syncingExpander;
+    private bool _hostsChildrenDirectly;
+    private bool _disposing;
+    private double _childIndent;
 
     /// <summary>Creates a collapsed item with no children.</summary>
     public TreeViewItem()
@@ -71,6 +102,21 @@ public class TreeViewItem : VisualElement
         set => SetValue(ForegroundProperty, value);
     }
 
+    /// <summary>Whether the row is the owning tree's selected row.</summary>
+    public bool IsSelected
+    {
+        get => (bool)GetValue(IsSelectedProperty)!;
+        set => SetValue(IsSelectedProperty, value);
+    }
+
+    /// <summary>Whether the pointer is over the row.</summary>
+    /// <remarks>This dependency property shadows <see cref="VisualElement.IsPointerOver"/> so a template trigger can
+    /// observe the row's hover state.</remarks>
+    public new bool IsPointerOver => (bool)GetValue(IsPointerOverProperty)!;
+
+    /// <summary>Whether the left pointer button is held down on the row.</summary>
+    public bool IsPressed => (bool)GetValue(IsPressedProperty)!;
+
     /// <summary>The child rows.</summary>
     public ObservableCollection<TreeViewItem> Items { get; } = [];
 
@@ -80,22 +126,103 @@ public class TreeViewItem : VisualElement
     /// <summary>The nesting depth; assigned by the owning tree.</summary>
     public int Depth { get; internal set; }
 
+    // 树在挂行时写回；模板部件、子行宿主与缩进都靠它。
+    internal TreeView? OwnerTree { get; set; }
+
+    internal VisualElement? ExpanderPart => _expanderPart;
+
+    internal Panel? ChildPresenter => _childPresenter;
+
+    internal bool HostsChildrenDirectly
+    {
+        get => _hostsChildrenDirectly;
+        set => _hostsChildrenDirectly = value;
+    }
+
+    internal double ChildIndent
+    {
+        get => _childIndent;
+        set => _childIndent = value;
+    }
+
+    internal void SetIsPointerOver(bool value) => SetValue(IsPointerOverProperty, value);
+
+    internal void SetIsPressed(bool value) => SetValue(IsPressedProperty, value);
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
-        var font = ResolveFont(Font ?? (ParentElement as TreeView)?.Font ?? DefaultFont);
-        var measured = VisualText.Measure(Header, font, 0f, wrap: false, RenderDpi);
-        return new Size(
-            (int)Math.Ceiling(measured.Width + Padding.Horizontal),
-            (int)Math.Ceiling(measured.Height + Padding.Vertical));
+        if (IsTemplated)
+        {
+            var root = MeasureTemplate(availableSize);
+            var width = root.Width;
+            var height = root.Height;
+            if (_hostsChildrenDirectly && IsExpanded)
+            {
+                var indent = (int)Math.Ceiling(Math.Max(0d, _childIndent));
+                foreach (var child in Items)
+                {
+                    var measured = child.Measure(new Size(Math.Max(0, availableSize.Width - indent), 0));
+                    width = Math.Max(width, measured.Width + indent);
+                    height += measured.Height;
+                }
+            }
+
+            return new Size(width, height);
+        }
+
+        var header = MeasureHeader();
+        if (!_hostsChildrenDirectly || !IsExpanded)
+        {
+            return header;
+        }
+
+        var widthSelf = header.Width;
+        var heightSelf = header.Height;
+        var childIndent = (int)Math.Ceiling(Math.Max(0d, _childIndent));
+        foreach (var child in Items)
+        {
+            var measured = child.Measure(new Size(Math.Max(0, availableSize.Width - childIndent), 0));
+            widthSelf = Math.Max(widthSelf, measured.Width + childIndent);
+            heightSelf += measured.Height;
+        }
+
+        return new Size(widthSelf, heightSelf);
+    }
+
+    /// <inheritdoc />
+    protected override void ArrangeOverride(Size finalSize)
+    {
+        if (IsTemplated)
+        {
+            var top = 0f;
+            if (TemplateRoot is { } root)
+            {
+                top = Math.Min(finalSize.Height, Math.Max(0f, root.DesiredSize.Height));
+                root.Arrange(new RectangleF(0f, 0f, finalSize.Width, top));
+            }
+
+            if (_hostsChildrenDirectly && IsExpanded)
+            {
+                ArrangeChildren(finalSize, top);
+            }
+
+            return;
+        }
+
+        if (_hostsChildrenDirectly && IsExpanded)
+        {
+            ArrangeChildren(finalSize, MeasureHeader().Height);
+        }
     }
 
     /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
         var theme = Theme.Current;
+        var headerHeight = MeasureHeader().Height;
         var expanderX = Padding.Left - 12f;
-        var centerY = Bounds.Height / 2f;
+        var centerY = headerHeight / 2f;
         if (Items.Count > 0)
         {
             using var brush = new SolidBrush(theme.MutedForeground);
@@ -120,12 +247,12 @@ public class TreeViewItem : VisualElement
             return;
         }
 
-        var font = ResolveFont(Font ?? (ParentElement as TreeView)?.Font ?? DefaultFont);
+        var font = ResolveFont(Font ?? OwnerTree?.Font ?? (ParentElement as TreeView)?.Font ?? DefaultFont);
         var content = new Rectangle(
             (int)Math.Ceiling(Padding.Left),
             (int)Math.Ceiling(Padding.Top),
             Math.Max(0, (int)Math.Ceiling(Bounds.Width - Padding.Horizontal)),
-            Math.Max(0, (int)Math.Ceiling(Bounds.Height - Padding.Vertical)));
+            Math.Max(0, (int)Math.Ceiling(headerHeight - Padding.Vertical)));
         VisualText.Draw(this,
             graphics,
             Header,
@@ -137,16 +264,223 @@ public class TreeViewItem : VisualElement
             StringAlignment.Center);
     }
 
-    /// <summary>Rejects a control template: a row's expander and header are painted by the owning tree.</summary>
-    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
-    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
-    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
-        if (template is not null)
+        base.OnPropertyChanged(e);
+
+        if (ReferenceEquals(e.Property, HeaderProperty))
         {
-            throw new NotSupportedException(
-                "TreeViewItem is painted by its owning TreeView and cannot be re-skinned by a ControlTemplate. "
-                + "Style its header font and foreground instead.");
+            UpdateHeaderPart();
+        }
+        else if (ReferenceEquals(e.Property, IsExpandedProperty))
+        {
+            SyncExpanderState();
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerEntered(VisualPointerEventArgs args)
+    {
+        base.OnPointerEntered(args);
+        SetIsPointerOver(true);
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerExited(VisualPointerEventArgs args)
+    {
+        base.OnPointerExited(args);
+        SetIsPointerOver(false);
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // 释放时保持子行挂在旧模板根里，让基类的 Dispose 顺着父子链回收它们。
+            _disposing = true;
+            if (_expanderPart is { } expander)
+            {
+                expander.PropertyChanged -= OnExpanderPropertyChanged;
+            }
+
+            OwnerTree = null;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanging()
+    {
+        base.OnTemplateChanging();
+
+        if (_expanderPart is { } expander)
+        {
+            expander.PropertyChanged -= OnExpanderPropertyChanged;
+        }
+
+        if (!_disposing)
+        {
+            DetachHostedChildren();
+        }
+
+        _headerPart = null;
+        _expanderPart = null;
+        _childPresenter = null;
+        _hostsChildrenDirectly = false;
+        _childIndent = 0d;
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanged()
+    {
+        base.OnTemplateChanged();
+
+        try
+        {
+            if (IsTemplated)
+            {
+                AttachTemplateParts();
+            }
+        }
+        catch
+        {
+            // 模板无效时把子行交还树，至少 Dispose 能顺着父子链回收它们。
+            OwnerTree?.OnItemTemplateChanged();
+            throw;
+        }
+
+        // 模板换了，子行该落在新的宿主里；交给树重排一次。
+        OwnerTree?.OnItemTemplateChanged();
+        InvalidateMeasure();
+    }
+
+    private Size MeasureHeader()
+    {
+        var font = ResolveFont(Font ?? OwnerTree?.Font ?? (ParentElement as TreeView)?.Font ?? DefaultFont);
+        var measured = VisualText.Measure(Header, font, 0f, wrap: false, RenderDpi);
+        return new Size(
+            (int)Math.Ceiling(measured.Width + Padding.Horizontal),
+            (int)Math.Ceiling(measured.Height + Padding.Vertical));
+    }
+
+    private void ArrangeChildren(Size finalSize, float top)
+    {
+        var indent = (float)Math.Max(0d, _childIndent);
+        var y = top;
+        foreach (var child in Items)
+        {
+            var height = child.DesiredSize.Height;
+            child.Arrange(new RectangleF(indent, y, Math.Max(0f, finalSize.Width - indent), height));
+            y += height;
+        }
+    }
+
+    private void AttachTemplateParts()
+    {
+        var header = GetTemplateChild<VisualElement>("PART_Header");
+        if (header is null)
+        {
+            throw new InvalidOperationException(
+                "TreeViewItem ControlTemplate must contain a part named 'PART_Header'.");
+        }
+
+        _headerPart = header;
+        _expanderPart = GetTemplateChild<VisualElement>("PART_Expander");
+        _childPresenter = GetTemplateChild<Panel>("PART_ItemsPresenter")
+            ?? TreeView.FindItemsHost(TemplateRoot);
+
+        UpdateHeaderPart();
+        if (_expanderPart is not null)
+        {
+            _expanderPart.PropertyChanged += OnExpanderPropertyChanged;
+        }
+
+        SyncExpanderState();
+    }
+
+    private void UpdateHeaderPart()
+    {
+        if (_headerPart is null)
+        {
+            return;
+        }
+
+        switch (_headerPart)
+        {
+            case TextBlock text:
+                text.Text = Header;
+                break;
+            case ContentPresenter presenter:
+                presenter.Content = Header;
+                break;
+            case ContentControl control:
+                control.Content = Header;
+                break;
+        }
+    }
+
+    // 展开器同步只对自身带 IsChecked 的开关类型生效；普通部件由树按命中区域切换。
+    private void SyncExpanderState()
+    {
+        if (_expanderPart is null)
+        {
+            return;
+        }
+
+        _syncingExpander = true;
+        try
+        {
+            switch (_expanderPart)
+            {
+                case ToggleButton toggle:
+                    toggle.IsChecked = IsExpanded;
+                    break;
+                case CheckBox check:
+                    check.IsChecked = IsExpanded;
+                    break;
+            }
+        }
+        finally
+        {
+            _syncingExpander = false;
+        }
+    }
+
+    private void OnExpanderPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_syncingExpander)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(e.Property, ToggleButton.IsCheckedProperty)
+            || ReferenceEquals(e.Property, CheckBox.IsCheckedProperty))
+        {
+            IsExpanded = e.NewValue is true;
+        }
+    }
+
+    // 旧模板根马上要被释放：先把挂在它里面的子行摘出来，否则会被一并 Dispose。
+    private void DetachHostedChildren()
+    {
+        foreach (var child in Items)
+        {
+            if (child.ParentElement is not { } parent)
+            {
+                continue;
+            }
+
+            for (var current = parent; current is not null; current = current.ParentElement)
+            {
+                if (ReferenceEquals(current, this))
+                {
+                    parent.RemoveChild(child);
+                    break;
+                }
+            }
         }
     }
 }
@@ -154,16 +488,22 @@ public class TreeViewItem : VisualElement
 /// <summary>A hierarchical list of <see cref="TreeViewItem"/> rows with selection, expansion and keyboard navigation.</summary>
 /// <remarks>
 /// <para>
-/// Only expanded rows are realized as children; the tree keeps a flat row order for arrangement and input. Put it in
-/// a <see cref="ScrollViewer"/> for long directories. Expansion, selection and collection changes rebuild that flat
-/// order and invalidate the measure.
+/// Without a control template only expanded rows are realized as direct children, and the tree arranges them in a flat
+/// row order. Put it in a <see cref="ScrollViewer"/> for long directories. Expansion, selection and collection changes
+/// rebuild that flat order and invalidate the measure.
+/// </para>
+/// <para>
+/// With a <see cref="TemplatedControl.Template"/> the template root must contain a <c>PART_ItemsPresenter</c> part or a
+/// panel marked with <see cref="ItemsControl.SetIsItemsHost"/>; root rows are hosted there. Each row hosts its own
+/// children in the row template's <c>PART_ItemsPresenter</c> when it has one, otherwise in the row element itself.
+/// The tree does not virtualize rows: a very large expanded tree realizes every visible row.
 /// </para>
 /// <para>
 /// The tree owns the row visuals it shows: an item can be collapsed and shown again, but it should not be shared by
 /// two trees at the same time.
 /// </para>
 /// </remarks>
-public class TreeView : Panel
+public class TreeView : TemplatedControl
 {
     /// <summary>The horizontally selected row, or <see langword="null"/>.</summary>
     public static readonly DependencyProperty SelectedItemProperty = DependencyProperty.Register(
@@ -182,8 +522,12 @@ public class TreeView : Panel
 
     private readonly List<TreeViewItem> _rows = [];
     private readonly HashSet<TreeViewItem> _observing = [];
+    private readonly HashSet<TreeViewItem> _attached = [];
     private TreeViewItem? _hover;
+    private TreeViewItem? _pressedRow;
+    private Panel? _itemsHost;
     private bool _rebuilding;
+    private bool _disposing;
 
     /// <summary>Creates a focusable tree with the current theme font.</summary>
     public TreeView()
@@ -192,6 +536,8 @@ public class TreeView : Panel
         Focusable = true;
         Padding = new XamlThickness(0f);
         Items.CollectionChanged += OnRootItemsChanged;
+        // 预览阶段先截住展开器：模板里用 ToggleButton 当展开器时也要由树统一切换。
+        PreviewPointerPressed += OnPreviewPointerPressed;
     }
 
     /// <summary>Raised after <see cref="SelectedItem"/> changes.</summary>
@@ -248,6 +594,12 @@ public class TreeView : Panel
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (IsTemplated)
+        {
+            EnsureItemsHost();
+            return MeasureTemplate(availableSize);
+        }
+
         var width = 0;
         var height = 0;
         foreach (var row in _rows)
@@ -263,6 +615,13 @@ public class TreeView : Panel
     /// <inheritdoc />
     protected override void ArrangeOverride(Size finalSize)
     {
+        if (IsTemplated)
+        {
+            EnsureItemsHost();
+            ArrangeTemplate(finalSize);
+            return;
+        }
+
         var y = 0f;
         foreach (var row in _rows)
         {
@@ -277,6 +636,13 @@ public class TreeView : Panel
     protected override void RenderContent(Graphics graphics)
     {
         base.RenderContent(graphics);
+
+        // 模板负责整行外观（含选中/悬停），树的合奏带必须退出。
+        if (IsTemplated)
+        {
+            return;
+        }
+
         var theme = Theme.Current;
         foreach (var row in _rows)
         {
@@ -313,16 +679,15 @@ public class TreeView : Panel
             return;
         }
 
-        var local = args.GetPosition(this);
-        var row = RowAt(local.Y);
+        var row = RowAtSurface(args.Position);
         if (row is null)
         {
             return;
         }
 
         Focus();
-        var expanderLeft = (float)(Math.Max(0, row.Depth) * Math.Max(0, Indent));
-        if (row.Items.Count > 0 && local.X >= expanderLeft - 4f && local.X <= expanderLeft + 16f)
+        SetPressedRow(row);
+        if (row.Items.Count > 0 && IsExpanderHit(row, args.Position))
         {
             row.IsExpanded = !row.IsExpanded;
         }
@@ -334,16 +699,51 @@ public class TreeView : Panel
         args.Handled = true;
     }
 
+    // 展开器在按钮自己处理按下之前先切换；否则 ToggleButton 只会改自己的 IsChecked。
+    private void OnPreviewPointerPressed(object? sender, VisualPointerEventArgs args)
+    {
+        if (!IsEnabled || args.Button != MouseButtons.Left)
+        {
+            return;
+        }
+
+        var row = RowAtSurface(args.Position);
+        if (row is null || row.Items.Count == 0 || !IsExpanderHit(row, args.Position))
+        {
+            return;
+        }
+
+        Focus();
+        SetPressedRow(row);
+        row.IsExpanded = !row.IsExpanded;
+        args.Handled = true;
+    }
+
+    /// <inheritdoc />
+    protected override void OnPointerReleased(VisualPointerEventArgs args)
+    {
+        base.OnPointerReleased(args);
+        if (_pressedRow is { } row)
+        {
+            row.SetIsPressed(false);
+            _pressedRow = null;
+        }
+    }
+
     /// <inheritdoc />
     protected override void OnPointerMoved(VisualPointerEventArgs args)
     {
         base.OnPointerMoved(args);
-        var row = RowAt(args.GetPosition(this).Y);
-        if (!ReferenceEquals(row, _hover))
+        var row = RowAtSurface(args.Position);
+        if (ReferenceEquals(row, _hover))
         {
-            _hover = row;
-            InvalidateVisual();
+            return;
         }
+
+        _hover?.SetIsPointerOver(false);
+        _hover = row;
+        _hover?.SetIsPointerOver(true);
+        InvalidateVisual();
     }
 
     /// <inheritdoc />
@@ -352,6 +752,7 @@ public class TreeView : Panel
         base.OnPointerExited(args);
         if (_hover is not null)
         {
+            _hover.SetIsPointerOver(false);
             _hover = null;
             InvalidateVisual();
         }
@@ -422,13 +823,27 @@ public class TreeView : Panel
 
         if (ReferenceEquals(e.Property, SelectedItemProperty))
         {
+            if (e.OldValue is TreeViewItem old)
+            {
+                old.IsSelected = false;
+            }
+
             if (e.NewValue is TreeViewItem next)
             {
+                next.IsSelected = true;
                 ScrollIntoView(next);
             }
 
+            SyncSelectionState();
             InvalidateVisual();
             SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+        else if (ReferenceEquals(e.Property, IndentProperty))
+        {
+            foreach (var item in _observing)
+            {
+                item.ChildIndent = Indent;
+            }
         }
     }
 
@@ -437,6 +852,8 @@ public class TreeView : Panel
     {
         if (disposing)
         {
+            // 释放时不要摘行：让基类顺着旧的模板根/直接子项回收它们。
+            _disposing = true;
             Items.CollectionChanged -= OnRootItemsChanged;
             foreach (var item in _observing)
             {
@@ -444,21 +861,60 @@ public class TreeView : Panel
             }
 
             _observing.Clear();
+            _attached.Clear();
         }
 
         base.Dispose(disposing);
     }
 
-    /// <summary>Rejects a control template: rows are owned and painted by the tree, not by template parts.</summary>
-    /// <param name="template">The template a style supplies, or <see langword="null"/> to clear it.</param>
-    /// <exception cref="NotSupportedException"><paramref name="template"/> is not <see langword="null"/>.</exception>
-    internal override void ApplyStyleTemplate(VisualControlTemplate? template)
+    /// <inheritdoc />
+    protected override void OnTemplateChanging()
     {
-        if (template is not null)
+        base.OnTemplateChanging();
+
+        // 模板根马上要被释放：行先摘出来，OnTemplateChanged 再挂到新宿主。
+        if (!_disposing)
         {
-            throw new NotSupportedException(
-                "TreeView paints its flattened rows itself; a ControlTemplate needs a row-container model that this "
-                + "control does not have. Style its font, foreground and row metrics instead.");
+            DetachAttachedRows();
+        }
+
+        _itemsHost = null;
+    }
+
+    /// <inheritdoc />
+    protected override void OnTemplateChanged()
+    {
+        base.OnTemplateChanged();
+
+        if (IsTemplated)
+        {
+            try
+            {
+                EnsureItemsHost();
+            }
+            catch
+            {
+                // 模板无效时仍把行挂回树上，Dispose 才能顺着父子链回收。
+                foreach (var row in _rows)
+                {
+                    DetachFromCurrentParent(row);
+                    Add(row);
+                    _attached.Add(row);
+                }
+
+                throw;
+            }
+        }
+
+        Rebuild();
+    }
+
+    // 行的模板换了：子行要按新的宿主重挂，整棵树重算一次。
+    internal void OnItemTemplateChanged()
+    {
+        if (!_rebuilding)
+        {
+            Rebuild();
         }
     }
 
@@ -504,17 +960,35 @@ public class TreeView : Panel
             }
 
             // 行视觉归树所有：先把上一轮的行摘掉，再按新的可见顺序挂回去。
-            foreach (var child in Children.ToArray())
+            DetachAttachedRows();
+            if (IsTemplated)
             {
-                if (child is TreeViewItem old)
+                var host = EnsureItemsHost();
+                foreach (var item in Items)
                 {
-                    RemoveChild(old);
+                    AttachSubtree(item, host);
                 }
             }
-
-            foreach (var row in _rows)
+            else
             {
-                Add(row);
+                // 旧路径会把树的子项里所有行清掉；保持这个行为，外部挂进来的行也一并回收。
+                foreach (var child in Children.ToArray())
+                {
+                    if (child is TreeViewItem stray)
+                    {
+                        DetachFromCurrentParent(stray);
+                    }
+                }
+
+                foreach (var row in _rows)
+                {
+                    // 旧路径由树统一摆放所有行；行自己不再托管子行。
+                    row.HostsChildrenDirectly = false;
+                    row.ChildIndent = 0d;
+                    DetachFromCurrentParent(row);
+                    Add(row);
+                    _attached.Add(row);
+                }
             }
         }
         finally
@@ -522,16 +996,169 @@ public class TreeView : Panel
             _rebuilding = false;
         }
 
+        if (_hover is { } hover && !_rows.Contains(hover))
+        {
+            hover.SetIsPointerOver(false);
+            _hover = null;
+        }
+
+        if (_pressedRow is { } pressed && !_rows.Contains(pressed))
+        {
+            pressed.SetIsPressed(false);
+            _pressedRow = null;
+        }
+
         InvalidateMeasure();
+        SyncSelectionState();
         if (SelectedItem is { } selected && !_rows.Contains(selected))
         {
             SelectedItem = null;
         }
     }
 
+    // 模板模式按行递归挂载：根行进模板宿主，子行进父行自己的 PART_ItemsPresenter。
+    private void AttachSubtree(TreeViewItem item, Panel host)
+    {
+        DetachFromCurrentParent(item);
+        host.Add(item);
+        _attached.Add(item);
+        if (!item.IsExpanded || item.Items.Count == 0)
+        {
+            return;
+        }
+
+        var childHost = ResolveChildHost(item);
+        foreach (var child in item.Items)
+        {
+            AttachSubtree(child, childHost);
+        }
+    }
+
+    private Panel ResolveChildHost(TreeViewItem item)
+    {
+        if (item.ChildPresenter is { } presenter)
+        {
+            item.HostsChildrenDirectly = false;
+            item.ChildIndent = 0d;
+            return presenter;
+        }
+
+        item.HostsChildrenDirectly = true;
+        item.ChildIndent = Indent;
+        return item;
+    }
+
+    private void DetachAttachedRows()
+    {
+        foreach (var row in _attached)
+        {
+            DetachFromCurrentParent(row);
+        }
+
+        _attached.Clear();
+    }
+
+    private static void DetachFromCurrentParent(TreeViewItem row)
+    {
+        if (row.ParentElement is { } parent && parent.Children.Contains(row))
+        {
+            parent.RemoveChild(row);
+        }
+    }
+
+    private Panel EnsureItemsHost()
+    {
+        if (_itemsHost is not null)
+        {
+            return _itemsHost;
+        }
+
+        _itemsHost = GetTemplateChild<Panel>("PART_ItemsPresenter")
+            ?? FindItemsHost(TemplateRoot);
+        if (_itemsHost is null)
+        {
+            throw new InvalidOperationException(
+                "TreeView ControlTemplate must contain a part named 'PART_ItemsPresenter' or a panel marked "
+                + "with ItemsControl.IsItemsHost.");
+        }
+
+        return _itemsHost;
+    }
+
+    // 行模板里的子行宿主：PART_ItemsPresenter 优先，其次任一 ItemsPresenter/IsItemsHost 面板。
+    internal static Panel? FindItemsHost(VisualElement? root)
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        if (root is ItemsPresenter presenter)
+        {
+            return presenter;
+        }
+
+        if (root is Panel panel && ItemsControl.GetIsItemsHost(panel))
+        {
+            return panel;
+        }
+
+        foreach (var child in root.Children)
+        {
+            if (child is VisualElement element && FindItemsHost(element) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    private void SyncSelectionState()
+    {
+        foreach (var item in _observing)
+        {
+            item.IsSelected = ReferenceEquals(item, SelectedItem);
+        }
+    }
+
+    private void SetPressedRow(TreeViewItem row)
+    {
+        if (ReferenceEquals(_pressedRow, row))
+        {
+            return;
+        }
+
+        _pressedRow?.SetIsPressed(false);
+        _pressedRow = row;
+        row.SetIsPressed(true);
+    }
+
+    private static bool IsExpanderHit(TreeViewItem row, PointF surfacePoint)
+    {
+        if (row.ExpanderPart is { } expander)
+        {
+            var bounds = expander.AbsoluteBounds;
+            if (bounds.Width > 0f && bounds.Height > 0f)
+            {
+                return bounds.Contains(surfacePoint);
+            }
+        }
+
+        // 模板行没有展开器部件时不猜区域；没有模板的行仍退回旧的自绘三角命中区。
+        if (row.TemplateRoot is not null)
+        {
+            return false;
+        }
+
+        var left = row.AbsoluteBounds.X;
+        return surfacePoint.X >= left - 4f && surfacePoint.X <= left + 16f;
+    }
+
     private void Flatten(TreeViewItem item, int depth)
     {
         item.Depth = depth;
+        item.OwnerTree = this;
         _rows.Add(item);
         if (!item.IsExpanded)
         {
@@ -550,6 +1177,7 @@ public class TreeView : Panel
     {
         if (subscribe)
         {
+            item.OwnerTree = this;
             if (!_observing.Add(item))
             {
                 return;
@@ -577,11 +1205,13 @@ public class TreeView : Panel
         }
     }
 
-    private TreeViewItem? RowAt(float y)
+    private TreeViewItem? RowAtSurface(PointF surfacePoint)
     {
-        foreach (var row in _rows)
+        // 模板模式下父行的 Bounds 包住子行；倒序先命中更深的行。
+        for (var index = _rows.Count - 1; index >= 0; index--)
         {
-            if (y >= row.Bounds.Y && y < row.Bounds.Bottom)
+            var row = _rows[index];
+            if (row.AbsoluteBounds.Contains(surfacePoint))
             {
                 return row;
             }
