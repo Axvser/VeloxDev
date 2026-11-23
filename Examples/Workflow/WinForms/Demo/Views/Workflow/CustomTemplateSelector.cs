@@ -1,6 +1,6 @@
 // VeloxDev customization: which visual view each pooled item kind gets.
 using Demo.ViewModels;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;

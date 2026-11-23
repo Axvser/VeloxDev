@@ -1,13 +1,13 @@
 // VeloxDev customization: the Controller card's typography, accent and code-behind editor policy.
 using System.ComponentModel;
 using Demo.ViewModels;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel;
+using Easel.Visuals;
 
 namespace Demo.Views.Workflow;
 
 /// <summary>The Controller node card: compile / run / stop / close plus the seed payload editor.</summary>
-public sealed partial class ControllerView : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class ControllerView : Easel.Visuals.Controls.UserControl
 {
     private bool _syncingSeed;
     private ControllerViewModel? _bound;
@@ -104,7 +104,7 @@ public sealed partial class ControllerView : VeloxDev.WinForms.Xaml.Visuals.Cont
 
     private void OnSeedPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
     {
-        if (!ReferenceEquals(e.Property, VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox.TextProperty)
+        if (!ReferenceEquals(e.Property, Easel.Visuals.Controls.TextBox.TextProperty)
             || _syncingSeed || DataContext is not ControllerViewModel controller)
         {
             return;

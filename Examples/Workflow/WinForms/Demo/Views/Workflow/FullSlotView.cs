@@ -1,6 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using VeloxDev.WinForms.Xaml;
+using Easel;
 using VeloxDev.WorkflowSystem;
 using DrawingPen = System.Drawing.Pen;
 
@@ -17,13 +17,13 @@ namespace Demo.Views.Workflow;
 /// read as small points rather than a filled square.
 /// </para>
 /// <para>
-/// It is a <see cref="VeloxDev.WinForms.Xaml.Visuals.VisualElement"/> rather than a native island: the whole
+/// It is a <see cref="Easel.Visuals.VisualElement"/> rather than a native island: the whole
 /// surface is painted in one pass, and the workflow engine finds this element through its <see cref="DataContext"/>
 /// just like the XAML slot views. <see cref="SlotState"/> carries the colour; <see cref="Channel"/> is kept for
 /// parity with the WPF view so a template can bind it even though the static ring does not animate.
 /// </para>
 /// </remarks>
-public sealed class FullSlotView : VeloxDev.WinForms.Xaml.Visuals.VisualElement
+public sealed class FullSlotView : Easel.Visuals.VisualElement
 {
     // 与 WPF Full 的 SlotView 同一组比例：端口再大，字形也不超过 32 设计单位。
     private const double GlyphReference = 32d;

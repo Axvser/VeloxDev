@@ -2,7 +2,7 @@
 using Demo.ViewModels.Workflow.Enums;
 using Demo.Views.Workflow;
 using System.Windows.Forms;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 // `TreeView` collides with System.Windows.Forms.TreeView; alias the visual surface product.

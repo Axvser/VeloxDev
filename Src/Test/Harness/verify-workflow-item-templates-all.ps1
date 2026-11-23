@@ -297,7 +297,7 @@ function New-ProbeProject($config, [string] $probeDir) {
 
     switch ($config.ProbeKind) {
         'WinForms' {
-            $xamlGenerator = Join-Path $repoRoot 'Src\Generators\VeloxDev.WinForms.Generator\VeloxDev.WinForms.Generator.csproj'
+            $xamlGenerator = Join-Path $repoRoot 'Easel\Src\Generators\Easel.Generator\Easel.Generator.csproj'
             $project = @"
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -310,13 +310,13 @@ function New-ProbeProject($config, [string] $probeDir) {
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
   </PropertyGroup>
   <ItemGroup>
-    <!-- The generated views take their base types from VeloxDev.WinForms.Xaml; the implicit WinForms namespace
+    <!-- The generated views take their base types from Easel; the implicit WinForms namespace
          would make Control/UserControl/Panel ambiguous in those files, exactly as in the trimmed demo. -->
     <Using Remove="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="$adapter" />
-    <!-- The WinForms XAML generator is an analyzer on the adapter; analyzers do not flow through a
+    <!-- The Easel XAML generator is an analyzer on the adapter; analyzers do not flow through a
          ProjectReference, and the probe owns the generated .xaml files, so both are wired here. -->
     <ProjectReference Include="$xamlGenerator" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <AdditionalFiles Include="Views/**/*.xaml" />

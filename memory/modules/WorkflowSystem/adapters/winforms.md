@@ -4,7 +4,7 @@
 > （`WorkflowInput.For(tree).Route(...)` + `IInputEvents`），指针底下是谁由适配器解析、认不到才回退 Core 的共享曲线判定。
 >
 > **读法**：契约在 `memory/modules/WorkflowSystem/extension.md` §3.9 / §4.3；人面向的搭建指南在
-> `skills/veloxdev-create-workflow/references/practices/gui/winforms.md`；XAML 运行时在 `memory/modules/WinFormsXaml/architecture.md`。
+> `skills/veloxdev-create-workflow/references/practices/gui/winforms.md`；视觉运行时在 Easel 子模块的 `Easel/Src/Easel`。
 > **路径写法**：下文裸文件名都相对 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`。
 
 ---
@@ -126,5 +126,5 @@
 ## 五、外部参照
 
 - 坐标与缩放数学：`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Math/WorkflowSurfaceMath.cs`（七家共用）。
-- 视觉运行时：`memory/modules/WinFormsXaml/architecture.md`。
+- 视觉运行时：Easel 子模块的 `Easel/Src/Easel`。
 - WPF 对照：`memory/modules/WorkflowSystem/adapters/wpf.md`。

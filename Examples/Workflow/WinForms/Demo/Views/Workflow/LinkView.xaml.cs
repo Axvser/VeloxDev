@@ -2,7 +2,7 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using VeloxDev.TransitionSystem;
-using VeloxDev.WinForms.Xaml;
+using Easel;
 using VeloxDev.WorkflowSystem;
 using Demo.Workflow;
 using DrawingPen = System.Drawing.Pen;
@@ -18,7 +18,7 @@ namespace Demo.Views.Workflow;
 /// curve by arc length rather than by a gradient brush, because a gradient's axis is the straight line between the
 /// ends and on a curve it lights the string instead of the rope.
 /// </remarks>
-public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class LinkView : Easel.Visuals.Controls.UserControl
 {
     private const double MinimumPull = 40d;
 

@@ -16,7 +16,7 @@ Each adapter ships a `dotnet new` item-template pack that generates the seven vi
 | slot | `SlotView` | one port's visual |
 | link | `LinkView` | one connection's visual — on MAUI the default surface draws links in one layer; on WinForms the visual path instantiates one per link |
 | tree | `TreeView` | the surface: scroll viewer, canvas, items host, decorators |
-| selector | `TemplateSelector` (`CustomTemplateSelector` on WinForms) | picks the node / link template; WinForms derives from `VeloxDev.WinForms.Xaml.Visuals.VisualTemplateSelector` and returns visual UserControl instances |
+| selector | `TemplateSelector` (`CustomTemplateSelector` on WinForms) | picks the node / link template; WinForms derives from `Easel.Visuals.VisualTemplateSelector` and returns visual UserControl instances |
 | decorator | `GridDecorator` | the grid and the ruler |
 | minimap | `MinimapOverlay` | thumbnail plus a draggable viewport indicator |
 

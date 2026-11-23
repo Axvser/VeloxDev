@@ -3,8 +3,8 @@ using System.Drawing;
 using System.Windows.Forms;
 using Demo.ViewModels;
 using Demo.Workflow;
-using VeloxDev.WinForms.Xaml.Visuals;
-using VeloxDev.WinForms.Xaml.Visuals.Controls;
+using Easel.Visuals;
+using Easel.Visuals.Controls;
 using VeloxDev.WorkflowSystem;
 using WorkflowBehaviors = VeloxDev.WorkflowSystem.AttachedBehaviors;
 using Wf = VeloxDev.WorkflowSystem;
@@ -253,8 +253,8 @@ public sealed class WorkflowCanvas : Control
     {
         for (var current = hit; current is not null; current = current.ParentElement)
         {
-            if (current is VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox
-                or VeloxDev.WinForms.Xaml.Visuals.Controls.RichTextBox)
+            if (current is Easel.Visuals.Controls.TextBox
+                or Easel.Visuals.Controls.RichTextBox)
             {
                 return true;
             }

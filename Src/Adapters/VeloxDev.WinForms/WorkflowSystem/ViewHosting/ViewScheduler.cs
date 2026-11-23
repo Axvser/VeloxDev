@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.Windows.Forms;
 using VeloxDev.Threading;
 using VeloxDev.WorkflowSystem;
-using VisualPanel = VeloxDev.WinForms.Xaml.Visuals.Controls.Panel;
+using VisualPanel = Easel.Visuals.Controls.Panel;
 
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
 /// <summary>Carries materialization batches to the WinForms message loop, or runs them inline when there is none.</summary>
 /// <remarks>
-/// A hosted <see cref="VeloxDev.WinForms.Xaml.Visuals.VisualHost"/> inside a running WinForms message loop takes the batch through
+/// A hosted <see cref="Easel.Visuals.VisualHost"/> inside a running WinForms message loop takes the batch through
 /// <c>BeginInvoke</c>, so a pan does not create every newly visible view on the input frame. A canvas that is not
 /// parented to a surface, whose surface has no handle, or a headless test host with a handle but no message loop
 /// runs the batch synchronously; that is what makes headless tests and the benchmark host deterministic.

@@ -3,11 +3,12 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using System.Threading;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
-using VisualButton = VeloxDev.WinForms.Xaml.Visuals.Controls.Button;
+using Easel;
+using Easel.Visuals;
+using VisualButton = Easel.Visuals.Controls.Button;
 using DrawingPen = System.Drawing.Pen;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -67,8 +68,8 @@ public sealed class WorkflowInfoOverlay : VisualElement
             Foreground = Color.FromArgb(0x7E, 0xC8, 0xFF),
             Background = Color.FromArgb(0x1E, 0x3A, 0x5F),
             BorderBrush = Color.FromArgb(0x7E, 0xC8, 0xFF),
-            BorderThickness = new VeloxDev.WinForms.Xaml.Controls.Thickness(1f),
-            Padding = new VeloxDev.WinForms.Xaml.Controls.Thickness(2f),
+            BorderThickness = new Easel.Controls.Thickness(1f),
+            Padding = new Easel.Controls.Thickness(2f),
             CornerRadius = 4f,
         };
         CopyButton.Click += OnCopyClicked;
@@ -251,18 +252,27 @@ public sealed class WorkflowInfoOverlay : VisualElement
         var y = 8f;
         foreach (var line in BuildLines())
         {
-            VisualText.Draw(
-                this,
+            DrawInfoLine(
                 graphics,
                 line,
-                InfoFont,
-                Color.FromArgb(0xDD, 0xE4, 0xEA),
-                new RectangleF(10f, y, Math.Max(1f, width - 20f - 66f), 20f),
-                wrap: false,
-                StringAlignment.Near,
-                StringAlignment.Near);
+                new RectangleF(10f, y, Math.Max(1f, width - 20f - 66f), 20f));
             y += 20f;
         }
+    }
+
+    // Easel 的 VisualText 不在公开面；这里用的是像素单位字体，等价于它的 NoWrap + Ellipsis 分支。
+    private static void DrawInfoLine(Graphics graphics, string text, RectangleF bounds)
+    {
+        using var brush = new SolidBrush(Color.FromArgb(0xDD, 0xE4, 0xEA));
+        using var format = new StringFormat
+        {
+            Alignment = StringAlignment.Near,
+            LineAlignment = StringAlignment.Near,
+            Trimming = StringTrimming.EllipsisCharacter,
+            FormatFlags = StringFormatFlags.NoWrap,
+        };
+        graphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+        graphics.DrawString(text, InfoFont, brush, bounds, format);
     }
 
     private string[] BuildLines()

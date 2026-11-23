@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem;
-using VisualPanel = VeloxDev.WinForms.Xaml.Visuals.Controls.Panel;
-using XamlVisibility = VeloxDev.WinForms.Xaml.Controls.Visibility;
+using VisualPanel = Easel.Visuals.Controls.Panel;
+using XamlVisibility = Easel.Controls.Visibility;
 
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 
@@ -144,7 +144,7 @@ public sealed class ViewContainer : IViewContainer<VisualPanel, VisualElement, I
 
         // 走 Children.Insert 就绕过了 VisualElement.Add 的隐式样式与排版失效，这里补上这两步。
         host.Children.Insert(index, view);
-        view.RefreshImplicitStyles();
+        view.RefreshStyle();
         host.InvalidateMeasure();
     }
 

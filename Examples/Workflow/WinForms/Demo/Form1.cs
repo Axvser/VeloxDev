@@ -1185,8 +1185,8 @@ namespace Demo
                 var visible = !workflowSurfaceControl.MinimapOverlay.IsMinimapVisible;
                 workflowSurfaceControl.MinimapOverlay.IsMinimapVisible = visible;
                 workflowSurfaceControl.MinimapOverlay.Visibility = visible
-                    ? VeloxDev.WinForms.Xaml.Controls.Visibility.Visible
-                    : VeloxDev.WinForms.Xaml.Controls.Visibility.Collapsed;
+                    ? Easel.Controls.Visibility.Visible
+                    : Easel.Controls.Visibility.Collapsed;
                 workflowSurfaceControl.MinimapOverlay.InvalidateVisual();
                 toggle.Text = visible ? "开" : "关";
                 toggle.TextColor = visible ? CardTheme.ActionCompile : CardTheme.DisabledText;

@@ -13,9 +13,14 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Common\Lib\Lib.csproj" />
     <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.WinForms\VeloxDev.WinForms.csproj" />
-    <ProjectReference Include="..\..\..\..\Src\Generators\VeloxDev.WinForms.Generator\VeloxDev.WinForms.Generator.csproj"
+    <!-- The views are compiled by Easel's XAML generator. Debug uses the Easel submodule; Release
+         resolves the published analyzer so a packed example matches what NuGet consumers get. -->
+    <ProjectReference Include="..\..\..\..\Easel\Src\Generators\Easel.Generator\Easel.Generator.csproj"
                       OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+                      ReferenceOutputAssembly="false"
+                      Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="Easel.Generator" Version="1.0.0"
+                      Condition="'$(Configuration)' != 'Debug'" />
   </ItemGroup>
 
   <ItemGroup>

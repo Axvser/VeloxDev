@@ -1,7 +1,7 @@
 ﻿using System.Drawing;
 using System.Drawing.Drawing2D;
 using VeloxDev.Adapters.NativeSamplers;
-using VeloxDev.WinForms.Xaml.Controls;
+using Easel.Controls;
 
 namespace VeloxDev.TransitionSystem
 {
@@ -11,7 +11,7 @@ namespace VeloxDev.TransitionSystem
         {
             RegisterInterpolator(typeof(Padding), new PaddingSampler());
             RegisterInterpolator(typeof(Thickness), new ThicknessSampler());
-            RegisterInterpolator(typeof(VeloxDev.WinForms.Xaml.Brush), new BrushSampler());
+            RegisterInterpolator(typeof(Easel.Brush), new BrushSampler());
 
             // 渲染 DP：Matrix 变换与可空裁剪矩形有采样器；bool 保持不可动画，由 VisualTransition 显式拒绝。
             RegisterInterpolator(typeof(Matrix), new MatrixSampler());

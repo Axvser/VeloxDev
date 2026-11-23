@@ -2,7 +2,7 @@
 
 namespace Demo.Views.Workflow;
 
-public sealed partial class SlotView : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class SlotView : Easel.Visuals.Controls.UserControl
 {
     public SlotView()
     {

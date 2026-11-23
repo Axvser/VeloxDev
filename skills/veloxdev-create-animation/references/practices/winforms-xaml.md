@@ -25,7 +25,7 @@ The visual runtime is documented in
 ```
 
 Several actions in one `EnterAction`/`ExitAction` are emitted as a `TriggerActionGroup`. A custom
-action derives `VeloxDev.WinForms.Xaml.Visuals.VisualTriggerAction` and overrides
+action derives `Easel.Visuals.VisualTriggerAction` and overrides
 `Invoke(VisualElement target)`; in a template trigger the target is the same `TargetName` part the
 setters write. The bridge is `VisualTransition.Animate(element, property, value, effect)` and
 `VisualTransition.AnimateKeyFrames(...)`; `VisualTransition.Stop(element)` ends the running
@@ -40,10 +40,10 @@ transition sets the element's local priority layer each frame:
 
 ```csharp
 using VeloxDev.TransitionSystem;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 
 Transition<VisualElement>.Create()
-    .Property(v => v.Margin, new VeloxDev.WinForms.Xaml.Controls.Thickness(0, 8, 0, 0))
+    .Property(v => v.Margin, new Easel.Controls.Thickness(0, 8, 0, 0))
     .Property(v => v.CornerRadius, 8f)
     .Effect(new TransitionEffect
     {

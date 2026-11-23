@@ -1,7 +1,7 @@
 using System.Drawing;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
-using VeloxDev.WinForms.Xaml;
+using Easel;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {
@@ -31,8 +31,8 @@ namespace VeloxDev.Adapters.NativeSamplers
             object? options,
             double t)
         {
-            var first = (start as VeloxDev.WinForms.Xaml.Brush)?.ApproximateColor ?? Color.Transparent;
-            var second = (end as VeloxDev.WinForms.Xaml.Brush)?.ApproximateColor ?? first;
+            var first = (start as Easel.Brush)?.ApproximateColor ?? Color.Transparent;
+            var second = (end as Easel.Brush)?.ApproximateColor ?? first;
             property.SetValue(target, new SolidColorBrush(Lerp(first, second, t)));
         }
 

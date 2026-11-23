@@ -91,8 +91,6 @@ jobs:
       publish: ${{ steps.read.outputs.publish }}
       generator_missing: ${{ steps.read.outputs.generator_missing }}
       generator_version: ${{ steps.read.outputs.generator_version }}
-      wingen_missing: ${{ steps.read.outputs.wingen_missing }}
-      wingen_version: ${{ steps.read.outputs.wingen_version }}
       core_missing: ${{ steps.read.outputs.core_missing }}
       core_version: ${{ steps.read.outputs.core_version }}
       cli_missing: ${{ steps.read.outputs.cli_missing }}
@@ -108,7 +106,6 @@ jobs:
         run: |
           $projects = @(
             @{ Id = "VeloxDev.Core.Generator"; Kind = "generator"; Path = "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" },
-            @{ Id = "VeloxDev.WinForms.Generator"; Kind = "winforms_generator"; Path = "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" },
             @{ Id = "VeloxDev.Core"; Kind = "core"; Path = "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" },
             @{ Id = "VeloxDev.Core.Extension"; Kind = "dependent"; Path = "Src/Core/VeloxDev.Core.Extension/VeloxDev.Core.Extension.csproj" },
             @{ Id = "VeloxDev.WPF"; Kind = "dependent"; Path = "Src/Adapters/VeloxDev.WPF/VeloxDev.WPF.csproj" },
@@ -173,8 +170,6 @@ jobs:
           "publish=$(To-Bool ($missing.Count -gt 0))" >> $env:GITHUB_OUTPUT
           "generator_missing=$(To-Bool (Is-Missing 'generator'))" >> $env:GITHUB_OUTPUT
           "generator_version=$(Get-Version 'generator')" >> $env:GITHUB_OUTPUT
-          "wingen_missing=$(To-Bool (Is-Missing 'winforms_generator'))" >> $env:GITHUB_OUTPUT
-          "wingen_version=$(Get-Version 'winforms_generator')" >> $env:GITHUB_OUTPUT
           "core_missing=$(To-Bool (Is-Missing 'core'))" >> $env:GITHUB_OUTPUT
           "core_version=$(Get-Version 'core')" >> $env:GITHUB_OUTPUT
           "cli_missing=$(To-Bool (@($missing | Where-Object { $_.Id -eq 'VeloxDev.Cli' }).Count -gt 0))" >> $env:GITHUB_OUTPUT
@@ -242,7 +237,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # VeloxDev.WinForms compiles its Easel animation adapter only when the Easel submodule is present.
+          # The Easel submodule stays checked out for in-repo Debug builds; Release restores the
+          # published Easel package instead.
           submodules: recursive
 
       - uses: actions/setup-dotnet@v6
@@ -283,41 +279,21 @@ jobs:
             -c Release -o artifacts --no-build
           if ($LASTEXITCODE -ne 0) { throw "pack failed: generator" }
 
-      - name: Build and pack the WinForms generator
-        # Same build-then-pack contract as the Core generator: the analyzer DLL is packed through a
-        # custom None item, so pack must run after the DLL exists. Both generators are packed here so
-        # their NuGet waits happen together instead of one after Core.
-        if: needs.version.outputs.wingen_missing == 'true'
-        shell: pwsh
-        env:
-          VERSION: ${{ needs.version.outputs.wingen_version }}
-        run: |
-          New-Item -ItemType Directory -Force artifacts | Out-Null
-          dotnet build "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" `
-            -c Release `
-            -p:GeneratePackageOnBuild=false
-          if ($LASTEXITCODE -ne 0) { throw "build failed: WinForms generator" }
-          dotnet pack "Src/Generators/VeloxDev.WinForms.Generator/VeloxDev.WinForms.Generator.csproj" `
-            -c Release -o artifacts --no-build
-          if ($LASTEXITCODE -ne 0) { throw "pack failed: WinForms generator" }
-
       - name: NuGet login (OIDC -> temporary key)
         id: login
-        if: needs.version.outputs.generator_missing == 'true' || needs.version.outputs.core_missing == 'true' || needs.version.outputs.wingen_missing == 'true'
+        if: needs.version.outputs.generator_missing == 'true' || needs.version.outputs.core_missing == 'true'
         uses: NuGet/login@v1
         with:
           user: Axvser
 
-      - name: Push the generators and wait until NuGet can serve them
-        # Core restores the Core generator and the WinForms adapter restores its generator, both as
-        # packages. Nothing that depends on a generator is packed until that generator is downloadable.
-        if: needs.version.outputs.generator_missing == 'true' || needs.version.outputs.wingen_missing == 'true'
+      - name: Push the generator and wait until NuGet can serve it
+        # Core restores the Core generator as a package, so nothing that depends on it is packed
+        # until that generator is downloadable.
+        if: needs.version.outputs.generator_missing == 'true'
         shell: pwsh
         env:
           PUSH_CORE_GENERATOR: ${{ needs.version.outputs.generator_missing }}
-          PUSH_WINGEN: ${{ needs.version.outputs.wingen_missing }}
           GENERATOR_VERSION: ${{ needs.version.outputs.generator_version }}
-          WINGEN_VERSION: ${{ needs.version.outputs.wingen_version }}
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           function Push-One([string]$id, [string]$version) {
@@ -333,12 +309,7 @@ jobs:
             Push-One "VeloxDev.Core.Generator" $env:GENERATOR_VERSION
             $pending += [pscustomobject]@{ Id = "VeloxDev.Core.Generator"; Version = $env:GENERATOR_VERSION }
           }
-          if ($env:PUSH_WINGEN -eq 'true') {
-            Push-One "VeloxDev.WinForms.Generator" $env:WINGEN_VERSION
-            $pending += [pscustomobject]@{ Id = "VeloxDev.WinForms.Generator"; Version = $env:WINGEN_VERSION }
-          }
-
-          # Poll both in one loop: waiting for them one after the other pays the slower one twice.
+          # Poll in one loop: waiting on several packages one after the other pays the slowest twice.
           # Ingestion time varies too much to cap the wait: sleep 5 minutes, then poll every minute.
           $delay = 300
           while ($pending.Count -gt 0) {
@@ -464,16 +435,17 @@ jobs:
             --source https://api.nuget.org/v3/index.json --skip-duplicate
           if ($LASTEXITCODE -ne 0) { throw "push failed: VeloxDev.Cli" }
 
-      - name: Wait for the WinForms generator on NuGet before the adapter
-        # The Release build of the adapter takes the generator as a PackageReference, so the exact
-        # generator version must be downloadable before the adapter is packed. A generator pushed by
-        # this run was already waited for above; this covers one that was already on NuGet.
-        if: contains(needs.version.outputs.rest_missing, '"VeloxDev.WinForms"') && needs.version.outputs.wingen_missing != 'true'
+      - name: Wait for Easel on NuGet before the adapter
+        # The Release build of the adapter takes Easel as a PackageReference, so its exact version must
+        # be downloadable before the adapter is packed. Easel is published from its own repository.
+        if: contains(needs.version.outputs.rest_missing, '"VeloxDev.WinForms"')
         shell: pwsh
-        env:
-          VERSION: ${{ needs.version.outputs.wingen_version }}
         run: |
-          $url = "https://api.nuget.org/v3-flatcontainer/veloxdev.winforms.generator/${env:VERSION}/veloxdev.winforms.generator.${env:VERSION}.nupkg"
+          $version = [regex]::Match(
+            (Get-Content "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj" -Raw),
+            'Include="Easel" Version="([^"]+)"').Groups[1].Value
+          if (-not $version) { throw "no Easel PackageReference in VeloxDev.WinForms.csproj" }
+          $url = "https://api.nuget.org/v3-flatcontainer/easel/$version/easel.$version.nupkg"
           # Ingestion time varies too much to cap the wait: sleep 5 minutes, then poll every minute.
           $delay = 300
           while ($true) {
@@ -558,14 +530,12 @@ jobs:
         shell: pwsh
         env:
           GENERATOR_VERSION: ${{ needs.version.outputs.generator_version }}
-          WINGEN_VERSION: ${{ needs.version.outputs.wingen_version }}
           CORE_VERSION: ${{ needs.version.outputs.core_version }}
           CLI_VERSION: ${{ needs.version.outputs.cli_version }}
           NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
         run: |
           $skip = @(
             "VeloxDev.Core.Generator.${env:GENERATOR_VERSION}.nupkg",
-            "VeloxDev.WinForms.Generator.${env:WINGEN_VERSION}.nupkg",
             "VeloxDev.Core.${env:CORE_VERSION}.nupkg",
             "VeloxDev.Cli.${env:CLI_VERSION}.nupkg"
           )

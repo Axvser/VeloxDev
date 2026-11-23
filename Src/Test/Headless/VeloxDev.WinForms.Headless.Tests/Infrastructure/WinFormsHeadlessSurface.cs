@@ -1,7 +1,7 @@
 ﻿using System.Drawing;
 using System.Windows.Forms;
 using VeloxDev.AdapterTestKit;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 using DrawingPointF = System.Drawing.PointF;

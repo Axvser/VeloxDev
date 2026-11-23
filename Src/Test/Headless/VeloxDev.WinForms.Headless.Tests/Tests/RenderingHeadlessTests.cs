@@ -3,10 +3,10 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.WinForms.Headless.Tests.Infrastructure;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
-using XamlRuntime = VeloxDev.WinForms.Xaml.XamlRuntime;
+using XamlRuntime = Easel.XamlRuntime;
 using DrawingSize = System.Drawing.Size;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;

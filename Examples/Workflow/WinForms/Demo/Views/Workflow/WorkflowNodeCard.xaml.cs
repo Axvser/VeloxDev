@@ -1,12 +1,12 @@
 // VeloxDev customization: the card is composed in XAML; the workflow surface binds it to the node model.
 using Demo.ViewModels;
-using VeloxDev.WinForms.Xaml;
+using Easel;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;
 
 /// <summary>A workflow node card composed of visual XAML.</summary>
-public sealed partial class WorkflowNodeCard : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class WorkflowNodeCard : Easel.Visuals.Controls.UserControl
 {
     /// <summary>Creates the card and runs the generated initializer.</summary>
     public WorkflowNodeCard()

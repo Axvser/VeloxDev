@@ -3,14 +3,14 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Linq;
-using VeloxDev.WinForms.Xaml;
+using Easel;
 using VeloxDev.WorkflowSystem;
 using DrawingPen = System.Drawing.Pen;
 
 namespace TemplateNamespace;
 
 /// <summary>Cubic Bézier connection that publishes the curve Core hit-tests and paints it in world coordinates.</summary>
-public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class TemplateClass : Easel.Visuals.Controls.UserControl
 {
     private const double MinimumPull = 40d;
     private ILinkComponent? _publishedLink;

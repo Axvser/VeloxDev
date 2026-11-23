@@ -2,9 +2,9 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
-using VisualCanvas = VeloxDev.WinForms.Xaml.Visuals.Controls.Canvas;
+using Easel;
+using Easel.Visuals;
+using VisualCanvas = Easel.Visuals.Controls.Canvas;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 

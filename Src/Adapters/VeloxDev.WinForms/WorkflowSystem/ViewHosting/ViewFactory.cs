@@ -1,4 +1,4 @@
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 

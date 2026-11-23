@@ -11,7 +11,7 @@
 
 ## 一、条目产出什么形状
 
-**XAML-first，整棵是视觉树**：tree/node/slot/link 产出 `TemplateClass.xaml` + `.xaml.cs`（code-behind 基类 `VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl`）；grid-decorator / minimap-overlay / template-selector 是纯 `.cs`。`InitializeComponent` 由生成器输出为 private 普通方法。
+**XAML-first，整棵是视觉树**：tree/node/slot/link 产出 `TemplateClass.xaml` + `.xaml.cs`（code-behind 基类 `Easel.Visuals.Controls.UserControl`）；grid-decorator / minimap-overlay / template-selector 是纯 `.cs`。`InitializeComponent` 由生成器输出为 private 普通方法。
 
 | 条目 | 形状 | 关键锚点 |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ tree 的 XAML 直接引用 `local:GridDecorator`、`local:NodeView`、`local:Slo
 
 ### P3 · `SlotPath` 用 XAML 的 `Shapes.SvgPathParser`
 
-解析器是 `VeloxDev.WinForms.Xaml.Controls.Shapes.SvgPathParser.Parse`（`<Path Data>` 共用）；支持 `M/L/C/Q/A/Z` 常用命令，看不懂的字符就地停下，图标只画一部分而不报错。坐标系是 1024 artboard 缩放到控件尺寸。
+解析器是 `Easel.Controls.Shapes.SvgPathParser.Parse`（`<Path Data>` 共用）；支持 `M/L/C/Q/A/Z` 常用命令，看不懂的字符就地停下，图标只画一部分而不报错。坐标系是 1024 artboard 缩放到控件尺寸。
 
 ### P1b · tree 资源就是 selector 的接线
 
@@ -88,6 +88,6 @@ tree 资源里 `DataTemplate x:Key="NodeTemplate"` / `LinkTemplate` / `SlotTempl
 | 结论 | 在哪 |
 |---|---|
 | 适配器侧的硬限制、相机、输入、DPI | `memory/modules/WorkflowSystem/adapters/winforms.md` |
-| XAML 运行时、生成器、对象资源、`.xaml.cs` | `memory/modules/WinFormsXaml/architecture.md` |
+| XAML 运行时、生成器、对象资源、`.xaml.cs` | `Easel/Src/Easel` 与 `Easel/Src/Generators/Easel.Generator` |
 | 适配器项目结构与三条轴 | `memory/modules/VeloxDev.WinForms/architecture.md` |
 | 「怎么用这套模板搭一个 WinForms 工作流视图」 | `skills/veloxdev-create-workflow/references/practices/gui/winforms.md` 的 `## Item templates` |

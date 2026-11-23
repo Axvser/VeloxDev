@@ -1,7 +1,7 @@
 ﻿# VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`SlotStateBrushConverter`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32/DPI 辅助）、`Xaml/`（视觉 XAML 运行时与 `Visuals/`）。同目录另有一份 `README.md`。
-> 包版本 12.0.0；生成器独立在 `Src/Generators/VeloxDev.WinForms.Generator/`。
+> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`SlotStateBrushConverter`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32/DPI 辅助）、视觉 XAML 运行时已移到 Easel 子模块（`Easel/Src/Easel/`）。同目录另有一份 `README.md`。
+> 包版本 12.0.0；生成器独立在 `Src/Generators/Easel.Generator/`。
 > **单一 XAML 后端**：控件是 `Xaml.Visuals.Controls` 下的 `VisualElement`，`VisualHost` 是唯一 HWND；工作流表面是 `VisualHost` 上的附着行为。每个可见 item 由 `ViewPool` 经 Core 池物化为一个视觉元素，没有第二个 HWND。`Xaml.Controls` 只留共享原语。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台。它在三条轴上的平台差异分别落在
@@ -67,9 +67,10 @@
 | `Nullable` + `ImplicitUsings` + `LangVersion latest` | 同名属性 | 全模块开可空 |
 | `GeneratePackageOnBuild` + `<Version>12.0.0</Version>` | 同名属性 | 与其余六家同；**没有** `GenerateDocumentationFile` |
 | Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core` | 两个引用项 | 与生成器那套双轨同形 |
+| Debug → `ProjectReference Easel/Src/Easel`／非 Debug → `PackageReference Easel 1.0.0` | Easel 引用 | 视觉运行时永远来自 Easel，不随本仓库发布 |
 | 四个 TFM 一起编 | — | 新写的 BCL 调用必须在 netframework4.6.1 与 netcoreapp3.0 上都存在 |
 
-**别用 `bin/`/`obj/` 目录名推支持的框架**：两个下游 demo 都是 `net10.0-windows`，解析到 `net8.0-windows` 那份资产。旧 TFM 的兼容层在 `Xaml/Compat.cs`：IsExternalInit、UnconditionalSuppressMessageAttribute、Clamp/IsFinite/TickCount64。
+**别用 `bin/`/`obj/` 目录名推支持的框架**：两个下游 demo 都是 `net10.0-windows`，解析到 `net8.0-windows` 那份资产。旧 TFM 的兼容层在 `Compat.cs`：IsExternalInit、UnconditionalSuppressMessageAttribute、Clamp/IsFinite/TickCount64。
 
 ## 五、陷阱（带依据）
 
@@ -93,7 +94,7 @@
 | 端口字形配色 | `WorkflowSystem/AttachedBehaviors/SlotStateBrushConverter.cs` |
 | 小地图 | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` |
 | 网格/标尺调色板与间距 | 模板条目 `workflow-grid-decorator/TemplateClass.cs` |
-| item → 视图的选择器 | `Xaml/Visuals/VisualTemplateSelector.cs` + 模板派生类 |
+| item → 视图的选择器 | `Easel.Visuals.VisualTemplateSelector` + 模板派生类 |
 | Win32 样式、100 控件阈值 | `WorkflowSystem/Platform/NativeWindowStyleHelper.cs` |
 | DPI 换算 | `WorkflowSystem/Platform/WorkflowDpi.cs` |
 | 视觉运行时、DP、绑定、样式、模板 | `Xaml/Visuals/` |

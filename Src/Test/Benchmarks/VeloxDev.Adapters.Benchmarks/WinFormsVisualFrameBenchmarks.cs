@@ -3,8 +3,8 @@ extern alias wf;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using BenchmarkDotNet.Attributes;
-using WfControls = wf::VeloxDev.WinForms.Xaml.Visuals.Controls;
-using WfVisuals = wf::VeloxDev.WinForms.Xaml.Visuals;
+using WfControls = Easel.Visuals.Controls;
+using WfVisuals = Easel.Visuals;
 
 namespace VeloxDev.Adapters.Benchmarks;
 

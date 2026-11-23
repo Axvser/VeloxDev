@@ -3,17 +3,17 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem.Platform;
 using VeloxDev.WorkflowSystem.StandardEx;
 using PlatformInput = System.Windows.Forms;
 using Wf = VeloxDev.WorkflowSystem;
-using VisualCanvas = VeloxDev.WinForms.Xaml.Visuals.Controls.Canvas;
-using VisualContextMenu = VeloxDev.WinForms.Xaml.Visuals.Controls.VisualContextMenu;
-using VisualScrollViewer = VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollViewer;
-using VisualScrollBar = VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollBar;
-using VisualScrollOffsetEventArgs = VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollOffsetRequestedEventArgs;
+using VisualCanvas = Easel.Visuals.Controls.Canvas;
+using VisualContextMenu = Easel.Visuals.Controls.VisualContextMenu;
+using VisualScrollViewer = Easel.Visuals.Controls.ScrollViewer;
+using VisualScrollBar = Easel.Visuals.Controls.ScrollBar;
+using VisualScrollOffsetEventArgs = Easel.Visuals.Controls.ScrollOffsetRequestedEventArgs;
 using DrawingPointF = System.Drawing.PointF;
 using DrawingSize = System.Drawing.Size;
 
@@ -351,7 +351,7 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        var zoom = XamlMath.Clamp(state.Zoom * factor, 0.1d, 10d);
+        var zoom = Math.Max(0.1d, Math.Min(10d, state.Zoom * factor));
         var world = SurfaceToWorld(host, surfacePoint);
         state.Zoom = zoom;
         state.Pan = new DrawingPointF(

@@ -1,16 +1,16 @@
 ﻿using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
-using VisualCanvas = VeloxDev.WinForms.Xaml.Visuals.Controls.Canvas;
-using VisualGrid = VeloxDev.WinForms.Xaml.Visuals.Controls.Grid;
-using VisualPanel = VeloxDev.WinForms.Xaml.Visuals.Controls.Panel;
-using VisualScrollViewer = VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollViewer;
-using VisualUserControl = VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl;
-using XamlBinding = VeloxDev.WinForms.Xaml.Binding;
+using VisualCanvas = Easel.Visuals.Controls.Canvas;
+using VisualGrid = Easel.Visuals.Controls.Grid;
+using VisualPanel = Easel.Visuals.Controls.Panel;
+using VisualScrollViewer = Easel.Visuals.Controls.ScrollViewer;
+using VisualUserControl = Easel.Visuals.Controls.UserControl;
+using XamlBinding = Easel.Binding;
 using DrawingPen = System.Drawing.Pen;
 using DrawingSize = System.Drawing.Size;
 

@@ -1,6 +1,6 @@
 ﻿using System.Drawing;
-using VeloxDev.WinForms.Xaml;
-using XamlBrush = VeloxDev.WinForms.Xaml.Brush;
+using Easel;
+using XamlBrush = Easel.Brush;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 

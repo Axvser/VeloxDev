@@ -1,9 +1,9 @@
 ﻿using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem.ViewHosting;
-using VisualPanel = VeloxDev.WinForms.Xaml.Visuals.Controls.Panel;
+using VisualPanel = Easel.Visuals.Controls.Panel;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -13,7 +13,7 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Attach it to a visual <see cref="VeloxDev.WinForms.Xaml.Visuals.Controls.Canvas"/> and bind
+/// Attach it to a visual <see cref="Easel.Visuals.Controls.Canvas"/> and bind
 /// <see cref="ItemsSourceProperty"/> to the virtualized item collection (normally <c>Helper.VisibleItems</c>). The
 /// pool bookkeeping lives in Core; <see cref="ViewSourcePipeline"/> closes the WinForms layers.
 /// </para>

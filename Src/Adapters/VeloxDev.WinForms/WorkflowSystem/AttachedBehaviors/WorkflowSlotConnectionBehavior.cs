@@ -1,7 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Windows.Forms;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel;
+using Easel.Visuals;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 

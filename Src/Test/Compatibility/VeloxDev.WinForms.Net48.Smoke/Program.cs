@@ -1,6 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 
 namespace Compat;
 

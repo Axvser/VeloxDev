@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Specialized;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem;
-using VisualPanel = VeloxDev.WinForms.Xaml.Visuals.Controls.Panel;
+using VisualPanel = Easel.Visuals.Controls.Panel;
 
 namespace VeloxDev.WorkflowSystem.ViewHosting;
 

@@ -100,7 +100,7 @@ namespace VeloxDev.TransitionSystem
             Control? own = target switch
             {
                 Control control => control,
-                VeloxDev.WinForms.Xaml.Visuals.VisualElement { Surface: { } surface } => surface,
+                Easel.Visuals.VisualElement { Surface: { } surface } => surface,
                 _ => null,
             };
 

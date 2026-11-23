@@ -244,7 +244,7 @@ public sealed class WorkflowSurfaceHeadlessTests
         Assert.AreSame(graph.Link, linkView.DataContext, "moving a node keeps the pooled link view");
         Assert.AreEqual(surface.View.Canvas.Bounds.Width, linkView.Bounds.Width, 1d,
             "the link keeps the canvas width after a node move");
-        Assert.IsTrue(linkView.Visibility == VeloxDev.WinForms.Xaml.Controls.Visibility.Visible);
+        Assert.IsTrue(linkView.Visibility == Easel.Controls.Visibility.Visible);
     }
 
     [TestMethod]

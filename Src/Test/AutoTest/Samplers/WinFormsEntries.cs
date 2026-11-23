@@ -1,9 +1,9 @@
 using System.Drawing;
 using System.Reflection;
-using AdapterBrush = VeloxDev.WinForms.Xaml.Brush;
+using AdapterBrush = Easel.Brush;
 using DrawingColor = System.Drawing.Color;
-using AdapterSolidBrush = VeloxDev.WinForms.Xaml.SolidColorBrush;
-using AdapterThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
+using AdapterSolidBrush = Easel.SolidColorBrush;
+using AdapterThickness = Easel.Controls.Thickness;
 using VeloxDev.Adapters.NativeSamplers;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;

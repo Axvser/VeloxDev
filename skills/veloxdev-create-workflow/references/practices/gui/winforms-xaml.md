@@ -1,28 +1,28 @@
-﻿# WinForms XAML runtime — complete reference
+# WinForms XAML runtime — complete reference
 
-`VeloxDev.WinForms` does not use a platform XAML. It ships one visual runtime in
-`VeloxDev.WinForms.Xaml`: the control library lives in `VeloxDev.WinForms.Xaml.Visuals.Controls`
+`VeloxDev.WinForms` does not use a platform XAML. It uses Easel's visual runtime in
+`Easel`: the control library lives in `Easel.Visuals.Controls`
 (controls derive from `VisualElement`), shapes in `.Visuals.Controls.Shapes`, shared layout primitives
-in `VeloxDev.WinForms.Xaml.Controls`, and the source generator in
-`VeloxDev.WinForms.Generator`. `VisualHost` is the only WinForms `Control`; it owns the single HWND
+in `Easel.Controls`, and the source generator in
+`Easel.Generator`. `VisualHost` is the only WinForms `Control`; it owns the single HWND
 and paints, lays out, hit-tests and routes input for the whole tree. Read this page before writing
 markup, a custom control, a style/trigger, or an animation on WinForms.
 [winforms.md](winforms.md) covers the workflow-specific surface.
 
 **Targets:** `netframework4.6.1`, `net5.0-windows`, `netcoreapp3.0`, `net8.0-windows`. On old TFMs
-the adapter uses its own `Xaml/Compat.cs` shim (`IsExternalInit`,
-`UnconditionalSuppressMessageAttribute`, `Clamp`, `IsFinite`, `TickCount64`).
+the adapter keeps its own `Compat.cs` shim (`IsExternalInit`,
+`UnconditionalSuppressMessageAttribute`).
 
 ## 1. Prefix and type resolution
 
 | Written in XAML | Resolves to |
 |---|---|
-| `Foo` (no prefix) | `Xaml.Visuals.Controls.Foo`, then `.Visuals.Controls.Shapes.Foo`, then `.Visuals.Foo`, then the shared primitives in `.Xaml.Controls` |
+| `Foo` (no prefix) | `Easel.Visuals.Controls.Foo`, then `.Visuals.Controls.Shapes.Foo`, then `.Visuals.Foo`, then the shared primitives in `.Easel.Controls` |
 | `local:Foo` | your own `clr-namespace` |
 | `native:Foo` | rejected: a visual parent only accepts `VisualElement` children |
 | `v:Foo` | legacy alias for unprefixed `Foo`; still accepted, not required |
 
-An unprefixed name that is not a visual type is `VELOX_XAML019`; write `local:Foo`. The root follows
+An unprefixed name that is not a visual type is `EASEL_XAML019`; write `local:Foo`. The root follows
 the same rule and must derive from `VisualElement`.
 
 The usual namespaces:
@@ -37,7 +37,7 @@ xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembl
 A XAML view is a `partial` class whose base is a visual control:
 
 ```csharp
-public sealed partial class MyView : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class MyView : Easel.Visuals.Controls.UserControl
 {
     public MyView() => InitializeComponent();
 }
@@ -202,7 +202,7 @@ Markup trigger actions animate one dependency property:
 ```
 
 `TransitionAction`, `KeyFrameAnimation` and `TriggerActionGroup` are the built-in actions; a custom
-action derives `VeloxDev.WinForms.Xaml.Visuals.VisualTriggerAction` and overrides
+action derives `Easel.Visuals.VisualTriggerAction` and overrides
 `Invoke(VisualElement target)`. A template trigger passes the same `TargetName` part to setters and
 actions. The code bridge is `VisualTransition.Animate` / `AnimateKeyFrames` / `Stop`.
 
@@ -212,8 +212,8 @@ Code-behind can also animate the visual element directly with
 ```csharp
 using VeloxDev.TransitionSystem;
 
-Transition<VeloxDev.WinForms.Xaml.Visuals.VisualElement>.Create()
-    .Property(v => v.Margin, new VeloxDev.WinForms.Xaml.Controls.Thickness(0, 8, 0, 0))
+Transition<Easel.Visuals.VisualElement>.Create()
+    .Property(v => v.Margin, new Easel.Controls.Thickness(0, 8, 0, 0))
     .Property(v => v.CornerRadius, 8f)
     .Effect(new TransitionEffect
     {
@@ -403,7 +403,7 @@ The generator reports `VELOX_XAML001–019` and `VELOX_XAMLP001–005`. The most
 | `VELOX_XAML004` | unsupported construct |
 | `VELOX_XAML013` | unknown attached property |
 | `VELOX_XAML014` | invalid `Style.TargetType` |
-| `VELOX_XAML019` | unprefixed name is not a visual type; write `local:` |
+| `EASEL_XAML019` | unprefixed name is not a visual type; write `local:` |
 
 ## 12. Workflow mapping
 
@@ -488,7 +488,7 @@ tree has no visual-only equivalent.
 ## 13. Verification
 
 ```bash
-dotnet test Src/Test/Unit/WinFormsXaml/VeloxDev.WinForms.Xaml.Test/VeloxDev.WinForms.Xaml.Test.csproj
+dotnet test Easel/Src/Test/Unit/Easel.Test/Easel.Test.csproj
 dotnet test Src/Test/Headless/VeloxDev.WinForms.Headless.Tests/VeloxDev.WinForms.Headless.Tests.csproj
 powershell -NoProfile -ExecutionPolicy Bypass -File Src/Test/Harness/verify-workflow-item-templates-all.ps1 -Platform WinForms -Strict
 ```
@@ -497,6 +497,6 @@ The runtime tests need a real control handle and a pumped message queue: transit
 posted through `Control.BeginInvoke`. The template harness generates and builds all seven items, but
 it cannot prove drawing; run the Trimmed demo for that.
 
-`Examples/XamlGallery` is the full feature catalogue. Build it or run it with `--smoke` after
+`Easel/Examples/XamlGallery` is the full feature catalogue. Build it or run it with `--smoke` after
 changing runtime features; `--capture`, `--entry`, `--group`, `--scroll`, `--light`, `--dump` drive
 and capture one card.

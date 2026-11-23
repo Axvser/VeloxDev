@@ -6,10 +6,10 @@ using System.Drawing;
 using BenchmarkDotNet.Attributes;
 using VeloxDev.MVVM;
 using VeloxDev.WorkflowSystem;
-using WfControls = wf::VeloxDev.WinForms.Xaml.Visuals.Controls;
+using WfControls = Easel.Visuals.Controls;
 using WfPool = wf::VeloxDev.WorkflowSystem.AttachedBehaviors.ViewPool;
 using WfPoolChangedEventArgs = wf::VeloxDev.WorkflowSystem.AttachedBehaviors.ViewPoolChangedEventArgs;
-using WfVisuals = wf::VeloxDev.WinForms.Xaml.Visuals;
+using WfVisuals = Easel.Visuals;
 
 namespace VeloxDev.Adapters.Benchmarks;
 
@@ -89,12 +89,12 @@ public class WinFormsViewPoolBenchmarks
         root.Add(new WfControls.Border
         {
             Background = Color.FromArgb(255, 37, 37, 38),
-            Margin = new wf::VeloxDev.WinForms.Xaml.Controls.Thickness(0),
+            Margin = new Easel.Controls.Thickness(0),
         });
 
         var content = new WfControls.StackPanel
         {
-            Margin = new wf::VeloxDev.WinForms.Xaml.Controls.Thickness(12, 36, 12, 8),
+            Margin = new Easel.Controls.Thickness(12, 36, 12, 8),
         };
         content.Add(new WfControls.TextBlock
         {
@@ -107,7 +107,7 @@ public class WinFormsViewPoolBenchmarks
             {
                 Text = "runtime value / status line",
                 Foreground = Color.FromArgb(255, 170, 174, 182),
-                Margin = new wf::VeloxDev.WinForms.Xaml.Controls.Thickness(0, 3, 0, 0),
+                Margin = new Easel.Controls.Thickness(0, 3, 0, 0),
             });
         }
 
@@ -115,13 +115,13 @@ public class WinFormsViewPoolBenchmarks
         {
             Text = "Run",
             Height = 24d,
-            Margin = new wf::VeloxDev.WinForms.Xaml.Controls.Thickness(0, 6, 0, 0),
+            Margin = new Easel.Controls.Thickness(0, 6, 0, 0),
         });
         content.Add(new WfControls.Button
         {
             Text = "Stop",
             Height = 24d,
-            Margin = new wf::VeloxDev.WinForms.Xaml.Controls.Thickness(0, 4, 0, 0),
+            Margin = new Easel.Controls.Thickness(0, 4, 0, 0),
         });
         root.Add(content);
         return root;

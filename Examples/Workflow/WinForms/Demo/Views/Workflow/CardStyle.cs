@@ -4,14 +4,14 @@
 // and its markup has no font literal. The card chrome therefore keeps colours in XAML and sets the font here, from
 // the same metric constants the GDI card theme already owns.
 using System.Drawing;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
-using VisualButton = VeloxDev.WinForms.Xaml.Visuals.Controls.Button;
-using VisualItemsControl = VeloxDev.WinForms.Xaml.Visuals.Controls.ItemsControl;
-using VisualRichTextBox = VeloxDev.WinForms.Xaml.Visuals.Controls.RichTextBox;
-using VisualTextBox = VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox;
-using VisualTextBlock = VeloxDev.WinForms.Xaml.Visuals.Controls.TextBlock;
-using XamlVisibility = VeloxDev.WinForms.Xaml.Controls.Visibility;
+using Easel;
+using Easel.Visuals;
+using VisualButton = Easel.Visuals.Controls.Button;
+using VisualItemsControl = Easel.Visuals.Controls.ItemsControl;
+using VisualRichTextBox = Easel.Visuals.Controls.RichTextBox;
+using VisualTextBox = Easel.Visuals.Controls.TextBox;
+using VisualTextBlock = Easel.Visuals.Controls.TextBlock;
+using XamlVisibility = Easel.Controls.Visibility;
 
 namespace Demo.Views.Workflow;
 

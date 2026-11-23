@@ -1,8 +1,8 @@
 ﻿using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem.Platform;
 using DrawingPen = System.Drawing.Pen;
 

@@ -3,7 +3,7 @@
 namespace TemplateNamespace;
 
 /// <summary>A workflow node card composed entirely in XAML.</summary>
-public sealed partial class TemplateClass : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class TemplateClass : Easel.Visuals.Controls.UserControl
 {
     public TemplateClass()
     {

@@ -1,18 +1,17 @@
 using System.Drawing.Drawing2D;
 using System.Reflection;
-using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;
 
-// The SVG path reader is internal to the XAML shapes; the slot attachment uses the same one.
+// The SVG path reader is internal to Easel's shapes; the slot attachment uses the same one.
 // Reflection keeps this suite free of an InternalsVisibleTo for a parser that only serves glyphs.
 [TestClass]
 public sealed class SvgPathParserTests
 {
     private static GraphicsPath Build(string data)
     {
-        var type = typeof(WorkflowSurfaceBehavior).Assembly.GetType(
-            "VeloxDev.WinForms.Xaml.Controls.Shapes.SvgPathParser")
+        var type = typeof(Easel.Visuals.VisualElement).Assembly.GetType(
+            "Easel.Controls.Shapes.SvgPathParser")
             ?? throw new InvalidOperationException("SvgPathParser moved; update the headless suite.");
         var method = type.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static)
             ?? throw new InvalidOperationException("SvgPathParser.Parse moved; update the headless suite.");

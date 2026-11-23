@@ -1,13 +1,13 @@
 // VeloxDev customization: the Python card's typography, accent and script editor policy.
 using System.ComponentModel;
 using Demo.ViewModels;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel;
+using Easel.Visuals;
 
 namespace Demo.Views.Workflow;
 
 /// <summary>The Python script node card: description, script editor and its dynamic port strips.</summary>
-public sealed partial class PythonNodeView : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class PythonNodeView : Easel.Visuals.Controls.UserControl
 {
     private bool _syncingScript;
     private PythonScriptNodeViewModel? _bound;
@@ -100,7 +100,7 @@ public sealed partial class PythonNodeView : VeloxDev.WinForms.Xaml.Visuals.Cont
 
     private void OnScriptPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
     {
-        if (!ReferenceEquals(e.Property, VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox.TextProperty)
+        if (!ReferenceEquals(e.Property, Easel.Visuals.Controls.TextBox.TextProperty)
             || _syncingScript || DataContext is not PythonScriptNodeViewModel python)
         {
             return;

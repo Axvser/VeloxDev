@@ -1,4 +1,4 @@
-using VeloxDev.WinForms.Xaml.Controls;
+using Easel.Controls;
 
 namespace VeloxDev.Adapters.NativeSamplers
 {

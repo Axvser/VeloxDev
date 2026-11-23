@@ -2,7 +2,7 @@
 
 namespace Demo.Views.Workflow;
 
-public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class TreeView : Easel.Visuals.Controls.UserControl
 {
     public TreeView()
     {

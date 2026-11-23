@@ -1,13 +1,13 @@
 // VeloxDev customization: the Timer card's typography, accent and interval editor policy.
 using System.ComponentModel;
 using Demo.ViewModels;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel;
+using Easel.Visuals;
 
 namespace Demo.Views.Workflow;
 
 /// <summary>The Timer node card: interval editor and the most recent tick.</summary>
-public sealed partial class TimerNodeView : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class TimerNodeView : Easel.Visuals.Controls.UserControl
 {
     private bool _syncingInterval;
     private TimerNodeViewModel? _bound;
@@ -100,7 +100,7 @@ public sealed partial class TimerNodeView : VeloxDev.WinForms.Xaml.Visuals.Contr
     // collapse to zero while the user is still typing.
     private void OnIntervalPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
     {
-        if (!ReferenceEquals(e.Property, VeloxDev.WinForms.Xaml.Visuals.Controls.TextBox.TextProperty)
+        if (!ReferenceEquals(e.Property, Easel.Visuals.Controls.TextBox.TextProperty)
             || _syncingInterval || DataContext is not TimerNodeViewModel timer)
         {
             return;

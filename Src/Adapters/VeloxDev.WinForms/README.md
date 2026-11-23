@@ -4,16 +4,17 @@ Package: `VeloxDev.WinForms` · Targets: `netframework4.6.1;net5.0-windows;netco
 · Namespaces: `VeloxDev.WorkflowSystem.AttachedBehaviors` (the workflow surface),
 `VeloxDev.WorkflowSystem.Platform` (Win32/DPI helpers).
 
-There is one XAML backend, the **visual backend**. It ships a dependency-property runtime, a Roslyn
-generator, and a WPF/Avalonia-shaped control library whose controls live in
-`VeloxDev.WinForms.Xaml.Visuals.Controls` and derive from `VeloxDev.WinForms.Xaml.Visuals.VisualElement`.
+The visual backend is **Easel**. The `Easel` submodule supplies the dependency-property runtime, the
+Roslyn generator (`Easel.Generator`), and a WPF/Avalonia-shaped control library whose controls live in
+`Easel.Visuals.Controls` and derive from `Easel.Visuals.VisualElement`. This adapter adds the workflow
+surface, the transition engine, and the animation bridge over that runtime.
 A `VisualHost` is the only WinForms `Control` in the tree: it owns one HWND and paints, lays out,
 hit-tests and routes input for the whole tree. The minimap and info HUD are ordinary visual elements
 inside that tree, not HWND siblings. The workflow surface is an attached behavior on that host.
 
 ## Type resolution and markup
 
-`VeloxDev.WinForms.Xaml.Controls` holds only shared primitives: `Thickness`, `GridLength`,
+`Easel.Controls` holds only shared primitives: `Thickness`, `GridLength`,
 `RowDefinition`, `ColumnDefinition`, the layout enums (`Visibility`, `HorizontalAlignment`,
 `VerticalAlignment`, `DockPlacement`, `GridUnitType`, `Stretch`, `TextAlignment`), internal
 `XamlDrawing`, and `Shapes.SvgPathParser`.
@@ -22,12 +23,12 @@ XAML is written **unprefixed**:
 
 | Written | Resolves to |
 | --- | --- |
-| `Foo` | `Visuals.Controls.Foo`, then `Visuals.Controls.Shapes.Foo`, then `Visuals.Foo`, then the primitives in `Xaml.Controls` |
+| `Foo` | `Easel.Visuals.Controls.Foo`, then `Easel.Visuals.Controls.Shapes.Foo`, then `Easel.Visuals.Foo`, then the primitives in `Easel.Controls` |
 | `local:Foo` | a type in your own `clr-namespace` |
 | `native:Foo` / `System.Windows.Forms` | rejected; a visual parent only accepts `VisualElement` children |
 | `v:Foo` | accepted as a legacy alias for unprefixed `Foo`; not required |
 
-An unprefixed name that resolves to no visual type is `VELOX_XAML019`; write `local:` for your own
+An unprefixed name that resolves to no visual type is `EASEL_XAML019`; write `local:` for your own
 type. A view root must derive from `VisualElement`, and its code-behind calls `InitializeComponent()`.
 
 Supported forms: unprefixed controls, attached properties (`Grid.Row="1"` or `<Grid.Row>1</Grid.Row>`),
@@ -187,7 +188,7 @@ WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);
 - `CustomTemplateSelector : VisualTemplateSelector` returns `VisualElement` instances (`NodeTemplate?.Create()`, etc.). `VisualTemplateSelector` is the item → view seam.
 - The shell (inspector, menus, status bar) stays ordinary WinForms; only the surface is visual.
 - Tree templates put `PART_SurfaceBorder`, `PART_GridDecorator`, `PART_ScrollViewer`, `PART_Canvas`, `PART_MinimapOverlay` and `PART_InfoOverlay` in one visual `Grid`, structurally the same as the WPF tree. `PointerPressSourceName` names the visual part that blank-canvas panning starts from; no HWND difference remains.
-- Runnable samples: `Examples/Workflow/WinForms` and `Examples/Workflow/WinForms Trimmed`; the visual catalogue is [`Examples/XamlGallery`](../../../Examples/XamlGallery/README.md).
+- Runnable samples: `Examples/Workflow/WinForms` and `Examples/Workflow/WinForms Trimmed`; the visual catalogue is [Easel's gallery](../../../Easel/Examples/XamlGallery/README.md).
 
 ## Behaviors
 

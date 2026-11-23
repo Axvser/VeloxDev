@@ -139,7 +139,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 `WorkflowSurfaceBehavior`（部件解析、相机、输入路由、视口持久化）、`ViewPool`（可见集 → 视觉元素）、
 `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior`（槽测量、标题拖动、插槽连接）、
 `SlotStateBrushConverter`、`WorkflowMinimapOverlay`；网格与标尺、节点/插槽/连线的视觉外观是模板条目的职责，选择器基类是
-`VeloxDev.WinForms.Xaml.Visuals.VisualTemplateSelector`。模板因此只剩视觉 XAML 根与部件。
+`Easel.Visuals.VisualTemplateSelector`。模板因此只剩视觉 XAML 根与部件。
 - Jalium（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/`）**不走这条**：
 角色落成附着行为（`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` /
 `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds`）+ 小地图 `WorkflowMinimapOverlay` +

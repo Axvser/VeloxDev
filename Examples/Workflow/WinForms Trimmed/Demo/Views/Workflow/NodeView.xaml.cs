@@ -3,7 +3,7 @@
 namespace Demo.Views.Workflow;
 
 /// <summary>A workflow node card composed entirely in XAML.</summary>
-public sealed partial class NodeView : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class NodeView : Easel.Visuals.Controls.UserControl
 {
     public NodeView()
     {

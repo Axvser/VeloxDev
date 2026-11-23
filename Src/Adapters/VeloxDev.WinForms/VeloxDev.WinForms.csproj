@@ -10,7 +10,7 @@
 		<LangVersion>latest</LangVersion>
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
 		<!-- WFO1000: the adapter's existing public designer properties are not designer-serialized.
-		     IL2026/IL2075: the XAML layer intentionally uses TypeDescriptor/reflection for native properties. -->
+		     IL2026/IL2075: the workflow surface reflects over template views and native properties. -->
 		<NoWarn>$(NoWarn);WFO1000;IL2026;IL2059;IL2067;IL2075</NoWarn>
 		<!-- The .NET Framework 4.6.1 and .NET Core 3.0 reference assemblies carry less nullable metadata;
 		     the same code is warning-free on net5/net8. Keep the old TFMs building without hiding warnings there. -->
@@ -20,9 +20,9 @@
 		<Title>VeloxDev.WinForms</Title>
 		<Version>12.0.0</Version>
 		<Authors>Axvser</Authors>
-		<Description>VeloxDev.Core + WinForms, including the XAML-first view runtime.</Description>
+		<Description>VeloxDev.Core + WinForms: the workflow surface and the VeloxDev transition engine adapter over the Easel visual runtime.</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
-		<PackageTags>winforms;xaml;workflow;ui;veloxdev</PackageTags>
+		<PackageTags>winforms;workflow;ui;veloxdev;easel</PackageTags>
 		<RepositoryUrl>https://github.com/Axvser/VeloxDev</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 	</PropertyGroup>
@@ -32,35 +32,15 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!-- The XAML source generator compiles these into the generated InitializeComponent. -->
-		<AdditionalFiles Include="**/*.xaml" />
-	</ItemGroup>
-
-	<PropertyGroup>
-		<!-- Easel is a git submodule at the repository root. The adapter is compiled only when that project is
-		     present; a package reference replaces this default later. -->
-		<EaselProject Condition="'$(EaselProject)' == ''">$(MSBuildThisFileDirectory)..\..\..\Easel\Src\Easel\Easel.csproj</EaselProject>
-	</PropertyGroup>
-
-	<ItemGroup Condition="Exists('$(EaselProject)')">
-		<ProjectReference Include="$(EaselProject)" />
-	</ItemGroup>
-
-	<ItemGroup Condition="!Exists('$(EaselProject)')">
-		<Compile Remove="XamlAnimation/**/*.cs" />
+		<!-- Easel is a git submodule at the repository root. Debug builds it from source; Release resolves
+		     the published package so the adapter's nuspec carries the real Easel dependency. -->
+		<ProjectReference Include="..\..\..\Easel\Src\Easel\Easel.csproj" Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="Easel" Version="1.0.0" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
 		<PackageReference Include="VeloxDev.Core" Version="12.0.0" Condition="'$(Configuration)' != 'Debug'" />
-		<!-- Debug uses the local generator source; Release resolves the analyzer package from NuGet,
-		     which is what the published adapter depends on and what the release workflow gates on. -->
-		<ProjectReference Include="..\..\Generators\VeloxDev.WinForms.Generator\VeloxDev.WinForms.Generator.csproj"
-		                  OutputItemType="Analyzer"
-		                  ReferenceOutputAssembly="false"
-		                  Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.WinForms.Generator" Version="12.0.0"
-		                  Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 </Project>

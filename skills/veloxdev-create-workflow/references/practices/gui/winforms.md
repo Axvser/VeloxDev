@@ -1,6 +1,6 @@
 ﻿# Windows Forms
 
-`VeloxDev.WinForms` · targets `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` · version 12.0.0
+`VeloxDev.WinForms` · targets `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` · version 13.0.0
 
 There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md`. This is the summary a consumer needs.
 
@@ -14,9 +14,9 @@ There is a long-form adapter README at `Src/Adapters/VeloxDev.WinForms/README.md
 styles, triggers, animations, custom controls, or a `DataTemplate`; this page only summarizes the
 workflow surface.
 
-WinForms has no platform XAML, so this adapter ships its own visual runtime (`Src/Adapters/VeloxDev.WinForms/Xaml/`) and a Roslyn generator (`Src/Generators/VeloxDev.WinForms.Generator/`). The generated `InitializeComponent()` builds a tree of `VisualElement`s hosted by one `VisualHost`.
+WinForms has no platform XAML, so this adapter ships its own visual runtime (`Easel/Src/Easel/`) and a Roslyn generator (`Src/Generators/Easel.Generator/`). The generated `InitializeComponent()` builds a tree of `VisualElement`s hosted by one `VisualHost`.
 
-- **Unprefixed means the visual backend**: `VeloxDev.WinForms.Xaml.Visuals.Controls` / `.Shapes` / `.Xaml`, plus the shared primitives in `.Xaml.Controls` (`UserControl`, `Canvas`, `Grid`, `Border`, `StackPanel`, `DockPanel`, `ScrollViewer`, `ItemsControl`, `TextBlock`, `Button`, `TextBox`, `TreeView`, `Path`, `Style`, `DataTemplate`, …).
+- **Unprefixed means the visual backend**: `Easel.Visuals.Controls` / `.Shapes` / `.Xaml`, plus the shared primitives in `.Easel.Controls` (`UserControl`, `Canvas`, `Grid`, `Border`, `StackPanel`, `DockPanel`, `ScrollViewer`, `ItemsControl`, `TextBlock`, `Button`, `TextBox`, `TreeView`, `Path`, `Style`, `DataTemplate`, …).
 - `local:` is your own namespace; the item templates use it for sibling views. The root follows the same rule: `<UserControl …>` and `<local:TreeView …>` resolve by the same table.
 - `native:` means `System.Windows.Forms` and is **rejected inside the visual tree**; native content is only possible through an explicit `NativeControlHost` island.
 - `v:` is still accepted as a legacy alias for unprefixed, but is not required.
@@ -32,7 +32,7 @@ xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembl
 
 ```xml
 <ItemGroup>
-  <ProjectReference Include="…/VeloxDev.WinForms.Generator.csproj"
+  <ProjectReference Include="…/Easel.Generator.csproj"
                     OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   <AdditionalFiles Include="**/*.xaml" />
 </ItemGroup>
@@ -41,7 +41,7 @@ xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembl
 **Code-behind names the adapter base with its full namespace:**
 
 ```csharp
-public sealed partial class TreeView : VeloxDev.WinForms.Xaml.Visuals.Controls.UserControl
+public sealed partial class TreeView : Easel.Visuals.Controls.UserControl
 ```
 
 ## Base control library
@@ -88,13 +88,13 @@ Attached coordinates follow the same `Owner.Property` spelling:
 
 Markup trigger actions animate one dependency property: `TransitionAction` for one segment,
 `KeyFrameAnimation` for a keyed chain, and `TriggerActionGroup` for several actions. A custom action
-derives `VeloxDev.WinForms.Xaml.Visuals.VisualTriggerAction`. Code-behind can also use
+derives `Easel.Visuals.VisualTriggerAction`. Code-behind can also use
 `VeloxDev.TransitionSystem.Transition<T>` directly on the element's CLR property wrappers:
 
 ```csharp
 using VeloxDev.TransitionSystem;
 
-Transition<VeloxDev.WinForms.Xaml.Visuals.VisualElement>.Create()
+Transition<Easel.Visuals.VisualElement>.Create()
     .Property(v => v.CornerRadius, 8f)
     .Effect(new TransitionEffect
     {
@@ -208,7 +208,7 @@ The surface opens the strip on a right-press on a link, positions it, and suspen
 
 ⚙ **The tree's visual selector is a resource.** Declare `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" …>` in the tree's resources; `WorkflowSurfaceBehavior` resolves that key by default (an explicit `VisualTemplateSelector` / `SetVisualTemplateSelector` overrides it).
 
-⚙ **Shared helpers:** `XamlRuntime.ParseColor` for palette strings. Each template draws its own rounded rectangle.
+⚙ **Shared helpers:** `Easel.XamlRuntime.ParseColor` for palette strings. Each template draws its own rounded rectangle.
 
 ⚙ **The decorator is the floating ruler.** `GridDecorator.RulerBand` feeds the virtualizer and its own viewport-fixed ruler layer; there is no separate ruler overlay form.
 

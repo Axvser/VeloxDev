@@ -1,5 +1,5 @@
 ﻿// VeloxDev customization: which visual each item kind gets.
-using VeloxDev.WinForms.Xaml.Visuals;
+using Easel.Visuals;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Views.Workflow;

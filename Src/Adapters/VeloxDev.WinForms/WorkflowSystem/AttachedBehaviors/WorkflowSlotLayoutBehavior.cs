@@ -1,10 +1,10 @@
 ﻿using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using VeloxDev.WinForms.Xaml;
-using VeloxDev.WinForms.Xaml.Visuals;
-using VisualCanvas = VeloxDev.WinForms.Xaml.Visuals.Controls.Canvas;
-using VisualItemsControl = VeloxDev.WinForms.Xaml.Visuals.Controls.ItemsControl;
+using Easel;
+using Easel.Visuals;
+using VisualCanvas = Easel.Visuals.Controls.Canvas;
+using VisualItemsControl = Easel.Visuals.Controls.ItemsControl;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
