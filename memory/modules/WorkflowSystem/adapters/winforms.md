@@ -65,6 +65,7 @@
 ### 2.6 连线：选择器给每条 link 一个 LinkView
 
 - `ViewPool` 通过 tree 的 `LinkTemplate` 为每条 link（含 virtual link）实例化一个视图；`DataTemplate` 把 `StartLeft/StartTop/EndLeft/EndTop` 绑到 `Sender.Anchor.*` / `Receiver.Anchor.*`，把 `CanRender` 绑到 `IsVisible`；表面 `ApplyLinkStyles` 再写 `LineColor`/`HighlightColor`/`IsVirtual`。视图 `OnRender` 画 cubic 并 `PublishCurve`。
+- **`LinkView` 的 `Bounds` 是整张画布，曲线可能画到负世界坐标**；`GetInvalidationBounds()` 必须按贝塞尔控制点的包围盒算脏区（Full 和 WinForms Trimmed 的 LinkView 都这样做）。默认 Bounds 只覆盖 0..画布，负象限的悬停高亮不会重画，整面重画（如系统截图）才“突然”完整。
 - **曲线是世界坐标**；相机变换只在绘制时加。`Start/End` 与发布给 Core 命中测试的是同一条曲线。
 - 命中在世界坐标里按半径判：半径取 `WorkflowInput.HitRadius`（demo 设 `LinkHitRadius = 6f`）。节点卡是不透明的，压在下面的那段线不画、也不应答，端口附近除外。
 - **WinForms 的 ViewPool 是独立实现**：`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/ViewPool.cs` 按 item 类型回收（每类上限 512），复用前把 DataContext 置空、重挂后设新项。配合 `VisualBindingExpression` 的父 DataContext 重求值，复用的 `PART_InputSlot` 会改绑到新槽位；少了这一步旧槽位拿到新 Anchor、真正的 Receiver 仍是 NaN，Link 空白。可选 `NodeLayerName`/`LinkLayerName` 把视图分到两个 Canvas；`DeferMaterialization=true` 时只在 WinForms 消息循环里分批建视图，无头宿主同步。

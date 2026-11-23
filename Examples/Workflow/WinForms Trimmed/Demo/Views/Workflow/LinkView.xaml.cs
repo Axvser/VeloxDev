@@ -76,6 +76,27 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.U
         }
     }
 
+    // 链接视图铺满画布，曲线却可能画到负世界坐标里；高亮/悬停的脏区必须按曲线包围盒算，
+    // 否则只重画 0..Bounds 的象限，系统截图触发整面重画后才“突然”完整。
+    protected override RectangleF GetInvalidationBounds()
+    {
+        if (CanRender && DataContext is ILinkComponent link && link.IsRenderReady()
+            && double.IsFinite(StartLeft) && double.IsFinite(StartTop)
+            && double.IsFinite(EndLeft) && double.IsFinite(EndTop))
+        {
+            var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull);
+            var minX = points.Min(point => point.X);
+            var minY = points.Min(point => point.Y);
+            var maxX = points.Max(point => point.X);
+            var maxY = points.Max(point => point.Y);
+            var bounds = RectangleF.FromLTRB((float)minX, (float)minY, (float)maxX, (float)maxY);
+            bounds.Inflate(12f, 12f);
+            return bounds;
+        }
+
+        return base.GetInvalidationBounds();
+    }
+
     protected override void OnRender(Graphics graphics)
     {
         if (!CanRender || DataContext is not ILinkComponent link || !link.IsRenderReady())
