@@ -11,6 +11,9 @@ using PlatformInput = System.Windows.Forms;
 using Wf = VeloxDev.WorkflowSystem;
 using VisualCanvas = VeloxDev.WinForms.Xaml.Visuals.Controls.Canvas;
 using VisualContextMenu = VeloxDev.WinForms.Xaml.Visuals.Controls.VisualContextMenu;
+using VisualScrollViewer = VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollViewer;
+using VisualScrollBar = VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollBar;
+using VisualScrollOffsetEventArgs = VeloxDev.WinForms.Xaml.Visuals.Controls.ScrollOffsetRequestedEventArgs;
 using DrawingPointF = System.Drawing.PointF;
 using DrawingSize = System.Drawing.Size;
 
@@ -496,7 +499,22 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         state.Canvas = root is null ? null : FindVisualNamed(root, GetCanvasName(host));
-        state.Scroll = root is null ? null : FindVisualNamed(root, GetScrollViewerName(host));
+        var scroll = root is null ? null : FindVisualNamed(root, GetScrollViewerName(host));
+        if (!ReferenceEquals(state.Scroll, scroll))
+        {
+            if (state.Scroll is VisualScrollViewer previous)
+            {
+                previous.ScrollOffsetRequested -= state.OnScrollOffsetRequested;
+                previous.IsExternalScroll = false;
+            }
+
+            state.Scroll = scroll;
+            if (scroll is VisualScrollViewer viewer)
+            {
+                viewer.IsExternalScroll = true;
+                viewer.ScrollOffsetRequested += state.OnScrollOffsetRequested;
+            }
+        }
         state.Grid = root is null ? null : FindVisualNamed(root, GetGridDecoratorName(host));
         state.GridDecorator = state.Grid as IWorkflowGridDecorator;
         state.PressSource = root is null ? null : FindVisualNamed(root, GetPointerPressSourceName(host));
@@ -524,6 +542,12 @@ public sealed class WorkflowSurfaceBehavior
         if (state.Minimap is IWorkflowMinimapScrollSource minimap)
         {
             minimap.ViewportScrollRequested -= state.OnMinimapScrollRequested;
+        }
+
+        if (state.Scroll is VisualScrollViewer viewer)
+        {
+            viewer.ScrollOffsetRequested -= state.OnScrollOffsetRequested;
+            viewer.IsExternalScroll = false;
         }
 
         state.Minimap = null;
@@ -719,23 +743,27 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        if (state.VisualHost is { } visualHost)
-        {
-            var client = visualHost.LogicalClientSize;
-            if (double.IsNaN(canvas.Width) || Math.Abs(canvas.Width - client.Width) > 0.01)
-            {
-                canvas.Width = client.Width;
-            }
-
-            if (double.IsNaN(canvas.Height) || Math.Abs(canvas.Height - client.Height) > 0.01)
-            {
-                canvas.Height = client.Height;
-            }
-        }
-
-
+        // 画布尺寸就是 ScrollViewer 的内容尺寸：世界范围 × 相机缩放，至少铺满视口。
+        // 滚动条因此由内容自身的测量结果驱动，节点/缩放改变范围时条会跟着变。
+        var cameraZoom = state.Zoom <= 0d ? 1d : state.Zoom;
         var content = VisualContentOffset(state);
         state.Content = new DrawingPointF((float)content.Horizontal, (float)content.Vertical);
+        var bounds = ScrollWorldBounds(state);
+        var hostClient = state.VisualHost?.LogicalClientSize ?? DrawingSize.Empty;
+        var extentWidth = (float)Math.Max(hostClient.Width, (bounds.MaxX - bounds.MinX) * cameraZoom);
+        var extentHeight = (float)Math.Max(hostClient.Height, (bounds.MaxY - bounds.MinY) * cameraZoom);
+        if (double.IsNaN(canvas.Width) || Math.Abs(canvas.Width - extentWidth) > 0.01)
+        {
+            canvas.Width = extentWidth;
+        }
+
+        if (double.IsNaN(canvas.Height) || Math.Abs(canvas.Height - extentHeight) > 0.01)
+        {
+            canvas.Height = extentHeight;
+        }
+
+        state.ExternalOriginX = (float)(bounds.MinX * cameraZoom);
+        state.ExternalOriginY = (float)(bounds.MinY * cameraZoom);
         canvas.Transform = new Matrix(
             (float)state.Zoom,
             0f,
@@ -744,6 +772,13 @@ public sealed class WorkflowSurfaceBehavior
             state.Pan.X + state.Content.X,
             state.Pan.Y + state.Content.Y);
         canvas.InvalidateVisual();
+
+        if (state.Scroll is VisualScrollViewer viewer)
+        {
+            viewer.SetExternalOffset(
+                -state.Pan.X - state.Content.X - state.ExternalOriginX,
+                -state.Pan.Y - state.Content.Y - state.ExternalOriginY);
+        }
 
         if (state.GridDecorator is { } grid)
         {
@@ -760,13 +795,13 @@ public sealed class WorkflowSurfaceBehavior
         if (state.Minimap is IWorkflowMinimapOverlay minimap)
         {
             var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
-            var client = state.VisualHost?.LogicalClientSize ?? DrawingSize.Empty;
+            var viewport = SurfaceViewport(state);
             minimap.ScrollOffsetX = -(state.Pan.X + state.Content.X) / zoom;
             minimap.ScrollOffsetY = -(state.Pan.Y + state.Content.Y) / zoom;
             minimap.ContentOffsetX = 0d;
             minimap.ContentOffsetY = 0d;
-            minimap.ViewportWidth = client.Width / zoom;
-            minimap.ViewportHeight = client.Height / zoom;
+            minimap.ViewportWidth = viewport.Width / zoom;
+            minimap.ViewportHeight = viewport.Height / zoom;
             minimap.WorkflowTree = state.Tree;
             state.Minimap.InvalidateVisual();
         }
@@ -781,18 +816,36 @@ public sealed class WorkflowSurfaceBehavior
             info.InvalidateVisual();
         }
 
-        if (state.Tree is { } tree && state.VisualHost is { } host)
+        if (state.Tree is { } tree && state.VisualHost is not null)
         {
             var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
-            var client = host.LogicalClientSize;
+            var viewport = SurfaceViewport(state);
             var band = state.GridDecorator?.RulerBand ?? 0d;
             tree.SetVirtualizeInset(left: band, top: band);
             tree.GetHelper().Viewport = new Wf.Viewport(
                 (-state.Pan.X - state.Content.X) / zoom,
                 (-state.Pan.Y - state.Content.Y) / zoom,
-                client.Width / zoom,
-                client.Height / zoom);
+                viewport.Width / zoom,
+                viewport.Height / zoom);
         }
+    }
+
+    // 表面视口是 ScrollViewer 的 presenter 区域（滚动条占位后剩下的部分）；还没排版时退回客户区。
+    private static DrawingSize SurfaceViewport(SurfaceState state)
+    {
+        if (state.Scroll is VisualScrollViewer viewer
+            && viewer.ViewportWidth > 1f
+            && viewer.ViewportHeight > 1f)
+        {
+            return new DrawingSize(
+                (int)Math.Round(viewer.ViewportWidth),
+                (int)Math.Round(viewer.ViewportHeight));
+        }
+
+        var client = state.VisualHost?.LogicalClientSize ?? DrawingSize.Empty;
+        return new DrawingSize(
+            Math.Max(0, client.Width - (int)Math.Ceiling(state.Content.X)),
+            Math.Max(0, client.Height - (int)Math.Ceiling(state.Content.Y)));
     }
 
     private static Wf.Offset VisualContentOffset(SurfaceState state)
@@ -800,6 +853,69 @@ public sealed class WorkflowSurfaceBehavior
         var content = state.Tree?.Layout?.ActualOffset ?? new Wf.Offset();
         var band = state.GridDecorator?.RulerBand ?? 0d;
         return new Wf.Offset(content.Horizontal + band, content.Vertical + band);
+    }
+
+    // 滚动范围取「原点尺寸 ∪ 所有节点」，节点被拖到原点外或新增在右侧时滚动条自动长出去。
+    private static (double MinX, double MinY, double MaxX, double MaxY) ScrollWorldBounds(SurfaceState state)
+    {
+        var layout = state.Tree?.Layout;
+        var minX = 0d;
+        var minY = 0d;
+        var maxX = Math.Max(0d, layout?.ActualSize.Width ?? 0d);
+        var maxY = Math.Max(0d, layout?.ActualSize.Height ?? 0d);
+
+        if (state.Tree is { } tree && tree.Nodes is { } nodes)
+        {
+            foreach (var node in nodes)
+            {
+                if (node.Anchor is not { } anchor || node.Size is not { } size)
+                {
+                    // 反序列化/构造中的节点可能暂时没有几何；没有几何就不参与滚动范围。
+                    continue;
+                }
+
+                minX = Math.Min(minX, anchor.Horizontal);
+                minY = Math.Min(minY, anchor.Vertical);
+                maxX = Math.Max(maxX, anchor.Horizontal + size.Width);
+                maxY = Math.Max(maxY, anchor.Vertical + size.Height);
+            }
+        }
+
+        // 换树时从内容范围重新起算；同一棵树里一旦被相机拖出去过，就保留扩展后的范围（WPF 的
+        // Negative/PositiveOffset 也是只长不回），拖回内容区时条不会缩回原长度。
+        if (!state.WorldBoundsValid || !ReferenceEquals(state.WorldBoundsTree, state.Tree))
+        {
+            state.WorldBoundsTree = state.Tree;
+            state.WorldBoundsValid = true;
+            state.WorldMinX = minX;
+            state.WorldMinY = minY;
+            state.WorldMaxX = maxX;
+            state.WorldMaxY = maxY;
+        }
+        else
+        {
+            state.WorldMinX = Math.Min(state.WorldMinX, minX);
+            state.WorldMinY = Math.Min(state.WorldMinY, minY);
+            state.WorldMaxX = Math.Max(state.WorldMaxX, maxX);
+            state.WorldMaxY = Math.Max(state.WorldMaxY, maxY);
+        }
+
+        // 相机拖出内容边缘时，把可见的内容区也纳入范围：Canvas/ScrollViewer 的 extent 随拖动长大，
+        // 条不会在内容边缘之外固定住（WPF 的画布也是靠 Negative/PositiveOffset 这样长出去的）。
+        // 左上先扣掉标尺带，初始视口不算作越界。
+        if (state.VisualHost is not null)
+        {
+            var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
+            var viewport = SurfaceViewport(state);
+            var viewLeft = -state.Pan.X / zoom;
+            var viewTop = -state.Pan.Y / zoom;
+            state.WorldMinX = Math.Min(state.WorldMinX, viewLeft);
+            state.WorldMinY = Math.Min(state.WorldMinY, viewTop);
+            state.WorldMaxX = Math.Max(state.WorldMaxX, viewLeft + (viewport.Width / zoom));
+            state.WorldMaxY = Math.Max(state.WorldMaxY, viewTop + (viewport.Height / zoom));
+        }
+
+        return (state.WorldMinX, state.WorldMinY, state.WorldMaxX, state.WorldMaxY);
     }
 
     private static void ApplyLinkStyles(SurfaceState state)
@@ -817,10 +933,13 @@ public sealed class WorkflowSurfaceBehavior
                 continue;
             }
 
-            SetIfPresent(view, "LineColor", GetVisualLinkColor(host));
-            SetIfPresent(view, "HighlightColor", GetVisualLinkHoverColor(host));
-            SetIfPresent(view, "IsVirtual", ReferenceEquals(link, state.Tree?.VirtualLink));
-            view.InvalidateVisual();
+            var changed = SetIfPresent(view, "LineColor", GetVisualLinkColor(host));
+            changed |= SetIfPresent(view, "HighlightColor", GetVisualLinkHoverColor(host));
+            changed |= SetIfPresent(view, "IsVirtual", ReferenceEquals(link, state.Tree?.VirtualLink));
+            if (changed)
+            {
+                view.InvalidateVisual();
+            }
         }
     }
 
@@ -837,19 +956,29 @@ public sealed class WorkflowSurfaceBehavior
             if (view.DataContext is Wf.ILinkComponent link)
             {
                 var highlighted = ReferenceEquals(link, hovered);
-                SetIfPresent(view, "IsHighlighted", highlighted);
-                view.InvalidateVisual();
+                if (SetIfPresent(view, "IsHighlighted", highlighted))
+                {
+                    view.InvalidateVisual();
+                }
             }
         }
     }
 
-    private static void SetIfPresent(VisualElement view, string propertyName, object? value)
+    private static bool SetIfPresent(VisualElement view, string propertyName, object? value)
     {
         var property = view.GetType().GetProperty(propertyName);
-        if (property is not null && property.CanWrite && value is not null && property.PropertyType.IsInstanceOfType(value))
+        if (property is null || !property.CanWrite || value is null || !property.PropertyType.IsInstanceOfType(value))
         {
-            property.SetValue(view, value);
+            return false;
         }
+
+        if (Equals(property.GetValue(view), value))
+        {
+            return false;
+        }
+
+        property.SetValue(view, value);
+        return true;
     }
 
     private static IEnumerable<VisualElement> EnumerateVisuals(VisualElement root)
@@ -925,6 +1054,7 @@ public sealed class WorkflowSurfaceBehavior
         if (args.Button == MouseButtons.Left
             && target is null
             && !handle.PreventDefault
+            && !IsOverScrollBar(state, surfacePoint)
             && IsWithinPressSource(state, state.VisualHost?.FindElementAt(surfacePoint)))
         {
             state.Panning = true;
@@ -1059,6 +1189,31 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         ApplyCamera(state);
+    }
+
+    // 滚动条是画出来的，不参与视觉命中；按在拇指/轨道上时把整笔手势让给 ScrollViewer，别同时平移相机。
+    private static bool IsOverScrollBar(SurfaceState state, DrawingPointF surfacePoint)
+    {
+        if (state.Scroll is not VisualScrollViewer viewer || state.VisualHost is not { } host)
+        {
+            return false;
+        }
+
+        for (var current = host.FindElementAt(surfacePoint); current is not null; current = current.ParentElement)
+        {
+            // 滚动条现在是模板部件：命中的就是 ScrollBar（只在自己的轨道条带内应答）。
+            if (current is VisualScrollBar)
+            {
+                return true;
+            }
+
+            if (ReferenceEquals(current, viewer))
+            {
+                return viewer.IsOverScrollBar(viewer.PointFromSurface(surfacePoint));
+            }
+        }
+
+        return false;
     }
 
     private static bool IsWithinPressSource(SurfaceState state, VisualElement? hit)
@@ -1386,6 +1541,18 @@ public sealed class WorkflowSurfaceBehavior
 
         public Wf.ITreeComponent? Tree { get; set; }
 
+        public object? WorldBoundsTree { get; set; }
+
+        public bool WorldBoundsValid { get; set; }
+
+        public double WorldMinX { get; set; }
+
+        public double WorldMinY { get; set; }
+
+        public double WorldMaxX { get; set; }
+
+        public double WorldMaxY { get; set; }
+
         public Wf.IWorkflowSurfaceScroller? Scroller { get; set; }
 
         public EventHandler<Wf.PointerPressedEventArgs>? MenuPressed { get; set; }
@@ -1397,6 +1564,11 @@ public sealed class WorkflowSurfaceBehavior
         public DrawingPointF Pan { get; set; }
 
         public DrawingPointF Content { get; set; }
+
+        // 滚动范围的世界原点（世界坐标 × 当前缩放），请求偏移时用来还原 pan。
+        public float ExternalOriginX { get; set; }
+
+        public float ExternalOriginY { get; set; }
 
         public bool Panning { get; set; }
 
@@ -1469,9 +1641,9 @@ public sealed class WorkflowSurfaceBehavior
 
         public void OnLayoutUpdated(object? sender, EventArgs e)
         {
+            // 相机每帧都要跟；但整棵树的行为检查与连线样式推送只在池变化/样式变化时做，
+            // 否则一次节点拖动会把每个节点和每条线都重新走一遍并强制重画。
             ApplyCamera(this);
-            EnsureAttachedBehaviors(Root);
-            ApplyLinkStyles(this);
         }
 
         // ViewPool materializes a card/slot view after the surface's initial walk; ensure its attached behaviors
@@ -1481,6 +1653,7 @@ public sealed class WorkflowSurfaceBehavior
             if (ReferenceEquals(e.Host, Canvas) || ReferenceEquals(e.Host, Root))
             {
                 EnsureAttachedBehaviors(Root);
+                ApplyLinkStyles(this);
             }
         }
 
@@ -1495,7 +1668,7 @@ public sealed class WorkflowSurfaceBehavior
             PointerPosition = new DrawingPointF(e.X / scale, e.Y / scale);
             var delta = new DrawingPointF(PointerPosition.X - PanStart.X, PointerPosition.Y - PanStart.Y);
             Pan = new DrawingPointF(PanStartPan.X + delta.X, PanStartPan.Y + delta.Y);
-            ApplyCamera(this);
+            ApplyCameraThrottled();
         }
 
         public void OnHostMouseUp(object? sender, MouseEventArgs e)
@@ -1524,6 +1697,7 @@ public sealed class WorkflowSurfaceBehavior
                 }
             }
 
+            FlushCamera();
             UpdateHover(this);
         }
 
@@ -1615,6 +1789,44 @@ public sealed class WorkflowSurfaceBehavior
             Pan = new DrawingPointF(
                 (float)(-(scrollX * Zoom) - Content.X),
                 (float)(-(scrollY * Zoom) - Content.Y));
+            ApplyCameraThrottled();
+        }
+
+        // 滚动条偏移是「可见世界左上角 − 世界原点」的表面像素；pan 从它反推。
+        public void OnScrollOffsetRequested(object? sender, VisualScrollOffsetEventArgs e)
+        {
+            Pan = new DrawingPointF(
+                -e.HorizontalOffset - Content.X - ExternalOriginX,
+                -e.VerticalOffset - Content.Y - ExternalOriginY);
+            ApplyCameraThrottled();
+        }
+
+        // 指针拖动可以到 100+Hz；相机每帧重绘整面，按 60Hz 合并位移，松手时再补最后一帧。
+        private readonly System.Diagnostics.Stopwatch _cameraClock = new();
+        private bool _cameraPending;
+
+        private void ApplyCameraThrottled()
+        {
+            if (_cameraClock.Elapsed.TotalMilliseconds >= 1000d / 60d)
+            {
+                _cameraClock.Restart();
+                _cameraPending = false;
+                ApplyCamera(this);
+                return;
+            }
+
+            _cameraPending = true;
+        }
+
+        private void FlushCamera()
+        {
+            if (!_cameraPending)
+            {
+                return;
+            }
+
+            _cameraPending = false;
+            _cameraClock.Restart();
             ApplyCamera(this);
         }
     }

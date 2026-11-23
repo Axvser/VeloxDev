@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
+using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Visuals;
 using VC = VeloxDev.WinForms.Xaml.Visuals.Controls;
 
@@ -152,6 +153,27 @@ public sealed class VisualTextEditingTests
 
         Assert.IsFalse(text.IsUsingNativeEditor, "leaving the field deactivates the island");
         Assert.IsFalse(surface.Controls.Contains(text.NativeEditor), "the island is removed from the surface");
+    }
+
+    [TestMethod]
+    public void TextBox_TransparentBackgroundFallsBackToTheNearestOpaqueAncestor()
+    {
+        using var surface = CreateSurface(220, 120);
+        _ = surface.Handle;
+        Application.DoEvents();
+
+        var sheet = new VC.Border { Background = new SolidColorBrush(Color.FromArgb(255, 13, 17, 23)) };
+        var text = new VC.TextBox { Width = 160, Height = 32, Background = Brush.Empty };
+        sheet.Add(text);
+        surface.Root = sheet;
+        Layout(surface, 220, 120);
+
+        surface.FocusElement(text);
+        Application.DoEvents();
+
+        Assert.IsTrue(text.IsUsingNativeEditor, "the native island still opens for a transparent visual field");
+        Assert.AreEqual(Color.FromArgb(255, 13, 17, 23), text.NativeEditor.BackColor,
+            "the native TextBox gets the nearest opaque ancestor colour, never transparent");
     }
 
     private static VisualHost CreateSurface(int width, int height)

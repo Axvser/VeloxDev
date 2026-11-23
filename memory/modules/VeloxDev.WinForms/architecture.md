@@ -108,7 +108,7 @@
 
 `Examples/Workflow/WinForms/Demo/Form1.cs` 的 `BuildWorkbenchFrame` 在 Designer 的 `splitContainer` 外面套标题条 + 状态条，`BuildSidebar` 把 `Panel1` 换成活动栏 + 侧栏；`Panel1/2.Padding=Empty`、`SplitterWidth=4`、`SplitterDistance=320` 是工作台版式。外壳（菜单、检查器、运行管理器、状态条）是普通 WinForms；工作流表面是 `Views/Workflow/WorkflowSurfaceView.xaml`（视觉 `UserControl`，`PART_*` + `behaviors:ViewPool`）+ `WorkflowCanvas.xaml.cs`（`VisualHost` + `WorkflowSurfaceBehavior` 接线），节点卡与端口经 `DataTemplate` + `CustomTemplateSelector` 物化（`ControllerView` / `TimerNodeView` / `PythonNodeView` / `EnumSelectorNodeView` / `WorkflowNodeCard`、`FullSlotView`、`LinkView`），网格/小地图在 `GridDecorator.cs` / `MinimapOverlay.cs`。
 
-- 节点卡显示名称与端口；每类型的富内联编辑器、节点右键自动布局、连线流光与 code-first 节点视图不在视觉 demo 里，编辑仍在检查器完成。
+- 节点卡显示名称与端口；每类型的富内联编辑器、节点右键自动布局与 code-first 节点视图不在视觉 demo 里，编辑仍在检查器完成。连线流光在 `LinkView.xaml.cs`：静态构造函数向 `WorkflowFlowClock.RegisterDriver` 注册按树共享的 30fps **线程池 `Timer` + UI 投递**驱动（不是 `Transition`，避免其 async 续体投回 WinForms 同步上下文），时钟按真实时间采样，绘制路径也采样。
 - **标题条菜单**：`BuildTitleStrip` 用 `GhostButton` 做菜单与命令中心，下拉是 `Views/Workbench/DarkPopupMenu`（无边框 `Form`）。**实测 2026-11-18**：`ContextMenuStrip` 即使设自定义 renderer 与暗色模式仍是浅色面板 + 浅色字。
 - **元素表是自建的 `ElementRowList.cs`**：每行 Label + 定位/删除图标按钮；`Dock=Top` 的控件后加的在上，所以 `SetEntries` 要反向添加。
 - **脚本化验证**：WinForms 坐标点击在 150% DPI 下不可靠，用 UI Automation 按 `Name=Compile/Run` 的 `InvokePattern`。

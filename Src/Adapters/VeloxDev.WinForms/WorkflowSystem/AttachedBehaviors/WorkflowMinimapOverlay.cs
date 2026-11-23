@@ -229,7 +229,12 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
         var hasNode = false;
         foreach (var node in tree.Nodes)
         {
-            var (x, y, w, h) = (node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height);
+            if (node.Anchor is not { } anchor || node.Size is not { } size)
+            {
+                continue;
+            }
+
+            var (x, y, w, h) = (anchor.Horizontal, anchor.Vertical, size.Width, size.Height);
             thumbnails?.Add((x, y, w, h));
             minX = Math.Min(minX, x);
             minY = Math.Min(minY, y);

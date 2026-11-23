@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Windows.Forms;
@@ -62,10 +63,17 @@ public sealed class WorkflowNodeDragBehavior
 
     private sealed class DragState
     {
+        // 指针事件可以到 100+Hz，而每次 MoveCommand 会让整棵视觉树重新布局、整面重绘。
+        // 把同一帧内的位移合起来，约 60Hz 提交一次，拖动的手感不变，开销减半。
+        private const double ApplyIntervalMs = 1000d / 60d;
+
         private readonly VisualElement owner;
+        private readonly Stopwatch applyClock = new();
         private INodeComponent? node;
         private VisualElement? coordinateHost;
         private PointF last;
+        private float pendingX;
+        private float pendingY;
         private bool dragging;
         private bool subscribed;
 
@@ -120,6 +128,9 @@ public sealed class WorkflowNodeDragBehavior
             }
 
             last = args.GetPosition(coordinateHost);
+            pendingX = 0f;
+            pendingY = 0f;
+            applyClock.Restart();
             dragging = true;
             args.Handled = true;
         }
@@ -138,16 +149,13 @@ public sealed class WorkflowNodeDragBehavior
             }
 
             var current = args.GetPosition(coordinateHost);
-            var dx = current.X - last.X;
-            var dy = current.Y - last.Y;
-            if (Math.Abs(dx) > 0.001f || Math.Abs(dy) > 0.001f)
-            {
-                if (node.MoveCommand.CanExecute(new Offset(dx, dy)))
-                {
-                    node.MoveCommand.Execute(new Offset(dx, dy));
-                }
+            pendingX += current.X - last.X;
+            pendingY += current.Y - last.Y;
+            last = current;
 
-                last = current;
+            if (applyClock.Elapsed.TotalMilliseconds >= ApplyIntervalMs)
+            {
+                ApplyPending();
             }
 
             args.Handled = true;
@@ -160,8 +168,28 @@ public sealed class WorkflowNodeDragBehavior
                 return;
             }
 
+            ApplyPending();
             Cancel();
             args.Handled = true;
+        }
+
+        private void ApplyPending()
+        {
+            if (node is null || (Math.Abs(pendingX) <= 0.001f && Math.Abs(pendingY) <= 0.001f))
+            {
+                return;
+            }
+
+            var dx = pendingX;
+            var dy = pendingY;
+            pendingX = 0f;
+            pendingY = 0f;
+            applyClock.Restart();
+
+            if (node.MoveCommand.CanExecute(new Offset(dx, dy)))
+            {
+                node.MoveCommand.Execute(new Offset(dx, dy));
+            }
         }
 
         private void Cancel()
@@ -169,6 +197,8 @@ public sealed class WorkflowNodeDragBehavior
             dragging = false;
             node = null;
             coordinateHost = null;
+            pendingX = 0f;
+            pendingY = 0f;
         }
     }
 

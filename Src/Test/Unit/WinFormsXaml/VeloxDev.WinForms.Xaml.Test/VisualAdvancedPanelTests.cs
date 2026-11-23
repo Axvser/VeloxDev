@@ -183,6 +183,49 @@ public sealed class VisualAdvancedPanelTests
         Assert.IsNull(grid.HitTestVisual(new PointF(150f, 150f)));
     }
 
+    [TestMethod]
+    public void Grid_AutoRowMeasuresANestedStarGridAtItsContentHeight()
+    {
+        var grid = new VisualCtl.Grid();
+        grid.RowDefinitions.Add(new V.RowDefinition { Height = V.GridLength.Auto });
+        grid.RowDefinitions.Add(new V.RowDefinition { Height = V.GridLength.Star });
+
+        // 一个没有行定义的 Grid 是单星号行；放在 Auto 行里时必须量成内容高度，
+        // 否则它会把整段可用高度要走，星号行归零。
+        var header = new VisualCtl.Grid();
+        header.Add(new VisualCtl.Border { Height = 24 });
+        var body = new VisualCtl.Border();
+        VisualCtl.Grid.SetRow(body, 1);
+
+        grid.Add(header);
+        grid.Add(body);
+
+        ArrangeRoot(grid, 200, 150);
+
+        AssertBounds(header, 0, 0, 200, 24);
+        AssertBounds(body, 0, 24, 200, 126);
+    }
+
+    [TestMethod]
+    public void Grid_MeasuresAChildInsideItsFixedTrack()
+    {
+        var grid = new VisualCtl.Grid();
+        grid.ColumnDefinitions.Add(new V.ColumnDefinition { Width = new V.GridLength(64) });
+        grid.ColumnDefinitions.Add(new V.ColumnDefinition { Width = V.GridLength.Star });
+
+        // 星号列的子项按可用宽度撑满；ScrollViewer 的期望尺寸因此取决于父级给了它多宽的轨道。
+        var track = new VisualCtl.Grid();
+        track.Add(new VisualCtl.Border());
+        var view = new VisualCtl.ScrollViewer { Content = track };
+        grid.Add(view);
+
+        ArrangeRoot(grid, 280, 100);
+
+        Assert.AreEqual(64f, view.DesiredSize.Width, 0.1f,
+            "the viewer is measured against its 64-pixel track, not the whole grid");
+        Assert.AreEqual(64f, view.Bounds.Width, 0.1f);
+    }
+
     private static void ArrangeRoot(VisualElement root, int width, int height)
     {
         root.Measure(new Size(width, height));

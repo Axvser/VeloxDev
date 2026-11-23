@@ -240,6 +240,95 @@ public sealed class WorkflowSurfaceBehaviorTests
         WorkflowSurfaceBehavior.SetIsEnabled(host, false);
     }
 
+    [TestMethod]
+    public void Surface_ScrollBarsFollowTheWorldBounds()
+    {
+        var tree = new TreeDefaultComponent();
+        tree.SetHelper(new TreeHelper(200d));
+        tree.Layout.OriginSize = new VeloxDev.WorkflowSystem.Size(300d, 200d);
+        var node = WorkflowVisualFixture.AddNode(tree, 500d, 50d);
+
+        var canvas = new VC.Canvas { Name = "PART_Canvas", IsHitTestVisible = true };
+        var scroll = new VC.ScrollViewer { Name = "PART_ScrollViewer", Content = canvas };
+
+        using var host = new VisualHost { Size = new DrawingSize(400, 300) };
+        host.Root = scroll;
+        WorkflowSurfaceBehavior.SetCanvasName(host, "PART_Canvas");
+        WorkflowSurfaceBehavior.SetScrollViewerName(host, "PART_ScrollViewer");
+        WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);
+        WorkflowSurfaceBehavior.SetIsEnabled(host, true);
+
+        Render(host, canvas);
+
+        Assert.IsTrue(scroll.IsExternalScroll, "the surface drives the viewer's bars");
+        Assert.AreEqual(700d, scroll.ExtentWidth, 0.5d, "the node beyond the origin size widens the range");
+
+        node.Anchor = new Anchor(900d, node.Anchor.Vertical, node.Anchor.Layer);
+        Render(host, canvas);
+        Assert.AreEqual(1100d, scroll.ExtentWidth, 0.5d, "dragging the node further extends the range");
+
+        WorkflowSurfaceBehavior.ZoomAt(host, PointF.Empty, 2d);
+        Render(host, canvas);
+        Assert.AreEqual(2200d, scroll.ExtentWidth, 0.5d, "zoom scales the scrollable range");
+
+        WorkflowSurfaceBehavior.SetWorkflowTree(host, null);
+        WorkflowSurfaceBehavior.SetIsEnabled(host, false);
+    }
+
+    [TestMethod]
+    public void Surface_ScrollBarsGrowWhenTheCameraPansPastTheContent()
+    {
+        var tree = new TreeDefaultComponent();
+        tree.SetHelper(new TreeHelper(200d));
+        tree.Layout.OriginSize = new VeloxDev.WorkflowSystem.Size(300d, 200d);
+        WorkflowVisualFixture.AddNode(tree, 500d, 50d);
+
+        var canvas = new VC.Canvas { Name = "PART_Canvas", IsHitTestVisible = true };
+        var scroll = new VC.ScrollViewer { Name = "PART_ScrollViewer", Content = canvas };
+
+        using var host = new VisualHost { Size = new DrawingSize(400, 300) };
+        host.Root = scroll;
+        WorkflowSurfaceBehavior.SetCanvasName(host, "PART_Canvas");
+        WorkflowSurfaceBehavior.SetScrollViewerName(host, "PART_ScrollViewer");
+        WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);
+        WorkflowSurfaceBehavior.SetIsEnabled(host, true);
+
+        Render(host, canvas);
+        var before = scroll.ExtentWidth;
+        Assert.AreEqual(700d, before, 0.5d);
+
+        // 相机向右拖出内容左边缘：可见内容区进入世界负坐标，画布/ScrollViewer 的 extent 应随之长大。
+        WorkflowSurfaceBehavior.SetPan(host, new PointF(1000f, 0f));
+        Render(host, canvas);
+
+        Assert.IsGreaterThan(before, scroll.ExtentWidth,
+            "panning past the content edge extends the scrollable range");
+        var expanded = scroll.ExtentWidth;
+
+        // 拖回内容区后范围保持扩展，不缩回原长度。
+        WorkflowSurfaceBehavior.SetPan(host, new PointF(0f, 0f));
+        Render(host, canvas);
+
+        Assert.AreEqual(expanded, scroll.ExtentWidth, 0.5d,
+            "returning inside the content keeps the expanded range");
+
+        WorkflowSurfaceBehavior.SetWorkflowTree(host, null);
+        WorkflowSurfaceBehavior.SetIsEnabled(host, false);
+    }
+
+    private static void Render(VisualHost host, VisualElement canvas)
+    {
+        using var bitmap = new Bitmap(1, 1);
+        using var graphics = Graphics.FromImage(bitmap);
+        var size = host.Size;
+        host.RenderTo(graphics, size);
+        canvas.InvalidateMeasure();
+        host.RenderTo(graphics, size);
+        // ApplyCamera resizes the canvas at the end of the previous pass, so the viewer sees the new content size
+        // one pass later.
+        host.RenderTo(graphics, size);
+    }
+
     private static void AssertAnchor(ISlotComponent slot, double expectedX, double expectedY, string message)
     {
         Assert.AreEqual(expectedX, slot.Anchor.Horizontal, 1d, message);

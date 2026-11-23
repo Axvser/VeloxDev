@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
@@ -51,6 +52,11 @@ public sealed class WorkflowFlowClock
     private readonly List<Action> _subscribers = [];
 
     private IWorkflowFlowDriver? _driver;
+    private bool _sampling;
+    private long _sampleStart;
+    private TimeSpan _enterDuration;
+    private TimeSpan _travelDuration;
+    private TimeSpan _exitDuration;
 
     private WorkflowFlowClock()
     {
@@ -74,6 +80,66 @@ public sealed class WorkflowFlowClock
     /// writes both scalars, then invokes <c>LateUpdate</c>, so a subscriber never sees half a frame.
     /// </remarks>
     public EventHandler<TransitionEventArgs> LateUpdateHandler => _lateUpdate;
+
+    /// <summary>Starts sampling the three-phase cycle from now, with the given enter/travel/exit durations.</summary>
+    /// <remarks>
+    /// A driver whose frame source can be starved by input (WinForms' <c>WM_TIMER</c>) samples this clock from the
+    /// paint path as well: every paint then advances the comet by elapsed time instead of waiting for a tick.
+    /// </remarks>
+    public void BeginSampling(TimeSpan enterDuration, TimeSpan travelDuration, TimeSpan exitDuration)
+    {
+        _enterDuration = enterDuration;
+        _travelDuration = travelDuration;
+        _exitDuration = exitDuration;
+        _sampleStart = Stopwatch.GetTimestamp();
+        _sampling = true;
+        BandHead = 0d;
+        BandIntensity = 0d;
+    }
+
+    /// <summary>Stops time-based sampling; the clock keeps whatever scalars are current.</summary>
+    public void EndSampling() => _sampling = false;
+
+    /// <summary>Writes the phase scalars for the current instant, if time-based sampling is active.</summary>
+    /// <remarks>Safe on the UI thread from any paint path; it allocates nothing and does not notify subscribers.</remarks>
+    public void Sample()
+    {
+        if (!_sampling)
+        {
+            return;
+        }
+
+        var enter = _enterDuration.TotalMilliseconds;
+        var travel = _travelDuration.TotalMilliseconds;
+        var exit = _exitDuration.TotalMilliseconds;
+        var cycle = enter + travel + exit;
+        if (cycle <= 0d)
+        {
+            return;
+        }
+
+        var elapsed = (Stopwatch.GetTimestamp() - _sampleStart) * 1000d / Stopwatch.Frequency;
+        elapsed %= cycle;
+
+        if (elapsed < enter)
+        {
+            var t = elapsed / enter;
+            BandHead = 0.30d * t;
+            BandIntensity = t;
+        }
+        else if (elapsed < enter + travel)
+        {
+            var t = (elapsed - enter) / travel;
+            BandHead = 0.30d + (0.48d * t);
+            BandIntensity = 1d;
+        }
+        else
+        {
+            var t = (elapsed - enter - travel) / exit;
+            BandHead = 0.78d + (0.22d * t);
+            BandIntensity = 1d - t;
+        }
+    }
 
     /// <summary>How many views currently sample this clock.</summary>
     public int SubscriberCount => _subscribers.Count;

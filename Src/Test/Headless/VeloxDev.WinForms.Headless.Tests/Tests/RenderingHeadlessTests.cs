@@ -16,6 +16,21 @@ namespace VeloxDev.WinForms.Headless.Tests.Tests;
 public sealed class RenderingHeadlessTests
 {
     [TestMethod]
+    public void Surface_SettlesLayoutBetweenFrames()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph, withMinimap: true);
+        var field = typeof(VisualHost).GetField("_layoutValid", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+
+        for (var pass = 0; pass < 4; pass++)
+        {
+            surface.Render();
+        }
+
+        Assert.IsTrue((bool)field.GetValue(surface.View)!, "a stable surface keeps no pending layout");
+    }
+
+    [TestMethod]
     public void VisualGridDecorator_RendersWithoutAWindow()
     {
         var decorator = new TemplateGridDecorator
@@ -67,8 +82,9 @@ public sealed class RenderingHeadlessTests
         Assert.AreSame(graph.Tree, minimap.WorkflowTree);
         Assert.AreEqual(60d, minimap.ScrollOffsetX, 1d);
         Assert.AreEqual(40d, minimap.ScrollOffsetY, 1d);
-        Assert.AreEqual(800d, minimap.ViewportWidth, 1d);
-        Assert.AreEqual(600d, minimap.ViewportHeight, 1d);
+        // 纵向/横向条各占 8px 后，presenter 的内容区是 792×592；相机视口跟随内容区而不是整个客户区。
+        Assert.AreEqual(792d, minimap.ViewportWidth, 1d);
+        Assert.AreEqual(592d, minimap.ViewportHeight, 1d);
 
         using var host = new VisualHost { Size = new DrawingSize(200, 140), DpiScaleOverride = 1f };
         host.Root = minimap;

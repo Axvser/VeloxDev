@@ -53,7 +53,7 @@ triggers and bindings work. None of them creates a child window.
 
 | Family | Types |
 |---|---|
-| Layout | `UserControl`, `ContentControl`, `Border`, `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `UniformGrid`, `Viewbox`, `Decorator`, `ScrollViewer`, `GridSplitter`, `GroupBox`, `Expander`, `TabControl` |
+| Layout | `UserControl`, `ContentControl`, `Border`, `Panel`, `StackPanel`, `DockPanel`, `WrapPanel`, `Grid`, `Canvas`, `UniformGrid`, `Viewbox`, `Decorator`, `ScrollViewer`, `ScrollBar`, `ScrollContentPresenter`, `GridSplitter`, `GroupBox`, `Expander`, `TabControl` |
 | Items | `ItemsControl`, `ListBox`, `VirtualList`, `TreeView`, `ComboBox`, `Calendar`, `DatePicker`, `ContentPresenter` |
 | Text | `TextBlock`, `TextBox`, `RichTextBox`, `Image` |
 | Selection / range | `Button`, `RepeatButton`, `ToggleButton`, `CheckBox`, `RadioButton`, `Slider`, `ProgressBar` |
@@ -276,6 +276,51 @@ declare it as an empty object resource and point the attached property at it.
   reads a part with `GetTemplateChild<T>("PART_...")`.
 - `ControlTemplate.Triggers` evaluate against the templated control and write the `Template` layer; a
   setter may name a part with `TargetName`.
+
+### 8.1.1 ContentTemplate
+
+`ContentControl.ContentTemplate` takes a `<DataTemplate>` for **non-visual** content: the template
+creates the visual and the raw `Content` becomes its `DataContext`. A `VisualElement` content is shown
+as-is and ignores `ContentTemplate`. `ContentPresenter` resolves its own `ContentTemplate` first, then
+the templated parent's; a plain string without either still becomes a `TextBlock`.
+
+`ContentTemplateSelector` (a `DataTemplateSelector` resource) picks a template from the raw content; it
+wins over `ContentTemplate` at the same level, and a `null` result falls through. `ContentStringFormat`
+formats the text projection with the current culture and is ignored when a template supplies the visual.
+
+```xml
+<ContentControl Content="{Binding SelectedRow}"
+                ContentTemplateSelector="{StaticResource RowPicker}"
+                ContentStringFormat="{}{0:N0}" />
+```
+
+```xml
+<Border>
+  <ContentControl Content="{Binding SelectedRow}" ContentTemplate="{StaticResource RowTemplate}" />
+</Border>
+```
+
+### 8.1.2 ScrollViewer and ScrollBar templates
+
+- `ScrollViewer` is a `ContentControl`; its default chrome is a `Grid` with the presenter in the star
+  cell and one `ScrollBar` in each Auto row/column. The bars occupy viewport space (WPF layout), so the
+  presenter's viewport is smaller than the viewer by the bar thickness on a visible axis. A custom
+  `Template` replaces the chrome; parts are `PART_ScrollContentPresenter`, `PART_HorizontalScrollBar`
+  and `PART_VerticalScrollBar`.
+- `ScrollBar` exposes `Orientation`, `Minimum`, `Maximum`, `Value`, `ViewportSize`, `SmallChange` and
+  `LargeChange`; `Value` is expressed in content pixels by default. It has its own optional `Template`
+  with `PART_Track`, `PART_Thumb`, `PART_DecreaseRepeatButton` and `PART_IncreaseRepeatButton`. Without
+  a thumb part it draws the default rounded thumb.
+- Bars start dragging from the thumb or the track (a track press pages once and continues as the same
+  drag); holding a track/repeat button pages again after ~400 ms, then every ~50 ms.
+- `ScrollViewer.CanContentScroll` delegates extent/offset/wheel/page steps to the content when it
+  implements `IScrollInfo`, so an item panel can report items instead of pixels. The built-in
+  `ScrollContentPresenter` implements the same interface in pixels; `VirtualList` still scrolls by
+  pixels.
+- A camera host can set `IsExternalScroll` and push offsets with `SetExternalOffset`; the presenter
+  then reports extent/viewport without moving the content, and bar gestures raise
+  `ScrollOffsetRequested`. `SetExternalOffset` should use the presenter viewport (excluding bars), not
+  the whole client area, when deriving the scroll range.
 
 ### 8.2 ItemsControl and item templates
 

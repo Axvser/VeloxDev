@@ -1438,13 +1438,33 @@ public class TextBox : VisualElement
         _editor.ReadOnly = IsReadOnly;
         _editor.UseSystemPasswordChar = IsPassword;
         _editor.Font = Font;
-        _editor.BackColor = Background?.ApproximateColor ?? theme.ControlBackground;
+        _editor.BackColor = ResolveNativeBackground();
         _editor.ForeColor = Foreground.IsEmpty
             ? (IsEnabled ? theme.Foreground : theme.DisabledForeground)
             : Foreground;
 #if NET5_0_OR_GREATER
         _editor.PlaceholderText = Placeholder;
 #endif
+    }
+
+    // 原生 TextBox 不支持透明背景色；视觉层的 Transparent 要落到最近一层不透明祖先或主题底色上。
+    private Color ResolveNativeBackground()
+    {
+        if (Background?.ApproximateColor is Color own && own.A > 0)
+        {
+            return Color.FromArgb(255, own.R, own.G, own.B);
+        }
+
+        for (var current = ParentElement; current is not null; current = current.ParentElement)
+        {
+            if (current.Background?.ApproximateColor is Color inherited && inherited.A > 0)
+            {
+                return Color.FromArgb(255, inherited.R, inherited.G, inherited.B);
+            }
+        }
+
+        var fallback = Theme.Current.ControlBackground;
+        return Color.FromArgb(255, fallback.R, fallback.G, fallback.B);
     }
 
     private void SyncEditorFromVisual()

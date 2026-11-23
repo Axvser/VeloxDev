@@ -564,15 +564,24 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     }
 
     /// <summary>Marks this element and its ancestors as needing a new arrange pass.</summary>
+    /// <remarks>
+    /// Measure results stay valid: an arrange-only change (a canvas coordinate, an alignment) does not change a
+    /// child's desired size, and re-measuring the whole tree is what made a node drag re-lay-out every card per move.
+    /// A size that actually changes still re-measures through <see cref="Measure"/>'s available-size comparison.
+    /// </remarks>
     public void InvalidateArrange()
     {
-        _measureValid = false;
         ParentElement?.InvalidateArrange();
         Surface?.InvalidateSurface();
     }
 
     /// <summary>Requests a repaint of the hosting surface without a new layout pass.</summary>
     public void InvalidateVisual()
+        => InvalidateVisual(GetInvalidationBounds());
+
+    /// <summary>Marks a local rectangle dirty, transformed through the ancestor bounds and transforms.</summary>
+    /// <param name="localBounds">The rectangle in this element's local coordinates.</param>
+    public void InvalidateVisual(RectangleF localBounds)
     {
         // 最近的位图缓存要重画；InvalidateCache 会把外层缓存也一并标脏。
         VisualElement? cached = null;
@@ -598,23 +607,15 @@ public abstract class VisualElement : ContainerVisual, IDisposable
             return;
         }
 
-        var damage = AbsoluteBounds;
-        if (damage.Width <= 0f || damage.Height <= 0f)
+        if (localBounds.Width <= 0f || localBounds.Height <= 0f)
         {
             surface.InvalidatePaint();
             return;
         }
 
-        // 变换后的像素位置与 Bounds 不一致；效果还会画到 Bounds 之外。这两种走整面重画。
-        for (var current = this; current is not null; current = current.ParentElement)
-        {
-            if (!current.Transform.IsIdentity)
-            {
-                surface.InvalidatePaint();
-                return;
-            }
-        }
+        var damage = GetAbsoluteBounds(localBounds);
 
+        // AbsoluteBounds 已经过祖先的 Transform；只有位图缓存和 Effect 越界需要整面/额外外扩。
         damage.Inflate(2f + (Effect?.Padding ?? 0f), 2f + (Effect?.Padding ?? 0f));
         surface.InvalidatePaint(damage);
     }
@@ -669,20 +670,26 @@ public abstract class VisualElement : ContainerVisual, IDisposable
 
     /// <summary>Returns this element's transformed rectangle in the surface's client coordinates.</summary>
     public RectangleF AbsoluteBounds
+        => GetAbsoluteBounds(new RectangleF(0f, 0f, Bounds.Width, Bounds.Height));
+
+    /// <summary>The local rectangle that a repaint of this element must cover.</summary>
+    /// <remarks>An element that draws inside a small part of a large bounds (a link spanning the canvas, for
+    /// example) can narrow the damage rectangle and avoid repainting the whole surface at animation rate.</remarks>
+    protected virtual RectangleF GetInvalidationBounds()
+        => new(0f, 0f, Bounds.Width, Bounds.Height);
+
+    private RectangleF GetAbsoluteBounds(RectangleF local)
     {
-        get
-        {
-            // A scaled/rotated element is no longer axis-aligned; use the transformed corners.
-            var topLeft = PointToSurface(PointF.Empty);
-            var topRight = PointToSurface(new PointF(Bounds.Width, 0f));
-            var bottomLeft = PointToSurface(new PointF(0f, Bounds.Height));
-            var bottomRight = PointToSurface(new PointF(Bounds.Width, Bounds.Height));
-            var minX = Math.Min(Math.Min(topLeft.X, topRight.X), Math.Min(bottomLeft.X, bottomRight.X));
-            var minY = Math.Min(Math.Min(topLeft.Y, topRight.Y), Math.Min(bottomLeft.Y, bottomRight.Y));
-            var maxX = Math.Max(Math.Max(topLeft.X, topRight.X), Math.Max(bottomLeft.X, bottomRight.X));
-            var maxY = Math.Max(Math.Max(topLeft.Y, topRight.Y), Math.Max(bottomLeft.Y, bottomRight.Y));
-            return new RectangleF(minX, minY, Math.Max(0f, maxX - minX), Math.Max(0f, maxY - minY));
-        }
+        // A scaled/rotated element is no longer axis-aligned; use the transformed corners.
+        var topLeft = PointToSurface(new PointF(local.Left, local.Top));
+        var topRight = PointToSurface(new PointF(local.Right, local.Top));
+        var bottomLeft = PointToSurface(new PointF(local.Left, local.Bottom));
+        var bottomRight = PointToSurface(new PointF(local.Right, local.Bottom));
+        var minX = Math.Min(Math.Min(topLeft.X, topRight.X), Math.Min(bottomLeft.X, bottomRight.X));
+        var minY = Math.Min(Math.Min(topLeft.Y, topRight.Y), Math.Min(bottomLeft.Y, bottomRight.Y));
+        var maxX = Math.Max(Math.Max(topLeft.X, topRight.X), Math.Max(bottomLeft.X, bottomRight.X));
+        var maxY = Math.Max(Math.Max(topLeft.Y, topRight.Y), Math.Max(bottomLeft.Y, bottomRight.Y));
+        return new RectangleF(minX, minY, Math.Max(0f, maxX - minX), Math.Max(0f, maxY - minY));
     }
 
     /// <summary>Disposes this element and its descendants.</summary>

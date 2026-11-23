@@ -172,7 +172,7 @@ RuntimeEngine.RunAsync(graph, IRuntimeContext, ct)         CompilerEx/Runtime/Ru
 - **同一套 NaN 约定还贯穿空间索引**：bounds 为空/NaN 的条目会被登记用于变更跟踪但**不进网格**（`GUI/Virtualization/SpatialGridHashMap.cs` 的 `Insert` 里 `if (!b.IsEmpty) IndexItem(...) else _unindexed.Add(item)`），端点未定位时连线对返回 `Empty` bounds（`GUI/Virtualization/NodePairBoundsProvider.cs` 的 `CalculateBounds` 里 `if (bA.IsEmpty || bB.IsEmpty) return Viewport.Empty;`），所以未测量的节点不会以 NaN 坐标进索引。
 - 坐标系约定：`SlotAnchorFromVisualCenter` = `视觉中心 − ActualOffset`（即画布局部），`SlotAnchorFromNode` = 节点锚点 + 局部偏移，`SlotAnchorFromCanvasLocal` 用于已经是画布局部坐标的情形。三个都在 `GUI/Math/WorkflowSurfaceMath.cs` 的 `SlotAnchorFromVisualCenter` / `SlotAnchorFromNode` / `SlotAnchorFromCanvasLocal`。
 - 渲染变换是 `ScaleCollapse` = `(1/scaleX, 1/scaleY, -anchorX, -anchorY)`（`WorkflowSurfaceMath.cs` 的 `ScaleCollapse`）。`CanvasLayout.Update()` 在 `Scale < 1` 时把 `ActualSize` 放大 `1/Scale`（`CanvasLayout.cs` 的 `Update`），否则折叠后的内容会越出画布。
-- **流光的每帧成本按平台不同**：WPF / Avalonia / WinUI 每棵树一个 `WorkflowFlowClock`（`Examples/Workflow/Common/Lib`），所有 LinkView 共订同一个 30fps 周期；WinForms 是画布级 30fps，Jalium 是表面级 30fps，MAUI 的 overlay 30fps，Blazor 的逐帧在 `wwwroot/flow.js` 的共享 `requestAnimationFrame`（30fps、IntersectionObserver 关掉屏外链接）。各家的缓存与绘制做法见 `adapters/<平台>.md` 与 demo 源码。
+- **流光的每帧成本按平台不同**：WPF / Avalonia / WinUI / WinForms 每棵树一个 `WorkflowFlowClock`（`Examples/Workflow/Common/Lib`），所有 LinkView 共订同一个 30fps 周期（WinForms 的驱动由 demo 的 `LinkView` 静态构造函数注册）。Jalium 是表面级 30fps，MAUI 的 overlay 30fps，Blazor 的逐帧在 `wwwroot/flow.js` 的共享 `requestAnimationFrame`（30fps、IntersectionObserver 关掉屏外链接）。各家的缓存与绘制做法见 `adapters/<平台>.md` 与 demo 源码。
 
 ### 3.5 虚拟化
 

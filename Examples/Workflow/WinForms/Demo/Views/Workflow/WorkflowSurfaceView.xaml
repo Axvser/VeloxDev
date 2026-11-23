@@ -8,35 +8,35 @@
 
   <local:WorkflowSurfaceView.Resources>
     <DataTemplate x:Key="ControllerTemplate">
-      <local:ControllerView Width="{Binding Size.Width}"
+      <local:ControllerView CacheAsBitmap="True" Width="{Binding Size.Width}"
                             Height="{Binding Size.Height}"
                             Canvas.Left="{Binding Anchor.Horizontal}"
                             Canvas.Top="{Binding Anchor.Vertical}"
                             Panel.ZIndex="{Binding Anchor.Layer}" />
     </DataTemplate>
     <DataTemplate x:Key="TimerTemplate">
-      <local:TimerNodeView Width="{Binding Size.Width}"
+      <local:TimerNodeView CacheAsBitmap="True" Width="{Binding Size.Width}"
                            Height="{Binding Size.Height}"
                            Canvas.Left="{Binding Anchor.Horizontal}"
                            Canvas.Top="{Binding Anchor.Vertical}"
                            Panel.ZIndex="{Binding Anchor.Layer}" />
     </DataTemplate>
     <DataTemplate x:Key="PythonTemplate">
-      <local:PythonNodeView Width="{Binding Size.Width}"
+      <local:PythonNodeView CacheAsBitmap="True" Width="{Binding Size.Width}"
                             Height="{Binding Size.Height}"
                             Canvas.Left="{Binding Anchor.Horizontal}"
                             Canvas.Top="{Binding Anchor.Vertical}"
                             Panel.ZIndex="{Binding Anchor.Layer}" />
     </DataTemplate>
     <DataTemplate x:Key="EnumTemplate">
-      <local:EnumSelectorNodeView Width="{Binding Size.Width}"
+      <local:EnumSelectorNodeView CacheAsBitmap="True" Width="{Binding Size.Width}"
                                   Height="{Binding Size.Height}"
                                   Canvas.Left="{Binding Anchor.Horizontal}"
                                   Canvas.Top="{Binding Anchor.Vertical}"
                                   Panel.ZIndex="{Binding Anchor.Layer}" />
     </DataTemplate>
     <DataTemplate x:Key="NodeTemplate">
-      <local:WorkflowNodeCard Width="{Binding Size.Width}"
+      <local:WorkflowNodeCard CacheAsBitmap="True" Width="{Binding Size.Width}"
                               Height="{Binding Size.Height}"
                               Canvas.Left="{Binding Anchor.Horizontal}"
                               Canvas.Top="{Binding Anchor.Vertical}"

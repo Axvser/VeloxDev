@@ -11,14 +11,17 @@ namespace VeloxDev.TransitionSystem
         /// expired timer asks first. A drag answers every mouse message with a synchronous repaint, so the queue
         /// always holds the next one and the clock stops for as long as the drag lasts; the rest of the time every
         /// timer in the process shares the same idle moments. The frame is therefore posted to the target's own
-        /// window with <see cref="Control.BeginInvoke(Delegate)"/> from a thread-pool timer: posted messages arrive
+        /// window — or to a live form when the target has none, such as a clock — with <see cref="Control.BeginInvoke(Delegate)"/>
+        /// from a thread-pool timer: posted messages arrive
         /// in order without waiting for the queue to empty, and the continuation still resumes on the control's
         /// thread — so the property writes stay direct and <c>Update</c>/<c>LateUpdate</c> stay on that thread,
         /// which is what a pacer is for. Starting on the target's thread is still the condition, so a first
         /// animation started elsewhere keeps the documented fallback, where each write marshals itself.
         /// </remarks>
         protected override FramePacerCore? CreateFramePacer(object target, IThreadAffinity affinity)
-            => affinity.IsCurrent(target) ? new PostedFramePacer(target as Control) : null;
+            // 非控件目标（如 WorkflowFlowClock）没有自己的窗口，采样仍借宿主的活窗体回到 UI 线程；
+            // 没有活窗体时 pacer 拿到 null，按默认的线程池路径放行。
+            => affinity.IsCurrent(target) ? new PostedFramePacer(UIThreadInspector.DispatcherFor(target)) : null;
 
         private sealed class PostedFramePacer : FramePacerCore
         {

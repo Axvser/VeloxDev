@@ -51,7 +51,8 @@
 ### 2.4 平移、滚动与视口持久化
 
 - `SetPan` / 指针处理改 `state.Pan`；`ApplyCamera` 把 content offset、相机、网格/小地图偏移一次推完。滚动条按**屏幕像素**走：`scroll = -pan`，不减 `ActualOffset`。
-- 小地图：`ScrollOffset = -(pan+content)/zoom`、`Viewport = client/zoom`。
+- **`PART_ScrollViewer` 是外部滚动模式**：`ApplyCamera` 调 `ScrollViewer.SetExternalOffset`，范围取「`Layout.ActualSize` ∪ 所有节点的世界包围盒 ∪ 当前可见内容区」乘 zoom；可见内容区是 presenter 视口（扣掉两条占位 ScrollBar 的 8px），不是整个客户区。相机拖出内容边缘时这个并集会跟着长大；同一棵树里只长不回，拖回内容区条的长度保持扩展后的状态，换树才重置。`ScrollOffsetRequested` 用 `pan = -(offset + content + 世界原点×zoom)` 反推；按在拇指/轨道上的手势由 `IsOverScrollBar` 判给 ScrollViewer，不启动相机平移。
+- 小地图：`ScrollOffset = -(pan+content)/zoom`、`Viewport = presenter 视口/zoom`（`SurfaceViewport`，扣掉条占位）。
 - 视口持久化：视觉路径保存**世界坐标左上角**（`GetWorldViewport`），与当时 zoom 无关；`DetachTree` 把它写回 `Layout.ViewportOffset`，`EnsureTree` 从它恢复 pan。
 - 网格/标尺仍随相机缩放。
 
@@ -66,6 +67,10 @@
 - `ViewPool` 通过 tree 的 `LinkTemplate` 为每条 link（含 virtual link）实例化一个视图；`DataTemplate` 把 `StartLeft/StartTop/EndLeft/EndTop` 绑到 `Sender.Anchor.*` / `Receiver.Anchor.*`，把 `CanRender` 绑到 `IsVisible`；表面 `ApplyLinkStyles` 再写 `LineColor`/`HighlightColor`/`IsVirtual`。视图 `OnRender` 画 cubic 并 `PublishCurve`。
 - **曲线是世界坐标**；相机变换只在绘制时加。`Start/End` 与发布给 Core 命中测试的是同一条曲线。
 - 命中在世界坐标里按半径判：半径取 `WorkflowInput.HitRadius`（demo 设 `LinkHitRadius = 6f`）。节点卡是不透明的，压在下面的那段线不画、也不应答，端口附近除外。
+- **流光由 demo 的 LinkView 自己驱动**：`LinkView` 静态构造函数向 `WorkflowFlowClock.RegisterDriver` 注册一个**线程池 `System.Threading.Timer`** 驱动（`Examples/Workflow/Common/Lib/.../WorkflowFlowClock.cs`），按树共享 30fps；tick 投递到 UI 线程后调 `WorkflowFlowClock.Sample()`。时钟按真实时间算相位，每次绘制都会采样并把 `BandHead/BandIntensity` 抄到视图，所以拖动/平移的重绘本身就让彗星前进。按下期间（`VisualHost.IsPointerGestureActive`）tick 不再发帧，避免和拖动重绘抢同一帧；流光只重画旧/新彗星尾段的包围盒，节点卡片 `CacheAsBitmap`。**不用 `Transition`**：它的 `await` 续体会把帧 Post 回 `WindowsFormsSynchronizationContext`，句柄状态变化时会在线程池上抛未处理异常；投递失败要吞掉（关闭中）。
+- 视图被池释放后绑定仍可能迟到一次锚点更新；`LinkView` 用 `_disposed` 或 `IsRenderReady`/`double.IsFinite` 拦住，否则 GDI+ `GraphicsPath` 进入无效状态后连 `Reset` 都会抛 `ArgumentException`。
+- **拖动时每帧重画是主要成本**：`InvalidateArrange` 不失效测量（纯位置/对齐变化复用测得的 desired）；节点拖动按约 60Hz 合并位移，画布平移/小地图/外部条拖动也按 60Hz 合并（`ApplyCameraThrottled`，松手 `FlushCamera` 补最后一帧）；`OnLayoutUpdated` 只推相机，行为检查与连线样式只在 `ViewPool.Changed` 与样式属性变化时做。
+- **滚动范围跟着内容走**：`ApplyCamera` 把 `PART_Canvas.Width/Height` 设成「（原点 ∪ 节点 ∪ 可见内容区）× zoom，至少视口大小」；`ScrollViewer` 的默认模板是 `ScrollContentPresenter` + 两条占 Auto 轨道的 `ScrollBar`，extent 由 presenter 测量内容得到，偏移仍由相机推（`SetExternalOffset`）。可见内容区并进来后，相机拖出原点/节点范围时 Canvas 会真实长大，条随之变长；扩展范围保存在 `SurfaceState.World*`，拖回不缩回，换树重置。拖动/缩放改变内容尺寸时也一样。
 - 右侧菜单：条目来自 tree 资源的 `VisualContextMenu`（`SetLinkMenuKey`），适配器从自己的 `PointerPressed(Right, link)` 打开；`SetLinkMenuBuilder` 只在没有视觉菜单键时回落为 `ContextMenuStrip`。**不挂 `Control.ContextMenuStrip`**。
 
 ### 2.7 插槽锚点写在坐标宿主的局部坐标里

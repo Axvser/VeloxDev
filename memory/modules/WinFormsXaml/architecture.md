@@ -17,7 +17,7 @@
 | `Visuals/Visual.cs` | `Visual` / `ContainerVisual` / `ShapeVisual` / `TextVisual` / `CurveBatchVisual` / `DropShadowEffect` | 视觉树节点：`Bounds`（父坐标）/ `Transform` / `Opacity` / `Clip` / `Effect`；`RenderContent` / `HitTestContent` |
 | `Visuals/VisualElement.cs` | `VisualElement : ContainerVisual, IDisposable` | 布局/输入/渲染基类：`Margin`/`Padding`/`Width`/`Height`/对齐/`Background`/`CornerRadius` 等 DP，measure/arrange、指针/键盘事件、逻辑焦点 |
 | `Visuals/VisualHost.cs` | `VisualHost : System.Windows.Forms.Control` | 唯一 HWND：`Root`、`Resources`、`DpiScaleOverride`、`RenderTo`、`ProcessPointer*` / `ProcessKey*` / 文本输入 |
-| `Visuals/Controls/` | 视觉控件 | `UserControl`/`ContentControl`/`Border`/`StackPanel`/`Grid`/`DockPanel`/`Canvas`/`WrapPanel`/`UniformGrid`/`Viewbox`/`ScrollViewer`/`ItemsControl`/`ListBox`/`VirtualList`/`TreeView`/`ComboBox`/`TextBlock`/`TextBox`/`RichTextBox`/`Button` 系/`Slider`/`ProgressBar`/`Calendar`/`DatePicker`/`VisualMenu`/`VisualContextMenu`/`VisualPopup`/`VisualPresenter`/Shapes |
+| `Visuals/Controls/` | 视觉控件 | `UserControl`/`ContentControl`/`Border`/`StackPanel`/`Grid`/`DockPanel`/`Canvas`/`WrapPanel`/`UniformGrid`/`Viewbox`/`ScrollViewer`/`ScrollBar`/`ScrollContentPresenter`/`ItemsControl`/`ListBox`/`VirtualList`/`TreeView`/`ComboBox`/`TextBlock`/`TextBox`/`RichTextBox`/`Button` 系/`Slider`/`ProgressBar`/`Calendar`/`DatePicker`/`VisualMenu`/`VisualContextMenu`/`VisualPopup`/`VisualPresenter`/Shapes |
 | `Visuals/VisualBindingOperations.cs` | `VisualBindingOperations` / `VisualBindingExpression` | OneWay/OneTime/TwoWay、`DataContext` 路径、Converter/StringFormat/FallbackValue/TargetNullValue；`RelativeSource.Self`/`TemplateBinding`；无 `ElementName`/校验规则 |
 | `Visuals/Styling.cs` | `VisualStyle` / `VisualSetter` / `VisualTrigger` | 显式/隐式样式；setter 写 `Style` 层、trigger 写 `StyleTrigger` 层；`EnterAction`/`ExitAction` 在激活/失效时各跑一次；移除只清自己那两层 |
 | `Visuals/VisualTriggerActions.cs` | `VisualTriggerAction` / `TriggerActionGroup` / `TransitionAction` / `KeyFrameAnimation` / `VisualTransition` | 视觉目标（`VisualElement`）的触发器动作；动画经 `Transition<VisualElement>` 写 `Animation` 层，同一目标的新动画覆盖旧动画，`Stop` 停住 |
@@ -37,9 +37,10 @@
 | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` / `WorkflowInfoOverlay.cs` | `VisualElement` | 视觉小地图与 HUD；表面推偏移、拖小地图反推滚动 |
 | `WorkflowSystem/Platform/NativeWindowStyleHelper.cs` / `WorkflowDpi.cs` | Win32/DPI 辅助 | `WS_CLIPCHILDREN`/`WS_EX_COMPOSITED`、`BeginRedraw`/`EndRedraw`；DPI 换算 |
 
-- **布局**：`VisualElement.Measure/Arrange` 管 Margin、显式尺寸、Min/Max、对齐与 Visibility；面板在 `MeasureOverride/ArrangeOverride` 只算内容。`Hidden` 占位不绘制，`Collapsed` 不测量不占位。`PropertyMetadata.AffectsMeasure/AffectsArrange/AffectsRender` 驱动失效。
+- **布局**：`VisualElement.Measure/Arrange` 管 Margin、显式尺寸、Min/Max、对齐与 Visibility；面板在 `MeasureOverride/ArrangeOverride` 只算内容。`Hidden` 占位不绘制，`Collapsed` 不测量不占位。`PropertyMetadata.AffectsMeasure/AffectsArrange/AffectsRender` 驱动失效。**`InvalidateArrange` 只失效摆放，保留测量缓存**：`Canvas.Left/Top` 或对齐这类纯位置变化不重测子树；可用尺寸真变了，`Measure` 自己会按 available 比较重测。
 - **输入**：`VisualHost` 命中测试最深元素，事件沿 `ParentElement` 冒泡；焦点是逻辑焦点，`FocusElement` 把原生焦点留在 Host 上，Tab 在焦点链里走。指针捕获、Enter/Leave、滚轮、文本输入都集中在 Host。
-- **`ScrollViewer`** 用 `Visual.Clip` 裁视口，内容按偏移摆放；滚轮沿祖先链冒泡。
+- **`ContentControl`** 的 `ContentTemplate` 只作用于非 `VisualElement` 内容：模板创建视觉并设 `DataContext = Content`；`VisualElement` 内容直通。解析顺序：presenter 自己的 selector → 自己的 `ContentTemplate` → `TemplatedParent` 的 selector → `ContentTemplate` → 文本投影。`ContentTemplateSelector`（`DataTemplateSelector`）拿到原始 `Content`；`ContentStringFormat` 只在文本投影路径按当前文化 `string.Format`。`ContentControl.Template` 走 `VisualControlTemplate`，与内容模板是两条路。
+- **`ScrollViewer` 是 `ContentControl`**：默认模板（`DefaultTemplate`）是 `Grid`：星号主格放 `ScrollContentPresenter(PART_ScrollContentPresenter)`，右列/下行各是 `Auto` 轨道放 `ScrollBar(PART_HorizontalScrollBar`/`PART_VerticalScrollBar)`，两条占用视口而不是覆盖内容；调用方 `Template` 或样式模板优先于默认 chrome。`ScrollContentPresenter` 按视口宽、纵向不设限量内容，裁切并偏移，并实现 `IScrollInfo`；`ScrollBar` 负责拇指/轨道/键盘、可选模板部件（`PART_Track`/`PART_Thumb`/`PART_*RepeatButton`）与按住自动翻页。`CanContentScroll=true` 且内容是 `IScrollInfo` 时，extent/offset/滚轮/分页都交给内容自己的单位。外部相机模式（`IsExternalScroll` + `SetExternalOffset`）只让 presenter 报范围、不偏移内容，条的手势转成 `ScrollOffsetRequested`。
 - **`TextBox`** 自绘插入符/选区/剪贴板，聚焦时用 `NativeControlHost` + 原生 `System.Windows.Forms.TextBox` 岛处理 IME/无障碍，非聚焦时自绘。
 - **`DataContext`** 是 inherited 属性；没有本地层时从 `ParentElement` 解析，祖先切换向无本地值的后代补发 `Inherited` 变更。
 - **覆盖层**：`VisualHost` 在根树之后绘制、之前命中铺满客户区的覆盖层；`VisualPopup` 挂进去，不受祖先 `ScrollViewer.Clip` 裁切。弹层脱离根树，打开时把目标 `DataContext` 以 `Inherited` 层推给内容。
@@ -65,7 +66,7 @@
 
 ## 三、边界与不变量
 
-- 支持：视觉控件树、DP/附加属性、`DataContext` 继承、OneWay/TwoWay/OneTime 绑定、Converter/StringFormat/Fallback/TargetNull、资源、显式/隐式 `VisualStyle`、样式/模板触发器与 enter/exit 动作、`ControlTemplate` + `ContentPresenter`、`ItemsControl.ItemTemplate`、keyed `DataTemplate`、`VisualPopup`/`VisualMenu`、`NativeControlHost`、DPI、`Theme`。
+- 支持：视觉控件树、DP/附加属性、`DataContext` 继承、OneWay/TwoWay/OneTime 绑定、Converter/StringFormat/Fallback/TargetNull、资源、显式/隐式 `VisualStyle`、样式/模板触发器与 enter/exit 动作、`ControlTemplate` + `ContentPresenter`、`ContentTemplate`、`ItemsControl.ItemTemplate`、keyed `DataTemplate`、`ScrollViewer` 默认/自定义模板与 `ScrollBar` 模板部件、`VisualPopup`/`VisualMenu`、`NativeControlHost`、DPI、`Theme`。
 - 不支持：设计器/热重载、`ElementName`/校验规则、`DynamicResource`、可变行高虚拟化、每条关键帧独立 `Ease`、`CommandBinding`/`InputBindings`、`NativeControlHost` 被变换/裁剪/混色。
 - **一个视觉父级只接受 `VisualElement` 子元素**；`native:` 与 `System.Windows.Forms` 控件不进视觉树，只能经 `NativeControlHost` 作矩形轴对齐岛。
 - `VisualTemplateSelector` 是 item → 元素的唯一接缝；`VisualStyle` 是描述不是活对象，改已应用样式的集合不会自动重应用。
@@ -74,6 +75,15 @@
 ## 四、坑（带依据）
 
 - **`Path` 的 `Stretch` 用显式 `Matrix(m11, m12, m21, m22, dx, dy)` 构造**：GDI+ 行向量下 `Scale`/`Translate` 叠加不会把 `-source` 一起缩放，整条几何会平移出控件。回归：`Path_UniformStretch_FitsTheGeometryIntoTheContentBounds`。
+- **`Grid` 先按轨道量、再按格子收紧**：`Grid.ResolveTracks` 第一遍 Auto 轨道沿该轴不设限（`int.MaxValue`，容器减掉 Padding 后按 `int.MaxValue / 2` 判定）、像素与星号轨道按整张网格量；轨道尺寸定下后按子项实际格子再量一次。少第二遍时 `ScrollViewer` 会把内容算成整格宽，安排进窄轨道后右对齐内容被推出裁剪区，槽位锚点也落在裁剪区外。回归：`Grid_MeasuresAChildInsideItsFixedTrack`、`Grid_AutoRowMeasuresANestedStarGridAtItsContentHeight`。
+- **`ScrollContentPresenter` 宽按视口、纵向不设限量内容**：宽若也不设限，`VirtualList` 会把 `int.MaxValue` 当 desired width，行内 `TextBlock` 画到 `int.MaxValue` 宽的矩形上抛 GDI+ `OverflowException`；纵向不设限才能让列表报告完整 extent。回归：`VirtualList_RealizesOnlyVisibleRowsAndFollowsTheScrollOffset`、`ScrollViewer_MeasuresStarContentAtItsNaturalHeight`。
+- **重绘脏区按本地矩形变换**：`InvalidateVisual` 取 `GetInvalidationBounds()`（元素可覆写成实际绘制区）经 `PointToSurface` 变成表面包围盒，不再因为祖先有 `Transform` 就整面重画；位图缓存和 `Effect` 仍走整面/外扩。`VisualHost.IsPointerGestureActive` 在按下/松开时维护，动画宿主可在拖动期间停掉定时器发帧，让拖动自身的重绘采样时钟。
+- **子元素实际尺寸变化自动反映到 extent/条**：内容 `Width/Height` 或 desired 改变后，presenter 重测并更新 extent/viewport，条的最大值随之变化；工作流把世界范围写进 `PART_Canvas.Width/Height`，条仍由控件层测量驱动，相机只决定子元素该多大。回归：`ScrollViewer_FollowsChildSizeChanges`。
+- **`ScrollViewer` 的 desired 要回到 presenter 的内容尺寸**：默认模板的 `Grid` 有星号轨道，会按可用尺寸铺满；`ScrollViewer.MeasureOverride` 必须返回 presenter 的 desired（+ Padding），否则放进 ComboBox 下拉弹层/StackPanel 的 Auto 尺寸时会把整条可用宽度占掉，弹层盖住旁边控件。回归：`ComboBox_OutsidePressClosesAndFocusesTheClickedElement`。
+- **滚动条占 Auto 轨道，不覆盖内容**：`ScrollBar` 只在自身轨道条带（含命中内缩）应答；默认 chrome 的两条条各占一行/一列，presenter 视口随之缩小。显示/隐藏用 `Visibility`；切换后必须让 `TemplateRoot`/`ScrollViewer` 重新 `Measure`——父级的测量缓存不会因子元素折叠/展开自动失效。轨道按下先翻一页、同一笔继续拖动；按住约 400ms 后每 50ms 重复一页；悬停拇指用主题前景色高亮。回归：`ScrollViewer_TrackPressContinuesAsTheSameDrag`、`ScrollViewer_ScrollBarCornerIsNotShared`、`ScrollViewer_ThumbBrightensUnderThePointer`、`ScrollBar_TemplatePartsPositionTheThumb`、`ScrollBar_TrackPressPagesOnceThenRepeats`。
+- **布局期间的新失效不能被本轮结尾吞掉**：`VisualHost.EnsureLayout` 在进入时置 `_layoutValid = true`，结束不再写 true；measure/arrange 里触发的 `InvalidateMeasure` 会把它留成 false，下一帧再排。滚动条第一次算出范围就是在 presenter 的 Arrange 里改 `Visibility`，少了这条会永远错过第二次测量。回归：`ScrollViewer_AutoBarsSettleAfterTheFirstLayout`。
+- **`CanContentScroll` 的单位由内容决定**：内容是 `IScrollInfo` 时，`ScrollViewer` 用它报告的 extent/viewport/offset 驱动两条条与滚轮/分页，presenter 只负责测量/裁切并把自身偏移归零；`VirtualList` 仍是像素滚动，尚未实现按项的逻辑单位。回归：`ScrollViewer_CanContentScrollUsesTheContentsScrollInfo`。
+- **原生 TextBox 不支持透明背景**：`TextBox.ApplyNativeProperties` 通过 `ResolveNativeBackground` 取自身或最近不透明祖先的颜色（兜底 `Theme.Current.ControlBackground`）。把视觉层的 `Transparent` 直接写进 `_editor.BackColor` 会抛 `ArgumentException: 控件不支持透明的背景色`。回归：`TextBox_TransparentBackgroundFallsBackToTheNearestOpaqueAncestor`。
 - **`PathGeometry.Parse` 的每个 `M` 必须 `StartFigure`**（再补零长度段把起点挪到 M 坐标）；当成 `L` 会在子路径间画连接线，白色描边就成了横穿字形的割线。回归：`Path_MultipleMoveCommands_StartSeparateFigures`。
 - **视觉子树的文字走 `VisualText.Draw`**：`TextRenderer` 直接写 HDC、不认 world transform，嵌套平移后文字会画到表面原点。
 - **`DockPanel` 顶部子项要显式高度**：没有 `RowDefinitions` 的 `Grid` 默认一行星号，会吃掉全部可用高度。

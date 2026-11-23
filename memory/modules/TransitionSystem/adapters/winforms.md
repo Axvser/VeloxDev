@@ -37,13 +37,13 @@
 
 ### 2.1 没有 dispatcher、也没有可问的存活源 ⇒ 只能自己记
 
-`_isAppAlive` 是静态字段，只在捕获成功那一刻挂上 `Application.ApplicationExit` 去关它（`UIThreadInspector.cs` 的 `EnsureCaptured` 里订阅 `ApplicationExit`，`_isAppAlive` 初值），`IsAlive => _isAppAlive`（`IsAlive`）。对照有 dispatcher 的家：WPF/Jalium 直接问 `dispatcher.HasShutdownStarted`、WinUI 问 `queue.TryEnqueue` 的返回值（见 `wpf.md` §2.1）。**没有东西可问，所以必须自己记**。同一形状的还有 MAUI 与 Razor。
+`_isAppAlive` 是静态字段，捕获成功时订阅一次 `ApplicationExit` 置 false（`UIThreadInspector.cs` 的 `SubscribeExit`/`OnApplicationExit`），`IsAlive => _isAppAlive`。同一个 UI 线程在新消息循环里再次被捕获时（同一线程、上下文变了或 `Application.MessageLoop` 已起）会把它复活。`PostCore` 在 `_isAppAlive == false` 时直接拒收，避免把动作排进一个不会再被泵的队列。对照有 dispatcher 的家：WPF/Jalium 直接问 `dispatcher.HasShutdownStarted`、WinUI 问 `queue.TryEnqueue` 的返回值（见 `wpf.md` §2.1）。**没有东西可问，所以必须自己记**。同一形状的还有 MAUI 与 Razor。
 
 ### 2.2 帧源不能是 WM_TIMER ⇒ 这家的 pacer 是「线程池定时器 + 投递到控件」
 
 **`WM_TIMER` 是这个平台上唯一不能用来当帧时钟的机制。** Windows 只在消息队列空无一物时才合成它，而那一刻只有一个「空闲时刻」——哪个到期定时器先被问到就归谁（这家进程里每个 `Transition` 都有一条自己的定时器）。队列里持续有输入/重绘消息时它会饿死。视觉表面的重绘是异步 `VisualHost.InvalidateSurface()`，不再有逐笔 `WM_MOUSEMOVE` 的同步 `Update()`，但 pacer 仍不能退回 `WM_TIMER`：定时器到期时队列是否空由平台决定，不由本框架决定。
 
-所以 `CreateFramePacer` 是 `affinity.IsCurrent(target) ? new PostedFramePacer(target as Control) : null`（`TransitionInterpreter.cs` 的 `CreateFramePacer`）：续体由 `System.Threading.Timer` 到期后经 `Control.BeginInvoke` 投回目标窗口（`PostedFramePacer.OnDue`）。投递出去的消息按 FIFO 送达，不等队列空；续体仍在控件线程上恢复 ⇒ 属性写入照旧直写、`Update`/`LateUpdate` 仍在该线程（pacer 存在的理由不变）。
+所以 `CreateFramePacer` 是 `affinity.IsCurrent(target) ? new PostedFramePacer(UIThreadInspector.DispatcherFor(target)) : null`（`TransitionInterpreter.cs` 的 `CreateFramePacer`）：续体由 `System.Threading.Timer` 到期后经 `Control.BeginInvoke` 投回目标窗口（`PostedFramePacer.OnDue`）。**目标不是 `Control` 时（POCO 时钟、`VisualElement`）借 `DispatcherFor` 找它的 `VisualHost` 或 `Application.OpenForms` 里仍活着的窗体**，否则 pacer 拿到 null、按默认线程池路径放行。投递出去的消息按 FIFO 送达，不等队列空；续体仍在控件线程上恢复 ⇒ 属性写入照旧直写、`Update`/`LateUpdate` 仍在该线程（pacer 存在的理由不变）。
 
 - 对照：WPF / Avalonia / WinUI / MAUI / Jalium 五家**一律**从 `affinity.ThreadFor(target)` 派生（WPF 是 `affinity.ThreadFor(target).TryGet<Dispatcher>(out var d) ? new DispatcherFramePacer(d) : null`，`Src/Adapters/VeloxDev.WPF/TransitionSystem/TransitionInterpreter.cs` 的 `CreateFramePacer`；其余四家同形，只换 `TryGet` 的类型）——它们的 `DispatcherTimer` 是**按优先级排队的队列项**，不受这条规则影响；Razor 干脆不覆写，注释写着「Blazor 没有在渲染器自己线程上触发的定时器」（`Src/Adapters/VeloxDev.Razor/TransitionSystem/TransitionInterpreter.cs` 的类型注释）。
 - **仍然「有条件地」取**（七家里唯一，见 §三·4）：判据是「续体要投到哪个控件的窗口上，只有已经在它线程上时才认这个前提」。
@@ -63,9 +63,9 @@
 
 ### 2.5 捕获是惰性的，而且「按类型名认亲」
 
-- 捕获发生在首次从 UI 线程碰到这个类时（`EnsureCaptured`，`UIThreadInspector.cs`），判据是 `SynchronizationContext.Current?.GetType().Name != "WindowsFormsSynchronizationContext"`（`EnsureCaptured` 里的字符串比较）—— **字符串比较，不是类型比较**。好处是不用引用那个类型；代价是任何自定义/包装过的同步上下文（名字对不上）都会被当成「不在 UI 线程」而**静默不捕获**（不抛、不告警）。
+- 捕获发生在首次从 UI 线程碰到这个类时（`EnsureCaptured`，`UIThreadInspector.cs`），判据是 `SynchronizationContext.Current?.GetType().Name != "WindowsFormsSynchronizationContext"`，并且**跳过线程池线程**（`Thread.CurrentThread.IsThreadPoolThread`）——池线程可能从 ExecutionContext 流回同一个上下文，引用相等不代表线程相同。同一 UI 线程换了新上下文（新的消息循环）会改绑；另一条还活着的 UI 线程不改绑；字符串比较仍是为了不引用那个类型。
 - 唯一的显式入口是 `CaptureUIThread()`（`UIThreadInspector.CaptureUIThread`），且必须在 `Application.Run` 之前调。
-- 存活探针 `_isAppAlive` 的初值是 `true`（`_isAppAlive` 字段），而订阅 `ApplicationExit` 只在捕获成功那一支里（`EnsureCaptured` 里）⇒ **没捕获过它就永远是 `true`**，`IsAlive` 不传达任何东西。危害有限（同时也没有 UI 上下文可投递）。
+- `IsCurrentThread` 同时要求上下文引用相等**和**当前托管线程 id 等于捕获到的 UI 线程 id；`PostCore` 对 `Control.BeginInvoke`/`SynchronizationContext.Post` 的 `InvalidOperationException`、`ObjectDisposedException`、`InvalidAsynchronousStateException` 一律返回 false，绝不把异常抛给异步续体（线程池上的未处理异常会终止进程）。`PostToContext` 用 `PostState.Invoked` 区分「上下文拒绝投递」与「动作自己抛异常」——后者照常外传。
 
 ---
 
@@ -76,7 +76,7 @@
 | 1 | **`IsCurrentFor` 被覆写（七家里唯一）**：先问目标 `Control.InvokeRequired`，拿不到控件才回落到基类。WinForms 没有任何 API 能「查一个 `Control` 属于哪个线程」，但 `Control` 自己答得出「调用方在不在我的线程上」——**同一个问题的对偶问法**。这不只是查询优化：`ThreadDispatcherBase.Post`（`Src/Core/VeloxDev.Core/Threading/ThreadDispatcherBase.cs` 的 `Post`）在 `IsCurrentFor` 为真时直接 `RunInline`，所以覆写它等于让 UI 线程上的写完全绕开消息泵。 | `UIThreadInspector.cs` 的 `IsCurrentFor` |
 | 2 | **`PostCore` 优先走目标 `Control.BeginInvoke`（七家里唯一）**：别家一律从 `thread` 里 `TryGet<TDispatcher/TSyncContext>`。这家先看目标本身是不是一个已建句柄的 `Control`（`ControlDispatcher`），是就直接投。所以**即使从未捕获过 UI 上下文、即使首次调用来自后台线程**，只要 `target` 是 `Control`，写也落对线程（`ControlDispatcher` 的 XML 注释明写这一点）。基类专门声明这是被允许的自由（`ThreadDispatcherBase` 的 `PostCore` remarks：需要 target 而不是 thread 的宿主可以忽略 `thread`）。 | `UIThreadInspector.cs` 的 `PostCore` |
 | 3 | **`ThreadFor` 返回「已捕获的上下文」，不为调用方造一个**：`ThreadRef.From(_uiSyncContext)`（`ThreadFor`）。没捕获过就是 `From(null)`。Razor 那家给的是「当下看到的」`SynchronizationContext.Current ?? 捕获值`——**两家在「调用方不在 UI 线程时给什么」上是相反的选择**。基类契约禁止「造一个」（`extension.md` §二·6），这家与 Razor 的分歧在于「拿什么当兜底」。 | `UIThreadInspector.cs` 的 `ThreadFor` |
-| 4 | **pacer 在七家里唯一「有条件地」取得**（见 §2.2）：别家要么给、要么不给，这家先问线程再决定；而且它是七家里唯一**不拿平台定时器当帧源**的 pacer（线程池定时器 + `Control.BeginInvoke`，因为 WM_TIMER 会被输入饿死）。 | `TransitionInterpreter.cs` 的 `CreateFramePacer`、`PostedFramePacer.OnDue` |
+| 4 | **pacer 在七家里唯一「有条件地」取得**（见 §2.2）：别家要么给、要么不给，这家先问线程再决定；而且它是七家里唯一**不拿平台定时器当帧源**的 pacer（线程池定时器 + `Control.BeginInvoke`，因为 WM_TIMER 会被输入饿死）。非控件目标通过 `UIThreadInspector.DispatcherFor` 借活窗体。 | `TransitionInterpreter.cs` 的 `CreateFramePacer`、`PostedFramePacer.OnDue` |
 | 5 | **`TransitionEffect` 连 `Priority` 默认值都不用给**：`TransitionEffect : TransitionEffectCore` 是纯空壳（`TransitionEffect.cs` 的空壳），因为 `NonPriority` 是空结构体，`default!` 就是全部答案（`ThreadDispatcherBase` 的 `InternalPriority` remarks）。WPF 那家必须在这里给一个 `DispatcherPriority`。 | `TransitionEffect.cs` |
 
 （**不改的**：`State : StateCore` 空壳、`TransitionScheduler` 非泛型空壳（非泛型 `TransitionScheduler`）、`ThemeValueConverters.cs` —— 六家都有这一份，Jalium 才没有，所以它不构成背离。）
@@ -112,6 +112,12 @@
 ### 4.5 静态构造的触发时机：这家的注册只有一个，漏掉等于「全部不动画」
 
 `Interpolator` 的静态构造（`Interpolator.cs`）只在 `Interpolator` 这个类型被第一次触碰时跑。`TransitionCore<...>` 有 `protected TInterpolatorCore interpolator = new();`（`Src/Core/VeloxDev.Core/TransitionSystem/Effects/Transition.cs` 的 `TransitionCore<...>` 里 `interpolator` 字段），在 WinForms 上就是 `new Interpolator()` ⇒ 只要 `new Transition<T>()` 过一次，注册就发生了，**不需要任何显式注册调用**。反过来：绕开 `Transition<T>` 直接调 `InterpolatorCore.Prepare` 时 `Padding` 没注册。别家漏一个注册只是少一个类型，这家漏掉就是全部（整张注册表就靠这一行）。
+
+### 4.6 失效的 `WindowsFormsSynchronizationContext` 能把进程打死
+
+旧的 `UIThreadInspector.PostCore` 直接 `control.BeginInvoke` / `context.Post`，没有兜底；`EnsureCaptured` 还会接受线程池线程从 ExecutionContext 流回来的 WinForms 上下文。于是 `Transition` 的 `await` 续体在池线程上把帧 Post 回一个编组窗口没有句柄的上下文时，`Control.MarshaledInvoke` 抛 `InvalidOperationException`（「在创建窗口句柄之前，不能在控件上调用 Invoke 或 BeginInvoke」）；`AwaitTaskContinuation` 在池线程上 `Task.ThrowAsync` 再投一次同一死上下文，第二次异常到达 `ThreadPoolWorkQueue.Dispatch` ⇒ 未处理异常终止进程（Windows 事件日志 .NET Runtime 1026 的栈可作为依据）。
+
+现在的约束：`PostCore`/`PostToContext` 对 `InvalidOperationException`/`ObjectDisposedException`/`InvalidAsynchronousStateException` 一律返回 false；`ControlDispatcher` 优先目标的活 `Control`/`VisualHost`，非控件目标退到 `Application.OpenForms` 的活窗体；`EnsureCaptured` 跳过线程池线程、同一 UI 线程换上下文时改绑、退出后允许复活；`IsCurrentThread` 额外要求托管线程 id 等于捕获的 UI 线程 id；`CreateFramePacer` 对非控件目标用 `UIThreadInspector.DispatcherFor` 借活窗体，不再让采样停在池线程上。回归：`UIThreadInspectorTests` 的 `PostCore_ReturnsFalse_WhenThePinnedContextCannotPost`、`PostCore_UsesALiveOpenForm_ForATargetWithoutItsOwnWindow`、`PostCore_RefusesOnceTheApplicationHasExited`、`PostAsyncAndRun_CompleteWhenTheHostRefuses`。
 
 ---
 

@@ -253,12 +253,15 @@ public sealed class LinkCurve
     /// <param name="node">The node the port sits on, or <see langword="null"/> for a port with no node.</param>
     public static (double X, double Y) PortOutward(double x, double y, INodeComponent? node)
     {
-        if (node is null) return (0, 0);
+        if (node?.Anchor is not { } anchor || node.Size is not { } size)
+        {
+            return (0, 0);
+        }
 
-        var halfWidth = Math.Max(1e-6, node.Size.Width * 0.5);
-        var halfHeight = Math.Max(1e-6, node.Size.Height * 0.5);
-        var dx = (x - (node.Anchor.Horizontal + halfWidth)) / halfWidth;
-        var dy = (y - (node.Anchor.Vertical + halfHeight)) / halfHeight;
+        var halfWidth = Math.Max(1e-6, size.Width * 0.5);
+        var halfHeight = Math.Max(1e-6, size.Height * 0.5);
+        var dx = (x - (anchor.Horizontal + halfWidth)) / halfWidth;
+        var dy = (y - (anchor.Vertical + halfHeight)) / halfHeight;
 
         if (Math.Abs(dx) >= Math.Abs(dy))
         {
