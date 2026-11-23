@@ -156,6 +156,91 @@ public sealed class VisualTextEditingTests
     }
 
     [TestMethod]
+    public void TextBox_NativeEditorSurvivesTheNextLayoutPass()
+    {
+        using var surface = CreateSurface(320, 160);
+        _ = surface.Handle;
+        Application.DoEvents();
+
+        var text = new VC.TextBox { Width = 260, Height = 34 };
+        surface.Root = text;
+        Layout(surface, 320, 160);
+
+        surface.FocusElement(text);
+        Application.DoEvents();
+        Assert.IsTrue(surface.Controls.Contains(text.NativeEditor), "the focused field parents the island");
+
+        // 岛的 ArrangeOverride 只在尺寸变化时重跑；下一次整树布局如果把它当成“这趟没安排到”摘掉，
+        // 它就会脱离宿主且再也拿不到焦点。回归：聚焦后的任何一趟布局都必须保留这个岛。
+        surface.InvalidateSurface();
+        Layout(surface, 320, 160);
+        Application.DoEvents();
+
+        Assert.IsTrue(text.IsUsingNativeEditor, "the island stays open across a layout pass");
+        Assert.IsTrue(surface.Controls.Contains(text.NativeEditor), "the island stays parented to the surface");
+    }
+
+    [TestMethod]
+    public void TextBox_UseNativeEditorFalseKeepsTheWholeFieldVisual()
+    {
+        using var surface = CreateSurface(320, 160);
+        _ = surface.Handle;
+        Application.DoEvents();
+
+        var text = new VC.TextBox { Width = 260, Height = 34, UseNativeEditor = false };
+        surface.Root = text;
+        Layout(surface, 320, 160);
+        surface.FocusElement(text);
+        Application.DoEvents();
+
+        Assert.AreSame(text, surface.FocusedElement);
+        Assert.IsFalse(text.IsUsingNativeEditor, "the opt-out never opens the native island");
+        Assert.IsFalse(surface.Controls.Contains(text.NativeEditor), "no child HWND is parented");
+
+        surface.ProcessTextInput("abc");
+        Assert.AreEqual("abc", text.Text, "typing still goes through the visual text path");
+        Assert.AreEqual(3, text.CaretIndex);
+
+        text.UseNativeEditor = true;
+        Application.DoEvents();
+
+        Assert.IsTrue(text.IsUsingNativeEditor, "turning it back on shows the island while focused");
+        Assert.IsTrue(surface.Controls.Contains(text.NativeEditor));
+    }
+
+    [TestMethod]
+    public void TextBox_NativeEditorIsClippedToTheScrollViewport()
+    {
+        using var surface = CreateSurface(200, 160);
+        _ = surface.Handle;
+        Application.DoEvents();
+
+        var scroll = new VC.ScrollViewer { Width = 200, Height = 100 };
+        var content = new VC.StackPanel { Width = 150 };
+        content.Add(new VC.Border { Height = 190 });
+        var text = new VC.TextBox { Width = 150, Height = 34 };
+        content.Add(text);
+        scroll.Content = content;
+        surface.Root = scroll;
+        Layout(surface, 200, 160);
+
+        scroll.VerticalOffset = 100;
+        Layout(surface, 200, 160);
+        surface.FocusElement(text);
+        Application.DoEvents();
+
+        Assert.IsTrue(text.IsUsingNativeEditor, "the field is focused");
+        var viewport = scroll.ContentPresenter!.AbsoluteBounds;
+        var scale = surface.DeviceDpi / 96f;
+        var editorTop = text.NativeEditor.Bounds.Top / scale;
+        var editorBottom = text.NativeEditor.Bounds.Bottom / scale;
+
+        // 原生岛是独立 HWND；不按视口裁剪时，它会越过 ScrollViewer 的下边缘盖住滚动条。
+        Assert.IsTrue(editorTop >= viewport.Top - 0.5f, "the island starts inside the viewport");
+        Assert.IsTrue(editorBottom <= viewport.Bottom + 0.5f, "the island ends inside the viewport");
+    }
+
+    [TestMethod]
     public void TextBox_TransparentBackgroundFallsBackToTheNearestOpaqueAncestor()
     {
         using var surface = CreateSurface(220, 120);

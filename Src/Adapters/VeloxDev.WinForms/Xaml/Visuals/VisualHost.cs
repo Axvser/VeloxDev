@@ -317,6 +317,10 @@ public class VisualHost : System.Windows.Forms.Control
             return;
         }
 
+        // OnPaint 会先用 BackColor 铺满脏区；DPI 与 GDI+ 裁剪取整可能让脏区最后一列/行没被视觉树覆盖，
+        // 拖动时就会在失效矩形边缘留下一条宿主底色的 1px 竖线。裁剪区向外放 1 个逻辑单位即可盖住。
+        logicalClip.Inflate(1, 1);
+
         var logicalSize = LogicalClientSize;
         var state = graphics.Save();
         try
@@ -450,7 +454,7 @@ public class VisualHost : System.Windows.Forms.Control
             if (element is not null)
             {
                 element.SetFocusVisible(_focusVisible);
-                Focus();
+                FocusHostUnlessNativeChildTookFocus();
             }
 
             return true;
@@ -462,10 +466,20 @@ public class VisualHost : System.Windows.Forms.Control
         _focused?.SetFocusVisible(_focusVisible);
         if (element is not null)
         {
-            Focus();
+            FocusHostUnlessNativeChildTookFocus();
         }
 
         return true;
+    }
+
+    // 逻辑焦点元素可能是一个原生岛（文本框的 IME 编辑器）：它在 OnGotFocus 里拿走原生焦点，
+    // 这里若再把焦点拉回宿主，宿主就会丢掉焦点并触发岛自己的 OnLostFocus，把岛藏掉。
+    private void FocusHostUnlessNativeChildTookFocus()
+    {
+        if (!ContainsFocus)
+        {
+            Focus();
+        }
     }
 
     /// <summary>Injects a pointer press at a client point.</summary>
@@ -731,13 +745,52 @@ public class VisualHost : System.Windows.Forms.Control
 
         _placedNative.Add(owner);
 
-        var physical = ToPhysical(bounds);
+        // 原生岛是独立 HWND，视觉层的 Clip 管不到它；不裁的话，滚动到视口边缘的文本框编辑器
+        // 或 NativeControlHost 会浮在滚动条和其它面板之上。按祖先剪辑矩形与客户区的交集摆放。
+        var visible = RectangleF.Intersect(bounds, GetNativeClipBounds(owner));
+        if (visible.Width < 1f || visible.Height < 1f)
+        {
+            child.Visible = false;
+            return;
+        }
+
+        var physical = ToPhysical(Rectangle.Round(visible));
         if (child.Bounds != physical)
         {
             child.Bounds = physical;
         }
 
         child.Visible = owner.IsVisible && owner.Visibility == XamlVisibility.Visible;
+    }
+
+    private RectangleF GetNativeClipBounds(NativeControlHost owner)
+    {
+        var clip = new RectangleF(0f, 0f, LogicalClientSize.Width, LogicalClientSize.Height);
+        for (var current = (VisualElement?)owner; current is not null; current = current.ParentElement)
+        {
+            if (current.ClipToBounds)
+            {
+                clip = RectangleF.Intersect(clip, current.AbsoluteBounds);
+            }
+
+            if (current.Clip is { } local)
+            {
+                clip = RectangleF.Intersect(
+                    clip,
+                    new RectangleF(
+                        current.AbsoluteBounds.X + local.X,
+                        current.AbsoluteBounds.Y + local.Y,
+                        local.Width,
+                        local.Height));
+            }
+
+            if (clip.Width <= 0f || clip.Height <= 0f)
+            {
+                break;
+            }
+        }
+
+        return clip;
     }
 
     internal void RemoveNative(NativeControlHost owner)
@@ -939,7 +992,12 @@ public class VisualHost : System.Windows.Forms.Control
     protected override void OnLostFocus(EventArgs e)
     {
         base.OnLostFocus(e);
-        _focused?.SetFocused(false);
+        // 焦点交给宿主里的原生岛（文本框的 IME 编辑器）不算离开逻辑焦点元素；否则元素会隐藏岛，
+        // 焦点弹回宿主，再触发 OnGotFocus 重新显示岛，形成焦点来回拉锯。
+        if (!ContainsFocus)
+        {
+            _focused?.SetFocused(false);
+        }
     }
 
     /// <inheritdoc />
@@ -1124,12 +1182,22 @@ public class VisualHost : System.Windows.Forms.Control
         }
 
         // A host that was collapsed or removed from the tree never reaches ArrangeOverride, so its HWND would stay
-        // floating above the surface. Anything not visited by this pass is detached.
-        foreach (var host in _nativeChildren.Keys.ToArray())
+        // floating above the surface. Anything not visited by this pass is detached — unless it is still live in this
+        // tree and merely skipped the pass because its arranged size did not change.
+        foreach (var pair in _nativeChildren.ToArray())
         {
-            if (!_placedNative.Contains(host))
+            if (_placedNative.Contains(pair.Key))
             {
-                RemoveNative(host);
+                continue;
+            }
+
+            if (pair.Key.Surface == this && pair.Key.IsVisible)
+            {
+                PlaceNative(pair.Key, pair.Value, Rectangle.Round(pair.Key.AbsoluteBounds));
+            }
+            else
+            {
+                RemoveNative(pair.Key);
             }
         }
 

@@ -167,6 +167,15 @@ public class Slider : VisualElement
             Math.Max(Theme.Current.ControlHeight, (int)(ThumbRadius * 2f + 6f)));
 
     /// <inheritdoc />
+    protected override RectangleF GetInvalidationBounds()
+    {
+        // 滑块在水平栈里会被拉伸到整列高度，但实际只画中间一条轨道；整列失效会让拖动每帧重画一大片。
+        var top = Math.Max(0f, (Bounds.Height / 2f) - ThumbRadius - 4f);
+        var height = Math.Min(Bounds.Height - top, (ThumbRadius * 2f) + 8f);
+        return new RectangleF(0f, top, Bounds.Width, Math.Max(0f, height));
+    }
+
+    /// <inheritdoc />
     protected override void OnRender(Graphics graphics)
     {
         var theme = Theme.Current;

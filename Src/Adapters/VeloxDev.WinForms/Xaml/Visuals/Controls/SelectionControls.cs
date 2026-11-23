@@ -242,11 +242,13 @@ public class ToggleButton : ToggleButtonBase
                     : theme.ControlBorder;
         XamlDrawing.PaintChrome(graphics, Rectangle.Round(track), background, border, new XamlThickness(1f), height / 2f);
 
+        // 轨道是像素对齐后画出来的，圆钮也必须以同一条对齐后的轨道为基准，否则半像素会让它看起来整体偏下。
+        var paintedTrack = Rectangle.Round(track);
         var knobRadius = Math.Max(3f, (height / 2f) - 3f);
         var knobMargin = Math.Max(3f, (height / 2f) - knobRadius);
         var knobCenter = new PointF(
-            IsChecked ? track.Right - knobMargin - knobRadius : track.Left + knobMargin + knobRadius,
-            track.Top + (height / 2f));
+            IsChecked ? paintedTrack.Right - knobMargin - knobRadius : paintedTrack.Left + knobMargin + knobRadius,
+            paintedTrack.Top + (paintedTrack.Height / 2f));
         var knobColor = !IsEnabled
             ? theme.DisabledForeground
             : IsChecked

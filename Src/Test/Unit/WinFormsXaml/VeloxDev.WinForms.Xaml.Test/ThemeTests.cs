@@ -3,7 +3,7 @@ using VC = VeloxDev.WinForms.Xaml.Visuals.Controls;
 
 namespace VeloxDev.WinForms.Xaml.Test;
 
-/// <summary>The built-in VS Code Dark+/Light+ palettes and the metrics the visual controls take from them.</summary>
+/// <summary>The built-in Dark+, Light+ and high-contrast palettes and the metrics the visual controls take from them.</summary>
 [STATestClass]
 public sealed class ThemeTests
 {
@@ -97,6 +97,42 @@ public sealed class ThemeTests
         Assert.AreEqual(dark.Selection.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#FF094771").ToArgb());
         Assert.AreEqual(light.WindowBackground.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#FFFFFF").ToArgb());
         Assert.AreEqual(light.Selection.ToArgb(), VeloxDev.WinForms.Xaml.XamlRuntime.ParseColor("#ADD6FF").ToArgb());
+    }
+
+    [TestMethod]
+    public void HighContrastPalette_IsBlackWithAnAmberAccent()
+    {
+        var contrast = VeloxDev.WinForms.Xaml.Theme.CreateHighContrast();
+
+        Assert.AreEqual(Color.Black, contrast.WindowBackground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0x0A, 0x0A, 0x0A), contrast.Surface);
+        Assert.AreEqual(Color.White, contrast.Foreground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0xCF, 0xCF, 0xCF), contrast.MutedForeground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0xFF, 0xB0, 0x00), contrast.Accent);
+        Assert.AreEqual(Color.Black, contrast.AccentForeground);
+        Assert.AreEqual(Color.FromArgb(0xFF, 0xFF, 0xD7, 0x00), contrast.FocusRing);
+        Assert.AreEqual(2f, contrast.CornerRadius);
+        Assert.AreEqual(30, contrast.ControlHeight);
+    }
+
+    [TestMethod]
+    public void ThemeModeChange_HighContrastSwapsThePalette()
+    {
+        var original = VeloxDev.WinForms.Xaml.Theme.Mode;
+        try
+        {
+            VeloxDev.WinForms.Xaml.Theme.Mode = VeloxDev.WinForms.Xaml.ThemeMode.HighContrast;
+
+            Assert.AreEqual(Color.Black, VeloxDev.WinForms.Xaml.Theme.Current.WindowBackground);
+            Assert.AreEqual(Color.FromArgb(0xFF, 0xFF, 0xB0, 0x00), VeloxDev.WinForms.Xaml.Theme.Current.Accent);
+
+            using var button = new VC.Button();
+            Assert.AreEqual(30, button.MinHeight, "controls pick up the high-contrast metrics");
+        }
+        finally
+        {
+            VeloxDev.WinForms.Xaml.Theme.Mode = original;
+        }
     }
 
     [TestMethod]

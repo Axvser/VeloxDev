@@ -68,6 +68,24 @@ public sealed class VisualBindingTests
     }
 
     [TestMethod]
+    public void NestedBinding_ReadsTheInheritedContextWhenTheSubtreeIsAttached()
+    {
+        var model = new Model { Name = "nested" };
+        using var root = new VC.StackPanel { DataContext = model };
+        using var column = new VC.StackPanel();
+        var text = new VC.TextBlock();
+        text.SetBinding(VC.TextBlock.TextProperty, new Binding(nameof(Model.Name)));
+        column.Add(text);
+        root.Add(column);
+
+        Assert.AreSame(model, text.DataContext, "the nested element sees the parent's context");
+        Assert.AreEqual(
+            "nested",
+            text.Text,
+            "a binding created before the subtree was attached must re-read the inherited context");
+    }
+
+    [TestMethod]
     public void TwoWayBinding_WritesBackToTheSource()
     {
         var model = new Model { Name = "source" };

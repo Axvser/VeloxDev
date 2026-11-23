@@ -10,12 +10,16 @@ public enum ThemeMode
 
     /// <summary>The Visual Studio Code Dark+ palette.</summary>
     Dark,
+
+    /// <summary>A high-contrast black palette with an amber accent.</summary>
+    HighContrast,
 }
 
 /// <summary>The colours and metrics a default control style reads.</summary>
 /// <remarks>
-/// The built-in palettes follow Visual Studio Code's Dark+ and Light+ themes: near-grey surfaces, a single blue
-/// accent, and four-pixel corners. A host may replace any entry by setting an explicit value or an implicit style.
+/// The built-in palettes follow Visual Studio Code's Dark+ and Light+ themes, plus a high-contrast black palette:
+/// near-grey surfaces, a single accent, and four-pixel corners. A host may replace any entry by setting an explicit
+/// value or an implicit style.
 /// </remarks>
 public sealed class ThemePalette
 {
@@ -92,7 +96,12 @@ public static class Theme
             }
 
             _mode = value;
-            _current = value == ThemeMode.Dark ? CreateDark() : CreateLight();
+            _current = value switch
+            {
+                ThemeMode.Dark => CreateDark(),
+                ThemeMode.Light => CreateLight(),
+                _ => CreateHighContrast(),
+            };
             Changed?.Invoke(null, EventArgs.Empty);
         }
     }
@@ -150,5 +159,27 @@ public static class Theme
         Selection = Color.FromArgb(0xFF, 0xAD, 0xD6, 0xFF),
         CornerRadius = 4f,
         ControlHeight = 28,
+    };
+
+    /// <summary>The built-in high-contrast palette: pure black surfaces, white text and an amber accent.</summary>
+    public static ThemePalette CreateHighContrast() => new()
+    {
+        WindowBackground = Color.Black,
+        Surface = Color.FromArgb(0xFF, 0x0A, 0x0A, 0x0A),
+        SurfaceAlt = Color.FromArgb(0xFF, 0x16, 0x16, 0x16),
+        ControlBackground = Color.FromArgb(0xFF, 0x10, 0x10, 0x10),
+        ControlBorder = Color.FromArgb(0xFF, 0x6F, 0x6F, 0x6F),
+        ControlHover = Color.FromArgb(0xFF, 0x1F, 0x1F, 0x1F),
+        ControlPressed = Color.FromArgb(0xFF, 0x2E, 0x2E, 0x2E),
+        Foreground = Color.White,
+        MutedForeground = Color.FromArgb(0xFF, 0xCF, 0xCF, 0xCF),
+        Accent = Color.FromArgb(0xFF, 0xFF, 0xB0, 0x00),
+        AccentForeground = Color.Black,
+        FocusRing = Color.FromArgb(0xFF, 0xFF, 0xD7, 0x00),
+        DisabledForeground = Color.FromArgb(0xFF, 0x8A, 0x8A, 0x8A),
+        DisabledBackground = Color.FromArgb(0xFF, 0x05, 0x05, 0x05),
+        Selection = Color.FromArgb(0xFF, 0x6B, 0x46, 0x00),
+        CornerRadius = 2f,
+        ControlHeight = 30,
     };
 }

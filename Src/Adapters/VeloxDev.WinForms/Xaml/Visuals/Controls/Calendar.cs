@@ -139,16 +139,6 @@ public class CalendarItem : VisualElement
                     4f);
                 graphics.FillPath(fill, path);
             }
-            else if (date == DateTime.Today)
-            {
-                using var outline = new Pen(theme.FocusRing, 1f);
-                graphics.DrawRectangle(
-                    outline,
-                    cell.X + 3.5f,
-                    cell.Y + 2.5f,
-                    cell.Width - 7f,
-                    cell.Height - 5f);
-            }
 
             VisualText.Draw(this,
                 graphics,
@@ -403,16 +393,6 @@ public class Calendar : TemplatedControl
                     new RectangleF(cell.X + 3f, cell.Y + 2f, cell.Width - 6f, cell.Height - 4f),
                     4f);
                 graphics.FillPath(fill, path);
-            }
-            else if (date == DateTime.Today)
-            {
-                using var outline = new Pen(theme.FocusRing, 1f);
-                graphics.DrawRectangle(
-                    outline,
-                    cell.X + 3.5f,
-                    cell.Y + 2.5f,
-                    cell.Width - 7f,
-                    cell.Height - 5f);
             }
 
             VisualText.Draw(this,

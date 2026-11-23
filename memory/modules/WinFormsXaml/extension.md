@@ -43,7 +43,9 @@
 - 模板：`<ControlTemplate TargetType="ContentControl">` 必须恰好一个视觉根；`x:Name` 是部件名，`ContentPresenter` 显示 `Content`。`TemplateBinding` 绑 `TemplatedParent`；模板触发器写 `Template` 层，`TargetName` 指部件。
 - 节点模板行为：根挂 `behaviors:WorkflowSlotLayoutBehavior`（`IsEnabled` / `SlotNames` / `SlotEnumeratorNames` / `CoordinateHostName`），标题行挂 `behaviors:WorkflowNodeDragBehavior`（`IsEnabled` / `CoordinateHostName`），插槽根挂 `behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"`。槽名是逗号分隔的 `x:Name`；没挂行为或没写 `IsEnabled` 就不测量、不拖动、不连接（没有部件名回退）。
 - 视图物化：`PART_Canvas` 上挂 `behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"` 与 `behaviors:ViewPool.TemplateSelector`（或单个 `ItemTemplate`）；池给每个 item 建一个视觉元素并设 `DataContext`，定位与绘制全在模板里。`WorkflowSurfaceBehavior` 在 `PART_Canvas` 尚未被绑定时替你把 `VisibleItems` 与 tree 的选择器接上。
+- 自定义输入框：`<ControlTemplate TargetType="TextBox">` 里放 `TextBoxContentHost x:Name="PART_ContentHost"`，再在 TextBox 上设 `UseNativeEditor="False"`。这样输入框完全走视觉层（DP、模板、绑定、选区、撤销都可用），不会出现 HWND airspace；需要 IME/原生无障碍时保持默认 `true`。
 - 弹层：`ComboBox` 直接可用；自定义 `VisualPopup` 的 `PlacementTarget` 在 code-behind 赋值（视觉绑定没有 `ElementName`）。弹层内容脱离根树，只能看到自己的资源与 `VisualHost.Resources`。
+- XAML 视图按当前主题取色：在构造函数里先把调色板写进 `Resources`（例如 `Resources["Accent"] = Theme.Current.Accent`），再调 `InitializeComponent()`；`{StaticResource}` 在构造期解析，晚了取不到。keyed `Style` / `ControlTemplate` / `DataTemplate` 与属性上的 `{StaticResource}` 共用这本字典。
 - 自定义 `Visual` 改变绘制内容后调 `InvalidateCache()`；走依赖属性的元素由 `InvalidateVisual` 自动标脏最近的 `CacheAsBitmap` 祖先。
 - `DockPanel` 顶部子项要显式高度：没有 `RowDefinitions` 的 `Grid` 默认一行星号，会吃掉全部可用高度。
 

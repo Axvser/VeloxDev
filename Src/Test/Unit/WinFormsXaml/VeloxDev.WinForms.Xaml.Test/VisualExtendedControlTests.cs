@@ -92,6 +92,34 @@ public sealed class VisualExtendedControlTests
     }
 
     [TestMethod]
+    public void Calendar_SelectingAnotherDayLeavesNoMarkerOnToday()
+    {
+        var today = DateTime.Today;
+        var other = today.Day > 1 ? today.AddDays(-1) : today.AddDays(1);
+        using var surface = new VisualHost { Size = new Size(250, 226) };
+        using var calendar = new VC.Calendar { Width = 250f, Height = 226f, SelectedDate = other };
+        surface.Root = calendar;
+
+        using var bitmap = new Bitmap(250, 226);
+        using var graphics = Graphics.FromImage(bitmap);
+        surface.RenderTo(graphics, new Size(250, 226));
+
+        // 今天那格不能留任何标记：焦点环矩形像旧选中框，圆点又像是没跟着走的选中指示。
+        var firstOfMonth = new DateTime(today.Year, today.Month, 1);
+        var offset = ((int)firstOfMonth.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        var index = offset + today.Day - 1;
+        var cellX = 6 + ((index % 7) * 34);
+        var cellY = 62 + ((index / 7) * 28);
+        var focusRing = Theme.Current.FocusRing.ToArgb();
+        var muted = Theme.Current.MutedForeground.ToArgb();
+
+        Assert.AreNotEqual(focusRing, bitmap.GetPixel(cellX + 17, cellY + 3).ToArgb(), "no ring along today's top edge");
+        Assert.AreNotEqual(focusRing, bitmap.GetPixel(cellX + 3, cellY + 14).ToArgb(), "no ring along today's left edge");
+        Assert.AreNotEqual(focusRing, bitmap.GetPixel(cellX + 30, cellY + 14).ToArgb(), "no ring along today's right edge");
+        Assert.AreNotEqual(muted, bitmap.GetPixel(cellX + 17, cellY + 23).ToArgb(), "no dot under today's number");
+    }
+
+    [TestMethod]
     public void DatePicker_OpensCalendarSelectsAndCloses()
     {
         using var surface = new VisualHost { Size = new Size(320, 280) };

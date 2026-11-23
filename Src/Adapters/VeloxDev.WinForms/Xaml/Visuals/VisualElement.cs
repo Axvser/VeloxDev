@@ -535,6 +535,19 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     {
         base.OnParentChanged(oldParent, newParent);
         ParentChanged?.Invoke(this, EventArgs.Empty);
+
+        // 换父级会让整个子树重新继承 DataContext；绑定只监听本元素的 DataContext 变化，
+        // 预构造的子树（x:Class 视图里绑在嵌套面板上的按钮就是这种）挂到有上下文的父级后，
+        // 不补这一跳就会一直停在空源上。
+        if (!IsSet(DataContextProperty))
+        {
+            var oldContext = (oldParent as VisualElement)?.DataContext;
+            var newContext = (newParent as VisualElement)?.DataContext;
+            if (!ReferenceEquals(oldContext, newContext))
+            {
+                RaisePropertyChanged(DataContextProperty, oldContext, newContext, BindingPriority.Inherited);
+            }
+        }
     }
 
     /// <summary>The surface that hosts this element, resolved through the parent chain.</summary>

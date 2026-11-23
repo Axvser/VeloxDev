@@ -41,12 +41,13 @@
 - **输入**：`VisualHost` 命中测试最深元素，事件沿 `ParentElement` 冒泡；焦点是逻辑焦点，`FocusElement` 把原生焦点留在 Host 上，Tab 在焦点链里走。指针捕获、Enter/Leave、滚轮、文本输入都集中在 Host。
 - **`ContentControl`** 的 `ContentTemplate` 只作用于非 `VisualElement` 内容：模板创建视觉并设 `DataContext = Content`；`VisualElement` 内容直通。解析顺序：presenter 自己的 selector → 自己的 `ContentTemplate` → `TemplatedParent` 的 selector → `ContentTemplate` → 文本投影。`ContentTemplateSelector`（`DataTemplateSelector`）拿到原始 `Content`；`ContentStringFormat` 只在文本投影路径按当前文化 `string.Format`。`ContentControl.Template` 走 `VisualControlTemplate`，与内容模板是两条路。
 - **`ScrollViewer` 是 `ContentControl`**：默认模板（`DefaultTemplate`）是 `Grid`：星号主格放 `ScrollContentPresenter(PART_ScrollContentPresenter)`，右列/下行各是 `Auto` 轨道放 `ScrollBar(PART_HorizontalScrollBar`/`PART_VerticalScrollBar)`，两条占用视口而不是覆盖内容；调用方 `Template` 或样式模板优先于默认 chrome。`ScrollContentPresenter` 按视口宽、纵向不设限量内容，裁切并偏移，并实现 `IScrollInfo`；`ScrollBar` 负责拇指/轨道/键盘、可选模板部件（`PART_Track`/`PART_Thumb`/`PART_*RepeatButton`）与按住自动翻页。`CanContentScroll=true` 且内容是 `IScrollInfo` 时，extent/offset/滚轮/分页都交给内容自己的单位。外部相机模式（`IsExternalScroll` + `SetExternalOffset`）只让 presenter 报范围、不偏移内容，条的手势转成 `ScrollOffsetRequested`。
-- **`TextBox`** 自绘插入符/选区/剪贴板，聚焦时用 `NativeControlHost` + 原生 `System.Windows.Forms.TextBox` 岛处理 IME/无障碍，非聚焦时自绘。
-- **`DataContext`** 是 inherited 属性；没有本地层时从 `ParentElement` 解析，祖先切换向无本地值的后代补发 `Inherited` 变更。
+- **`TextBox`** 自绘插入符/选区/剪贴板，聚焦时默认用 `NativeControlHost` + 原生 `System.Windows.Forms.TextBox` 岛处理 IME/无障碍；`UseNativeEditor=false` 时聚焦也走自绘（DP、模板、绑定、撤销全保留，只失去 IME 组合与原生无障碍 peer）。其余控件（`RichTextBox`、`ComboBox`、`Calendar` 等）都是纯视觉控件；唯一的另一条原生路径是显式 `NativeControlHost`。
+- **`DataContext`** 是 inherited 属性；没有本地层时从 `ParentElement` 解析，祖先切换向无本地值的后代补发 `Inherited` 变更；子树换父级时 `VisualElement.OnParentChanged` 也给自身与后代补这一跳。绑定只监听本元素的 DataContext 变化，少了这一跳，预构造的嵌套子树挂到有上下文的父级后会一直停在空源上（如 XAML 视图里的按钮 `Command` 绑定）。
 - **覆盖层**：`VisualHost` 在根树之后绘制、之前命中铺满客户区的覆盖层；`VisualPopup` 挂进去，不受祖先 `ScrollViewer.Clip` 裁切。弹层脱离根树，打开时把目标 `DataContext` 以 `Inherited` 层推给内容。
 - **`RichTextBox`** 用扁平字符缓冲，每字符带 `RichTextStyle`；绘制必须走 `VisualText.Draw`。
 - **渲染缓存**：`Visual.CacheAsBitmap` 缓存本地子树；`VisualElement.InvalidateVisual` 标脏最近的缓存并上报矩形，`VisualHost` 只清/画脏矩形；有变换或 `Effect` 时整面重画。
 - **默认暗色对齐 Scribalix / VS Code workbench**：画布 `#141414`、面板 `#252526`、raised `#2D2D2D`、输入 `#2A2A2A`、边框 `#333333`、文本 `#E7E7E7`/`#A0A0A0`、accent/focus `#0078D4`、选中 `#094771`；light 为 Light+（`#FFFFFF`/`#F3F3F3`、选中 `#ADD6FF`）。4px 圆角、28px 控件高。
+- **`Theme` 内置三套调色板**：`ThemeMode.Dark` / `Light` / `HighContrast`。高对比是纯黑底、白字、琥珀 accent（`#FFB000`）、聚焦 `#FFD700`、`CornerRadius=2`、`ControlHeight=30`；`ThemeMode` 切换整套 `ThemePalette`，控件在下次构造/根重建时读取。
 - **DPI**：`VisualHost` 按 `DeviceDpi/96` 物理渲染；布局、相机、模型锚点与装饰偏移都是逻辑 DIP。
 - **属性没有别名**（用户定）：一个概念只有一个 DP 名，`Background`/`Foreground` 而不是 `BackColor`/`ForeColor`。
 
@@ -79,6 +80,7 @@
 - **`ScrollContentPresenter` 宽按视口、纵向不设限量内容**：宽若也不设限，`VirtualList` 会把 `int.MaxValue` 当 desired width，行内 `TextBlock` 画到 `int.MaxValue` 宽的矩形上抛 GDI+ `OverflowException`；纵向不设限才能让列表报告完整 extent。回归：`VirtualList_RealizesOnlyVisibleRowsAndFollowsTheScrollOffset`、`ScrollViewer_MeasuresStarContentAtItsNaturalHeight`。
 - **DataContext 绑定的源是父级上下文**：`VisualBindingExpression` 对 `DataContext` 目标的绑定取 `ParentElement.DataContext`，并同时订阅父级的 DataContext 变化与 `VisualElement.ParentChanged`；父上下文/父级变化后重新解析源，复用视图的本地 DataContext 绑定才不会停在旧值。回归场景：ViewPool 复用 EnumSelectorNodeView 后输入口重新绑到新 SlotViewModel。
 - **重绘脏区按本地矩形变换**：`InvalidateVisual` 取 `GetInvalidationBounds()`（元素可覆写成实际绘制区）经 `PointToSurface` 变成表面包围盒，不再因为祖先有 `Transform` 就整面重画；位图缓存和 `Effect` 仍走整面/外扩。`VisualHost.LastPaintTimestamp`/`PaintCount`/`LastPaintWasClockDriven` 记录绘制来源，动画宿主据此让定时帧给拖动重绘让位。`MotionScale` 默认 1（关闭），手势期间可降分辨率；`Visual.RenderDamage` 只对局部脏区裁剪不相交子树，位图缓存/Effect 不裁。
+- **局部重绘的裁剪区要外扩 1 个逻辑单位**：`OnPaint` 先用 `BackColor` 铺脏区，`RenderPhysical` 再把物理脏区转成逻辑裁剪；DPI/GDI+ 取整会让脏区最后一列/行没被视觉树覆盖，拖动时留下一条宿主底色的 1px 竖线。`RenderPhysical` 现在把逻辑裁剪 `Inflate(1,1)`。`Slider` 会被水平栈拉伸到整列高，整列失效会把这条缝拉满高度，所以它的 `GetInvalidationBounds` 只报中间轨道带。
 - **子元素实际尺寸变化自动反映到 extent/条**：内容 `Width/Height` 或 desired 改变后，presenter 重测并更新 extent/viewport，条的最大值随之变化；工作流把世界范围写进 `PART_Canvas.Width/Height`，条仍由控件层测量驱动，相机只决定子元素该多大。回归：`ScrollViewer_FollowsChildSizeChanges`。
 - **`ScrollViewer` 的 desired 要回到 presenter 的内容尺寸**：默认模板的 `Grid` 有星号轨道，会按可用尺寸铺满；`ScrollViewer.MeasureOverride` 必须返回 presenter 的 desired（+ Padding），否则放进 ComboBox 下拉弹层/StackPanel 的 Auto 尺寸时会把整条可用宽度占掉，弹层盖住旁边控件。回归：`ComboBox_OutsidePressClosesAndFocusesTheClickedElement`。
 - **滚动条占 Auto 轨道，不覆盖内容**：`ScrollBar` 只在自身轨道条带（含命中内缩）应答；默认 chrome 的两条条各占一行/一列，presenter 视口随之缩小。显示/隐藏用 `Visibility`；切换后必须让 `TemplateRoot`/`ScrollViewer` 重新 `Measure`——父级的测量缓存不会因子元素折叠/展开自动失效。轨道按下先翻一页、同一笔继续拖动；按住约 400ms 后每 50ms 重复一页；悬停拇指用主题前景色高亮。回归：`ScrollViewer_TrackPressContinuesAsTheSameDrag`、`ScrollViewer_ScrollBarCornerIsNotShared`、`ScrollViewer_ThumbBrightensUnderThePointer`、`ScrollBar_TemplatePartsPositionTheThumb`、`ScrollBar_TrackPressPagesOnceThenRepeats`。
@@ -93,6 +95,10 @@
 - **视觉子树的文字走 `VisualText.Draw`**：`TextRenderer` 直接写 HDC、不认 world transform，嵌套平移后文字会画到表面原点。
 - **`DockPanel` 顶部子项要显式高度**：没有 `RowDefinitions` 的 `Grid` 默认一行星号，会吃掉全部可用高度。
 - **`NativeControlHost` 是 airspace 岛**：子 HWND 永远浮在视觉树之上，不能变换/裁剪/混色，弹层也盖不住它。
+- **原生岛不会每趟布局都重走 `ArrangeOverride`**：`NativeControlHost.ArrangeOverride` 是 `VisualHost.PlaceNative` 的唯一登记点，但 `VisualElement.Arrange` 在尺寸不变且已安排过时跳过 `ArrangeOverride`；`EnsureLayout` 末尾的扫描曾因此把岛当成“这趟没安排到”摘掉（岛仍 `IsUsingNativeEditor`，却已脱离宿主、拿不到焦点）。扫描现在对仍满足 `host.Surface == this && host.IsVisible` 的宿主按 `AbsoluteBounds` 重新 `PlaceNative`，其余才 `RemoveNative`。回归：`TextBox_NativeEditorSurvivesTheNextLayoutPass`。
+- **原生岛拿走原生焦点不算逻辑失焦**：`VisualHost.OnLostFocus` 只在 `!ContainsFocus` 时清 `_focused`，`FocusElement` 末尾也只在 `!ContainsFocus` 时重新聚焦宿主。否则宿主焦点会把岛顶掉，`TextBox.OnLostFocus` 再藏岛，焦点在宿主与岛之间反复来回。回归：点击文本框后原生编辑器应保持 `NativeEditor.Focused`，且下一次布局不摘岛。
+- **原生岛按祖先 Clip 裁剪**：`VisualHost.PlaceNative` 把子 HWND 的矩形裁到宿主客户区与祖先 `ClipToBounds`/`Clip` 的交集，交集小于 1px 就隐藏。HWND 不受视觉 `Clip` 约束，不裁的话滚动到视口边缘的 TextBox 编辑器或 `NativeControlHost` 会盖住滚动条和其它面板。回归：`TextBox_NativeEditorIsClippedToTheScrollViewport`。
+- **`Calendar` 不在“今天”上留标记**：只画选中日的 accent 填充。焦点环矩形或小圆点都会在换选日期后留在旧日期上，看起来像没清掉的选中框。回归：`Calendar_SelectingAnotherDayLeavesNoMarkerOnToday`。
 
 ## 五、验证
 

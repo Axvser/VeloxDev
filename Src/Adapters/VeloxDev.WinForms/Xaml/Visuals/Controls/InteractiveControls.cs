@@ -297,7 +297,8 @@ public class Button : ButtonBase
 /// hosted <see cref="System.Windows.Forms.TextBox"/> is the native island that supplies IME composition and an
 /// accessibility peer, and the self-drawn text and caret are hidden while it is active. The island is a real HWND, so
 /// it always paints above the visual tree and cannot be transformed, blended or clipped: multi-line overflow is
-/// clipped by the visual path, and only the content rectangle is covered — the border and padding stay visual.
+/// clipped by the visual path, and only the content rectangle is covered — the border and padding stay visual. Set
+/// <see cref="UseNativeEditor"/> to <see langword="false"/> to keep the whole field on the visual path instead.
 /// </para>
 /// <para>
 /// A control template replaces the self-drawn border and background. The template must contain a
@@ -336,11 +337,23 @@ public class TextBox : TemplatedControl
                 AffectsRender = true,
             });
 
-    /// <summary>Whether the text can be edited.</summary>
+    /// <summary>Whether the field can be edited.</summary>
     public static readonly DependencyProperty IsReadOnlyProperty =
         DependencyProperty.Register(
             nameof(IsReadOnly), typeof(bool), typeof(TextBox),
             new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>Whether the focused field hosts the native editor island for IME and accessibility.</summary>
+    /// <remarks>
+    /// The field is self-drawn either way; this only decides what happens while it has focus. Set it to
+    /// <see langword="false"/> for a fully visual text box — no child HWND, no airspace island — when IME composition
+    /// and the native accessibility peer are not needed. Typing, selection, clipboard, undo, templates and bindings stay
+    /// on the visual path.
+    /// </remarks>
+    public static readonly DependencyProperty UseNativeEditorProperty =
+        DependencyProperty.Register(
+            nameof(UseNativeEditor), typeof(bool), typeof(TextBox),
+            new PropertyMetadata(true));
 
     /// <summary>Whether the field currently owns focus, including while its native editor island holds the keyboard focus.</summary>
     /// <remarks>A control template trigger reads this property; the CLR <see cref="VisualElement.IsFocused"/> stays the surface-level flag.</remarks>
@@ -479,6 +492,18 @@ public class TextBox : TemplatedControl
     {
         get => (bool)GetValue(IsReadOnlyProperty)!;
         set => SetValue(IsReadOnlyProperty, value);
+    }
+
+    /// <summary>Whether the focused field hosts the native editor island for IME and accessibility.</summary>
+    /// <remarks>
+    /// The visual text, caret, selection, clipboard and undo path is used either way. Disable it to keep the control
+    /// entirely on the visual layer (no child HWND, no airspace clipping limit), at the cost of IME composition and the
+    /// native accessibility peer.
+    /// </remarks>
+    public bool UseNativeEditor
+    {
+        get => (bool)GetValue(UseNativeEditorProperty)!;
+        set => SetValue(UseNativeEditorProperty, value);
     }
 
     /// <summary>Whether the text is drawn as bullets.</summary>
@@ -679,6 +704,30 @@ public class TextBox : TemplatedControl
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
+        if (ReferenceEquals(e.Property, UseNativeEditorProperty))
+        {
+            if (UseNativeEditor)
+            {
+                if (IsFocused)
+                {
+                    ShowNativeEditor();
+                }
+            }
+            else
+            {
+                HideNativeEditor();
+                if (IsFocused)
+                {
+                    _caretVisible = true;
+                    _caretTimer.Start();
+                }
+            }
+
+            UpdateFocusState();
+            InvalidateVisual();
+            return;
+        }
+
         if (ReferenceEquals(e.Property, TextProperty))
         {
             ClampSelection();
@@ -1493,8 +1542,8 @@ public class TextBox : TemplatedControl
 
     private void ShowNativeEditor()
     {
-        // 没有窗口句柄时原生岛无处安放，保持自绘路径即可；真实宿主在拿到句柄后才有 IME/无障碍。
-        if (Surface is not { IsHandleCreated: true })
+        // 没有窗口句柄时原生岛无处安放；UseNativeEditor=false 时整个编辑都留在自绘路径。
+        if (!UseNativeEditor || Surface is not { IsHandleCreated: true })
         {
             return;
         }
