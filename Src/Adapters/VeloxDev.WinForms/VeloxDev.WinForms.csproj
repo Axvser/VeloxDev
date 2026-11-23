@@ -18,7 +18,7 @@
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<PackageId>VeloxDev.WinForms</PackageId>
 		<Title>VeloxDev.WinForms</Title>
-		<Version>11.2.0</Version>
+		<Version>12.0.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinForms, including the XAML-first view runtime.</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
@@ -38,7 +38,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="../../Core/VeloxDev.Core/VeloxDev.Core.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="VeloxDev.Core" Version="11.2.0" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="VeloxDev.Core" Version="12.0.0" Condition="'$(Configuration)' != 'Debug'" />
 		<!-- Debug uses the local generator source; Release resolves the analyzer package from NuGet,
 		     which is what the published adapter depends on and what the release workflow gates on. -->
 		<ProjectReference Include="..\..\Generators\VeloxDev.WinForms.Generator\VeloxDev.WinForms.Generator.csproj"

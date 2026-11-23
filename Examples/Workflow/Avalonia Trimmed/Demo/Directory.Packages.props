@@ -15,8 +15,8 @@
     <PackageVersion Include="Avalonia.Browser" Version="12.0.3" />
     <PackageVersion Include="Avalonia.Android" Version="12.0.3" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageVersion Include="VeloxDev.Avalonia" Version="5.0.29" />
-    <PackageVersion Include="VeloxDev.Core" Version="5.0.33-fixed1" />
+    <PackageVersion Include="VeloxDev.Avalonia" Version="12.0.0" />
+    <PackageVersion Include="VeloxDev.Core" Version="12.0.0" />
     <PackageVersion Include="Xamarin.AndroidX.Core.SplashScreen" Version="1.0.1.15" />
   </ItemGroup>
 </Project>

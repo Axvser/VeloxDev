@@ -7,7 +7,7 @@
     generator and neither may be on NuGet yet.
 
     This lives here, not in each csproj: the version stays written directly in every project
-    (e.g. Version="11.0.0"), and the release procedure rewrites that literal. Each swap applies only
+    (e.g. Version="x.y.z"), and the release procedure rewrites that literal. Each swap applies only
     to projects that actually consume the package, so unrelated projects under Src/ are left alone.
   -->
   <ItemGroup Condition="'$(VeloxDevLocalCore)' == 'true' And '$(Configuration)' != 'Debug'">
