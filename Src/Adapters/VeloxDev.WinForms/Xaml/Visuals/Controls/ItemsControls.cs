@@ -46,15 +46,46 @@ public class ItemsControl : Panel
             nameof(ItemTemplate), typeof(DataTemplate), typeof(ItemsControl),
             new PropertyMetadata(null) { AffectsMeasure = true, AffectsRender = false });
 
+    /// <summary>Chooses the item template per source item; a non-null result wins over <see cref="ItemTemplate"/>.</summary>
+    public static readonly DependencyProperty ItemTemplateSelectorProperty =
+        DependencyProperty.Register(
+            nameof(ItemTemplateSelector), typeof(DataTemplateSelector), typeof(ItemsControl),
+            new PropertyMetadata(null) { AffectsMeasure = true, AffectsRender = false });
+
+    /// <summary>The panel that hosts the realized items, or <see langword="null"/> to stack them vertically.</summary>
+    public static readonly DependencyProperty ItemsPanelProperty =
+        DependencyProperty.Register(
+            nameof(ItemsPanel), typeof(ItemsPanelTemplate), typeof(ItemsControl),
+            new PropertyMetadata(null) { AffectsMeasure = true, AffectsRender = false });
+
+    /// <summary>Marks a panel as the host of an <see cref="ItemsControl"/>'s realized items.</summary>
+    public static readonly DependencyProperty IsItemsHostProperty =
+        DependencyProperty.RegisterAttached(
+            "IsItemsHost", typeof(bool), typeof(ItemsControl),
+            new PropertyMetadata(false) { AffectsMeasure = true, AffectsRender = false });
+
     private readonly List<object?> _sourceItems = [];
     private readonly List<VisualElement> _items = [];
     private INotifyCollectionChanged? _observed;
+    private ItemsPanelTemplate? _appliedPanelTemplate;
+    private Panel? _itemsHost;
     private bool _rebuilding;
 
     /// <summary>Creates an empty items panel.</summary>
     public ItemsControl()
     {
     }
+
+    /// <summary>Reads whether <paramref name="element"/> is marked as an items host panel.</summary>
+    /// <param name="element">The element to read.</param>
+    public static bool GetIsItemsHost(VisualElement element)
+        => element is null ? throw new ArgumentNullException(nameof(element)) : (bool)element.GetValue(IsItemsHostProperty)!;
+
+    /// <summary>Marks <paramref name="element"/> as the host of an items control's realized items.</summary>
+    /// <param name="element">The panel to mark.</param>
+    /// <param name="value">Whether the panel hosts items.</param>
+    public static void SetIsItemsHost(VisualElement element, bool value)
+        => (element ?? throw new ArgumentNullException(nameof(element))).SetValue(IsItemsHostProperty, value);
 
     /// <summary>The sequence whose items become child visuals.</summary>
     public IEnumerable? ItemsSource
@@ -84,6 +115,20 @@ public class ItemsControl : Panel
         set => SetValue(ItemTemplateProperty, value);
     }
 
+    /// <summary>Chooses the item template per source item; a non-null result wins over <see cref="ItemTemplate"/>.</summary>
+    public DataTemplateSelector? ItemTemplateSelector
+    {
+        get => (DataTemplateSelector?)GetValue(ItemTemplateSelectorProperty);
+        set => SetValue(ItemTemplateSelectorProperty, value);
+    }
+
+    /// <summary>The panel that hosts the realized items, or <see langword="null"/> to stack them vertically.</summary>
+    public ItemsPanelTemplate? ItemsPanel
+    {
+        get => (ItemsPanelTemplate?)GetValue(ItemsPanelProperty);
+        set => SetValue(ItemsPanelProperty, value);
+    }
+
     /// <summary>The realized item visuals, in source order.</summary>
     public IReadOnlyList<VisualElement> Items => _items;
 
@@ -110,7 +155,8 @@ public class ItemsControl : Panel
     /// <exception cref="InvalidOperationException">The configured <see cref="ItemFactory"/> returned <see langword="null"/>.</exception>
     protected virtual VisualElement CreateItemVisual(object? item)
     {
-        var template = ItemTemplate;
+        var selector = ItemTemplateSelector;
+        var template = selector?.SelectTemplate(item, null) ?? ItemTemplate;
         var factory = ItemFactory;
         var visual = template is not null
             ? template.Create()
@@ -144,24 +190,85 @@ public class ItemsControl : Panel
         }
     }
 
-    /// <summary>Removes every realized item visual from this panel.</summary>
+    /// <summary>Removes every realized item visual from its host.</summary>
     protected void ClearRealizedItems()
     {
         for (var index = _items.Count - 1; index >= 0; index--)
         {
-            RemoveChild(_items[index]);
+            // items 可能挂在 ItemsPresenter/ItemsPanel 里，而不是控件自身。
+            _items[index].ParentElement?.RemoveChild(_items[index]);
         }
 
         _items.Clear();
     }
 
-    /// <summary>Adds a realized item visual to <see cref="Items"/> and to the visual children.</summary>
+    /// <summary>Adds a realized item visual to <see cref="Items"/> and to the active items host.</summary>
     /// <param name="visual">The item visual to add.</param>
     protected void AddRealizedItem(VisualElement visual)
     {
         if (visual is null) throw new ArgumentNullException(nameof(visual));
         _items.Add(visual);
+        var host = ResolveItemsHost();
+        if (host is not null && !ReferenceEquals(host, visual))
+        {
+            host.Add(visual);
+            return;
+        }
+
         Add(visual);
+    }
+
+    // ItemsPanel 优先；否则使用内容里声明的 ItemsPresenter（或 IsItemsHost 标记的面板）；都没有就由控件自己竖排。
+    private Panel? ResolveItemsHost()
+    {
+        var template = ItemsPanel;
+        if (template is not null)
+        {
+            if (_itemsHost is not null && ReferenceEquals(_appliedPanelTemplate, template))
+            {
+                return _itemsHost;
+            }
+
+            if (_itemsHost is not null && Children.Contains(_itemsHost))
+            {
+                RemoveChild(_itemsHost);
+            }
+
+            _appliedPanelTemplate = template;
+            _itemsHost = template.Create();
+            Add(_itemsHost);
+            return _itemsHost;
+        }
+
+        var hostFromTemplate = _appliedPanelTemplate is not null && _itemsHost is not null;
+        _appliedPanelTemplate = null;
+        if (template is null && hostFromTemplate && Children.Contains(_itemsHost!))
+        {
+            // 上一轮由 ItemsPanel 创建的宿主在模板被移除后退出。
+            RemoveChild(_itemsHost!);
+            _itemsHost = null;
+        }
+
+        foreach (var child in Children)
+        {
+            if (child is ItemsPresenter presenter)
+            {
+                _itemsHost = presenter;
+                return presenter;
+            }
+        }
+
+        foreach (var child in Children)
+        {
+            if (child is Panel panel && GetIsItemsHost(panel))
+            {
+                _itemsHost = panel;
+                return panel;
+            }
+        }
+
+        _itemsHost = null;
+        return null;
     }
 
     /// <summary>Called after <see cref="ItemsSource"/> or <see cref="ItemFactory"/> rebuilt the realized items.</summary>
@@ -174,6 +281,15 @@ public class ItemsControl : Panel
     {
         var padding = Padding;
         var contentWidth = Math.Max(0, availableSize.Width - (int)Math.Ceiling(padding.Horizontal));
+        var contentHeight = Math.Max(0, availableSize.Height - (int)Math.Ceiling(padding.Vertical));
+        if (_itemsHost is not null)
+        {
+            var hosted = _itemsHost.Measure(new Size(contentWidth, contentHeight));
+            return new Size(
+                hosted.Width + (int)Math.Ceiling(padding.Horizontal),
+                hosted.Height + (int)Math.Ceiling(padding.Vertical));
+        }
+
         var width = 0;
         var height = 0;
         foreach (var child in _items)
@@ -202,6 +318,12 @@ public class ItemsControl : Panel
             (int)Math.Ceiling(padding.Top),
             Math.Max(0f, finalSize.Width - padding.Horizontal),
             Math.Max(0f, finalSize.Height - padding.Vertical));
+        if (_itemsHost is not null)
+        {
+            _itemsHost.Arrange(content);
+            return;
+        }
+
         var position = content.Top;
         foreach (var child in _items)
         {
@@ -227,6 +349,8 @@ public class ItemsControl : Panel
         }
         else if (ReferenceEquals(e.Property, ItemFactoryProperty)
                  || ReferenceEquals(e.Property, ItemTemplateProperty)
+                 || ReferenceEquals(e.Property, ItemTemplateSelectorProperty)
+                 || ReferenceEquals(e.Property, ItemsPanelProperty)
                  || ReferenceEquals(e.Property, DisplayMemberPathProperty))
         {
             RebuildItems();
@@ -283,6 +407,8 @@ public class ItemsControl : Panel
                 }
             }
 
+            // 先确定宿主：空 ItemsSource 也要让 ItemsPanel 里的空面板参与布局。
+            ResolveItemsHost();
             RealizeItems();
         }
         finally

@@ -130,14 +130,16 @@ internal sealed class VisualTemplateTriggerApplication : IDisposable
                     continue;
                 }
 
-                var target = ResolveTarget(trigger) ?? _owner;
+                var target = ResolveTarget(trigger, null) ?? _owner;
                 nowActive.Add(trigger);
                 foreach (var setter in trigger.Setters)
                 {
                     if (setter?.Property is not null)
                     {
+                        // Setter.TargetName 是 WPF 形状；Trigger.TargetName 仍作为整条触发器默认目标。
+                        var setterTarget = ResolveTarget(trigger, setter.TargetName) ?? target;
                         active ??= [];
-                        active[(target, setter.Property)] = setter.Value;
+                        active[(setterTarget, setter.Property)] = setter.Value;
                     }
                 }
             }
@@ -164,7 +166,7 @@ internal sealed class VisualTemplateTriggerApplication : IDisposable
             {
                 if (!_activeTriggers.Contains(trigger))
                 {
-                    (entered ??= []).Add((trigger, ResolveTarget(trigger) ?? _owner));
+                    (entered ??= []).Add((trigger, ResolveTarget(trigger, null) ?? _owner));
                 }
             }
 
@@ -172,7 +174,7 @@ internal sealed class VisualTemplateTriggerApplication : IDisposable
             {
                 if (!nowActive.Contains(trigger))
                 {
-                    (exited ??= []).Add((trigger, ResolveTarget(trigger) ?? _owner));
+                    (exited ??= []).Add((trigger, ResolveTarget(trigger, null) ?? _owner));
                 }
             }
 
@@ -222,18 +224,19 @@ internal sealed class VisualTemplateTriggerApplication : IDisposable
         _activeTriggers.Clear();
         foreach (var trigger in active)
         {
-            InvokeAction(trigger.ExitAction, ResolveTarget(trigger) ?? _owner);
+            InvokeAction(trigger.ExitAction, ResolveTarget(trigger, null) ?? _owner);
         }
     }
 
-    private IWinformsObject? ResolveTarget(VisualTrigger trigger)
+    private IWinformsObject? ResolveTarget(VisualTrigger trigger, string? setterTargetName)
     {
-        if (string.IsNullOrEmpty(trigger.TargetName))
+        var name = string.IsNullOrEmpty(setterTargetName) ? trigger.TargetName : setterTargetName;
+        if (string.IsNullOrEmpty(name))
         {
             return _owner;
         }
 
-        return _scope.Find(trigger.TargetName) as IWinformsObject;
+        return _scope.Find(name) as IWinformsObject;
     }
 
     private void ClearWritten()

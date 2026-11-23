@@ -187,9 +187,9 @@ public sealed class VisualContentTemplateTests
             new InMemoryAdditionalText("ProbeVisualView.xaml", xaml));
 
         Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
-        StringAssert.Contains(
-            run.GeneratedText(),
-            "host.ContentTemplate = global::VeloxDev.WinForms.Xaml.Visuals.VisualResourceLookup");
+        var generated = run.GeneratedText();
+        StringAssert.Contains(generated, "VisualResourceLookup.ApplyStatic<");
+        StringAssert.Contains(generated, "host.ContentTemplate = __v");
 
         var errors = output.GetDiagnostics()
             .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)

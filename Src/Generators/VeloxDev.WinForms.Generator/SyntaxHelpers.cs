@@ -69,7 +69,6 @@ internal static class SyntaxHelpers
     public const string VisualsNamespace = "VeloxDev.WinForms.Xaml.Visuals";
     public const string VisualControlsNamespace = "VeloxDev.WinForms.Xaml.Visuals.Controls";
     public const string VisualShapesNamespace = "VeloxDev.WinForms.Xaml.Visuals.Controls.Shapes";
-    public const string XamlControlMetadataName = "VeloxDev.WinForms.Xaml.Controls.Control";
     public const string ControlMetadataName = "System.Windows.Forms.Control";
     public const string DependencyPropertyMetadataName = "VeloxDev.WinForms.Xaml.DependencyProperty";
     public const string VisualElementMetadataName = "VeloxDev.WinForms.Xaml.Visuals.VisualElement";

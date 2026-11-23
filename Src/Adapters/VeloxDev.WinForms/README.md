@@ -30,11 +30,13 @@ XAML is written **unprefixed**:
 An unprefixed name that resolves to no visual type is `VELOX_XAML019`; write `local:` for your own
 type. A view root must derive from `VisualElement`, and its code-behind calls `InitializeComponent()`.
 
-Supported forms: unprefixed controls, attached properties (`Grid.Row`, `Canvas.Left`), `local:`,
-`x:Name`, CLR events, `Resources`, `<Style>` (implicit by `TargetType` or keyed), `<ControlTemplate>`,
-`<DataTemplate>` as an inline item template **and** as a keyed resource, selector resources
-(`local:Selector x:Key=... Template="{StaticResource ...}"`), `VisualTemplateSelector`, bindings
-(`VisualBindingOperations`), `VisualTrigger` setters, shapes, and `ItemsControl.ItemTemplate`.
+Supported forms: unprefixed controls, attached properties (`Grid.Row="1"` or `<Grid.Row>1</Grid.Row>`),
+`Canvas.Left`, `local:`, `x:Name`, CLR events, `Resources`, `<Style>` (implicit by `TargetType` or keyed, with
+direct or wrapped `Setter`/`Trigger` elements), `<ControlTemplate>`, `<DataTemplate>` as an inline item template
+**and** as a keyed resource, `<ItemsPanelTemplate>` plus `<ItemsControl.ItemsPanel>`/`ItemsPresenter`,
+selector resources (`local:Selector x:Key=... Template="{StaticResource ...}"`), `VisualTemplateSelector`,
+bindings (`VisualBindingOperations`), `{StaticResource}`/`{DynamicResource}`, `VisualTrigger` setters, shapes,
+`ItemsControl.ItemTemplate` and `ItemsControl.ItemTemplateSelector`.
 
 ## Visual backend
 
@@ -49,14 +51,19 @@ second window.
   priority layer (`Animation`, `LocalValue`, `StyleTrigger`, `Template`, `Style`, `Inherited`).
 - **Bindings.** `element.SetBinding(Element.PropProperty, new Binding("Name") { Source = vm })`
   supports `OneWay`/`OneTime`/`TwoWay`, `DataContext` paths, converters, `StringFormat`,
-  `FallbackValue` and `TargetNullValue`; `RelativeSource.Self` and `TemplateBinding`
-  (`RelativeSource.TemplatedParent`) resolve too. `GetObservable`/`Bind` push an `IObservable` into a
-  layer. `ElementName` and validation rules are not part of this layer.
+  `FallbackValue` and `TargetNullValue`; `RelativeSource.Self`, `TemplateBinding`
+  (`RelativeSource.TemplatedParent`) and `FindAncestor` resolve too. `ElementName` searches the nearest
+  `VisualNameScope` first (so an item template never binds to another item's part), then ancestor names, then —
+  outside templates — the whole tree. `GetObservable`/`Bind` push an `IObservable` into a layer. Validation
+  rules are not part of this layer.
 - **Resources and styles.** `VisualElement.Resources` and `VisualHost.Resources` are ordinary
   `ResourceDictionary` stores; `VisualResourceLookup.Get<T>` walks the element, its ancestors and the
-  surface. `VisualStyle` / `VisualSetter` / `VisualTrigger` come from code or from `Styles`
-  collections. A style is a description, not a live object: mutating an applied style's `Setters`
-  does not re-apply it.
+  surface. Generated `{StaticResource}` values are anchored on the target element and resolve as soon as its
+  ancestor chain is complete, so a dictionary on any ancestor or on the surface works; `{DynamicResource}`
+  keeps listening to those dictionaries and updates on add, replace and remove. `VisualStyle` /
+  `VisualSetter` / `VisualTrigger` come from code or from `Styles` collections. A style is a description,
+  not a live object: mutating an applied style's `Setters` does not re-apply it. A setter may carry a
+  `Binding` or a `TargetName`; `TargetName` resolves through the applied control template.
 - **Templates.** `ContentControl` shows one `Content` or a `VisualControlTemplate`; the template's root
   reports `TemplatedParent`, named parts resolve through `GetTemplateChild<T>`, and
   `ContentPresenter` receives the content. `VisualStyle.Template` applies through a style;
@@ -86,18 +93,21 @@ second window.
   deepest hit element; focus is logical and `FocusElement`/`Tab` move it. Document-level input rules
   are handled by `VisualHost`.
 - **Visual XAML.** Ordinary unprefixed names (`UserControl`, `Canvas`, `Grid`, `Border`, `Viewbox`,
-  `ItemsControl`, `DataTemplate`, `Path`) resolve to the visual backend. Generated code assigns a
-  single control to `Content` for `UserControl`/`ContentControl`/`ScrollViewer`, and `Add`s it
-  elsewhere; a type with an `Items` collection writes `Items.Add`. `x:Name` becomes a field and
-  `VisualElement.Name`; template names register into the per-instance `VisualNameScope`. A keyed
-  `DataTemplate` resource is generated into `Visuals.DataTemplate` and compiled to a factory. A
-  `{StaticResource}` on a child is anchored on the view root, because generated code assigns
-  attributes before parenting.
+  `ItemsControl`, `DataTemplate`, `ItemsPanelTemplate`, `ItemsPresenter`, `Path`) resolve to the visual backend.
+  Generated code assigns a single control to `Content` for `UserControl`/`ContentControl`/`ScrollViewer`, and
+  `Add`s it elsewhere; a type with an `Items` collection writes `Items.Add`. `x:Name` becomes a field and
+  `VisualElement.Name`; a name inside a `ControlTemplate`, `DataTemplate`/`ItemTemplate`/`ContentTemplate` or
+  `ItemsPanelTemplate` registers into that instance's `VisualNameScope` instead. A `{StaticResource}` on a
+  child resolves against the child's own chain, not against the view root only. `ItemsControl.ItemsPanel`
+  replaces the default vertical stack; an `ItemsPresenter` (or a panel marked with
+  `ItemsControl.IsItemsHost`) declared in the content serves as the host. `ItemsControl.ItemTemplateSelector`
+  picks a `DataTemplate` per item and wins over `ItemTemplate`.
 - **Triggers.** `VisualTrigger` applies `Setters` at `BindingPriority.StyleTrigger`; style triggers
   and template triggers work. `EnterAction` and `ExitAction` run once on activation and once on
   deactivation; `TransitionAction` and `KeyFrameAnimation` animate one dependency property through
   the transition system, and a custom action derives `Visuals.VisualTriggerAction`. A template
-  trigger's actions receive the same `TargetName` part as its setters.
+  trigger's actions receive the same `TargetName` part as its setters. `DataTrigger` and `MultiTrigger`
+  are not supported on the visual backend and are reported as `VELOX_XAML004` instead of being skipped.
 - **Theme.** `Theme.CreateDark()` / `CreateLight()` palettes follow the VS Code workbench / Scribalix
   tokens (window `#141414`, panels `#252526`, inputs `#2A2A2A`, borders `#333333`, text `#E7E7E7`,
   muted `#A0A0A0`, accent `#0078D4`, selection `#094771`; Light+ keeps `#F3F3F3` panels and

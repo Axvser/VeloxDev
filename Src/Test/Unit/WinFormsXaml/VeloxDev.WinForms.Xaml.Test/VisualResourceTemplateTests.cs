@@ -202,7 +202,8 @@ public sealed class VisualResourceTemplateTests
         var generated = run.GeneratedText();
         StringAssert.Contains(generated, "new global::VeloxDev.WinForms.Xaml.Visuals.VisualStyle()");
         StringAssert.Contains(generated, ".Resources[\"Fancy\"] =");
-        StringAssert.Contains(generated, "action.Style = global::VeloxDev.WinForms.Xaml.Visuals.VisualResourceLookup");
+        StringAssert.Contains(generated, "VisualResourceLookup.ApplyStatic<");
+        StringAssert.Contains(generated, "action.Style = __v");
 
         var errors = output.GetDiagnostics()
             .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
@@ -249,7 +250,8 @@ public sealed class VisualResourceTemplateTests
         StringAssert.Contains(generated, "CreateVisualControlTemplate_Card");
         StringAssert.Contains(generated, "__xamlScope.Register(\"PART_Frame\"");
         StringAssert.Contains(generated, "new global::VeloxDev.WinForms.Xaml.Visuals.VisualControlTemplate(");
-        StringAssert.Contains(generated, "host.Template = global::VeloxDev.WinForms.Xaml.Visuals.VisualResourceLookup");
+        StringAssert.Contains(generated, "VisualResourceLookup.ApplyStatic<");
+        StringAssert.Contains(generated, "host.Template = __v");
 
         var errors = output.GetDiagnostics()
             .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)

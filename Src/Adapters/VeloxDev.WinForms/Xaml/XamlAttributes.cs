@@ -39,6 +39,18 @@ public sealed class XamlPropertyAttribute : Attribute
 
     /// <summary>An optional default value, parsed against the property type by the generator.</summary>
     public string? DefaultValue { get; set; }
+
+    /// <summary>Whether a change invalidates measure; forwarded to the generated property metadata.</summary>
+    public bool AffectsMeasure { get; set; }
+
+    /// <summary>Whether a change invalidates arrange without a new measure; forwarded to the generated metadata.</summary>
+    public bool AffectsArrange { get; set; }
+
+    /// <summary>Whether a change repaints the target; defaults to <see langword="true"/> like <see cref="PropertyMetadata"/>.</summary>
+    public bool AffectsRender { get; set; } = true;
+
+    /// <summary>Whether descendants inherit the value when they have none of their own.</summary>
+    public bool Inherits { get; set; }
 }
 
 /// <summary>
@@ -51,8 +63,8 @@ public sealed class XamlPropertyAttribute : Attribute
 /// </para>
 /// <code>
 /// [XamlAttachedProperty]
-/// public static partial string? GetTag(System.Windows.Forms.Control control);
-/// public static partial void SetTag(System.Windows.Forms.Control control, string? value);
+/// public static partial string? GetTag(VeloxDev.WinForms.Xaml.Visuals.VisualElement element);
+/// public static partial void SetTag(VeloxDev.WinForms.Xaml.Visuals.VisualElement element, string? value);
 /// </code>
 /// <para>
 /// The attribute may be placed on either accessor; the pair is matched by the <c>Get</c>/<c>Set</c> name. The
@@ -79,4 +91,16 @@ public sealed class XamlAttachedPropertyAttribute : Attribute
 
     /// <summary>An optional default value, parsed against the property type by the generator.</summary>
     public string? DefaultValue { get; set; }
+
+    /// <summary>Whether a change invalidates measure; forwarded to the generated property metadata.</summary>
+    public bool AffectsMeasure { get; set; }
+
+    /// <summary>Whether a change invalidates arrange without a new measure; forwarded to the generated metadata.</summary>
+    public bool AffectsArrange { get; set; }
+
+    /// <summary>Whether a change repaints the target; defaults to <see langword="true"/> like <see cref="PropertyMetadata"/>.</summary>
+    public bool AffectsRender { get; set; } = true;
+
+    /// <summary>Whether descendants inherit the value when they have none of their own.</summary>
+    public bool Inherits { get; set; }
 }

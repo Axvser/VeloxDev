@@ -312,22 +312,6 @@ public static class XamlRuntime
             : throw new FormatException($"'{text}' is not a point value (2 numbers).");
     }
 
-    /// <summary>
-    /// Converts <paramref name="value"/> to the attached property's declared type and stores it on
-    /// <paramref name="target"/>.
-    /// </summary>
-    /// <param name="target">The control receiving the value.</param>
-    /// <param name="property">The attached dependency property.</param>
-    /// <param name="value">The value to convert and store.</param>
-    /// <remarks>Generated XAML uses this for attached-property literals and static resources, where the value type is not known to the compiler.</remarks>
-    public static void SetAttachedValue(System.Windows.Forms.Control target, DependencyProperty property, object? value)
-    {
-        if (target is null) throw new ArgumentNullException(nameof(target));
-        if (property is null) throw new ArgumentNullException(nameof(property));
-
-        property.SetValue(target, ConvertValue(value, property.PropertyType));
-    }
-
     /// <summary>Finds a registered attached property, or throws when the owner never registered it.</summary>
     /// <param name="ownerType">The type that registered the attached property.</param>
     /// <param name="name">The property name.</param>

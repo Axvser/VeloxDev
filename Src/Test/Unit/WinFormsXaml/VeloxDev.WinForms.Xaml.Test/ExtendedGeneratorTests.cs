@@ -158,6 +158,7 @@ public sealed class ExtendedGeneratorTests
         StringAssert.Contains(generated, ".Setters.Add(new global::VeloxDev.WinForms.Xaml.Visuals.VisualSetter(");
         StringAssert.Contains(generated, "global::VeloxDev.WinForms.Xaml.Visuals.Controls.Grid.RowProperty");
         StringAssert.Contains(generated, "list.ItemTemplate = new global::VeloxDev.WinForms.Xaml.Visuals.DataTemplate(");
-        StringAssert.Contains(generated, "host.Template = global::VeloxDev.WinForms.Xaml.Visuals.VisualResourceLookup");
+        StringAssert.Contains(generated, "VisualResourceLookup.ApplyStatic<");
+        StringAssert.Contains(generated, "host.Template = __v");
     }
 }

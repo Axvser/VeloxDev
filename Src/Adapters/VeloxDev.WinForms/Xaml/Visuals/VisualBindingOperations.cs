@@ -228,6 +228,28 @@ internal sealed class VisualBindingExpression : IDisposable
 
     private static VisualElement? FindNamedElement(VisualElement target, string name)
     {
+        // 1. 最近的模板实例名字域：同一 item/模板实例的部件优先，绝不跨实例。
+        if (target.FindInEnclosingNameScope(name) as VisualElement is { } scoped)
+        {
+            return scoped;
+        }
+
+        // 2. 模板外的命名元素通常是祖先（例如工作流模板按 ElementName 找 PART_Canvas），按名字查祖先。
+        for (var current = target.ParentElement; current is not null; current = current.ParentElement)
+        {
+            if (string.Equals(current.Name, name, StringComparison.Ordinal))
+            {
+                return current;
+            }
+        }
+
+        // 3. 模板实例内部到此为止：全树遍历会把绑定串到另一个 item 的同名部件。
+        if (target.EnclosingNameScope is not null)
+        {
+            return null;
+        }
+
+        // 4. 非模板树回退到从根开始的深度优先查找（兄弟元素、页面里任意命名元素）。
         var root = target;
         while (root.ParentElement is { } parent)
         {

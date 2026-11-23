@@ -149,6 +149,8 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     private VisualStyleCollection? _styles;
     private ResourceDictionary? _resources;
     private VisualNameScope? _templateScope;
+    private VisualNameScope? _instanceScope;
+    private List<IDisposable>? _resourceBindings;
 
     /// <summary>The outer spacing around this element.</summary>
     public XamlThickness Margin
@@ -739,6 +741,18 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         _styleApplication?.Apply(null);
         _explicitStyle = null;
         _implicitStyle = null;
+
+        // 动态/延迟资源订阅也要摘掉，否则字典的 Changed 会把已释放的元素一直留在内存里。
+        if (_resourceBindings is not null)
+        {
+            foreach (var binding in _resourceBindings)
+            {
+                binding.Dispose();
+            }
+
+            _resourceBindings.Clear();
+        }
+
         DisposeCache();
 
         foreach (var child in Children.ToArray())
@@ -812,7 +826,14 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         }
     }
 
-    internal void SetSurfaceRoot(VisualHost? surface) => _surface = surface;
+    internal void SetSurfaceRoot(VisualHost? surface)
+    {
+        _surface = surface;
+        // 表面资源是资源链的最后一站；根挂到 VisualHost（或从它摘下）时延迟解析要重试一次。
+        SurfaceChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal event EventHandler? SurfaceChanged;
 
     // 模板里的每个后代都记着施模板的控件；TemplateBinding 靠它找源，模板触发器也写回它。
     internal void SetTemplatedParentRecursive(VisualElement? parent)
@@ -829,12 +850,39 @@ public abstract class VisualElement : ContainerVisual, IDisposable
 
     internal void SetTemplateScope(VisualNameScope? scope) => _templateScope = scope;
 
+    // DataTemplate/ItemsPanelTemplate 实例根自己的名字域；控件模板作用在自己的 _templateScope 上，两者不互相覆盖。
+    internal void SetNameScope(VisualNameScope? scope) => _instanceScope = scope;
+
+    // 资源订阅由 VisualResourceLookup 建立；元素释放时统一摘掉。
+    internal void TrackResourceBinding(IDisposable binding) => (_resourceBindings ??= []).Add(binding);
+
+    // 从本元素向上找到最近的名字域；ElementName 先在这里查，查不到才回退到树遍历。
+    internal VisualNameScope? EnclosingNameScope
+    {
+        get
+        {
+            for (var current = this; current is not null; current = current.ParentElement)
+            {
+                if ((current._templateScope ?? current._instanceScope) is { } scope)
+                {
+                    return scope;
+                }
+            }
+
+            return null;
+        }
+    }
+
+    // 模板实例内的 ElementName 只能命中本实例的名字域；跨实例查找会串到别的 item。
+    internal object? FindInEnclosingNameScope(string name)
+        => EnclosingNameScope?.Find(name);
+
     /// <summary>Returns the named template part created for this element, or <see langword="null"/>.</summary>
     /// <typeparam name="T">The type the caller expects.</typeparam>
     /// <param name="name">The <c>x:Name</c> the part was declared with inside the template.</param>
     /// <remarks>The scope belongs to one template instance; parts of another instance never resolve here.</remarks>
     public T? GetTemplateChild<T>(string name) where T : class
-        => _templateScope?.Find<T>(name);
+        => (_templateScope ?? _instanceScope)?.Find<T>(name);
 
     // 样式有 Template 时由 VisualStyleApplication 回调；只有 ContentControl 覆写它。
     internal virtual void ApplyStyleTemplate(VisualControlTemplate? template)

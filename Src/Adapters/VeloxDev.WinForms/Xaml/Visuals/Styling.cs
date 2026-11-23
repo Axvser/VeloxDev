@@ -33,6 +33,25 @@ public sealed class VisualSetter
 
     /// <summary>The value written while the owning style or trigger is active.</summary>
     public object? Value { get; set; }
+
+    /// <summary>
+    /// A binding that writes <see cref="Property"/> while the setter is active, or <see langword="null"/>.
+    /// </summary>
+    /// <remarks>
+    /// A setter binding is attached when the style is applied and detached when it is removed. It writes the local
+    /// layer, so an explicit local value or binding on the element still wins, exactly as a WPF setter binding loses to
+    /// a local value.
+    /// </remarks>
+    public Binding? Binding { get; set; }
+
+    /// <summary>
+    /// The named template part this setter writes, or <see langword="null"/> for the styled element.
+    /// </summary>
+    /// <remarks>
+    /// The name is resolved through the styled element's applied control template. When that template has no such part
+    /// the setter is skipped for that element instead of writing the wrong node.
+    /// </remarks>
+    public string? TargetName { get; set; }
 }
 
 /// <summary>
@@ -227,9 +246,11 @@ internal sealed class VisualStyleApplication
 {
     private readonly VisualElement _element;
     private readonly List<VisualTrigger> _triggers = [];
-    private readonly HashSet<DependencyProperty> _styleProperties = [];
-    private readonly HashSet<DependencyProperty> _triggerProperties = [];
+    private readonly HashSet<(IWinformsObject Target, DependencyProperty Property)> _styleProperties = [];
+    private readonly HashSet<(IWinformsObject Target, DependencyProperty Property)> _triggerProperties = [];
     private readonly HashSet<VisualTrigger> _activeTriggers = [];
+    private readonly List<IDisposable> _bindings = [];
+    private readonly List<(IWinformsObject Target, DependencyProperty Property)> _bindingProperties = [];
     private VisualStyle? _style;
     private bool _subscribed;
     private bool _evaluating;
@@ -249,6 +270,7 @@ internal sealed class VisualStyleApplication
         // 先退订再摘层：摘层会发 PropertyChanged，若还挂着触发器会被当成一次真实变更重新求值。
         Unsubscribe();
         ExitActiveTriggers();
+        ClearBindings();
         ClearTriggerLayer();
         ClearStyleLayer();
 
@@ -276,15 +298,31 @@ internal sealed class VisualStyleApplication
             return;
         }
 
-        var values = new Dictionary<DependencyProperty, object?>();
+        var values = new Dictionary<(IWinformsObject Target, DependencyProperty Property), object?>();
+        var bindings = new List<(IWinformsObject Target, DependencyProperty Property, Binding Binding)>();
         foreach (var link in style.Flatten())
         {
             foreach (var setter in link.Setters)
             {
-                // 用字典按属性去重：BasedOn 链上同一个属性只写一次，derived 的值覆盖 base。
-                if (setter?.Property is not null)
+                // 用字典按“目标 + 属性”去重：BasedOn 链上同一个属性只写一次，derived 的值覆盖 base。
+                if (setter?.Property is null)
                 {
-                    values[setter.Property] = setter.Value;
+                    continue;
+                }
+
+                var target = ResolveTarget(setter.TargetName);
+                if (target is null)
+                {
+                    continue;
+                }
+
+                if (setter.Binding is not null)
+                {
+                    bindings.Add((target, setter.Property, setter.Binding));
+                }
+                else
+                {
+                    values[(target, setter.Property)] = setter.Value;
                 }
             }
 
@@ -298,9 +336,16 @@ internal sealed class VisualStyleApplication
                 _triggers.Add(trigger);
                 foreach (var setter in trigger.Setters)
                 {
-                    if (setter?.Property is not null)
+                    if (setter?.Property is null)
                     {
-                        _triggerProperties.Add(setter.Property);
+                        continue;
+                    }
+
+                    // Setter.TargetName（WPF 形状）优先；旧的 Trigger.TargetName 作为兼容回落。
+                    var target = ResolveTarget(setter.TargetName ?? trigger.TargetName);
+                    if (target is not null)
+                    {
+                        _triggerProperties.Add((target, setter.Property));
                     }
                 }
             }
@@ -308,8 +353,14 @@ internal sealed class VisualStyleApplication
 
         foreach (var pair in values)
         {
-            pair.Key.SetValue(_element, pair.Value, BindingPriority.Style);
+            pair.Key.Property.SetValue(pair.Key.Target, pair.Value, BindingPriority.Style);
             _styleProperties.Add(pair.Key);
+        }
+
+        foreach (var (target, property, binding) in bindings)
+        {
+            _bindings.Add(VisualBindingOperations.Bind(target, property, binding));
+            _bindingProperties.Add((target, property));
         }
 
         if (_triggers.Count > 0)
@@ -319,6 +370,12 @@ internal sealed class VisualStyleApplication
             EvaluateTriggers();
         }
     }
+
+    // 命名部件从当前应用的控制模板里取；没有名字就写元素本身。
+    private IWinformsObject? ResolveTarget(string? targetName)
+        => string.IsNullOrEmpty(targetName)
+            ? _element
+            : _element.GetTemplateChild<VisualElement>(targetName);
 
     private void OnElementPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e) => EvaluateTriggers();
 
@@ -336,7 +393,7 @@ internal sealed class VisualStyleApplication
         List<VisualTrigger>? exited = null;
         try
         {
-            Dictionary<DependencyProperty, object?>? active = null;
+            Dictionary<(IWinformsObject Target, DependencyProperty Property), object?>? active = null;
             var nowActive = new HashSet<VisualTrigger>();
             foreach (var trigger in _triggers)
             {
@@ -348,23 +405,31 @@ internal sealed class VisualStyleApplication
                 nowActive.Add(trigger);
                 foreach (var setter in trigger.Setters)
                 {
-                    if (setter?.Property is not null)
+                    if (setter?.Property is null)
                     {
-                        active ??= [];
-                        active[setter.Property] = setter.Value;
+                        continue;
                     }
+
+                    var target = ResolveTarget(setter.TargetName ?? trigger.TargetName);
+                    if (target is null)
+                    {
+                        continue;
+                    }
+
+                    active ??= [];
+                    active[(target, setter.Property)] = setter.Value;
                 }
             }
 
-            foreach (var property in _triggerProperties)
+            foreach (var pair in _triggerProperties)
             {
-                if (active is not null && active.TryGetValue(property, out var value))
+                if (active is not null && active.TryGetValue(pair, out var value))
                 {
-                    property.SetValue(_element, value, BindingPriority.StyleTrigger);
+                    pair.Property.SetValue(pair.Target, value, BindingPriority.StyleTrigger);
                 }
                 else
                 {
-                    property.ClearValue(_element, BindingPriority.StyleTrigger);
+                    pair.Property.ClearValue(pair.Target, BindingPriority.StyleTrigger);
                 }
             }
 
@@ -426,6 +491,23 @@ internal sealed class VisualStyleApplication
         }
     }
 
+    // 样式 setter 的绑定写在 Local 层；卸载时必须连绑定和它写过的本地值一起摘掉，否则值会留在元素上。
+    private void ClearBindings()
+    {
+        foreach (var binding in _bindings)
+        {
+            binding.Dispose();
+        }
+
+        _bindings.Clear();
+        foreach (var pair in _bindingProperties)
+        {
+            pair.Property.ClearValue(pair.Target);
+        }
+
+        _bindingProperties.Clear();
+    }
+
     private void Unsubscribe()
     {
         if (!_subscribed)
@@ -439,9 +521,9 @@ internal sealed class VisualStyleApplication
 
     private void ClearStyleLayer()
     {
-        foreach (var property in _styleProperties)
+        foreach (var pair in _styleProperties)
         {
-            property.ClearValue(_element, BindingPriority.Style);
+            pair.Property.ClearValue(pair.Target, BindingPriority.Style);
         }
 
         _styleProperties.Clear();
@@ -449,9 +531,9 @@ internal sealed class VisualStyleApplication
 
     private void ClearTriggerLayer()
     {
-        foreach (var property in _triggerProperties)
+        foreach (var pair in _triggerProperties)
         {
-            property.ClearValue(_element, BindingPriority.StyleTrigger);
+            pair.Property.ClearValue(pair.Target, BindingPriority.StyleTrigger);
         }
     }
 }

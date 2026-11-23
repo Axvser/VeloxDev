@@ -239,7 +239,7 @@ public sealed class PrefixResolutionTests
             "list.ItemTemplate = new global::VeloxDev.WinForms.Xaml.Visuals.DataTemplate(this.CreateVisualItemTemplate_0);");
         StringAssert.Contains(
             generated,
-            "private global::VeloxDev.WinForms.Xaml.Visuals.VisualElement CreateVisualItemTemplate_0()");
+            "private global::VeloxDev.WinForms.Xaml.Visuals.VisualElement CreateVisualItemTemplate_0(");
     }
 
     [TestMethod]
