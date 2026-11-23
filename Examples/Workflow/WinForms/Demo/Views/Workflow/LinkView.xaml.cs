@@ -368,12 +368,6 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.U
             return;
         }
 
-        // 按下期间拖动本身就在重绘，OnRender 会采样时钟；定时器再发一帧只会抢绘制时间。
-        if (Surface is { IsPointerGestureActive: true })
-        {
-            return;
-        }
-
         var previousHead = _bandHead;
         var previousIntensity = _bandIntensity;
         _bandHead = clock.BandHead;

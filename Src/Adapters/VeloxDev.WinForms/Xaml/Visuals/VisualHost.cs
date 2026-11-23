@@ -351,10 +351,6 @@ public class VisualHost : System.Windows.Forms.Control
         return true;
     }
 
-    /// <summary>Whether a pointer button is currently down on this surface.</summary>
-    /// <remarks>Animation hosts stop their timer-driven repaints while a drag is already repainting.</remarks>
-    public bool IsPointerGestureActive { get; private set; }
-
     /// <summary>Injects a pointer press at a client point.</summary>
     /// <param name="point">The point in physical client pixels; it is converted to logical surface coordinates.</param>
     /// <param name="button">The pressed button.</param>
@@ -362,7 +358,6 @@ public class VisualHost : System.Windows.Forms.Control
     /// <returns><see langword="true"/> when an element handled the event.</returns>
     public bool ProcessPointerDown(PointF point, MouseButtons button, int clickCount = 1)
     {
-        IsPointerGestureActive = true;
         // 鼠标点击只转移焦点，不显示键盘焦点环；否则 Gallery 里每个 Toggle/Button 点一下都会多一圈蓝框。
         _focusVisible = false;
         _focused?.SetFocusVisible(false);
@@ -437,7 +432,6 @@ public class VisualHost : System.Windows.Forms.Control
         var args = new VisualPointerEventArgs(point, _buttons, button, 1, 0, ModifierKeys);
         target?.RaisePointerReleased(args);
         _capture = null;
-        IsPointerGestureActive = false;
         if (IsHandleCreated)
         {
             Capture = false;
@@ -668,16 +662,6 @@ public class VisualHost : System.Windows.Forms.Control
         base.OnResize(e);
         _dpiScaleValid = false;
         InvalidateSurface();
-    }
-
-    /// <inheritdoc />
-    protected override void OnMouseCaptureChanged(EventArgs e)
-    {
-        base.OnMouseCaptureChanged(e);
-        if (!Capture)
-        {
-            IsPointerGestureActive = false;
-        }
     }
 
     /// <inheritdoc />
