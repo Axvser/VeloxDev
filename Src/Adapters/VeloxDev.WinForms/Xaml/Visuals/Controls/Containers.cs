@@ -129,7 +129,7 @@ public class Expander : VisualElement
         VisualText.Draw(this,
             graphics,
             Header,
-            DefaultFont,
+            ResolveFont(DefaultFont),
             theme.Foreground,
             new Rectangle(24, 0, Math.Max(0, (int)Bounds.Width - 32), (int)HeaderHeight),
             wrap: false,
@@ -302,7 +302,7 @@ public class GroupBox : VisualElement
         var theme = Theme.Current;
         var headerWidth = string.IsNullOrEmpty(Header)
             ? 0f
-            : VisualText.Measure(Header, DefaultFont, 0f, wrap: false, RenderDpi).Width + 12f;
+            : VisualText.Measure(Header, ResolveFont(DefaultFont), 0f, wrap: false, RenderDpi).Width + 12f;
         var border = BorderBrush?.ApproximateColor ?? theme.ControlBorder;
         using var pen = new Pen(border, 1f);
         using var path = XamlDrawing.RoundedRectangle(
@@ -317,7 +317,7 @@ public class GroupBox : VisualElement
             VisualText.Draw(this,
                 graphics,
                 Header,
-                DefaultFont,
+                ResolveFont(DefaultFont),
                 theme.Foreground,
                 new Rectangle(14, 0, (int)headerWidth, 14),
                 wrap: false,
@@ -401,7 +401,7 @@ public class TabControl : VisualElement
         var pageHeight = 0;
         foreach (var item in Items)
         {
-            width += VisualText.Measure(item.Header, DefaultFont, 0f, wrap: false, RenderDpi).Width + 28f;
+            width += VisualText.Measure(item.Header, ResolveFont(DefaultFont), 0f, wrap: false, RenderDpi).Width + 28f;
         }
 
         if (SelectedIndex >= 0 && SelectedIndex < Items.Count && Items[SelectedIndex].Content is { } content)
@@ -440,7 +440,7 @@ public class TabControl : VisualElement
         for (var index = 0; index < Items.Count; index++)
         {
             var width = (float)Math.Ceiling(
-                VisualText.Measure(Items[index].Header, DefaultFont, 0f, wrap: false, RenderDpi).Width + 28f);
+                VisualText.Measure(Items[index].Header, ResolveFont(DefaultFont), 0f, wrap: false, RenderDpi).Width + 28f);
             var tab = new RectangleF(x, 0f, width, TabHeight);
             _tabs.Add(tab);
             if (index == SelectedIndex)
@@ -454,7 +454,7 @@ public class TabControl : VisualElement
             VisualText.Draw(this,
                 graphics,
                 Items[index].Header,
-                DefaultFont,
+                ResolveFont(DefaultFont),
                 index == SelectedIndex ? theme.Foreground : theme.MutedForeground,
                 new Rectangle((int)tab.X, (int)tab.Y, (int)tab.Width, (int)tab.Height),
                 wrap: false,

@@ -91,6 +91,7 @@ public class ScrollBar : VisualElement
     private VisualElement? _templateRoot;
     private VisualTemplateTriggerApplication? _templateTriggers;
     private bool _dragging;
+    private bool? _templateOwnsThumb;
     private bool _hover;
     private float _dragStartAxis;
     private double _dragStartValue;
@@ -232,17 +233,35 @@ public class ScrollBar : VisualElement
             Math.Max(0f, finalSize.Width - (float)padding.Horizontal),
             Math.Max(0f, finalSize.Height - (float)padding.Vertical)));
 
-        if (GetTemplateChild<VisualElement>("PART_Thumb") is { } thumb)
+        // 模板带 PART_Track 且已经给拇指排出了非空矩形时，拇指位置归模板自己的布局；只有模板没管它才回退到手算。
+        if (GetTemplateChild<VisualElement>("PART_Thumb") is not { } thumb)
         {
-            // 拇指由滚动条摆放，不受模板自己的面板排版支配；换算到它的直接父级坐标再 Arrange。
-            var origin = ParentOrigin(thumb);
-            var thumbRect = GetThumbRect(GetTrackRect());
-            thumb.Arrange(new RectangleF(
-                thumbRect.X - origin.X,
-                thumbRect.Y - origin.Y,
-                thumbRect.Width,
-                thumbRect.Height));
+            return;
         }
+
+        if (GetTemplateChild<VisualElement>("PART_Track") is not null)
+        {
+            // 第一次排版决定这个模板是否自己给拇指排了非空矩形；之后 Value 重排时不能再把
+            // 上一次自动摆放的结果误当成模板布局。
+            _templateOwnsThumb ??= thumb.Bounds.Width > 0f && thumb.Bounds.Height > 0f;
+            if (_templateOwnsThumb == true)
+            {
+                return;
+            }
+        }
+        else
+        {
+            _templateOwnsThumb = null;
+        }
+
+        // 拇指由滚动条摆放，不受模板自己的面板排版支配；换算到它的直接父级坐标再 Arrange。
+        var origin = ParentOrigin(thumb);
+        var thumbRect = GetThumbRect(GetTrackRect());
+        thumb.Arrange(new RectangleF(
+            thumbRect.X - origin.X,
+            thumbRect.Y - origin.Y,
+            thumbRect.Width,
+            thumbRect.Height));
     }
 
     /// <inheritdoc />
@@ -252,6 +271,7 @@ public class ScrollBar : VisualElement
 
         if (ReferenceEquals(e.Property, TemplateProperty))
         {
+            _templateOwnsThumb = null;
             UpdateTemplate();
         }
         else if (ReferenceEquals(e.Property, ValueProperty))
@@ -270,6 +290,7 @@ public class ScrollBar : VisualElement
             if (HasTemplatedThumb)
             {
                 InvalidateArrange();
+                _templateRoot?.InvalidateArrange();
             }
         }
         else if (ReferenceEquals(e.Property, MinimumProperty)
@@ -280,6 +301,7 @@ public class ScrollBar : VisualElement
             if (HasTemplatedThumb)
             {
                 InvalidateArrange();
+                _templateRoot?.InvalidateArrange();
             }
         }
         else if (ReferenceEquals(e.Property, IsEnabledProperty) && !IsEnabled)

@@ -27,20 +27,27 @@ public abstract class Visual : WinformsObject
     public RectangleF Bounds { get; set; }
 
     /// <summary>A local transform applied after <see cref="Bounds"/> is translated to the origin.</summary>
-    public Matrix Transform { get; set; } = new();
+    /// <remarks>The identity matrix is created lazily so an unset visual holds no native GDI+ matrix.</remarks>
+    public virtual Matrix Transform
+    {
+        get => _transform ??= new Matrix();
+        set => _transform = value ?? new Matrix();
+    }
+
+    private Matrix? _transform;
 
     /// <summary>The opacity of this visual and its subtree, in the range 0..1.</summary>
-    public double Opacity { get; set; } = 1d;
+    public virtual double Opacity { get; set; } = 1d;
 
     /// <summary>An optional clip rectangle in the visual's local coordinates.</summary>
-    public RectangleF? Clip { get; set; }
+    public virtual RectangleF? Clip { get; set; }
 
     /// <summary>Whether children are painted and hit-tested only inside this visual's local bounds.</summary>
     /// <remarks>WPF's <c>UIElement.ClipToBounds</c> equivalent; defaults to <see langword="false"/>.</remarks>
-    public bool ClipToBounds { get; set; }
+    public virtual bool ClipToBounds { get; set; }
 
     /// <summary>An optional effect applied to the rendered subtree.</summary>
-    public VisualEffect? Effect { get; set; }
+    public virtual VisualEffect? Effect { get; set; }
 
     /// <summary>Whether this visual and its subtree are painted and hit-tested.</summary>
     public bool IsVisible { get; set; } = true;
@@ -59,7 +66,7 @@ public abstract class Visual : WinformsObject
     /// dirty automatically; a custom visual must call <see cref="InvalidateCache"/> after changing the pixels it
     /// draws. An <see cref="Effect"/> disables the cache for that visual.
     /// </remarks>
-    public bool CacheAsBitmap { get; set; }
+    public virtual bool CacheAsBitmap { get; set; }
 
     private ContainerVisual? _parent;
 

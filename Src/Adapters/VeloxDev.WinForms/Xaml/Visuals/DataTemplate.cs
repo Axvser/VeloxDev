@@ -48,9 +48,16 @@ public sealed class DataTemplate
 
 /// <summary>Chooses the <see cref="DataTemplate"/> used to present a piece of content.</summary>
 /// <remarks>
+/// <para>
 /// A selector is referenced from XAML resources and assigned to a content template selector property. Its non-null
 /// result wins over a static <see cref="DataTemplate"/> at the same level, so one control can present different
 /// templates for different content values.
+/// </para>
+/// <para>
+/// Unlike <see cref="VisualTemplateSelector"/>, which returns one element for the item-to-view seam, this selector
+/// returns a factory together with the owning container. <see cref="DataTemplateSelectorAdapter"/> bridges a selector
+/// of this kind into that seam.
+/// </para>
 /// </remarks>
 public abstract class DataTemplateSelector
 {

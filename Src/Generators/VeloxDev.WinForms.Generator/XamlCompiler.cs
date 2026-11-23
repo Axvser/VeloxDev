@@ -23,7 +23,8 @@ namespace VeloxDev.WinForms.Generator;
 /// properties written as <c>&lt;Grid.Row&gt;1&lt;/Grid.Row&gt;</c>.</item>
 /// <item>String, numeric, boolean, enum, color, padding, thickness, size, point and time-span literals.</item>
 /// <item><c>{Binding Path, Mode}</c>, <c>{StaticResource Key}</c> and <c>{DynamicResource Key}</c> on visual
-/// properties and attached properties.</item>
+/// properties and attached properties; binding arguments include <c>UpdateSourceTrigger</c>, <c>ConverterCulture</c>
+/// and the validation flags.</item>
 /// <item><c>DataTemplate</c>, <c>ControlTemplate</c> and <c>ItemsPanelTemplate</c> resources and property elements;
 /// each instance receives its own <c>VisualNameScope</c>.</item>
 /// <item>Visual styles with direct or wrapped <c>Setter</c> and <c>VisualTrigger</c> elements.</item>
@@ -719,18 +720,24 @@ internal sealed class XamlCompiler
         var path = arguments.TryGetValue("Path", out var explicitPath) ? explicitPath : positional ?? string.Empty;
         var mode = arguments.TryGetValue("Mode", out var explicitMode) ? explicitMode : "OneWay";
 
-        if (mode is not ("OneWay" or "TwoWay" or "OneTime"))
+        // WPF 的 BindingMode.Default 就是 OneWay；省掉初始化器即落到 Binding.Mode 的默认值。
+        if (mode == "Default")
+        {
+            mode = "OneWay";
+        }
+
+        if (mode is not ("OneWay" or "TwoWay" or "OneTime" or "OneWayToSource"))
         {
             Report(Diagnostics.UnsupportedValue, source, mode, targetType?.ToDisplayString() ?? "binding");
             return null;
         }
 
-        if (!allowTwoWay && mode == "TwoWay")
+        if (!allowTwoWay && (mode is "TwoWay" or "OneWayToSource"))
         {
             Report(
                 Diagnostics.UnsupportedConstruct,
                 source,
-                "TwoWay is not supported for attached values on native controls; the binding behaves as OneWay.");
+                $"{mode} is not supported for attached values on native controls; the binding behaves as OneWay.");
             mode = "OneWay";
         }
 
@@ -789,6 +796,13 @@ internal sealed class XamlCompiler
             initializers.Add($"ConverterParameter = {parameterExpression}");
         }
 
+        if (arguments.TryGetValue("ConverterCulture", out var converterCulture))
+        {
+            // 空串在 .NET 里就是固定区域性，与 WPF 把 ConverterCulture="" 解析成 InvariantCulture 一致。
+            initializers.Add(
+                $"ConverterCulture = global::System.Globalization.CultureInfo.GetCultureInfo({SyntaxHelpers.Quote(converterCulture)})");
+        }
+
         if (arguments.TryGetValue("StringFormat", out var stringFormat))
         {
             // XAML 的 "{}" 前缀是转义：只有格式串自己要以 "{" 开头时才写它，不能原样交给 string.Format。
@@ -826,6 +840,29 @@ internal sealed class XamlCompiler
             }
 
             initializers.Add($"UpdateSourceTrigger = {SyntaxHelpers.Fqn("UpdateSourceTrigger")}.{updateTrigger}");
+        }
+
+        // 四个校验开关此前被静默丢弃；未知值必须报错，否则 `ValidatesOnExceptions="true "` 看似生效实则没挂上。
+        foreach (var validationFlag in new[]
+                 {
+                     "ValidatesOnExceptions",
+                     "NotifyOnValidationError",
+                     "ValidatesOnDataErrors",
+                     "ValidatesOnNotifyDataErrors",
+                 })
+        {
+            if (!arguments.TryGetValue(validationFlag, out var flagText))
+            {
+                continue;
+            }
+
+            if (!bool.TryParse(flagText, out var flagValue))
+            {
+                Report(Diagnostics.UnsupportedValue, source, flagText, validationFlag);
+                return null;
+            }
+
+            initializers.Add($"{validationFlag} = {(flagValue ? "true" : "false")}");
         }
 
         var typeName = templateBinding ? SyntaxHelpers.Fqn("TemplateBinding") : SyntaxHelpers.Fqn("Binding");

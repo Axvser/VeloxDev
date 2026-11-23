@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Visuals;
 using XamlDrawing = VeloxDev.WinForms.Xaml.Controls.XamlDrawing;
+using XamlBrush = VeloxDev.WinForms.Xaml.Brush;
 using XamlThickness = VeloxDev.WinForms.Xaml.Controls.Thickness;
 
 namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
@@ -24,11 +25,11 @@ public class Button : ButtonBase
             nameof(Font), typeof(Font), typeof(Button),
             new PropertyMetadata(DefaultFont) { AffectsMeasure = true, AffectsRender = true });
 
-    /// <summary>The text colour; empty uses the active theme.</summary>
+    /// <summary>The text colour as a brush value; an empty colour uses the active theme.</summary>
     public static readonly DependencyProperty ForegroundProperty =
         DependencyProperty.Register(
-            nameof(Foreground), typeof(Color), typeof(Button),
-            new PropertyMetadata(Color.Empty) { AffectsRender = true });
+            nameof(Foreground), typeof(XamlBrush), typeof(Button),
+            new PropertyMetadata(null) { AffectsRender = true });
 
     private bool _hover;
     private bool _pressed;
@@ -52,10 +53,10 @@ public class Button : ButtonBase
         set => SetValue(TextProperty, value ?? string.Empty);
     }
 
-    /// <summary>The font used to draw the text.</summary>
+    /// <summary>The font used to draw the text, composed with the inherited typography properties.</summary>
     public Font Font
     {
-        get => (Font)GetValue(FontProperty)!;
+        get => ResolveFont((Font)GetValue(FontProperty)!);
         set
         {
             if (value is not null)
@@ -65,11 +66,26 @@ public class Button : ButtonBase
         }
     }
 
-    /// <summary>The text colour; empty uses the active theme.</summary>
+    /// <summary>The text colour; an empty colour uses the active theme.</summary>
+    /// <remarks>
+    /// The dependency property stores a brush, so a style, trigger or binding may supply a
+    /// <see cref="VeloxDev.WinForms.Xaml.Brush"/>, a hex colour string or a <see cref="Color"/>. The CLR wrapper
+    /// reads back the representative colour.
+    /// </remarks>
     public Color Foreground
     {
-        get => (Color)GetValue(ForegroundProperty)!;
-        set => SetValue(ForegroundProperty, value);
+        get => GetValue(ForegroundProperty) is XamlBrush brush ? brush.ApproximateColor : Color.Empty;
+        set
+        {
+            if (value.IsEmpty)
+            {
+                ClearValue(ForegroundProperty);
+            }
+            else
+            {
+                SetValue(ForegroundProperty, new SolidColorBrush(value));
+            }
+        }
     }
 
     /// <summary>Raised when the button is clicked by the pointer or the keyboard.</summary>
@@ -281,11 +297,11 @@ public class TextBox : VisualElement
             nameof(Font), typeof(Font), typeof(TextBox),
             new PropertyMetadata(DefaultFont) { AffectsMeasure = true, AffectsRender = true });
 
-    /// <summary>The text colour; empty uses the active theme.</summary>
+    /// <summary>The text colour as a brush value; an empty colour uses the active theme.</summary>
     public static readonly DependencyProperty ForegroundProperty =
         DependencyProperty.Register(
-            nameof(Foreground), typeof(Color), typeof(TextBox),
-            new PropertyMetadata(Color.Empty) { AffectsRender = true });
+            nameof(Foreground), typeof(XamlBrush), typeof(TextBox),
+            new PropertyMetadata(null) { AffectsRender = true });
 
     /// <summary>Whether the text can be edited.</summary>
     public static readonly DependencyProperty IsReadOnlyProperty =
@@ -379,10 +395,10 @@ public class TextBox : VisualElement
         set => SetValue(PlaceholderProperty, value ?? string.Empty);
     }
 
-    /// <summary>The font used to draw the text.</summary>
+    /// <summary>The font used to draw the text, composed with the inherited typography properties.</summary>
     public Font Font
     {
-        get => (Font)GetValue(FontProperty)!;
+        get => ResolveFont((Font)GetValue(FontProperty)!);
         set
         {
             if (value is not null)
@@ -392,11 +408,26 @@ public class TextBox : VisualElement
         }
     }
 
-    /// <summary>The text colour; empty uses the active theme.</summary>
+    /// <summary>The text colour; an empty colour uses the active theme.</summary>
+    /// <remarks>
+    /// The dependency property stores a brush, so a style, trigger or binding may supply a
+    /// <see cref="VeloxDev.WinForms.Xaml.Brush"/>, a hex colour string or a <see cref="Color"/>. The CLR wrapper
+    /// reads back the representative colour.
+    /// </remarks>
     public Color Foreground
     {
-        get => (Color)GetValue(ForegroundProperty)!;
-        set => SetValue(ForegroundProperty, value);
+        get => GetValue(ForegroundProperty) is XamlBrush brush ? brush.ApproximateColor : Color.Empty;
+        set
+        {
+            if (value.IsEmpty)
+            {
+                ClearValue(ForegroundProperty);
+            }
+            else
+            {
+                SetValue(ForegroundProperty, new SolidColorBrush(value));
+            }
+        }
     }
 
     /// <summary>Whether the text can be edited.</summary>
@@ -600,6 +631,9 @@ public class TextBox : VisualElement
         }
 
         if (ReferenceEquals(e.Property, FontProperty)
+            || ReferenceEquals(e.Property, FontSizeProperty)
+            || ReferenceEquals(e.Property, FontFamilyProperty)
+            || ReferenceEquals(e.Property, FontWeightProperty)
             || ReferenceEquals(e.Property, WrapProperty)
             || ReferenceEquals(e.Property, AcceptsReturnProperty)
             || ReferenceEquals(e.Property, IsPasswordProperty)

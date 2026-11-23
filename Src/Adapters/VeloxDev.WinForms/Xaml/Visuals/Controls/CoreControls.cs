@@ -254,11 +254,11 @@ public class TextBlock : VisualElement
             nameof(Font), typeof(Font), typeof(TextBlock),
             new PropertyMetadata(DefaultFont) { AffectsMeasure = true, AffectsRender = true });
 
-    /// <summary>The text colour; empty uses the active theme.</summary>
+    /// <summary>The text colour as a brush value; an empty colour uses the active theme.</summary>
     public static readonly DependencyProperty ForegroundProperty =
         DependencyProperty.Register(
-            nameof(Foreground), typeof(Color), typeof(TextBlock),
-            new PropertyMetadata(Color.Empty) { AffectsRender = true });
+            nameof(Foreground), typeof(XamlBrush), typeof(TextBlock),
+            new PropertyMetadata(null) { AffectsRender = true });
 
     /// <summary>Whether overlong text wraps at word boundaries.</summary>
     public static readonly DependencyProperty WrapProperty =
@@ -285,10 +285,10 @@ public class TextBlock : VisualElement
         set => SetValue(TextProperty, value ?? string.Empty);
     }
 
-    /// <summary>The font used to draw the text.</summary>
+    /// <summary>The font used to draw the text, composed with the inherited typography properties.</summary>
     public Font Font
     {
-        get => (Font)GetValue(FontProperty)!;
+        get => ResolveFont((Font)GetValue(FontProperty)!);
         set
         {
             if (value is not null)
@@ -298,11 +298,26 @@ public class TextBlock : VisualElement
         }
     }
 
-    /// <summary>The text colour; empty uses the active theme.</summary>
+    /// <summary>The text colour; an empty colour uses the active theme.</summary>
+    /// <remarks>
+    /// The dependency property stores a brush, so a style, trigger or binding may supply a
+    /// <see cref="VeloxDev.WinForms.Xaml.Brush"/>, a hex colour string or a <see cref="Color"/>. The CLR wrapper
+    /// reads back the representative colour.
+    /// </remarks>
     public Color Foreground
     {
-        get => (Color)GetValue(ForegroundProperty)!;
-        set => SetValue(ForegroundProperty, value);
+        get => GetValue(ForegroundProperty) is XamlBrush brush ? brush.ApproximateColor : Color.Empty;
+        set
+        {
+            if (value.IsEmpty)
+            {
+                ClearValue(ForegroundProperty);
+            }
+            else
+            {
+                SetValue(ForegroundProperty, new SolidColorBrush(value));
+            }
+        }
     }
 
     /// <summary>Whether overlong text wraps at word boundaries.</summary>

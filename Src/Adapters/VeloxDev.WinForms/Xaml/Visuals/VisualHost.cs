@@ -440,7 +440,7 @@ public class VisualHost : System.Windows.Forms.Control
     public bool FocusElement(VisualElement? element)
     {
         if (element is not null
-            && (element.Surface != this || !element.Focusable || !element.IsEnabled || !element.IsVisible))
+            && (element.Surface != this || !element.Focusable || !element.IsEffectivelyEnabled || !element.IsVisible))
         {
             return false;
         }
@@ -481,17 +481,19 @@ public class VisualHost : System.Windows.Forms.Control
         point = ToLogical(point);
         var target = FindElementAt(point);
         DismissPopupsFor(target);
-        if (target is not null)
+        // 禁用的祖先连同其子树都不接收这一笔按下；本地把 IsEnabled 写回 true 的子项也一样。
+        var inputTarget = ResolveInputTarget(target);
+        if (inputTarget is not null)
         {
-            var focusable = FindFocusableAncestor(target);
+            var focusable = FindFocusableAncestor(inputTarget);
             if (focusable is not null)
             {
                 FocusElement(focusable);
             }
         }
 
-        _capture = target;
-        if (target is not null && IsHandleCreated)
+        _capture = inputTarget;
+        if (inputTarget is not null && IsHandleCreated)
         {
             Capture = true;
         }
@@ -504,10 +506,10 @@ public class VisualHost : System.Windows.Forms.Control
 
         IsPointerGestureActive = true;
 
-        if (target is not null)
+        if (inputTarget is not null)
         {
             var chain = new List<VisualElement>();
-            for (var current = target; current is not null; current = current.ParentElement)
+            for (var current = inputTarget; current is not null; current = current.ParentElement)
             {
                 chain.Add(current);
             }
@@ -524,7 +526,7 @@ public class VisualHost : System.Windows.Forms.Control
         }
 
         var args = new VisualPointerEventArgs(point, _buttons, button, clickCount, 0, ModifierKeys);
-        target?.RaisePointerPressed(args);
+        inputTarget?.RaisePointerPressed(args);
         return args.Handled;
     }
 
@@ -535,8 +537,9 @@ public class VisualHost : System.Windows.Forms.Control
     {
         point = ToLogical(point);
         var hoverTarget = FindElementAt(point);
-        UpdateHover(point, hoverTarget);
-        var target = _capture ?? hoverTarget;
+        // 禁用子树不进入悬停链，悬停态与按下态保持同一套启用判定。
+        UpdateHover(point, ResolveInputTarget(hoverTarget));
+        var target = ResolveInputTarget(_capture ?? hoverTarget);
         var args = new VisualPointerEventArgs(point, _buttons, MouseButtons.None, 1, 0, ModifierKeys);
         target?.RaisePointerMoved(args);
         Cursor = hoverTarget?.Cursor ?? Cursors.Default;
@@ -550,7 +553,7 @@ public class VisualHost : System.Windows.Forms.Control
     public bool ProcessPointerUp(PointF point, MouseButtons button)
     {
         point = ToLogical(point);
-        var target = _capture ?? FindElementAt(point) ?? _root as VisualElement;
+        var target = ResolveInputTarget(_capture ?? FindElementAt(point) ?? _root as VisualElement);
         _buttons &= ~button;
         var args = new VisualPointerEventArgs(point, _buttons, button, 1, 0, ModifierKeys);
         target?.RaisePointerReleased(args);
@@ -587,7 +590,7 @@ public class VisualHost : System.Windows.Forms.Control
     public bool ProcessPointerWheel(PointF point, int delta)
     {
         point = ToLogical(point);
-        var target = FindElementAt(point);
+        var target = ResolveInputTarget(FindElementAt(point));
         var args = new VisualPointerEventArgs(point, _buttons, MouseButtons.None, 1, delta, ModifierKeys);
         target?.RaisePointerWheel(args);
         return args.Handled;
@@ -854,7 +857,7 @@ public class VisualHost : System.Windows.Forms.Control
         base.OnMouseEnter(e);
         // PointToClient 返回物理坐标，悬停链用的是逻辑坐标。
         var point = ToLogical(PointToClient(Cursor.Position));
-        UpdateHover(point, FindElementAt(point));
+        UpdateHover(point, ResolveInputTarget(FindElementAt(point)));
     }
 
     /// <inheritdoc />
@@ -1134,11 +1137,15 @@ public class VisualHost : System.Windows.Forms.Control
         LayoutUpdated?.Invoke(this, EventArgs.Empty);
     }
 
+    // 输入目标必须自身与所有祖先都启用；否则这一笔输入整段作废。
+    private static VisualElement? ResolveInputTarget(VisualElement? element)
+        => element is not null && element.IsEffectivelyEnabled ? element : null;
+
     private static VisualElement? FindFocusableAncestor(VisualElement? element)
     {
         for (var current = element; current is not null; current = current.ParentElement)
         {
-            if (current.Focusable && current.IsEnabled && current.IsVisible)
+            if (current.Focusable && current.IsEffectivelyEnabled && current.IsVisible)
             {
                 return current;
             }
@@ -1160,21 +1167,44 @@ public class VisualHost : System.Windows.Forms.Control
             return;
         }
 
-        var index = _focused is null ? -1 : order.IndexOf(_focused);
+        // TabIndex 升序；同值时保持遍历顺序（稳定 DFS），不会因排序实现而抖动。
+        var ranked = new List<(VisualElement Element, int Index)>(order.Count);
+        for (var index = 0; index < order.Count; index++)
+        {
+            ranked.Add((order[index], index));
+        }
+
+        ranked.Sort(static (left, right) =>
+        {
+            var byTabIndex = left.Element.TabIndex.CompareTo(right.Element.TabIndex);
+            return byTabIndex != 0 ? byTabIndex : left.Index.CompareTo(right.Index);
+        });
+
+        var currentIndex = -1;
+        for (var position = 0; position < ranked.Count; position++)
+        {
+            if (ReferenceEquals(ranked[position].Element, _focused))
+            {
+                currentIndex = position;
+                break;
+            }
+        }
+
         var next = forward
-            ? (index + 1) % order.Count
-            : (index <= 0 ? order.Count - 1 : index - 1);
-        FocusElement(order[next]);
+            ? (currentIndex + 1) % ranked.Count
+            : (currentIndex <= 0 ? ranked.Count - 1 : currentIndex - 1);
+        FocusElement(ranked[next].Element);
     }
 
     private static void CollectFocusable(VisualElement element, List<VisualElement> order)
     {
-        if (!element.IsVisible)
+        // 禁用的容器连子树一起跳过：里面的控件即使本地是启用态也不能被 Tab 到。
+        if (!element.IsVisible || !element.IsEffectivelyEnabled)
         {
             return;
         }
 
-        if (element.Focusable && element.IsEnabled)
+        if (element.Focusable && element.IsTabStop)
         {
             order.Add(element);
         }

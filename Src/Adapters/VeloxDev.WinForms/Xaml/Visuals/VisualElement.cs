@@ -11,6 +11,41 @@ using XamlVisibility = VeloxDev.WinForms.Xaml.Controls.Visibility;
 
 namespace VeloxDev.WinForms.Xaml.Visuals;
 
+/// <summary>The relative weight of a typeface, from thin to black.</summary>
+/// <remarks>
+/// GDI+ exposes only regular and bold faces, so <see cref="SemiBold"/> and heavier compose as bold while lighter
+/// weights compose as the base font's regular style.
+/// </remarks>
+public enum FontWeight
+{
+    /// <summary>The thinnest weight.</summary>
+    Thin,
+
+    /// <summary>An extra-light weight.</summary>
+    ExtraLight,
+
+    /// <summary>A light weight.</summary>
+    Light,
+
+    /// <summary>The regular weight; the default.</summary>
+    Normal,
+
+    /// <summary>A medium weight.</summary>
+    Medium,
+
+    /// <summary>A semibold weight; the lightest weight GDI+ paints as bold.</summary>
+    SemiBold,
+
+    /// <summary>A bold weight.</summary>
+    Bold,
+
+    /// <summary>An extra-bold weight.</summary>
+    ExtraBold,
+
+    /// <summary>The heaviest weight.</summary>
+    Black,
+}
+
 /// <summary>
 /// The layout, input and rendering base of the HWND-free visual control library.
 /// </summary>
@@ -88,7 +123,7 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// <summary>Whether an element accepts input and draws an enabled state.</summary>
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.Register(
         nameof(IsEnabled), typeof(bool), typeof(VisualElement),
-        new PropertyMetadata(true));
+        new PropertyMetadata(true) { Inherits = true });
 
     /// <summary>Whether an element participates in the focus chain.</summary>
     public static readonly DependencyProperty FocusableProperty = DependencyProperty.Register(
@@ -125,6 +160,73 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         nameof(CornerRadius), typeof(float), typeof(VisualElement),
         new PropertyMetadata(0f));
 
+    /// <summary>The opacity of this element and its subtree, in the range 0..1.</summary>
+    public static readonly DependencyProperty OpacityProperty = DependencyProperty.Register(
+        nameof(Opacity), typeof(double), typeof(VisualElement),
+        new PropertyMetadata(
+            1d,
+            null,
+            static (_, value) => value is double opacity ? XamlMath.Clamp(opacity, 0d, 1d) : 1d)
+        {
+            AffectsRender = true,
+        });
+
+    /// <summary>The local transform applied after this element's bounds are translated to the origin.</summary>
+    public static readonly DependencyProperty TransformProperty = DependencyProperty.Register(
+        nameof(Transform), typeof(Matrix), typeof(VisualElement),
+        new PropertyMetadata(
+            null,
+            null,
+            static (_, value) => value is Matrix matrix ? matrix : new Matrix())
+        {
+            AffectsRender = true,
+        });
+
+    /// <summary>An optional clip rectangle in this element's local coordinates.</summary>
+    public static readonly DependencyProperty ClipProperty = DependencyProperty.Register(
+        nameof(Clip), typeof(RectangleF?), typeof(VisualElement),
+        new PropertyMetadata(null) { AffectsRender = true });
+
+    /// <summary>Whether this element's children are painted and hit-tested only inside its bounds.</summary>
+    public static readonly DependencyProperty ClipToBoundsProperty = DependencyProperty.Register(
+        nameof(ClipToBounds), typeof(bool), typeof(VisualElement),
+        new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>An optional effect applied to the rendered subtree.</summary>
+    public static readonly DependencyProperty EffectProperty = DependencyProperty.Register(
+        nameof(Effect), typeof(VisualEffect), typeof(VisualElement),
+        new PropertyMetadata(null) { AffectsRender = true });
+
+    /// <summary>Whether this element's subtree is cached in a bitmap between frames.</summary>
+    public static readonly DependencyProperty CacheAsBitmapProperty = DependencyProperty.Register(
+        nameof(CacheAsBitmap), typeof(bool), typeof(VisualElement),
+        new PropertyMetadata(false) { AffectsRender = true });
+
+    /// <summary>The font size in points, inherited from ancestors; <see cref="double.NaN"/> derives it from <c>Font</c>.</summary>
+    public static readonly DependencyProperty FontSizeProperty = DependencyProperty.Register(
+        nameof(FontSize), typeof(double), typeof(VisualElement),
+        new PropertyMetadata(double.NaN) { Inherits = true, AffectsMeasure = true, AffectsRender = true });
+
+    /// <summary>The font family name, inherited from ancestors; <see langword="null"/> derives it from <c>Font</c>.</summary>
+    public static readonly DependencyProperty FontFamilyProperty = DependencyProperty.Register(
+        nameof(FontFamily), typeof(string), typeof(VisualElement),
+        new PropertyMetadata(null) { Inherits = true, AffectsMeasure = true, AffectsRender = true });
+
+    /// <summary>The relative typeface weight, inherited from ancestors; <see cref="FontWeight.Normal"/> derives it from <c>Font</c>.</summary>
+    public static readonly DependencyProperty FontWeightProperty = DependencyProperty.Register(
+        nameof(FontWeight), typeof(FontWeight), typeof(VisualElement),
+        new PropertyMetadata(FontWeight.Normal) { Inherits = true, AffectsMeasure = true, AffectsRender = true });
+
+    /// <summary>The order in which <see cref="Keys.Tab"/> visits focusable elements; lower values come first.</summary>
+    public static readonly DependencyProperty TabIndexProperty = DependencyProperty.Register(
+        nameof(TabIndex), typeof(int), typeof(VisualElement),
+        new PropertyMetadata(0) { AffectsRender = false });
+
+    /// <summary>Whether <see cref="Keys.Tab"/> stops at this element when it is focusable.</summary>
+    public static readonly DependencyProperty IsTabStopProperty = DependencyProperty.Register(
+        nameof(IsTabStop), typeof(bool), typeof(VisualElement),
+        new PropertyMetadata(true) { AffectsRender = false });
+
     /// <summary>The inherited data context used by bindings and templates.</summary>
     public static readonly DependencyProperty DataContextProperty = DependencyProperty.Register(
         nameof(DataContext), typeof(object), typeof(VisualElement),
@@ -151,6 +253,12 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     private VisualNameScope? _templateScope;
     private VisualNameScope? _instanceScope;
     private List<IDisposable>? _resourceBindings;
+    private Font? _resolvedFont;
+    private Font? _resolvedFontBase;
+    private float _resolvedFontSize;
+    private string? _resolvedFontFamily;
+    private bool _resolvedFontWeighted;
+    private bool _resolvedFontBold;
 
     /// <summary>The outer spacing around this element.</summary>
     public XamlThickness Margin
@@ -286,6 +394,91 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         set => SetValue(CornerRadiusProperty, value);
     }
 
+    // 未写本地值时返回每元素独立的单位矩阵，避免多个元素共享同一个可变的 Matrix 默认值。
+    private Matrix? _identityTransform;
+
+    /// <inheritdoc />
+    public override Matrix Transform
+    {
+        get => GetValue(TransformProperty) as Matrix ?? (_identityTransform ??= new Matrix());
+        set => SetValue(TransformProperty, value);
+    }
+
+    /// <inheritdoc />
+    public override double Opacity
+    {
+        get => (double)GetValue(OpacityProperty)!;
+        set => SetValue(OpacityProperty, value);
+    }
+
+    /// <inheritdoc />
+    public override RectangleF? Clip
+    {
+        get => (RectangleF?)GetValue(ClipProperty);
+        set => SetValue(ClipProperty, value);
+    }
+
+    /// <inheritdoc />
+    public override bool ClipToBounds
+    {
+        get => (bool)GetValue(ClipToBoundsProperty)!;
+        set => SetValue(ClipToBoundsProperty, value);
+    }
+
+    /// <inheritdoc />
+    public override VisualEffect? Effect
+    {
+        get => (VisualEffect?)GetValue(EffectProperty);
+        set => SetValue(EffectProperty, value);
+    }
+
+    /// <inheritdoc />
+    public override bool CacheAsBitmap
+    {
+        get => (bool)GetValue(CacheAsBitmapProperty)!;
+        set => SetValue(CacheAsBitmapProperty, value);
+    }
+
+    /// <summary>The font size in points, inherited from ancestors; <see cref="double.NaN"/> derives it from the control font.</summary>
+    public double FontSize
+    {
+        get => (double)GetValue(FontSizeProperty)!;
+        set => SetValue(FontSizeProperty, value);
+    }
+
+    /// <summary>The font family name, inherited from ancestors; <see langword="null"/> derives it from the control font.</summary>
+    public string? FontFamily
+    {
+        get => (string?)GetValue(FontFamilyProperty);
+        set => SetValue(FontFamilyProperty, value);
+    }
+
+    /// <summary>The relative typeface weight, inherited from ancestors; <see cref="FontWeight.Normal"/> derives it from the control font.</summary>
+    public FontWeight FontWeight
+    {
+        get => (FontWeight)GetValue(FontWeightProperty)!;
+        set => SetValue(FontWeightProperty, value);
+    }
+
+    /// <summary>The order in which <see cref="Keys.Tab"/> visits focusable elements; lower values come first.</summary>
+    public int TabIndex
+    {
+        get => (int)GetValue(TabIndexProperty)!;
+        set => SetValue(TabIndexProperty, value);
+    }
+
+    /// <summary>Whether <see cref="Keys.Tab"/> stops at this element when it is focusable.</summary>
+    public bool IsTabStop
+    {
+        get => (bool)GetValue(IsTabStopProperty)!;
+        set => SetValue(IsTabStopProperty, value);
+    }
+
+    /// <summary>Whether this element and every ancestor are enabled.</summary>
+    /// <remarks>Use it when deciding whether a subtree may receive input or focus; <see cref="IsEnabled"/> alone ignores disabled ancestors.</remarks>
+    public bool IsEffectivelyEnabled
+        => IsEnabled && (ParentElement?.IsEffectivelyEnabled ?? true);
+
     /// <summary>A caller-facing identifier, or <see langword="null"/> when none was assigned.</summary>
     /// <remarks>
     /// The visual backend has no <c>NameScope</c> for ordinary elements, so this is a plain label used by the gallery
@@ -354,6 +547,58 @@ public abstract class VisualElement : ContainerVisual, IDisposable
     /// high DPI, then get scaled a second time by the world transform.
     /// </remarks>
     protected int RenderDpi => 96;
+
+    /// <summary>Composes <paramref name="font"/> with the inherited typography properties.</summary>
+    /// <param name="font">The control's base font, used for every field the typography properties leave unset.</param>
+    /// <returns>The base font when no typography override applies; otherwise a cached derived font owned by this element.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="font"/> is <see langword="null"/>.</exception>
+    public Font ResolveFont(Font font)
+    {
+        if (font is null) throw new ArgumentNullException(nameof(font));
+
+        var size = FontSize;
+        var family = FontFamily;
+        var weight = FontWeight;
+        var hasSize = !double.IsNaN(size) && size > 0d;
+        var hasFamily = !string.IsNullOrEmpty(family);
+        var hasWeight = weight != FontWeight.Normal;
+        if (!hasSize && !hasFamily && !hasWeight)
+        {
+            return font;
+        }
+
+        var targetSize = hasSize ? (float)size : font.Size;
+        var targetFamily = hasFamily ? family! : font.FontFamily.Name;
+        var bold = weight >= FontWeight.SemiBold;
+        var style = hasWeight
+            ? (bold ? font.Style | FontStyle.Bold : font.Style & ~FontStyle.Bold)
+            : font.Style;
+
+        if (_resolvedFont is not null
+            && ReferenceEquals(_resolvedFontBase, font)
+            && Math.Abs(_resolvedFontSize - targetSize) < 0.001f
+            && string.Equals(_resolvedFontFamily, targetFamily, StringComparison.Ordinal)
+            && _resolvedFontWeighted == hasWeight
+            && _resolvedFontBold == bold)
+        {
+            return _resolvedFont;
+        }
+
+        _resolvedFont?.Dispose();
+        _resolvedFont = new Font(
+            targetFamily,
+            targetSize,
+            style,
+            font.Unit,
+            font.GdiCharSet,
+            font.GdiVerticalFont);
+        _resolvedFontBase = font;
+        _resolvedFontSize = targetSize;
+        _resolvedFontFamily = targetFamily;
+        _resolvedFontWeighted = hasWeight;
+        _resolvedFontBold = bold;
+        return _resolvedFont;
+    }
 
     /// <summary>The style explicitly assigned to this element, or <see langword="null"/>.</summary>
     /// <remarks>
@@ -755,6 +1000,12 @@ public abstract class VisualElement : ContainerVisual, IDisposable
 
         DisposeCache();
 
+        _resolvedFont?.Dispose();
+        _resolvedFont = null;
+        _resolvedFontBase = null;
+        _identityTransform?.Dispose();
+        _identityTransform = null;
+
         foreach (var child in Children.ToArray())
         {
             if (child is VisualElement element)
@@ -772,9 +1023,41 @@ public abstract class VisualElement : ContainerVisual, IDisposable
 
     /// <inheritdoc />
     protected override object? GetInheritedValue(DependencyProperty property)
-        => ReferenceEquals(property, DataContextProperty)
-            ? ParentElement?.DataContext
-            : base.GetInheritedValue(property);
+    {
+        if (ReferenceEquals(property, DataContextProperty))
+        {
+            return ParentElement?.DataContext;
+        }
+
+        if (ReferenceEquals(property, IsEnabledProperty))
+        {
+            return ParentElement?.IsEnabled;
+        }
+
+        if (ReferenceEquals(property, FontSizeProperty))
+        {
+            // NaN 表示“没有自己的值”，继续向上找，而不是把一个无效尺寸当成继承值。
+            return ParentElement?.GetValue(FontSizeProperty) is double size && !double.IsNaN(size)
+                ? size
+                : null;
+        }
+
+        if (ReferenceEquals(property, FontFamilyProperty))
+        {
+            return ParentElement?.GetValue(FontFamilyProperty) is string family && !string.IsNullOrEmpty(family)
+                ? family
+                : null;
+        }
+
+        if (ReferenceEquals(property, FontWeightProperty))
+        {
+            return ParentElement?.GetValue(FontWeightProperty) is FontWeight weight && weight != FontWeight.Normal
+                ? weight
+                : null;
+        }
+
+        return base.GetInheritedValue(property);
+    }
 
     /// <inheritdoc />
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
@@ -789,11 +1072,33 @@ public abstract class VisualElement : ContainerVisual, IDisposable
         {
             NotifyDataContextDescendants(this, e.OldValue, e.NewValue);
         }
+        else if (ReferenceEquals(e.Property, IsEnabledProperty)
+                 || ReferenceEquals(e.Property, FontSizeProperty)
+                 || ReferenceEquals(e.Property, FontFamilyProperty)
+                 || ReferenceEquals(e.Property, FontWeightProperty))
+        {
+            // 继承属性变了要让没写本地值的后代收到通知；绑定、动画与重绘都靠这一跳。
+            NotifyInheritedDescendants(this, e.Property, e.OldValue, e.NewValue);
+
+            // 子树被禁用时，正握着焦点的后代必须立刻交还焦点。
+            if (ReferenceEquals(e.Property, IsEnabledProperty)
+                && !IsEnabled
+                && Surface?.FocusedElement is { } focused
+                && IsAncestorOf(focused))
+            {
+                Surface.FocusElement(null);
+            }
+        }
         else if (ReferenceEquals(e.Property, Canvas.LeftProperty)
                  || ReferenceEquals(e.Property, Canvas.TopProperty))
         {
             // 画布坐标只让父级重新摆放这一项；子级内部不用重排。
             ParentElement?.InvalidateArrange();
+        }
+
+        if (ReferenceEquals(e.Property, CacheAsBitmapProperty) && !CacheAsBitmap)
+        {
+            DisposeCache();
         }
 
         if (e.Property.Metadata.AffectsMeasure)
@@ -823,6 +1128,22 @@ public abstract class VisualElement : ContainerVisual, IDisposable
 
             element.RaisePropertyChanged(DataContextProperty, oldValue, newValue, BindingPriority.Inherited);
             NotifyDataContextDescendants(element, oldValue, newValue);
+        }
+    }
+
+    // 只通知直接子级；每个子级的 OnPropertyChanged 会继续向下传，避免同一层被通知两次。
+    private static void NotifyInheritedDescendants(
+        VisualElement parent,
+        DependencyProperty property,
+        object? oldValue,
+        object? newValue)
+    {
+        foreach (var child in parent.Children)
+        {
+            if (child is VisualElement element && !element.IsSet(property))
+            {
+                element.RaisePropertyChanged(property, oldValue, newValue, BindingPriority.Inherited);
+            }
         }
     }
 

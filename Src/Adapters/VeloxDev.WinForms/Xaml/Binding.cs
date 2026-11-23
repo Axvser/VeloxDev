@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.ComponentModel;
+using System.Globalization;
 
 namespace VeloxDev.WinForms.Xaml;
 
@@ -13,6 +14,9 @@ public enum BindingMode
 
     /// <summary>Source to target once, when the binding is first attached.</summary>
     OneTime,
+
+    /// <summary>Target to source only; the target never receives a value from the source.</summary>
+    OneWayToSource,
 }
 
 /// <summary>When a two-way binding writes the target value back to its source.</summary>
@@ -27,7 +31,7 @@ public enum UpdateSourceTrigger
     /// <summary>Write back when the target loses focus.</summary>
     LostFocus,
 
-    /// <summary>Write back when the host edits the value.</summary>
+    /// <summary>Never write automatically; call the binding expression's update method.</summary>
     Explicit,
 }
 
@@ -112,6 +116,36 @@ public interface IParameterizedValueConverter
 }
 
 /// <summary>
+/// An optional converter contract that receives the binding's culture.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A converter implements this interface in addition to <see cref="IValueConverter"/>. It also receives
+/// <see cref="Binding.ConverterParameter"/>, so it covers converters that need both the parameter and the culture in
+/// one call instead of chaining the two older interfaces.
+/// </para>
+/// <para>
+/// When <see cref="Binding.ConverterCulture"/> is unset the engine passes <see cref="CultureInfo.CurrentCulture"/>.
+/// </para>
+/// </remarks>
+public interface ICultureAwareValueConverter
+{
+    /// <summary>Converts a source value for the target property.</summary>
+    /// <param name="value">The value read from the source.</param>
+    /// <param name="targetType">The type of the property receiving the value.</param>
+    /// <param name="parameter">The binding's converter parameter.</param>
+    /// <param name="culture">The culture selected by the binding.</param>
+    object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture);
+
+    /// <summary>Converts a target value back for the source property.</summary>
+    /// <param name="value">The value read from the target.</param>
+    /// <param name="sourceType">The type of the property receiving the value.</param>
+    /// <param name="parameter">The binding's converter parameter.</param>
+    /// <param name="culture">The culture selected by the binding.</param>
+    object? ConvertBack(object? value, Type sourceType, object? parameter, CultureInfo culture);
+}
+
+/// <summary>
 /// Describes a one-way, two-way or one-time link from a source object to one dependency property, or to one native
 /// WinForms property through a binding sink.
 /// </summary>
@@ -124,6 +158,10 @@ public interface IParameterizedValueConverter
 /// <para>
 /// <see cref="StringFormat"/> and <see cref="FallbackValue"/> are applied after the converter, which matches WPF's
 /// order. <see cref="TargetNullValue"/> replaces a source value that is <see langword="null"/>.
+/// </para>
+/// <para>
+/// <see cref="BindingMode.OneWayToSource"/> never writes the source value into the target; the target's initial value
+/// is left untouched, and target changes are written back under <see cref="UpdateSourceTrigger"/>.
 /// </para>
 /// </remarks>
 public class Binding
@@ -161,6 +199,12 @@ public class Binding
     /// <summary>A value passed to <see cref="IParameterizedValueConverter"/> alongside the bound value.</summary>
     public object? ConverterParameter { get; set; }
 
+    /// <summary>
+    /// The culture passed to an <see cref="ICultureAwareValueConverter"/>; <see langword="null"/> means
+    /// <see cref="CultureInfo.CurrentCulture"/>.
+    /// </summary>
+    public CultureInfo? ConverterCulture { get; set; }
+
     /// <summary>A composite format applied after conversion; a bare format such as <c>N2</c> is wrapped as <c>{0:N2}</c>.</summary>
     public string? StringFormat { get; set; }
 
@@ -173,16 +217,19 @@ public class Binding
     /// <summary>When a two-way binding writes the target value back.</summary>
     public UpdateSourceTrigger UpdateSourceTrigger { get; set; }
 
-    /// <summary>Whether an exception thrown while converting or writing back becomes a validation error.</summary>
+    /// <summary>
+    /// Whether an exception thrown while converting or while writing the source becomes a validation error instead of
+    /// a crash. The error is exposed through <see cref="Validation.HasErrorProperty"/> on the target.
+    /// </summary>
     public bool ValidatesOnExceptions { get; set; }
 
-    /// <summary>Whether binding errors are surfaced as events.</summary>
+    /// <summary>Whether a validation error added or removed by this binding raises <see cref="Validation.Error"/>.</summary>
     public bool NotifyOnValidationError { get; set; }
 
-    /// <summary>Whether a source implementing <see cref="System.ComponentModel.INotifyDataErrorInfo"/> contributes its errors.</summary>
+    /// <summary>Whether a source implementing <see cref="INotifyDataErrorInfo"/> contributes its errors.</summary>
     public bool ValidatesOnNotifyDataErrors { get; set; } = true;
 
-    /// <summary>Whether a source implementing <see cref="System.ComponentModel.IDataErrorInfo"/> contributes its errors.</summary>
+    /// <summary>Whether a source implementing <see cref="IDataErrorInfo"/> contributes its errors.</summary>
     public bool ValidatesOnDataErrors { get; set; } = true;
 }
 
