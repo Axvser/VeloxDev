@@ -17,21 +17,31 @@ using XamlVerticalAlignment = VeloxDev.WinForms.Xaml.Controls.VerticalAlignment;
 namespace Demo;
 
 /// <summary>One gallery card: metadata, its usage snippet and the visual factory that builds it.</summary>
-internal sealed record GalleryCard(
-    string Id,
-    string Group,
-    string Title,
-    string Summary,
-    string Usage,
-    Func<GalleryModel, VisualElement> Create);
+internal sealed record GalleryCard(GalleryCardInfo Info, Func<GalleryModel, VisualElement> Create)
+{
+    /// <summary>The card id.</summary>
+    public string Id => Info.Id;
+
+    /// <summary>The catalog group.</summary>
+    public string Group => Info.Group;
+
+    /// <summary>The card title.</summary>
+    public string Title => Info.Title;
+
+    /// <summary>The card summary.</summary>
+    public string Summary => Info.Summary;
+
+    /// <summary>The usage snippet.</summary>
+    public string Usage => Info.Usage;
+}
 
 /// <summary>Builds every visual-backend card shown by the gallery.</summary>
 internal static class GalleryVisualCards
 {
     /// <summary>Creates the card list in catalog order.</summary>
     /// <param name="model">The shared data context.</param>
-    /// <param name="rebuild">Rebuilds the whole gallery; used by the theme card.</param>
-    public static IReadOnlyList<GalleryCard> Create(GalleryModel model, Action? rebuild)
+    /// <param name="theme">The palette service used by the theme cards.</param>
+    public static IReadOnlyList<GalleryCard> Create(GalleryModel model, IThemeService theme)
     {
         var cards = new List<GalleryCard>();
         cards.AddRange(DefaultCards(model));
@@ -43,7 +53,7 @@ internal static class GalleryVisualCards
         cards.AddRange(OverlayCards());
         cards.AddRange(StylingCards());
         cards.AddRange(BindingCards(model));
-        cards.AddRange(ThemeCards(rebuild));
+        cards.AddRange(ThemeCards(theme));
         cards.AddRange(VisualsCards());
         return cards;
     }
@@ -51,106 +61,10 @@ internal static class GalleryVisualCards
     private static List<GalleryCard> DefaultCards(GalleryModel model) => new()
     {
         Card("defaults.controls", "Defaults", "Default controls",
-            "The implicit fallback style: no control below sets a style, background, foreground or palette override.",
-            "// no Style, Background or Foreground is set on any control",
-            _ => BuildDefaultControls(model)),
+            "The implicit fallback style, authored as visual XAML: no control below sets a style, background or foreground.",
+            "x:Class=\"Demo.Views.DefaultsView\"",
+            _ => new DefaultsView(model)),
     };
-
-    // 这组控件刻意不做任何外观设置：它们展示的就是宿主不写样式时的默认观感。
-    private static VC.StackPanel BuildDefaultControls(GalleryModel model)
-    {
-        var intro = Caption("Every control uses the implicit fallback style. Only text, control size and layout are authored.");
-        intro.Width = 660;
-
-        var buttons = Section("Button · RepeatButton · ToggleButton");
-        buttons.Add(Row(8,
-            new VC.Button { Text = "Button" },
-            new VC.RepeatButton { Text = "Repeat" },
-            new VC.ToggleButton { IsChecked = true }));
-
-        var selection = Section("CheckBox · RadioButton");
-        selection.Add(Row(10,
-            new VC.CheckBox { IsChecked = true },
-            new VC.RadioButton { GroupName = "defaults", IsChecked = true },
-            new VC.CheckBox()));
-
-        var editors = Section("TextBox · PasswordBox");
-        editors.Add(new VC.TextBox { Width = 200, Placeholder = "TextBox" });
-        editors.Add(new VC.TextBox { Width = 200, IsPassword = true, Placeholder = "PasswordBox" });
-
-        var range = Section("Slider · ProgressBar");
-        range.Add(new VC.Slider { Width = 200, Value = 40 });
-        range.Add(new VC.ProgressBar { Width = 200, Height = 8, Value = 65 });
-
-        var comboBox = new VC.ComboBox { Width = 200, SelectedIndex = 0 };
-        comboBox.Items.Add("Balanced");
-        comboBox.Items.Add("Throughput");
-        comboBox.Items.Add("Latency");
-        var combo = Section("ComboBox");
-        combo.Add(comboBox);
-
-        var left = new VC.StackPanel { Spacing = 12, Width = 210 };
-        left.Add(buttons);
-        left.Add(selection);
-        left.Add(editors);
-        left.Add(range);
-        left.Add(combo);
-
-        var listBox = new VC.ListBox { Width = 200, Height = 110, SelectedIndex = 0 };
-        listBox.ItemsSource = new[] { "Alpha", "Bravo", "Charlie", "Delta" };
-        var list = Section("ListBox");
-        list.Add(listBox);
-
-        var tree = new VC.TreeView { Width = 200, Height = 160 };
-        foreach (var node in model.TreeNodes)
-        {
-            tree.Items.Add(BuildTreeItem(node));
-        }
-
-        var treeView = Section("TreeView");
-        treeView.Add(tree);
-
-        var text = new VC.StackPanel { Spacing = 8, Width = 200 };
-        text.Add(new VC.TextBlock
-        {
-            Text = "TextBlock wraps its text inside the fallback width.",
-            Wrap = true,
-        });
-        text.Add(new VC.GroupBox
-        {
-            Header = "GroupBox",
-            Child = new VC.TextBlock { Text = "Content sits inside the frame.", Wrap = true },
-        });
-        text.Add(new VC.Expander
-        {
-            Header = "Expander",
-            IsExpanded = true,
-            Content = new VC.TextBlock { Text = "Content is measured only while expanded.", Wrap = true },
-        });
-        var textSection = Section("TextBlock · GroupBox · Expander");
-        textSection.Add(text);
-
-        var middle = new VC.StackPanel { Spacing = 12, Width = 200 };
-        middle.Add(list);
-        middle.Add(treeView);
-        middle.Add(textSection);
-
-        var calendar = new VC.Calendar { Width = 250, SelectedDate = DateTime.Today };
-        var calendarSection = Section("Calendar");
-        calendarSection.Add(calendar);
-
-        var datePicker = Section("DatePicker");
-        datePicker.Add(new VC.DatePicker { Width = 250, SelectedDate = DateTime.Today });
-
-        var right = new VC.StackPanel { Spacing = 12, Width = 250 };
-        right.Add(calendarSection);
-        right.Add(datePicker);
-
-        var root = new VC.StackPanel { Spacing = 14 };
-        root.Add(intro);
-        root.Add(Row(14, left, middle, right));
-        return root;
-    }
 
     private static VC.StackPanel Section(string caption)
     {
@@ -340,6 +254,10 @@ internal static class GalleryVisualCards
         Card("text.text-box", "Text", "TextBox", "Self-drawn editing with placeholder and selection.",
             "new TextBox { Placeholder = \"Type here\" }",
             _ => new VC.TextBox { Width = 320, Placeholder = "Type here" }),
+        Card("text.custom-field", "Text", "XAML custom field",
+            "A templated TextBox with UseNativeEditor=false: every DP stays visual, with no child HWND.",
+            "new TextBox { UseNativeEditor = false, Template = field }",
+            _ => new CustomTextBox()),
         Card("text.password-box", "Text", "PasswordBox", "The same editor with the password glyphs.",
             "new TextBox { IsPassword = true }",
             _ => new VC.TextBox { Width = 320, IsPassword = true, Placeholder = "Password" }),
@@ -730,13 +648,9 @@ internal static class GalleryVisualCards
                 style.Triggers.Add(trigger);
                 button.Style = style;
                 var check = new VC.CheckBox { IsChecked = true };
-                check.PropertyChanged += (_, e) =>
-                {
-                    if (e.Property == VC.CheckBox.IsCheckedProperty)
-                    {
-                        button.IsEnabled = check.IsChecked == true;
-                    }
-                };
+                button.SetBinding(
+                    VisualElement.IsEnabledProperty,
+                    new XamlBinding("IsChecked") { Source = check, Mode = BindingMode.OneWay });
                 var stack = new VC.StackPanel { Spacing = 10 };
                 stack.Add(button);
                 stack.Add(check);
@@ -836,7 +750,7 @@ internal static class GalleryVisualCards
                 title.SetBinding(VC.TextBlock.TextProperty, new XamlBinding("SaveCount") { StringFormat = "SaveCount: {0}" });
                 panel.Add(title);
                 var button = new VC.Button { Text = "Run SaveCommand", Height = 30 };
-                button.Click += (_, _) => model.SaveCommand.Execute(null);
+                button.SetBinding(VC.Button.CommandProperty, new XamlBinding("SaveCommand"));
                 panel.Add(button);
                 return panel;
             }),
@@ -849,11 +763,15 @@ internal static class GalleryVisualCards
                 text.SetBinding(VC.TextBlock.TextProperty, new XamlBinding("Amount") { Converter = new MoneyConverter() });
                 return text;
             }),
+        Card("binding.mvvm", "Binding", "MVVM view model",
+            "A [VeloxProperty]/[VeloxCommand] view model bound from visual XAML.",
+            "[VeloxProperty] · [VeloxCommand]",
+            _ => new ViewModelBoard()),
     };
 
-    private static List<GalleryCard> ThemeCards(Action? rebuild) => new()
+    private static List<GalleryCard> ThemeCards(IThemeService theme) => new()
     {
-        Card("theme.palette", "Theme", "Palette", "The VS Code Dark+/Light+ tokens used by the visual backend.",
+        Card("theme.palette", "Theme", "Palette", "The Dark+, Light+ and high-contrast tokens used by the visual backend.",
             "Theme.Current.Accent",
             _ =>
             {
@@ -880,22 +798,23 @@ internal static class GalleryVisualCards
                 stack.Add(Label("Segoe UI 9.5 · default", Theme.Current.MutedForeground));
                 return stack;
             }),
-        Card("theme.mode", "Theme", "Theme mode", "Dark+ and Light+ palettes; rebuilding the root applies the mode.",
-            "Theme.Mode = ThemeMode.Light",
+        Card("theme.mode", "Theme", "Theme mode", "Dark+, Light+ and high-contrast palettes; rebuilding the root applies the mode.",
+            "Theme.Mode = ThemeMode.HighContrast",
             _ =>
             {
                 var stack = new VC.StackPanel { Spacing = 10 };
                 stack.Add(Label($"Current mode: {Theme.Mode}", Theme.Current.Foreground));
                 var button = new VC.Button { Text = "Switch palette", Height = 32 };
-                if (rebuild is not null)
-                {
-                    button.Click += (_, _) => rebuild();
-                }
+                button.Click += (_, _) => theme.Cycle();
 
                 stack.Add(button);
                 stack.Add(Label("The gallery rebuilds its visual root so every control reads the new Theme.Current values.", Theme.Current.MutedForeground, wrap: true).WithWidth(360));
                 return stack;
             }),
+        Card("theme.resources", "Theme", "Resources in XAML",
+            "Palette colours, keyed styles, a trigger, a control template and a data template declared in visual XAML.",
+            "x:Key=\"Primary\" · {StaticResource Primary}",
+            _ => new ResourceShowcase()),
     };
 
     private static List<GalleryCard> VisualsCards() => new()
@@ -964,7 +883,7 @@ internal static class GalleryVisualCards
         };
     }
 
-    private static VC.TreeViewItem BuildTreeItem(GalleryNode node)
+    internal static VC.TreeViewItem BuildTreeItem(GalleryNode node)
     {
         var item = new VC.TreeViewItem { Header = node.Name, IsExpanded = true };
         foreach (var child in node.Children)
@@ -1001,7 +920,7 @@ internal static class GalleryVisualCards
         string summary,
         string usage,
         Func<GalleryModel, VisualElement> create)
-        => new(id, group, title, summary, usage, create);
+        => new(new GalleryCardInfo(id, group, title, summary, usage), create);
 
     private static T WithWidth<T>(this T element, double width) where T : VisualElement
     {

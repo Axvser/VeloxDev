@@ -1,0 +1,90 @@
+<StackPanel
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Class="Demo.Views.ResourceShowcase"
+    Width="250"
+    Spacing="10">
+
+  <StackPanel.Resources>
+    <Style x:Key="Pill" TargetType="Border">
+      <Style.Setters>
+        <Setter Property="Background" Value="{StaticResource SurfaceAlt}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="12,6" />
+      </Style.Setters>
+    </Style>
+
+    <Style x:Key="Primary" TargetType="Button">
+      <Style.Setters>
+        <Setter Property="Background" Value="{StaticResource Accent}" />
+        <Setter Property="Foreground" Value="{StaticResource AccentText}" />
+        <Setter Property="Height" Value="34" />
+      </Style.Setters>
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False">
+          <Trigger.Setters>
+            <Setter Property="Background" Value="{StaticResource DisabledBackground}" />
+            <Setter Property="Foreground" Value="{StaticResource MutedText}" />
+          </Trigger.Setters>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <ControlTemplate x:Key="CardChrome" TargetType="ContentControl">
+      <Border x:Name="PART_Frame"
+              Background="{StaticResource CardBackground}"
+              BorderBrush="{StaticResource CardBorder}"
+              BorderThickness="1"
+              CornerRadius="8"
+              Padding="12">
+        <StackPanel Spacing="6">
+          <TextBlock Text="ControlTemplate · PART_Frame" Foreground="{StaticResource Accent}" />
+          <ContentPresenter />
+        </StackPanel>
+      </Border>
+    </ControlTemplate>
+
+    <DataTemplate x:Key="RowTemplate">
+      <Border Background="{StaticResource CardBackground}"
+              BorderBrush="{StaticResource CardBorder}"
+              BorderThickness="1"
+              CornerRadius="4"
+              Padding="8,4"
+              Margin="0,0,0,4">
+        <TextBlock Text="{Binding}" Foreground="{StaticResource Text}" Wrap="True" />
+      </Border>
+    </DataTemplate>
+  </StackPanel.Resources>
+
+  <TextBlock Text="Resources, styles, a trigger and a template declared in this view's XAML."
+             Foreground="{StaticResource Text}"
+             FontSize="15"
+             Wrap="True" />
+
+  <Border Style="{StaticResource Pill}">
+    <TextBlock Text="Border · keyed Style + StaticResource brushes"
+               Foreground="{StaticResource Text}"
+               Wrap="True" />
+  </Border>
+
+  <StackPanel Orientation="Horizontal" Spacing="10">
+    <Button x:Name="primaryButton" Text="Primary style" Style="{StaticResource Primary}" />
+    <CheckBox x:Name="enableSwitch" IsChecked="True" />
+  </StackPanel>
+  <TextBlock Text="The trigger follows IsEnabled."
+             Foreground="{StaticResource MutedText}"
+             Wrap="True" />
+
+  <ContentControl Template="{StaticResource CardChrome}">
+    <TextBlock Text="This text is rendered by the template's ContentPresenter."
+               Foreground="{StaticResource Text}"
+               Wrap="True" />
+  </ContentControl>
+
+  <ItemsControl x:Name="rows" ItemTemplate="{StaticResource RowTemplate}" />
+  <TextBlock Text="Each row comes from the keyed DataTemplate in the same dictionary."
+             Foreground="{StaticResource MutedText}"
+             Wrap="True" />
+</StackPanel>

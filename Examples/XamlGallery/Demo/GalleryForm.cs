@@ -9,7 +9,10 @@ namespace Demo;
 /// <summary>The native window that hosts the visual-backend gallery surface.</summary>
 public sealed class GalleryForm : Form
 {
-    private readonly GalleryModel _model = new();
+    private readonly GalleryModel _model;
+    private readonly IThemeService _theme;
+    private readonly GalleryCardCatalog _catalog;
+    private readonly GalleryShellViewModel _vm;
     private GalleryVisualShell _shell;
 
     /// <summary>Creates the window and docks the single visual surface into it.</summary>
@@ -17,7 +20,12 @@ public sealed class GalleryForm : Form
     public GalleryForm(string[] args)
     {
         _ = args;
-        Text = "VeloxDev Visual Gallery";
+        _model = new GalleryModel();
+        _theme = new ThemeService();
+        _catalog = new GalleryCardCatalog(_model, _theme);
+        _vm = new GalleryShellViewModel(_catalog.Infos, _theme);
+
+        Text = "Modern WinForms Gallery";
         ClientSize = new Size(1440, 900);
         MinimumSize = new Size(1180, 720);
         StartPosition = FormStartPosition.CenterScreen;
@@ -31,8 +39,9 @@ public sealed class GalleryForm : Form
         };
         Controls.Add(Surface);
 
-        _shell = new GalleryVisualShell(_model, ToggleTheme);
+        _shell = new GalleryVisualShell(_model, _vm, _catalog);
         Surface.Root = _shell.Root;
+        _theme.Changed += OnThemeChanged;
     }
 
     /// <summary>The single visual surface hosted by this window.</summary>
@@ -59,7 +68,7 @@ public sealed class GalleryForm : Form
     public void SetChromeVisible(bool visible) => _shell.SetChromeVisible(visible);
 
     /// <summary>Switches the palette; used by capture mode to verify the visual rebuild.</summary>
-    public void ToggleThemeForCapture() => ToggleTheme();
+    public void ToggleThemeForCapture() => _theme.Cycle();
 
     /// <inheritdoc />
     protected override void OnHandleCreated(EventArgs e)
@@ -83,17 +92,16 @@ public sealed class GalleryForm : Form
         }));
     }
 
-    private void ToggleTheme()
+    private void OnThemeChanged(object? sender, EventArgs e) => RebuildShell();
+
+    private void RebuildShell()
     {
-        Theme.Mode = Theme.Mode == ThemeMode.Dark ? ThemeMode.Light : ThemeMode.Dark;
-        Application.SetColorMode(Theme.Mode == ThemeMode.Dark ? SystemColorMode.Dark : SystemColorMode.Classic);
         BackColor = Theme.Current.WindowBackground;
         Surface.BackColor = Theme.Current.WindowBackground;
 
         var previous = Surface.Root;
-        var shell = new GalleryVisualShell(_model, ToggleTheme, _shell.SelectedId, _shell.FilterText);
-        _shell = shell;
-        Surface.Root = shell.Root;
+        _shell = new GalleryVisualShell(_model, _vm, _catalog);
+        Surface.Root = _shell.Root;
         if (IsHandleCreated)
         {
             // 事件处理器可能就在被替换的树里；等这一手返回后再释放旧根。
@@ -108,6 +116,18 @@ public sealed class GalleryForm : Form
         ApplyTitleBarTheme();
     }
 
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _theme.Changed -= OnThemeChanged;
+            _vm.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
     // WinForms 的暗色模式不一定改 DWM 标题栏；显式按当前调色板设置，浅色模式才不会留一条黑标题栏。
     private void ApplyTitleBarTheme()
     {
@@ -116,7 +136,7 @@ public sealed class GalleryForm : Form
             return;
         }
 
-        var dark = Theme.Mode == ThemeMode.Dark ? 1 : 0;
+        var dark = Theme.Mode == ThemeMode.Light ? 0 : 1;
         _ = DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int));
         _ = DwmSetWindowAttribute(Handle, 19, ref dark, sizeof(int));
     }

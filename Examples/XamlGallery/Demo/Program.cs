@@ -10,14 +10,15 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        // WinForms 的原生暗色在句柄创建时决定；--light 让整个进程从一开始就是浅色，切主题只留给演示。
-        var light = args.Contains("--light", StringComparer.OrdinalIgnoreCase);
-        if (light)
-        {
-            Theme.Mode = ThemeMode.Light;
-        }
+        // WinForms 的原生暗色在句柄创建时决定；--light / --contrast 让整个进程从一开始就用那套调色板。
+        var mode = args.Contains("--contrast", StringComparer.OrdinalIgnoreCase)
+            ? ThemeMode.HighContrast
+            : args.Contains("--light", StringComparer.OrdinalIgnoreCase)
+                ? ThemeMode.Light
+                : ThemeMode.Dark;
+        Theme.Mode = mode;
 
-        Application.SetColorMode(light ? SystemColorMode.Classic : SystemColorMode.Dark);
+        Application.SetColorMode(mode == ThemeMode.Light ? SystemColorMode.Classic : SystemColorMode.Dark);
 
         using var form = new GalleryForm(args);
         GalleryCapture.ApplyStartup(form, args);

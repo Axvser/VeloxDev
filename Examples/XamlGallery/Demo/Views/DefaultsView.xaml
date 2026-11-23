@@ -1,0 +1,128 @@
+<StackPanel
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Class="Demo.Views.DefaultsView"
+    Spacing="14">
+
+  <!-- The default card is a XAML view on purpose: the controls below still author no style, background or
+       foreground of their own; only the titled plates around them read the two palette resources. -->
+  <StackPanel.Resources>
+    <Style x:Key="Plate" TargetType="Border">
+      <Style.Setters>
+        <Setter Property="Background" Value="{StaticResource PlateBackground}" />
+        <Setter Property="BorderBrush" Value="{StaticResource PlateBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="10" />
+      </Style.Setters>
+    </Style>
+    <Style x:Key="Caption" TargetType="TextBlock">
+      <Style.Setters>
+        <Setter Property="Foreground" Value="{StaticResource CaptionForeground}" />
+        <Setter Property="FontSize" Value="9" />
+      </Style.Setters>
+    </Style>
+  </StackPanel.Resources>
+
+  <TextBlock Style="{StaticResource Caption}"
+             Width="660"
+             Wrap="True"
+             Text="Every control uses the implicit fallback style. Only text, control size and layout are authored." />
+
+  <StackPanel Orientation="Horizontal" Spacing="14">
+    <StackPanel Spacing="12">
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="Button · RepeatButton · ToggleButton" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Text="Button" />
+            <RepeatButton Text="Repeat" />
+            <ToggleButton IsChecked="True" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="CheckBox · RadioButton" />
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <CheckBox IsChecked="True" />
+            <RadioButton GroupName="defaults" IsChecked="True" />
+            <CheckBox />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="TextBox · PasswordBox" />
+          <TextBox Width="200" Placeholder="TextBox" />
+          <TextBox Width="200" IsPassword="True" Placeholder="PasswordBox" />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="Slider · ProgressBar" />
+          <Slider Width="200" Value="40" />
+          <ProgressBar Width="200" Height="8" Value="65" />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="ComboBox" />
+          <ComboBox x:Name="comboBox" Width="200" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
+    <StackPanel Spacing="12">
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="ListBox" />
+          <ListBox x:Name="listBox" Width="200" Height="110" SelectedIndex="0" />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="TreeView" />
+          <TreeView x:Name="tree" Width="200" Height="160" />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="TextBlock · GroupBox · Expander" />
+          <StackPanel Spacing="8" Width="200">
+            <TextBlock Text="TextBlock wraps its text inside the fallback width." Wrap="True" />
+            <GroupBox Header="GroupBox">
+              <TextBlock Text="Content sits inside the frame." Wrap="True" />
+            </GroupBox>
+            <Expander Header="Expander" IsExpanded="True">
+              <TextBlock Text="Content is measured only while expanded." Wrap="True" />
+            </Expander>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+
+    <StackPanel Spacing="12">
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="Calendar" />
+          <Calendar x:Name="calendar" Width="250" />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Plate}">
+        <StackPanel Spacing="5">
+          <TextBlock Style="{StaticResource Caption}" Text="DatePicker" />
+          <DatePicker x:Name="datePicker" Width="250" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </StackPanel>
+
+</StackPanel>

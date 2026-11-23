@@ -3,6 +3,7 @@ using System.Windows.Forms;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WinForms.Xaml.Visuals;
 using VC = VeloxDev.WinForms.Xaml.Visuals.Controls;
+using XamlBinding = VeloxDev.WinForms.Xaml.Binding;
 using XamlColumnDefinition = VeloxDev.WinForms.Xaml.Controls.ColumnDefinition;
 using XamlDockPlacement = VeloxDev.WinForms.Xaml.Controls.DockPlacement;
 using XamlGridLength = VeloxDev.WinForms.Xaml.Controls.GridLength;
@@ -17,12 +18,17 @@ namespace Demo;
 internal sealed class GalleryVisualShell
 {
     private readonly GalleryModel _model;
-    private readonly Action? _rebuild;
-    private readonly Dictionary<string, GalleryCard> _byId;
+    private readonly GalleryShellViewModel _vm;
+    private readonly GalleryCardCatalog _catalog;
     private readonly Dictionary<VC.TreeViewItem, string> _entryItems = [];
     private readonly GalleryVisualInspector _inspector = new();
-    private readonly VC.TreeView _catalog = new() { Focusable = true };
-    private readonly VC.TextBox _search = new() { Placeholder = "Filter controls…", Height = 30 };
+    private readonly VC.TreeView _catalogTree = new() { Focusable = true };
+    private readonly VC.TextBox _search = new()
+    {
+        Placeholder = "Filter controls…",
+        Height = 30,
+        Margin = new XamlThickness(0f, 0f, 0f, 8f),
+    };
     private readonly VC.ContentControl _previewHost = new();
     private VC.ScrollViewer _previewScroll = null!;
     private readonly VC.TextBlock _title = new();
@@ -36,19 +42,17 @@ internal sealed class GalleryVisualShell
     private readonly VC.Border _inspectorPane;
     private readonly VC.GridSplitter _leftSplitter;
     private readonly VC.GridSplitter _rightSplitter;
-    private string? _selectedId;
+    private bool _syncingSelection;
 
-    /// <summary>Builds the shell and selects the initial card.</summary>
-    /// <param name="model">The shared sample data.</param>
-    /// <param name="rebuild">Rebuilds the gallery after a theme change; may be <see langword="null"/>.</param>
-    /// <param name="initialId">The card to select, or <see langword="null"/> for the first card.</param>
-    /// <param name="filter">The initial catalog filter.</param>
-    public GalleryVisualShell(GalleryModel model, Action? rebuild, string? initialId = null, string? filter = null)
+    /// <summary>Builds the shell for an existing view model and selection.</summary>
+    /// <param name="model">The shared sample data used by the card factories.</param>
+    /// <param name="vm">The shell state; it survives palette rebuilds.</param>
+    /// <param name="catalog">The card metadata/factory pairs.</param>
+    public GalleryVisualShell(GalleryModel model, GalleryShellViewModel vm, GalleryCardCatalog catalog)
     {
         _model = model;
-        _rebuild = rebuild;
-        Cards = GalleryVisualCards.Create(model, rebuild);
-        _byId = Cards.ToDictionary(static card => card.Id, StringComparer.Ordinal);
+        _vm = vm;
+        _catalog = catalog;
         var theme = Theme.Current;
 
         _title.Font = new Font("Segoe UI Semibold", 16f);
@@ -97,58 +101,73 @@ internal sealed class GalleryVisualShell
         root.Add(preview);
 
         Root = root;
-        if (!string.IsNullOrEmpty(filter))
-        {
-            _search.Text = filter;
-        }
+        _search.SetBinding(
+            VC.TextBox.TextProperty,
+            new XamlBinding(nameof(GalleryShellViewModel.FilterText))
+            {
+                Source = _vm,
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
+            });
+        _title.SetBinding(
+            VC.TextBlock.TextProperty,
+            new XamlBinding(nameof(GalleryShellViewModel.Title)) { Source = _vm });
+        _summary.SetBinding(
+            VC.TextBlock.TextProperty,
+            new XamlBinding(nameof(GalleryShellViewModel.Summary)) { Source = _vm });
+        _usage.SetBinding(
+            VC.TextBlock.TextProperty,
+            new XamlBinding(nameof(GalleryShellViewModel.Usage)) { Source = _vm });
+        _status.SetBinding(
+            VC.TextBlock.TextProperty,
+            new XamlBinding(nameof(GalleryShellViewModel.StatusText)) { Source = _vm });
 
-        _catalog.SelectionChanged += OnCatalogSelectionChanged;
-        _search.PropertyChanged += OnSearchChanged;
+        _catalogTree.SelectionChanged += OnCatalogSelectionChanged;
+        _vm.CatalogChanged += OnCatalogChanged;
+        _vm.PreviewChanged += OnPreviewChanged;
         RebuildCatalog();
-        SelectEntry(initialId ?? Cards[0].Id);
+        if (_vm.SelectedCard is { } initial)
+        {
+            ShowCard(initial);
+        }
     }
 
     /// <summary>The visual root of the gallery.</summary>
     public VisualElement Root { get; }
 
     /// <summary>Every card in catalog order.</summary>
-    public IReadOnlyList<GalleryCard> Cards { get; }
+    public IReadOnlyList<GalleryCard> Cards => _catalog.Cards;
 
     /// <summary>The selected card id, or <see langword="null"/>.</summary>
-    public string? SelectedId => _selectedId;
+    public string? SelectedId => _vm.SelectedCard?.Id;
 
     /// <summary>The current catalog filter text.</summary>
-    public string FilterText => _search.Text;
+    public string FilterText => _vm.FilterText;
 
     /// <summary>Selects a card and updates the preview and inspector.</summary>
     /// <param name="id">The card id.</param>
     /// <returns><see langword="false"/> when the id is unknown.</returns>
     public bool SelectEntry(string id)
     {
-        if (!_byId.ContainsKey(id))
+        if (!_vm.SelectCard(id))
         {
             return false;
         }
 
-        if (!_entryItems.ContainsValue(id))
-        {
-            _search.Text = string.Empty;
-            RebuildCatalog();
-        }
-
-        var item = _entryItems.FirstOrDefault(pair => pair.Value == id).Key;
+        var item = _vm.SelectedCard is { } card
+            ? _entryItems.FirstOrDefault(pair => pair.Value == card.Id).Key
+            : null;
         if (item is null)
         {
-            return false;
+            RebuildCatalog();
+            item = _vm.SelectedCard is { } retry
+                ? _entryItems.FirstOrDefault(pair => pair.Value == retry.Id).Key
+                : null;
         }
 
-        if (ReferenceEquals(_catalog.SelectedItem, item))
+        if (item is not null)
         {
-            ShowCard(id);
-        }
-        else
-        {
-            _catalog.Reveal(item);
+            _catalogTree.Reveal(item);
         }
 
         return true;
@@ -174,20 +193,20 @@ internal sealed class GalleryVisualShell
 
     /// <summary>Finds a card by id.</summary>
     /// <param name="id">The card id.</param>
-    public GalleryCard? FindCard(string id) => _byId.TryGetValue(id, out var card) ? card : null;
+    public GalleryCard? FindCard(string id) => _catalog.Find(id);
 
     private VC.Border BuildTitleBar(ThemePalette theme)
     {
         var stack = new VC.StackPanel { Spacing = 3 };
         stack.Add(new VC.TextBlock
         {
-            Text = "VeloxDev Visual Gallery",
+            Text = "Modern WinForms Gallery",
             Font = new Font("Segoe UI Semibold", 18f),
             Foreground = theme.Foreground,
         });
         stack.Add(new VC.TextBlock
         {
-            Text = "One HWND · a visual control tree · self-drawn UI",
+            Text = "A self-drawn WinForms gallery · one HWND · a visual control tree",
             Foreground = theme.MutedForeground,
         });
 
@@ -202,15 +221,13 @@ internal sealed class GalleryVisualShell
                 Foreground = theme.AccentForeground,
             },
         };
-        var toggle = new VC.Button
-        {
-            Text = Theme.Mode == ThemeMode.Dark ? "Light+ mode" : "Dark+ mode",
-            Height = 32,
-        };
-        if (_rebuild is not null)
-        {
-            toggle.Click += (_, _) => _rebuild();
-        }
+        var toggle = new VC.Button { Height = 32 };
+        toggle.SetBinding(
+            VC.Button.TextProperty,
+            new XamlBinding(nameof(GalleryShellViewModel.ThemeModeLabel)) { Source = _vm });
+        toggle.SetBinding(
+            VC.Button.CommandProperty,
+            new XamlBinding(nameof(GalleryShellViewModel.CycleThemeCommand)) { Source = _vm });
 
         var actions = new VC.StackPanel
         {
@@ -242,7 +259,6 @@ internal sealed class GalleryVisualShell
 
     private VC.Border BuildStatusBar(ThemePalette theme)
     {
-        _status.Text = "Ready";
         return new VC.Border
         {
             Background = theme.Surface,
@@ -255,17 +271,8 @@ internal sealed class GalleryVisualShell
 
     private VC.Border BuildCatalogPane(ThemePalette theme)
     {
-        var header = new VC.TextBlock
-        {
-            Text = "Catalog",
-            Font = new Font("Segoe UI Semibold", 11f),
-            Foreground = theme.Accent,
-            Margin = new XamlThickness(0f, 0f, 0f, 8f),
-        };
-        var scroll = new VC.ScrollViewer { Content = _catalog };
+        var scroll = new VC.ScrollViewer { Content = _catalogTree };
         var pane = new VC.DockPanel { LastChildFill = true };
-        pane.Add(header);
-        VC.DockPanel.SetDock(header, XamlDockPlacement.Top);
         pane.Add(_search);
         VC.DockPanel.SetDock(_search, XamlDockPlacement.Top);
         pane.Add(scroll);
@@ -335,84 +342,83 @@ internal sealed class GalleryVisualShell
 
     private void OnCatalogSelectionChanged(object? sender, EventArgs e)
     {
-        if (_catalog.SelectedItem is { } item && _entryItems.TryGetValue(item, out var id))
+        if (_syncingSelection
+            || _catalogTree.SelectedItem is not { } item
+            || !_entryItems.TryGetValue(item, out var id))
         {
-            ShowCard(id);
+            return;
         }
+
+        _vm.SelectCard(id);
     }
 
-    private void OnSearchChanged(object? sender, DependencyPropertyChangedEventArgs e)
+    private void OnCatalogChanged(object? sender, EventArgs e) => RebuildCatalog();
+
+    private void OnPreviewChanged(object? sender, GalleryCardInfo? info)
     {
-        if (e.Property == VC.TextBox.TextProperty)
+        if (info is null)
         {
-            RebuildCatalog();
+            ClearPreview();
+        }
+        else
+        {
+            ShowCard(info);
         }
     }
 
     private void RebuildCatalog()
     {
         _entryItems.Clear();
-        _catalog.Items.Clear();
-        var filter = _search.Text.Trim();
-        foreach (var group in Cards.GroupBy(static card => card.Group, StringComparer.Ordinal))
+        _catalogTree.Items.Clear();
+        foreach (var group in _vm.VisibleGroups)
         {
-            var matches = group.Where(card => Matches(card, filter)).ToList();
-            if (matches.Count == 0)
+            var groupItem = new VC.TreeViewItem { Header = group.Name, IsExpanded = true };
+            foreach (var info in group.Cards)
             {
-                continue;
-            }
-
-            var groupItem = new VC.TreeViewItem { Header = group.Key, IsExpanded = true };
-            foreach (var card in matches)
-            {
-                var item = new VC.TreeViewItem { Header = card.Title };
-                _entryItems[item] = card.Id;
+                var item = new VC.TreeViewItem { Header = info.Title };
+                _entryItems[item] = info.Id;
                 groupItem.Items.Add(item);
             }
 
-            _catalog.Items.Add(groupItem);
+            _catalogTree.Items.Add(groupItem);
         }
 
-        var selected = _selectedId is not null
-            ? _entryItems.FirstOrDefault(pair => pair.Value == _selectedId).Key
+        var selected = _vm.SelectedCard is { } card
+            ? _entryItems.FirstOrDefault(pair => pair.Value == card.Id).Key
             : null;
-        _catalog.SelectedItem = selected ?? _entryItems.Keys.FirstOrDefault();
-        if (_catalog.SelectedItem is null)
+        _syncingSelection = true;
+        try
         {
-            _previewHost.Content = null;
-            _title.Text = "No matches";
-            _summary.Text = "Clear the filter to show the catalog again.";
-            _inspector.SetTarget(null);
+            _catalogTree.SelectedItem = selected ?? _entryItems.Keys.FirstOrDefault();
+        }
+        finally
+        {
+            _syncingSelection = false;
         }
     }
 
-    private static bool Matches(GalleryCard card, string filter)
-        => filter.Length == 0
-           || card.Id.Contains(filter, StringComparison.OrdinalIgnoreCase)
-           || card.Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
-           || card.Summary.Contains(filter, StringComparison.OrdinalIgnoreCase)
-           || card.Group.Contains(filter, StringComparison.OrdinalIgnoreCase);
-
-    private void ShowCard(string id)
+    private void ShowCard(GalleryCardInfo info)
     {
-        if (!_byId.TryGetValue(id, out var card))
-        {
-            return;
-        }
-
         Root.Surface?.ClosePopups();
-        _selectedId = id;
-        _title.Text = card.Title;
-        _summary.Text = card.Summary;
-        _usage.Text = card.Usage;
         _usageExpander.IsExpanded = false;
         _previewScroll.VerticalOffset = 0;
 
         var previous = _previewHost.Content as VisualElement;
-        var next = card.Create(_model);
+        var next = _catalog.Find(info.Id)?.Create(_model);
         _previewHost.Content = next;
         previous?.Dispose();
         _inspector.SetTarget(next);
-        _status.Text = $"{card.Group} · {card.Id}";
+    }
+
+    private void ClearPreview()
+    {
+        Root.Surface?.ClosePopups();
+        _usageExpander.IsExpanded = false;
+        _previewScroll.VerticalOffset = 0;
+        _inspector.SetTarget(null);
+
+        var previous = _previewHost.Content as VisualElement;
+        _previewHost.Content = null;
+        previous?.Dispose();
     }
 }
