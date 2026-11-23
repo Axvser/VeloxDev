@@ -165,27 +165,45 @@ public sealed partial class DependencyProperty
 
     private object? CoerceAndValidate(System.Windows.Forms.Control target, object? value)
     {
-        if (value is null && PropertyType.IsValueType && Nullable.GetUnderlyingType(PropertyType) is null)
-        {
-            throw new ArgumentException(
-                $"Property '{Name}' cannot be set to null because its type '{PropertyType}' is a non-nullable value type.",
-                nameof(value));
-        }
-
-        if (value is not null && !PropertyType.IsInstanceOfType(value))
+        if (value is not null && !IsAssignable(value))
         {
             value = XamlRuntime.ConvertValue(value, PropertyType);
         }
 
+        // 转换器对不认识的类型可能原样返回；校验放在这里，写入端才不会在拆箱处炸成 InvalidCastException。
+        value = ValidateValueType(value);
+
         if (Metadata.CoerceValueCallback is { } coerce)
         {
-            value = coerce(target, value);
+            value = ValidateValueType(coerce(target, value));
         }
 
-        if (value is null && PropertyType.IsValueType && Nullable.GetUnderlyingType(PropertyType) is null)
+        return value;
+    }
+
+    // 可空值类型以盒装基础值给出值是合法的，IsInstanceOfType 对它返回 false，所以单独放行。
+    private bool IsAssignable(object value)
+        => PropertyType.IsInstanceOfType(value)
+           || Nullable.GetUnderlyingType(PropertyType)?.IsInstanceOfType(value) == true;
+
+    private object? ValidateValueType(object? value)
+    {
+        if (value is null)
+        {
+            if (PropertyType.IsValueType && Nullable.GetUnderlyingType(PropertyType) is null)
+            {
+                throw new ArgumentException(
+                    $"Property '{Name}' cannot be set to null because its type '{PropertyType}' is a non-nullable value type.",
+                    nameof(value));
+            }
+
+            return null;
+        }
+
+        if (!IsAssignable(value))
         {
             throw new ArgumentException(
-                $"The coercion of property '{Name}' produced null, which is invalid for '{PropertyType}'.",
+                $"A value of type '{value.GetType()}' cannot be assigned to property '{Name}' of type '{PropertyType}'.",
                 nameof(value));
         }
 

@@ -134,18 +134,17 @@ public abstract class Visual : WinformsObject
         }
 
         var bounds = visual.GetSurfaceBounds();
-        if (bounds.Width <= 0f || bounds.Height <= 0f)
+        if (bounds.Width > 0f && bounds.Height > 0f)
         {
-            return false;
+            bounds.Inflate(DamageCullMargin, DamageCullMargin);
+            if (bounds.IntersectsWith(damage))
+            {
+                return true;
+            }
         }
 
-        bounds.Inflate(DamageCullMargin, DamageCullMargin);
-        if (bounds.IntersectsWith(damage))
-        {
-            return true;
-        }
-
-        // 未裁剪的容器允许子项越界绘制；只有整棵子树都在脏区外才算真正可跳过。
+        // 未裁剪的容器允许子项越界绘制；零尺寸容器（在栈里被量成 0 高）同样要检查子项，
+        // 否则父级的脏区剔除会把它连同整棵子树一起丢掉。
         if (visual is ContainerVisual container && !visual.ClipToBounds)
         {
             foreach (var child in container.Children)
@@ -264,7 +263,14 @@ public abstract class Visual : WinformsObject
     public void Render(Graphics graphics)
     {
         if (graphics is null) throw new ArgumentNullException(nameof(graphics));
-        if (!IsVisible || Opacity <= 0d || Bounds.Width <= 0f || Bounds.Height <= 0f)
+        if (!IsVisible || Opacity <= 0d)
+        {
+            return;
+        }
+
+        var zeroSized = Bounds.Width <= 0f || Bounds.Height <= 0f;
+        // 零尺寸且不裁剪的容器仍要画子项：Canvas 在 StackPanel 里被量成 0 高就是这样。
+        if (zeroSized && !(this is ContainerVisual && !ClipToBounds))
         {
             return;
         }
@@ -289,6 +295,13 @@ public abstract class Visual : WinformsObject
             if (Clip is { } clip)
             {
                 graphics.SetClip(clip, CombineMode.Intersect);
+            }
+
+            // 零尺寸装不下一张合成位图，缓存也没有意义；直接画子项。
+            if (zeroSized)
+            {
+                RenderChildren(graphics);
+                return;
             }
 
             if (CacheAsBitmap && Effect is null)
@@ -316,7 +329,15 @@ public abstract class Visual : WinformsObject
     /// <param name="point">The point to test.</param>
     public bool HitTest(PointF point)
     {
-        if (!IsVisible || Opacity <= 0d || Bounds.Width <= 0f || Bounds.Height <= 0f)
+        if (!IsVisible || Opacity <= 0d)
+        {
+            return false;
+        }
+
+        var zeroSized = Bounds.Width <= 0f || Bounds.Height <= 0f;
+        var allowOutside = !ClipToBounds;
+        // 零尺寸不裁剪的容器仍要命中子项：子项本来就在它的 0 尺寸框之外。
+        if (zeroSized && !allowOutside)
         {
             return false;
         }
@@ -334,12 +355,18 @@ public abstract class Visual : WinformsObject
             local = points[0];
         }
 
-        if (!UnboundedHitTest && (local.X < 0f || local.Y < 0f || local.X > Bounds.Width || local.Y > Bounds.Height))
+        if (Clip is { } clip && !clip.Contains(local))
         {
             return false;
         }
 
-        if (Clip is { } clip && !clip.Contains(local))
+        // 自身内容仍按自己的布局框判定；零尺寸时只让子项作答。
+        if (zeroSized)
+        {
+            return HitTestChildren(local);
+        }
+
+        if (!UnboundedHitTest && (local.X < 0f || local.Y < 0f || local.X > Bounds.Width || local.Y > Bounds.Height))
         {
             return false;
         }
@@ -418,7 +445,9 @@ public abstract class Visual : WinformsObject
 
     private PointF? ToLocal(PointF point, bool allowOutside)
     {
-        if (Bounds.Width <= 0f || Bounds.Height <= 0f)
+        var zeroSized = Bounds.Width <= 0f || Bounds.Height <= 0f;
+        // 零尺寸且允许越界的容器（ClipToBounds=false）仍把点交给子项；否则无从命中。
+        if (zeroSized && !allowOutside)
         {
             return null;
         }
@@ -587,6 +616,7 @@ public abstract class Visual : WinformsObject
 public class ContainerVisual : Visual
 {
     private readonly VisualCollection _children;
+    private readonly List<(Visual Visual, int Index)> _zOrder = [];
 
     /// <summary>Creates an empty container.</summary>
     public ContainerVisual()
@@ -629,7 +659,7 @@ public class ContainerVisual : Visual
     /// <inheritdoc />
     protected override void RenderChildren(Graphics graphics)
     {
-        foreach (var child in _children)
+        foreach (var (child, _) in BuildZOrder())
         {
             if (ShouldRenderChild(child))
             {
@@ -649,9 +679,11 @@ public class ContainerVisual : Visual
     /// <inheritdoc />
     protected override bool HitTestChildren(PointF point, out Visual? visual)
     {
-        for (var index = _children.Count - 1; index >= 0; index--)
+        // 命中顺序与绘制相反：ZIndex 高的先命中，同值按声明顺序的逆序（后声明的在上）。
+        var order = BuildZOrder();
+        for (var index = order.Count - 1; index >= 0; index--)
         {
-            var child = _children[index];
+            var child = order[index].Visual;
             if (child is null)
             {
                 continue;
@@ -668,6 +700,30 @@ public class ContainerVisual : Visual
         visual = null;
         return false;
     }
+
+    // 稳定的 ZIndex 序：List.Sort 不稳定，用原始下标打破平局，保证同值子项保持声明顺序。
+    private List<(Visual Visual, int Index)> BuildZOrder()
+    {
+        _zOrder.Clear();
+        for (var index = 0; index < _children.Count; index++)
+        {
+            var child = _children[index];
+            if (child is not null)
+            {
+                _zOrder.Add((child, index));
+            }
+        }
+
+        _zOrder.Sort(static (left, right) =>
+        {
+            var byZIndex = ZIndexOf(left.Visual).CompareTo(ZIndexOf(right.Visual));
+            return byZIndex != 0 ? byZIndex : left.Index.CompareTo(right.Index);
+        });
+        return _zOrder;
+    }
+
+    private static int ZIndexOf(Visual visual)
+        => visual is VisualElement element ? Controls.Panel.GetZIndex(element) : 0;
 
     private sealed class VisualCollection(ContainerVisual owner) : System.Collections.ObjectModel.Collection<Visual>
     {

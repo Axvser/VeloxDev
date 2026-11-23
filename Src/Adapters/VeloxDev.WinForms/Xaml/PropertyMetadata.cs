@@ -8,10 +8,18 @@ namespace VeloxDev.WinForms.Xaml;
 public delegate void PropertyChangedCallback(System.Windows.Forms.Control target, DependencyPropertyChangedEventArgs e);
 
 /// <summary>Coerces a value before it is stored in a dependency property.</summary>
-/// <param name="target">The <see cref="System.Windows.Forms.Control"/> that is receiving the value.</param>
+/// <param name="target">
+/// The object receiving the value: a <see cref="System.Windows.Forms.Control"/> for an attached value, or an
+/// <see cref="IWinformsObject"/> for a visual element.
+/// </param>
 /// <param name="baseValue">The value supplied by the caller.</param>
 /// <returns>The value that is actually stored.</returns>
-public delegate object? CoerceValueCallback(System.Windows.Forms.Control target, object? baseValue);
+/// <remarks>
+/// The parameter is <see cref="System.Object"/> because both storage models share this callback: an attached value
+/// lives on a native control, while a visual element stores its value in a priority table. Cast at the callback when
+/// the registering property is known to be used with only one of the two.
+/// </remarks>
+public delegate object? CoerceValueCallback(object target, object? baseValue);
 
 /// <summary>The old and new values of one dependency property change.</summary>
 public readonly struct DependencyPropertyChangedEventArgs

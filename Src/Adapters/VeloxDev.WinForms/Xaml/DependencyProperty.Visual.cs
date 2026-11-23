@@ -40,24 +40,19 @@ public sealed partial class DependencyProperty
 
     internal object? CoerceFor(IWinformsObject target, object? value)
     {
-        if (value is null)
+        // 视觉目标没有 Control，但回调的 target 是 object：这条路径与附加属性共用同一套元数据。
+        if (value is not null && !IsAssignable(value))
         {
-            if (PropertyType.IsValueType && Nullable.GetUnderlyingType(PropertyType) is null)
-            {
-                throw new ArgumentException(
-                    $"Property '{Name}' cannot be set to null because its type '{PropertyType}' is a non-nullable value type.",
-                    nameof(value));
-            }
-
-            return null;
+            value = XamlRuntime.ConvertValue(value, PropertyType);
         }
 
-        if (PropertyType.IsInstanceOfType(value)
-            || Nullable.GetUnderlyingType(PropertyType)?.IsInstanceOfType(value) == true)
+        value = ValidateValueType(value);
+
+        if (Metadata.CoerceValueCallback is { } coerce)
         {
-            return value;
+            value = ValidateValueType(coerce(target, value));
         }
 
-        return XamlRuntime.ConvertValue(value, PropertyType);
+        return value;
     }
 }

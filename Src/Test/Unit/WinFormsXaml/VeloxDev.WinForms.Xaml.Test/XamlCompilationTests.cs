@@ -238,4 +238,63 @@ public sealed class XamlCompilationTests
             .ToArray();
         Assert.IsEmpty(errors, GeneratorProbe.Describe(errors));
     }
+
+    [TestMethod]
+    public void InlineContentTemplates_Compile()
+    {
+        const string source = """
+            namespace Probe;
+
+            public partial class ContentTemplateView : VeloxDev.WinForms.Xaml.Visuals.Controls.StackPanel
+            {
+            }
+            """;
+
+        const string xaml = """
+            <local:ContentTemplateView
+                xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:local="clr-namespace:Probe"
+                x:Class="Probe.ContentTemplateView">
+
+              <ContentControl x:Name="host">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding Name}" />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+
+              <ContentPresenter x:Name="presenter">
+                <ContentPresenter.ContentTemplate>
+                  <DataTemplate>
+                    <Border />
+                  </DataTemplate>
+                </ContentPresenter.ContentTemplate>
+              </ContentPresenter>
+
+            </local:ContentTemplateView>
+            """;
+
+        var (run, output) = GeneratorProbe.RunAndCompile(
+            [new XamlFileGenerator()],
+            source,
+            "VisualContentTemplateProbe",
+            new InMemoryAdditionalText("ContentTemplateView.xaml", xaml));
+
+        Assert.IsEmpty(run.Diagnostics, GeneratorProbe.Describe(run.Diagnostics));
+
+        var errors = output.GetDiagnostics()
+            .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray();
+        Assert.IsEmpty(errors, GeneratorProbe.Describe(errors));
+
+        var generated = run.GeneratedText();
+        StringAssert.Contains(
+            generated,
+            "host.ContentTemplate = new global::VeloxDev.WinForms.Xaml.Visuals.DataTemplate(");
+        StringAssert.Contains(
+            generated,
+            "presenter.ContentTemplate = new global::VeloxDev.WinForms.Xaml.Visuals.DataTemplate(");
+    }
 }

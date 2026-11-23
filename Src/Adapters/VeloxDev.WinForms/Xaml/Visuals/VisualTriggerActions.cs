@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using VeloxDev.TransitionSystem;
 using VeloxDev.TransitionSystem.Abstractions;
 
@@ -44,6 +45,12 @@ public sealed class KeyFrame
 /// <remarks>
 /// The animation writes at <see cref="BindingPriority.Animation"/>, so it outranks a local value, style setter or
 /// trigger setter while it runs. A new animation started on the same element supersedes the running one.
+/// <para>
+/// When it completes or is stopped, the value it reached is written at <see cref="BindingPriority.LocalValue"/> and
+/// the animation layer is cleared. The end value therefore holds at local precedence (HoldEnd) instead of shadowing
+/// every later write at animation precedence: a later local write overrides it, and clearing the local value lets
+/// the style, trigger or default value show through again.
+/// </para>
 /// </remarks>
 public sealed class TransitionAction : VisualTriggerAction
 {
@@ -75,7 +82,9 @@ public sealed class TransitionAction : VisualTriggerAction
 /// <remarks>
 /// Each adjacent pair of keyframes becomes one segment whose duration is proportional to its slice of
 /// <see cref="Duration"/>. The chain is one mutual animation: a later animation on the same element supersedes all
-/// of it, and <see cref="VisualTransition.Stop"/> ends it where it stands.
+/// of it, and <see cref="VisualTransition.Stop"/> ends it where it stands. As with
+/// <see cref="TransitionAction"/>, the value reached when the chain ends is held at
+/// <see cref="BindingPriority.LocalValue"/> after the animation layer is cleared.
 /// </remarks>
 public sealed class KeyFrameAnimation : VisualTriggerAction
 {
@@ -127,6 +136,10 @@ public sealed class KeyFrameAnimation : VisualTriggerAction
 /// <see cref="VisualDependencyTransitionProperty"/> makes one <see cref="DependencyProperty"/> look like any other
 /// animatable path; the WinForms adapter's <see cref="Interpolator"/> prepares and samples it, and its scheduler
 /// owns frame pacing on the surface's UI thread. No transition code is duplicated here.
+/// <para>
+/// A completed or stopped animation holds its last value by writing it at <see cref="BindingPriority.LocalValue"/>
+/// and clearing the animation layer, so the value never keeps outranking later writes at animation precedence.
+/// </para>
 /// </remarks>
 public static class VisualTransition
 {
@@ -158,11 +171,24 @@ public static class VisualTransition
             Ease = Eases.Cubic.Out,
         };
 
+        var animated = new VisualDependencyTransitionProperty(target, property);
+        Track(animated);
+        animated.AttachCompleter(effect);
+
         // 走 Transition<T> 而不是直接拿 scheduler.Execute：后者创建的 run 不会被登记，TransitionCore.Exit
         // 就停不掉它。Transition<T> 会在目标锁内登记，并顺带 supersede 上一趟互斥动画。
         var transition = Transition<VisualElement>.Create().Effect(effect);
-        transition.GetState().SetValue(new VisualDependencyTransitionProperty(target, property), to);
-        Transition<VisualElement>.Execute(target, new[] { transition }, CanMutualTask: true);
+        transition.GetState().SetValue(animated, to);
+        try
+        {
+            Transition<VisualElement>.Execute(target, new[] { transition }, CanMutualTask: true);
+        }
+        catch
+        {
+            // 校验失败时动画根本没有启动，不会有 Finally 来收尾；把登记与回调撤掉，值保持原样。
+            animated.Rollback();
+            throw;
+        }
     }
 
     /// <summary>Animates <paramref name="property"/> through <paramref name="frames"/>, one segment per adjacent pair.</summary>
@@ -211,6 +237,7 @@ public static class VisualTransition
         var root = Transition<VisualElement>.Create();
         var segment = root;
         var previousOffset = 0d;
+        var animated = new VisualDependencyTransitionProperty(target, property);
 
         for (var index = 0; index < ordered.Count; index++)
         {
@@ -224,14 +251,21 @@ public static class VisualTransition
                 to = XamlRuntime.ConvertValue(to, property.PropertyType);
             }
 
-            segment.GetState().SetValue(new VisualDependencyTransitionProperty(target, property), to);
-            segment.Effect(new TransitionEffect
+            segment.GetState().SetValue(animated, to);
+            var segmentEffect = new TransitionEffect
             {
                 Duration = segmentDuration,
                 Ease = ease ?? Eases.Cubic.Out,
                 LoopTime = loopTime,
                 IsAutoReverse = isAutoReverse,
-            });
+            };
+            segment.Effect(segmentEffect);
+
+            // 链的最后一段最后结束；只在这里挂收尾，避免前面每段的 Finally 把动画层提前清掉。
+            if (index == ordered.Count - 1)
+            {
+                animated.AttachCompleter(segmentEffect);
+            }
 
             previousOffset = offset;
             if (index < ordered.Count - 1)
@@ -240,16 +274,88 @@ public static class VisualTransition
             }
         }
 
-        Transition<VisualElement>.Execute(target, new[] { root }, CanMutualTask: true);
+        Track(animated);
+        try
+        {
+            Transition<VisualElement>.Execute(target, new[] { root }, CanMutualTask: true);
+        }
+        catch
+        {
+            animated.Rollback();
+            throw;
+        }
     }
 
     /// <summary>Stops every animation currently running on <paramref name="target"/>.</summary>
     /// <param name="target">The element whose animations are stopped.</param>
+    /// <remarks>
+    /// The value each running animation had reached is held at <see cref="BindingPriority.LocalValue"/> and the
+    /// animation layer is cleared, so the stop freezes where it stands without leaving a value that outranks every
+    /// later write. Use it when a trigger exits or an element is torn down.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
     public static void Stop(VisualElement target)
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
+
+        var active = TakeActive(target);
         TransitionCore.Exit(target, IncludeMutual: true, IncludeNoMutual: false);
+        foreach (var animated in active)
+        {
+            animated.HoldCurrentValue();
+        }
+    }
+
+    // 按目标弱引用登记正在动画的属性；ConditionalWeakTable 保证表面释放后不滞留元素。
+    private static readonly ConditionalWeakTable<VisualElement, Dictionary<DependencyProperty, VisualDependencyTransitionProperty>> ActiveAnimations = new();
+    private static readonly object ActiveAnimationsLock = new();
+
+    private static void Track(VisualDependencyTransitionProperty animated)
+    {
+        lock (ActiveAnimationsLock)
+        {
+            ActiveAnimations.GetOrCreateValue(animated.Target)[animated.Property] = animated;
+        }
+    }
+
+    // 只有仍登记在册的实例才移除：被新动画取代的旧实例不能清掉新动画正在写的层位。
+    internal static bool Untrack(VisualDependencyTransitionProperty animated)
+    {
+        lock (ActiveAnimationsLock)
+        {
+            if (ActiveAnimations.TryGetValue(animated.Target, out var map)
+                && map.TryGetValue(animated.Property, out var current)
+                && ReferenceEquals(current, animated))
+            {
+                map.Remove(animated.Property);
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    internal static bool HasActive(VisualElement target)
+    {
+        lock (ActiveAnimationsLock)
+        {
+            return ActiveAnimations.TryGetValue(target, out var map) && map.Count > 0;
+        }
+    }
+
+    private static List<VisualDependencyTransitionProperty> TakeActive(VisualElement target)
+    {
+        lock (ActiveAnimationsLock)
+        {
+            if (!ActiveAnimations.TryGetValue(target, out var map))
+            {
+                return [];
+            }
+
+            var active = new List<VisualDependencyTransitionProperty>(map.Values);
+            map.Clear();
+            return active;
+        }
     }
 }
 
@@ -258,12 +364,18 @@ internal sealed class VisualDependencyTransitionProperty : ITransitionProperty
 {
     private readonly VisualElement _target;
     private readonly DependencyProperty _property;
+    private EventHandler<TransitionEventArgs>? _finallyHandler;
+    private TransitionEffect? _finallyEffect;
 
     internal VisualDependencyTransitionProperty(VisualElement target, DependencyProperty property)
     {
         _target = target;
         _property = property;
     }
+
+    internal VisualElement Target => _target;
+
+    internal DependencyProperty Property => _property;
 
     public string Path => $"{_target.GetType().Name}.{_property.Name}";
 
@@ -279,5 +391,79 @@ internal sealed class VisualDependencyTransitionProperty : ITransitionProperty
     {
         _property.SetValue(_target, value, BindingPriority.Animation);
         return true;
+    }
+
+    // 动画自然结束或被取消时把最末值落到本地层并清掉动画层；否则 Animation 层会永远压住 local/style。
+    internal void AttachCompleter(TransitionEffect effect)
+    {
+        DetachCompleter();
+        _finallyEffect = effect;
+        _finallyHandler = OnFinally;
+        effect.Finally += _finallyHandler;
+    }
+
+    internal void DetachCompleter()
+    {
+        if (_finallyEffect is { } effect && _finallyHandler is { } handler)
+        {
+            effect.Finally -= handler;
+        }
+
+        _finallyEffect = null;
+        _finallyHandler = null;
+    }
+
+    private void OnFinally(object? sender, TransitionEventArgs e)
+    {
+        // 样式里的同一个 effect 会被克隆给多个元素；回调的 sender 是触发它的目标，只处理自己的那个。
+        if (!ReferenceEquals(sender, _target))
+        {
+            return;
+        }
+
+        // 先摘回调：即使是已被取代的旧实例，也不该让调用方复用的 effect 累积处理器。
+        DetachCompleter();
+
+        // 被新动画取代的旧实例不在册上，不能把新动画正在写的层位清掉。
+        if (VisualTransition.Untrack(this))
+        {
+            HoldCurrentValue();
+        }
+    }
+
+    // 把动画层当前值改成 Local 层，再摘掉 Animation 层：值留住（HoldEnd），但不再压过后续写入。
+    internal void HoldCurrentValue()
+    {
+        DetachCompleter();
+
+        // DP 存储不是线程安全的；无句柄或已在句柄线程上时直接写，否则投回表面线程。
+        if (_target.Surface is { IsHandleCreated: true, IsDisposed: false } surface && surface.InvokeRequired)
+        {
+            try
+            {
+                surface.BeginInvoke(new Action(HoldCurrentValueCore));
+                return;
+            }
+            catch (InvalidOperationException)
+            {
+                // 句柄在检查与投递之间消失：退回就地写入。
+            }
+        }
+
+        HoldCurrentValueCore();
+    }
+
+    private void HoldCurrentValueCore()
+    {
+        var value = _property.GetValue(_target);
+        _property.SetValue(_target, value, BindingPriority.LocalValue);
+        _property.ClearValue(_target, BindingPriority.Animation);
+    }
+
+    // 启动失败时撤回登记与回调，不动属性值。
+    internal void Rollback()
+    {
+        VisualTransition.Untrack(this);
+        DetachCompleter();
     }
 }

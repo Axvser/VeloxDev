@@ -729,6 +729,12 @@ public abstract class VisualElement : ContainerVisual, IDisposable
             return;
         }
 
+        // 元素被拆掉时动画必须停下并把层位落回本地层；否则调度器会继续往一个已释放的节点写值。
+        if (VisualTransition.HasActive(this))
+        {
+            VisualTransition.Stop(this);
+        }
+
         // 样式应用握着本元素的 PropertyChanged 订阅；释放时摘掉，避免事件把已释放对象拉回来。
         _styleApplication?.Apply(null);
         _explicitStyle = null;

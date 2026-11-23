@@ -261,7 +261,11 @@ internal sealed class XamlCompiler
                 }
 
                 var objectExpression = EmitXamlObject(child, type, hostExpression);
-                _current.Line($"{elementExpression}.{collection.Name}.Add({objectExpression});");
+                if (objectExpression is not null)
+                {
+                    _current.Line($"{elementExpression}.{collection.Name}.Add({objectExpression});");
+                }
+
                 continue;
             }
 
@@ -352,7 +356,8 @@ internal sealed class XamlCompiler
         return expression;
     }
 
-    private string EmitXamlObject(XElement element, ITypeSymbol type, string? hostExpression)
+    // 返回 null 表示这个对象无法生成（已报诊断）：调用方要跳过赋值，不能把一个未声明的变量写进代码。
+    private string? EmitXamlObject(XElement element, ITypeSymbol type, string? hostExpression)
     {
         // 视觉元素必须走 EmitControl：只有它生成 x:Name 字段并递归用 Add 挂子项。
         if (IsVisualElement(type))
@@ -369,7 +374,7 @@ internal sealed class XamlCompiler
                 Diagnostics.UnsupportedConstruct,
                 element,
                 $"'{type.Name}' needs a public parameterless constructor to be declared in XAML.");
-            return NextVariable();
+            return null;
         }
 
         var variable = NextVariable();
@@ -406,7 +411,10 @@ internal sealed class XamlCompiler
             }
 
             var childExpression = EmitXamlObject(child, childType, hostExpression);
-            _current.Line($"{variable}.{collection.Name}.Add({childExpression});");
+            if (childExpression is not null)
+            {
+                _current.Line($"{variable}.{collection.Name}.Add({childExpression});");
+            }
         }
 
         EmitTextContent(element, type, variable);
@@ -455,7 +463,10 @@ internal sealed class XamlCompiler
                 }
 
                 var childExpression = EmitXamlObject(child, childType, hostExpression);
-                _current.Line($"{ownerExpression}.{property.Name}.Add({childExpression});");
+                if (childExpression is not null)
+                {
+                    _current.Line($"{ownerExpression}.{property.Name}.Add({childExpression});");
+                }
             }
 
             return;
@@ -476,7 +487,11 @@ internal sealed class XamlCompiler
             }
 
             var contentExpression = EmitXamlObject(content, contentType, hostExpression);
-            _current.Line($"{ownerExpression}.{property.Name} = {contentExpression};");
+            if (contentExpression is not null)
+            {
+                _current.Line($"{ownerExpression}.{property.Name} = {contentExpression};");
+            }
+
             return;
         }
 
@@ -2948,13 +2963,18 @@ internal sealed class XamlCompiler
             }
         }
 
-        if (isVisual && memberName == "ItemTemplate")
+        // DataTemplate 属性元素没有公共无参构造，不能走通用 EmitXamlObject；ItemTemplate 与 ContentTemplate
+        // 都把它编成一个返回 VisualElement 的私有工厂，与模板资源同形。只有属性确实是 DataTemplate 时才接管。
+        var templateProperty = isVisual && memberName is ("ItemTemplate" or "ContentTemplate")
+            ? FindProperty(ownerType, memberName)
+            : null;
+        if (templateProperty?.Type.Name == "DataTemplate")
         {
             var templateElement = propertyElement.Elements()
                 .FirstOrDefault(child => ChildMemberName(child) == "DataTemplate");
             if (templateElement is not null)
             {
-                EmitVisualItemTemplate(templateElement, ownerExpression);
+                EmitVisualTemplateProperty(templateElement, ownerExpression, memberName);
                 return;
             }
         }
@@ -3021,7 +3041,10 @@ internal sealed class XamlCompiler
                 }
 
                 var childExpression = EmitXamlObject(child, childType, hostExpression);
-                _current.Line($"{ownerExpression}.{property.Name}.Add({childExpression});");
+                if (childExpression is not null)
+                {
+                    _current.Line($"{ownerExpression}.{property.Name}.Add({childExpression});");
+                }
             }
 
             return;
@@ -3042,7 +3065,11 @@ internal sealed class XamlCompiler
             }
 
             var contentExpression = EmitXamlObject(content, contentType, hostExpression);
-            _current.Line($"{ownerExpression}.{property.Name} = {contentExpression};");
+            if (contentExpression is not null)
+            {
+                _current.Line($"{ownerExpression}.{property.Name} = {contentExpression};");
+            }
+
             return;
         }
 
@@ -3995,14 +4022,17 @@ internal sealed class XamlCompiler
         return $"new {VisualFqn("DataTemplate")}(this.{methodName})";
     }
 
-    // 视觉 ItemsControl 的 ItemTemplate：模板体编成一个返回 VisualElement 的私有工厂，交给
+    // 视觉模板属性（ItemTemplate / ContentTemplate）：模板体编成一个返回 VisualElement 的私有工厂，交给
     // 视觉 DataTemplate。模板内的 x:Name 是每实例部件、不生成宿主字段。
-    private void EmitVisualItemTemplate(XElement templateElement, string ownerExpression)
+    private void EmitVisualTemplateProperty(XElement templateElement, string ownerExpression, string propertyName)
     {
         var content = templateElement.Elements().FirstOrDefault(child => !IsPropertyElement(child));
         if (content is null)
         {
-            Report(Diagnostics.UnsupportedConstruct, templateElement, "A visual ItemTemplate needs one root element.");
+            Report(
+                Diagnostics.UnsupportedConstruct,
+                templateElement,
+                $"A visual {propertyName} needs one root element.");
             return;
         }
 
@@ -4012,7 +4042,7 @@ internal sealed class XamlCompiler
             Report(
                 Diagnostics.UnsupportedConstruct,
                 content,
-                "A visual ItemTemplate root must be a visual element.");
+                $"A visual {propertyName} root must be a visual element.");
             return;
         }
 
@@ -4042,7 +4072,7 @@ internal sealed class XamlCompiler
         _helpers.Close();
 
         _current.Line(
-            $"{ownerExpression}.ItemTemplate = new "
+            $"{ownerExpression}.{propertyName} = new "
             + $"{VisualFqn("DataTemplate")}(this.{methodName});");
     }
 
@@ -4650,7 +4680,13 @@ internal sealed class XamlCompiler
                 return false;
             }
 
-            expression = EmitXamlObject(resource, resourceType, null);
+            var objectExpression = EmitXamlObject(resource, resourceType, null);
+            if (objectExpression is null)
+            {
+                return false;
+            }
+
+            expression = objectExpression;
             return true;
         }
 

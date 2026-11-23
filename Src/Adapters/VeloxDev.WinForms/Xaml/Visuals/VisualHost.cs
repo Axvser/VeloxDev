@@ -67,6 +67,7 @@ public class VisualHost : System.Windows.Forms.Control
         Root = new ContainerVisual();
         _styles.Changed += (_, _) => RefreshStyles();
         _overlay.SetSurfaceRoot(this);
+        Theme.Changed += OnThemeChanged;
     }
 
     /// <summary>Raised after the root tree has been measured and arranged.</summary>
@@ -943,6 +944,8 @@ public class VisualHost : System.Windows.Forms.Control
     {
         if (disposing)
         {
+            // 主题是静态状态；不摘订阅，静态事件会把宿主钉在内存里。
+            Theme.Changed -= OnThemeChanged;
             CloseAllPopups();
             ClearNativeChildren();
             _focused = null;
@@ -964,6 +967,17 @@ public class VisualHost : System.Windows.Forms.Control
     {
         _rootElement?.RefreshImplicitStyles();
         _overlay.RefreshImplicitStyles();
+    }
+
+    // 主题色由控件在绘制时读取，切换 Theme.Mode 只失效表面即可重绘。
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        InvalidateSurface();
     }
 
     internal VisualElement OverlayHost => _overlay;

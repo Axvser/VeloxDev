@@ -229,6 +229,16 @@ public class GroupBox : VisualElement
         set => SetValue(ChildProperty, value);
     }
 
+    /// <summary>Adds the single child through <see cref="Child"/> so XAML content maps to it.</summary>
+    /// <param name="child">The child to add.</param>
+    /// <typeparam name="T">The child's concrete type.</typeparam>
+    /// <returns>The added child.</returns>
+    public new T Add<T>(T child) where T : VisualElement
+    {
+        Child = child;
+        return child;
+    }
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -279,7 +289,8 @@ public class GroupBox : VisualElement
                 parent.Remove(next);
             }
 
-            Add(next);
+            // 本类隐藏了 Add<T> 去写 Child；这里必须走基类，否则不会挂进 Children 参与绘制。
+            base.Add(next);
         }
 
         InvalidateMeasure();

@@ -48,11 +48,29 @@ public sealed class DependencyPropertyTests
             set => ConfigurationProperty.SetValue(this, value);
         }
 
-        private static object? CoerceNumber(Control target, object? baseValue)
+        private static object? CoerceNumber(object target, object? baseValue)
             => Math.Clamp((int)baseValue!, 0, 100);
 
         private static void OnNumberChanged(Control target, DependencyPropertyChangedEventArgs e)
             => Changes.Add((e.Property, e.OldValue, e.NewValue));
+    }
+
+    /// <summary>Visual-target properties: one that has no conversion and one that coerces.</summary>
+    private static class VisualProbe
+    {
+        public static readonly DependencyProperty ColorProperty = DependencyProperty.Register(
+            "Color",
+            typeof(System.Drawing.Color),
+            typeof(VisualProbe));
+
+        public static readonly DependencyProperty RatioProperty = DependencyProperty.Register(
+            "Ratio",
+            typeof(double),
+            typeof(VisualProbe),
+            new PropertyMetadata(0.5d, null, CoerceRatio));
+
+        private static object? CoerceRatio(object target, object? baseValue)
+            => Math.Clamp((double)baseValue!, 0d, 1d);
     }
 
     /// <summary>An attached property whose accessors take a visual element, as the generator requires.</summary>
@@ -168,6 +186,28 @@ public sealed class DependencyPropertyTests
         ProbeControl.NumberProperty.SetValue(control, "42");
 
         Assert.AreEqual(42, control.Number);
+    }
+
+    [TestMethod]
+    public void VisualTarget_RejectsAValueThatCannotBeConverted()
+    {
+        using var border = new VC.Border();
+
+        // Color 没有从 int 出发的转换，转换器会原样返回；写入端必须在拆箱处报错之前拦住它。
+        Assert.ThrowsExactly<ArgumentException>(() => border.SetValue(VisualProbe.ColorProperty, 42));
+        Assert.AreEqual(System.Drawing.Color.Empty, border.GetValue(VisualProbe.ColorProperty));
+    }
+
+    [TestMethod]
+    public void VisualTarget_InvokesTheCoerceCallback()
+    {
+        using var border = new VC.Border();
+
+        border.SetValue(VisualProbe.RatioProperty, 5d);
+        Assert.AreEqual(1d, (double)border.GetValue(VisualProbe.RatioProperty)!);
+
+        border.SetValue(VisualProbe.RatioProperty, -3d);
+        Assert.AreEqual(0d, (double)border.GetValue(VisualProbe.RatioProperty)!);
     }
 
     [TestMethod]

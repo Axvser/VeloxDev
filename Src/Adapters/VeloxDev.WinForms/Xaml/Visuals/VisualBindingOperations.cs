@@ -80,9 +80,12 @@ internal sealed class VisualBindingExpression : IDisposable
         }
 
         AttachDataContextParent();
-        if (_property == VisualElement.DataContextProperty && _target is VisualElement contextTarget)
+
+        // 绑定可能在挂上父级之前就建立（预构造子树、复用视图）；任何绑定都要在父级变化后重解源，
+        // 否则 ElementName 与继承来的 DataContext 会一直停在建立时看到的空源上。
+        if (_target is VisualElement parentedTarget)
         {
-            contextTarget.ParentChanged += OnTargetParentChanged;
+            parentedTarget.ParentChanged += OnTargetParentChanged;
         }
 
         if (_binding.Mode != BindingMode.OneTime)
@@ -302,13 +305,13 @@ internal sealed class VisualBindingExpression : IDisposable
         var source = ResolveSource();
         if (source is null)
         {
-            ApplyTarget(_binding.FallbackValue);
+            ApplyMissingSource();
             return;
         }
 
         if (!_path.TryResolve(source, out var value, out var nodes, out var leaf))
         {
-            ApplyTarget(_binding.FallbackValue);
+            ApplyMissingSource();
             return;
         }
 
@@ -339,6 +342,18 @@ internal sealed class VisualBindingExpression : IDisposable
         }
 
         ApplyTarget(value);
+    }
+
+    // 无源且没有显式 FallbackValue 时回到目标默认值；不要写一个 null 覆盖默认值。
+    private void ApplyMissingSource()
+    {
+        if (_binding.FallbackValue is null)
+        {
+            _target.ClearValue(_property);
+            return;
+        }
+
+        ApplyTarget(_binding.FallbackValue);
     }
 
     private void TrackNodes(List<object?> nodes)

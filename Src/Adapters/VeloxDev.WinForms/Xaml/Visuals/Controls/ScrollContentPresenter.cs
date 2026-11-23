@@ -8,9 +8,9 @@ namespace VeloxDev.WinForms.Xaml.Visuals.Controls;
 /// <summary>Hosts one content element and clips it to a scrollable viewport.</summary>
 /// <remarks>
 /// <para>
-/// The content is measured without a limit along a scrollable axis and against the viewport along the other axis, so
-/// wrapped text still wraps while a long list reports its full height. Arranging places the content at
-/// <c>-offset</c>; the clip stays on the viewport.
+/// The content is measured without a limit along each scrollable axis and against the viewport along a disabled
+/// axis, so wrapped text reports its full width once horizontal scrolling is enabled while a long list reports its
+/// full height. Arranging places the content at <c>-offset</c>; the clip stays on the viewport.
 /// </para>
 /// <para>
 /// Offsets are clamped to <c>[0, Extent - Viewport]</c>. An axis whose <see cref="CanHorizontallyScroll"/> or
@@ -28,6 +28,9 @@ public class ScrollContentPresenter : ContentPresenter, IScrollInfo
     private bool _canHorizontallyScroll;
     private bool _canVerticallyScroll = true;
     private bool _isExternalScroll;
+
+    // 横向不约束时的上限：够宽以容纳换行内容，又不会像 int.MaxValue 那样把虚拟列表的算术撑爆。
+    private const int MaxUnboundedMeasure = 100_000;
 
     // 上一次对外公布的数值：只有真的变了才发 ScrollChanged，避免每次重排都打扰订阅者。
     private float _reportedHorizontalOffset;
@@ -242,11 +245,24 @@ public class ScrollContentPresenter : ContentPresenter, IScrollInfo
             return new Size((int)Math.Ceiling(padding.Horizontal), (int)Math.Ceiling(padding.Vertical));
         }
 
-        // 宽始终按视口量：长文本按视口换行，虚拟列表也按视口宽实现行；
-        // 显式更宽的内容仍会报告自己的 desired width，横向 extent 由此而来。
-        var measureWidth = innerWidth;
+        // 竖向不约束：长列表报出完整高度，同时按视口高实现行；横向只有开了滚动才不约束，
+        // 否则长文本按视口换行。上限取一个大而有限的值，避免虚拟列表把 int.MaxValue 吃进算术。
         var measureHeight = _canVerticallyScroll ? int.MaxValue : innerHeight;
-        var desired = content.Measure(new Size(measureWidth, measureHeight));
+        Size desired;
+        if (_canHorizontallyScroll)
+        {
+            var wide = content.Measure(new Size(MaxUnboundedMeasure, measureHeight));
+
+            // 填满可用宽度的面板（虚拟列表）在未约束宽度下会原样报回这条上限；那会把横向 extent
+            // 撑到十万像素并让横条永不消失，所以这类内容退回视口宽度重测。
+            desired = wide.Width >= MaxUnboundedMeasure
+                ? content.Measure(new Size(innerWidth, measureHeight))
+                : wide;
+        }
+        else
+        {
+            desired = content.Measure(new Size(innerWidth, measureHeight));
+        }
 
         _extentWidth = Math.Max(0f, desired.Width - (float)padding.Horizontal);
         _extentHeight = Math.Max(0f, desired.Height - (float)padding.Vertical);
