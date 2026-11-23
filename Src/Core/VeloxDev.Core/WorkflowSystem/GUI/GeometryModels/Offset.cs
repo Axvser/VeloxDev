@@ -1,21 +1,14 @@
-using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>A two-dimensional coordinate offset.</summary>
-[AgentContext(AgentLanguages.Chinese, "表示一个二维坐标偏移量")]
-[AgentContext(AgentLanguages.English, "Represents a two-dimensional coordinate offset")]
 public sealed partial class Offset(double left = 0d, double top = 0d) : ICloneable, IEquatable<Offset>
 {
     [VeloxProperty]
-    [AgentContext(AgentLanguages.Chinese, "水平偏移量，像素单位")]
-    [AgentContext(AgentLanguages.English, "Horizontal offset in pixels")]
     private double _horizontal = left;
 
     [VeloxProperty]
-    [AgentContext(AgentLanguages.Chinese, "垂直偏移量，像素单位")]
-    [AgentContext(AgentLanguages.English, "Vertical offset in pixels")]
     private double _vertical = top;
 
     /// <inheritdoc />

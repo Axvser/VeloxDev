@@ -1,0 +1,430 @@
+<AgentContext>
+  <Type name="VeloxDev.WorkflowSystem.IRuntimeIdentifiable">
+    <Text language="Chinese">工作流组件运行时唯一标识接口，提供在整个程序生命周期内唯一的ID</Text>
+    <Text language="English">Workflow component runtime identity interface, provides a unique ID throughout the program lifetime</Text>
+    <Member name="RuntimeId">
+      <Text language="Chinese">运行时唯一ID，在组件创建时分配，不随集合变化</Text>
+      <Text language="English">Runtime unique ID assigned at creation, stable across collection mutations</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.IWorkflowComponent">
+    <Text language="Chinese">工作流组件接口，任何工作流组件都实现该接口</Text>
+    <Text language="English">Workflow component base interface</Text>
+    <Member name="InitializeWorkflow">
+      <Text language="Chinese">初始化工作流组件，无参数</Text>
+      <Text language="English">Initializes the workflow component, no parameters</Text>
+    </Member>
+    <Member name="OnPropertyChanging">
+      <Text language="Chinese">属性即将更改时通知UI更新，参数为属性名称</Text>
+      <Text language="English">Triggered when a property is about to change, parameter is the property name</Text>
+    </Member>
+    <Member name="OnPropertyChanged">
+      <Text language="Chinese">属性已更改时通知UI更新，参数为属性名称</Text>
+      <Text language="English">Triggered when a property has changed, parameter is the property name</Text>
+    </Member>
+    <Member name="CloseCommand">
+      <Text language="Chinese">终结所有执行中的任务，参数为Null</Text>
+      <Text language="English">Terminates all ongoing tasks, parameter is Null</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.ILinkComponent">
+    <Text language="Chinese">工作流Link组件接口，维护Slot之间的连接关系</Text>
+    <Text language="English">Workflow Link component interface, maintaining connections between Slots</Text>
+    <Member name="Sender">
+      <Text language="Chinese">连接发起方</Text>
+      <Text language="English">The sender of the connection</Text>
+    </Member>
+    <Member name="Receiver">
+      <Text language="Chinese">连接接收方</Text>
+      <Text language="English">The receiver of the connection</Text>
+    </Member>
+    <Member name="IsVisible">
+      <Text language="Chinese">连接是否可见</Text>
+      <Text language="English">Whether the connection is visible</Text>
+    </Member>
+    <Member name="DeleteCommand">
+      <Text language="Chinese">删除当前连接，参数为Null</Text>
+      <Text language="English">Delete the current connection, parameter is Null</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.INodeComponent">
+    <Text language="Chinese">工作流Node组件接口，维护节点的空间信息、Slot集合以及广播行为</Text>
+    <Text language="English">Workflow Node component interface, maintaining node geometry, slot collection, and broadcast behaviors</Text>
+    <Member name="Parent">
+      <Text language="Chinese">所属的Tree组件</Text>
+      <Text language="English">The parent Tree component</Text>
+    </Member>
+    <Member name="Anchor">
+      <Text language="Chinese">当前Node在画布中的锚点坐标</Text>
+      <Text language="English">The anchor position of the current node on the canvas</Text>
+    </Member>
+    <Member name="Size">
+      <Text language="Chinese">当前Node的尺寸</Text>
+      <Text language="English">The size of the current node</Text>
+    </Member>
+    <Member name="Slots">
+      <Text language="Chinese">当前Node包含的所有Slot组件</Text>
+      <Text language="English">All Slot components owned by the current node</Text>
+    </Member>
+    <Member name="MoveCommand">
+      <Text language="Chinese">移动节点，参数为Offset</Text>
+      <Text language="English">Move node command, parameter is Offset</Text>
+    </Member>
+    <Member name="SetAnchorCommand">
+      <Text language="Chinese">设置锚点坐标，参数为Anchor</Text>
+      <Text language="English">Set anchor command, parameter is Anchor</Text>
+    </Member>
+    <Member name="SetSizeCommand">
+      <Text language="Chinese">设置节点尺寸，参数为Size</Text>
+      <Text language="English">Set size command, parameter is Size</Text>
+    </Member>
+    <Member name="CreateSlotCommand">
+      <Text language="Chinese">创建Slot，参数为ISlotComponent</Text>
+      <Text language="English">Create slot command, parameter is ISlotComponent</Text>
+    </Member>
+    <Member name="DeleteCommand">
+      <Text language="Chinese">删除当前Node，参数为Null，相关Slot和Link会被删除</Text>
+      <Text language="English">Delete the current node, parameter is Null, related Slots and Links will be deleted</Text>
+    </Member>
+    <Member name="ReceiveCommand">
+      <Text language="Chinese">接收数据并执行节点，参数为可空的 ITaskContext（含 data/sender/receiver）</Text>
+      <Text language="English">Receive data and execute the node; parameter is a nullable ITaskContext (data/sender/receiver)</Text>
+    </Member>
+    <Member name="BroadcastCommand">
+      <Text language="Chinese">正向广播数据，参数为Nullable</Text>
+      <Text language="English">Broadcast data forward, parameter is Nullable</Text>
+    </Member>
+    <Member name="ReverseBroadcastCommand">
+      <Text language="Chinese">反向广播数据，参数为Nullable</Text>
+      <Text language="English">Broadcast data in reverse direction, parameter is Nullable</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.ISlotComponent">
+    <Text language="Chinese">工作流Slot组件接口，维护Node与Node之间的连接关系</Text>
+    <Text language="English">Workflow Slot component interface, maintaining connections between Nodes</Text>
+    <Member name="Targets">
+      <Text language="Chinese">当前Slot连接到的目标Slot集合</Text>
+      <Text language="English">Collection of target slots connected from the current slot</Text>
+    </Member>
+    <Member name="Sources">
+      <Text language="Chinese">当前Slot接收到连接的源Slot集合</Text>
+      <Text language="English">Collection of source slots connected to the current slot</Text>
+    </Member>
+    <Member name="Parent">
+      <Text language="Chinese">所属的Node组件</Text>
+      <Text language="English">The parent Node component</Text>
+    </Member>
+    <Member name="Channel">
+      <Text language="Chinese">当前Slot的通道类型</Text>
+      <Text language="English">The channel type of the current slot</Text>
+    </Member>
+    <Member name="State">
+      <Text language="Chinese">当前Slot的连接状态</Text>
+      <Text language="English">The connection state of the current slot</Text>
+    </Member>
+    <Member name="Anchor">
+      <Text language="Chinese">当前Slot在画布中的锚点坐标</Text>
+      <Text language="English">The anchor position of the current slot on the canvas</Text>
+    </Member>
+    <Member name="SetChannelCommand">
+      <Text language="Chinese">设定通道，参数为SlotChannel</Text>
+      <Text language="English">Set channel command, parameter is SlotChannel</Text>
+    </Member>
+    <Member name="SendConnectionCommand">
+      <Text language="Chinese">作为连接构建发起方，参数为Null</Text>
+      <Text language="English">Start connection construction as the sender, parameter is Null</Text>
+    </Member>
+    <Member name="ReceiveConnectionCommand">
+      <Text language="Chinese">作为连接构建接收方，参数为Null</Text>
+      <Text language="English">Accept connection construction as the receiver, parameter is Null</Text>
+    </Member>
+    <Member name="DeleteCommand">
+      <Text language="Chinese">删除当前Slot，参数为Null，相关Link会被删除</Text>
+      <Text language="English">Delete the current slot, parameter is Null, related Links will be deleted</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.ITreeComponent">
+    <Text language="Chinese">工作流Tree组件接口，维护一个工作空间内所有Node、Slot和Link组件</Text>
+    <Text language="English">Workflow Tree component interface, maintaining all Node, Slot, and Link components within a workspace</Text>
+    <Member name="Layout">
+      <Text language="Chinese">画布布局上下文，记录画布尺寸与偏移信息</Text>
+      <Text language="English">Canvas layout context, recording canvas size and offset information</Text>
+    </Member>
+    <Member name="VirtualLink">
+      <Text language="Chinese">仅在建立连接的过程中可见</Text>
+      <Text language="English">Only visible during the connection establishment process</Text>
+    </Member>
+    <Member name="Nodes">
+      <Text language="Chinese">所有Node组件</Text>
+      <Text language="English">All Node components</Text>
+    </Member>
+    <Member name="Links">
+      <Text language="Chinese">所有Link组件</Text>
+      <Text language="English">All Link components</Text>
+    </Member>
+    <Member name="LinksMap">
+      <Text language="Chinese">Slot组件之间的连接关系映射</Text>
+      <Text language="English">Mapping of connections between Slot components</Text>
+    </Member>
+    <Member name="CreateNodeCommand">
+      <Text language="Chinese">创建节点，参数为INodeComponent</Text>
+      <Text language="English">Create node command, parameter is INodeComponent</Text>
+    </Member>
+    <Member name="SetPointerCommand">
+      <Text language="Chinese">更新触点位置，参数为Anchor</Text>
+      <Text language="English">Update pointer position, parameter is Anchor</Text>
+    </Member>
+    <Member name="ResetVirtualLinkCommand">
+      <Text language="Chinese">重置虚拟连接，参数为Null</Text>
+      <Text language="English">Reset virtual link, parameter is Null</Text>
+    </Member>
+    <Member name="SendConnectionCommand">
+      <Text language="Chinese">发起连接构建，参数为ISlotComponent</Text>
+      <Text language="English">Initiate connection construction, parameter is ISlotComponent</Text>
+    </Member>
+    <Member name="ReceiveConnectionCommand">
+      <Text language="Chinese">接收连接构建，参数为ISlotComponent</Text>
+      <Text language="English">Receive connection construction, parameter is ISlotComponent</Text>
+    </Member>
+    <Member name="SubmitCommand">
+      <Text language="Chinese">提交操作，参数为IActionPair</Text>
+      <Text language="English">Submit action, parameter is IActionPair</Text>
+    </Member>
+    <Member name="RedoCommand">
+      <Text language="Chinese">重做操作，参数为Null</Text>
+      <Text language="English">Redo action, parameter is Null</Text>
+    </Member>
+    <Member name="UndoCommand">
+      <Text language="Chinese">撤销操作，参数为Null</Text>
+      <Text language="English">Undo action, parameter is Null</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.SlotChannel">
+    <Text language="Chinese">定义工作流插槽在两个方向上的连接容量：Target 表示当前插槽可主动连出的目标数量，Source 表示当前插槽可被连入的来源数量。这是一个位掩码枚举，两个方向独立计数；组合值表示同时具备多种方向权限。语义优先级为 Multiple &gt; One &gt; None，同一方向上高优先级覆盖低优先级。此外，当节点的 [SlotSelectors] 声明了 SlotChannel 时，它也可作为 SlotEnumerator 的 selector 类型，用于按通道类型路由信号。</Text>
+    <Text language="English">Defines the connection capacity of a workflow slot in two independent directions: Target means how many outgoing targets this slot may connect to, and Source means how many incoming sources may connect to this slot. This is a flags enum. Each direction is evaluated independently, and combined values grant permissions for both directions. Semantic priority per direction is Multiple &gt; One &gt; None, where the higher priority overrides the lower one. Additionally, when a node's [SlotSelectors] includes SlotChannel, it is also valid as a SlotEnumerator selector type for routing signals by channel type.</Text>
+    <Member name="None">
+      <Text language="Chinese">无权限：默认值，表示不允许建立任何连接。</Text>
+      <Text language="English">None: Default value indicating no connections are allowed.</Text>
+    </Member>
+    <Member name="OneTarget">
+      <Text language="Chinese">单一目标：当前插槽最多只能主动连接到 1 个目标，即最多 1 条出向连接。</Text>
+      <Text language="English">One Target: This slot may actively connect to at most 1 target, i.e. at most 1 outgoing connection.</Text>
+    </Member>
+    <Member name="OneSource">
+      <Text language="Chinese">单一源：当前插槽最多只能被 1 个来源连接，即最多 1 条入向连接。</Text>
+      <Text language="English">One Source: This slot may be connected by at most 1 source, i.e. at most 1 incoming connection.</Text>
+    </Member>
+    <Member name="OneBoth">
+      <Text language="Chinese">单一双向：等价于 OneTarget | OneSource。表示最多 1 条出向连接且最多 1 条入向连接，两者分别计数；不表示必须与同一个对象形成一对一绑定。</Text>
+      <Text language="English">One Both: Equivalent to OneTarget | OneSource. It means at most 1 outgoing connection and at most 1 incoming connection, counted independently. It does not mean a strict one-to-one pairing with the same peer.</Text>
+    </Member>
+    <Member name="MultipleTargets">
+      <Text language="Chinese">多重目标：当前插槽可以主动连接到多个目标，即允许多条出向连接。</Text>
+      <Text language="English">Multiple Targets: This slot may actively connect to multiple targets, i.e. multiple outgoing connections are allowed.</Text>
+    </Member>
+    <Member name="MultipleSources">
+      <Text language="Chinese">多重源：当前插槽可以被多个来源连接，即允许多条入向连接。</Text>
+      <Text language="English">Multiple Sources: This slot may be connected by multiple sources, i.e. multiple incoming connections are allowed.</Text>
+    </Member>
+    <Member name="MultipleBoth">
+      <Text language="Chinese">多重双向：等价于 MultipleTargets | MultipleSources。表示出向和入向都允许多条连接，两者分别计数。</Text>
+      <Text language="English">Multiple Both: Equivalent to MultipleTargets | MultipleSources. It means both outgoing and incoming directions allow multiple connections, counted independently.</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.SlotState">
+    <Text language="Chinese">描述工作流插槽的当前运行时状态。支持组合状态，例如同时处于预览发送和预览接收状态。</Text>
+    <Text language="English">Describes the current runtime state of a workflow slot. Supports combined states, e.g., simultaneously previewing as sender and receiver.</Text>
+    <Member name="StandBy">
+      <Text language="Chinese">空闲：插槽处于待机状态，无任何连接或操作。</Text>
+      <Text language="English">StandBy: The slot is idle with no active connections or operations.</Text>
+    </Member>
+    <Member name="PreviewSender">
+      <Text language="Chinese">预览发送：正在尝试建立连接，当前作为发送端（拖拽出线中）。</Text>
+      <Text language="English">Preview Sender: Attempting to establish a connection, acting as the sender (dragging output).</Text>
+    </Member>
+    <Member name="PreviewReceiver">
+      <Text language="Chinese">预览接收：正在尝试建立连接，当前作为接收端（拖拽入线中）。</Text>
+      <Text language="English">Preview Receiver: Attempting to establish a connection, acting as the receiver (dragging input).</Text>
+    </Member>
+    <Member name="Sender">
+      <Text language="Chinese">已连接发送：已建立稳定连接，作为数据发送端。</Text>
+      <Text language="English">Sender: Connection established, actively acting as a data sender.</Text>
+    </Member>
+    <Member name="Receiver">
+      <Text language="Chinese">已连接接收：已建立稳定连接，作为数据处理/接收端。</Text>
+      <Text language="English">Receiver: Connection established, actively acting as a data receiver/processor.</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.IAccessContext">
+    <Text language="Chinese">数据流访问上下文：一次「发送槽→接收槽」的数据流访问请求。AccessAsync 的专用入参。编译期（IsCompilePhase=true、Data=null）做无数据静态检测；运行期（IsCompilePhase=false、Data=负载）做实时检测</Text>
+    <Text language="English">Dataflow access context: a dataflow access request from Sender to Receiver. The dedicated parameter contract of AccessAsync. Compile phase (IsCompilePhase=true, Data=null) performs static detection without data; runtime phase (IsCompilePhase=false, Data=payload) performs real-time detection</Text>
+    <Member name="IsCompilePhase">
+      <Text language="Chinese">校验阶段：true 编译期（无数据），false 运行期（有数据）</Text>
+      <Text language="English">Validation phase: true = compile time (no data), false = runtime (with data)</Text>
+    </Member>
+    <Member name="Sender">
+      <Text language="Chinese">发送端输出槽（上游），可为空</Text>
+      <Text language="English">Sender output slot (upstream), nullable</Text>
+    </Member>
+    <Member name="Receiver">
+      <Text language="Chinese">接收端输入槽（下游），可为空</Text>
+      <Text language="English">Receiver input slot (downstream), nullable</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.IContext">
+    <Text language="Chinese">工作流上下文体系的根契约：统一携带负载 Data（可空）。派生 IAccessContext（数据流访问）、ITaskContext（数据流任务上下文）、IRuntimeContext（编译器运行时会话）、ICompileContext（编译身份）</Text>
+    <Text language="English">Root contract of the workflow context hierarchy, carrying a universal payload Data (nullable). Derives IAccessContext (dataflow access), ITaskContext (dataflow task context), IRuntimeContext (compiler runtime session) and ICompileContext (compile-time identity)</Text>
+    <Member name="Data">
+      <Text language="Chinese">负载数据（可空）：运行期为真实数据，编译期恒为 null</Text>
+      <Text language="English">Payload data (nullable): real data at runtime, always null at compile time</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.ITaskContext">
+    <Text language="Chinese">数据流任务上下文，节点 ReceiveCommand → Helper.ReceiveAsync 的入参契约，含可空的 data/sender/receiver</Text>
+    <Text language="English">Dataflow task context; the input contract of ReceiveCommand → Helper.ReceiveAsync, carrying nullable data/sender/receiver</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.IWorkflowGridDecorator">
+    <Text language="Chinese">工作流画布网格装饰器的数据交换契约：接收滚动偏移与内容偏移，用于绘制网格与标尺</Text>
+    <Text language="English">Workflow grid-decorator data-exchange contract: receives scroll and content offsets for grid + ruler painting</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.IWorkflowMinimapOverlay">
+    <Text language="Chinese">工作流小地图覆盖层的数据交换契约：接收视口尺寸与树模型，用于缩略图渲染与拖拽导航</Text>
+    <Text language="English">Workflow minimap-overlay data-exchange contract: receives viewport size + tree for thumbnail rendering and drag navigation</Text>
+  </Type>
+  <Type name="VeloxDev.Core.WorkflowSystem.CompilerEx.ICompileContext">
+    <Text language="Chinese">编译期身份上下文：固定编号 Order / 链内索引 ChainIndex / 子图偏移 Offset</Text>
+    <Text language="English">Compile-time identity context: fixed Order / in-chain index ChainIndex / sub-graph Offset</Text>
+    <Member name="InputNodes">
+      <Text language="Chinese">汇合点输入源节点列表：Count 大于 1 时运行期把各上游产物聚合为只读字典 GroupData 注入 Data；链式/单输入节点为 null</Text>
+      <Text language="English">Join-point input source nodes: when Count &gt; 1 the runtime aggregates each upstream output into a read-only GroupData dictionary injected as Data; null on chained/single-input nodes</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.Core.WorkflowSystem.CompilerEx.RouterCompileMode">
+    <Text language="Chinese">路由器的编译模式：Static 表示编译期只返回当前选中的分支，编译图只含那条路径、顺序也在编译期定死；Dynamic 表示编译期返回全部分支，编译图保留整棵分支结构，运行期再解析走哪一条。</Text>
+    <Text language="English">The router's compile mode: Static returns only the currently selected branch at compile time, so the compiled graph holds that single path with its order fixed; Dynamic returns every branch at compile time, so the compiled graph keeps the whole branch structure and the key is resolved at run time.</Text>
+  </Type>
+  <Type name="VeloxDev.Core.WorkflowSystem.CompilerEx.IRuntimeContext">
+    <Text language="Chinese">编译器运行时会话上下文（继承 ITaskContext）：UID/日志/共享变量/执行位置，编译驱动时作为任务上下文传入节点</Text>
+    <Text language="English">Compiler runtime session context (inherits ITaskContext): UID/logs/shared variables/execution position, passed to nodes as the task context during compiled runs</Text>
+    <Member name="ActiveRedirectTarget">
+      <Text language="Chinese">当前重定向目标 Order：引擎每 pass 开头写入（首 pass 为 null），产物收集用它区分契约保留 prefix 与陈旧分支</Text>
+      <Text language="English">Active redirect target Order set by the engine at the start of each pass (null on the first pass); the output collector uses it to distinguish contract-preserved prefix from stale branches</Text>
+    </Member>
+    <Member name="RegisterOutput">
+      <Text language="Chinese">登记节点本次运行的产物：引擎逐节点驱动后写入，带当前 pass 戳；多输入汇合点按输入组聚合</Text>
+      <Text language="English">Register a node's output for this run stamped with the current attempt: the engine writes it after driving each node, and multi-input joins aggregate per input group</Text>
+    </Member>
+    <Member name="ResetOutputs">
+      <Text language="Chinese">清空产物登记表：每次 RunAsync 开始清空一次，重定向重跑不清空（由 pass 戳过滤陈旧产物）</Text>
+      <Text language="English">Clear the product registry once at the start of each RunAsync (not cleared on redirect re-runs; stale outputs are filtered by pass stamp)</Text>
+    </Member>
+    <Member name="CollectGroupedInputs">
+      <Text language="Chinese">按输入组收集产物为只读字典：仅本 pass 产物 + 目标前契约保留 prefix；未登记的来源不包含（TryGetValue 返回 false）</Text>
+      <Text language="English">Collect outputs for a group of input nodes as a read-only dictionary: only this pass's outputs plus the contract-preserved prefix before the redirect target; unregistered sources are absent (TryGetValue returns false)</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.Core.WorkflowSystem.CompilerEx.IGroupData">
+    <Text language="Chinese">汇合数据：多输入节点以只读字典读取各上游产物（Key=来源 Node 引用身份，Value=该节点本次产物）</Text>
+    <Text language="English">Group data: multi-input join reads each upstream node's output as a read-only dictionary (Key=source node reference, Value=its output this run)</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.Anchor">
+    <Text language="Chinese">用于在工作流系统中描述组件的空间位置</Text>
+    <Text language="English">Used to describe the spatial position of components in the workflow system</Text>
+    <Member name="_horizontal">
+      <Text language="Chinese">水平坐标，单位为像素</Text>
+      <Text language="English">Horizontal coordinate, in pixels</Text>
+    </Member>
+    <Member name="_vertical">
+      <Text language="Chinese">垂直坐标，单位为像素</Text>
+      <Text language="English">Vertical coordinate, in pixels</Text>
+    </Member>
+    <Member name="_layer">
+      <Text language="Chinese">图层，行为取决于GUI</Text>
+      <Text language="English">Layer, behavior depends on the GUI</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.Offset">
+    <Text language="Chinese">表示一个二维坐标偏移量</Text>
+    <Text language="English">Represents a two-dimensional coordinate offset</Text>
+    <Member name="_horizontal">
+      <Text language="Chinese">水平偏移量，像素单位</Text>
+      <Text language="English">Horizontal offset in pixels</Text>
+    </Member>
+    <Member name="_vertical">
+      <Text language="Chinese">垂直偏移量，像素单位</Text>
+      <Text language="English">Vertical offset in pixels</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.Scale">
+    <Text language="Chinese">表示一个二维缩放因子，默认 1.0 表示不缩放</Text>
+    <Text language="English">Represents a two-dimensional scale factor; 1.0 means no scaling</Text>
+    <Member name="_horizontal">
+      <Text language="Chinese">水平缩放因子，1.0 表示不缩放</Text>
+      <Text language="English">Horizontal scale factor, 1.0 means no scaling</Text>
+    </Member>
+    <Member name="_vertical">
+      <Text language="Chinese">垂直缩放因子，1.0 表示不缩放</Text>
+      <Text language="English">Vertical scale factor, 1.0 means no scaling</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.Size">
+    <Text language="Chinese">表示一个二维尺寸</Text>
+    <Text language="English">Represents a two-dimensional size</Text>
+    <Member name="_width">
+      <Text language="Chinese">宽度，像素单位</Text>
+      <Text language="English">Width in pixels</Text>
+    </Member>
+    <Member name="_height">
+      <Text language="Chinese">高度，像素单位</Text>
+      <Text language="English">Height in pixels</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.ILinkHitTestable">
+    <Text language="Chinese">连线的可选命中能力：视图提交自己画出的曲线与那个控件，界面按它判命中</Text>
+    <Text language="English">Optional link hit-test capability: the view publishes the curve it drew and the control that drew it; the surface queries it</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.LinkCurve">
+    <Text language="Chinese">连线的扁平化几何：由视图提交点列，Core 负责包围盒、弧长与命中判定</Text>
+    <Text language="English">A link's flattened geometry: the view supplies the points, Core owns bounds, arc length and containment</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.SurfaceViewport">
+    <Text language="Chinese">工作流画布表面状态的不可变快照：滚动偏移 + 视口尺寸 + 内容偏移</Text>
+    <Text language="English">Immutable snapshot of the workflow surface state: scroll offsets + viewport size + content offsets</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.SurfaceCanvas">
+    <Text language="Chinese">工作流画布的计算尺寸快照</Text>
+    <Text language="English">Computed canvas size snapshot of a workflow surface</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.TaskContext">
+    <Text language="Chinese">ITaskContext 的只读结构体载体，可空 data/sender/receiver</Text>
+    <Text language="English">Readonly struct carrier of ITaskContext with nullable data/sender/receiver</Text>
+    <Member name="Data">
+      <Text language="Chinese">负载数据（可空）</Text>
+      <Text language="English">Payload data (nullable)</Text>
+    </Member>
+    <Member name="Sender">
+      <Text language="Chinese">上游输出槽（发送端），可为空</Text>
+      <Text language="English">Upstream output slot (sender), nullable</Text>
+    </Member>
+    <Member name="Receiver">
+      <Text language="Chinese">本节点输入槽（接收端），可为空</Text>
+      <Text language="English">This node's input slot (receiver), nullable</Text>
+    </Member>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.LinkDefaultComponent">
+    <Text language="Chinese">工作流Link组件接口的默认实现类</Text>
+    <Text language="English">The default implementation class of the workflow Link component interface</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.NodeDefaultComponent">
+    <Text language="Chinese">工作流Node组件接口的默认实现类</Text>
+    <Text language="English">The default implementation class of the workflow Node component interface</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.SlotDefaultComponent">
+    <Text language="Chinese">工作流Slot组件接口的默认实现类</Text>
+    <Text language="English">The default implementation class of the workflow Slot component interface</Text>
+  </Type>
+  <Type name="VeloxDev.WorkflowSystem.TreeDefaultComponent">
+    <Text language="Chinese">工作流Tree组件接口的默认实现类</Text>
+    <Text language="English">The default implementation class of the workflow Tree component interface</Text>
+  </Type>
+</AgentContext>

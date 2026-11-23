@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using VeloxDev.AI;
 
 namespace VeloxDev.WorkflowSystem;
 
@@ -12,8 +11,6 @@ namespace VeloxDev.WorkflowSystem;
 /// <see cref="Anchor"/>, <see cref="Offset"/>) — adapters map their native point types to doubles at the
 /// call boundary, so Core carries no GUI-framework dependency.
 /// </summary>
-[AgentContext(AgentLanguages.Chinese, "工作流画布适配器共享的纯坐标数学：视口换算、平移越界、网格偏移、槽口锚点、小地图映射")]
-[AgentContext(AgentLanguages.English, "Pure coordinate math shared by workflow-surface adapters: viewport, pan overscroll, grid, slot anchor, minimap")]
 public static class WorkflowSurfaceMath
 {
     /// <summary>

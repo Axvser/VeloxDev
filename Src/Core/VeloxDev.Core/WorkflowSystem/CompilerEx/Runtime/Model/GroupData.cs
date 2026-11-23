@@ -1,5 +1,4 @@
 using System.Collections;
-using VeloxDev.AI;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
@@ -12,8 +11,6 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// <see cref="IReadOnlyDictionary{TKey,TValue}.Keys"/>; unregistered upstreams (branch not executed / skipped)
 /// are absent from the dictionary and TryGetValue returns false.
 /// </summary>
-[AgentContext(AgentLanguages.Chinese, "汇合数据：多输入节点以只读字典读取各上游产物（Key=来源 Node 引用身份，Value=该节点本次产物）")]
-[AgentContext(AgentLanguages.English, "Group data: multi-input join reads each upstream node's output as a read-only dictionary (Key=source node reference, Value=its output this run)")]
 public interface IGroupData : IReadOnlyDictionary<INodeComponent, object?>
 {
 }

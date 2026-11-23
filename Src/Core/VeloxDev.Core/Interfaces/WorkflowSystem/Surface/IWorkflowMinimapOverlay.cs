@@ -1,4 +1,3 @@
-using VeloxDev.AI;
 
 namespace VeloxDev.WorkflowSystem;
 
@@ -13,8 +12,6 @@ namespace VeloxDev.WorkflowSystem;
 /// flat copy and Jalium a derived copy under <c>VeloxDev.WorkflowSystem.AttachedBehaviors</c>; the derived
 /// shape is the normalized form).
 /// </summary>
-[AgentContext(AgentLanguages.Chinese, "工作流小地图覆盖层的数据交换契约：接收视口尺寸与树模型，用于缩略图渲染与拖拽导航")]
-[AgentContext(AgentLanguages.English, "Workflow minimap-overlay data-exchange contract: receives viewport size + tree for thumbnail rendering and drag navigation")]
 public interface IWorkflowMinimapOverlay : IWorkflowGridDecorator
 {
     /// <summary>Viewport width in screen pixels, used to scale the viewport indicator and resolve drags.</summary>

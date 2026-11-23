@@ -1,12 +1,9 @@
 ﻿using System.Collections.ObjectModel;
-using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>The default implementation of <see cref="INodeComponent"/>.</summary>
-[AgentContext(AgentLanguages.Chinese, "工作流Node组件接口的默认实现类")]
-[AgentContext(AgentLanguages.English, "The default implementation class of the workflow Node component interface")]
 public sealed partial class NodeDefaultComponent : INodeComponent, IRuntimeIdentifiable
 {
     private INodeHelper helper = new NodeHelper();

@@ -1,4 +1,3 @@
-using VeloxDev.AI;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
@@ -8,8 +7,6 @@ namespace VeloxDev.Core.WorkflowSystem.CompilerEx;
 /// copy is held by the compiled graph (<see cref="CompiledGraph.TryGetCompileInfo"/>), and
 /// <see cref="ICompileTimeAware.AttachCompileTimeContext"/> receives a snapshot as an optional notification.
 /// </summary>
-[AgentContext(AgentLanguages.Chinese, "编译期身份上下文：固定编号 Order / 链内索引 ChainIndex / 子图偏移 Offset")]
-[AgentContext(AgentLanguages.English, "Compile-time identity context: fixed Order / in-chain index ChainIndex / sub-graph Offset")]
 public interface ICompileContext : IAccessContext
 {
     /// <summary>Compile-time fixed execution order (-1 = absolute stop).</summary>
@@ -27,7 +24,5 @@ public interface ICompileContext : IAccessContext
     /// <see cref="IRuntimeContext.Data"/>; null on chained/single-input nodes, preserving bare Data chaining
     /// semantics.
     /// </summary>
-    [AgentContext(AgentLanguages.Chinese, "汇合点输入源节点列表：Count 大于 1 时运行期把各上游产物聚合为只读字典 GroupData 注入 Data；链式/单输入节点为 null")]
-    [AgentContext(AgentLanguages.English, "Join-point input source nodes: when Count > 1 the runtime aggregates each upstream output into a read-only GroupData dictionary injected as Data; null on chained/single-input nodes")]
     IReadOnlyList<INodeComponent>? InputNodes { get; set; }
 }

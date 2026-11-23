@@ -40,6 +40,11 @@
 		<CompilerVisibleProperty Include="VeloxAgentContextTree" />
 	</ItemGroup>
 
+	<!-- Agent 说明的 XML 资源放在仓库根 Assets 下；本工程显式收，不依赖项目目录下的约定 glob。 -->
+	<ItemGroup>
+		<AdditionalFiles Include="..\..\..\Assets\VeloxDev.Core.agentcontext.xml" />
+	</ItemGroup>
+
 	<!-- Debug 用本地生成器源码，Release 用包。analyzer 不随 ProjectReference 传递，
 	     所以用到生成器特性的项目都要各自重复这一对。 -->
 	<ItemGroup>

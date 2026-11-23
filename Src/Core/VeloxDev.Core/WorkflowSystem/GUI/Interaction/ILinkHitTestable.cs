@@ -1,5 +1,4 @@
 using System;
-using VeloxDev.AI;
 
 namespace VeloxDev.WorkflowSystem;
 
@@ -22,8 +21,6 @@ namespace VeloxDev.WorkflowSystem;
 /// </remarks>
 /// <seealso cref="LinkHitTestEx"/>
 /// <seealso cref="LinkCurve"/>
-[AgentContext(AgentLanguages.Chinese, "连线的可选命中能力：视图提交自己画出的曲线与那个控件，界面按它判命中")]
-[AgentContext(AgentLanguages.English, "Optional link hit-test capability: the view publishes the curve it drew and the control that drew it; the surface queries it")]
 public interface ILinkHitTestable
 {
     /// <summary>

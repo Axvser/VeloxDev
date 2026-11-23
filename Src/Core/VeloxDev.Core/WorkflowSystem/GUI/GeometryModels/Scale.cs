@@ -1,21 +1,14 @@
-using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>A two-dimensional scale factor; 1.0 means no scaling.</summary>
-[AgentContext(AgentLanguages.Chinese, "表示一个二维缩放因子，默认 1.0 表示不缩放")]
-[AgentContext(AgentLanguages.English, "Represents a two-dimensional scale factor; 1.0 means no scaling")]
 public sealed partial class Scale(double horizontal = 1d, double vertical = 1d) : ICloneable, IEquatable<Scale>
 {
     [VeloxProperty]
-    [AgentContext(AgentLanguages.Chinese, "水平缩放因子，1.0 表示不缩放")]
-    [AgentContext(AgentLanguages.English, "Horizontal scale factor, 1.0 means no scaling")]
     private double _horizontal = horizontal;
 
     [VeloxProperty]
-    [AgentContext(AgentLanguages.Chinese, "垂直缩放因子，1.0 表示不缩放")]
-    [AgentContext(AgentLanguages.English, "Vertical scale factor, 1.0 means no scaling")]
     private double _vertical = vertical;
 
     /// <inheritdoc />

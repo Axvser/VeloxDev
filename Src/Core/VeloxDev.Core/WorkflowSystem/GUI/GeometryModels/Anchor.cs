@@ -1,26 +1,17 @@
 using System.Runtime.Serialization;
-using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>A component's spatial position: horizontal and vertical coordinates and a layer.</summary>
-[AgentContext(AgentLanguages.Chinese, "用于在工作流系统中描述组件的空间位置")]
-[AgentContext(AgentLanguages.English, "Used to describe the spatial position of components in the workflow system")]
 public sealed partial class Anchor(double left = 0d, double top = 0d, int layer = 0)
     : ICloneable, IEquatable<Anchor>
 {
     [VeloxProperty]
-    [AgentContext(AgentLanguages.Chinese, "水平坐标，单位为像素")]
-    [AgentContext(AgentLanguages.English, "Horizontal coordinate, in pixels")]
     private double _horizontal = left;
     [VeloxProperty]
-    [AgentContext(AgentLanguages.Chinese, "垂直坐标，单位为像素")]
-    [AgentContext(AgentLanguages.English, "Vertical coordinate, in pixels")]
     private double _vertical = top;
     [VeloxProperty]
-    [AgentContext(AgentLanguages.Chinese, "图层，行为取决于GUI")]
-    [AgentContext(AgentLanguages.English, "Layer, behavior depends on the GUI")]
     private int _layer = layer;
 
     // 序列化状态（仅运行期，不写入 JSON）：

@@ -1,12 +1,9 @@
 using System.Collections.ObjectModel;
-using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>The default implementation of <see cref="ISlotComponent"/>.</summary>
-[AgentContext(AgentLanguages.Chinese, "工作流Slot组件接口的默认实现类")]
-[AgentContext(AgentLanguages.English, "The default implementation class of the workflow Slot component interface")]
 public sealed partial class SlotDefaultComponent : ISlotComponent, IRuntimeIdentifiable
 {
     private ISlotHelper helper = new SlotHelper();

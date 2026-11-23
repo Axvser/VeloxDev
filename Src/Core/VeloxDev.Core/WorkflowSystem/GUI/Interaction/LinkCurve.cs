@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using VeloxDev.AI;
 
 namespace VeloxDev.WorkflowSystem;
 
@@ -21,8 +20,6 @@ namespace VeloxDev.WorkflowSystem;
 ///
 /// Immutable once built, so it can be published once per geometry change and shared by every query.
 /// </summary>
-[AgentContext(AgentLanguages.Chinese, "连线的扁平化几何：由视图提交点列，Core 负责包围盒、弧长与命中判定")]
-[AgentContext(AgentLanguages.English, "A link's flattened geometry: the view supplies the points, Core owns bounds, arc length and containment")]
 public sealed class LinkCurve
 {
     /// <summary>Default sample count for the house cubic — the density the seven adapters settled on.</summary>

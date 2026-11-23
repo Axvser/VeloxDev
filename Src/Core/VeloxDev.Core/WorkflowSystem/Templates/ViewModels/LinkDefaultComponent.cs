@@ -1,11 +1,8 @@
-using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>The default implementation of <see cref="ILinkComponent"/>.</summary>
-[AgentContext(AgentLanguages.Chinese, "工作流Link组件接口的默认实现类")]
-[AgentContext(AgentLanguages.English, "The default implementation class of the workflow Link component interface")]
 public sealed partial class LinkDefaultComponent : IConnectionPreviewLink, IRuntimeIdentifiable
 {
     private ILinkHelper helper = new LinkHelper();

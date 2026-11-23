@@ -1,23 +1,16 @@
 using System.Runtime.Serialization;
-using VeloxDev.AI;
 using VeloxDev.MVVM;
 
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>A two-dimensional size.</summary>
-[AgentContext(AgentLanguages.Chinese, "表示一个二维尺寸")]
-[AgentContext(AgentLanguages.English, "Represents a two-dimensional size")]
 public sealed partial class Size(double width = 0d, double height = 0d)
     : ICloneable, IEquatable<Size>
 {
     [VeloxProperty]
-    [AgentContext(AgentLanguages.Chinese, "宽度，像素单位")]
-    [AgentContext(AgentLanguages.English, "Width in pixels")]
     private double _width = width;
 
     [VeloxProperty]
-    [AgentContext(AgentLanguages.Chinese, "高度，像素单位")]
-    [AgentContext(AgentLanguages.English, "Height in pixels")]
     private double _height = height;
 
     // 序列化状态（仅运行期，不写入 JSON）：与 Anchor._collapseScale/_owner 同一套契约。
