@@ -8,10 +8,10 @@
 
 [![Documentation](https://img.shields.io/badge/docs-online-4f8ff7?logo=readthedocs&logoColor=white)](https://axvser.github.io/VeloxDev.Docs/)
 [![NuGet](https://img.shields.io/nuget/v/VeloxDev.Core?logo=nuget&label=NuGet)](https://www.nuget.org/packages/VeloxDev.Core)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-8%20skills-d97757)](skills/)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-skills-d97757)](skills/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE.txt)
 
-<img src="Assets/promo/00-overview.gif" width="100%" alt="VeloxDev overview: a real node editor, seven GUIs, the pipeline, the four layers and the eight Claude skills">
+<img src="Assets/promo/00-overview.gif" width="100%" alt="VeloxDev overview: a real node editor, seven GUIs, the pipeline, the four layers and the Claude skills">
 
 <sub>**Overview** · six beats: the real editor, seven GUIs, the pipeline, the four layers, the skills, the close.</sub>
 
@@ -46,7 +46,7 @@
 
 <sub><code>skills/veloxdev-use-workflow-cli</code> · load, inspect, edit, compile and run without a window.</sub>
 
-All nine are 1280 × 720 at 15 fps. Each skill film is one of the eight
+Every film is 1280 × 720 at 15 fps. Each skill film is one of the
 [`skills/`](skills/) `SKILL.md` files, and each film is also a VeloxDev workflow
 archive that `veloxdev run` executes end to end. Beats and verification:
 [Assets/promo/README.md](Assets/promo/README.md).
