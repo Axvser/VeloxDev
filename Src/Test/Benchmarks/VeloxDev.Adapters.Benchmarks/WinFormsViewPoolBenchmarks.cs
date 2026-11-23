@@ -1,8 +1,11 @@
 extern alias wf;
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Drawing;
 using BenchmarkDotNet.Attributes;
+using VeloxDev.MVVM;
+using VeloxDev.WorkflowSystem;
 using WfControls = wf::VeloxDev.WinForms.Xaml.Visuals.Controls;
 using WfPool = wf::VeloxDev.WorkflowSystem.AttachedBehaviors.ViewPool;
 using WfPoolChangedEventArgs = wf::VeloxDev.WorkflowSystem.AttachedBehaviors.ViewPoolChangedEventArgs;
@@ -10,9 +13,9 @@ using WfVisuals = wf::VeloxDev.WinForms.Xaml.Visuals;
 
 namespace VeloxDev.Adapters.Benchmarks;
 
-// The WinForms adapter keeps its own create/dispose view pool; WPF/Avalonia share the recycling
-// ViewPoolCore. These benchmarks separate the pool cost, the surface's post-change walk, and the XAML
-// visual layer's layout/paint on the same 400-card tree.
+// The WinForms adapter now shares the Core recycling pipeline with WPF/Avalonia, closed over the visual backend.
+// These benchmarks separate the pool cost, the surface's post-change walk, and the XAML visual layer's
+// layout/paint on the same 400-card tree.
 [MemoryDiagnoser]
 public class WinFormsViewPoolBenchmarks
 {
@@ -32,7 +35,7 @@ public class WinFormsViewPoolBenchmarks
         canvas = new WfControls.Canvas();
         host.Root = canvas;
         WfPool.SetItemsSource(canvas, items);
-        WfPool.SetItemTemplate(canvas, new WfVisuals.DataTemplate(CreateCard));
+        WfPool.SetTemplateSelector(canvas, new CardSelector());
         WfPool.Refresh(canvas);
         WfPool.Changed += OnPoolChanged;
         bitmap = new Bitmap(1200, 800);
@@ -81,8 +84,7 @@ public class WinFormsViewPoolBenchmarks
 
     private void OnPoolChanged(object? sender, WfPoolChangedEventArgs e) => changed++;
 
-    internal static WfVisuals.VisualElement CreateCard()
-    {
+    internal static WfVisuals.VisualElement CreateCard()    {
         var root = new WfControls.Grid { Width = 230d, Height = 170d };
         root.Add(new WfControls.Border
         {
@@ -139,10 +141,37 @@ public class WinFormsViewPoolBenchmarks
         return count;
     }
 
-    internal sealed record NodeItem(int Id);
+    // Core 只物化 IWorkflowComponent；基准条目照旧带一个空命令与空通知。
+    internal sealed record NodeItem(int Id) : IWorkflowComponent
+    {
+        private static readonly IVeloxCommand Close = new VeloxCommand((_, _) => Task.CompletedTask);
+
+        public IVeloxCommand CloseCommand => Close;
+
+        public event PropertyChangingEventHandler? PropertyChanging;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public void InitializeWorkflow()
+        {
+        }
+
+        public void OnPropertyChanging(string propertyName)
+            => PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(propertyName));
+
+        public void OnPropertyChanged(string propertyName)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    // 基准里的条目统一是 NodeItem，选择器直接照卡模板造一个新视图。
+    internal sealed class CardSelector : WfVisuals.VisualTemplateSelector
+    {
+        public override WfVisuals.VisualElement? SelectTemplate(object? item)
+            => item is NodeItem ? CreateCard() : null;
+    }
 }
 
-// WorkflowSurfaceBehavior.OnPoolChanged walks the whole visual tree after every added view. This benchmark
+// WorkflowSurfaceBehavior.OnPoolChanged walks the whole visual tree after each materialization batch. This benchmark
 // keeps the pool identical to AddAll and adds only that walk, so the two numbers differ by the surface hook.
 [MemoryDiagnoser]
 public class WinFormsViewPoolSurfaceWalkBenchmarks
@@ -161,7 +190,7 @@ public class WinFormsViewPoolSurfaceWalkBenchmarks
         canvas = new WfControls.Canvas();
         host.Root = canvas;
         WfPool.SetItemsSource(canvas, items);
-        WfPool.SetItemTemplate(canvas, new WfVisuals.DataTemplate(WinFormsViewPoolBenchmarks.CreateCard));
+        WfPool.SetTemplateSelector(canvas, new WinFormsViewPoolBenchmarks.CardSelector());
         WfPool.Refresh(canvas);
         WfPool.Changed += OnPoolChanged;
     }
@@ -217,7 +246,7 @@ public class WinFormsViewPoolChurnBenchmarks
         canvas = new WfControls.Canvas();
         host.Root = canvas;
         WfPool.SetItemsSource(canvas, items);
-        WfPool.SetItemTemplate(canvas, new WfVisuals.DataTemplate(WinFormsViewPoolBenchmarks.CreateCard));
+        WfPool.SetTemplateSelector(canvas, new WinFormsViewPoolBenchmarks.CardSelector());
         WfPool.Refresh(canvas);
         bitmap = new Bitmap(1200, 800);
         graphics = Graphics.FromImage(bitmap);

@@ -1,8 +1,8 @@
 ﻿# VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`SlotStateBrushConverter`、三个视图附着行为）、`WorkflowSystem/Platform/`（Win32/DPI 辅助）、`Xaml/`（视觉 XAML 运行时与 `Visuals/`）。同目录另有一份 `README.md`。
+> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`SlotStateBrushConverter`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32/DPI 辅助）、`Xaml/`（视觉 XAML 运行时与 `Visuals/`）。同目录另有一份 `README.md`。
 > 包版本 12.0.0；生成器独立在 `Src/Generators/VeloxDev.WinForms.Generator/`。
-> **单一 XAML 后端**：控件是 `Xaml.Visuals.Controls` 下的 `VisualElement`，`VisualHost` 是唯一 HWND；工作流表面是 `VisualHost` 上的附着行为。没有 HWND 控件库或 Core `ViewHosting/`；每个可见 item 由 `ViewPool` 物化为一个视觉元素，没有第二个 HWND。`Xaml.Controls` 只留共享原语。
+> **单一 XAML 后端**：控件是 `Xaml.Visuals.Controls` 下的 `VisualElement`，`VisualHost` 是唯一 HWND；工作流表面是 `VisualHost` 上的附着行为。每个可见 item 由 `ViewPool` 经 Core 池物化为一个视觉元素，没有第二个 HWND。`Xaml.Controls` 只留共享原语。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台。它在三条轴上的平台差异分别落在
 > `memory/modules/WorkflowSystem/adapters/winforms.md`、`memory/modules/TransitionSystem/adapters/winforms.md`、`memory/modules/Templates/adapters/winforms.md`，本文**指路不抄**。
@@ -30,7 +30,8 @@
 | 类型 | 形态 | 宿主/模板做什么 | 关键成员 |
 |---|---|---|---|
 | `WorkflowSurfaceBehavior` | 附着行为（`RegisterAttached`） | `VisualHost` 上设 `IsEnabled`/`ZoomEnabled`/`VisualTemplateSelector`/`VisualTemplateSelectorKey` 与部件 `*Name` | `EnsureParts` / `EnsurePool` / `ApplyCamera` / `WorkflowTree` / `LinkMenuKey`（`LinkMenuBuilder` 为旧回落） / `Refresh` / 相机 API |
-| `ViewPool` | 附着行为（通用视觉池，与工作流无关） | `PART_Canvas` 上设 `ItemsSource`/`TemplateSelector`/`ItemTemplate` | 一个 item 一个视觉子元素，按 `Panel.ZIndex` + 源序排序，`Refresh` |
+| `ViewPool` | 附着行为（薄壳，与工作流无关） | `PART_Canvas` 上设 `ItemsSource`/`TemplateSelector`；任一变化或 `Refresh` 重建 `ViewSourcePipeline` | 一个 item 一个视觉子元素；按首次挂载时的模板 `Panel.ZIndex` 插位（连线在节点前），回收交给 Core，`Changed` 每批一次 |
+| `ViewSourcePipeline` + `ViewHosting/` 九项 | Core `ViewSourcePipelineCore<Panel,VisualElement,IWorkflowComponent,NonPriority,…>` 的闭包 | 工厂走 `VisualTemplateSelector`；容器留在画布上隐藏复用；调度器有句柄用 `BeginInvoke`、无句柄同步跑 | `ViewFactory` / `ViewContainer` / `ViewScheduler` / `ViewArranger` / `ViewMeasureHost` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` |
 | `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` | `VisualElement` 附着行为 | 节点/插槽模板在指定元素上开 `IsEnabled` 并给 `CoordinateHostName` | 槽测量写 `slot.Anchor`、标题行拖动、按下-释放在接收口连接 |
 | `WorkflowMinimapOverlay` | `VisualElement, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource` | 模板派生，只给调色板；与 `PART_SurfaceBorder` 同级进 tree 根 `Grid` | 定位、拖拽映射、`ScrollOffsetX/Y` |
 | `WorkflowInfoOverlay` | `VisualElement` | 模板直接实例化；绑定 `PART_GridDecorator` 的偏移 | 六行 HUD，视口取 `PART_SurfaceBorder.Bounds` |
@@ -38,7 +39,7 @@
 | `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | Core 契约 | 网格装饰器/小地图是模板角色，适配器只留契约 | 表面每次刷新推偏移 |
 | `NativeWindowStyleHelper` / `WorkflowDpi` | 平台辅助 | `WS_CLIPCHILDREN`/`WS_EX_COMPOSITED`、`BeginRedraw`/`EndRedraw`、DPI 换算 | 见 `WorkflowSystem/adapters/winforms.md` |
 
-**支撑件**：item 物化归通用视觉 `ViewPool`，定位归模板绑定（`Anchor`/`Size`/`Panel.ZIndex`），缩放归相机；不接 Core `ViewHosting/`，也没有 `IWorkflowSurfaceNodeView` 或 `ModelChangeRelay`。
+**支撑件**：item 物化归通用视觉 `ViewPool` + `WorkflowSystem/ViewHosting/`（Core 池），定位归模板绑定（`Anchor`/`Size`/`Panel.ZIndex`），缩放归相机；没有 `IWorkflowSurfaceNodeView` 或 `ModelChangeRelay`。
 
 ## 三、宿主怎么把它接起来
 
@@ -46,7 +47,7 @@
 - **名字仍是接线语言。** 部件解析 `FindVisualNamed` 递归遍历视觉子树、`Ordinal` 比较 `VisualElement.Name`，取第一个命中；找不到静默跳过。`x:Name` 同时写字段与 `VisualElement.Name`，模板写一次即可。
 - **`Refresh(Control)` 是整树/部件变化后的重推入口**（不检查 `IsEnabled`）：重新解析部件、装池、`ApplyCamera` 把视口推给树与装饰器。
 - **平移在 `WorkflowSurfaceBehavior.SetPan` 与指针处理里**；`ApplyCamera` 把 `zoom`/`pan`/`content` 写进 `PART_Canvas.Transform`，并把同一组偏移推给网格/小地图。
-- **视图物化由通用视觉 `ViewPool` 做**：`EnsurePool` 把 `VisibleItems` 与 tree 选择器装到 `PART_Canvas`，池按集合变更自建/回收视图；不接 Core `ViewHosting/`/`ViewScheduler`/`ViewContainer`。
+- **视图物化由 `ViewPool` + `WorkflowSystem/ViewHosting/` 做**：`EnsurePool` 把 `VisibleItems` 与 tree 选择器装到 `PART_Canvas`，`ViewSourcePipeline` 组合 Core 的池与九项层；工厂直接调 `VisualTemplateSelector`，回收桶、批大小、`Replace` 都归 Core（默认 `AdaptiveViewPoolPolicy`）。重建池期间 `state.RefreshingPool` 压住 `Changed`，`Refresh` 返回后统一扫一遍行为与连线样式。
 - **小地图/HUD 在视觉树里**：表面把偏移推给 `WorkflowMinimapOverlay`/`WorkflowInfoOverlay`；拖小地图经 `IWorkflowMinimapScrollSource.ViewportScrollRequested` 反推视口。
 
 ## 四、`GlobalUsings.cs` 与 `VeloxDev.WinForms.csproj`
@@ -78,6 +79,8 @@
 4. **`ThemeValueConverters.cs` 的类名与 `System.Drawing` 撞名**：用 GDI+ 那个必须全限定（`System.Drawing.ColorConverter` / `FontConverter`）。
 5. **`NativeWindowStyleHelper` 里 `WS_CLIPCHILDREN` 与 `WS_EX_COMPOSITED` 同为 `0x02000000`**，却写向两个不同 index；不要按值合并。`CompositedMaxControlCount = 100` 是设计取舍。
 6. **视觉相机方向**：上滚 `zoom *= 1.1`，下滚 `/1.1`，夹在 `0.1..10`。
+7. **池化视图被移除后留在画布上**：`ViewContainer.Deactivate` 只清 `DataContext` 并设 `Collapsed`，`Detach` 不摘树 ⇒ `Canvas.Children.Count` 是「曾经物化过的视图数」，活动视图数看 `ViewPool.GetActiveViewCount`。管道销毁时 `ViewSourcePipeline.Dispose` 经 `ReleaseAll` 才真正移除并释放。
+8. **`Panel.ZIndex` 不是活动排序**：`ViewContainer.Attach` 只在首次挂载时按当前 `Panel.ZIndex` 插位（连线 -1 落在节点前），之后模板改 `Anchor.Layer` 不会重排；`SetZOrder` 是空实现，避免覆盖模板绑定。
 
 ## 六、入口：我要改 X 先打开哪个文件
 
@@ -85,7 +88,7 @@
 |---|---|
 | 表面：部件解析 / 平移 / 视口持久化 / 小地图接线 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` |
 | 相机矩阵、输入路由、世界↔表面、缩放、连线样式 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` |
-| item → 视图物化（池、z 序、回收） | `WorkflowSystem/AttachedBehaviors/ViewPool.cs` |
+| item → 视图物化（池、z 序、回收） | `WorkflowSystem/AttachedBehaviors/ViewPool.cs` + `WorkflowSystem/ViewHosting/` |
 | 槽测量 / 标题拖动 / 插槽连接 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` / `WorkflowNodeDragBehavior.cs` / `WorkflowSlotConnectionBehavior.cs` |
 | 端口字形配色 | `WorkflowSystem/AttachedBehaviors/SlotStateBrushConverter.cs` |
 | 小地图 | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` |

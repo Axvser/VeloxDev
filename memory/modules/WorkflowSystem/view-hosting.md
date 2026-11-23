@@ -1,7 +1,7 @@
 # 可见集 → 视图：Core 视图系统
 
 > 把「虚拟化产出的 `VisibleItems` 如何变成 UI 视图」按 TransitionSystem 的分层方式组织：**接口定层次、抽象类/泛型类跑通用流程、适配器逐层实现、最后一个泛型类型组合成系统**。
-> WPF / Avalonia / WinUI / MAUI / Jalium 用 `ViewPool` 门面接入 `ViewSourcePipelineCore`；Razor 是 renderer-native 例外（§七）；WinForms 不接 Core 管线 —— 它用适配器里的通用视觉 `ViewPool` 附着属性按 `VisibleItems` 建视觉子元素。
+> WPF / Avalonia / WinUI / MAUI / Jalium / WinForms 用 `ViewPool` 门面接入 `ViewSourcePipelineCore`；Razor 是 renderer-native 例外（§七）。
 
 ---
 
@@ -51,7 +51,7 @@
 
 入口仍是 `WorkflowSystem/AttachedBehaviors/ViewPool.cs` 的附着属性 `ViewPool.ItemsSource` / `ViewPool.TemplateSelector`；它只创建/销毁 `ViewSourcePipeline`。
 
-**其余四家**（WPF / WinUI / MAUI / Jalium；路径均为 `Src/Adapters/VeloxDev.<GUI>/WorkflowSystem/ViewHosting/`，同样是那组层与 `ViewSourcePipeline`，默认 `AdaptiveViewPoolPolicy`）：
+**其余五家**（WPF / WinUI / MAUI / Jalium / WinForms；路径均为 `Src/Adapters/VeloxDev.<GUI>/WorkflowSystem/ViewHosting/`，同样是那组层与 `ViewSourcePipeline`，默认 `AdaptiveViewPoolPolicy`）：
 
 | 平台 | `THost` / `TView` | 优先级 | 几何 | 连线 | 备注 |
 |---|---|---|---|---|---|
@@ -59,8 +59,9 @@
 | WinUI | `Panel` / `FrameworkElement` | `DispatcherQueuePriority.Low` | 命令式 Canvas，`ViewLayoutTracker` 订阅属性变化 | 逐条池化 | `TryEnqueue` 拒绝时返回 false |
 | MAUI | `Layout` / `View` | `NonPriority` + 16ms 一次性 timer | `AbsoluteLayout` + 节点 Anchor/Size 订阅 | `ViewLinkLayer.IsActive=true`，overlay 继续画 | 池不物化 link |
 | Jalium | `Panel` / `FrameworkElement` | `DispatcherPriority.Background` | 绑定，`ViewArranger` no-op | 逐条池化；`WorkflowLinkBounds` 自盒化不动 | 模板选择器 + 资源回退 |
+| WinForms | `Panel` / `VisualElement` | `NonPriority`；无句柄时同步 | 绑定，no-op | 逐条池化 | 工厂直接调 `VisualTemplateSelector`；无句柄同步并以队列排空避免递归 |
 
-**WinForms 不接这条 Core 管线**：视觉后端没有 `ViewHosting/`；它在 `WorkflowSystem/AttachedBehaviors/ViewPool.cs` 提供一个与工作流无关的视觉池，附着到 `PART_Canvas` 上按 `Helper.VisibleItems` 建视觉子元素，每条 link 一个视觉 `LinkView`，用 `VisualTemplateSelector` 或单个 `DataTemplate`。
+**WinForms 的视觉后端**（`WorkflowSystem/ViewHosting/`）：`ViewFactory` 直接调 `VisualTemplateSelector`（没有 `DataTemplate` 回退缓存）；`ViewContainer` 把视图留在画布上，`Deactivate` 清 `DataContext` 并设 `Collapsed`，首次挂载按模板当前 `Panel.ZIndex` 插位（连线 -1 在节点前），`SetZOrder` 是空实现；`ViewSourcePipeline.Dispose` 额外经 `ReleaseAll` 移除并释放视图。`ViewPool` 的 `Changed` 是**每批一次**（策略实现 `IViewBatchFeedback` 后转成一次通知）。
 
 **适配器类都是 `public sealed`**，不是 `internal` —— 它们是本家对外的开放面；类名也不带平台前缀（`ViewFactory` / `ViewContainer` / `ViewSourcePipeline` …）。七家不能同时安装，同名类型正是这套设计的前提。
 
@@ -94,7 +95,7 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 
 ## 三、不变量
 
-1. **`IViewScheduler.Schedule` 必须异步**。实现只能 post（Dispatcher / DispatcherQueue / MainThread / 定时器 / renderer），不能同步调用 `batch`；否则批尾重排会递归。**不要直接拿 `IThreadDispatcher.Post` 当 `Schedule`**：后者在已在目标线程时会 inline。
+1. **`IViewScheduler.Schedule` 必须异步**。实现只能 post（Dispatcher / DispatcherQueue / MainThread / 定时器 / renderer），不能同步调用 `batch`；否则批尾重排会递归。**不要直接拿 `IThreadDispatcher.Post` 当 `Schedule`**：后者在已在目标线程时会 inline。**唯一例外是无句柄/无头宿主**（WinForms）：此时同步执行，但实现必须把重入的下一批入队排空而不是递归调用。
 2. **`Attach` 必须幂等**。回收的视图可能仍在视觉树里，复用时池仍会调 `Attach`；实现自己 `Children.Contains` 去重。
 3. **`Deactivate` 是回收的解绑口**；`Detach` 只负责隐藏/摘除，不负责清 `DataContext`。
 4. **`Factory.CreateView` 返回 `null` = 该类型不支持，按运行时类型永久缓存**（直到 system 被销毁）。换模板必须重建 system —— `ViewPool` 的两个附着属性任一变化都会 `Cleanup` + 重建。
@@ -141,7 +142,7 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 
 **Avalonia 的测量口径**（16 核 Windows、.NET 10.0.12、2000 节点 / 3000 条本地连线、视口 1200×800、20 步、5 轮、自适应策略；节点=Border+Text，连线=1×1 占位，因此是**管线下限**，不是完整 demo 视图的性能）：正常视口约 180–280 个可见项；全量是一次性物化 5001 个视图的最坏情况。
 
-**五家完整矩阵**（同一台 16 核 Windows、.NET 10.0.12、2000/3000、1200×800、20 步、5 轮、自适应；中位 ms，Full 分配 MB）。WinForms 用自身的视觉 `ViewPool`、不在这条 Core 池管线内，不在矩阵内：
+**五家完整矩阵**（同一台 16 核 Windows、.NET 10.0.12、2000/3000、1200×800、20 步、5 轮、自适应；中位 ms，Full 分配 MB）。WinForms 也走这条 Core 管线，但它的视觉后端由 `WinFormsViewPoolBenchmarks` 单独度量，未并入本表：
 
 | 适配器 | Initial | Scroll step | Full | Full 分配 |
 |---|---:|---:|---:|---:|
@@ -151,7 +152,7 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 | WinUI | 29.40 | 6.00 | 392.53 | 10.0 |
 | MAUI | 286.46 | 37.54 | 5070.75 | 357.0 |
 
-MAUI 的 Active 只到 2000/5001，是 overlay 把连线挡在主池外；它的 Full 不能与另外四家按视图数直接横比。WinForms 的视觉 `ViewPool` 按 `VisibleItems` 建视觉元素、每条 link 一个 `LinkView`，与这里的 Core 池记账不是同一套模型。
+MAUI 的 Active 只到 2000/5001，是 overlay 把连线挡在主池外；它的 Full 不能与另外四家按视图数直接横比。
 
 当前管线的关键成本控制：pending 用 `Queue + HashSet`（增删查 O(1)，移除后留下 tombstone 由出队时跳过）；Avalonia `ViewContainer` 用引用比较 `HashSet<Control>` 做挂载去重，不再 `Children.Contains`；`LinkLayer.IsActive=false` 时完全跳过整集枚举；每批受 `BatchSize=1024` 与 16ms 双重限制。
 

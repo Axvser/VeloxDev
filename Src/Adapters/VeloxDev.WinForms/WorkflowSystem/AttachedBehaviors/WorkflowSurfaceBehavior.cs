@@ -678,7 +678,18 @@ public sealed class WorkflowSurfaceBehavior
             }
         }
 
-        ViewPool.Refresh(canvas);
+        // 这次重建期间池会同步（无头宿主）或稍后（有消息泵）逐批通知；重建结束后统一走一遍行为与连线样式，
+        // 重建产出的 Changed 不再各自扫树。
+        state.RefreshingPool = true;
+        try
+        {
+            ViewPool.Refresh(canvas);
+        }
+        finally
+        {
+            state.RefreshingPool = false;
+        }
+
         EnsureAttachedBehaviors(state.Root);
         ApplyLinkStyles(state);
     }
@@ -1514,6 +1525,9 @@ public sealed class WorkflowSurfaceBehavior
 
         private bool poolRefreshPending;
 
+        // 重建池期间池会连续发批通知；重建方自己在 Refresh 返回后统一扫树，这些通知不用再各扫一遍。
+        public bool RefreshingPool { get; set; }
+
         public SurfaceState(Control host)
         {
             Host = host;
@@ -1652,12 +1666,17 @@ public sealed class WorkflowSurfaceBehavior
         // now, otherwise a pooled title row never subscribes to the drag behavior.
         public void OnPoolChanged(object? sender, ViewPoolChangedEventArgs e)
         {
+            if (RefreshingPool)
+            {
+                return;
+            }
+
             if (!ReferenceEquals(e.Host, Canvas) && !ReferenceEquals(e.Host, Root))
             {
                 return;
             }
 
-            // 一次批量物化会对每个视图各发一次 Changed；整棵树只扫一遍，留到本消息轮的下一拍。
+            // Changed 是每批一次；仍留到本消息轮的下一拍，连着来的几批只扫一遍树。
             if (poolRefreshPending)
             {
                 return;

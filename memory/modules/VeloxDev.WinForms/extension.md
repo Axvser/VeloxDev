@@ -9,7 +9,7 @@
 | 我想加 | 挂点 | 位置 |
 |---|---|---|
 | 一张新的工作流表面 | `VisualHost` + `WorkflowSurfaceBehavior`：设 `IsEnabled`/`ZoomEnabled`/`VisualTemplateSelector`（或 `VisualTemplateSelectorKey`）与部件 `*Name`；tree 是视觉 `UserControl`，`PART_Canvas` 是视觉 `Canvas` 并挂 `behaviors:ViewPool` | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`；示例 `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/TreeView.xaml` |
-| node/slot/link 视觉模板 | 视觉 `UserControl` 根；node `Viewbox > Grid 260×180` + `PART_InputSlot`/`PART_OutputSlots`，slot `Viewbox > Path`，link DP + `OnRender` 发布曲线；选择器派生 `VisualTemplateSelector`，tree 资源用 `DataTemplate` 包住它们 | 模板 `workflow-node-view` / `workflow-slot-view` / `workflow-link-view`；池 `ViewPool.cs` |
+| node/slot/link 视觉模板 | 视觉 `UserControl` 根；node `Viewbox > Grid 260×180` + `PART_InputSlot`/`PART_OutputSlots`，slot `Viewbox > Path`，link DP + `OnRender` 发布曲线；选择器派生 `VisualTemplateSelector`，tree 资源用 `DataTemplate` 包住它们 | 模板 `workflow-node-view` / `workflow-slot-view` / `workflow-link-view`；池 `ViewPool.cs` + `WorkflowSystem/ViewHosting/` |
 | 换网格/标尺外观 | 模板条目实现 `IWorkflowGridDecorator`，设调色板与间距；宿主用 `GridDecoratorName` 接上 | 模板 `workflow-grid-decorator/TemplateClass.cs` |
 | 「item 类型 → 视图」的选择器 | 派生 `VisualTemplateSelector`（`SelectTemplate` 返回 `VisualElement`） | `Xaml/Visuals/VisualTemplateSelector.cs` + 模板派生类 |
 | 一个新的附着行为 | `public static class` + `ConditionalWeakTable<VisualHost, State>` + 静态 `Get`/`Set` | `WorkflowSystem/AttachedBehaviors/`；若每次刷新要推值，改 `WorkflowSurfaceBehavior.Refresh` |

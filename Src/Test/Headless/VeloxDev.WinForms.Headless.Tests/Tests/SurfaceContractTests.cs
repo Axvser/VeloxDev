@@ -35,14 +35,13 @@ public sealed class SurfaceContractTests
     }
 
     [TestMethod]
-    public void ViewPool_ExposesTheItemSourceTemplateAndSelector()
+    public void ViewPool_ExposesTheItemSourceSelectorAndRefresh()
     {
         var pool = typeof(ViewPool);
         foreach (var method in new[]
                  {
                      "GetItemsSource", "SetItemsSource",
                      "GetTemplateSelector", "SetTemplateSelector",
-                     "GetItemTemplate", "SetItemTemplate",
                      "Refresh",
                  })
         {

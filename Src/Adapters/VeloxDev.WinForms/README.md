@@ -167,7 +167,7 @@ WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);
 ```
 
 - `WorkflowSurfaceBehavior` owns the camera: it writes one matrix to `PART_Canvas.Transform`, routes pointer/wheel/key input to Core, converts the pointer through the inverse matrix, divides drag deltas by zoom, and pushes grid/minimap/viewport offsets. Vertical wheel, Shift+wheel and `WM_MOUSEHWHEEL` all reach the same `IWorkflowSurfaceScroller` with the raw 120-delta. Its public camera API is `GetZoom`, `GetPan`, `SetPan`, `SurfaceToWorld`, `WorldToSurface`, `GetWorldViewport`, `SetWorldViewport`, `ZoomAt`, `ProcessWheel` and `Refresh`.
-- `ViewPool` is a generic, workflow-free attached behavior on `PART_Canvas`. It adds the view first, then sets `DataContext`, so `ElementName`/ancestor bindings resolve; it orders children by `Panel.ZIndex` then source order. Bind `ItemsSource` to `Helper.VisibleItems`; a `VisualTemplateSelector` or a single `DataTemplate` chooses the view.
+- `ViewPool` is a generic, workflow-free attached behavior on `PART_Canvas`. It rebuilds a Core `ViewSourcePipeline` (the shared view pool) when `ItemsSource`/`TemplateSelector` changes or `Refresh` runs; views are recycled by item type and rebound. A new view is parented before its `DataContext` is set, so `ElementName`/ancestor bindings resolve; a link (`Panel.ZIndex=-1`) is attached below the node cards. Bind `ItemsSource` to `Helper.VisibleItems`; a `VisualTemplateSelector` chooses the view.
 - Node/slot/link templates are visual `UserControl`s. Node is `Viewbox > Grid 260×180` with a title, `PART_InputSlot` and `PART_OutputSlots` (`ItemsControl` + `DataTemplate`); slot is `Viewbox > Path`; every link is a `LinkView` that publishes the curve Core hit-tests. The tree's `DataTemplate`s bind `Width`/`Height`/`Canvas.Left`/`Canvas.Top`/`Panel.ZIndex` and the link endpoints.
 - Slot measurement, title-row drag and slot connection are separate `VisualElement` attached behaviors: `WorkflowSlotLayoutBehavior`, `WorkflowNodeDragBehavior`, `WorkflowSlotConnectionBehavior`. The surface calls `Ensure` on each visual element; a behavior with no `IsEnabled` does nothing.
 - The item-template `SlotView` code-behind is only `InitializeComponent()`; `PART_Glyph.Fill` binds the model `State` through `SlotStateBrushConverter`.
@@ -182,7 +182,7 @@ WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);
 | Behavior | Attach to | Purpose |
 | --- | --- | --- |
 | `WorkflowSurfaceBehavior` | A `VisualHost` | Resolves `PART_*` visual parts; owns the camera matrix, input routing, scroll/viewport push and the in-tree minimap/HUD. |
-| `ViewPool` | A visual `Canvas` (`PART_Canvas`) | One visual child per item; `DataContext`, z-order, add/remove. |
+| `ViewPool` | A visual `Canvas` (`PART_Canvas`) | One Core-pooled visual child per item; recycling, re-binding and z-order on attach. |
 | `WorkflowSlotLayoutBehavior` | A node view root | Measures named slot parts and writes `slot.Anchor`. |
 | `WorkflowNodeDragBehavior` | A card's title row | Turns a press into a node drag measured in the coordinate host. |
 | `WorkflowSlotConnectionBehavior` | A slot view root | Press starts a connection; release over a receiver completes it. |
