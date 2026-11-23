@@ -67,6 +67,9 @@ public class VisualHost : System.Windows.Forms.Control
     /// <summary>Raised after the root tree has been measured and arranged.</summary>
     public event EventHandler? LayoutUpdated;
 
+    /// <summary>The <see cref="System.Diagnostics.Stopwatch"/> timestamp of the last completed paint.</summary>
+    public long LastPaintTimestamp { get; private set; }
+
     /// <summary>Styles applied implicitly to matching elements in this surface's visual tree.</summary>
     /// <remarks>
     /// An element's own <see cref="VisualElement.Styles"/> collection and its ancestors' collections take precedence
@@ -307,6 +310,7 @@ public class VisualHost : System.Windows.Forms.Control
             EnsureLayout(size);
             _root.Render(graphics);
             _overlay.Render(graphics);
+            LastPaintTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
         }
         finally
         {

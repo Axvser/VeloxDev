@@ -368,6 +368,17 @@ public sealed partial class LinkView : VeloxDev.WinForms.Xaml.Visuals.Controls.U
             return;
         }
 
+        // 拖动/平移的重绘刚刚推进过彗星，定时帧让位给输入；按住不动时没有重绘，照常发帧。
+        if (Surface is { } surface)
+        {
+            var sincePaint = System.Diagnostics.Stopwatch.GetTimestamp() - surface.LastPaintTimestamp;
+            if (surface.LastPaintTimestamp != 0
+                && sincePaint < System.Diagnostics.Stopwatch.Frequency * 20L / 1000L)
+            {
+                return;
+            }
+        }
+
         var previousHead = _bandHead;
         var previousIntensity = _bandIntensity;
         _bandHead = clock.BandHead;
