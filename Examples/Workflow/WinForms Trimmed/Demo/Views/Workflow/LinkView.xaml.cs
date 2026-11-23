@@ -1,5 +1,6 @@
 // VeloxDev customization: customize the curve, colours and hit-test policy here.
 using System.Drawing;
+using System.Linq;
 using System.Drawing.Drawing2D;
 using VeloxDev.WinForms.Xaml;
 using VeloxDev.WorkflowSystem;

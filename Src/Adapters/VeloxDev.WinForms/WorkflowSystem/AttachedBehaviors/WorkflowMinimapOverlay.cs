@@ -146,10 +146,9 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
         using var viewportPen = new DrawingPen(_viewportStroke, 1.5f);
         foreach (var (nx, ny, nw, nh) in _nodeRects)
         {
-            var x = fitted.Ox + ((nx - fitted.MinX) * fitted.Scale);
-            var y = fitted.Oy + ((ny - fitted.MinY) * fitted.Scale);
-            var w = Math.Max(2d, nw * fitted.Scale);
-            var h = Math.Max(2d, nh * fitted.Scale);
+            var (x, y) = WorkflowSurfaceMath.MinimapLocal(nx, ny, fitted.Left, fitted.Top, fitted.Ox, fitted.Oy, fitted.Scale);
+            var w = WorkflowSurfaceMath.MinThumbSize(nw, fitted.Scale, 2d);
+            var h = WorkflowSurfaceMath.MinThumbSize(nh, fitted.Scale, 2d);
             graphics.FillRectangle(nodeBrush, (float)x, (float)y, (float)w, (float)h);
         }
 
@@ -207,8 +206,10 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
 
     private void UpdateViewport(PointF point, MinimapLayout layout)
     {
-        var sx = ((point.X - layout.Ox) / layout.Scale) + layout.MinX - (ViewportWidth / 2d) + ContentOffsetX;
-        var sy = ((point.Y - layout.Oy) / layout.Scale) + layout.MinY - (ViewportHeight / 2d) + ContentOffsetY;
+        var (localX, localY) = WorkflowSurfaceMath.MinimapToCanvasLocal(
+            point.X, point.Y, layout.Ox, layout.Oy, layout.Scale, layout.Left, layout.Top);
+        var (sx, sy) = WorkflowSurfaceMath.MinimapToScroll(
+            localX, localY, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
         ScrollOffsetX = sx;
         ScrollOffsetY = sy;
         InvalidateVisual();
@@ -224,9 +225,7 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
         }
 
         thumbnails?.Clear();
-        double minX = double.MaxValue, minY = double.MaxValue;
-        double maxX = double.MinValue, maxY = double.MinValue;
-        var hasNode = false;
+        var rects = new List<(double X, double Y, double W, double H)>();
         foreach (var node in tree.Nodes)
         {
             if (node.Anchor is not { } anchor || node.Size is not { } size)
@@ -234,45 +233,49 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
                 continue;
             }
 
-            var (x, y, w, h) = (anchor.Horizontal, anchor.Vertical, size.Width, size.Height);
-            thumbnails?.Add((x, y, w, h));
-            minX = Math.Min(minX, x);
-            minY = Math.Min(minY, y);
-            maxX = Math.Max(maxX, x + w);
-            maxY = Math.Max(maxY, y + h);
-            hasNode = true;
+            var rect = (anchor.Horizontal, anchor.Vertical, size.Width, size.Height);
+            rects.Add(rect);
+            thumbnails?.Add(rect);
         }
 
-        if (!hasNode)
+        if (rects.Count == 0)
         {
             return null;
         }
 
-        var contentW = Math.Max(1d, maxX - minX);
-        var contentH = Math.Max(1d, maxY - minY);
-        var drawW = Math.Max(1d, Bounds.Width - (ContentPadding * 2d));
-        var drawH = Math.Max(1d, Bounds.Height - (ContentPadding * 2d));
-        var scale = Math.Min(drawW / contentW, drawH / contentH);
-        var ox = ContentPadding + ((drawW - (contentW * scale)) / 2d);
-        var oy = ContentPadding + ((drawH - (contentH * scale)) / 2d);
-        return new MinimapLayout(minX, minY, scale, ox, oy);
+        var global = WorkflowBounds.FromNodes(rects);
+        var padding = Math.Max(0d, ContentPadding);
+        var (ox, oy, scale) = WorkflowSurfaceMath.MinimapFit(
+            global.Width,
+            global.Height,
+            Math.Max(1d, Bounds.Width - (padding * 2d)),
+            Math.Max(1d, Bounds.Height - (padding * 2d)),
+            padding);
+        return new MinimapLayout(global.Left, global.Top, scale, ox, oy);
     }
 
     private RectangleF ViewportRect(MinimapLayout layout)
     {
-        var vx = layout.Ox + ((ScrollOffsetX - ContentOffsetX - layout.MinX) * layout.Scale);
-        var vy = layout.Oy + ((ScrollOffsetY - ContentOffsetY - layout.MinY) * layout.Scale);
-        var vw = Math.Min(Bounds.Width, Math.Max(4d, ViewportWidth * layout.Scale));
-        var vh = Math.Min(Bounds.Height, Math.Max(4d, ViewportHeight * layout.Scale));
-        vx = XamlMath.Clamp(vx, 0d, Math.Max(0d, Bounds.Width - vw));
-        vy = XamlMath.Clamp(vy, 0d, Math.Max(0d, Bounds.Height - vh));
-        return new RectangleF((float)vx, (float)vy, (float)vw, (float)vh);
+        var (x, y, width, height) = WorkflowSurfaceMath.MinimapViewportRect(
+            layout.Ox,
+            layout.Oy,
+            layout.Scale,
+            ScrollOffsetX - ContentOffsetX,
+            ScrollOffsetY - ContentOffsetY,
+            ViewportWidth,
+            ViewportHeight,
+            layout.Left,
+            layout.Top,
+            Bounds.Width,
+            Bounds.Height,
+            minRectSize: 4d);
+        return new RectangleF((float)x, (float)y, (float)width, (float)height);
     }
 
-    private readonly struct MinimapLayout(double minX, double minY, double scale, double ox, double oy)
+    private readonly struct MinimapLayout(double left, double top, double scale, double ox, double oy)
     {
-        public double MinX { get; } = minX;
-        public double MinY { get; } = minY;
+        public double Left { get; } = left;
+        public double Top { get; } = top;
         public double Scale { get; } = scale;
         public double Ox { get; } = ox;
         public double Oy { get; } = oy;

@@ -231,7 +231,7 @@ public sealed class WorkflowSlotLayoutBehavior
             var surfacePoint = element.PointToSurface(new System.Drawing.PointF(
                 element.Bounds.Width / 2f, element.Bounds.Height / 2f));
             var hostPoint = coordinateHost.PointFromSurface(surfacePoint);
-            var anchor = new Anchor(hostPoint.X, hostPoint.Y, slot.Anchor.Layer);
+            var anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(hostPoint.X, hostPoint.Y, slot.Anchor.Layer);
             if (double.IsNaN(slot.Anchor.Horizontal)
                 || double.IsNaN(slot.Anchor.Vertical)
                 || Math.Abs(slot.Anchor.Horizontal - anchor.Horizontal) > 0.01d

@@ -19,9 +19,6 @@ namespace Demo.Views.Workflow;
 /// </summary>
 public sealed class WorkflowCanvas : Control
 {
-    // 连线的命中半径，交给输入路由用。6 是七家统一的值（Core 的 LinkHitTestEx.DefaultHitRadius）。
-    private const float LinkHitRadius = 6f;
-
     private readonly VisualHost _host;
     private readonly WorkflowSurfaceView _surface;
 
@@ -119,7 +116,6 @@ public sealed class WorkflowCanvas : Control
         DetachLinkInput();
 
         var input = WorkflowInput.For(tree);
-        input.HitRadius = LinkHitRadius;
         _input = input;
 
         if (tree.GetHelper() is Wf.IInputEvents events)
