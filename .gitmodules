@@ -1,0 +1,3 @@
+[submodule "Easel"]
+	path = Easel
+	url = https://github.com/Axvser/Easel.git

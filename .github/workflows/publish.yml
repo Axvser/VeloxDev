@@ -241,6 +241,9 @@ jobs:
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v7
+        with:
+          # VeloxDev.WinForms compiles its Easel animation adapter only when the Easel submodule is present.
+          submodules: recursive
 
       - uses: actions/setup-dotnet@v6
         with:
