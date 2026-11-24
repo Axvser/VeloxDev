@@ -73,7 +73,7 @@ namespace Demo.Views
             typeof(SlotView),
             new PropertyMetadata(SlotChannel.MultipleBoth, OnChannelChanged));
 
-        // 四个圆共用一支画刷：字形只有一个颜色，改它比改四个 Fill/Stroke 便宜
+        // 四个圆共用一支固定画刷，省得每个圆各建一份
         private readonly SolidColorBrush _glyphBrush = new(Microsoft.UI.Colors.White);
 
         // 每帧只改这四个 ScaleTransform，不改 Width/Height。这是本家与 Avalonia 那版最大的写法差别，
@@ -251,8 +251,6 @@ namespace Demo.Views
                 ApplyBaseSize(size);
             }
 
-            UpdateGlyphColor();
-
             bool aiming = IsAiming;
             bool connected = IsConnected;
 
@@ -370,26 +368,6 @@ namespace Demo.Views
             var ratio = (radius * 2) / baseSize;
             scale.ScaleX = ratio;
             scale.ScaleY = ratio;
-        }
-
-        // 端口颜色仍按 SlotState 给：默认白、发送端 Tomato、接收端 Lime、两头都通 Violet。
-        // Avalonia 那边是每张卡在自己的 Grid.Styles 里写这四条选择器；WinUI 没有选择器，
-        // 而四个圆又共用一支画刷，所以直接算在这里 —— 五张卡的映射就一直是一样的了。
-        // （Enum 卡在 Avalonia 只覆盖了 Receiver 一条，其余落到默认白；这里沿用完整映射。）
-        private void UpdateGlyphColor()
-        {
-            var color = SlotState switch
-            {
-                var state when state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver) => Microsoft.UI.Colors.Violet,
-                var state when state.HasFlag(SlotState.Sender) => Microsoft.UI.Colors.Tomato,
-                var state when state.HasFlag(SlotState.Receiver) => Microsoft.UI.Colors.Lime,
-                _ => Microsoft.UI.Colors.White,
-            };
-
-            if (_glyphBrush.Color != color)
-            {
-                _glyphBrush.Color = color;
-            }
         }
 
         #endregion

@@ -8,12 +8,11 @@
     <WorkflowSlotConnectionBehavior Slot="Slot" Tree="Tree" IsEnabled="true" Style="@Style">
         <svg class="veloxdev-wf-slot-svg"
              width="@(SlotSizeCss)" height="@(SlotSizeCss)"
-             viewBox="0 0 1024 1024">
-            <path d="TemplateSlotPath"
-                  fill="@WorkflowPresentation.SlotStateColor(Slot.State, WorkflowPresentation.ToCss("TemplateSlotColor"))"
-                  stroke="@WorkflowPresentation.ToCss("TemplateSlotBorderColor")"
-                  stroke-width="8"
-                  stroke-linejoin="round" />
+             viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="45"
+                    fill="@WorkflowPresentation.ToCss("TemplateSlotColor")"
+                    stroke="@WorkflowPresentation.ToCss("TemplateSlotBorderColor")"
+                    stroke-width="10" />
         </svg>
     </WorkflowSlotConnectionBehavior>
 }

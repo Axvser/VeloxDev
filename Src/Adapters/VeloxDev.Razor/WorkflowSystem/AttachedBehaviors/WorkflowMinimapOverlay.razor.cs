@@ -16,6 +16,10 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// rectangle. Consumes a <see cref="SurfaceViewport"/> context and implements
 /// <see cref="IWorkflowMinimapOverlay"/> for API parity with the XAML adapters.
 ///
+/// The component renders a full-surface, click-through layer; the inner minimap box is placed at
+/// the content viewport's top-right corner (below the ruler band, left of the vertical scrollbar,
+/// above the horizontal one) using the available area measured by JavaScript.
+///
 /// Mirrors the XAML adapters' architecture: the content-fit mapping and node rects are recomputed
 /// only when the tree content changes (nodes added/removed/moved — debounced 16ms), never on plain
 /// scroll. The viewport-block indicator is moved directly by JavaScript as the surface scrolls, so
@@ -43,7 +47,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
     /// <summary>Gets or sets the minimap background color.</summary>
     [Parameter]
-    public string Background { get; set; } = "#D2141922";
+    public string Background { get; set; } = "#331E1E1E";
 
     /// <summary>Gets or sets the minimap border color.</summary>
     [Parameter]
@@ -119,6 +123,19 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     /// <inheritdoc />
     public bool IsMinimapVisible { get; set; } = true;
 
+    /// <summary>Gets or sets the gap in pixels kept between the minimap and the available corner.</summary>
+    [Parameter]
+    public double MinimapMargin { get; set; } = 12;
+
+    /// <inheritdoc />
+    public double AvailableRight { get; set; }
+
+    /// <inheritdoc />
+    public double AvailableTop { get; set; }
+
+    /// <inheritdoc />
+    public double AvailableBottom { get; set; }
+
     private ElementReference _element;
     private IJSObjectReference? _module;
     private DotNetObjectReference<WorkflowMinimapOverlay>? _dotNetRef;
@@ -135,6 +152,18 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
     private double _lastWidth;
     private double _lastHeight;
+    private double _lastMargin;
+
+    // 小地图矩形：由可用区（Available*）算出；绘制、内容映射与内层盒子的定位共用这一份。
+    private double _rectLeft;
+    private double _rectTop;
+    private double _rectWidth = 180;
+    private double _rectHeight = 120;
+    private double _rectRight;
+    private double _overlayWidth;
+    private bool _areaMeasured;
+
+    private const double MinimapMinSize = 20;
 
     // 事件驱动的内容跟踪：只在节点增/删/移动时（去抖地）重算映射/节点矩形，与 XAML 几家的 MarkDirty + 16ms 定时器一致。
     private ITreeComponent? _subscribedTree;
@@ -150,9 +179,18 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
     // CSS style 属性内无单位长度无效（浏览器会丢弃，元素塌成 0×0）。这些值喂给内联 width/height 样式，下面 SVG 的 width/height 属性也接受 px 后缀。
     // 固定不变并用 '.' 分隔：它们喂给 style 与 SVG 长度属性，逗号小数文化会序列化出浏览器解析不了的值。
-    private string WidthCss => Width.ToString("0.#", CultureInfo.InvariantCulture) + "px";
-    private string HeightCss => Height.ToString("0.#", CultureInfo.InvariantCulture) + "px";
-    private string NodeRadiusCss => NodeRadius.ToString("0.#", CultureInfo.InvariantCulture);
+    private string RectWidthCss => Css(_rectWidth) + "px";
+    private string RectHeightCss => Css(_rectHeight) + "px";
+
+    // 首次测量回来之前内层盒子藏起来：可用区还是 0 时矩形落在原点，先画出来会闪一下再跳到右上角。
+    // 没有滚动容器 id 时无法测量，沿用旧的贴角落位置。
+    private string RectTopCss => (_areaMeasured ? Css(_rectTop) : "8") + "px";
+    private string RectRightCss => (_areaMeasured ? Css(_rectRight) : "8") + "px";
+    private string InnerVisibilityCss =>
+        _areaMeasured || string.IsNullOrWhiteSpace(ScrollViewerId) ? "visible" : "hidden";
+
+    private static string Css(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
+    private string NodeRadiusCss => Css(NodeRadius);
     private string ViewportStrokeWidthCss => ViewportStrokeWidth.ToString("0.#", CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
@@ -179,10 +217,12 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         }
 
         if (Math.Abs(Width - _lastWidth) > double.Epsilon
-            || Math.Abs(Height - _lastHeight) > double.Epsilon)
+            || Math.Abs(Height - _lastHeight) > double.Epsilon
+            || Math.Abs(MinimapMargin - _lastMargin) > double.Epsilon)
         {
             _lastWidth = Width;
             _lastHeight = Height;
+            _lastMargin = MinimapMargin;
             recompute = true;
         }
 
@@ -211,6 +251,27 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         {
             _ = _module.InvokeVoidAsync("refreshMinimapViewport", ScrollViewerId);
         }
+    }
+
+    /// <summary>
+    /// Receives the free corner measured by JavaScript: <paramref name="availableRight"/> excludes the
+    /// vertical scrollbar, <paramref name="availableTop"/> is the horizontal ruler band height, and
+    /// <paramref name="availableBottom"/> excludes the horizontal scrollbar;
+    /// <paramref name="overlayWidth"/> is the full-surface layer's width, used to express the inner
+    /// box's <c>right</c> offset.
+    /// </summary>
+    [JSInvokable]
+    public void OnMinimapAreaMeasured(double availableRight, double availableTop, double availableBottom, double overlayWidth)
+    {
+        AvailableRight = Math.Max(0, availableRight);
+        AvailableTop = Math.Max(0, availableTop);
+        AvailableBottom = Math.Max(0, availableBottom);
+        _overlayWidth = Math.Max(0, overlayWidth);
+        _areaMeasured = true;
+
+        // 可用区变了，矩形可能被夹小 —— 映射和视口块都按矩形尺寸重算，再让标记按新位置渲染。
+        Recompute();
+        _ = InvokeAsync(StateHasChanged);
     }
 
     // ── 内容跟踪（事件驱动，与 XAML 几家一致）─────────────────────────────
@@ -340,13 +401,50 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
 
     // ── 映射 ────────────────────────────────────────────────────────────────
 
+    // 可用区 → 小地图矩形。首次测量前 Available* 为 0，Core 退回原点 + 请求尺寸；内层盒子此时隐藏。
+    private MinimapDrawContext CreatePlacementContext()
+        => new()
+        {
+            MinimapWidth = Width,
+            MinimapHeight = Height,
+            MinimapMargin = MinimapMargin,
+            AvailableRight = AvailableRight,
+            AvailableTop = AvailableTop,
+            AvailableBottom = AvailableBottom,
+        };
+
+    private void UpdatePlacement()
+    {
+        var bounds = CreatePlacementContext().GetMinimapRect(MinimapMinSize);
+        _rectLeft = bounds.Left;
+        _rectTop = bounds.Top;
+        _rectWidth = Math.Max(1, bounds.Width);
+        _rectHeight = Math.Max(1, bounds.Height);
+        // 内层盒子用 top/right 定位；right 相对整块浮层（宽度 = 表面宽）来说。
+        _rectRight = Math.Max(0, _overlayWidth - (_rectLeft + _rectWidth));
+    }
+
+    private MinimapDrawContext EmptyContext()
+        => new()
+        {
+            MinimapWidth = _rectWidth,
+            MinimapHeight = _rectHeight,
+            Padding = Math.Max(0, Padding),
+            AvailableRight = AvailableRight,
+            AvailableTop = AvailableTop,
+            AvailableBottom = AvailableBottom,
+            MinimapMargin = MinimapMargin,
+        };
+
     private void Recompute()
     {
+        UpdatePlacement();
+
         var tree = WorkflowTree;
         if (tree is null)
         {
             MappedNodes = null;
-            DrawContext = new MinimapDrawContext();
+            DrawContext = EmptyContext();
             return;
         }
 
@@ -354,7 +452,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         if (nodes.Length == 0)
         {
             MappedNodes = Array.Empty<Mapped>();
-            DrawContext = new MinimapDrawContext();
+            DrawContext = EmptyContext();
             return;
         }
 
@@ -368,8 +466,9 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         }
 
         var pad = Math.Max(0, Padding);
-        var drawW = Math.Max(1, Width - pad * 2);
-        var drawH = Math.Max(1, Height - pad * 2);
+        // 映射按矩形尺寸算（可用区可能把它夹得比请求的 Width/Height 小），绘制与拖拽反演才能对齐。
+        var drawW = Math.Max(1, _rectWidth - pad * 2);
+        var drawH = Math.Max(1, _rectHeight - pad * 2);
         var bw = Math.Max(1, maxX - minX);
         var bh = Math.Max(1, maxY - minY);
         var (ox, oy, scale) = WorkflowSurfaceMath.MinimapFit(bw, bh, drawW, drawH, pad);
@@ -399,7 +498,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         {
             var (vx, vy, vw, vh) = WorkflowSurfaceMath.MinimapViewportRect(
                 ox, oy, scale, viewportBounds.Left, viewportBounds.Top, viewportBounds.Width, viewportBounds.Height,
-                minX, minY, Width, Height, minRectSize: 2.0);
+                minX, minY, _rectWidth, _rectHeight, minRectSize: 2.0);
             mappedViewport = WorkflowBounds.FromNode(vx, vy, vw, vh);
         }
 
@@ -412,13 +511,17 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
                 n.Anchor.Horizontal, n.Anchor.Vertical, n.Size.Width, n.Size.Height)).ToArray(),
             MappedNodes = MappedNodes.Select(n => WorkflowBounds.FromNode(n.X, n.Y, n.W, n.H)).ToArray(),
             MappedViewport = mappedViewport,
-            MinimapWidth = Width,
-            MinimapHeight = Height,
+            MinimapWidth = _rectWidth,
+            MinimapHeight = _rectHeight,
             Padding = pad,
             OriginX = ox,
             OriginY = oy,
             Scale = scale,
             NodeCornerRadius = NodeRadius,
+            AvailableRight = AvailableRight,
+            AvailableTop = AvailableTop,
+            AvailableBottom = AvailableBottom,
+            MinimapMargin = MinimapMargin,
         };
 
         // 视口块不在这里计算/渲染：它完全归 JS（setMinimapViewport），.NET 重建因此永远不会用陈旧坐标覆盖它。

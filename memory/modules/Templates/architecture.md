@@ -1,4 +1,4 @@
-﻿# Templates — 模板包
+# Templates — 模板包
 
 > **路径约定**：本文的路径都相对 `Src/Templates/`。`workflow-<角色>/` 指某个条目目录，完整形式是
 > `VeloxDev.<平台>.Templates/working/content/workflow-<角色>/`。引用 Core、适配器、demo、skill 时写全路径。
@@ -217,6 +217,9 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 `MinimapDrawContext`（Core `Interfaces/WorkflowSystem/Surface/MinimapDrawContext.cs`）带树、内容/视口包围盒、
 节点世界矩形、预映射的节点/视口矩形、拟合原点与比例、圆角 —— 覆写方不再自己推这些。
 
+小地图元素现在**铺满表面**；`AvailableRight/Top/Bottom`（内容区右上角：让开竖滚动条与水平刻度、底部让开横滚动条）
+与 `MinimapMargin` 一起进 context，默认绘制用 `GetMinimapRect(min)` 把小地图放在该角，命中/拖拽也只认这个矩形。
+
 **WinForms 的七项不是「基类 + 派生」**：tree 是视觉 `UserControl` + `WorkflowSurfaceBehavior`；node / slot / link 都是视觉 `UserControl`，由 `ViewPool` 物化、`DataTemplate` 定位，`WorkflowSlotLayoutBehavior` 写锚点，`LinkView` 自己发布曲线；grid / minimap / selector 是纯 `.cs`。调度与平台机制在适配器，调色板、卡片样子与选择器策略在模板。颜色解析统一走 `XamlRuntime.ParseColor`。
 
 `node-view` 收掉的只有机制（绑定/定位/折叠/反射读名字），**卡片长什么样是用户的设计** —— Full demo 的卡片视觉仍留在模板/宿主。
@@ -233,11 +236,11 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 ### 7.1 一批"命令行收得下、什么也不替换"的 symbol
 
 `template.json` 里的 symbol 若 `type: parameter` 而**没有 `replaces`**，`dotnet new --help` 会把它列出来、
-命令行能传、**不报错、也不替换任何文本**。分布见下表；**WinForms 与 Jalium 没有**。
+命令行能传、**不报错、也不替换任何文本**。分布见下表；`slotPath` 七家都有，其余按家。
 
 | 平台 | 条目 | 空转的 symbol |
 |---|---|---|
-| MAUI | `workflow-slot-view` | `slotPath`（端口画 `Ellipse`，SVG 路径解析不出来） |
+| 七家 | `workflow-slot-view` | `slotPath`（槽口统一画 `Ellipse` / `<circle>`，路径值只作 CLI 兼容） |
 | Razor | `workflow-slot-view` | `slotBackground` |
 | Razor | `workflow-grid-decorator` | `gridBackground`、`minorGridColor`、`majorGridColor` |
 | Razor | `workflow-tree-view` | `surfaceBorderBrush`、`surfaceBorderThickness`、`surfaceCornerRadius` |
@@ -247,8 +250,7 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 「Style parameters」一节）：七家接受**同一套参数名、同一套默认值**，命令行因此能在 GUI 之间原样搬。
 删参数会让 `dotnet new` 报未知参数；补的是**说明**，不是删参数，也不是硬造一个样式点。
 
-`slotPath` 与 `slotColor` / `slotBorderColor` 现已七家全部有 `replaces`：槽模板的 `Path` 绑
-`State` 经各家的 `SlotStateBrushConverter`，`slotPath` 是图形本体。
+`slotColor` / `slotBorderColor` 七家都有 `replaces`；`slotPath` 七家都没有，模板不再解析 SVG 路径。
 
 ⚠ **人面向文档只举了子集**（Razor 的树边框/圆角）；上表是跨平台的完整枚举。
 
@@ -276,20 +278,12 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 
 ⇒ 七家里只有这一家把「生成即失败」写进产物。这是**设计**（逼用户填对类型），不是缺陷。
 
-### 7.4 插槽状态着色：Avalonia 完全没有
+### 7.4 插槽状态着色：框架与模板都不做
 
-`SlotState`（决定插槽在连线手势下变紫/番茄红/青柠）七家都**由 slot-view 自己绑 DataContext 的 `State`**，
-node-view 不再传 `SlotState`：
+槽模板是一个 `Ellipse`（Razor 是 `<circle>`），`Fill` / `Stroke` 直接用 `slotColor` / `slotBorderColor`，不读 `State`。`ISlotComponent.State` 是普通可观察属性；要按状态改外观的
+宿主自己订 `PropertyChanged`，框架不提供配色转换器、palette，也没有 `StateChanged` 事件。
 
-| 平台 | 方式 |
-|---|---|
-| WPF / Avalonia / WinUI / MAUI / Jalium | 各适配器的 `SlotStateBrushConverter`：`Fill="{Binding State, Converter=…}"`，`Stroke` 同转换器带 `ConverterParameter=Border`；`StandByColor` / `BorderColor` 由模板给。MAUI 的图形是 `Ellipse`（SVG 路径解析不出来），其余是 `Path Data=TemplateSlotPath` |
-| WinForms | 同一模式：`PART_Glyph.Fill` 经 `SlotStateBrushConverter`（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/SlotStateBrushConverter.cs`） |
-| Razor | 标记里调用 `WorkflowPresentation.SlotStateColor(Slot.State, …)` |
-
-⇒ slot-view 的 code-behind 回到只有 `InitializeComponent()`（Razor 只剩参数与 `PropertyChanged` 订阅）。
-
-⇒ 在 Avalonia 上，插槽**永远不会变色**，而且不会报错。要修就得给 slot-view 加一个状态属性再绑上去。
+⇒ 六家 slot-view code-behind 只有 `InitializeComponent()`；Razor 只剩参数，不再订 `PropertyChanged`。
 
 ### 7.5 渲染就绪门：WPF / Jalium / Razor / WinForms 四家写了
 
@@ -332,7 +326,7 @@ node-view 不再传 `SlotState`：
 | 节点卡 底 / 字 / 边 | `#DDFFFFFF` / `#DD1E1E1E` / `#331E1E1E` |
 | 槽位 待机 / 描边 / 三态 | `#DD1E1E1E` / `#FFFFFFFF` / `#FF6347`·`#32CD32`·`#EE82EE` |
 | 连线 | `#DDFFFFFF`，粗 2 |
-| 小地图四色 | `#D2141922` / `#DC94A3B8` / `#DC38BDF8` / `#F0FFFFFF` |
+| 小地图四色 | `#331E1E1E` / `#DC94A3B8` / `#DC38BDF8` / `#F0FFFFFF` |
 
 **七家 Trimmed demo 逐项等于上表**，只有一处刻意偏差：Jalium 标尺四色自成一档。
 
@@ -387,7 +381,7 @@ node-view 不再传 `SlotState`：
 
 输出槽在 `DataTemplate` 里（`ItemsSource="{Binding OutputSlots.Items}"`），那个 `DataTemplate` 的 DataContext 是**包装项**（成员是 `Slot` 与 `Name`）。槽视图元素上写 `DataContext="{Binding Slot}"` / `BindingContext="{Binding Slot}"`，此后它的上下文就是槽自己 —— 所以槽内部统一写 `{Binding State}`。
 
-不要在同一元素上再写 `SlotState="{Binding Slot.State}"`：DataContext 已被改成槽 VM，这一行改在槽 VM 里求值，而 `ISlotComponent` 没有 `Slot` 成员 ⇒ 绑定失败、槽永远拿不到状态，且不报错。七家的 node-view 现在都不传 `SlotState`，状态配色由 slot-view 自己完成（§7.4）。
+不要在同一元素上再写 `SlotState="{Binding Slot.State}"`：DataContext 已被改成槽 VM，这一行改在槽 VM 里求值，而 `ISlotComponent` 没有 `Slot` 成员 ⇒ 绑定失败、槽永远拿不到状态，且不报错。七家模板的 node-view 都不传 `SlotState`；槽视图用的是模板固定色（§7.4）。
 
 ---
 

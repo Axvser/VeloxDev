@@ -86,9 +86,6 @@
 					<Style Selector="local|SlotView">
 						<Setter Property="Foreground" Value="White" />
 					</Style>
-					<Style Selector="local|SlotView[SlotState=16]">
-						<Setter Property="Foreground" Value="Lime" />
-					</Style>
 				</Grid.Styles>
 				<local:SlotView x:Name="PART_InputSlot"
 								Width="32" Height="32"

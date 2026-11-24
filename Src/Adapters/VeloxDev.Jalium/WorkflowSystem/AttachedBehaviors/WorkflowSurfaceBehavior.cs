@@ -1058,6 +1058,27 @@ public static class WorkflowSurfaceBehavior
             minimap.ViewportWidth = state.ScrollViewer?.ViewportWidth ?? 0d;
             minimap.ViewportHeight = state.ScrollViewer?.ViewportHeight ?? 0d;
             minimap.WorkflowTree = tree;
+
+            // 小地图贴在「内容区右上角」：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+            // 滚动条厚度由 ScrollViewer 自己的 ActualWidth − ViewportWidth 得出 —— 本家没有 WPF 的
+            // SystemParameters.VerticalScrollBarWidth，而 ViewportWidth 是内容区（不含滚动条），差值就是
+            // 滚动条占掉的那一条；只在 Computed 可见时减，避免把边框/内边距当成滚动条。
+            var overlayElement = state.MinimapOverlay as FrameworkElement;
+            var overlayWidth = overlayElement?.ActualWidth ?? 0d;
+            var overlayHeight = overlayElement?.ActualHeight ?? 0d;
+            if (overlayWidth <= 0d) overlayWidth = state.ScrollViewer?.ActualWidth ?? 0d;
+            if (overlayHeight <= 0d) overlayHeight = state.ScrollViewer?.ActualHeight ?? 0d;
+
+            var verticalBar = state.ScrollViewer is { ComputedVerticalScrollBarVisibility: Visibility.Visible } verticalViewer
+                ? Math.Max(0d, verticalViewer.ActualWidth - verticalViewer.ViewportWidth)
+                : 0d;
+            var horizontalBar = state.ScrollViewer is { ComputedHorizontalScrollBarVisibility: Visibility.Visible } horizontalViewer
+                ? Math.Max(0d, horizontalViewer.ActualHeight - horizontalViewer.ViewportHeight)
+                : 0d;
+
+            minimap.AvailableRight = Math.Max(0d, overlayWidth - verticalBar);
+            minimap.AvailableTop = state.GridDecorator?.RulerBand ?? 0d;
+            minimap.AvailableBottom = Math.Max(0d, overlayHeight - horizontalBar);
         }
     }
 

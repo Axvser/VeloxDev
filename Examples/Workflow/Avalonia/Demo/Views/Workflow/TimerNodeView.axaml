@@ -18,15 +18,6 @@
 				<Style Selector="local|SlotView">
 					<Setter Property="Foreground" Value="White" />
 				</Style>
-				<Style Selector="local|SlotView[SlotState=8]">
-					<Setter Property="Foreground" Value="Tomato" />
-				</Style>
-				<Style Selector="local|SlotView[SlotState=16]">
-					<Setter Property="Foreground" Value="Lime" />
-				</Style>
-				<Style Selector="local|SlotView[SlotState=24]">
-					<Setter Property="Foreground" Value="Violet" />
-				</Style>
 			</Grid.Styles>
 
 			<Border Grid.RowSpan="2" Classes="card" />

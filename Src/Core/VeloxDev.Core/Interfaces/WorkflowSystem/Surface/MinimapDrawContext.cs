@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace VeloxDev.WorkflowSystem;
@@ -57,6 +58,48 @@ public sealed class MinimapDrawContext
 
     /// <summary>Corner radius applied to the minimap frame.</summary>
     public double MinimapCornerRadius { get; init; }
+
+    /// <summary>
+    /// The x of the content viewport's right edge in overlay-local pixels, excluding the vertical scrollbar.
+    /// </summary>
+    public double AvailableRight { get; init; }
+
+    /// <summary>The y of the content viewport's top edge, below the horizontal ruler band.</summary>
+    public double AvailableTop { get; init; }
+
+    /// <summary>
+    /// The y of the content viewport's bottom edge in overlay-local pixels, excluding the horizontal scrollbar.
+    /// </summary>
+    public double AvailableBottom { get; init; }
+
+    /// <summary>The gap kept between the minimap and the available corner.</summary>
+    public double MinimapMargin { get; init; }
+
+    /// <summary>
+    /// Computes the minimap rectangle inside the available corner: its top-right corner sits at
+    /// (<see cref="AvailableRight"/> - margin, <see cref="AvailableTop"/> + margin), and the size is the
+    /// requested <see cref="MinimapWidth"/> / <see cref="MinimapHeight"/> clamped to the free area and
+    /// <paramref name="minimumSize"/>. Falls back to the origin when the adapter did not supply an available area.
+    /// </summary>
+    /// <param name="minimumSize">The smallest width or height the minimap may shrink to.</param>
+    public WorkflowBounds GetMinimapRect(double minimumSize)
+    {
+        var min = Math.Max(1, minimumSize);
+        var margin = Math.Max(0, MinimapMargin);
+        var width = Math.Max(min, MinimapWidth);
+        var height = Math.Max(min, MinimapHeight);
+
+        if (AvailableRight <= 0 || AvailableBottom <= AvailableTop)
+        {
+            return WorkflowBounds.FromNode(0, 0, width, height);
+        }
+
+        width = Math.Min(width, Math.Max(1, AvailableRight - margin * 2));
+        height = Math.Min(height, Math.Max(1, AvailableBottom - AvailableTop - margin * 2));
+        var left = Math.Max(margin, AvailableRight - margin - width);
+        var top = AvailableTop + margin;
+        return WorkflowBounds.FromNode(left, top, width, height);
+    }
 
     /// <summary>Whether any node produced a non-empty content box.</summary>
     public bool HasContent => !ContentBounds.IsEmpty;

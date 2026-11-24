@@ -57,29 +57,6 @@ public static class WorkflowPresentation
     }
 
     /// <summary>
-    /// Maps a slot's state to the port glyph's CSS color, using <paramref name="standByCss"/> for the idle state.
-    /// </summary>
-    public static string SlotStateColor(SlotState state, string standByCss)
-    {
-        if (state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver))
-        {
-            return "#EE82EE";
-        }
-
-        if (state.HasFlag(SlotState.Sender) || state.HasFlag(SlotState.PreviewSender))
-        {
-            return "#FF6347";
-        }
-
-        if (state.HasFlag(SlotState.Receiver) || state.HasFlag(SlotState.PreviewReceiver))
-        {
-            return "#32CD32";
-        }
-
-        return standByCss;
-    }
-
-    /// <summary>
     /// Input slots are the pure link-sources rendered on the node's left edge. The
     /// enumerated selector slots default to <see cref="SlotChannel.MultipleBoth"/>, which
     /// also carries a source flag, so the target flags are what separate the right-edge

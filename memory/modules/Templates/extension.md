@@ -132,12 +132,12 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 而且早就在用：生成文件引用适配器程序集（`TemplateClass.xaml` 里 `xmlns:behaviors` 的 `assembly=VeloxDev.WPF`）本来就要
 用户自己装包，minimap 这个角色在六家就是「包里发控件 + 模板薄派生」（WPF / Avalonia / WinUI / MAUI / Jalium / Razor 各家都只剩薄薄一层）。
 
-**WinForms 的七项全部走这条**：适配器给行为与转换器，模板只声明 XAML 根与部件。
+**WinForms 的七项全部走这条**：适配器给行为与平台机制，模板只声明 XAML 根与部件。
 
 - WinForms（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`）：
 `WorkflowSurfaceBehavior`（部件解析、相机、输入路由、视口持久化）、`ViewPool`（可见集 → 视觉元素）、
 `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior`（槽测量、标题拖动、插槽连接）、
-`SlotStateBrushConverter`、`WorkflowMinimapOverlay`；网格与标尺、节点/插槽/连线的视觉外观是模板条目的职责，选择器基类是
+`WorkflowMinimapOverlay`；网格与标尺、节点/插槽/连线的视觉外观是模板条目的职责，选择器基类是
 `Easel.Visuals.VisualTemplateSelector`。模板因此只剩视觉 XAML 根与部件。
 - Jalium（`Src/Adapters/VeloxDev.Jalium/WorkflowSystem/AttachedBehaviors/`）**不走这条**：
 角色落成附着行为（`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` /
@@ -151,9 +151,8 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 那个角色照样含平台机制。机制与策略的分层见
 [`layer-ownership-specifications.md`](../../specifications/layer-ownership-specifications.md)。
 
-⇒ 被抽出的公共物只有一件：`TemplateSlotPath` 那段 SVG。它是**每个条目的 `template.json` 里各存一份字面量**
-（七个平台的 `defaultValue` 逐字节相同，viewBox 1024×1024），**改图标要改每一处**，
-而且其中一处（MAUI）根本没有 `replaces`。
+⇒ 没有被抽出的公共物：槽口图形统一成一个 `Ellipse`（Razor 是 `<circle>`），改图标改模板本身。
+`slotPath` 七家都只在 `template.json` 里保留为 CLI 兼容的空参。
 
 ### 4.2 捷径：从另一家复制条目，改后缀
 

@@ -54,19 +54,11 @@
 
 ## 三、这一家模板特有的坑
 
-### P1 · 插槽**永远不会变色**
+### P1 · 插槽颜色是模板固定色
 
-`SlotState`（连线手势下变紫/番茄红/青柠）在这一家的模板里**一处都没有**（`grep SlotState
-VeloxDev.Avalonia.Templates/working/content/` 零命中）。slot-view 只把描边颜色绑到
-`$parent[UserControl].Foreground`：
-
-```xml
-<Path Fill="{Binding $parent[UserControl].Foreground}" Data="TemplateSlotPath" />
-```
-
-`workflow-slot-view/TemplateClass.axaml` 里 `Path` 的 `Fill` 绑定 —— 而 `workflow-slot-view/TemplateClass.axaml.cs`
-是一个**只有 `InitializeComponent()` 的空 partial 类**，没有任何地方会写 `Foreground`。
-⇒ 插槽在 Avalonia 上不会随连线状态变色，**且不报错**。对照全表见 `../architecture.md` §7.4。
+`SlotState` 在这一家的模板里**一处都没有**（`grep SlotState VeloxDev.Avalonia.Templates/working/content/` 零命中）。
+slot-view 的 `Path` 直接用 `Fill="TemplateSlotColor"` / `Stroke="TemplateSlotBorderColor"`，不读 `State`；
+code-behind 只有 `InitializeComponent()`。
 
 ### P2 · `x:CompileBindings="False"` 只在 node-view 里，而且带一句 TODO
 

@@ -186,20 +186,23 @@
     white-space: nowrap;
 }
 
-/* Minimap overlay — anchored top-right of the surface. */
+/* Minimap overlay — a full-surface layer. The layer itself is click-through; only the inner
+   box (positioned by the component at the content viewport's top-right corner, below the
+   ruler band and left of the vertical scrollbar) receives pointer events. */
 .veloxdev-wf-minimap {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    inset: 0;
     z-index: 50;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
 }
 
 .veloxdev-wf-minimap-inner {
-    position: relative;
+    position: absolute;
     overflow: hidden;
     cursor: crosshair;
     border-radius: 6px;
+    pointer-events: auto;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
 }
 
 .veloxdev-wf-minimap-svg {

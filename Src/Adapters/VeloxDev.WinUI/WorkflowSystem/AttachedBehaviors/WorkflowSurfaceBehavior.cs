@@ -542,6 +542,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ViewChanged += OnViewChanged;
+            // 视口尺寸变化不一定触发 ViewChanged；小地图的可用右上角依赖滚动条厚度，必须跟着窗口一起改。
+            state.ScrollViewer.SizeChanged += OnScrollViewerSizeChanged;
         }
 
         // 滚轮的挂接不跟缩放开关走：普通滚轮的汇报与缩放是两件事。
@@ -558,6 +560,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ViewChanged -= OnViewChanged;
+            state.ScrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
         }
 
         UnhookWheel(state);
@@ -1395,6 +1398,36 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 position, Modifiers(e.KeyModifiers), host, target, button, 1, handle));
     }
 
+    private static void OnScrollViewerSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is not ScrollViewer viewer)
+        {
+            return;
+        }
+
+        var host = EnumerateVisualAncestors(viewer).OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        if (host is null || host.GetValue(StateProperty) is not SurfaceState state)
+        {
+            return;
+        }
+
+        // 布局趟之后视口尺寸才落定（ScrollViewer.ViewportWidth 中途会滞后）；延到 Low 优先级再量滚动条厚度。
+        host.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (!GetIsEnabled(host)
+                || host.GetValue(StateProperty) is not SurfaceState currentState
+                || !ReferenceEquals(currentState, state))
+            {
+                return;
+            }
+
+            if (host.DataContext is ITreeComponent viewModel)
+            {
+                UpdateMinimapOverlay(viewModel, currentState);
+            }
+        });
+    }
+
     private static void OnViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
     {
         if (sender is not ScrollViewer viewer)
@@ -1734,6 +1767,66 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         minimap.ViewportWidth = Math.Max(0, state.ScrollViewer.ActualWidth);
         minimap.ViewportHeight = Math.Max(0, state.ScrollViewer.ActualHeight);
         minimap.WorkflowTree = viewModel;
+
+        // 小地图贴在“内容区右上角”：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+        var overlayWidth = state.MinimapOverlay?.ActualWidth ?? state.ScrollViewer.ActualWidth;
+        var overlayHeight = state.MinimapOverlay?.ActualHeight ?? state.ScrollViewer.ActualHeight;
+        minimap.AvailableRight = Math.Max(0, overlayWidth - VerticalScrollBarThickness(state.ScrollViewer));
+        minimap.AvailableTop = state.GridDecorator is IWorkflowGridDecorator decorator ? decorator.RulerBand : 0d;
+        minimap.AvailableBottom = Math.Max(0, overlayHeight - HorizontalScrollBarThickness(state.ScrollViewer));
+    }
+
+    // 优先量模板里那条 ScrollBar 的实际渲染厚度：WinUI 的 conscious 滚动条可能叠在内容上，
+    // 此时 ViewportWidth 不会变小、视口差额为 0，但“让开滚动条”仍要求把这段宽度扣掉。
+    // 找不到模板里的 ScrollBar（自定义模板）时退回 Actual − Viewport 的差额，两者取大。
+    private static double VerticalScrollBarThickness(ScrollViewer viewer)
+        => MeasureScrollBarThickness(viewer, Orientation.Vertical);
+
+    private static double HorizontalScrollBarThickness(ScrollViewer viewer)
+        => MeasureScrollBarThickness(viewer, Orientation.Horizontal);
+
+    private static double MeasureScrollBarThickness(ScrollViewer viewer, Orientation orientation)
+    {
+        var vertical = orientation == Orientation.Vertical;
+        if (vertical
+            ? viewer.ComputedVerticalScrollBarVisibility != Visibility.Visible
+            : viewer.ComputedHorizontalScrollBarVisibility != Visibility.Visible)
+        {
+            return 0d;
+        }
+
+        var bar = FindTemplateScrollBar(viewer, orientation);
+        var barThickness = bar is null ? 0d : vertical ? bar.ActualWidth : bar.ActualHeight;
+        var layoutThickness = vertical
+            ? (viewer.ViewportWidth > 0 ? viewer.ActualWidth - viewer.ViewportWidth : 0d)
+            : (viewer.ViewportHeight > 0 ? viewer.ActualHeight - viewer.ViewportHeight : 0d);
+        return Math.Max(0, Math.Max(barThickness, layoutThickness));
+    }
+
+    // 只在 ScrollViewer 自己的模板里找：内容区（ScrollContentPresenter）里的列表自带滚动条，不能算成表面这台。
+    private static ScrollBar? FindTemplateScrollBar(DependencyObject root, Orientation orientation)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is ScrollContentPresenter)
+            {
+                continue;
+            }
+
+            if (child is ScrollBar bar && bar.Orientation == orientation)
+            {
+                return bar;
+            }
+
+            if (FindTemplateScrollBar(child, orientation) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)

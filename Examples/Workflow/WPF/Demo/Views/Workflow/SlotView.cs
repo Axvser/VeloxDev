@@ -101,9 +101,8 @@ public class SlotView : UserControl
         // 每个卡过去都在自己的 SlotView 上写这句；现在写在控件里，卡片忘了也不会再丢掉交互
         WorkflowSlotConnectionBehavior.SetIsEnabled(this, true);
 
-        // 先落一次颜色：Control.Foreground 的默认是系统文字色（近黑），而依赖属性「没变过」
-        // 就不会有回调 —— 卡片不绑 SlotState 时端口会是一枚黑环
-        UpdateForeground();
+        // 固定成白环：Control.Foreground 的默认是系统文字色（近黑），不显式落一次就是一枚黑环
+        Foreground = Brushes.White;
 
         // WPF 的 UserControl 没有可重写的虚拟挂载方法，用 Loaded/Unloaded 这对事件（WPF 适配器也用它挂载画布）；
         // 构造时不起周期：还不在树上的控件不该有一条对无人可见的画面写 Sweep 的循环
@@ -151,18 +150,12 @@ public class SlotView : UserControl
     }
 
     /// <summary>
-    /// The WPF stand-in for Avalonia's <c>AffectsRender</c>: repaint, re-derive the state colour, and start or
-    /// stop the clock when the direction a slot declares changes.
+    /// The WPF stand-in for Avalonia's <c>AffectsRender</c>: repaint, and start or stop the clock when the
+    /// direction a slot declares changes.
     /// </summary>
     private static void OnGlyphChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var slot = (SlotView)d;
-
-        // Foreground 来自卡片，它不是本控件的依赖属性，换了状态颜色也不会自己重绘
-        if (e.Property == SlotStateProperty)
-        {
-            slot.UpdateForeground();
-        }
 
         if (e.Property == ChannelProperty)
         {
@@ -188,23 +181,7 @@ public class SlotView : UserControl
     private bool IsConnected =>
         SlotState.HasFlag(SlotState.Sender) || SlotState.HasFlag(SlotState.Receiver);
 
-    /// <summary>
-    /// The port's colour by state, kept from the cards that used to declare it one by one (input slots point
-    /// left, output slots point right, and their state tints the glyph). The new design says direction with the
-    /// ripple and leaves the ring symmetric, so this is the only thing the old pin direction was carrying.
-    /// </summary>
-    private void UpdateForeground()
-    {
-        Foreground = SlotState switch
-        {
-            var state when state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver) => Brushes.Violet,
-            var state when state.HasFlag(SlotState.Sender) => Brushes.Tomato,
-            var state when state.HasFlag(SlotState.Receiver) => Brushes.Lime,
-            _ => Brushes.White,
-        };
-    }
-
-    // 每视图构建：周期只写一个标量，几何与配色都不参与
+    // 每视图构建：周期只写一个标量，几何不参与
     // 匀速（Eases.Default 就是恒等）—— 波纹不该有缓动，速度一变化就不像在流了
     private Transition<SlotView> BuildSpin() => Transition<SlotView>.Create()
         .Property(v => v.Sweep, 1d)

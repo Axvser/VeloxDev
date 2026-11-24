@@ -47,7 +47,7 @@ internal static class PortGlyph
             return;
         }
 
-        var color = ColorOf(state);
+        var color = Colors.White;
         bool canSend = CanSend(channel);
         bool canReceive = CanReceive(channel);
         bool aiming = IsAiming(state);
@@ -135,24 +135,4 @@ internal static class PortGlyph
 
     private static bool IsConnected(SlotState state)
         => state.HasFlag(SlotState.Sender) || state.HasFlag(SlotState.Receiver);
-
-    // 端口颜色按 SlotState 取：默认白、发送端 Tomato、接收端 Lime、两头都通 Violet。
-    // 预览（正在拉线的那一头）不加色 —— 它的反馈在呼吸与波纹上，不在颜色上，Avalonia 那边亦然。
-    private static Color ColorOf(SlotState state)
-    {
-        bool sender = state.HasFlag(SlotState.Sender);
-        bool receiver = state.HasFlag(SlotState.Receiver);
-
-        if (sender && receiver)
-        {
-            return Colors.Violet;
-        }
-
-        if (sender)
-        {
-            return Colors.Tomato;
-        }
-
-        return receiver ? Colors.Lime : Colors.White;
-    }
 }

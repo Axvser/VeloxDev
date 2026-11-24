@@ -14,7 +14,7 @@ public class MinimapOverlay : WorkflowMinimapOverlay
 {
     public MinimapOverlay()
     {
-        MinimapBackgroundColor = Color.FromArgb("#D2141922");
+        MinimapBackgroundColor = Color.FromArgb("#331E1E1E");
         MinimapBorderColor = Color.FromArgb("#DC94A3B8");
         NodeFillColor = Color.FromArgb("#DC38BDF8");
         ViewportStrokeColor = Color.FromArgb("#F0FFFFFF");

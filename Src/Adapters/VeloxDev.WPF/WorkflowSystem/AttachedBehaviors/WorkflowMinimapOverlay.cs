@@ -60,6 +60,22 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         DependencyProperty.Register(nameof(MinimapHeight), typeof(double), typeof(WorkflowMinimapOverlay),
             new FrameworkPropertyMetadata(140d, OnPropChanged));
 
+    public static readonly DependencyProperty MinimapMarginProperty =
+        DependencyProperty.Register(nameof(MinimapMargin), typeof(double), typeof(WorkflowMinimapOverlay),
+            new FrameworkPropertyMetadata(12d, OnPropChanged));
+
+    public static readonly DependencyProperty AvailableRightProperty =
+        DependencyProperty.Register(nameof(AvailableRight), typeof(double), typeof(WorkflowMinimapOverlay),
+            new FrameworkPropertyMetadata(0d, OnPropChanged));
+
+    public static readonly DependencyProperty AvailableTopProperty =
+        DependencyProperty.Register(nameof(AvailableTop), typeof(double), typeof(WorkflowMinimapOverlay),
+            new FrameworkPropertyMetadata(0d, OnPropChanged));
+
+    public static readonly DependencyProperty AvailableBottomProperty =
+        DependencyProperty.Register(nameof(AvailableBottom), typeof(double), typeof(WorkflowMinimapOverlay),
+            new FrameworkPropertyMetadata(0d, OnPropChanged));
+
     public static readonly DependencyProperty RulerThicknessProperty =
         DependencyProperty.Register(nameof(RulerThickness), typeof(double), typeof(WorkflowMinimapOverlay),
             new FrameworkPropertyMetadata(28d, OnPropChanged));
@@ -72,7 +88,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     public static readonly DependencyProperty MinimapBackgroundProperty =
         DependencyProperty.Register(nameof(MinimapBackground), typeof(Brush), typeof(WorkflowMinimapOverlay),
-            new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromArgb(210, 20, 25, 34)), OnPropChanged));
+            new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromArgb(0x33, 0x1E, 0x1E, 0x1E)), OnPropChanged));
 
     public static readonly DependencyProperty MinimapBorderBrushProperty =
         DependencyProperty.Register(nameof(MinimapBorderBrush), typeof(Brush), typeof(WorkflowMinimapOverlay),
@@ -136,6 +152,14 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     public bool IsMinimapVisible { get => (bool)GetValue(IsMinimapVisibleProperty); set => SetValue(IsMinimapVisibleProperty, value); }
     public double MinimapWidth { get => (double)GetValue(MinimapWidthProperty); set => SetValue(MinimapWidthProperty, value); }
     public double MinimapHeight { get => (double)GetValue(MinimapHeightProperty); set => SetValue(MinimapHeightProperty, value); }
+    /// <inheritdoc />
+    public double MinimapMargin { get => (double)GetValue(MinimapMarginProperty); set => SetValue(MinimapMarginProperty, value); }
+    /// <inheritdoc />
+    public double AvailableRight { get => (double)GetValue(AvailableRightProperty); set => SetValue(AvailableRightProperty, value); }
+    /// <inheritdoc />
+    public double AvailableTop { get => (double)GetValue(AvailableTopProperty); set => SetValue(AvailableTopProperty, value); }
+    /// <inheritdoc />
+    public double AvailableBottom { get => (double)GetValue(AvailableBottomProperty); set => SetValue(AvailableBottomProperty, value); }
     public double RulerThickness { get => (double)GetValue(RulerThicknessProperty); set => SetValue(RulerThicknessProperty, value); }
     public double LinkStrokeThickness { get => (double)GetValue(LinkStrokeThicknessProperty); set => SetValue(LinkStrokeThicknessProperty, value); }
     public Brush? MinimapBackground { get => (Brush?)GetValue(MinimapBackgroundProperty); set => SetValue(MinimapBackgroundProperty, value); }
@@ -163,11 +187,11 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     private readonly HashSet<ILinkComponent> _subscribedLinks = [];
     private ITreeComponent? _subscribedTree;
     private ScrollViewer? _scrollViewer;
+    private Rect _minimapRect = Rect.Empty;
 
     public WorkflowMinimapOverlay()
     {
-        Width = MinimapWidth;
-        Height = MinimapHeight;
+        // 全表面浮层：模板让它铺满表面，小地图自己画在 context 给出的“可用右上角”。
         IsHitTestVisible = true;
         Focusable = true;
         Loaded += OnLoaded;
@@ -177,9 +201,30 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     protected override HitTestResult? HitTestCore(PointHitTestParameters hitTestParameters)
     {
         var pt = hitTestParameters.HitPoint;
-        if (pt.X >= 0 && pt.X < RenderSize.Width && pt.Y >= 0 && pt.Y < RenderSize.Height)
-            return new PointHitTestResult(this, pt);
-        return null;
+        _minimapRect = ComputeMinimapRect();
+        return _minimapRect.Contains(pt) ? new PointHitTestResult(this, pt) : null;
+    }
+
+    // 可用区来自 surface：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+    private Rect ComputeMinimapRect()
+    {
+        var width = Math.Max(0, RenderSize.Width);
+        var height = Math.Max(0, RenderSize.Height);
+        var right = AvailableRight > 0 ? AvailableRight : width;
+        var top = Math.Max(0, AvailableTop);
+        var bottom = AvailableBottom > top ? AvailableBottom : height;
+
+        var placement = new MinimapDrawContext
+        {
+            MinimapWidth = MinimapWidth,
+            MinimapHeight = MinimapHeight,
+            MinimapMargin = MinimapMargin,
+            AvailableRight = right,
+            AvailableTop = top,
+            AvailableBottom = bottom,
+        };
+        var bounds = placement.GetMinimapRect(MinimapMinSize);
+        return new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
     }
 
     private void OnLoaded(object? s, RoutedEventArgs e)
@@ -363,6 +408,8 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     {
         if (_isDragging) return;
         var pt = e.GetPosition(this);
+        var rect = _minimapRect.IsEmpty ? ComputeMinimapRect() : _minimapRect;
+        if (!rect.Contains(pt)) return;
 
         // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
         NavigateToCanvasLocal(pt.X, pt.Y);
@@ -397,10 +444,10 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     private (double Ox, double Oy, double MmW, double MmH, double Sc) ComputeTransform(WorkflowBounds gb)
     {
-        var margin = 0.0; // WPF margin is handled by Grid alignment
-        var minSz = Math.Max(1, MinimapMinSize);
-        var mmW = Math.Max(minSz, Math.Min(MinimapWidth, RenderSize.Width - margin * 2));
-        var mmH = Math.Max(minSz, Math.Min(MinimapHeight, RenderSize.Height - margin * 2));
+        var rect = ComputeMinimapRect();
+        _minimapRect = rect;
+        var mmW = Math.Max(1, rect.Width);
+        var mmH = Math.Max(1, rect.Height);
         var pad = Math.Max(0, ContentPadding);
         var (ox, oy, sc) = WorkflowSurfaceMath.MinimapFit(gb.Width, gb.Height, mmW - pad * 2, mmH - pad * 2, pad);
         return (ox, oy, mmW, mmH, sc);
@@ -410,6 +457,9 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     {
         var gb = _lastGlobalBounds;
         if (gb.IsEmpty) return;
+        var rect = _minimapRect.IsEmpty ? ComputeMinimapRect() : _minimapRect;
+        adjX -= rect.Left;
+        adjY -= rect.Top;
         var (ox, oy, _, _, sc) = ComputeTransform(gb);
         if (sc <= 0) return;
 
@@ -447,10 +497,9 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     protected override void OnRender(DrawingContext dc)
     {
-        // 画透明背景，为命中测试建立可视内容
         var sz = RenderSize;
         if (sz.Width <= 0 || sz.Height <= 0) return;
-        dc.DrawRectangle(System.Windows.Media.Brushes.Transparent, null, new Rect(sz));
+        _minimapRect = ComputeMinimapRect();
 
         if (!IsMinimapVisible) return;
         if (_pendingRefresh) RefreshMinimapData();
@@ -466,7 +515,10 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     /// </summary>
     protected virtual void DrawMinimap(DrawingContext dc, MinimapDrawContext context)
     {
-        var mmRect = new Rect(0, 0, context.MinimapWidth, context.MinimapHeight);
+        var bounds = context.GetMinimapRect(MinimapMinSize);
+        var mmRect = new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        var offsetX = mmRect.Left;
+        var offsetY = mmRect.Top;
         var cr = Math.Max(0, context.MinimapCornerRadius);
 
         // 缩略图背景
@@ -487,7 +539,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
                 foreach (var node in context.MappedNodes)
                 {
                     dc.DrawRoundedRectangle(NodeBrush, null,
-                        new Rect(node.Left, node.Top, node.Width, node.Height), ncr, ncr);
+                        new Rect(offsetX + node.Left, offsetY + node.Top, node.Width, node.Height), ncr, ncr);
                 }
             }
 
@@ -495,7 +547,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             if (context.HasViewport && !context.MappedViewport.IsEmpty)
             {
                 var vp = context.MappedViewport;
-                var vr = new Rect(vp.Left, vp.Top, vp.Width, vp.Height);
+                var vr = new Rect(offsetX + vp.Left, offsetY + vp.Top, vp.Width, vp.Height);
                 var ncr = Math.Max(0, context.NodeCornerRadius);
                 if (ViewportFill is not null)
                     dc.DrawRoundedRectangle(ViewportFill, null, vr, ncr, ncr);
@@ -512,9 +564,20 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     /// <summary>Builds the geometry for one draw pass from the cached content and viewport bounds.</summary>
     private MinimapDrawContext CreateDrawContext(double availableWidth, double availableHeight)
     {
-        var minSz = Math.Max(1, MinimapMinSize);
-        var mmW = Math.Max(minSz, Math.Min(MinimapWidth, availableWidth));
-        var mmH = Math.Max(minSz, Math.Min(MinimapHeight, availableHeight));
+        var top = Math.Max(0, AvailableTop);
+        var placement = new MinimapDrawContext
+        {
+            MinimapWidth = MinimapWidth,
+            MinimapHeight = MinimapHeight,
+            MinimapMargin = MinimapMargin,
+            AvailableRight = AvailableRight > 0 ? AvailableRight : availableWidth,
+            AvailableTop = top,
+            AvailableBottom = AvailableBottom > top ? AvailableBottom : availableHeight,
+        };
+        var bounds = placement.GetMinimapRect(MinimapMinSize);
+        var mmW = Math.Max(1, bounds.Width);
+        var mmH = Math.Max(1, bounds.Height);
+        _minimapRect = new Rect(bounds.Left, bounds.Top, mmW, mmH);
         var gb = _lastGlobalBounds;
         var pad = Math.Max(0, ContentPadding);
         var (ox, oy, sc) = WorkflowSurfaceMath.MinimapFit(
@@ -557,6 +620,10 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             Scale = sc,
             NodeCornerRadius = Math.Max(0, NodeCornerRadius),
             MinimapCornerRadius = Math.Max(0, MinimapCornerRadius),
+            AvailableRight = placement.AvailableRight,
+            AvailableTop = placement.AvailableTop,
+            AvailableBottom = placement.AvailableBottom,
+            MinimapMargin = placement.MinimapMargin,
         };
     }
 }

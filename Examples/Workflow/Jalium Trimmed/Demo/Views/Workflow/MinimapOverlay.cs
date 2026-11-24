@@ -12,7 +12,7 @@ public class MinimapOverlay : WorkflowMinimapOverlay
 {
     public MinimapOverlay()
     {
-        MinimapBackground = CreateBrush("#D2141922");
+        MinimapBackground = CreateBrush("#331E1E1E");
         MinimapBorderBrush = CreateBrush("#DC94A3B8");
         NodeBrush = CreateBrush("#DC38BDF8");
         ViewportStroke = CreateBrush("#F0FFFFFF");

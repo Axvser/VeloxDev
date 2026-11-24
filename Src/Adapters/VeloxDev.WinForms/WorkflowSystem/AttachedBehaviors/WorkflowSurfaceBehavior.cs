@@ -14,6 +14,7 @@ using VisualContextMenu = Easel.Visuals.Controls.VisualContextMenu;
 using VisualScrollViewer = Easel.Visuals.Controls.ScrollViewer;
 using VisualScrollBar = Easel.Visuals.Controls.ScrollBar;
 using VisualScrollOffsetEventArgs = Easel.Visuals.Controls.ScrollOffsetRequestedEventArgs;
+using XamlVisibility = Easel.Controls.Visibility;
 using DrawingPointF = System.Drawing.PointF;
 using DrawingSize = System.Drawing.Size;
 
@@ -771,6 +772,7 @@ public sealed class WorkflowSurfaceBehavior
             WorkflowSlotLayoutBehavior.Ensure(element);
             WorkflowNodeDragBehavior.Ensure(element);
             WorkflowSlotConnectionBehavior.Ensure(element);
+            WorkflowEvents.Ensure(element);
             foreach (var child in element.Children)
             {
                 if (child is VisualElement nested)
@@ -850,6 +852,24 @@ public sealed class WorkflowSurfaceBehavior
             minimap.ViewportWidth = viewport.Width / zoom;
             minimap.ViewportHeight = viewport.Height / zoom;
             minimap.WorkflowTree = state.Tree;
+
+            // 小地图贴在内容区右上角：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+            var overlayWidth = state.Minimap.Bounds.Width;
+            var overlayHeight = state.Minimap.Bounds.Height;
+            if (overlayWidth <= 0.5f)
+            {
+                overlayWidth = viewport.Width;
+            }
+
+            if (overlayHeight <= 0.5f)
+            {
+                overlayHeight = viewport.Height;
+            }
+
+            var (verticalBar, horizontalBar) = MeasureScrollBars(state);
+            minimap.AvailableRight = Math.Max(0d, overlayWidth - verticalBar);
+            minimap.AvailableTop = state.GridDecorator is IWorkflowGridDecorator decorator ? decorator.RulerBand : 0d;
+            minimap.AvailableBottom = Math.Max(0d, overlayHeight - horizontalBar);
             state.Minimap.InvalidateVisual();
         }
 
@@ -875,6 +895,31 @@ public sealed class WorkflowSurfaceBehavior
                 viewport.Width / zoom,
                 viewport.Height / zoom);
         }
+    }
+
+    // 滚动条是模板部件：可见时按排版后的条宽让位，部件还没量出宽度时退回系统条宽。
+    private static (double Vertical, double Horizontal) MeasureScrollBars(SurfaceState state)
+    {
+        var vertical = 0d;
+        var horizontal = 0d;
+        if (state.Scroll is VisualScrollViewer viewer)
+        {
+            if (viewer.VerticalScrollBar is { Visibility: XamlVisibility.Visible } verticalBar)
+            {
+                vertical = verticalBar.Bounds.Width > 0.5f
+                    ? verticalBar.Bounds.Width
+                    : SystemInformation.VerticalScrollBarWidth;
+            }
+
+            if (viewer.HorizontalScrollBar is { Visibility: XamlVisibility.Visible } horizontalBar)
+            {
+                horizontal = horizontalBar.Bounds.Height > 0.5f
+                    ? horizontalBar.Bounds.Height
+                    : SystemInformation.HorizontalScrollBarHeight;
+            }
+        }
+
+        return (vertical, horizontal);
     }
 
     // 表面视口是 ScrollViewer 的 presenter 区域（滚动条占位后剩下的部分）；还没排版时退回客户区。

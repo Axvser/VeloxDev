@@ -8,21 +8,10 @@
     IsHitTestVisible="True"
     ClipToBounds="False"
     behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
-  <local:TemplateClass.Resources>
-    <behaviors:SlotStateBrushConverter x:Key="SlotStateBrush"
-                                       StandByColor="TemplateSlotColor"
-                                       BorderColor="TemplateSlotBorderColor" />
-  </local:TemplateClass.Resources>
-
-  <!-- VeloxDev customization: this visual UserControl draws the connector; the engine writes PART_Glyph.Fill
-       from the slot's model state, so the code-behind stays at InitializeComponent(). -->
-  <Viewbox Stretch="Uniform">
-    <!-- The outline width is in the glyph's 1024-unit space; the Viewbox scales it with the icon. -->
-    <Path x:Name="PART_Glyph"
-          Fill="{Binding State, Converter={StaticResource SlotStateBrush}}"
-          Stroke="{Binding State, Converter={StaticResource SlotStateBrush}, ConverterParameter=Border}"
-          StrokeThickness="48"
-          Data="TemplateSlotPath" />
-  </Viewbox>
+  <!-- VeloxDev customization: replace the fixed glyph colour with your own. -->
+  <Ellipse x:Name="PART_Glyph"
+           Fill="TemplateSlotColor"
+           Stroke="TemplateSlotBorderColor"
+           StrokeThickness="1.5" />
 
 </local:TemplateClass>

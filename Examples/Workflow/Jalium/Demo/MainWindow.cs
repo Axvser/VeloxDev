@@ -293,9 +293,8 @@ internal sealed class MainWindow : Window
 
         var minimapOverlay = new Minimap(viewerControl)
         {
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 40, 16, 0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
         };
 
         // 画布信息 HUD：贴左下、不吃指针；滚动 / 缩放 / 拖动都由下面这一处喂给它。
@@ -316,6 +315,20 @@ internal sealed class MainWindow : Window
             minimapOverlay.ViewportWidth = viewerControl.ViewportWidth;
             minimapOverlay.ViewportHeight = viewerControl.ViewportHeight;
 
+            // 浮层铺满表面，小地图自己落在内容区右上角：右侧让开竖滚动条，顶部让开表面画的水平
+            // 刻度带，底部让开横滚动条。厚度取 ScrollViewer 的 Actual − Viewport（内容区不含滚动条）。
+            var verticalBar = viewerControl.ComputedVerticalScrollBarVisibility == Visibility.Visible
+                ? Math.Max(0d, viewerControl.ActualWidth - viewerControl.ViewportWidth)
+                : 0d;
+            var horizontalBar = viewerControl.ComputedHorizontalScrollBarVisibility == Visibility.Visible
+                ? Math.Max(0d, viewerControl.ActualHeight - viewerControl.ViewportHeight)
+                : 0d;
+            var overlayWidth = minimapOverlay.ActualWidth > 0 ? minimapOverlay.ActualWidth : viewerControl.ActualWidth;
+            var overlayHeight = minimapOverlay.ActualHeight > 0 ? minimapOverlay.ActualHeight : viewerControl.ActualHeight;
+            minimapOverlay.AvailableRight = Math.Max(0d, overlayWidth - verticalBar);
+            minimapOverlay.AvailableTop = NodeEditorSurface.RulerThickness;
+            minimapOverlay.AvailableBottom = Math.Max(0d, overlayHeight - horizontalBar);
+
             info.WorkflowTree = surfaceView.Tree;
             info.ContentOffsetX = surfaceView.OriginX;
             info.ContentOffsetY = surfaceView.OriginY;
@@ -334,6 +347,9 @@ internal sealed class MainWindow : Window
         root.Children.Add(viewerControl);
         root.Children.Add(minimapOverlay);
         root.Children.Add(info);
+
+        // 首次布局前也先把刻度带让位定下来；尺寸类字段拿不到时由浮层自己按 Actual 回退。
+        RefreshOverlays();
 
         surface = surfaceView;
         viewer = viewerControl;

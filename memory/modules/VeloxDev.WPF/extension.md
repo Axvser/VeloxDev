@@ -132,7 +132,7 @@
 | Avalonia | 与 WPF 同名文件一一对应 |
 | MAUI | **没有 `WorkflowCanvasTransformBehavior.cs`**（换成 `WorkflowLinkOverlay.cs`），其余同 WPF |
 | Jalium | **一组附着行为/池文件**（`WorkflowSurfaceBehavior` / `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowEvents` / `WorkflowLinkBounds` + `WorkflowMinimapOverlay` / `ViewPool` / `ViewHosting/`）；与 WPF 的差异是**没有 `WorkflowCanvasTransformBehavior`**（变换发在 `WorkflowSurfaceBehavior.CanvasTransform` 上）、多一个 `WorkflowLinkBounds` |
-| WinForms | **视觉表面**：`WorkflowSurfaceBehavior`（`VisualHost` 上的部件解析、相机、输入）+ 通用视觉 `ViewPool`（可见集物化）/ `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `SlotStateBrushConverter` / `WorkflowMinimapOverlay` / `VisualTemplateSelector` / `IWorkflowMinimapScrollSource` / `NativeWindowStyleHelper`；不接 Core `ViewHosting/` |
+| WinForms | **视觉表面**：`WorkflowSurfaceBehavior`（`VisualHost` 上的部件解析、相机、输入）+ 通用视觉 `ViewPool`（可见集物化）/ `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowMinimapOverlay` / `VisualTemplateSelector` / `IWorkflowMinimapScrollSource` / `NativeWindowStyleHelper`；不接 Core `ViewHosting/` |
 | Razor | `WorkflowSystem/AttachedBehaviors/` 下是 `.cs` 与 `.razor` 两组文件（组件即角色），**完全没有 `ViewManager`**（`git grep -ln "class ViewManager" -- Src/Adapters/VeloxDev.Razor` 零命中），另有 `WorkflowPresentation.cs` / `WorkflowRuntimeIds.cs` / `WorkflowGeometryScope.cs` |
 
 另外两条与「搬」有关的既有事实：**WPF 与 WinForms 的 csproj TFM 四元组逐字相同**（`netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`）；`WorkflowGridDecorator` 现在 **Razor 放在适配器里**，WPF / WinForms / Jalium 都把它放在模板包里（`memory/modules/Templates/adapters/wpf.md` §一；WinForms 是视觉 `VisualElement`）。

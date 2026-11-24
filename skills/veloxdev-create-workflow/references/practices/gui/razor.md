@@ -82,7 +82,7 @@ private string ScaleCss => Node is null || Node.Size.Width <= 0
 
 ⚙ **The tree declares the link menu as a fragment.** The generated surface passes `<LinkMenu Context="link">…</LinkMenu>`; each entry receives the right-pressed link, and the surface renders the chrome and, on right-press, opens the menu itself, positions it, and suspends the input router while it is open. Add or remove entry `<button>`s there — this GUI has no binding for menu items, so the handler is inline.
 
-⚙ **Inert on this pack, each marked "accepted for cross-GUI CLI parity":** slot `slotBackground`; tree `surfaceBorderBrush`, `surfaceBorderThickness`, `surfaceCornerRadius`; decorator `gridBackground`, `minorGridColor`, `majorGridColor`. Those three decorator colours are drawn by the surface's own CSS/JS rather than by the decorator's parameters.
+⚙ **Inert on this pack, each marked "accepted for cross-GUI CLI parity":** slot `slotBackground`; tree `surfaceBorderBrush`, `surfaceBorderThickness`, `surfaceCornerRadius`; decorator `gridBackground`, `minorGridColor`, `majorGridColor`. `slotPath` is inert on every pack — each slot view draws an ellipse. Those three decorator colours are drawn by the surface's own CSS/JS rather than by the decorator's parameters.
 
 ⚙ **Colours are also runtime parameters here** — each symbol becomes the fallback default of a Blazor `[Parameter]`:
 

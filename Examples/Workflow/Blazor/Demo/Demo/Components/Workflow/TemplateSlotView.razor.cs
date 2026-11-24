@@ -223,34 +223,8 @@ public partial class TemplateSlotView : ComponentBase, IDisposable
     private string ReceiveRadiusCss => N(ReceiveRadius);
     private string ReceiveOpacityCss => N(ReceiveOpacity);
 
-    /// <summary>The ring's colour: the slot's own state, opaque. Alpha is a separate attribute.</summary>
-    private string ColorCss => StateColor(State);
-
-    /// <summary>
-    /// The WPF template contract, kept: Sender + Receiver → Violet, Sender → Tomato, Receiver → Lime.
-    /// Standby is white rather than the template's near-black <c>#DD1E1E1E</c>, because the port now
-    /// sits on a dark card where a near-black glyph is invisible — the Avalonia card made the same
-    /// call. The alpha that the old value carried lives in the opacity attributes now.
-    /// </summary>
-    private static string StateColor(SlotState state)
-    {
-        if (state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver))
-        {
-            return "#EE82EE";
-        }
-
-        if (state.HasFlag(SlotState.Sender))
-        {
-            return "#FF6347";
-        }
-
-        if (state.HasFlag(SlotState.Receiver))
-        {
-            return "#32CD32";
-        }
-
-        return "#FFFFFF";
-    }
+    /// <summary>The ring's colour: a fixed white, opaque. Alpha is a separate attribute.</summary>
+    private string ColorCss => "#FFFFFF";
 
     // Razor 用当前区域写裸 double，逗号小数点会写出浏览器读不了的 SVG 属性
     private static string N(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
@@ -281,7 +255,7 @@ public partial class TemplateSlotView : ComponentBase, IDisposable
     {
         base.OnParametersSet();
 
-        // 视图池会把一个端口复用到另一个插槽上；换了插槽，波纹的方向与颜色都得跟着换
+        // 视图池会把一个端口复用到另一个插槽上；换了插槽，波纹的方向得跟着换
         if (!ReferenceEquals(_subscribed, Slot))
         {
             Sync(Slot);
@@ -310,7 +284,7 @@ public partial class TemplateSlotView : ComponentBase, IDisposable
 
     private void OnSlotChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Channel 决定波纹的方向，State 决定颜色与亮度；两者都是重绘的理由。
+        // Channel 决定波纹的方向，State 决定亮度与呼吸；两者都是重绘的理由。
         if (e.PropertyName is nameof(ISlotComponent.Channel))
         {
             SyncSpin();

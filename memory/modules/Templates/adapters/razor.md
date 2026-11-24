@@ -21,7 +21,7 @@
 | tree-view | 一个 `<WorkflowSurfaceBehavior>` + 三个**片段参数槽**（`GridDecorator` / `Minimap` / `ChildContent`），内容层只有**一个** `<TemplateSelector>`：节点与连线都由它物化 | `.razor`：`WorkflowSurfaceBehavior`、`GridDecorator` / `Minimap` / `TemplateSelector`；`.razor.cs`：`ComponentBase` 基类与 `Tree` / `ScrollViewerId` / `CanvasId` / `NodeTemplate` 参数 |
 | link-view | 一个 `<svg>` + `<path d="@d" data-veloxdev-link-curve="1">`（虚线 `stroke-dasharray="@dash"`，`dash` 在 code-behind 里取 `"6 4"`） | `.razor`：`<svg>` 与两个 `<path>`；`.razor.cs`：`BuildCurve`（几何）、`IsLinkRenderReady` / `double.IsNaN` 两道守卫 |
 | node-view | 两层适配器行为包裹 + **定尺寸卡片 div**，`transform:scale()` 缩放 | `.razor`：`WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` 与卡片 `div`；`.razor.cs`：`DesignWidth` / `ScaleCss` |
-| slot-view | 一个 `<svg viewBox="0 0 1024 1024">` + `<path d="TemplateSlotPath">` | `.razor`：`<svg>` / `<path>`；`.razor.cs`：`IconSize` / `ViewBoxSize` / `SlotStateColor` |
+| slot-view | 一个 `<svg viewBox="0 0 100 100">` + `<circle>`，`fill` 用 `ToCss("TemplateSlotColor")` | `.razor`：`<svg>` / `<circle>`；`.razor.cs`：`IconSize` / `SlotSizeCss`（不再订 `PropertyChanged`） |
 | grid-decorator | **薄壳**：`@if (Viewport is { } vp)` 后渲染适配器的 `<WorkflowGridDecorator>` | `.razor`：`Viewport` / `<WorkflowGridDecorator>`；`.razor.cs`：`Viewport` / `RulerThickness` / `GridSpacing` / `MajorLineEvery` |
 | minimap-overlay | **薄壳**：同上，渲染适配器的 `<WorkflowMinimapOverlay>` | `.razor`：`<WorkflowMinimapOverlay>`；`.razor.cs`：`Viewport` / `Width` / `Height` |
 | template-selector | `<ViewPool ItemsSource KeySelector>` + 一个 `<ItemTemplate>` | `.razor`：`<ViewPool>` / `<ItemTemplate>`；`.razor.cs`：`Select` |
@@ -188,11 +188,10 @@ tree-view 把连线交给池（本文 §二·3 / §二·6），池对每个 item
 ### P7 · 同一份小工具在多个文件里各抄一遍
 
 `ToCss`（`#AARRGGBB` → `rgba(...)`）与 `HexByte` 在**多处**逐字重复：
-`link-view` / `node-view` / `slot-view` / `grid-decorator` / `minimap-overlay` 各自的 `TemplateClass.razor.cs`
+`link-view` / `node-view` / `grid-decorator` / `minimap-overlay` 各自的 `TemplateClass.razor.cs`
 （`template-selector` 没有；tree-view 用适配器的
 `WorkflowPresentation.ToCss`，`Src/Adapters/VeloxDev.Razor/WorkflowSystem/AttachedBehaviors/WorkflowPresentation.cs` 的 `ToCss` + `HexByte`）。
 ⇒ 改解析规则（比如支持 3 位缩写、或支持 `#RGB`）要改这些地方 **加** 适配器那一份。
-（WinUI 那家的那份重复见 `../adapters/winui.md` §三·P4。）
 同一类的还有**设计尺寸 260 在 node-view 里多处各写一份**：标记的 `width:260px;height:180px`
 （`workflow-node-view/TemplateClass.razor` 的卡片 `div`）与 code-behind 的 `DesignWidth = 260`（`TemplateClass.razor.cs` 的 `DesignWidth`）。
 后者是 `ScaleCss` 的分母 ⇒ 只改标记里的 260，缩放因子会按错误的设计宽算，

@@ -19,8 +19,8 @@ namespace Demo.Views.Workflow;
 /// <para>
 /// It is a <see cref="Easel.Visuals.VisualElement"/> rather than a native island: the whole
 /// surface is painted in one pass, and the workflow engine finds this element through its <see cref="DataContext"/>
-/// just like the XAML slot views. <see cref="SlotState"/> carries the colour; <see cref="Channel"/> is kept for
-/// parity with the WPF view so a template can bind it even though the static ring does not animate.
+/// just like the XAML slot views. <see cref="SlotState"/> drives the ring's brightness; <see cref="Channel"/> is kept
+/// for parity with the WPF view so a template can bind it even though the static ring does not animate.
 /// </para>
 /// </remarks>
 public sealed class FullSlotView : Easel.Visuals.VisualElement
@@ -31,7 +31,7 @@ public sealed class FullSlotView : Easel.Visuals.VisualElement
     private const double RingThicknessRatio = 0.045d;
     private const double CoreRadiusRatio = 0.06d;
 
-    /// <summary>The port's runtime colour state.</summary>
+    /// <summary>The port's runtime connection state.</summary>
     public static readonly DependencyProperty SlotStateProperty = DependencyProperty.Register(
         nameof(SlotState), typeof(SlotState), typeof(FullSlotView),
         new PropertyMetadata(SlotState.StandBy) { AffectsRender = true });
@@ -49,7 +49,7 @@ public sealed class FullSlotView : Easel.Visuals.VisualElement
         IsHitTestVisible = true;
     }
 
-    /// <summary>The port's runtime colour state.</summary>
+    /// <summary>The port's runtime connection state.</summary>
     public SlotState SlotState
     {
         get => (SlotState)GetValue(SlotStateProperty)!;
@@ -68,7 +68,7 @@ public sealed class FullSlotView : Easel.Visuals.VisualElement
     {
         base.OnPropertyChanged(e);
 
-        // DataContext 不参与 AffectsRender；绑定晚解析时颜色会停在 StandBy，这里补一次重绘。
+        // DataContext 不参与 AffectsRender；绑定晚解析时亮度会停在 StandBy，这里补一次重绘。
         if (ReferenceEquals(e.Property, DataContextProperty))
         {
             InvalidateVisual();
@@ -85,7 +85,8 @@ public sealed class FullSlotView : Easel.Visuals.VisualElement
         }
 
         var state = EffectiveState;
-        var color = StateColor(state);
+        // 端口固定白色，只靠亮度区分静息与激活。
+        var color = Color.White;
         var aiming = state.HasFlag(SlotState.PreviewSender) || state.HasFlag(SlotState.PreviewReceiver);
         var connected = state.HasFlag(SlotState.Sender) || state.HasFlag(SlotState.Receiver);
 
@@ -129,27 +130,6 @@ public sealed class FullSlotView : Easel.Visuals.VisualElement
 
             return state;
         }
-    }
-
-    private static Color StateColor(SlotState state)
-    {
-        if (state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver))
-        {
-            return Color.Violet;
-        }
-
-        if (state.HasFlag(SlotState.Sender) || state.HasFlag(SlotState.PreviewSender))
-        {
-            return Color.Tomato;
-        }
-
-        if (state.HasFlag(SlotState.Receiver) || state.HasFlag(SlotState.PreviewReceiver))
-        {
-            return Color.Lime;
-        }
-
-        // WPF Full 的静息色是白（再由亮度压到半透明）；深灰在深色卡面上会让细环消失。
-        return Color.White;
     }
 
     private static Color AtAlpha(Color color, double alpha)

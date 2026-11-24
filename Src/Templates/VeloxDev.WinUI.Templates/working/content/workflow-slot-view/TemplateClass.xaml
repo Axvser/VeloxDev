@@ -9,17 +9,10 @@
     mc:Ignorable="d"
     Background="TemplateSlotBackground"
     behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
-    <UserControl.Resources>
-        <behaviors:SlotStateBrushConverter x:Key="SlotStateBrush"
-                                           StandByColor="TemplateSlotColor"
-                                           BorderColor="TemplateSlotBorderColor" />
-    </UserControl.Resources>
     <Grid Background="Transparent">
-        <Viewbox>
-            <Path Data="TemplateSlotPath"
-                  Fill="{Binding State, Converter={StaticResource SlotStateBrush}}"
-                  Stroke="{Binding State, Converter={StaticResource SlotStateBrush}, ConverterParameter=Border}"
-                  StrokeThickness="48" />
-        </Viewbox>
+        <Ellipse Fill="TemplateSlotColor"
+                 Stroke="TemplateSlotBorderColor"
+                 StrokeThickness="1.5"
+                 Stretch="Fill" />
     </Grid>
 </UserControl>

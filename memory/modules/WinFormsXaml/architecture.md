@@ -33,7 +33,6 @@
 | `Theme.cs` | `Theme` / `ThemePalette` | 明/暗调色板；视觉控件渲染时直接读 `Theme.Current` |
 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` | 附着行为 | `VisualHost` 上解析 `PART_*` 视觉部件；相机矩阵（`PART_Canvas.Transform`）、Core 输入路由、网格/小地图/视口/虚拟化推送；相机 API `GetZoom`/`GetPan`/`SetPan`/`SurfaceToWorld`/`WorldToSurface`/`GetWorldViewport`/`SetWorldViewport`/`ZoomAt`/`ProcessWheel`/`Refresh` |
 | `WorkflowSystem/AttachedBehaviors/ViewPool.cs` | 附着行为 | 通用视觉池（与工作流无关）：一个 item 一个视觉子元素，`ItemsSource`/`TemplateSelector`/`ItemTemplate`，设 `DataContext`，按 `Panel.ZIndex` + 源序排序 |
-| `WorkflowSystem/AttachedBehaviors/SlotStateBrushConverter.cs` | `IValueConverter` | 模型 `SlotState` → 端口字形画笔，供模板绑 `PART_Glyph.Fill` |
 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` / `WorkflowNodeDragBehavior.cs` / `WorkflowSlotConnectionBehavior.cs` | `VisualElement` 附着行为 | 槽测量写 `slot.Anchor`、标题行拖动、按下-释放在接收口完成连接；由 `WorkflowSurfaceBehavior` 在每个视觉元素上 `Ensure` |
 | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` / `WorkflowInfoOverlay.cs` | `VisualElement` | 视觉小地图与 HUD；表面推偏移、拖小地图反推滚动 |
 | `WorkflowSystem/Platform/NativeWindowStyleHelper.cs` / `WorkflowDpi.cs` | Win32/DPI 辅助 | `WS_CLIPCHILDREN`/`WS_EX_COMPOSITED`、`BeginRedraw`/`EndRedraw`；DPI 换算 |

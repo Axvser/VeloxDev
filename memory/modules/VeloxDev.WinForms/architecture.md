@@ -1,6 +1,6 @@
 ﻿# VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`SlotStateBrushConverter`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32/DPI 辅助）、视觉 XAML 运行时已移到 Easel 子模块（`Easel/Src/Easel/`）。
+> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`WorkflowEvents`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32/DPI 辅助）、视觉 XAML 运行时已移到 Easel 子模块（`Easel/Src/Easel/`）。
 > 包版本见 csproj；生成器独立在 `Src/Generators/Easel.Generator/`。
 > **单一 XAML 后端**：控件是 `Xaml.Visuals.Controls` 下的 `VisualElement`，`VisualHost` 是唯一 HWND；工作流表面是 `VisualHost` 上的附着行为。每个可见 item 由 `ViewPool` 经 Core 池物化为一个视觉元素，没有第二个 HWND。`Xaml.Controls` 只留共享原语。
 >
@@ -95,7 +95,6 @@
 | 相机矩阵、输入路由、世界↔表面、缩放、连线样式 | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs` |
 | item → 视图物化（池、z 序、回收） | `WorkflowSystem/AttachedBehaviors/ViewPool.cs` + `WorkflowSystem/ViewHosting/` |
 | 槽测量 / 标题拖动 / 插槽连接 | `WorkflowSystem/AttachedBehaviors/WorkflowSlotLayoutBehavior.cs` / `WorkflowNodeDragBehavior.cs` / `WorkflowSlotConnectionBehavior.cs` |
-| 端口字形配色 | `WorkflowSystem/AttachedBehaviors/SlotStateBrushConverter.cs` |
 | 小地图 | `WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs` |
 | 网格/标尺调色板与间距 | 模板条目 `workflow-grid-decorator/TemplateClass.cs` |
 | item → 视图的选择器 | `Easel.Visuals.VisualTemplateSelector` + 模板派生类 |

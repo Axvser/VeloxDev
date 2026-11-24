@@ -50,15 +50,6 @@
 						<Style Selector="local|SlotView">
 							<Setter Property="Foreground" Value="White" />
 						</Style>
-						<Style Selector="local|SlotView[SlotState=8]">
-							<Setter Property="Foreground" Value="Tomato" />
-						</Style>
-						<Style Selector="local|SlotView[SlotState=16]">
-							<Setter Property="Foreground" Value="Lime" />
-						</Style>
-						<Style Selector="local|SlotView[SlotState=24]">
-							<Setter Property="Foreground" Value="Violet" />
-						</Style>
 					</Grid.Styles>
 
 					<!-- Input port strip (scrollable, left). Viewport extends 8px past the card edge and the content is

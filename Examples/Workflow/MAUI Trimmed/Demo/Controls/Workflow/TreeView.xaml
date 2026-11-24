@@ -59,9 +59,8 @@
             </local:WorkflowGridDecorator>
         </Border>
         <local:MinimapOverlay x:Name="PART_MinimapOverlay"
-                              HorizontalOptions="End"
-                              VerticalOptions="Start"
-                              Margin="0,12,12,0"
+                              HorizontalOptions="Fill"
+                              VerticalOptions="Fill"
                               ScrollViewerName="PART_ScrollViewer" />
         <!-- Realtime canvas-info HUD (floating decorator layer, bottom-left). Refreshes from the Core
              model + the host's ScrollView.Scrolled (TreeView.xaml.cs). -->

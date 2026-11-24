@@ -15,7 +15,7 @@ public sealed class MinimapOverlay : WorkflowMinimapOverlay
     /// <summary>Creates the overlay and applies the palette.</summary>
     public MinimapOverlay()
     {
-        MinimapBackground = ParseColor("#D2141922");
+        MinimapBackground = ParseColor("#331E1E1E");
         MinimapBorderBrush = ParseColor("#DC94A3B8");
         NodeBrush = ParseColor("#DC38BDF8");
         ViewportStroke = ParseColor("#F0FFFFFF");

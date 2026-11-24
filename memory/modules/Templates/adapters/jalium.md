@@ -25,13 +25,13 @@
 | node-view | `UserControl`（标记）+ `partial class` | 卡片：`Viewbox` + 设计尺寸 `Grid(260×180)`；`SlotNames`／`SlotEnumeratorNames` 指 `PART_InputSlot`／`PART_OutputSlots`；标题栏挂 `WorkflowNodeDragBehavior` | 标记的 `WorkflowSlotLayoutBehavior.*`、`Viewbox` / 设计尺寸 `Grid`、`WorkflowNodeDragBehavior` |
 | link-view | `UserControl`（标记）+ `partial class`（实现在 code-behind） | 连线：`LineColor`／`CanRender` DP + `StartLeft/Top`／`EndLeft/Top` 端点 DP，`Refresh` 自盒化、`BuildCurve` 烘焙、`OnRender` 画 | code-behind 的一组 DP、`Refresh`、`OnRender` / `BuildCurve` |
 | grid-decorator | `sealed class TemplateClass : Grid, IWorkflowGridDecorator` | 网格/标尺：**整个渲染器都在这里** —— 两面自绘子层（世界网格 + 两条浮动标尺）、笔刷缓存、`GridStep`／`MajorLineEvery`／七色 | 类声明、`DefaultRulerThickness = 36`、`GridStep` / `MajorLineEvery`、`DrawGrid` / `DrawRulers` |
-| slot-view | `UserControl`（标记）+ `partial class` | 端口图形：标记里 `Path` + `WorkflowSlotConnectionBehavior`；code-behind 按 `SlotState` 算 `Foreground` 配色 | 标记的 `WorkflowSlotConnectionBehavior` / `Path`、code-behind 的 `UpdateForeground` |
+| slot-view | `UserControl`（标记）+ `partial class` | 端口图形：标记里 `Path` 用模板颜色符号 + `WorkflowSlotConnectionBehavior`；code-behind 只有 `InitializeComponent()` | 标记的 `WorkflowSlotConnectionBehavior` / `Path` |
 | minimap-overlay | `class TemplateClass : WorkflowMinimapOverlay` | 薄派生：构造器设 `MinimapBackground`／`MinimapBorderBrush`／`NodeBrush`／`ViewportStroke` 四色（**不是空构造器**） | 类声明、构造器里的四色 |
 | template-selector | `sealed class TemplateClass : DataTemplateSelector` | 分派：四个 `DataTemplate?` 属性（`NodeTemplate`／`SlotTemplate`／`LinkTemplate`／`TreeTemplate`），`SelectTemplate` 逐个查、缺了抛 | 类声明、四个属性、`SelectTemplate` |
 
 ⇒ 三条推论：
 
-1. **`workflow-slot-view` 是标记 + 薄 code-behind**：`UserControl` 里一个 `Viewbox` 包 `Path`（`Data="TemplateSlotPath"`，`Fill` 绑 `Foreground`），code-behind 只按 `SlotState` 写 `Foreground` 四色（`TemplateClass.jalxaml.cs` 的 `UpdateForeground`），连接手势由标记里的 `WorkflowSlotConnectionBehavior` 承担。端口位置由 `WorkflowSlotLayoutBehavior` 量测写回 `slot.Anchor`（见 `WorkflowSystem/adapters/jalium.md` §2.3）。
+1. **`workflow-slot-view` 是标记 + 薄 code-behind**：`UserControl` 里一个 `Ellipse`（`Fill` / `Stroke` 直接用 `TemplateSlotColor` / `TemplateSlotBorderColor`），连接手势由标记里的 `WorkflowSlotConnectionBehavior` 承担，code-behind 只有 `InitializeComponent()`。端口位置由 `WorkflowSlotLayoutBehavior` 量测写回 `slot.Anchor`（见 `WorkflowSystem/adapters/jalium.md` §2.3）。
 2. **`grid-decorator` 是 `.cs`**：`sealed class TemplateClass : Grid, IWorkflowGridDecorator`（不派生适配器基类）。两面自绘子层在构造器里装配，`RulerThickness` DP 默认值就是 `DefaultRulerThickness = 36`。整个渲染器都在这一个文件里 —— 改网格外观/间距/刻度就改它。
 3. **`selector` 条目是 `DataTemplateSelector` 的派生类**：tree-view 模板在 `Resources` 里 `new` 它（把 `NodeTemplate`／`LinkTemplate` 两个 `StaticResource` 赋进去），交给 `ViewPool.TemplateSelector`。`SlotTemplate`／`TreeTemplate` 未设 ⇒ 槽/树 item 一旦进池就抛 `InvalidOperationException`（`workflow-template-selector/TemplateClass.cs` 的 `SelectTemplate`）—— 这两类 item 从不进本仓库的池。
 
@@ -69,8 +69,8 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 | `GridStep = TemplateGridSpacing;` / `MajorLineEvery = TemplateMajorLineEvery;` | `grid-decorator/TemplateClass.cs` 的 `GridStep` / `MajorLineEvery` | 内联进 C# 表达式。`gridSpacing` 默认值 `'40d'` 在这里**是合法的 C#**（`40d`）—— 与 Razor 必须剥掉这个 `d` 正好相反；`majorLineEvery` 默认 `5` 是 int |
 | `BorderThickness="TemplateNodeBorderThickness"` / `CornerRadius="TemplateNodeCornerRadius"` | `workflow-node-view/TemplateClass.jalxaml` 的卡片 `Border` | 内联进标记属性；默认 `1` / `6`，Jalium 按 Thickness / CornerRadius 解析 |
 | `const double thickness = TemplateLinkThickness;` | `workflow-link-view/TemplateClass.jalxaml.cs` 的 `Render` | **double** |
-| `ColorConverter.ConvertFromString("Template…Color")` | `grid-decorator/TemplateClass.cs` 的构造器、`workflow-link-view/TemplateClass.jalxaml.cs` 的 `LineColorProperty`、`workflow-slot-view/TemplateClass.jalxaml.cs` 的 `UpdateForeground` | C# 侧的颜色一律是**字符串** |
-| `Background="TemplateSurfaceBackground"` / `Foreground="TemplateNodeForeground"` / `Data="TemplateSlotPath"` | `workflow-tree-view/TemplateClass.jalxaml` 的 `PART_SurfaceBorder`、`workflow-node-view/TemplateClass.jalxaml` 的根与标题、`workflow-slot-view/TemplateClass.jalxaml` 的根与 `Path` | 标记侧的颜色/路径也是**字符串**字面量 |
+| `ColorConverter.ConvertFromString("Template…Color")` | `grid-decorator/TemplateClass.cs` 的构造器、`workflow-link-view/TemplateClass.jalxaml.cs` 的 `LineColorProperty` | C# 侧的颜色一律是**字符串** |
+| `Background="TemplateSurfaceBackground"` / `Foreground="TemplateNodeForeground"` / `Fill="TemplateSlotColor"` | `workflow-tree-view/TemplateClass.jalxaml` 的 `PART_SurfaceBorder`、`workflow-node-view/TemplateClass.jalxaml` 的根与标题、`workflow-slot-view/TemplateClass.jalxaml` 的 `Ellipse` | 标记侧的颜色也是**字符串**字面量 |
 
 ⇒ 给 `gridSpacing`/`majorLineEvery`/`nodeBorderThickness`/`nodeCornerRadius`/`linkThickness` 传非数值（如 `40px`）
 **生成时会成功、构建时才炸**（`dotnet new` 只做文本替换）。
@@ -83,9 +83,7 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 
 `../architecture.md` §7.1 的判据是「`type: parameter` 而**没有 `replaces`**」——`dotnet new --help` 收得下、命令行能传、不报错、也不替换文本。七个 `template.json` 里**每个 symbol 都带了 `replaces`** ⇒ Jalium 侧没有空转符号。
 
-`gridBackground`、slot-view、minimap-overlay、tree-view 的 symbol 都有绘制面：grid-decorator 读 `TemplateGridBackground`（`workflow-grid-decorator/TemplateClass.cs` 的 `SurfaceBackground` 赋值）、slot-view 读 `TemplateSlotBackground`/`TemplateSlotColor`/`TemplateSlotPath`（`workflow-slot-view/TemplateClass.jalxaml` 的 `Background` / `Path`、`…jalxaml.cs` 的 `UpdateForeground`）、minimap-overlay 读那四色（`workflow-minimap-overlay/TemplateClass.cs` 的构造器）、tree-view 读 `TemplateSurfaceBackground`/`TemplateSurfaceBorderBrush`/`…Thickness`/`…CornerRadius`（`workflow-tree-view/TemplateClass.jalxaml` 的 `PART_SurfaceBorder`）。
-
-⚠ 一处残留：**`slotBorderColor` 的 token（`TemplateSlotBorderColor`）在 Jalium 的 slot-view 产物里一处都不出现**（`git grep TemplateSlotBorderColor -- Src/Templates/VeloxDev.Jalium.Templates` 只命中它自己的 `template.json`）。它按 §7.1 的定义不算「空转」（有 `replaces`），但传 `--slotBorderColor` 实际仍什么都不改变 —— slot-view 是一条 `Path`，没有独立的边框面。
+`gridBackground`、slot-view、minimap-overlay、tree-view 的 symbol 都有绘制面：grid-decorator 读 `TemplateGridBackground`（`workflow-grid-decorator/TemplateClass.cs` 的 `SurfaceBackground` 赋值）、slot-view 读 `TemplateSlotBackground`/`TemplateSlotColor`/`TemplateSlotBorderColor`（`workflow-slot-view/TemplateClass.jalxaml` 的 `Background` / `Ellipse`）、minimap-overlay 读那四色（`workflow-minimap-overlay/TemplateClass.cs` 的构造器）、tree-view 读 `TemplateSurfaceBackground`/`TemplateSurfaceBorderBrush`/`…Thickness`/`…CornerRadius`（`workflow-tree-view/TemplateClass.jalxaml` 的 `PART_SurfaceBorder`）。
 
 ### P2 · 标尺厚度 `36` 的单一来源在**模板的 grid-decorator**
 
@@ -103,10 +101,10 @@ slot-view / link-view / grid-decorator / minimap-overlay / selector **都不引�
 （WPF/Avalonia/WinUI/MAUI 是把 `TranslateTransform` 绑到 `PART_GridDecorator.RulerThickness`）。
 跨平台对照见 `../architecture.md` §六·轴 1。
 
-### P3 · 状态色在**模板**的 slot-view 里（读 `SlotState`）
+### P3 · 插槽颜色是模板固定色
 
-- 四个插槽状态色由 `workflow-slot-view/TemplateClass.jalxaml.cs` 的 `UpdateForeground()` 算 —— 读的是 `SlotState`（一个 DP，由模板绑定送 `Slot.State`），写 `Foreground`，标记里的 `Path` 再 `Fill` 绑它。**不是每帧解析**：`SlotState` 变才重算一次。
-- 对照 `../architecture.md` §7.4：这一家**不绑颜色属性、在 code-behind 里算** —— 状态色在模板的 slot-view 里算，没有适配器基类 `WorkflowSlotView`，也没有 `DrawCard`。
+- `workflow-slot-view/TemplateClass.jalxaml` 的 `Path` 直接用 `Fill="TemplateSlotColor"` / `Stroke="TemplateSlotBorderColor"`；code-behind 只有 `InitializeComponent()`。
+- 模板不读 `State`；要按状态改外观的宿主自己订 `PropertyChanged`。对照 `../architecture.md` §7.4。
 
 ### P4 · link-view 的"自盒化"：助手在适配器，**调用在模板**
 

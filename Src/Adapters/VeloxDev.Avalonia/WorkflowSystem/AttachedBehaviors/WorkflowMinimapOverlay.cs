@@ -2,6 +2,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Rendering;
 using PlatformInput = Avalonia.Input;
 using Wf = VeloxDev.WorkflowSystem;
 using Avalonia.Threading;
@@ -14,15 +15,15 @@ using System.ComponentModel;
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// A minimap overlay positioned in the top-right corner of the workflow container.
-/// Renders a thumbnail overview of all nodes (rectangles), links (lines),
-/// and the current visible viewport (highlighted frame).
-/// 
-/// Only occupies the minimap panel area (top-right), so it never obscures
-/// the rulers or coordinate grid.
-/// Supports toggling visibility and dragging the viewport indicator rectangle.
+/// A full-surface minimap overlay for Avalonia. It fills its host and draws a thumbnail overview of all
+/// nodes and the visible viewport inside the content viewport's top-right corner, below the ruler band and
+/// left of the vertical scrollbar. Only the drawn minimap rectangle receives pointer input.
+///
+/// The surface behavior pushes <see cref="AvailableRight"/> / <see cref="AvailableTop"/> /
+/// <see cref="AvailableBottom"/> so the corner follows the scrollbars and ruler; dragging inside the minimap
+/// navigates the bound ScrollViewer.
 /// </summary>
-public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
+public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay, ICustomHitTest
 {
     // ── 样式属性 ─────────────────────────────────────────────────────────────
 
@@ -60,7 +61,6 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 
     /// <summary>
     /// Height of the ruler area (at top/left) drawn by the grid decorator.
-    /// The minimap uses this to position itself below the ruler.
     /// Default 28 matches <c>WorkflowGridDecorator.RulerThickness</c>.
     /// </summary>
     public static readonly StyledProperty<double> RulerThicknessProperty =
@@ -73,7 +73,25 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
         AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(MinimapHeight), 140d);
 
     public static readonly StyledProperty<double> MinimapMarginProperty =
-        AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(MinimapMargin), 8d);
+        AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(MinimapMargin), 12d);
+
+    /// <summary>
+    /// The x of the content viewport's right edge in this overlay's local pixels, excluding the vertical
+    /// scrollbar. Zero means the surface has not supplied an available corner yet.
+    /// </summary>
+    public static readonly StyledProperty<double> AvailableRightProperty =
+        AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(AvailableRight));
+
+    /// <summary>The y of the content viewport's top edge, below the ruler band.</summary>
+    public static readonly StyledProperty<double> AvailableTopProperty =
+        AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(AvailableTop));
+
+    /// <summary>
+    /// The y of the content viewport's bottom edge in this overlay's local pixels, excluding the horizontal
+    /// scrollbar. Zero means the surface has not supplied an available corner yet.
+    /// </summary>
+    public static readonly StyledProperty<double> AvailableBottomProperty =
+        AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(AvailableBottom));
 
     public static readonly StyledProperty<double> LinkStrokeThicknessProperty =
         AvaloniaProperty.Register<WorkflowMinimapOverlay, double>(nameof(LinkStrokeThickness), 2.0);
@@ -82,7 +100,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 
     public static readonly StyledProperty<IBrush?> MinimapBackgroundProperty =
         AvaloniaProperty.Register<WorkflowMinimapOverlay, IBrush?>(nameof(MinimapBackground),
-            new SolidColorBrush(Color.FromArgb(210, 20, 25, 34)));
+            new SolidColorBrush(Color.FromArgb(0x33, 0x1E, 0x1E, 0x1E)));
 
     public static readonly StyledProperty<IBrush?> MinimapBorderBrushProperty =
         AvaloniaProperty.Register<WorkflowMinimapOverlay, IBrush?>(nameof(MinimapBorderBrush),
@@ -142,6 +160,12 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     public double MinimapWidth { get => GetValue(MinimapWidthProperty); set => SetValue(MinimapWidthProperty, value); }
     public double MinimapHeight { get => GetValue(MinimapHeightProperty); set => SetValue(MinimapHeightProperty, value); }
     public double MinimapMargin { get => GetValue(MinimapMarginProperty); set => SetValue(MinimapMarginProperty, value); }
+    /// <inheritdoc />
+    public double AvailableRight { get => GetValue(AvailableRightProperty); set => SetValue(AvailableRightProperty, value); }
+    /// <inheritdoc />
+    public double AvailableTop { get => GetValue(AvailableTopProperty); set => SetValue(AvailableTopProperty, value); }
+    /// <inheritdoc />
+    public double AvailableBottom { get => GetValue(AvailableBottomProperty); set => SetValue(AvailableBottomProperty, value); }
     public double LinkStrokeThickness { get => GetValue(LinkStrokeThicknessProperty); set => SetValue(LinkStrokeThicknessProperty, value); }
     public IBrush? MinimapBackground { get => GetValue(MinimapBackgroundProperty); set => SetValue(MinimapBackgroundProperty, value); }
     public IBrush? MinimapBorderBrush { get => GetValue(MinimapBorderBrushProperty); set => SetValue(MinimapBorderBrushProperty, value); }
@@ -165,6 +189,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     private WorkflowBounds _lastViewport;
     private bool _pendingRefresh = true;
     private bool _isDragging;
+    private Rect _minimapRect;
 
     static WorkflowMinimapOverlay()
     {
@@ -175,6 +200,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
             ViewportWidthProperty, ViewportHeightProperty,
             IsMinimapVisibleProperty,
             MinimapWidthProperty, MinimapHeightProperty, MinimapMarginProperty, MinimapMinSizeProperty,
+            AvailableRightProperty, AvailableTopProperty, AvailableBottomProperty,
             MinimapBackgroundProperty, MinimapBorderBrushProperty, MinimapCornerRadiusProperty,
             MinimapBorderThicknessProperty,
             NodeBrushProperty, NodeCornerRadiusProperty,
@@ -184,10 +210,29 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
             RulerThicknessProperty);
     }
 
-    public WorkflowMinimapOverlay()
+    // ── 命中测试 ─────────────────────────────────────────────────────────────
+
+    // 全表面浮层只在算出来的小地图矩形里接收指针，其余位置放行给下面的画布。
+    // point 是元素局部坐标（Avalonia 的 ICustomHitTest 契约），与 ComputeMinimapRect 同一坐标系。
+    bool ICustomHitTest.HitTest(Point point) => ComputeMinimapRect().Contains(point);
+
+    // 可用区来自 surface：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+    private Rect ComputeMinimapRect()
     {
-        Width = MinimapWidth;
-        Height = MinimapHeight;
+        var width = Math.Max(0, Bounds.Width);
+        var height = Math.Max(0, Bounds.Height);
+        var top = Math.Max(0, AvailableTop);
+        var placement = new Wf.MinimapDrawContext
+        {
+            MinimapWidth = MinimapWidth,
+            MinimapHeight = MinimapHeight,
+            MinimapMargin = MinimapMargin,
+            AvailableRight = AvailableRight > 0 ? AvailableRight : width,
+            AvailableTop = top,
+            AvailableBottom = AvailableBottom > top ? AvailableBottom : height,
+        };
+        var bounds = placement.GetMinimapRect(MinimapMinSize);
+        return new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
     }
 
     // ── 生命周期 ─────────────────────────────────────────────────────────────
@@ -444,8 +489,12 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     {
         base.OnPointerPressed(e);
         if (_isDragging) return;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
 
         var pt = e.GetPosition(this);
+        var rect = ComputeMinimapRect();
+        if (!rect.Contains(pt)) return;
+        _minimapRect = rect;
 
         // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
         NavigateToCanvasLocal(pt.X, pt.Y);
@@ -468,6 +517,8 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     protected override void OnPointerReleased(PlatformInput.PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        if (!_isDragging) return;
+
         _isDragging = false;
         e.Pointer.Capture(null);
         e.Handled = true;
@@ -483,15 +534,13 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
 
     private (double OriginX, double OriginY, double MmW, double MmH, double Scale) ComputeTransform(WorkflowBounds globalBounds)
     {
-        var margin = Math.Max(0, MinimapMargin);
-        var minSize = Math.Max(1, MinimapMinSize);
-        var mmW = Math.Max(minSize, Math.Min(MinimapWidth, Bounds.Width - margin * 2));
-        var mmH = Math.Max(minSize, Math.Min(MinimapHeight, Bounds.Height - margin * 2));
+        var rect = ComputeMinimapRect();
+        _minimapRect = rect;
+        var mmW = Math.Max(1, rect.Width);
+        var mmH = Math.Max(1, rect.Height);
         var pad = Math.Max(0, ContentPadding);
-        var drawW = mmW - pad * 2;
-        var drawH = mmH - pad * 2;
         var (ox, oy, sc) = WorkflowSurfaceMath.MinimapFit(
-            globalBounds.Width, globalBounds.Height, drawW, drawH, pad);
+            globalBounds.Width, globalBounds.Height, mmW - pad * 2, mmH - pad * 2, pad);
         return (ox, oy, mmW, mmH, sc);
     }
 
@@ -499,6 +548,12 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     {
         var gb = _lastGlobalBounds;
         if (gb.IsEmpty) return;
+
+        // 指针在浮层局部坐标里；减去小地图矩形原点才落到小地图自身的 0..mmW / 0..mmH 空间。
+        var rect = _minimapRect.Width > 0 ? _minimapRect : ComputeMinimapRect();
+        adjX -= rect.Left;
+        adjY -= rect.Top;
+
         var (ox, oy, _, _, sc) = ComputeTransform(gb);
         if (sc <= 0) return;
 
@@ -544,7 +599,10 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     /// </summary>
     protected virtual void DrawMinimap(DrawingContext drawingContext, Wf.MinimapDrawContext context)
     {
-        var mmRect = new Rect(0, 0, context.MinimapWidth, context.MinimapHeight);
+        var bounds = context.GetMinimapRect(MinimapMinSize);
+        var mmRect = new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        var offsetX = mmRect.Left;
+        var offsetY = mmRect.Top;
         var cr = (float)Math.Max(0, context.MinimapCornerRadius);
 
         // 圆角背景
@@ -562,7 +620,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
                 foreach (var node in context.MappedNodes)
                 {
                     drawingContext.FillRectangle(NodeBrush,
-                        new Rect(node.Left, node.Top, node.Width, node.Height), ncr);
+                        new Rect(offsetX + node.Left, offsetY + node.Top, node.Width, node.Height), ncr);
                 }
             }
 
@@ -570,7 +628,7 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
             if (context.HasViewport && !context.MappedViewport.IsEmpty)
             {
                 var vp = context.MappedViewport;
-                var vr = new Rect(vp.Left, vp.Top, vp.Width, vp.Height);
+                var vr = new Rect(offsetX + vp.Left, offsetY + vp.Top, vp.Width, vp.Height);
                 var ncr = (float)Math.Max(0, context.NodeCornerRadius);
                 if (ViewportFill is not null)
                     drawingContext.FillRectangle(ViewportFill, vr, ncr);
@@ -583,10 +641,20 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
     /// <summary>Builds the geometry for one draw pass from the cached content and viewport bounds.</summary>
     private Wf.MinimapDrawContext CreateDrawContext(double availableWidth, double availableHeight)
     {
-        var margin = Math.Max(0, MinimapMargin);
-        var minSize = Math.Max(1, MinimapMinSize);
-        var mmW = Math.Max(minSize, Math.Min(MinimapWidth, availableWidth - margin * 2));
-        var mmH = Math.Max(minSize, Math.Min(MinimapHeight, availableHeight - margin * 2));
+        var top = Math.Max(0, AvailableTop);
+        var placement = new Wf.MinimapDrawContext
+        {
+            MinimapWidth = MinimapWidth,
+            MinimapHeight = MinimapHeight,
+            MinimapMargin = MinimapMargin,
+            AvailableRight = AvailableRight > 0 ? AvailableRight : availableWidth,
+            AvailableTop = top,
+            AvailableBottom = AvailableBottom > top ? AvailableBottom : availableHeight,
+        };
+        var bounds = placement.GetMinimapRect(MinimapMinSize);
+        var mmW = Math.Max(1, bounds.Width);
+        var mmH = Math.Max(1, bounds.Height);
+        _minimapRect = new Rect(bounds.Left, bounds.Top, mmW, mmH);
         var gb = _lastGlobalBounds;
         var pad = Math.Max(0, ContentPadding);
         var (ox, oy, sc) = WorkflowSurfaceMath.MinimapFit(
@@ -629,6 +697,10 @@ public class WorkflowMinimapOverlay : Control, IWorkflowMinimapOverlay
             Scale = sc,
             NodeCornerRadius = Math.Max(0, NodeCornerRadius),
             MinimapCornerRadius = Math.Max(0, MinimapCornerRadius),
+            AvailableRight = placement.AvailableRight,
+            AvailableTop = placement.AvailableTop,
+            AvailableBottom = placement.AvailableBottom,
+            MinimapMargin = placement.MinimapMargin,
         };
     }
 

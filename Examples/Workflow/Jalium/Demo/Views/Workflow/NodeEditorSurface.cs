@@ -27,7 +27,7 @@ internal sealed class NodeEditorSurface : Canvas, IWorkflowSurfaceNavigator
 {
     private const double GridStep = 40;
     private const double MajorStep = 200;
-    private const double RulerThickness = 36;
+    internal const double RulerThickness = 36;
     private const double LinkThickness = 2;
 
     // 选中（＝指针搭上）的连线：加粗 1.5，与其它六家的连线一致

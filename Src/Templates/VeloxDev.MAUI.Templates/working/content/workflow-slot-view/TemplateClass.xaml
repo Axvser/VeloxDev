@@ -5,14 +5,9 @@
              x:Class="TemplateNamespace.TemplateClass"
              BackgroundColor="TemplateSlotBackground"
              behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
-    <ContentView.Resources>
-        <behaviors:SlotStateBrushConverter x:Key="SlotStateBrush"
-                                           StandByColor="TemplateSlotColor"
-                                           BorderColor="TemplateSlotBorderColor" />
-    </ContentView.Resources>
     <Grid BackgroundColor="Transparent">
-        <Ellipse Fill="{Binding State, Converter={StaticResource SlotStateBrush}}"
-                 Stroke="{Binding State, Converter={StaticResource SlotStateBrush}, ConverterParameter=Border}"
+        <Ellipse Fill="TemplateSlotColor"
+                 Stroke="TemplateSlotBorderColor"
                  StrokeThickness="1.5" />
     </Grid>
 </ContentView>

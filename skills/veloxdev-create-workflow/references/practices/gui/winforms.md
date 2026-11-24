@@ -85,7 +85,7 @@ The tree markup is the part layout:
 `CustomTemplateSelector : VisualTemplateSelector` returns a visual `NodeView` / `SlotView` / `LinkView`, usually
 through the tree's `DataTemplate`s. Node is a visual `UserControl` with `Viewbox > Grid 260×180`, title,
 `PART_InputSlot` and `PART_OutputSlots` (`ItemsControl` + `DataTemplate` row); Slot is a visual `UserControl`
-with `Viewbox > Path`; Link is a visual `UserControl` with endpoint DPs and `OnRender`. The surface writes the
+with an `Ellipse`; Link is a visual `UserControl` with endpoint DPs and `OnRender`. The surface writes the
 camera matrix to `PART_Canvas.Transform`; the canvas is sized to the viewport and hit-tests unbounded, so its
 children may live at any world coordinate while the `ScrollViewer` supplies the clip.
 
@@ -175,7 +175,7 @@ minimap.
 | --- | --- | --- |
 | tree | visual `UserControl` with visual `GridDecorator > ScrollViewer > Canvas`; hosted in a generic `VisualHost` | the palette, the visual selector resource, the link colours/width |
 | node | visual `UserControl` root: `Viewbox > Grid 260×180`, chrome `Border`, title, `PART_InputSlot`, `PART_OutputSlots` ItemsControl | the card shell, title and port-row template |
-| slot | visual `UserControl` with `Viewbox > Path`; model `State` drives the glyph fill | glyph geometry/colors |
+| slot | visual `UserControl` with an `Ellipse`; the glyph colour is fixed | glyph and colours |
 | link | visual `UserControl` with endpoint DPs and `OnRender`; publishes its curve | curve drawing and colors |
 | selector | code-only `VisualTemplateSelector` | item type → view mapping |
 | decorator | code-only `GridDecorator` | grid/ruler metrics |

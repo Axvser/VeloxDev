@@ -6,7 +6,7 @@
 
     为什么是四个 Ellipse 而不是一个自绘面：WinUI 没有 OnRender，Avalonia 那版在
     Render(DrawingContext) 里逐帧画，这里只能落到保留模式上。四个同心圆正好一形一元素，
-    颜色只有一种（GlyphBrush，由 SlotState 决定），每帧变的只有直径与不透明度 ——
+    颜色固定为白（GlyphBrush），每帧变的只有直径与不透明度 ——
     每帧一次的量级因此是「四个元素的 Width/Height 与 Opacity」，不是一条重画指令。
 
     这里没有走「一个 Path + EllipseGeometry，只改 Center/Radius」那条更省布局的路：

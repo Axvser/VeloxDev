@@ -20,6 +20,8 @@ Each adapter ships a `dotnet new` item-template pack that generates the seven vi
 | decorator | `GridDecorator` | the grid and the ruler |
 | minimap | `MinimapOverlay` | thumbnail plus a draggable viewport indicator; override `DrawMinimap` to add your own drawing |
 
+⚙ **The minimap fills the surface; the context places it.** `MinimapDrawContext.AvailableRight/Top/Bottom` describe the content viewport's free top-right corner (clear of the ruler band and both scrollbars) and `MinimapMargin` is the gap; the default drawing uses `GetMinimapRect`. Do not add a top-right `Margin`/alignment to the minimap element — it must stretch.
+
 Short names are `{prefix}-v-{kind}` on every pack — the decorator is `-v-decorator`, not `-v-grid`:
 
 | Package | Prefix | Example |
@@ -69,9 +71,9 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 | | `-bt` `nodeBorderThickness` | card border width |
 | | `-cr` `nodeCornerRadius` | card corner radius |
 | slot | `-bg` `slotBackground` | slot hit-test / backing fill |
-| | `-sc` `slotColor` | slot standby colour |
+| | `-sc` `slotColor` | slot glyph fill |
 | | `-bc` `slotBorderColor` | slot border colour (where the slot draws a border) |
-| | `-sp` `slotPath` | the SVG path the slot glyph is drawn from (MAUI draws an ellipse and ignores it) |
+| | `-sp` `slotPath` | accepted for cross-GUI CLI parity; every pack draws an ellipse glyph instead |
 | link | `-lc` `linkColor` | settled link stroke |
 | | `-lt` `linkThickness` | settled link stroke width |
 | tree | `-bg` `surfaceBackground` | surface fill |
@@ -93,7 +95,7 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 | | `-nf` `nodeFill` | node mark fill |
 | | `-vs` `viewportStroke` | viewport indicator stroke |
 
-⚙ **A colour symbol is a contract even where the framework has no consumer.** Where a framework draws no border or no SVG path, the pack still declares the symbol for CLI parity and says so in its own `template.json`. The command line stays uniform; the generated file documents the inert value. When a colour refuses to appear, edit the generated file directly rather than the command line.
+⚙ **A colour symbol is a contract even where the framework has no consumer.** Where a framework draws no border or no separate glyph surface, the pack still declares the symbol for CLI parity and says so in its own `template.json`. The command line stays uniform; the generated file documents the inert value. When a colour refuses to appear, edit the generated file directly rather than the command line.
 
 ⚙ **The colour symbols also appear inside comments in the generated files**, so a substitution rewrites doc text as well. That is cosmetic.
 

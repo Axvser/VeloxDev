@@ -108,7 +108,7 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 |---|---|---|
 | tree | `jalium-v-tree` | the surface markup: behavior attributes, the node/link `DataTemplate`s, the pool binding, the link menu |
 | node | `jalium-v-node` | the card inside the design-size `Viewbox`; keep the `PART_*` names in step with the slot-layout attributes |
-| slot | `jalium-v-slot` | the glyph path; fill/stroke bind `State` through `SlotStateBrushConverter` |
+| slot | `jalium-v-slot` | the ellipse glyph; fill/stroke use the slot colour symbols |
 | link | `jalium-v-link` | the curve, its `MinimumPull`, the stroke |
 | decorator | `jalium-v-decorator` | the whole grid: palette, spacing, major-line count, the drawing |
 | minimap | `jalium-v-minimap` | the four palette colours and the `DrawMinimap` override |
@@ -116,7 +116,7 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 
 ⚙ **`jalium-v-tree` has no `linkColor` symbol** (only `jalium-v-link` declares it), so `-lc` is rejected on the tree and the tree's `LinkView` entry takes the link item's own default. Change the link colour on `jalium-v-link`.
 
-⚙ **Every declared slot symbol's token is live.** `slotColor` is the standby fill and `slotBorderColor` the glyph outline; both bind the slot `State` through `SlotStateBrushConverter`.
+⚙ **Every declared slot symbol's token is live.** `slotColor` is the glyph fill and `slotBorderColor` the glyph outline; both are static template colours.
 
 ⚙ Colours are substituted into parser calls (`ColorConverter.ConvertFromString("TemplateSlotColor")`), not into literals — which is why the mirror comparison normalises colour spelling before diffing.
 

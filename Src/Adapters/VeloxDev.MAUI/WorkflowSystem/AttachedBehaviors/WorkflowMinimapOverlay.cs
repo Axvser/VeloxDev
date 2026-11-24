@@ -10,19 +10,23 @@ using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 #endif
-using WfAnchor = VeloxDev.WorkflowSystem.Anchor;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 /// <summary>
-/// A minimap overlay for MAUI that renders a thumbnail overview of all nodes,
-/// links, and the visible viewport in the top-right corner.
+/// A full-surface minimap layer for MAUI. The layer fills its host and draws the minimap in the content
+/// viewport's top-right corner, below the horizontal ruler band and clear of the scrollbars (MAUI's
+/// overlay scrollbars reserve no space).
+/// Only the drawn minimap rectangle receives input: an outer, non-interactive drawing surface covers the
+/// whole host, while a second surface sized to the minimap rectangle carries the interactions, so canvas
+/// gestures pass through everywhere else.
 /// </summary>
-public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapOverlay
+public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
 {
     // ── 可绑定属性 ──────────────────────────────────────────────────────────
 
-    private static void OnVisualProp(BindableObject b, object o, object n) => ((WorkflowMinimapOverlay)b).MarkDirty();
+    private static void OnVisualProp(BindableObject b, object o, object n)
+        => ((WorkflowMinimapOverlay)b).MarkDirty();
 
     public static readonly BindableProperty ScrollOffsetXProperty = BindableProperty.Create(nameof(ScrollOffsetX), typeof(double), typeof(WorkflowMinimapOverlay), 0d, propertyChanged: OnVisualProp);
     public static readonly BindableProperty ScrollOffsetYProperty = BindableProperty.Create(nameof(ScrollOffsetY), typeof(double), typeof(WorkflowMinimapOverlay), 0d, propertyChanged: OnVisualProp);
@@ -33,10 +37,14 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     public static readonly BindableProperty IsMinimapVisibleProperty = BindableProperty.Create(nameof(IsMinimapVisible), typeof(bool), typeof(WorkflowMinimapOverlay), true, propertyChanged: OnVisualProp);
     public static readonly BindableProperty MinimapWidthProperty = BindableProperty.Create(nameof(MinimapWidth), typeof(double), typeof(WorkflowMinimapOverlay), 200d, propertyChanged: OnVisualProp);
     public static readonly BindableProperty MinimapHeightProperty = BindableProperty.Create(nameof(MinimapHeight), typeof(double), typeof(WorkflowMinimapOverlay), 140d, propertyChanged: OnVisualProp);
+    public static readonly BindableProperty MinimapMarginProperty = BindableProperty.Create(nameof(MinimapMargin), typeof(double), typeof(WorkflowMinimapOverlay), 12d, propertyChanged: OnVisualProp);
+    public static readonly BindableProperty AvailableRightProperty = BindableProperty.Create(nameof(AvailableRight), typeof(double), typeof(WorkflowMinimapOverlay), 0d, propertyChanged: OnVisualProp);
+    public static readonly BindableProperty AvailableTopProperty = BindableProperty.Create(nameof(AvailableTop), typeof(double), typeof(WorkflowMinimapOverlay), 0d, propertyChanged: OnVisualProp);
+    public static readonly BindableProperty AvailableBottomProperty = BindableProperty.Create(nameof(AvailableBottom), typeof(double), typeof(WorkflowMinimapOverlay), 0d, propertyChanged: OnVisualProp);
     public static readonly BindableProperty RulerThicknessProperty = BindableProperty.Create(nameof(RulerThickness), typeof(double), typeof(WorkflowMinimapOverlay), 28d, propertyChanged: OnVisualProp);
     public static readonly BindableProperty LinkStrokeThicknessProperty = BindableProperty.Create(nameof(LinkStrokeThickness), typeof(double), typeof(WorkflowMinimapOverlay), 2.0, propertyChanged: OnVisualProp);
 
-    public static readonly BindableProperty MinimapBackgroundColorProperty = BindableProperty.Create(nameof(MinimapBackgroundColor), typeof(Color), typeof(WorkflowMinimapOverlay), Color.FromRgba(20, 25, 34, 210), propertyChanged: OnVisualProp);
+    public static readonly BindableProperty MinimapBackgroundColorProperty = BindableProperty.Create(nameof(MinimapBackgroundColor), typeof(Color), typeof(WorkflowMinimapOverlay), Color.FromRgba(30, 30, 30, 51), propertyChanged: OnVisualProp);
     public static readonly BindableProperty MinimapBorderColorProperty = BindableProperty.Create(nameof(MinimapBorderColor), typeof(Color), typeof(WorkflowMinimapOverlay), Color.FromRgba(148, 163, 184, 220), propertyChanged: OnVisualProp);
     public static readonly BindableProperty NodeFillColorProperty = BindableProperty.Create(nameof(NodeFillColor), typeof(Color), typeof(WorkflowMinimapOverlay), Color.FromRgba(56, 189, 248, 220), propertyChanged: OnVisualProp);
     public static readonly BindableProperty LinkStrokeColorProperty = BindableProperty.Create(nameof(LinkStrokeColor), typeof(Color), typeof(WorkflowMinimapOverlay), Color.FromRgba(180, 200, 220, 180), propertyChanged: OnVisualProp);
@@ -67,6 +75,14 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     public bool IsMinimapVisible { get => (bool)GetValue(IsMinimapVisibleProperty); set => SetValue(IsMinimapVisibleProperty, value); }
     public double MinimapWidth { get => (double)GetValue(MinimapWidthProperty); set => SetValue(MinimapWidthProperty, value); }
     public double MinimapHeight { get => (double)GetValue(MinimapHeightProperty); set => SetValue(MinimapHeightProperty, value); }
+    /// <inheritdoc />
+    public double MinimapMargin { get => (double)GetValue(MinimapMarginProperty); set => SetValue(MinimapMarginProperty, value); }
+    /// <inheritdoc />
+    public double AvailableRight { get => (double)GetValue(AvailableRightProperty); set => SetValue(AvailableRightProperty, value); }
+    /// <inheritdoc />
+    public double AvailableTop { get => (double)GetValue(AvailableTopProperty); set => SetValue(AvailableTopProperty, value); }
+    /// <inheritdoc />
+    public double AvailableBottom { get => (double)GetValue(AvailableBottomProperty); set => SetValue(AvailableBottomProperty, value); }
     public double RulerThickness { get => (double)GetValue(RulerThicknessProperty); set => SetValue(RulerThicknessProperty, value); }
     public double LinkStrokeThickness { get => (double)GetValue(LinkStrokeThicknessProperty); set => SetValue(LinkStrokeThicknessProperty, value); }
     public Color? MinimapBackgroundColor { get => (Color?)GetValue(MinimapBackgroundColorProperty); set => SetValue(MinimapBackgroundColorProperty, value); }
@@ -85,7 +101,19 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 
     // ── 内部类型 ────────────────────────────────────────────────────────────
 
+    // 输入层只负责命中与手势，不画任何东西。
+    private sealed class NoopDrawable : IDrawable
+    {
+        public static readonly NoopDrawable Instance = new();
+
+        public void Draw(ICanvas canvas, RectF dirtyRect) { }
+    }
+
     // ── 状态 ────────────────────────────────────────────────────────────────
+
+    // 全表面绘制层（从不吃输入）与只覆盖小地图矩形的输入层。
+    private readonly GraphicsView _drawView;
+    private readonly GraphicsView _inputView;
 
     private WorkflowBounds _lastGlobalBounds;
     private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
@@ -99,7 +127,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private bool _nativePointerActive = false;
     private ContentView? _parentView;
 #if WINDOWS
-    // 原生平移手势借用 GraphicsView 已捕获的 manipulation 管线（ManipulationMode=All），指针移出缩略图后增量照常到达；
+    // 原生平移手势借用输入层 GraphicsView 已捕获的 manipulation 管线（ManipulationMode=All），指针移出缩略图后增量照常到达；
     // 路由的 PointerMoved 监听不行 —— 一旦开始 manipulation，只有捕获者收得到指针事件，它会停在边界。
     private PanGestureRecognizer? _panGesture;
     private float _dragStartX;
@@ -120,25 +148,75 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     // 绘制的中间量（MAUI ICanvas 用 float）
     private float _mmW, _mmH, _ox, _oy, _sc;
     private WorkflowBounds _drawGb;
+    // 最近一次布局算出的可用区与放置矩形。矩形是浮层局部坐标；输入层的子坐标从矩形左上角起算。
+    private double _placementRight, _placementTop, _placementBottom, _placementMargin;
+    private RectF _minimapRect;
 
     public WorkflowMinimapOverlay()
     {
-        Drawable = this;
-        HeightRequest = MinimapHeight;
-        WidthRequest = MinimapWidth;
+        // 全表面浮层：本元素自身不吃输入（CascadeInputTransparent=false 让子元素仍可命中），
+        // 绘制层始终 InputTransparent；只有小地图矩形上的输入层接收指针。
+        InputTransparent = true;
+        CascadeInputTransparent = false;
 
-        StartInteraction += OnStartInteraction;
-        DragInteraction += OnDragInteraction;
-        EndInteraction += OnEndInteraction;
+        _drawView = new GraphicsView
+        {
+            Drawable = this,
+            InputTransparent = true,
+            HorizontalOptions = LayoutOptions.Fill,
+            VerticalOptions = LayoutOptions.Fill,
+        };
+        _inputView = new GraphicsView
+        {
+            Drawable = NoopDrawable.Instance,
+            HorizontalOptions = LayoutOptions.Start,
+            VerticalOptions = LayoutOptions.Start,
+        };
+        Children.Add(_drawView);
+        Children.Add(_inputView);
+
+        _inputView.StartInteraction += OnStartInteraction;
+        _inputView.DragInteraction += OnDragInteraction;
+        _inputView.EndInteraction += OnEndInteraction;
+        _inputView.HandlerChanged += OnInputHandlerChanged;
+        _inputView.HandlerChanging += OnInputHandlerChanging;
         Loaded += OnLoaded;
 
 #if WINDOWS
-        // 静态挂接（而非拖拽开始时才挂），这样即使手势压掉了 MAUI 自己在 GraphicsView 上的触摸交互，按下也总被捕获；
+        // 静态挂接（而非拖拽开始时才挂），这样即使手势压掉了 MAUI 在输入层上的触摸交互，按下也总被捕获；
         // 拖拽结束由本手势的 Completed/Canceled 负责。
         _panGesture = new PanGestureRecognizer();
         _panGesture.PanUpdated += OnPanUpdated;
-        GestureRecognizers.Add(_panGesture);
+        _inputView.GestureRecognizers.Add(_panGesture);
 #endif
+    }
+
+    protected override void OnSizeAllocated(double width, double height)
+    {
+        base.OnSizeAllocated(width, height);
+        UpdateInputPlacement(width, height);
+        MarkDirty();
+    }
+
+    // 可用区来自 surface：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+    // MAUI 的滚动条是覆盖式的（不占宽高），surface 因此把整幅宽高作为可用区传下来。
+    private MinimapDrawContext CreatePlacement(double availableWidth, double availableHeight)
+    {
+        var width = SafeDim(availableWidth, 0);
+        var height = SafeDim(availableHeight, 0);
+        var top = double.IsNaN(AvailableTop) ? 0 : Math.Max(0, AvailableTop);
+        var right = double.IsNaN(AvailableRight) ? 0 : AvailableRight;
+        var bottom = double.IsNaN(AvailableBottom) ? 0 : AvailableBottom;
+
+        return new MinimapDrawContext
+        {
+            MinimapWidth = double.IsNaN(MinimapWidth) ? 0 : Math.Max(0, MinimapWidth),
+            MinimapHeight = double.IsNaN(MinimapHeight) ? 0 : Math.Max(0, MinimapHeight),
+            MinimapMargin = double.IsNaN(MinimapMargin) ? 0 : Math.Max(0, MinimapMargin),
+            AvailableRight = right > 0 ? right : width,
+            AvailableTop = top,
+            AvailableBottom = bottom > top ? bottom : height,
+        };
     }
 
     private void OnLoaded(object? s, EventArgs e)
@@ -157,15 +235,16 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             el = el.Parent;
         }
 
+        UpdateInputPlacement();
+
 #if WINDOWS
-        // 元素已进入活动树、平台视图已存在，在这里挂原生指针处理器（OnHandlerChanged 早于视图创建）。
+        // 元素已进入活动树、平台视图已存在，在这里挂原生指针处理器。
         AttachPlatformPressedHandler();
 #endif
     }
 
-    protected override void OnHandlerChanged()
+    private void OnInputHandlerChanged(object? sender, EventArgs e)
     {
-        base.OnHandlerChanged();
 #if WINDOWS
         // 新的 handler 世代：若此刻平台视图还没建，允许再安排一次延后重试。
         _platformAttachPending = false;
@@ -173,47 +252,29 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
 #endif
     }
 
-    protected override void OnHandlerChanging(HandlerChangingEventArgs args)
+    private void OnInputHandlerChanging(object? sender, HandlerChangingEventArgs args)
     {
-        base.OnHandlerChanging(args);
 #if WINDOWS
         // 从要离开的平台视图上摘掉处理器，避免 handler 重建（如页面导航）时泄漏。
         if (args.OldHandler?.PlatformView is UIElement oldEl)
         {
-            if (_nativePressedHandler is not null)
-            {
-                oldEl.RemoveHandler(UIElement.PointerPressedEvent, _nativePressedHandler);
-                _nativePressedHandler = null;
-            }
-            if (_nativeMovedHandler is not null)
-            {
-                oldEl.RemoveHandler(UIElement.PointerMovedEvent, _nativeMovedHandler);
-                _nativeMovedHandler = null;
-            }
-            if (_nativeReleasedHandler is not null)
-            {
-                oldEl.RemoveHandler(UIElement.PointerReleasedEvent, _nativeReleasedHandler);
-                oldEl.RemoveHandler(UIElement.PointerCanceledEvent, _nativeReleasedHandler);
-                oldEl.RemoveHandler(UIElement.PointerCaptureLostEvent, _nativeReleasedHandler);
-                _nativeReleasedHandler = null;
-            }
+            DetachPlatformPressedHandler(oldEl);
         }
 #endif
     }
 
 #if WINDOWS
     /// <summary>
-    /// Hooks the minimap's own platform element. The press always originates there, so
-    /// these handlers fire even when the pan gesture claims the manipulation and
-    /// suppresses MAUI's touch interaction (StartInteraction). With the GraphicsView's
-    /// manipulation holding pointer capture, PointerMoved on this same element keeps
-    /// arriving outside the bounds — a second, independent out-of-bounds input path on
-    /// top of the pan gesture's manipulation deltas.
+    /// Hooks the minimap input surface's own platform element. The press always originates there, so
+    /// these handlers fire even when the pan gesture claims the manipulation and suppresses MAUI's
+    /// touch interaction (StartInteraction). With the GraphicsView's manipulation holding pointer
+    /// capture, PointerMoved on this same element keeps arriving outside the bounds — a second,
+    /// independent out-of-bounds input path on top of the pan gesture's manipulation deltas.
     /// </summary>
     private void AttachPlatformPressedHandler()
     {
         if (_nativePressedHandler is not null) return;
-        if (this.Handler?.PlatformView is not UIElement mmEl)
+        if (_inputView.Handler?.PlatformView is not UIElement mmEl)
         {
             // HandlerChanged 早于 MAUI 创建平台视图（创建发生在 handler 的 Setup 里）；延后一拍，UI 线程处理时原生元素已存在。
             // 由 _platformAttachPending 限界，永不出现的视图不会空转。
@@ -224,11 +285,20 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         }
         _nativePressedHandler = (s, e) =>
         {
-            if (this.Handler?.PlatformView is not UIElement mm) return;
+            if (_inputView.Handler?.PlatformView is not UIElement mm) return;
+
+            if (_pendingRefresh) RefreshMinimapData();
+            var (sw, sh) = CurrentSurfaceSize();
+            if (sw <= 0 || sh <= 0) return;
+            ComputeDrawing(sw, sh);
+
+            var pt = e.GetCurrentPoint(mm).Position;
+            // 输入层本就只覆盖小地图矩形；这里再挡一道，陈旧布局下也不会在矩形外起拖。
+            if (!IsInsideMinimapRect((float)pt.X, (float)pt.Y)) return;
+
             // 新的一次按下：清掉上一次可能没收到 Completed 的手势标记；本次手势若随后 Started 会重新置位。
             _panActive = false;
             _nativePointerActive = true;
-            var pt = e.GetCurrentPoint(mm).Position;
             // 尽力显式捕获：捕获期间只有此元素发指针事件，下面的 PointerMoved 移出边界也继续流动，直到释放（只能在 PointerPressed 期间取得）。
             mm.CapturePointer(e.Pointer);
             // MAUI 的 StartInteraction 先经类 handler 再到本实例 handler，所以交互跑时 _isDragging 已为真，
@@ -236,10 +306,6 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             if (_isDragging) return;
             _dragStartX = (float)pt.X;
             _dragStartY = (float)pt.Y;
-            if (_pendingRefresh) RefreshMinimapData();
-            var aw = (float)SafeDim(WidthRequest, 1);
-            var ah = (float)SafeDim(HeightRequest, 1);
-            ComputeDrawing(aw, ah);
             _lastScrollX = float.MinValue;
             _lastScrollY = float.MinValue;
             NavigateToCanvasLocal(_dragStartX, _dragStartY);
@@ -250,7 +316,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             if (!_isDragging) return;
             // 原生探针是 Windows 上的首选：绝对坐标与缩略图同一套 DIP。PanGesture 的 TotalX/Y
             // 在 WinUI 上会带屏幕/元素偏移，拿它加到局部起点上会把目标一次推出上千像素。
-            if (this.Handler?.PlatformView is not UIElement mm) return;
+            if (_inputView.Handler?.PlatformView is not UIElement mm) return;
             var pt = e.GetCurrentPoint(mm).Position;
             NavigateToCanvasLocal((float)pt.X, (float)pt.Y);
         };
@@ -264,6 +330,27 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         mmEl.AddHandler(UIElement.PointerReleasedEvent, _nativeReleasedHandler, true);
         mmEl.AddHandler(UIElement.PointerCanceledEvent, _nativeReleasedHandler, true);
         mmEl.AddHandler(UIElement.PointerCaptureLostEvent, _nativeReleasedHandler, true);
+    }
+
+    private void DetachPlatformPressedHandler(UIElement mmEl)
+    {
+        if (_nativePressedHandler is not null)
+        {
+            mmEl.RemoveHandler(UIElement.PointerPressedEvent, _nativePressedHandler);
+            _nativePressedHandler = null;
+        }
+        if (_nativeMovedHandler is not null)
+        {
+            mmEl.RemoveHandler(UIElement.PointerMovedEvent, _nativeMovedHandler);
+            _nativeMovedHandler = null;
+        }
+        if (_nativeReleasedHandler is not null)
+        {
+            mmEl.RemoveHandler(UIElement.PointerReleasedEvent, _nativeReleasedHandler);
+            mmEl.RemoveHandler(UIElement.PointerCanceledEvent, _nativeReleasedHandler);
+            mmEl.RemoveHandler(UIElement.PointerCaptureLostEvent, _nativeReleasedHandler);
+            _nativeReleasedHandler = null;
+        }
     }
 
     /// <summary>
@@ -302,7 +389,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     {
         UnsubscribeFromTree();
         _subscribedTree = newTree;
-        if (newTree is null) return;
+        if (newTree is null) { MarkDirty(); return; }
 
         if (newTree.Nodes is INotifyCollectionChanged nc)
         {
@@ -316,6 +403,9 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         }
         MarkDirty();
     }
+
+    // 没有节点就没有可画的小地图：输入层此时必须让开，否则右上角会凭空吞掉画布手势。
+    private bool HasMinimapContent => WorkflowTree?.Nodes is { Count: > 0 };
 
     private void UnsubscribeFromTree()
     {
@@ -393,7 +483,10 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void FlushInvalidate()
     {
         _invalidatePending = false;
-        Invalidate();
+        // 输入层随可用区/树内容一起在同一帧更新：MarkDirty 的来者可能来自后台线程，
+        // 而 Margin / WidthRequest / IsVisible 只能在主线程写。
+        UpdateInputPlacement();
+        _drawView.Invalidate();
     }
 
     // ── 数据刷新 ─────────────────────────────────────────────────────────────
@@ -434,27 +527,73 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         _lastViewport = default;
     }
 
-    // ── 为绘制计算 float 中间量 ────────────────────────────────────────────
+    // ── 布局与绘制中间量 ────────────────────────────────────────────────────
 
-    private void ComputeDrawing(float availWidth, float availHeight)
+    private (double W, double H) CurrentSurfaceSize()
     {
-        var gb = _lastGlobalBounds;
-        _drawGb = gb;
-        var minSz = Math.Max(1f, (float)MinimapMinSize);
+        var w = SafeDim(Width, SafeDim(_drawView.Width, 0));
+        var h = SafeDim(Height, SafeDim(_drawView.Height, 0));
+        return (w, h);
+    }
 
-        // 布局过渡期 WidthRequest 可能让 availWidth/Height 为 NaN。
-        if (float.IsNaN(availWidth) || float.IsNaN(availHeight))
+    private void UpdateInputPlacement()
+        => UpdateInputPlacement(SafeDim(Width, 0), SafeDim(Height, 0));
+
+    // 把输入层贴到小地图矩形上：矩形外的一切命中因此落回画布。
+    private void UpdateInputPlacement(double width, double height)
+    {
+        if (width <= 0 || height <= 0)
         {
-            _mmW = minSz;
-            _mmH = minSz;
-            _sc = 1f;
-            _ox = 0f;
-            _oy = 0f;
+            _inputView.IsVisible = false;
             return;
         }
 
-        _mmW = Math.Max(minSz, Math.Min((float)MinimapWidth, availWidth));
-        _mmH = Math.Max(minSz, Math.Min((float)MinimapHeight, availHeight));
+        var placement = CreatePlacement(width, height);
+        var bounds = placement.GetMinimapRect(MinimapMinSize);
+        _minimapRect = new RectF((float)bounds.Left, (float)bounds.Top, (float)bounds.Width, (float)bounds.Height);
+
+        _inputView.Margin = new Microsoft.Maui.Thickness(bounds.Left, bounds.Top, 0, 0);
+        if (Math.Abs(_inputView.WidthRequest - bounds.Width) > 0.5) _inputView.WidthRequest = bounds.Width;
+        if (Math.Abs(_inputView.HeightRequest - bounds.Height) > 0.5) _inputView.HeightRequest = bounds.Height;
+        _inputView.IsVisible = IsMinimapVisible && HasMinimapContent && bounds.Width > 0 && bounds.Height > 0;
+    }
+
+    private bool IsInsideMinimapRect(float x, float y)
+        => _minimapRect.Width > 0 && _minimapRect.Height > 0
+            && x >= -1f && y >= -1f
+            && x <= _minimapRect.Width + 1f && y <= _minimapRect.Height + 1f;
+
+    private void ComputeDrawing(double availWidth, double availHeight)
+    {
+        var gb = _lastGlobalBounds;
+        _drawGb = gb;
+
+        var placement = CreatePlacement(availWidth, availHeight);
+        var bounds = placement.GetMinimapRect(MinimapMinSize);
+        _placementRight = placement.AvailableRight;
+        _placementTop = placement.AvailableTop;
+        _placementBottom = placement.AvailableBottom;
+        _placementMargin = placement.MinimapMargin;
+
+        // 布局过渡期尺寸可能为 NaN；退回最小尺寸，绘制与命中都不至于拿到 NaN。
+        if (double.IsNaN(bounds.Width) || double.IsNaN(bounds.Height)
+            || double.IsInfinity(bounds.Width) || double.IsInfinity(bounds.Height)
+            || bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            var fallback = (float)Math.Max(1, MinimapMinSize);
+            _minimapRect = new RectF(0f, 0f, fallback, fallback);
+            _mmW = fallback;
+            _mmH = fallback;
+            _ox = 0f;
+            _oy = 0f;
+            _sc = 1f;
+            return;
+        }
+
+        _minimapRect = new RectF((float)bounds.Left, (float)bounds.Top, (float)bounds.Width, (float)bounds.Height);
+        _mmW = (float)Math.Max(1, bounds.Width);
+        _mmH = (float)Math.Max(1, bounds.Height);
+
         var pad = (float)Math.Max(0, ContentPadding);
         var drawW = _mmW - pad * 2;
         var drawH = _mmH - pad * 2;
@@ -520,12 +659,14 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
         {
             if (_isDragging) return;
             if (_pendingRefresh) RefreshMinimapData();
-            var aw = (float)SafeDim(WidthRequest, 1);
-            var ah = (float)SafeDim(HeightRequest, 1);
-            ComputeDrawing(aw, ah);
+            var (sw, sh) = CurrentSurfaceSize();
+            if (sw <= 0 || sh <= 0) return;
+            ComputeDrawing(sw, sh);
 
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
+            // 输入层只覆盖小地图矩形；这里再挡一道，陈旧布局下也不会在矩形外起拖。
+            if (!IsInsideMinimapRect(pt.X, pt.Y)) return;
 
             // 新手势从当前指针重新起算；沿用上一轮的节流目标会把第一次滚动吞掉。
             _lastScrollX = float.MinValue;
@@ -587,7 +728,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void SubscribeDragCapture()
     {
 #if WINDOWS
-        // 空操作：原生平移手势与平台 PointerPressed 探针都是静态挂接（构造/OnHandlerChanged），没有可懒订阅的东西；
+        // 空操作：原生平移手势与平台 PointerPressed 探针都是静态挂接（构造/HandlerChanged），没有可懒订阅的东西；
         // 拖拽结束由 pan 手势的 Completed/Canceled 负责。
 #else
         SubscribeParentGestureCapture();
@@ -597,7 +738,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void UnsubscribeDragCapture()
     {
 #if WINDOWS
-        // 空操作：静态处理器在视图生命周期内一直挂着，在 OnHandlerChanging 里摘除。
+        // 空操作：静态处理器在视图生命周期内一直挂着，在 HandlerChanging 里摘除。
 #else
         UnsubscribeParentGestureCapture();
 #endif
@@ -624,9 +765,12 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private void OnParentPointerMoved(object? sender, PlatformInput.PointerEventArgs e)
     {
         if (!_isDragging) return;
+        // 父视图的指针事件是浮层局部坐标；输入层里的一切都从矩形左上角起算，这里换回去。
         var pos = e.GetPosition(this);
         if (pos is null) return;
-        NavigateToCanvasLocal((float)pos.Value.X, (float)pos.Value.Y);
+        NavigateToCanvasLocal(
+            (float)(pos.Value.X - _minimapRect.Left),
+            (float)(pos.Value.Y - _minimapRect.Top));
     }
 
     private void OnParentPointerReleased(object? sender, PlatformInput.PointerEventArgs e)
@@ -641,7 +785,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     private float _lastScrollY = float.MinValue;
 
     /// <summary>
-    /// Navigate the main workflow viewport to world coordinates (adjX, adjY).
+    /// Navigate the main workflow viewport to a point in minimap-local coordinates (the minimap
+    /// rectangle's top-left is the origin).
     /// When the target scroll position exceeds the current canvas bounds, the
     /// canvas model expands (PositiveOffset/NegativeOffset) and ApplyLayout
     /// translates the content accordingly.  The IsRefreshing guard in
@@ -764,10 +909,8 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             // dirtyRect.Width/Height 可能为 NaN（已知 MAUI WinUI 问题）；必须用 IsNaN 判断 —— NaN > 0 为假，NaN <= 0 也为假。
             var dw = dirtyRect.Width;
             var dh = dirtyRect.Height;
-            var w = (!float.IsNaN(dw) && dw > 0)
-                ? dw : (float)SafeDim(WidthRequest, 1);
-            var h = (!float.IsNaN(dh) && dh > 0)
-                ? dh : (float)SafeDim(HeightRequest, 1);
+            var w = (!float.IsNaN(dw) && dw > 0) ? dw : (float)SafeDim(Width, 0);
+            var h = (!float.IsNaN(dh) && dh > 0) ? dh : (float)SafeDim(Height, 0);
             if (w <= 0 || h <= 0) return;
             if (WorkflowTree?.Nodes is null || WorkflowTree.Nodes.Count == 0) return;
 
@@ -789,22 +932,26 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
     /// </summary>
     protected virtual void DrawMinimap(ICanvas canvas, MinimapDrawContext context)
     {
+        // 默认绘制把整幅缩略图平移到矩形左上角：context 里的映射仍是缩略图局部坐标（原点 0,0）。
+        var bounds = context.GetMinimapRect(MinimapMinSize);
+        var offsetX = (float)bounds.Left;
+        var offsetY = (float)bounds.Top;
         var cr = Math.Max(0, (float)context.MinimapCornerRadius);
 
         if (MinimapBackgroundColor is not null)
         {
             canvas.FillColor = MinimapBackgroundColor;
-            canvas.FillRoundedRectangle(0, 0, (float)context.MinimapWidth, (float)context.MinimapHeight, cr);
+            canvas.FillRoundedRectangle(offsetX, offsetY, (float)context.MinimapWidth, (float)context.MinimapHeight, cr);
         }
         if (MinimapBorderColor is not null)
         {
             canvas.StrokeColor = MinimapBorderColor;
             canvas.StrokeSize = (float)MinimapBorderThickness;
-            canvas.DrawRoundedRectangle(0, 0, (float)context.MinimapWidth, (float)context.MinimapHeight, cr);
+            canvas.DrawRoundedRectangle(offsetX, offsetY, (float)context.MinimapWidth, (float)context.MinimapHeight, cr);
         }
 
         canvas.SaveState();
-        canvas.ClipRectangle(0, 0, (float)context.MinimapWidth, (float)context.MinimapHeight);
+        canvas.ClipRectangle(offsetX, offsetY, (float)context.MinimapWidth, (float)context.MinimapHeight);
         try
         {
             if (NodeFillColor is not null)
@@ -814,7 +961,7 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
                 foreach (var node in context.MappedNodes)
                 {
                     canvas.FillRoundedRectangle(
-                        (float)node.Left, (float)node.Top,
+                        offsetX + (float)node.Left, offsetY + (float)node.Top,
                         (float)node.Width, (float)node.Height, ncr);
                 }
             }
@@ -827,13 +974,13 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
                 if (ViewportFillColor is not null)
                 {
                     canvas.FillColor = ViewportFillColor;
-                    canvas.FillRoundedRectangle((float)vp.Left, (float)vp.Top, (float)vp.Width, (float)vp.Height, ncr);
+                    canvas.FillRoundedRectangle(offsetX + (float)vp.Left, offsetY + (float)vp.Top, (float)vp.Width, (float)vp.Height, ncr);
                 }
                 if (ViewportStrokeColor is not null)
                 {
                     canvas.StrokeColor = ViewportStrokeColor;
                     canvas.StrokeSize = (float)ViewportStrokeThickness;
-                    canvas.DrawRoundedRectangle((float)vp.Left, (float)vp.Top, (float)vp.Width, (float)vp.Height, ncr);
+                    canvas.DrawRoundedRectangle(offsetX + (float)vp.Left, offsetY + (float)vp.Top, (float)vp.Width, (float)vp.Height, ncr);
                 }
             }
         }
@@ -877,6 +1024,10 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             Scale = _sc,
             NodeCornerRadius = Math.Max(0, NodeCornerRadius),
             MinimapCornerRadius = Math.Max(0, MinimapCornerRadius),
+            AvailableRight = _placementRight,
+            AvailableTop = _placementTop,
+            AvailableBottom = _placementBottom,
+            MinimapMargin = _placementMargin,
         };
     }
 }

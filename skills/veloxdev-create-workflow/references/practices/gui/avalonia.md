@@ -97,4 +97,4 @@ Retained views overriding `Render(DrawingContext)`, with the render-ready gate a
 
 ⚙ **The tree's link context menu is a resource plus a key.** The generated `TreeView.axaml` declares `<ContextMenu x:Key="WorkflowTreeMenu">` (entries use `{ReflectionBinding …}` because the resource has no `x:DataType`) and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="WorkflowTreeMenu"` at it; the adapter owns the right-press wiring. Add or remove `<MenuItem>`s in that resource.
 
-⚙ **Both slot colours are live.** `slotColor` (`-sc`) is the standby fill and `slotBorderColor` (`-bc`) the glyph outline; both bind the slot `State` through `SlotStateBrushConverter`, so the port also turns violet / tomato / lime during a connection gesture.
+⚙ **Both slot colours are live.** `slotColor` (`-sc`) is the glyph fill and `slotBorderColor` (`-bc`) the glyph outline; both are static template colours.

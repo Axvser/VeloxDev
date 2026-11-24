@@ -67,6 +67,6 @@ The point is to keep the geometry non-negative and inside the element's own box,
 
 ⚙ **The link context menu is a `MenuFlyout` resource plus `LinkMenuKey`.** The generated tree declares `<MenuFlyout x:Key="LinkContextMenu">` and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` at it; the adapter positions it and reports open/close. `MenuFlyout` has no `DataContext`, so the adapter feeds each `MenuFlyoutItem.DataContext` the pressed link — `Command="{Binding DeleteCommand}"` works per item.
 
-⚙ **`slotBorderColor` (`-bc`) drives the glyph outline.** The slot's `Path.Stroke` binds the slot `State` through `SlotStateBrushConverter` with `ConverterParameter=Border`; `-sc` sets the standby fill.
+⚙ **`slotBorderColor` (`-bc`) drives the glyph outline.** The slot's `Ellipse.Stroke` uses the border-colour symbol; `-sc` sets the glyph fill.
 
 ⚙ **The template does not emit `x:Name="Root"`.** The demo's tree has one and MAUI's template requires it; the packs are not symmetric.

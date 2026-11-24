@@ -2172,7 +2172,9 @@ public sealed class WorkflowSurfaceBehavior
 
     private static void UpdateMinimapOverlay(ITreeComponent viewModel, SurfaceState state, double scrollX, double scrollY)
     {
-        if (state.MinimapOverlay is not IWorkflowMinimapOverlay minimap || state.ScrollViewer is null)
+        if (state.MinimapOverlay is not View overlayView
+            || overlayView is not IWorkflowMinimapOverlay minimap
+            || state.ScrollViewer is null)
         {
             return;
         }
@@ -2184,6 +2186,23 @@ public sealed class WorkflowSurfaceBehavior
         minimap.ViewportWidth = double.IsNaN(state.ScrollViewer.Width) ? 1 : state.ScrollViewer.Width;
         minimap.ViewportHeight = double.IsNaN(state.ScrollViewer.Height) ? 1 : state.ScrollViewer.Height;
         minimap.WorkflowTree = viewModel;
+
+        // 小地图贴在内容区右上角：顶部让开装饰器的水平刻度带。MAUI 的滚动条是覆盖式的，
+        // 横竖都不占宽高，所以右/下边沿就是浮层自身的边沿（不扣滚动条厚度）。
+        var overlayWidth = overlayView.Width;
+        var overlayHeight = overlayView.Height;
+        if (double.IsNaN(overlayWidth) || overlayWidth <= 0) overlayWidth = state.ScrollViewer.Width;
+        if (double.IsNaN(overlayHeight) || overlayHeight <= 0) overlayHeight = state.ScrollViewer.Height;
+        if (double.IsNaN(overlayWidth) || overlayWidth <= 0) overlayWidth = 0;
+        if (double.IsNaN(overlayHeight) || overlayHeight <= 0) overlayHeight = 0;
+
+        var ruler = state.GridDecorator is IWorkflowGridDecorator decorator
+            ? Math.Max(0d, decorator.RulerBand)
+            : 0d;
+
+        minimap.AvailableRight = overlayWidth;
+        minimap.AvailableTop = ruler;
+        minimap.AvailableBottom = overlayHeight;
     }
 
     private static void ApplyPendingScrollRestore(ContentView host, SurfaceState state)

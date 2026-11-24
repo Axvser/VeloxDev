@@ -112,6 +112,42 @@ window.veloxdevWorkflow = (() => {
             (isFinite(scale) && scale > 0) ? { scale, ox, oy, minX, minY, maxX, maxY } : null;
     }
 
+    // Measures the free corner a full-surface minimap layer may draw into:
+    //   [availableRight, availableTop, availableBottom, overlayWidth]
+    // availableRight = surface width − vertical scrollbar, availableTop = ruler band height,
+    // availableBottom = surface height − horizontal scrollbar. The scrollbar thicknesses come from
+    // offset/client deltas (the browser reports no scrollbar size); the ruler band is read from the
+    // grid decorator's data attribute and falls back to the top band's box. The overlay shares the
+    // scroll container's origin, so these lengths need no extra offset.
+    function measureMinimapArea(scrollerId) {
+        const scroller = document.getElementById(scrollerId);
+        if (!scroller) return null;
+        const vBar = Math.max(0, scroller.offsetWidth - scroller.clientWidth);
+        const hBar = Math.max(0, scroller.offsetHeight - scroller.clientHeight);
+        const surfaceWidth = Math.max(0, scroller.offsetWidth);
+        const surfaceHeight = Math.max(0, scroller.offsetHeight);
+
+        let ruler = 0;
+        const surface = scroller.closest('.veloxdev-wf-surface');
+        const rulerEl = surface ? surface.querySelector('.veloxdev-wf-ruler') : null;
+        if (rulerEl) {
+            const attr = parseFloat(rulerEl.getAttribute('data-veloxdev-ruler-thickness'));
+            if (isFinite(attr) && attr >= 0) {
+                ruler = attr;
+            } else {
+                const band = rulerEl.querySelector('.veloxdev-wf-ruler-top');
+                if (band) ruler = Math.max(0, band.getBoundingClientRect().height);
+            }
+        }
+
+        return [
+            Math.max(0, surfaceWidth - vBar),
+            Math.max(0, ruler),
+            Math.max(0, surfaceHeight - hBar),
+            surfaceWidth
+        ];
+    }
+
     // Positions a node wrapper at an absolute world coordinate (canvas-content-relative). Used by the
     // node-drag behavior for external anchor changes (undo/redo, layout commands); during a live drag
     // the drag handler owns the position directly.
@@ -147,8 +183,20 @@ window.veloxdevWorkflow = (() => {
 
     // Re-applies the last pushed viewport world rect to the minimap block. Called by the minimap
     // component after every .NET re-render, because a re-render rewrites the block from stale .NET
-    // state (MappedViewport); this restores the JS-owned, current position.
+    // state (MappedViewport); this restores the JS-owned, current position. The registered SVG size
+    // is re-read first: the inner box can shrink when the available corner does, and the block clamp
+    // must follow the size actually rendered.
     function refreshMinimapViewport(scrollerId) {
+        const reg = minimapRects[scrollerId];
+        if (reg && reg.rect) {
+            const svg = reg.rect.closest('svg');
+            if (svg) {
+                const w = parseFloat(svg.getAttribute('width'));
+                const h = parseFloat(svg.getAttribute('height'));
+                if (isFinite(w) && w > 0) reg.width = w;
+                if (isFinite(h) && h > 0) reg.height = h;
+            }
+        }
         const last = minimapLastWorld[scrollerId];
         if (!last) return;
         setMinimapViewport(scrollerId, last.x, last.y, last.w, last.h);
@@ -1648,6 +1696,44 @@ window.veloxdevWorkflow = (() => {
             };
         }
 
+        // Report the free corner so .NET positions the inner box there and maps the nodes at the
+        // box's actual size. Re-measured when the surface resizes or scrolls (scrollbar presence can
+        // change with content), throttled to one report per frame.
+        const scrollerEl = document.getElementById(scrollerId);
+        let lastArea = null;
+        let areaFrame = 0;
+        let areaDisposed = false;
+        const pushArea = function () {
+            areaFrame = 0;
+            if (areaDisposed || !dotnetRef) return;
+            const area = measureMinimapArea(scrollerId);
+            if (!area) return;
+            if (lastArea
+                && Math.abs(lastArea[0] - area[0]) < 0.5
+                && Math.abs(lastArea[1] - area[1]) < 0.5
+                && Math.abs(lastArea[2] - area[2]) < 0.5
+                && Math.abs(lastArea[3] - area[3]) < 0.5) {
+                return;
+            }
+            lastArea = area;
+            try {
+                const pending = dotnetRef.invokeMethodAsync(
+                    'OnMinimapAreaMeasured', area[0], area[1], area[2], area[3]);
+                if (pending && typeof pending.catch === 'function') pending.catch(function () { });
+            } catch (_) {
+                // The component was disposed: this measurement has no receiver.
+            }
+        };
+        const scheduleArea = function () {
+            if (areaFrame) return;
+            areaFrame = (typeof requestAnimationFrame === 'function')
+                ? requestAnimationFrame(pushArea)
+                : setTimeout(pushArea, 16);
+        };
+        if (scrollerEl) scrollerEl.addEventListener('scroll', scheduleArea, { passive: true });
+        // Deferred: initMinimap is awaited by the component's first render; let that round trip unwind.
+        setTimeout(pushArea, 0);
+
         minimapEl.addEventListener('mousedown', function (e) {
             e.preventDefault();
             const mmRect = minimapEl.getBoundingClientRect();
@@ -1736,7 +1822,6 @@ window.veloxdevWorkflow = (() => {
         // Window resize changes the visible-area size without a scroll; re-push the viewport block
         // with the new scroller client size so the minimap reflects the current editor state without
         // requiring a click (the world top-left is unchanged — only the visible size shrinks).
-        const scrollerEl = document.getElementById(scrollerId);
         let resizeObserver = null;
         if (scrollerEl && typeof ResizeObserver !== 'undefined') {
             const onResize = function () {
@@ -1744,6 +1829,7 @@ window.veloxdevWorkflow = (() => {
                 if (last) {
                     setMinimapViewport(scrollerId, last.x, last.y, scrollerEl.clientWidth, scrollerEl.clientHeight);
                 }
+                scheduleArea();
             };
             resizeObserver = new ResizeObserver(onResize);
             resizeObserver.observe(scrollerEl);
@@ -1751,8 +1837,14 @@ window.veloxdevWorkflow = (() => {
 
         return {
             dispose: function () {
+                areaDisposed = true;
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
+                if (scrollerEl) scrollerEl.removeEventListener('scroll', scheduleArea);
+                if (areaFrame) {
+                    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(areaFrame);
+                    areaFrame = 0;
+                }
                 if (resizeObserver) resizeObserver.disconnect();
                 if (minimapRects[scrollerId]) delete minimapRects[scrollerId];
             }
@@ -1842,6 +1934,7 @@ window.veloxdevWorkflow = (() => {
         scrollToRatio,
         scrollToPosition,
         setMinimapMapping,
+        measureMinimapArea,
         setNodePosition,
         setMinimapViewport,
         refreshMinimapViewport,
@@ -1869,6 +1962,7 @@ export const getViewportSize = window.veloxdevWorkflow.getViewportSize;
 export const scrollToRatio = window.veloxdevWorkflow.scrollToRatio;
 export const scrollToPosition = window.veloxdevWorkflow.scrollToPosition;
 export const setMinimapMapping = window.veloxdevWorkflow.setMinimapMapping;
+export const measureMinimapArea = window.veloxdevWorkflow.measureMinimapArea;
 export const setNodePosition = window.veloxdevWorkflow.setNodePosition;
 export const setMinimapViewport = window.veloxdevWorkflow.setMinimapViewport;
 export const refreshMinimapViewport = window.veloxdevWorkflow.refreshMinimapViewport;

@@ -27,7 +27,7 @@ public partial class MinimapOverlay : ComponentBase
     [Parameter]
     public string? ScrollViewerId { get; set; }
 
-    private string Background { get; } = ToCss("#D2141922");
+    private string Background { get; } = ToCss("#331E1E1E");
     private string Border { get; } = ToCss("#DC94A3B8");
     private string NodeFill { get; } = ToCss("#DC38BDF8");
     private string ViewportStroke { get; } = ToCss("#F0FFFFFF");

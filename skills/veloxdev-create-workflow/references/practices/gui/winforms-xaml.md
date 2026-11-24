@@ -145,8 +145,8 @@ parts. A node that needs extra slots names them and registers them with the same
 - A slot connects only when its view root marks `WorkflowSlotConnectionBehavior.IsEnabled="True"`.
 - `WorkflowSlotLayoutBehavior` measures the named parts and writes their anchors. A slot whose anchor is still
   `NaN` is not measured yet; its link draws nothing.
-- The slot view's code-behind is only `InitializeComponent()`. Its glyph fill binds to the slot model `State`
-  through `SlotStateBrushConverter`.
+- The slot view's code-behind is only `InitializeComponent()`. Its glyph fill and outline are the template's
+  slot colour symbols.
 
 The link view is one visual per link. The template binds `StartLeft` / `StartTop` / `EndLeft` / `EndTop` to
 `Sender.Anchor.*` / `Receiver.Anchor.*` and `CanRender` to `IsVisible`; the surface writes `LineColor` /

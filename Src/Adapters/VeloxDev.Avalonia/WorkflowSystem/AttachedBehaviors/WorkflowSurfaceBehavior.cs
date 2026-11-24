@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Input;
 using PlatformInput = Avalonia.Input;
@@ -572,9 +573,17 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (state.PointerPressSource is not null)
             state.PointerPressSource.PointerPressed += OnPointerPressed;
 
+        if (state.MinimapOverlay is not null)
+        {
+            // 浮层铺满表面后，可用右上角取的是浮层自身尺寸；窗口/宿主改尺寸时这里也要重下发。
+            state.MinimapOverlay.SizeChanged += OnMinimapOverlaySizeChanged;
+        }
+
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ScrollChanged += OnScrollChanged;
+            // 套模板会新建滚动条；套完要让小地图重新量一次厚度。
+            state.ScrollViewer.TemplateApplied += OnScrollViewerTemplateApplied;
             // 移除 ScrollContentPresenter 内置的 ScrollGestureRecognizer：否则在触屏平台（Android/iOS）它会在拖拽中
             // 抢走指针捕获，破坏节点拖拽与插槽连接；本类自带完整的平移逻辑。
             state.ScrollViewer.LayoutUpdated += OnScrollViewerLayoutUpdated;
@@ -620,9 +629,13 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (state.PointerPressSource is not null)
             state.PointerPressSource.PointerPressed -= OnPointerPressed;
 
+        if (state.MinimapOverlay is not null)
+            state.MinimapOverlay.SizeChanged -= OnMinimapOverlaySizeChanged;
+
         if (state.ScrollViewer is not null)
         {
             state.ScrollViewer.ScrollChanged -= OnScrollChanged;
+            state.ScrollViewer.TemplateApplied -= OnScrollViewerTemplateApplied;
             state.ScrollViewer.LayoutUpdated -= OnScrollViewerLayoutUpdated;
         }
 
@@ -1300,6 +1313,87 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         minimap.ViewportWidth = state.ScrollViewer.Viewport.Width;
         minimap.ViewportHeight = state.ScrollViewer.Viewport.Height;
         minimap.WorkflowTree = viewModel;
+
+        // 小地图贴在“内容区右上角”：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+        var overlayWidth = state.MinimapOverlay?.Bounds.Width ?? state.ScrollViewer.Bounds.Width;
+        var overlayHeight = state.MinimapOverlay?.Bounds.Height ?? state.ScrollViewer.Bounds.Height;
+        minimap.AvailableRight = Math.Max(0, overlayWidth - GetVisibleScrollBarThickness(state.ScrollViewer, Avalonia.Layout.Orientation.Vertical));
+        minimap.AvailableTop = state.GridDecorator is IWorkflowGridDecorator decorator ? decorator.RulerBand : 0d;
+        minimap.AvailableBottom = Math.Max(0, overlayHeight - GetVisibleScrollBarThickness(state.ScrollViewer, Avalonia.Layout.Orientation.Horizontal));
+    }
+
+    // Avalonia 11 的 ScrollViewer 没有公开“计算后的滚动条可见性”（WPF 的 Computed*ScrollBarVisibility），
+    // 所以厚度只能量模板里真实的那两根 ScrollBar：按模板部件名找到它们，只要 IsVisible 且量到尺寸就取该尺寸；
+    // 套模板之前、或滚动条隐藏时退化为 0（此时内容本来就贴到边）。
+    private static double GetVisibleScrollBarThickness(ScrollViewer viewer, Avalonia.Layout.Orientation orientation)
+    {
+        var partName = orientation == Avalonia.Layout.Orientation.Vertical
+            ? "PART_VerticalScrollBar"
+            : "PART_HorizontalScrollBar";
+
+        var bar = FindTemplateScrollBar(viewer, viewer, partName);
+        if (bar is null || !bar.IsVisible)
+            return 0d;
+
+        var thickness = orientation == Avalonia.Layout.Orientation.Vertical
+            ? bar.Bounds.Width
+            : bar.Bounds.Height;
+        return Math.Max(0, thickness);
+    }
+
+    // 只走模板外壳：遇到 ScrollContentPresenter 就不再往下 —— 那里面是整棵画布，卡片自带的内层
+    // ScrollViewer 也用同名部件；钻进去既会量错，也会让每次平移都扫全树。
+    // TemplatedParent 再兜一层，确保量到的是这台 ScrollViewer 自己的滚动条。
+    private static ScrollBar? FindTemplateScrollBar(Visual parent, ScrollViewer owner, string name)
+    {
+        foreach (var child in parent.GetVisualChildren())
+        {
+            if (child is ScrollContentPresenter)
+                continue;
+
+            if (child is ScrollBar bar && bar.Name == name && ReferenceEquals(bar.TemplatedParent, owner))
+                return bar;
+
+            var found = FindTemplateScrollBar(child, owner, name);
+            if (found is not null)
+                return found;
+        }
+
+        return null;
+    }
+
+    private static void OnMinimapOverlaySizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (sender is not Control overlay)
+            return;
+
+        var host = overlay.GetVisualAncestors().OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        if (host?.GetValue(StateProperty) is not SurfaceState state)
+            return;
+
+        if (host.DataContext is not ITreeComponent viewModel)
+            return;
+
+        UpdateMinimapOverlay(viewModel, state);
+    }
+
+    // TemplateApplied 时滚动条刚建出来、还没排版；推迟到布局相再量，否则读到的是零尺寸。
+    private static void OnScrollViewerTemplateApplied(object? sender, TemplateAppliedEventArgs e)
+    {
+        if (sender is not ScrollViewer viewer)
+            return;
+
+        var host = viewer.GetVisualAncestors().OfType<UserControl>().FirstOrDefault(GetIsEnabled);
+        if (host?.GetValue(StateProperty) is not SurfaceState state)
+            return;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!GetIsEnabled(host) || host.DataContext is not ITreeComponent viewModel)
+                return;
+
+            UpdateMinimapOverlay(viewModel, state);
+        }, DispatcherPriority.Loaded);
     }
 
     private static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)

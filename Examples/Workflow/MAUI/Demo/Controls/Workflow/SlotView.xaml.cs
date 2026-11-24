@@ -223,7 +223,7 @@ public partial class SlotView : ContentView
 
             var centerX = dirtyRect.Center.X;
             var centerY = dirtyRect.Center.Y;
-            var color = ResolveSlotColor(owner.SlotState);
+            var color = Colors.White;
 
             var ringRadius = (float)(size * RingRadiusRatio);
             bool aiming = IsAiming(owner.SlotState);
@@ -305,20 +305,6 @@ public partial class SlotView : ContentView
 
         private static bool IsConnected(SlotState state)
             => state.HasFlag(SlotState.Sender) || state.HasFlag(SlotState.Receiver);
-
-        /// <summary>
-        /// The colour the previous port already used: white at rest, one colour per connection role.
-        /// Avalonia carries it on <c>Foreground</c> through style selectors; MAUI has no style selector that
-        /// keys off an enum value, so the same three-way mapping lives here.
-        /// </summary>
-        private static Color ResolveSlotColor(SlotState state)
-            => state switch
-            {
-                var value when value.HasFlag(SlotState.Sender) && value.HasFlag(SlotState.Receiver) => Colors.Violet,
-                var value when value.HasFlag(SlotState.Sender) => Colors.Tomato,
-                var value when value.HasFlag(SlotState.Receiver) => Colors.Lime,
-                _ => Colors.White,
-            };
     }
 
     #endregion

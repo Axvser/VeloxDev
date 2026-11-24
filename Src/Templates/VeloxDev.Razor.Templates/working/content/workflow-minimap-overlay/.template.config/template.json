@@ -31,7 +31,7 @@
       "type": "parameter",
       "datatype": "text",
       "description": "Minimap background color.",
-      "defaultValue": "#D2141922",
+      "defaultValue": "#331E1E1E",
       "replaces": "TemplateMinimapBackground"
     },
     "minimapBorder": {

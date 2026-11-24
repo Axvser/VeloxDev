@@ -156,8 +156,7 @@ public class SlotView : UserControl
 
         if (change.Property == SlotStateProperty || change.Property == ForegroundProperty)
         {
-            // Foreground 来自节点视图的样式选择器，它不是 AffectsRender 的属性，
-            // 不主动重绘的话换了状态颜色也不会跟着变
+            // Foreground 不在 AffectsRender 之列，换色时要主动重绘
             InvalidateVisual();
         }
     }

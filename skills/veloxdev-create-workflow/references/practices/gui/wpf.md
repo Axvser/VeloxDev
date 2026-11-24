@@ -101,7 +101,7 @@ protected override void OnRender(DrawingContext dc)
 
 ⚙ **The tree's link context menu is a resource plus a key.** The generated `TreeView.xaml` declares an **empty** `<ContextMenu x:Key="LinkContextMenu">` and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` at it; the adapter owns the right-press wiring. Add or remove `<MenuItem>`s in that resource — each is bound to the pressed link, so `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (or your own command) is the whole entry.
 
-⚙ **`slotBorderColor` (`-bc`) drives the glyph outline.** The slot's `Path.Stroke` binds the slot `State` through `SlotStateBrushConverter` with `ConverterParameter=Border`, so `-bc` changes the outline and `-sc` changes the standby fill.
+⚙ **`slotBorderColor` (`-bc`) drives the glyph outline.** The slot's `Ellipse.Stroke` uses the border-colour symbol, so `-bc` changes the outline and `-sc` changes the glyph fill.
 
 ⚙ **The tree's inline `LinkTemplate` hardcodes `LineColor="#DDFFFFFF"`.** The `linkColor` symbol reaches `LinkView`, so `-lc` changes the generated link view but not the tree's inline template — change both, or reference `LinkView`'s own default.
 

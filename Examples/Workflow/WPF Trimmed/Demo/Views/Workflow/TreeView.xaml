@@ -63,9 +63,8 @@
             </workflowViews:WorkflowGridDecorator>
         </Border>
         <workflowViews:MinimapOverlay x:Name="PART_MinimapOverlay"
-                                      HorizontalAlignment="Right"
-                                      VerticalAlignment="Top"
-                                      Margin="0,12,12,0"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
                                       ScrollViewerName="PART_ScrollViewer" />
         <!-- Realtime canvas-info HUD (floating decorator layer). Scroll/content offsets come from the
              grid decorator's DPs (fed by WorkflowSurfaceBehavior on scroll/pan/zoom); viewport size from

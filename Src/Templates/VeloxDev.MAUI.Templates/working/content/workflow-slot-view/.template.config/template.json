@@ -37,7 +37,7 @@
     "slotColor": {
       "type": "parameter",
       "datatype": "text",
-      "description": "Slot standby color.",
+      "description": "Slot glyph color.",
       "defaultValue": "#DD1E1E1E",
       "replaces": "TemplateSlotColor"
     },

@@ -1407,6 +1407,19 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         minimap.ViewportWidth = state.ScrollViewer.ViewportWidth;
         minimap.ViewportHeight = state.ScrollViewer.ViewportHeight;
         minimap.WorkflowTree = viewModel;
+
+        // 小地图贴在“内容区右上角”：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+        var overlayWidth = state.MinimapOverlay?.ActualWidth ?? state.ScrollViewer.ActualWidth;
+        var overlayHeight = state.MinimapOverlay?.ActualHeight ?? state.ScrollViewer.ActualHeight;
+        var verticalBar = state.ScrollViewer.ComputedVerticalScrollBarVisibility == Visibility.Visible
+            ? SystemParameters.VerticalScrollBarWidth
+            : 0d;
+        var horizontalBar = state.ScrollViewer.ComputedHorizontalScrollBarVisibility == Visibility.Visible
+            ? SystemParameters.HorizontalScrollBarHeight
+            : 0d;
+        minimap.AvailableRight = Math.Max(0, overlayWidth - verticalBar);
+        minimap.AvailableTop = state.GridDecorator is IWorkflowGridDecorator decorator ? decorator.RulerBand : 0d;
+        minimap.AvailableBottom = Math.Max(0, overlayHeight - horizontalBar);
     }
 
     private static double GetHorizontalScrollMaximum(ScrollViewer scrollViewer)

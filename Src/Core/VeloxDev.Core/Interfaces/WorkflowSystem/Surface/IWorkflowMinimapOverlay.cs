@@ -25,4 +25,19 @@ public interface IWorkflowMinimapOverlay : IWorkflowGridDecorator
 
     /// <summary>Whether the minimap overlay should render.</summary>
     bool IsMinimapVisible { get; set; }
+
+    /// <summary>
+    /// The x of the content viewport's right edge in this overlay's local pixels, excluding the vertical
+    /// scrollbar. The surface behavior recomputes it whenever the layout or scroll range changes.
+    /// </summary>
+    double AvailableRight { get; set; }
+
+    /// <summary>The y of the content viewport's top edge, below the horizontal ruler band.</summary>
+    double AvailableTop { get; set; }
+
+    /// <summary>The y of the content viewport's bottom edge in local pixels, excluding the horizontal scrollbar.</summary>
+    double AvailableBottom { get; set; }
+
+    /// <summary>The gap kept between the minimap and the available corner.</summary>
+    double MinimapMargin { get; set; }
 }

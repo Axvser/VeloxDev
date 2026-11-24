@@ -4,9 +4,9 @@
 {
     <div class="veloxdev-wf-minimap">
         <div class="veloxdev-wf-minimap-inner"
-             style="width:@WidthCss;height:@HeightCss;background:@Background;border:1px solid @BorderColor;"
+             style="width:@RectWidthCss;height:@RectHeightCss;top:@RectTopCss;right:@RectRightCss;background:@Background;border:1px solid @BorderColor;visibility:@InnerVisibilityCss;"
              @ref="_element">
-            <svg class="veloxdev-wf-minimap-svg" width="@WidthCss" height="@HeightCss">
+            <svg class="veloxdev-wf-minimap-svg" width="@RectWidthCss" height="@RectHeightCss">
                 @if (MappedNodes is not null)
                 {
                     @foreach (var n in MappedNodes)

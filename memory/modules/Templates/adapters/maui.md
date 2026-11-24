@@ -79,23 +79,20 @@
 不是标记里的 `Width="260"`（WPF/WinUI 那边是标记里的固定 `Grid Width="260" Height="180"`）。
 **改节点设计尺寸时两家的改法不同。**
 
-### 2.6 插槽状态由转换器着色
+### 2.6 插槽颜色是模板固定色
 
-slot-view 是 `Ellipse`（共享 SVG 路径在本家解析不出来），`Fill` / `Stroke` 经
-`SlotStateBrushConverter` 绑 `{Binding State}`，`StandByColor` / `BorderColor` 由模板给；
-code-behind 只有 `InitializeComponent()`。node-view 不再传 `SlotState`。
+slot-view 是 `Ellipse`（共享 SVG 路径在本家解析不出来），`Fill` / `Stroke` 直接用
+`TemplateSlotColor` / `TemplateSlotBorderColor`；code-behind 只有 `InitializeComponent()`。
+node-view 不传 `SlotState`。
 
 ---
 
 ## 三、这一家模板特有的坑
 
-### P1 · `slotPath` 是空转参数，因为这一家从**几何**画插槽
+### P1 · `slotPath` 是空转参数
 
-`workflow-slot-view/.template.config/template.json` 声明了 `slotPath` 却没有 `replaces`。
-根因在代码：`SlotDrawable.Draw` 用 `canvas.FillCircle` / `canvas.DrawCircle`
-按 `dirtyRect` 算半径（`workflow-slot-view/TemplateClass.xaml.cs` 的 `SlotDrawable.Draw`），
-一份 SVG 路径都没有。⇒ **想在 MAUI 上换插槽图标，要改的是 `SlotDrawable`，不是任何 `TemplateSlotPath`。**
-其余空转参数与全局清单见 `../architecture.md` §7.1。
+七家的 slot-view 都画 `Ellipse`（Razor 是 `<circle>`），`template.json` 里的 `slotPath` 只作 CLI 兼容保留。
+换图标改模板里的图形，不是改这个参数。其余空转参数与全局清单见 `../architecture.md` §7.1。
 
 ### P2 · `Replace` / `Move` 由 Core 池处理
 
