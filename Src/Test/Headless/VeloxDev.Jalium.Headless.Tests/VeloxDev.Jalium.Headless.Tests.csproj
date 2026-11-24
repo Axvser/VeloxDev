@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
     Jalium 适配器的无头测试：Jalium 自己的测试套件就是无显示运行的（控件可 Measure/Arrange，
@@ -15,8 +15,8 @@
 
   <ItemGroup>
     <PackageReference Include="MSTest" Version="4.0.2" />
-    <PackageReference Include="Jalium.UI.Xaml" Version="26.10.8" />
-    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.8" />
+    <PackageReference Include="Jalium.UI.Xaml" Version="26.11.1" />
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.11.1" />
     <PackageReference Include="coverlet.collector" Version="6.0.4">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

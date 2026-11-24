@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -8,6 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\Src\Adapters\VeloxDev.Jalium\VeloxDev.Jalium.csproj" />
-    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.9" />
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.11.1" />
   </ItemGroup>
 </Project>
