@@ -11,7 +11,7 @@
                 {
                     @foreach (var n in MappedNodes)
                     {
-                        <rect x="@n.XCss" y="@n.YCss" width="@n.WCss" height="@n.HCss"
+                        <rect x="@Css(n.Left)" y="@Css(n.Top)" width="@Css(n.Width)" height="@Css(n.Height)"
                               fill="@NodeFill" rx="@NodeRadiusCss" />
                     }
                 }
