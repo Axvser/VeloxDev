@@ -435,17 +435,18 @@ jobs:
             --source https://api.nuget.org/v3/index.json --skip-duplicate
           if ($LASTEXITCODE -ne 0) { throw "push failed: VeloxDev.Cli" }
 
-      - name: Wait for Easel on NuGet before the adapter
-        # The Release build of the adapter takes Easel as a PackageReference, so its exact version must
-        # be downloadable before the adapter is packed. Easel is published from its own repository.
+      - name: Wait for WinForms.Easel on NuGet before the adapter
+        # The Release build of the adapter takes WinForms.Easel as a PackageReference, so its exact
+        # version must be downloadable before the adapter is packed. WinForms.Easel is published from
+        # its own repository, under the id WinForms.Easel (not the old plain Easel id).
         if: contains(needs.version.outputs.rest_missing, '"VeloxDev.WinForms"')
         shell: pwsh
         run: |
           $version = [regex]::Match(
             (Get-Content "Src/Adapters/VeloxDev.WinForms/VeloxDev.WinForms.csproj" -Raw),
-            'Include="Easel" Version="([^"]+)"').Groups[1].Value
-          if (-not $version) { throw "no Easel PackageReference in VeloxDev.WinForms.csproj" }
-          $url = "https://api.nuget.org/v3-flatcontainer/easel/$version/easel.$version.nupkg"
+            'Include="WinForms\.Easel" Version="([^"]+)"').Groups[1].Value
+          if (-not $version) { throw "no WinForms.Easel PackageReference in VeloxDev.WinForms.csproj" }
+          $url = "https://api.nuget.org/v3-flatcontainer/winforms.easel/$version/winforms.easel.$version.nupkg"
           # Ingestion time varies too much to cap the wait: sleep 5 minutes, then poll every minute.
           $delay = 300
           while ($true) {
