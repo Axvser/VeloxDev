@@ -488,7 +488,10 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         DetachTree(host, state);
-        ClearParts(state);
+        UnhookInput(state);
+        ReleaseParts(state);
+        state.Root = null;
+        state.Surface = null;
         ClearPressHandles(state);
         if (state.VisualHost is { } visual)
         {
@@ -522,67 +525,79 @@ public sealed class WorkflowSurfaceBehavior
 
         // 表面子树之外是外壳，部件只在表面里找。
         var scope = state.Surface ?? root;
-        state.Canvas = scope is null ? null : FindVisualNamed(scope, GetCanvasName(host));
-        var scroll = scope is null ? null : FindVisualNamed(scope, GetScrollViewerName(host));
-        if (!ReferenceEquals(state.Scroll, scroll))
+        if (state.PartBindings.Count == 0)
         {
-            if (state.Scroll is VisualScrollViewer previous)
-            {
-                previous.ScrollOffsetRequested -= state.OnScrollOffsetRequested;
-                previous.IsExternalScroll = false;
-            }
-
-            state.Scroll = scroll;
-            if (scroll is VisualScrollViewer viewer)
-            {
-                viewer.IsExternalScroll = true;
-                viewer.ScrollOffsetRequested += state.OnScrollOffsetRequested;
-            }
+            BindParts(state);
         }
-        state.Grid = scope is null ? null : FindVisualNamed(scope, GetGridDecoratorName(host));
-        state.GridDecorator = state.Grid as IWorkflowGridDecorator;
-        state.PressSource = scope is null ? null : FindVisualNamed(scope, GetPointerPressSourceName(host));
+
+        // 每次 Ensure 都重解析；注册表按引用比较，没换过的部件不会重订任何东西。
+        state.Parts.Set(WorkflowSurfacePart.Canvas, scope is null ? null : FindVisualNamed(scope, GetCanvasName(host)));
+        state.Parts.Set(WorkflowSurfacePart.ScrollViewer, scope is null ? null : FindVisualNamed(scope, GetScrollViewerName(host)));
+        state.Parts.Set(WorkflowSurfacePart.GridDecorator, scope is null ? null : FindVisualNamed(scope, GetGridDecoratorName(host)));
+        state.Parts.Set(WorkflowSurfacePart.PointerPressSource, scope is null ? null : FindVisualNamed(scope, GetPointerPressSourceName(host)));
+        state.Parts.Set(WorkflowSurfacePart.MinimapOverlay, scope is null ? null : FindVisualNamed(scope, GetMinimapOverlayName(host)));
         state.Info = scope is null ? null : FindVisualNamed(scope, "PART_InfoOverlay") as WorkflowInfoOverlay;
-
-        var minimap = scope is null ? null : FindVisualNamed(scope, GetMinimapOverlayName(host));
-        if (!ReferenceEquals(state.Minimap, minimap))
-        {
-            if (state.Minimap is IWorkflowMinimapScrollSource previous)
-            {
-                previous.ViewportScrollRequested -= state.OnMinimapScrollRequested;
-            }
-
-            state.Minimap = minimap;
-            if (minimap is IWorkflowMinimapScrollSource source)
-            {
-                source.ViewportScrollRequested += state.OnMinimapScrollRequested;
-            }
-        }
     }
 
-    private static void ClearParts(SurfaceState state)
+    // 订阅随部件走：绑定负责「先退旧、再进新」，并把每个部件持有的处理器收在一条订阅里。
+    private static void BindParts(SurfaceState state)
     {
-        UnhookInput(state);
-        if (state.Minimap is IWorkflowMinimapScrollSource minimap)
+        var parts = state.Parts;
+
+        state.PartBindings.Add(new SurfacePartBinding<VisualElement>(
+            parts,
+            WorkflowSurfacePart.ScrollViewer,
+            scroll =>
+            {
+                if (scroll is not VisualScrollViewer viewer)
+                {
+                    return;
+                }
+
+                viewer.IsExternalScroll = true;
+                viewer.ScrollOffsetRequested += state.OnScrollOffsetRequested;
+            },
+            scroll =>
+            {
+                if (scroll is not VisualScrollViewer viewer)
+                {
+                    return;
+                }
+
+                viewer.ScrollOffsetRequested -= state.OnScrollOffsetRequested;
+                viewer.IsExternalScroll = false;
+            }));
+
+        state.PartBindings.Add(new SurfacePartBinding<VisualElement>(
+            parts,
+            WorkflowSurfacePart.MinimapOverlay,
+            minimap =>
+            {
+                if (minimap is IWorkflowMinimapScrollSource source)
+                {
+                    source.ViewportScrollRequested += state.OnMinimapScrollRequested;
+                }
+            },
+            minimap =>
+            {
+                if (minimap is IWorkflowMinimapScrollSource source)
+                {
+                    source.ViewportScrollRequested -= state.OnMinimapScrollRequested;
+                }
+            }));
+    }
+
+    private static void ReleaseParts(SurfaceState state)
+    {
+        // 先释放绑定（各自退订当前部件），再清空注册表：Clear 时已经没人订阅，不会重复退订。
+        foreach (var binding in state.PartBindings)
         {
-            minimap.ViewportScrollRequested -= state.OnMinimapScrollRequested;
+            binding.Dispose();
         }
 
-        if (state.Scroll is VisualScrollViewer viewer)
-        {
-            viewer.ScrollOffsetRequested -= state.OnScrollOffsetRequested;
-            viewer.IsExternalScroll = false;
-        }
-
-        state.Minimap = null;
+        state.PartBindings.Clear();
+        state.Parts.Clear();
         state.Info = null;
-        state.PressSource = null;
-        state.Root = null;
-        state.Surface = null;
-        state.Canvas = null;
-        state.Scroll = null;
-        state.Grid = null;
-        state.GridDecorator = null;
     }
 
     // 没设表面名时整棵根树就是表面，保持单视图宿主的原契约。
@@ -1682,19 +1697,24 @@ public sealed class WorkflowSurfaceBehavior
         // 根树里的工作流子树；单视图宿主时等于 Root。
         public VisualElement? Surface { get; set; }
 
-        public VisualElement? Canvas { get; set; }
+        // 部件解析与订阅配对都在 Core 的注册表里：同引用不重订，换件先退旧再进新，Detach 时逐条释放。
+        public SurfacePartRegistry Parts { get; } = new();
 
-        public VisualElement? Scroll { get; set; }
+        public List<IDisposable> PartBindings { get; } = [];
 
-        public VisualElement? Grid { get; set; }
+        public VisualElement? Canvas => Parts.Get<VisualElement>(WorkflowSurfacePart.Canvas);
 
-        public IWorkflowGridDecorator? GridDecorator { get; set; }
+        public VisualElement? Scroll => Parts.Get<VisualElement>(WorkflowSurfacePart.ScrollViewer);
 
-        public VisualElement? Minimap { get; set; }
+        public VisualElement? Grid => Parts.Get<VisualElement>(WorkflowSurfacePart.GridDecorator);
+
+        public IWorkflowGridDecorator? GridDecorator => Grid as IWorkflowGridDecorator;
+
+        public VisualElement? Minimap => Parts.Get<VisualElement>(WorkflowSurfacePart.MinimapOverlay);
 
         public WorkflowInfoOverlay? Info { get; set; }
 
-        public VisualElement? PressSource { get; set; }
+        public VisualElement? PressSource => Parts.Get<VisualElement>(WorkflowSurfacePart.PointerPressSource);
 
         public Wf.ITreeComponent? Tree { get; set; }
 

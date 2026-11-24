@@ -140,20 +140,19 @@ WPF 那份是 `PreviewMouseLeftButtonDown/Up` + 两个处理器都 `e.Handled = 
 
 `WorkflowSlotLayoutBehavior`：
 
-1. **同步**：`LayoutUpdated` → `WorkflowLayoutStamp.Capture` → `WorkflowLayoutBatch.Request(control, stamp, work)` → `Flush()`（`OnLayoutUpdated`）。
-2. **异步**：`Visual.BoundsProperty` 变化 → `Request(control, work)` 强制 + `Schedule`（`OnControlPropertyChanged`）。
-3. **异步**：DataContext 的 `INotifyPropertyChanged` 且属性名在 `SlotPropertyNames` 里 → 强制 + `Schedule`（`OnNodePropertyChanged`）。
+1. **同步**：`LayoutUpdated` → `RequestMeasure(SlotLayoutTrigger.Layout)` → Core 比指纹 + `Flush()`（`OnLayoutUpdated`）。
+2. **同步**：`Visual.BoundsProperty` 变化 → 同样走 `Layout` 触发（`OnControlPropertyChanged`），由指纹里的实测尺寸变化放行，指纹没变就不重测。
+3. **异步**：DataContext / 配置属性 / 模型属性（`WatchedPropertyNames`）→ `Attachment` / `Configuration` / `Model` 触发，强制 + `Schedule`（`OnDataContextChanged` / `OnConfigurationChanged` / `OnNodePropertyChanged`）。
 
-批次以**树**为 owner（`node.Parent`），`post` 是 `Dispatcher.UIThread.Post(…, DispatcherPriority.Render)`（见 [../scheduling.md](../scheduling.md)）。**三条并存的理由仍是平台决定的**：布局 pass 在渲染循环上、与 `Render` 优先级同一带（§二.6），所以「延后到 Render」这条路没法保证赶在本帧渲染前，必须再留一条同步的路；而 `Bounds` 与 ViewModel 属性变化又不是每次都有布局 pass，所以两条异步路也不能省。区别在于：同步路先比指纹，未动过的节点不重测；异步路只排一次共享的 `Flush`，没有每节点一个 `SyncPending` 旗标。
+批次以**树**为 owner（`node.Parent`），`post` 是 `Dispatcher.UIThread.Post(…, DispatcherPriority.Render)`（见 [../scheduling.md](../scheduling.md)）。**三条并存是平台决定的**：布局 pass 在渲染循环上、与 `Render` 优先级同一带（§二.6），「延后到 Render」赶不上本帧渲染，必须留一条同步路；`Bounds` 与 ViewModel 属性变化又不总有布局 pass，两条异步路也不能省。
 
-- 上一家（WPF）是 `LayoutUpdated` + `SizeChanged` + `PropertyChanged`（WPF `WorkflowSlotLayoutBehavior.cs` 的三个订阅）；这家把 `SizeChanged` 换成了 `BoundsProperty` 的类处理器，**因为 Avalonia 的 `Visual.Bounds` 是 `Rect` 且以 `AvaloniaProperty` 形式存在**（实测：`Visual.Bounds` 是 `Avalonia.Rect`），所以能直接挂在属性变化上，不必等 `SizeChanged` 事件。
-- 这家**没有** WinUI 那种「额外订阅坐标宿主的 `LayoutUpdated`」的做法（WinUI `WorkflowSlotLayoutBehavior.cs` 的额外订阅）—— 与 §二.7 同因：这家的 `LayoutUpdated` 本来就是整棵树一次。
+- `AvaloniaSlotPartLocator.CountSlots` 数**已实例化的枚举容器**（`ContainerFromIndex` 非空），与 `FindEnumeratedSlots` 同口径。数 `ItemCount` 会让「容器还没生成」那一趟得到一个看似完整的指纹，实测后果是槽位锚点停在 `NaN`、整条连线不画，拖一下端点节点才恢复。
+- 上一家（WPF）是 `LayoutUpdated` + `SizeChanged` + `PropertyChanged`；这家用 `BoundsProperty` 的类处理器代替 `SizeChanged` —— Avalonia 的 `Visual.Bounds` 是 `Rect` 且以 `AvaloniaProperty` 形式存在（实测：`Avalonia.Rect`），可直接挂属性变化。
+- 这家**没有** WinUI 那种「额外订阅坐标宿主的 `LayoutUpdated`」的做法 —— 与 §二.7 同因：这家的 `LayoutUpdated` 本来就是整棵树一次。
 
 ### 5. 插槽名匹配是**宽松匹配**：控制名 + 去 `PART_` 前缀形式 + 三个字面量兜底
 
-`WorkflowSlotLayoutBehavior.cs` 的 `Sync`：`SlotPropertyNames` 除 `Anchor` / `Size` 外，收下 `SlotNames` / `SlotEnumeratorNames` 里每个控制名、每个以 `PART_` 开头的名字**去掉前缀后的形式**，另外**无条件**加三个字面量 `"InputSlot"` / `"OutputSlot"` / `"OutputSlots"`。注释写的理由是「Control names (e.g. `"PART_OutputSlots"`) differ from ViewModel property names (`"OutputSlots"`)」。
-
-**这里的做法和其他家不一样，因为这家把「XAML 里的控件名」与「ViewModel 的属性名」这两个命名空间在适配器里对齐**，代价是那三个字面量兜底会对所有节点生效（包括根本没用这些名字的节点）。兜底名字加进去就等于给全仓库的节点都开了一个属性名触发器。
+`SlotLayoutPipelineCore.BuildWatchedPropertyNames`：除 `Anchor` / `Size` 外，收下 `SlotNames` / `SlotEnumeratorNames` 里每个控制名、每个以 `PART_` 开头的名字**去掉前缀后的形式**，另外**无条件**加三个字面量 `"InputSlot"` / `"OutputSlot"` / `"OutputSlots"`。理由：XAML 控件名（`PART_OutputSlots`）与 ViewModel 属性名（`OutputSlots`）是两个命名空间，适配器把它们对齐；代价是那三个字面量兜底对所有节点生效。
 
 ### 6. 模板查找的第三级是 `Application.Current.DataTemplates`
 

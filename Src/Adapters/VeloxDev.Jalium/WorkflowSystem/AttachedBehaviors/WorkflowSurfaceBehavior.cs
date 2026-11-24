@@ -55,17 +55,23 @@ public static class WorkflowSurfaceBehavior
     {
         public FrameworkElement Host = null!;
 
-        public ScrollViewer? ScrollViewer;
+        // 部件解析与订阅配对都在 Core 的注册表里：同引用不重订，换件先退旧再进新，Detach 时逐条释放。
+        public SurfacePartRegistry Parts { get; } = new();
 
-        public Panel? Canvas;
+        public List<IDisposable> PartBindings { get; } = [];
 
-        public IWorkflowGridDecorator? GridDecorator;
+        public ScrollViewer? ScrollViewer => Parts.Get<ScrollViewer>(WorkflowSurfacePart.ScrollViewer);
 
-        public FrameworkElement? GridDecoratorElement;
+        public Panel? Canvas => Parts.Get<Panel>(WorkflowSurfacePart.Canvas);
 
-        public IWorkflowMinimapOverlay? MinimapOverlay;
+        public FrameworkElement? GridDecoratorElement => Parts.Get<FrameworkElement>(WorkflowSurfacePart.GridDecorator);
 
-        public FrameworkElement? PointerPressSource;
+        public IWorkflowGridDecorator? GridDecorator => GridDecoratorElement as IWorkflowGridDecorator;
+
+        public IWorkflowMinimapOverlay? MinimapOverlay
+            => Parts.Get<FrameworkElement>(WorkflowSurfacePart.MinimapOverlay) as IWorkflowMinimapOverlay;
+
+        public FrameworkElement? PointerPressSource => Parts.Get<FrameworkElement>(WorkflowSurfacePart.PointerPressSource);
 
         public ITreeComponent? Tree;
 
@@ -434,6 +440,7 @@ public static class WorkflowSurfaceBehavior
         }
 
         UnbindTree(state);
+        ReleaseParts(state);
 
         state.ZoomPin = null;
         state.ZoomPinTimer?.Stop();
@@ -444,7 +451,6 @@ public static class WorkflowSurfaceBehavior
         host.DataContextChanged -= OnDataContextChanged;
         RemoveHandler(host, UIElement.PreviewMouseMoveEvent, state.MouseMoveHandler);
         RemoveHandler(host, UIElement.PreviewMouseUpEvent, state.MouseUpHandler);
-        UnhookWheel(state);
         RemoveHandler(host, UIElement.KeyDownEvent, state.KeyDownHandler);
         RemoveHandler(host, UIElement.KeyUpEvent, state.KeyUpHandler);
         RemoveHandler(host, UIElement.LostMouseCaptureEvent, state.LostCaptureHandler);
@@ -506,58 +512,82 @@ public static class WorkflowSurfaceBehavior
 
     private static void ResolveNamedParts(FrameworkElement host, SurfaceState state)
     {
-        var scrollViewer = ResolvePart<ScrollViewer>(host, GetScrollViewerName(host));
-        if (!ReferenceEquals(scrollViewer, state.ScrollViewer))
+        // 状态可能由 Refresh 自己新建（先于 Attach）：绑定没建过就先补上，否则部件会被登记但没人订阅。
+        if (state.PartBindings.Count == 0)
         {
-            if (state.ScrollViewer is { } previous)
-            {
-                previous.ScrollChanged -= OnScrollViewerChanged;
-                previous.SizeChanged -= OnScrollViewerSizeChanged;
-            }
-
-            state.ScrollViewer = scrollViewer;
-
-            if (scrollViewer is not null)
-            {
-                scrollViewer.ScrollChanged += OnScrollViewerChanged;
-                scrollViewer.SizeChanged += OnScrollViewerSizeChanged;
-            }
-
-            // 视口可能晚于 ZoomEnabled 解析出来，所以两处都挂一次（幂等）。
-            HookZoom(host, state);
+            BindParts(host, state);
         }
 
-        var canvas = ResolvePart<Panel>(host, GetCanvasName(host));
-        if (!ReferenceEquals(canvas, state.Canvas))
-        {
-            // 换画布：先把滚轮从旧画布上摘掉（同一委托实例），再装到新画布。
-            UnhookWheel(state);
-            state.Canvas = canvas;
-            HookWheel(state);
-        }
+        // 每次 Refresh 都重解析；注册表按引用比较，没换过的部件不会重订任何东西。
+        state.Parts.Set(
+            WorkflowSurfacePart.ScrollViewer, ResolvePart<ScrollViewer>(host, GetScrollViewerName(host)));
+        state.Parts.Set(
+            WorkflowSurfacePart.Canvas, ResolvePart<Panel>(host, GetCanvasName(host)));
+        state.Parts.Set(
+            WorkflowSurfacePart.GridDecorator, ResolvePart<FrameworkElement>(host, GetGridDecoratorName(host)));
+        state.Parts.Set(
+            WorkflowSurfacePart.MinimapOverlay, ResolvePart<FrameworkElement>(host, GetMinimapOverlayName(host)));
+        state.Parts.Set(
+            WorkflowSurfacePart.PointerPressSource, ResolvePart<FrameworkElement>(host, GetPointerPressSourceName(host)));
+    }
 
-        // 「起平移」挂在**具名按下源**的预览相上，与 WPF 同形。挂在宿主的冒泡相上收不到：
-        // 滚动视口那一层会把 MouseDown 标成已处理，宿主的处理器于是整场不触发（这里是实测踩到的）。
-        var pressSource = ResolvePart<FrameworkElement>(host, GetPointerPressSourceName(host));
-        if (!ReferenceEquals(pressSource, state.PointerPressSource))
-        {
-            if (state.PointerPressSource is { } previous && state.PressSourceDownHandler is not null)
+    // 订阅随部件走：绑定负责「先退旧、再进新」，并把每个部件持有的处理器收在一条订阅里。
+    private static void BindParts(FrameworkElement host, SurfaceState state)
+    {
+        var parts = state.Parts;
+
+        state.PartBindings.Add(new SurfacePartBinding<ScrollViewer>(
+            parts,
+            WorkflowSurfacePart.ScrollViewer,
+            viewer =>
             {
-                previous.PreviewMouseDown -= state.PressSourceDownHandler;
-            }
-
-            state.PointerPressSource = pressSource;
-
-            if (pressSource is not null)
+                viewer.ScrollChanged += OnScrollViewerChanged;
+                viewer.SizeChanged += OnScrollViewerSizeChanged;
+                // 视口可能晚于 ZoomEnabled 解析出来，所以这里也挂一次（幂等）。
+                HookZoom(host, state);
+            },
+            viewer =>
             {
+                viewer.PreviewMouseWheel -= state.ZoomWheelHandler;
+                viewer.ScrollChanged -= OnScrollViewerChanged;
+                viewer.SizeChanged -= OnScrollViewerSizeChanged;
+            }));
+
+        state.PartBindings.Add(new SurfacePartBinding<Panel>(
+            parts,
+            WorkflowSurfacePart.Canvas,
+            canvas => HookWheel(state, canvas),
+            canvas => UnhookWheel(state, canvas)));
+
+        state.PartBindings.Add(new SurfacePartBinding<FrameworkElement>(
+            parts,
+            WorkflowSurfacePart.PointerPressSource,
+            source =>
+            {
+                // 「起平移」挂在具名按下源的预览相上，与 WPF 同形。挂在宿主的冒泡相上收不到：
+                // 滚动视口那一层会把 MouseDown 标成已处理，宿主的处理器于是整场不触发（实测踩到的）。
                 state.PressSourceDownHandler ??= OnPointerPressSourceDown;
-                pressSource.PreviewMouseDown += state.PressSourceDownHandler;
-            }
+                source.PreviewMouseDown += state.PressSourceDownHandler;
+            },
+            source =>
+            {
+                if (state.PressSourceDownHandler is not null)
+                {
+                    source.PreviewMouseDown -= state.PressSourceDownHandler;
+                }
+            }));
+    }
+
+    private static void ReleaseParts(SurfaceState state)
+    {
+        // 先释放绑定（各自退订当前部件），再清空注册表：Clear 时已经没人订阅，不会重复退订。
+        foreach (var binding in state.PartBindings)
+        {
+            binding.Dispose();
         }
 
-        state.GridDecoratorElement = ResolvePart<FrameworkElement>(host, GetGridDecoratorName(host));
-        state.GridDecorator = state.GridDecoratorElement as IWorkflowGridDecorator;
-        state.MinimapOverlay = ResolvePart<FrameworkElement>(host, GetMinimapOverlayName(host)) as IWorkflowMinimapOverlay;
+        state.PartBindings.Clear();
+        state.Parts.Clear();
     }
 
     private static T? ResolvePart<T>(FrameworkElement host, string? name) where T : class
@@ -583,19 +613,16 @@ public static class WorkflowSurfaceBehavior
     // 画布在 ScrollContentPresenter 之前，冒泡相里 Handled 真挡得住 —— 与 WinUI 那条同形
     // （见 memory/modules/WorkflowSystem/adapters/wpf.md §三·1 与 §三点六）。
     // handledEventsToo:true 是给已被卡片置 Handled 的那一笔留门（卡片自己不处理滚轮）。
-    private static void HookWheel(SurfaceState state)
+    private static void HookWheel(SurfaceState state, Panel canvas)
     {
-        if (state.Canvas is { } canvas)
-        {
-            state.MouseWheelHandler ??= OnMouseWheel;
-            canvas.AddHandler(Mouse.MouseWheelEvent, state.MouseWheelHandler, true);
-        }
+        state.MouseWheelHandler ??= OnMouseWheel;
+        canvas.AddHandler(Mouse.MouseWheelEvent, state.MouseWheelHandler, true);
     }
 
-    // 摘除要用同一个委托实例；state.Canvas 是「当前挂着的那台」，所以必须在改写它之前调用。
-    private static void UnhookWheel(SurfaceState state)
+    // 摘除要用同一个委托实例；绑定把「挂上的那台画布」原样交回来，所以换件不会摘错。
+    private static void UnhookWheel(SurfaceState state, Panel canvas)
     {
-        if (state.Canvas is { } canvas && state.MouseWheelHandler is not null)
+        if (state.MouseWheelHandler is not null)
         {
             canvas.RemoveHandler(Mouse.MouseWheelEvent, state.MouseWheelHandler);
         }

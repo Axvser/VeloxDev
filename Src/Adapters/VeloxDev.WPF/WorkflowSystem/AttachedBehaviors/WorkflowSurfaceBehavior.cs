@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,11 +23,16 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public bool IsPanning { get; set; }
         public Point PanStart { get; set; }
         public Vector PanStartOffset { get; set; }
-        public ScrollViewer? ScrollViewer { get; set; }
-        public Canvas? Canvas { get; set; }
-        public FrameworkElement? GridDecorator { get; set; }
-        public FrameworkElement? MinimapOverlay { get; set; }
-        public FrameworkElement? PointerPressSource { get; set; }
+
+        // 部件解析与订阅配对都在 Core 的注册表里：同引用不重订，换件先退旧再进新，Detach 时逐条释放。
+        public SurfacePartRegistry Parts { get; } = new();
+        public List<IDisposable> PartBindings { get; } = [];
+
+        public ScrollViewer? ScrollViewer => Parts.Get<ScrollViewer>(WorkflowSurfacePart.ScrollViewer);
+        public Canvas? Canvas => Parts.Get<Canvas>(WorkflowSurfacePart.Canvas);
+        public FrameworkElement? GridDecorator => Parts.Get<FrameworkElement>(WorkflowSurfacePart.GridDecorator);
+        public FrameworkElement? MinimapOverlay => Parts.Get<FrameworkElement>(WorkflowSurfacePart.MinimapOverlay);
+        public FrameworkElement? PointerPressSource => Parts.Get<FrameworkElement>(WorkflowSurfacePart.PointerPressSource);
 
         // 宿主本身：悬停焦点在连线可视对象不可聚焦时的落点（模板/Trimmed 的连线视图就是这种）。
         public UserControl? Host { get; set; }
@@ -392,7 +398,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
         if (control.GetValue(StateProperty) is SurfaceState state)
         {
-            UnsubscribeResolvedControls(state);
+            ReleaseParts(state);
             UnwireLinkMenu(state);
         }
 
@@ -427,108 +433,97 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     private static void ResolveNamedControls(UserControl control, SurfaceState state)
     {
-        UnsubscribeResolvedControls(state);
-
-        var scrollViewerName = GetScrollViewerName(control);
-        if (!string.IsNullOrWhiteSpace(scrollViewerName))
+        // 状态可能由 Refresh 自己新建（先于 Attach）：绑定没建过就先补上，否则部件会被登记但没人订阅。
+        if (state.PartBindings.Count == 0)
         {
-            state.ScrollViewer = control.FindName(scrollViewerName) as ScrollViewer;
+            BindParts(control, state);
         }
 
-        var canvasName = GetCanvasName(control);
-        if (!string.IsNullOrWhiteSpace(canvasName))
-        {
-            state.Canvas = control.FindName(canvasName) as Canvas;
-        }
-
-        var gridDecoratorName = GetGridDecoratorName(control);
-        if (!string.IsNullOrWhiteSpace(gridDecoratorName))
-        {
-            state.GridDecorator = control.FindName(gridDecoratorName) as FrameworkElement;
-        }
-
-        var minimapOverlayName = GetMinimapOverlayName(control);
-        if (!string.IsNullOrWhiteSpace(minimapOverlayName))
-        {
-            state.MinimapOverlay = control.FindName(minimapOverlayName) as FrameworkElement;
-        }
-
-        var pointerPressSourceName = GetPointerPressSourceName(control);
-        if (!string.IsNullOrWhiteSpace(pointerPressSourceName))
-        {
-            state.PointerPressSource = control.FindName(pointerPressSourceName) as FrameworkElement;
-        }
-
-        if (state.PointerPressSource is not null)
-        {
-            state.PointerPressSource.PreviewMouseDown += OnPointerPressed;
-            state.PointerPressSource.PreviewMouseLeftButtonUp += OnSurfaceMouseLeftButtonUp;
-        }
-
-        if (state.ScrollViewer is not null)
-        {
-            state.ScrollViewer.ScrollChanged += OnScrollChanged;
-        }
-
-        if (GetZoomEnabled(control))
-        {
-            HookZoom(state);
-        }
+        // 每次 Refresh 都重解析；注册表按引用比较，没换过的部件不会重订任何东西。
+        state.Parts.Set(
+            WorkflowSurfacePart.ScrollViewer, ResolveNamed<ScrollViewer>(control, GetScrollViewerName(control)));
+        state.Parts.Set(
+            WorkflowSurfacePart.Canvas, ResolveNamed<Canvas>(control, GetCanvasName(control)));
+        state.Parts.Set(
+            WorkflowSurfacePart.GridDecorator, ResolveNamed<FrameworkElement>(control, GetGridDecoratorName(control)));
+        state.Parts.Set(
+            WorkflowSurfacePart.MinimapOverlay, ResolveNamed<FrameworkElement>(control, GetMinimapOverlayName(control)));
+        state.Parts.Set(
+            WorkflowSurfacePart.PointerPressSource, ResolveNamed<FrameworkElement>(control, GetPointerPressSourceName(control)));
     }
 
-    private static void UnsubscribeResolvedControls(SurfaceState state)
+    // 订阅随部件走：绑定负责「先退旧、再进新」，并把每个部件持有的处理器收在一条订阅里。
+    private static void BindParts(UserControl host, SurfaceState state)
     {
-        if (state.PointerPressSource is not null)
-        {
-            state.PointerPressSource.PreviewMouseDown -= OnPointerPressed;
-            state.PointerPressSource.PreviewMouseLeftButtonUp -= OnSurfaceMouseLeftButtonUp;
-        }
+        var parts = state.Parts;
 
-        if (state.ScrollViewer is not null)
-        {
-            state.ScrollViewer.ScrollChanged -= OnScrollChanged;
-            state.ScrollViewer.PreviewMouseWheel -= OnZoomPreviewMouseWheel;
-        }
+        state.PartBindings.Add(new SurfacePartBinding<ScrollViewer>(
+            parts,
+            WorkflowSurfacePart.ScrollViewer,
+            viewer =>
+            {
+                viewer.ScrollChanged += OnScrollChanged;
+                if (GetZoomEnabled(host))
+                    HookZoom(state, viewer);
+            },
+            viewer =>
+            {
+                UnhookZoom(state, viewer);
+                viewer.ScrollChanged -= OnScrollChanged;
+            }));
 
-        state.PointerPressSource = null;
-        state.ScrollViewer = null;
-        state.Canvas = null;
-        state.GridDecorator = null;
-        state.MinimapOverlay = null;
+        state.PartBindings.Add(new SurfacePartBinding<FrameworkElement>(
+            parts,
+            WorkflowSurfacePart.PointerPressSource,
+            source =>
+            {
+                source.PreviewMouseDown += OnPointerPressed;
+                source.PreviewMouseLeftButtonUp += OnSurfaceMouseLeftButtonUp;
+            },
+            source =>
+            {
+                source.PreviewMouseDown -= OnPointerPressed;
+                source.PreviewMouseLeftButtonUp -= OnSurfaceMouseLeftButtonUp;
+            }));
     }
+
+    private static void ReleaseParts(SurfaceState state)
+    {
+        // 先释放绑定（各自退订当前部件），再清空注册表：Clear 时已经没人订阅，不会重复退订。
+        foreach (var binding in state.PartBindings)
+            binding.Dispose();
+
+        state.PartBindings.Clear();
+        state.Parts.Clear();
+    }
+
+    private static T? ResolveNamed<T>(UserControl control, string? name) where T : class
+        => string.IsNullOrWhiteSpace(name) ? null : control.FindName(name!) as T;
 
     private static void OnZoomEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is not UserControl control || control.GetValue(StateProperty) is not SurfaceState state)
+        if (d is not UserControl control
+            || control.GetValue(StateProperty) is not SurfaceState state
+            || state.ScrollViewer is not { } viewer)
         {
             return;
         }
 
         if (Equals(e.NewValue, true))
         {
-            HookZoom(state);
+            HookZoom(state, viewer);
         }
         else
         {
-            UnhookZoom(state);
+            UnhookZoom(state, viewer);
         }
     }
 
-    private static void HookZoom(SurfaceState state)
-    {
-        if (state.ScrollViewer is not null)
-        {
-            state.ScrollViewer.PreviewMouseWheel += OnZoomPreviewMouseWheel;
-        }
-    }
+    private static void HookZoom(SurfaceState state, ScrollViewer viewer)
+        => viewer.PreviewMouseWheel += OnZoomPreviewMouseWheel;
 
-    private static void UnhookZoom(SurfaceState state)
-    {
-        if (state.ScrollViewer is not null)
-        {
-            state.ScrollViewer.PreviewMouseWheel -= OnZoomPreviewMouseWheel;
-        }
-    }
+    private static void UnhookZoom(SurfaceState state, ScrollViewer viewer)
+        => viewer.PreviewMouseWheel -= OnZoomPreviewMouseWheel;
 
     private static void OnZoomPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {

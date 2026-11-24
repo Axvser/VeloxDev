@@ -12,6 +12,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using VeloxDev.WorkflowSystem;
@@ -26,15 +27,20 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public bool IsPanning { get; set; }
         public Point PanStart { get; set; }
         public Vector PanStartOffset { get; set; }
-        public ScrollViewer? ScrollViewer { get; set; }
-        public Canvas? Canvas { get; set; }
-        public Control? GridDecorator { get; set; }
-        public Control? PointerPressSource { get; set; }
+
+        // 部件解析与订阅配对都在 Core 的注册表里：同引用不重订，换件先退旧再进新，Detach 时逐条释放。
+        public SurfacePartRegistry Parts { get; } = new();
+        public List<IDisposable> PartBindings { get; } = [];
+
+        public ScrollViewer? ScrollViewer => Parts.Get<ScrollViewer>(WorkflowSurfacePart.ScrollViewer);
+        public Canvas? Canvas => Parts.Get<Canvas>(WorkflowSurfacePart.Canvas);
+        public Control? GridDecorator => Parts.Get<Control>(WorkflowSurfacePart.GridDecorator);
+        public Control? MinimapOverlay => Parts.Get<Control>(WorkflowSurfacePart.MinimapOverlay);
+        public Control? PointerPressSource => Parts.Get<Control>(WorkflowSurfacePart.PointerPressSource);
 
         // 刚刚那一次按下建出来的句柄。路由在隧道相、比节点与插槽的处理器更早，所以句柄现成 ——
         // 组件行为读它就知道订阅者有没有否决这一笔。每次按下都会重写，不会拿到上一笔的。
         public WorkflowEventHandle? PressHandle { get; set; }
-        public Control? MinimapOverlay { get; set; }
         public EventHandler<PlatformInput.PointerWheelEventArgs>? ZoomHandler { get; set; }
 
         // 视口恢复状态机：捕获、排队、只恢复一次都在 Core，本类只提供延迟与落点。
@@ -489,7 +495,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
         if (control.GetValue(StateProperty) is SurfaceState state)
         {
-            UnsubscribeResolvedControls(state);
+            ReleaseParts(state);
             UnwireLinkMenu(state);
         }
 
@@ -516,52 +522,81 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
 
     private static void ResolveNamedControls(UserControl control, SurfaceState state)
     {
-        UnsubscribeResolvedControls(state);
-
-        var scrollViewerName = GetScrollViewerName(control);
-        if (!string.IsNullOrWhiteSpace(scrollViewerName))
-            state.ScrollViewer = FindNamed<ScrollViewer>(control, scrollViewerName!);
-
-        var canvasName = GetCanvasName(control);
-        if (!string.IsNullOrWhiteSpace(canvasName))
-            state.Canvas = FindNamed<Canvas>(control, canvasName!);
-
-        var gridDecoratorName = GetGridDecoratorName(control);
-        if (!string.IsNullOrWhiteSpace(gridDecoratorName))
-            state.GridDecorator = FindNamed<Control>(control, gridDecoratorName!);
-
-        var minimapOverlayName = GetMinimapOverlayName(control);
-        if (!string.IsNullOrWhiteSpace(minimapOverlayName))
-            state.MinimapOverlay = FindNamed<Control>(control, minimapOverlayName!);
-
-        var pointerPressSourceName = GetPointerPressSourceName(control);
-        if (!string.IsNullOrWhiteSpace(pointerPressSourceName))
-            state.PointerPressSource = FindNamed<Control>(control, pointerPressSourceName!);
-
-        if (state.PointerPressSource is not null)
-            state.PointerPressSource.PointerPressed += OnPointerPressed;
-
-        if (state.MinimapOverlay is not null)
+        // 状态可能由 Refresh 自己新建（先于 Attach）：绑定没建过就先补上，否则部件会被登记但没人订阅。
+        if (state.PartBindings.Count == 0)
         {
-            // 浮层铺满表面后，可用右上角取的是浮层自身尺寸；窗口/宿主改尺寸时这里也要重下发。
-            state.MinimapOverlay.SizeChanged += OnMinimapOverlaySizeChanged;
+            BindParts(control, state);
         }
 
-        if (state.ScrollViewer is not null)
-        {
-            state.ScrollViewer.ScrollChanged += OnScrollChanged;
-            // 套模板会新建滚动条；套完要让小地图重新量一次厚度。
-            state.ScrollViewer.TemplateApplied += OnScrollViewerTemplateApplied;
-            // 移除 ScrollContentPresenter 内置的 ScrollGestureRecognizer：否则在触屏平台（Android/iOS）它会在拖拽中
-            // 抢走指针捕获，破坏节点拖拽与插槽连接；本类自带完整的平移逻辑。
-            state.ScrollViewer.LayoutUpdated += OnScrollViewerLayoutUpdated;
-        }
-
-        if (GetZoomEnabled(control))
-        {
-            HookZoom(state);
-        }
+        // 每次 Refresh 都重解析；注册表按引用比较，没换过的部件不会重订任何东西。
+        state.Parts.Set(
+            WorkflowSurfacePart.ScrollViewer, ResolveNamed<ScrollViewer>(control, GetScrollViewerName(control)));
+        state.Parts.Set(
+            WorkflowSurfacePart.Canvas, ResolveNamed<Canvas>(control, GetCanvasName(control)));
+        state.Parts.Set(
+            WorkflowSurfacePart.GridDecorator, ResolveNamed<Control>(control, GetGridDecoratorName(control)));
+        state.Parts.Set(
+            WorkflowSurfacePart.MinimapOverlay, ResolveNamed<Control>(control, GetMinimapOverlayName(control)));
+        state.Parts.Set(
+            WorkflowSurfacePart.PointerPressSource, ResolveNamed<Control>(control, GetPointerPressSourceName(control)));
     }
+
+    // 订阅随部件走：绑定负责「先退旧、再进新」，并把每个部件持有的处理器收在一条订阅里。
+    private static void BindParts(UserControl host, SurfaceState state)
+    {
+        var parts = state.Parts;
+
+        state.PartBindings.Add(new SurfacePartBinding<ScrollViewer>(
+            parts,
+            WorkflowSurfacePart.ScrollViewer,
+            viewer =>
+            {
+                viewer.ScrollChanged += OnScrollChanged;
+                // 套模板会新建滚动条；套完要让小地图重新量一次厚度。
+                viewer.TemplateApplied += OnScrollViewerTemplateApplied;
+                // 移除 ScrollContentPresenter 内置的 ScrollGestureRecognizer：否则在触屏平台（Android/iOS）它会在拖拽中
+                // 抢走指针捕获，破坏节点拖拽与插槽连接；本类自带完整的平移逻辑。
+                viewer.LayoutUpdated += OnScrollViewerLayoutUpdated;
+                if (GetZoomEnabled(host))
+                    HookZoom(state, viewer);
+            },
+            viewer =>
+            {
+                UnhookZoom(state, viewer);
+                viewer.ScrollChanged -= OnScrollChanged;
+                viewer.TemplateApplied -= OnScrollViewerTemplateApplied;
+                viewer.LayoutUpdated -= OnScrollViewerLayoutUpdated;
+            }));
+
+        state.PartBindings.Add(new SurfacePartBinding<Control>(
+            parts,
+            WorkflowSurfacePart.MinimapOverlay,
+            overlay =>
+            {
+                // 浮层铺满表面后，可用右上角取的是浮层自身尺寸；窗口/宿主改尺寸时这里也要重下发。
+                overlay.SizeChanged += OnMinimapOverlaySizeChanged;
+            },
+            overlay => overlay.SizeChanged -= OnMinimapOverlaySizeChanged));
+
+        state.PartBindings.Add(new SurfacePartBinding<Control>(
+            parts,
+            WorkflowSurfacePart.PointerPressSource,
+            source => source.PointerPressed += OnPointerPressed,
+            source => source.PointerPressed -= OnPointerPressed));
+    }
+
+    private static void ReleaseParts(SurfaceState state)
+    {
+        // 先释放绑定（各自退订当前部件），再清空注册表：Clear 时已经没人订阅，不会重复退订。
+        foreach (var binding in state.PartBindings)
+            binding.Dispose();
+
+        state.PartBindings.Clear();
+        state.Parts.Clear();
+    }
+
+    private static T? ResolveNamed<T>(UserControl control, string? name) where T : Control
+        => string.IsNullOrWhiteSpace(name) ? null : FindNamed<T>(control, name!);
 
     /// <summary>
     /// Resolves one named control, or <see langword="null"/> when the names cannot be resolved yet.
@@ -592,62 +627,39 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         }
     }
 
-    private static void UnsubscribeResolvedControls(SurfaceState state)
-    {
-        if (state.PointerPressSource is not null)
-            state.PointerPressSource.PointerPressed -= OnPointerPressed;
-
-        if (state.MinimapOverlay is not null)
-            state.MinimapOverlay.SizeChanged -= OnMinimapOverlaySizeChanged;
-
-        if (state.ScrollViewer is not null)
-        {
-            state.ScrollViewer.ScrollChanged -= OnScrollChanged;
-            state.ScrollViewer.TemplateApplied -= OnScrollViewerTemplateApplied;
-            state.ScrollViewer.LayoutUpdated -= OnScrollViewerLayoutUpdated;
-        }
-
-        UnhookZoom(state);
-        state.PointerPressSource = null;
-        state.ScrollViewer = null;
-        state.Canvas = null;
-        state.GridDecorator = null;
-        state.MinimapOverlay = null;
-    }
-
     private static void OnZoomEnabledChanged(UserControl control, AvaloniaPropertyChangedEventArgs e)
     {
-        if (control.GetValue(StateProperty) is not SurfaceState state)
+        if (control.GetValue(StateProperty) is not SurfaceState state || state.ScrollViewer is not { } viewer)
         {
             return;
         }
 
         if (Equals(e.NewValue, true))
         {
-            HookZoom(state);
+            HookZoom(state, viewer);
         }
         else
         {
-            UnhookZoom(state);
+            UnhookZoom(state, viewer);
         }
     }
 
     // Avalonia 没有 PreviewMouseWheel，所以滚轮在 ScrollViewer 上做隧道：它在控件滚动前触发并标记已处理，
     // 普通滚轮滚动因此不受影响。
-    private static void HookZoom(SurfaceState state)
+    private static void HookZoom(SurfaceState state, ScrollViewer viewer)
     {
-        if (state.ScrollViewer is not null && state.ZoomHandler is null)
+        if (state.ZoomHandler is null)
         {
             state.ZoomHandler = OnZoomPointerWheelChanged;
-            state.ScrollViewer.AddHandler(InputElement.PointerWheelChangedEvent, state.ZoomHandler, RoutingStrategies.Tunnel);
+            viewer.AddHandler(InputElement.PointerWheelChangedEvent, state.ZoomHandler, RoutingStrategies.Tunnel);
         }
     }
 
-    private static void UnhookZoom(SurfaceState state)
+    private static void UnhookZoom(SurfaceState state, ScrollViewer viewer)
     {
-        if (state.ScrollViewer is not null && state.ZoomHandler is not null)
+        if (state.ZoomHandler is not null)
         {
-            state.ScrollViewer.RemoveHandler(InputElement.PointerWheelChangedEvent, state.ZoomHandler);
+            viewer.RemoveHandler(InputElement.PointerWheelChangedEvent, state.ZoomHandler);
             state.ZoomHandler = null;
         }
     }

@@ -11,11 +11,18 @@ public sealed class WorkflowSurfaceBehavior
     private sealed class SurfaceState
     {
         public ContentView? Host { get; set; }
-        public ScrollView? ScrollViewer { get; set; }
-        public AbsoluteLayout? Canvas { get; set; }
-        public View? GridDecorator { get; set; }
-        public View? MinimapOverlay { get; set; }
-        public View? PointerPressSource { get; set; }
+
+        // 部件解析与订阅配对都在 Core 的注册表里：同引用不重订，换件先退旧再进新，Detach 时逐条释放。
+        public SurfacePartRegistry Parts { get; } = new();
+
+        public List<IDisposable> PartBindings { get; } = [];
+
+        public ScrollView? ScrollViewer => Parts.Get<ScrollView>(WorkflowSurfacePart.ScrollViewer);
+        public AbsoluteLayout? Canvas => Parts.Get<AbsoluteLayout>(WorkflowSurfacePart.Canvas);
+        public View? GridDecorator => Parts.Get<View>(WorkflowSurfacePart.GridDecorator);
+        public View? MinimapOverlay => Parts.Get<View>(WorkflowSurfacePart.MinimapOverlay);
+        public View? PointerPressSource => Parts.Get<View>(WorkflowSurfacePart.PointerPressSource);
+
         public PanGestureRecognizer? PanGesture { get; set; }
         public PinchGestureRecognizer? ZoomGesture { get; set; }
         public double ZoomStartScale { get; set; }
@@ -679,7 +686,7 @@ public sealed class WorkflowSurfaceBehavior
 
         if (control.GetValue(StateProperty) is SurfaceState state)
         {
-            UnsubscribeResolvedControls(state);
+            ReleaseParts(state);
             UnsubscribeLayout(state);
             UnwireLinkMenu(state);
             state.Host = null;
@@ -729,122 +736,130 @@ public sealed class WorkflowSurfaceBehavior
 
     private static void ResolveNamedControls(ContentView control, SurfaceState state)
     {
-        UnsubscribeResolvedControls(state);
-
-        var scrollViewerName = GetScrollViewerName(control);
-        var canvasName = GetCanvasName(control);
-        var gridDecoratorName = GetGridDecoratorName(control);
-        var pointerPressSourceName = GetPointerPressSourceName(control);
-
-        if (!string.IsNullOrWhiteSpace(scrollViewerName))
+        // 状态可能由 Refresh 自己新建（先于 Attach）：绑定没建过就先补上，否则部件会被登记但没人订阅。
+        if (state.PartBindings.Count == 0)
         {
-            state.ScrollViewer = control.FindByName<ScrollView>(scrollViewerName);
+            BindParts(control, state);
         }
 
-        if (!string.IsNullOrWhiteSpace(canvasName))
-        {
-            state.Canvas = control.FindByName<AbsoluteLayout>(canvasName);
-            if (state.Canvas is not null)
+        // 每次 Refresh 都重解析；注册表按引用比较，没换过的部件不会重订任何东西。
+        state.Parts.Set(WorkflowSurfacePart.ScrollViewer, ResolveNamed<ScrollView>(control, GetScrollViewerName(control)));
+        state.Parts.Set(WorkflowSurfacePart.Canvas, ResolveNamed<AbsoluteLayout>(control, GetCanvasName(control)));
+        state.Parts.Set(WorkflowSurfacePart.GridDecorator, ResolveNamed<View>(control, GetGridDecoratorName(control)));
+        state.Parts.Set(WorkflowSurfacePart.MinimapOverlay, ResolveNamed<View>(control, GetMinimapOverlayName(control)));
+        state.Parts.Set(WorkflowSurfacePart.PointerPressSource, ResolveNamed<View>(control, GetPointerPressSourceName(control)));
+    }
+
+    private static T? ResolveNamed<T>(ContentView control, string? name) where T : Element
+        => string.IsNullOrWhiteSpace(name) ? null : control.FindByName<T>(name!);
+
+    // 订阅随部件走：绑定负责「先退旧、再进新」，并把每个部件持有的处理器收在一条订阅里。
+    private static void BindParts(ContentView control, SurfaceState state)
+    {
+        var parts = state.Parts;
+
+        state.PartBindings.Add(new SurfacePartBinding<ScrollView>(
+            parts,
+            WorkflowSurfacePart.ScrollViewer,
+            viewer =>
             {
-                state.Canvas.ChildAdded += OnCanvasChildAdded;
-                state.Canvas.ChildRemoved += OnCanvasChildRemoved;
+                viewer.Scrolled += OnScrolled;
+                viewer.SizeChanged += OnScrollViewerSizeChanged;
+                // 在平台视图出现后配置原生 ScrollViewer（handler 可能在本挂接之后才创建）；handler 重建时会再跑一次。
+                viewer.HandlerChanged += OnScrollViewerHandlerChanged;
+                OnScrollViewerHandlerChanged(viewer, EventArgs.Empty);
+            },
+            viewer =>
+            {
+                viewer.Scrolled -= OnScrolled;
+                viewer.SizeChanged -= OnScrollViewerSizeChanged;
+                viewer.HandlerChanged -= OnScrollViewerHandlerChanged;
+            }));
+
+        state.PartBindings.Add(new SurfacePartBinding<AbsoluteLayout>(
+            parts,
+            WorkflowSurfacePart.Canvas,
+            canvas =>
+            {
+                canvas.ChildAdded += OnCanvasChildAdded;
+                canvas.ChildRemoved += OnCanvasChildRemoved;
 #if WINDOWS
                 // 滚轮挂在画布上（见 HookWheel）；平台元素可能在本挂接之后才建好，所以也订 handler 的出生。
-                state.Canvas.HandlerChanged += OnCanvasHandlerChanged;
+                canvas.HandlerChanged += OnCanvasHandlerChanged;
                 HookWheel(state);
 #endif
-            }
-        }
+            },
+            canvas =>
+            {
+                canvas.ChildAdded -= OnCanvasChildAdded;
+                canvas.ChildRemoved -= OnCanvasChildRemoved;
+#if WINDOWS
+                canvas.HandlerChanged -= OnCanvasHandlerChanged;
+                UnhookWheel(state);
+#endif
+            }));
 
-        if (!string.IsNullOrWhiteSpace(gridDecoratorName))
-        {
-            state.GridDecorator = control.FindByName<View>(gridDecoratorName);
-        }
-
-        var minimapOverlayName = GetMinimapOverlayName(control);
-        if (!string.IsNullOrWhiteSpace(minimapOverlayName))
-        {
-            state.MinimapOverlay = control.FindByName<View>(minimapOverlayName);
-        }
-
-        if (!string.IsNullOrWhiteSpace(pointerPressSourceName))
-        {
-            state.PointerPressSource = control.FindByName<View>(pointerPressSourceName);
-            if (state.PointerPressSource is not null)
+        state.PartBindings.Add(new SurfacePartBinding<View>(
+            parts,
+            WorkflowSurfacePart.PointerPressSource,
+            source =>
             {
 #if WINDOWS
                 // 平移走原生指针事件，不用 PanGestureRecognizer：只要还在用 manipulation，
                 // 原生 ScrollViewer 就会在松手那一刻把它自己累积的偏移补上（实测 423→186，
                 // 见 OnScrollViewerHandlerChanged）。指针事件不产生 manipulation，它便无从插手。
-                PlatformPanHosts[state.PointerPressSource] = state;
-                state.PointerPressSource.HandlerChanged += OnPointerPressSourceHandlerChanged;
-                HookPlatformPan(state.PointerPressSource);
+                PlatformPanHosts[source] = state;
+                source.HandlerChanged += OnPointerPressSourceHandlerChanged;
+                HookPlatformPan(source);
 #else
                 state.PanGesture = new PanGestureRecognizer();
                 state.PanGesture.PanUpdated += OnPanUpdated;
-                state.PointerPressSource.GestureRecognizers.Add(state.PanGesture);
+                source.GestureRecognizers.Add(state.PanGesture);
 #endif
-            }
-        }
-
-        if (state.ScrollViewer is not null)
-        {
-            state.ScrollViewer.Scrolled += OnScrolled;
-            state.ScrollViewer.SizeChanged += OnScrollViewerSizeChanged;
-            // 在平台视图出现后配置原生 ScrollViewer（handler 可能在本挂接之后才创建）；handler 重建时会再跑一次。
-            state.ScrollViewer.HandlerChanged += OnScrollViewerHandlerChanged;
-            OnScrollViewerHandlerChanged(state.ScrollViewer, EventArgs.Empty);
-        }
-
-        if (GetZoomEnabled(control))
-        {
-            HookZoom(control, state);
-        }
+                // 缩放的手势挂在这个源上（见 HookZoom）：换了源就重新挂一次。
+                if (GetZoomEnabled(control))
+                {
+                    HookZoom(control, state);
+                }
+            },
+            source =>
+            {
+#if WINDOWS
+                source.HandlerChanged -= OnPointerPressSourceHandlerChanged;
+                PlatformPanHosts.Remove(source);
+                UnhookPlatformPan(state);
+#else
+                if (state.PanGesture is not null)
+                {
+                    state.PanGesture.PanUpdated -= OnPanUpdated;
+                    source.GestureRecognizers.Remove(state.PanGesture);
+                    state.PanGesture = null;
+                }
+#endif
+                // 捏合手势属于旧源：从它身上摘掉，新源由 attach 重新挂。
+                if (state.ZoomGesture is not null)
+                {
+                    state.ZoomGesture.PinchUpdated -= OnPinchUpdated;
+                    source.GestureRecognizers.Remove(state.ZoomGesture);
+                    state.ZoomGesture = null;
+                }
+            }));
     }
 
-    private static void UnsubscribeResolvedControls(SurfaceState state)
+    private static void ReleaseParts(SurfaceState state)
     {
-        if (state.ScrollViewer is not null)
+        // 先释放绑定（各自退订当前部件），再清空注册表：Clear 时已经没人订阅，不会重复退订。
+        foreach (var binding in state.PartBindings)
         {
-            state.ScrollViewer.Scrolled -= OnScrolled;
-            state.ScrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
-            state.ScrollViewer.HandlerChanged -= OnScrollViewerHandlerChanged;
+            binding.Dispose();
         }
 
-        if (state.Canvas is not null)
-        {
-            state.Canvas.ChildAdded -= OnCanvasChildAdded;
-            state.Canvas.ChildRemoved -= OnCanvasChildRemoved;
-#if WINDOWS
-            state.Canvas.HandlerChanged -= OnCanvasHandlerChanged;
-            UnhookWheel(state);
-#endif
-        }
-
-        if (state.PointerPressSource is not null)
-        {
-#if WINDOWS
-            state.PointerPressSource.HandlerChanged -= OnPointerPressSourceHandlerChanged;
-            PlatformPanHosts.Remove(state.PointerPressSource);
-            UnhookPlatformPan(state);
-#else
-            if (state.PanGesture is not null)
-            {
-                state.PanGesture.PanUpdated -= OnPanUpdated;
-                state.PointerPressSource.GestureRecognizers.Remove(state.PanGesture);
-            }
-#endif
-        }
+        state.PartBindings.Clear();
+        state.Parts.Clear();
 
         UnhookZoom(state);
         state.PanCts?.Cancel();
         state.PanCts = null;
-        state.ScrollViewer = null;
-        state.Canvas = null;
-        state.GridDecorator = null;
-        state.MinimapOverlay = null;
-        state.PointerPressSource = null;
-        state.PanGesture = null;
     }
 
     private static void OnZoomEnabledChanged(BindableObject bindable, object? oldValue, object? newValue)

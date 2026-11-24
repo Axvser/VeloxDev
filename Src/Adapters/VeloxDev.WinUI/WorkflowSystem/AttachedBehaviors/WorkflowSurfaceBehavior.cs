@@ -25,11 +25,18 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public Windows.Foundation.Point PanStartOffset { get; set; }
         public bool IsVisibleRegionUpdateQueued { get; set; }
         public UserControl? Host { get; set; }
-        public ScrollViewer? ScrollViewer { get; set; }
-        public Canvas? Canvas { get; set; }
-        public FrameworkElement? GridDecorator { get; set; }
-        public FrameworkElement? MinimapOverlay { get; set; }
-        public FrameworkElement? PointerPressSource { get; set; }
+
+        // 部件解析与订阅配对都在 Core 的注册表里：同引用不重订，换件先退旧再进新，Detach 时逐条释放。
+        public SurfacePartRegistry Parts { get; } = new();
+
+        public List<IDisposable> PartBindings { get; } = [];
+
+        public ScrollViewer? ScrollViewer => Parts.Get<ScrollViewer>(WorkflowSurfacePart.ScrollViewer);
+        public Canvas? Canvas => Parts.Get<Canvas>(WorkflowSurfacePart.Canvas);
+        public FrameworkElement? GridDecorator => Parts.Get<FrameworkElement>(WorkflowSurfacePart.GridDecorator);
+        public FrameworkElement? MinimapOverlay => Parts.Get<FrameworkElement>(WorkflowSurfacePart.MinimapOverlay);
+        public FrameworkElement? PointerPressSource => Parts.Get<FrameworkElement>(WorkflowSurfacePart.PointerPressSource);
+
         public PointerEventHandler? WheelHandler { get; set; }
 
         /// <summary>The element the wheel handler is attached to: the scroll content presenter when
@@ -429,7 +436,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         {
             state.PendingScrollTimer?.Stop();
             state.PendingScrollTimer = null;
-            UnsubscribeResolvedControls(state);
+            ReleaseParts(state);
             UnwireLinkMenu(state);
         }
 
@@ -470,88 +477,93 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
 
     private static void ResolveNamedControls(UserControl control, SurfaceState state)
     {
-        UnsubscribeResolvedControls(state);
-
-        var scrollViewerName = GetScrollViewerName(control);
-        if (!string.IsNullOrWhiteSpace(scrollViewerName))
+        // 状态可能由 Refresh 自己新建（先于 Attach）：绑定没建过就先补上，否则部件会被登记但没人订阅。
+        if (state.PartBindings.Count == 0)
         {
-            var resolvedViewer = control.FindName(scrollViewerName) as ScrollViewer;
-            if (!ReferenceEquals(resolvedViewer, state.ScrollViewer))
-            {
-                // 换了滚动容器：旧容器上的在途目标不能带过来。
-                state.PendingScrollX = double.NaN;
-                state.PendingScrollY = double.NaN;
-                state.PendingScrollTimer?.Stop();
-                state.PendingScrollTimer = null;
-            }
-
-            state.ScrollViewer = resolvedViewer;
-
-            // 焦点要能落在滚动容器本身上（见 Attach 的注释）。模板里的 ScrollViewer 默认不可 Tab 停留，
-            // 不置这一位的话 `Focus()` 会失败，平台转而把焦点交给画布里第一个可聚焦的后代（节点卡的 TextBox），
-            // 随后 BringIntoView 就把视口拽回那个输入框。
-            if (state.ScrollViewer is { } viewer) viewer.IsTabStop = true;
+            BindParts(state);
         }
 
-        var canvasName = GetCanvasName(control);
-        if (!string.IsNullOrWhiteSpace(canvasName))
-        {
-            state.Canvas = control.FindName(canvasName) as Canvas;
-        }
-
-        var gridDecoratorName = GetGridDecoratorName(control);
-        if (!string.IsNullOrWhiteSpace(gridDecoratorName))
-        {
-            state.GridDecorator = control.FindName(gridDecoratorName) as FrameworkElement;
-        }
-
-        var minimapOverlayName = GetMinimapOverlayName(control);
-        if (!string.IsNullOrWhiteSpace(minimapOverlayName))
-        {
-            state.MinimapOverlay = control.FindName(minimapOverlayName) as FrameworkElement;
-        }
-
-        var pointerPressSourceName = GetPointerPressSourceName(control);
-        if (!string.IsNullOrWhiteSpace(pointerPressSourceName))
-        {
-            state.PointerPressSource = control.FindName(pointerPressSourceName) as FrameworkElement;
-        }
-
-        if (state.PointerPressSource is not null)
-        {
-            state.PointerPressSource.PointerPressed += OnPointerPressed;
-        }
-
-        if (state.ScrollViewer is not null)
-        {
-            state.ScrollViewer.ViewChanged += OnViewChanged;
-            // 视口尺寸变化不一定触发 ViewChanged；小地图的可用右上角依赖滚动条厚度，必须跟着窗口一起改。
-            state.ScrollViewer.SizeChanged += OnScrollViewerSizeChanged;
-        }
-
-        // 滚轮的挂接不跟缩放开关走：普通滚轮的汇报与缩放是两件事。
-        HookWheel(state);
+        // 每次 Refresh 都重解析；注册表按引用比较，没换过的部件不会重订任何东西。
+        state.Parts.Set(WorkflowSurfacePart.ScrollViewer, ResolveNamed<ScrollViewer>(control, GetScrollViewerName(control)));
+        state.Parts.Set(WorkflowSurfacePart.Canvas, ResolveNamed<Canvas>(control, GetCanvasName(control)));
+        state.Parts.Set(WorkflowSurfacePart.GridDecorator, ResolveNamed<FrameworkElement>(control, GetGridDecoratorName(control)));
+        state.Parts.Set(WorkflowSurfacePart.MinimapOverlay, ResolveNamed<FrameworkElement>(control, GetMinimapOverlayName(control)));
+        state.Parts.Set(WorkflowSurfacePart.PointerPressSource, ResolveNamed<FrameworkElement>(control, GetPointerPressSourceName(control)));
     }
 
-    private static void UnsubscribeResolvedControls(SurfaceState state)
+    private static T? ResolveNamed<T>(UserControl control, string? name) where T : FrameworkElement
+        => string.IsNullOrWhiteSpace(name) ? null : control.FindName(name!) as T;
+
+    // 订阅随部件走：绑定负责「先退旧、再进新」，并把每个部件持有的处理器收在一条订阅里。
+    private static void BindParts(SurfaceState state)
     {
-        if (state.PointerPressSource is not null)
+        var parts = state.Parts;
+
+        state.PartBindings.Add(new SurfacePartBinding<ScrollViewer>(
+            parts,
+            WorkflowSurfacePart.ScrollViewer,
+            viewer =>
+            {
+                // 换了滚动容器：旧容器上的在途目标不能带过来。
+                state.PendingScrollTimer?.Stop();
+                state.PendingScrollTimer = null;
+                state.PendingScrollX = double.NaN;
+                state.PendingScrollY = double.NaN;
+
+                // 焦点要能落在滚动容器本身上（见 Attach 的注释）。模板里的 ScrollViewer 默认不可 Tab 停留，
+                // 不置这一位的话 `Focus()` 会失败，平台转而把焦点交给画布里第一个可聚焦的后代（节点卡的 TextBox），
+                // 随后 BringIntoView 就把视口拽回那个输入框。
+                viewer.IsTabStop = true;
+                viewer.ViewChanged += OnViewChanged;
+                // 视口尺寸变化不一定触发 ViewChanged；小地图的可用右上角依赖滚动条厚度，必须跟着窗口一起改。
+                viewer.SizeChanged += OnScrollViewerSizeChanged;
+                // 滚轮挂在滚动内容呈现器或画布上，两者都由部件决定，所以换了哪一个都重挂一次。
+                RehookWheel(state);
+            },
+            viewer =>
+            {
+                state.PendingScrollTimer?.Stop();
+                state.PendingScrollTimer = null;
+                state.PendingScrollX = double.NaN;
+                state.PendingScrollY = double.NaN;
+                viewer.ViewChanged -= OnViewChanged;
+                viewer.SizeChanged -= OnScrollViewerSizeChanged;
+                RehookWheel(state);
+            }));
+
+        state.PartBindings.Add(new SurfacePartBinding<Canvas>(
+            parts,
+            WorkflowSurfacePart.Canvas,
+            _ => RehookWheel(state),
+            _ => RehookWheel(state)));
+
+        state.PartBindings.Add(new SurfacePartBinding<FrameworkElement>(
+            parts,
+            WorkflowSurfacePart.PointerPressSource,
+            source => source.PointerPressed += OnPointerPressed,
+            source => source.PointerPressed -= OnPointerPressed));
+    }
+
+    private static void ReleaseParts(SurfaceState state)
+    {
+        // 先释放绑定（各自退订当前部件），再清空注册表：Clear 时已经没人订阅，不会重复退订。
+        foreach (var binding in state.PartBindings)
         {
-            state.PointerPressSource.PointerPressed -= OnPointerPressed;
+            binding.Dispose();
         }
 
-        if (state.ScrollViewer is not null)
-        {
-            state.ScrollViewer.ViewChanged -= OnViewChanged;
-            state.ScrollViewer.SizeChanged -= OnScrollViewerSizeChanged;
-        }
+        state.PartBindings.Clear();
+        state.Parts.Clear();
 
+        // 滚轮的宿主由两个部件共同决定：绑定退订时还看得见另一个部件，会顺手再挂一次。
+        // 收尾必须显式摘掉，否则下一次挂接时 HookWheel 见 handler 非空直接返回，旧宿主一直留着。
         UnhookWheel(state);
-        state.PointerPressSource = null;
-        state.ScrollViewer = null;
-        state.Canvas = null;
-        state.GridDecorator = null;
-        state.MinimapOverlay = null;
+    }
+
+    private static void RehookWheel(SurfaceState state)
+    {
+        UnhookWheel(state);
+        HookWheel(state);
     }
 
     private static void OnZoomEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
