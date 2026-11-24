@@ -72,6 +72,14 @@ public partial class TreeHelper<T> : ITreeHelper, ITreeEvents, IInputEvents, IWo
     // 每次 Install 递增；投递时把版本一并带走，卸载/换线程重装后旧上下文里的回投才会被丢掉。
     private int installVersion;
 
+    // 可观测计数：只记事实，不参与调度。全部走 Interlocked，tick 线程与 UI 线程同时写也不会丢。
+    private long dirtyRequestCount;
+    private long passPostCount;
+    private long passRunCount;
+    private long passEmptyCount;
+    private long lastPassTicks;
+    private long totalPassTicks;
+
     partial void Update(FrameEventArgs e)
     {
         if (!useVirtualization || Volatile.Read(ref isDirty) == 0) return;
@@ -89,6 +97,7 @@ public partial class TreeHelper<T> : ITreeHelper, ITreeEvents, IInputEvents, IWo
         try
         {
             var version = Volatile.Read(ref installVersion);
+            Interlocked.Increment(ref passPostCount);
             context.Post(_ => RunQueuedVirtualizationPass(version), null);
         }
         catch (Exception ex)
@@ -111,10 +120,26 @@ public partial class TreeHelper<T> : ITreeHelper, ITreeEvents, IInputEvents, IWo
     private void RunVirtualizationPass()
     {
         // 先取走脏标记：这一趟执行期间的变更会重新标脏，由下一 tick 接手，不会被这里吞掉。
-        if (Interlocked.Exchange(ref isDirty, 0) == 0) return;
+        if (Interlocked.Exchange(ref isDirty, 0) == 0)
+        {
+            Interlocked.Increment(ref passEmptyCount);
+            return;
+        }
 
-        Component?.Virtualize(Viewport);
-        BroadcastVisibleItemLayout();
+        Interlocked.Increment(ref passRunCount);
+        var started = Stopwatch.GetTimestamp();
+
+        try
+        {
+            Component?.Virtualize(Viewport);
+            BroadcastVisibleItemLayout();
+        }
+        finally
+        {
+            var elapsed = Stopwatch.GetTimestamp() - started;
+            Interlocked.Exchange(ref lastPassTicks, elapsed);
+            Interlocked.Add(ref totalPassTicks, elapsed);
+        }
     }
 
     private void BroadcastVisibleItemLayout()
@@ -271,6 +296,58 @@ public partial class TreeHelper<T> : ITreeHelper, ITreeEvents, IInputEvents, IWo
         return this;
     }
 
+    #region Virtualization metrics
+
+    /// <summary>
+    /// The number of <see cref="MarkDirty"/> calls since the helper was created (or since
+    /// <see cref="ResetVirtualizationMetrics"/>), including calls the tick later merged into one pass.
+    /// </summary>
+    /// <remarks>
+    /// Only the public <see cref="MarkDirty"/> entry counts. The collection-change paths in this type set the dirty
+    /// flag directly; they are reported through <see cref="PassRunCount"/> once a pass drains them.
+    /// </remarks>
+    public long DirtyRequestCount => Interlocked.Read(ref dirtyRequestCount);
+
+    /// <summary>
+    /// The number of virtualization passes posted to the host's <see cref="SynchronizationContext"/>.
+    /// </summary>
+    /// <remarks>
+    /// A posted pass whose install version no longer matches is still counted here: it was scheduled, then dropped.
+    /// </remarks>
+    public long PassPostCount => Interlocked.Read(ref passPostCount);
+
+    /// <summary>The number of virtualization passes that actually ran (drained a dirty flag and updated the visible set).</summary>
+    public long PassRunCount => Interlocked.Read(ref passRunCount);
+
+    /// <summary>
+    /// The number of pass dispatches that found nothing to do — the dirty flag had already been drained by an
+    /// earlier dispatch.
+    /// </summary>
+    public long PassEmptyCount => Interlocked.Read(ref passEmptyCount);
+
+    /// <summary>The wall-clock duration of the most recent virtualization pass, or zero when none has run.</summary>
+    public TimeSpan LastVirtualizationPassDuration => ToDuration(Interlocked.Read(ref lastPassTicks));
+
+    /// <summary>The summed wall-clock duration of every virtualization pass that ran.</summary>
+    public TimeSpan TotalVirtualizationPassDuration => ToDuration(Interlocked.Read(ref totalPassTicks));
+
+    /// <summary>Resets every virtualization metric to zero.</summary>
+    /// <remarks>A diagnostic hook: the counters are additive read-only state and never affect scheduling.</remarks>
+    public void ResetVirtualizationMetrics()
+    {
+        Interlocked.Exchange(ref dirtyRequestCount, 0);
+        Interlocked.Exchange(ref passPostCount, 0);
+        Interlocked.Exchange(ref passRunCount, 0);
+        Interlocked.Exchange(ref passEmptyCount, 0);
+        Interlocked.Exchange(ref lastPassTicks, 0);
+        Interlocked.Exchange(ref totalPassTicks, 0);
+    }
+
+    private static TimeSpan ToDuration(long stopwatchTicks)
+        => stopwatchTicks <= 0 ? TimeSpan.Zero : TimeSpan.FromSeconds(stopwatchTicks / (double)Stopwatch.Frequency);
+
+    #endregion
+
     #region Data CallBack
     private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -411,7 +488,15 @@ public partial class TreeHelper<T> : ITreeHelper, ITreeEvents, IInputEvents, IWo
         => Component?.StandardClearHistory();
 
     /// <inheritdoc />
-    public virtual void MarkDirty() => Interlocked.Exchange(ref isDirty, 1);
+    /// <summary>
+    /// Marks the visible set stale; the next virtualization pass rebuilds it.
+    /// </summary>
+    /// <remarks>Counted by <see cref="DirtyRequestCount"/> before the flag is set, so a burst is visible even when one pass drains it.</remarks>
+    public virtual void MarkDirty()
+    {
+        Interlocked.Increment(ref dirtyRequestCount);
+        Interlocked.Exchange(ref isDirty, 1);
+    }
     #endregion
 
     #region Layout
