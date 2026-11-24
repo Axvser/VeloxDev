@@ -37,12 +37,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         public Control? MinimapOverlay { get; set; }
         public EventHandler<PlatformInput.PointerWheelEventArgs>? ZoomHandler { get; set; }
 
-        // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
-        public ITreeComponent? LastRestoreTree { get; set; }
-        public bool HasPendingRestore { get; set; }
-        public bool RestoreQueued { get; set; }
-        public double PendingRestoreX { get; set; }
-        public double PendingRestoreY { get; set; }
+        // 视口恢复状态机：捕获、排队、只恢复一次都在 Core，本类只提供延迟与落点。
+        public SurfaceViewportRestoreCore? Restore { get; set; }
 
         // 悬停时取焦点的那个连线控件（引用比较，避免每次指针移动都重复 Focus）。
         public Control? HoverFocus { get; set; }
@@ -216,7 +212,8 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         }
 
         // 画布滚动归适配器（见 OnPointerWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollViewer。
-        var scroller = new SurfaceScroller(state);
+        // 换算、夹取、越界撑大与居中都在 Core，本类只把 ScrollViewer 的读数与写入包成宿主。
+        var scroller = new SurfaceScrollerCore(new AvaloniaSurfaceScrollHost(state));
         state.Scroller = scroller;
         input.Scroller = scroller;
         input.Navigator = scroller;
@@ -424,43 +421,14 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     private static void CaptureViewportRestore(UserControl host, SurfaceState state)
     {
         if (host.DataContext is not ITreeComponent viewModel) return;
-        if (ReferenceEquals(viewModel, state.LastRestoreTree)) return;
-
-        state.LastRestoreTree = viewModel;
-
-        if (!WorkflowSurfaceMath.HasViewportRestore(viewModel.Layout)) return;
-
-        var scroll = WorkflowSurfaceMath.ViewportRestoreScroll(viewModel.Layout);
-        state.PendingRestoreX = scroll.Horizontal;
-        state.PendingRestoreY = scroll.Vertical;
-        state.HasPendingRestore = true;
+        state.Restore?.Capture(viewModel);
     }
 
     // 布局稳定后再滚：DataContext 变化这一刻控件往往还没排版，Extent 还是 0，直接滚会被夹没。
-    // 控件也还没解析出来时就不清标记 —— 下一次 Refresh 会再排一次，这就是重试。
+    // 控件也还没解析出来时由 Core 保留待恢复标记 —— 下一次 Refresh 会再排一次，这就是重试。
     private static void QueueViewportRestore(UserControl host, SurfaceState state)
     {
-        if (!state.HasPendingRestore || state.RestoreQueued) return;
-
-        state.RestoreQueued = true;
-        Dispatcher.UIThread.Post(() =>
-        {
-            state.RestoreQueued = false;
-
-            if (!state.HasPendingRestore || !GetIsEnabled(host) || state.ScrollViewer is not { } viewer)
-                return;
-
-            state.HasPendingRestore = false;
-
-            var maxH = GetHorizontalScrollMaximum(viewer);
-            var maxV = GetVerticalScrollMaximum(viewer);
-            viewer.Offset = new Vector(
-                WorkflowSurfaceMath.ClampValue(state.PendingRestoreX, 0, maxH),
-                WorkflowSurfaceMath.ClampValue(state.PendingRestoreY, 0, maxV));
-
-            // 恢复后的位置立刻写回模型，免得控件与 Layout.ViewportOffset 各说各话。
-            UpdateVisibleRegion(host, state);
-        }, DispatcherPriority.Loaded);
+        state.Restore?.Schedule(new AvaloniaViewportRestoreHost(host, state), () => UpdateVisibleRegion(host, state));
     }
 
     private static void OnIsEnabledChanged(UserControl control, AvaloniaPropertyChangedEventArgs e)
@@ -478,7 +446,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
     {
         Detach(control);
 
-        var state = new SurfaceState { Host = control };
+        var state = new SurfaceState { Host = control, Restore = new SurfaceViewportRestoreCore() };
         control.SetValue(StateProperty, state);
 
         // 宿主必须能拿焦点，悬停焦点才有落点、Delete 才有路由。`UserControl` 的 `Focusable` 默认是
@@ -901,103 +869,82 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         }
     }
 
-    // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
-    // Avalonia 的 Delta 已是一格 ±1，而 ScrollViewer 自己每格滚 50（实测，WPF 那边是 120 一格、3 行 × 16），
-    // 取同一个数，接管之后手感才不会变。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
+    // ScrollViewer 的宿主层：只报告当前读数、写偏移、让布局认下长大的范围。
+    // 换算/夹取/居中都在 SurfaceScrollerCore，本类不再保留一份。
+    private sealed class AvaloniaSurfaceScrollHost : ISurfaceScrollHost
     {
-        private const double PixelsPerDelta = 50d;
-
         private readonly SurfaceState state;
 
-        public SurfaceScroller(SurfaceState state) => this.state = state;
+        public AvaloniaSurfaceScrollHost(SurfaceState state) => this.state = state;
 
-        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
-        {
-            if (state.ScrollViewer is not { } viewer)
-            {
-                return;
-            }
+        public CanvasLayout? Layout => (state.Host?.DataContext as ITreeComponent)?.Layout;
 
-            // 横轴正 = 向右，偏移同向取加；纵轴正 = 远离用户 = 视口上移，偏移取减 —— 两轴的「正」不是同一个物理方向。
-            var dx = wheelDeltaX * PixelsPerDelta;
-            var dy = -wheelDeltaY * PixelsPerDelta;
+        public double ViewportWidth => state.ScrollViewer?.Viewport.Width ?? 0d;
 
-            // 零增量不动那一轴（IWorkflowSurfaceScroller.ScrollBy 的 remarks）：只把非零那轴算进目标，另一轴原样沿用。
-            var desiredX = dx != 0d ? viewer.Offset.X + dx : viewer.Offset.X;
-            var desiredY = dy != 0d ? viewer.Offset.Y + dy : viewer.Offset.Y;
+        public double ViewportHeight => state.ScrollViewer?.Viewport.Height ?? 0d;
 
-            var maxH = GetHorizontalScrollMaximum(viewer);
-            var maxV = GetVerticalScrollMaximum(viewer);
+        public double HorizontalOffset => state.ScrollViewer?.Offset.X ?? 0d;
 
-            var host = state.Host;
-            if (host is null || host.DataContext is not ITreeComponent viewModel)
-            {
-                // 拿不到布局时退回旧的「到边即停」，至少不越界。
-                viewer.Offset = new Vector(
-                    dx != 0d ? WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH) : viewer.Offset.X,
-                    dy != 0d ? WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV) : viewer.Offset.Y);
-                return;
-            }
+        public double VerticalOffset => state.ScrollViewer?.Offset.Y ?? 0d;
 
-            // 与平移走同一条边界语义：越界经 ClampScrollOffset 撑大画布（extendRatio 用平移那个），而不是到边即停。
-            // 两处若各留一套语义，同一个画布「拖能撑出去、滚不能」。
-            var newX = dx != 0d
-                ? WorkflowSurfaceMath.ClampScrollOffset(
-                    desiredX, maxH, viewModel.Layout, horizontal: true, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
-                : desiredX;
-            var newY = dy != 0d
-                ? WorkflowSurfaceMath.ClampScrollOffset(
-                    desiredY, maxV, viewModel.Layout, horizontal: false, extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
-                : desiredY;
+        public double HorizontalMaximum
+            => state.ScrollViewer is { } viewer ? GetHorizontalScrollMaximum(viewer) : 0d;
 
-            if (newX != desiredX || newY != desiredY)
-            {
-                // 撑大过画布：extent 是懒的，先 ApplyLayout + UpdateLayout 让 ScrollViewer 认下新范围，再重读 max
-                //（与缩放那支同一套：Avalonia 一次 UpdateLayout 就是整棵树一次布局 pass，见 memory/modules/WorkflowSystem/adapters/avalonia.md §二.6）。
-                ApplyLayout(host, state);
-                viewer.UpdateLayout();
-                maxH = GetHorizontalScrollMaximum(viewer);
-                maxV = GetVerticalScrollMaximum(viewer);
-                newX = Math.Min(newX, maxH);
-                newY = Math.Min(newY, maxV);
-            }
+        public double VerticalMaximum
+            => state.ScrollViewer is { } viewer ? GetVerticalScrollMaximum(viewer) : 0d;
 
-            // 只写增量非零的那一轴：另一轴原样沿用当前偏移，免得把它夹回范围里（零增量不许动那一轴）。
-            viewer.Offset = new Vector(
-                dx != 0d ? WorkflowSurfaceMath.ClampValue(newX, 0d, maxH) : viewer.Offset.X,
-                dy != 0d ? WorkflowSurfaceMath.ClampValue(newY, 0d, maxV) : viewer.Offset.Y);
-        }
+        // 这家的滚轮 Delta 已是一格 ±1，ScrollViewer 自己每格滚 50 —— 取同一个数，接管之后手感不变。
+        public SurfaceWheelProfile WheelProfile => SurfaceWheelProfile.FromPixels(1d, 50d);
 
-        public void CenterOn(double localX, double localY)
+        public void ApplyOffset(double? horizontalOffset, double? verticalOffset)
         {
             if (state.ScrollViewer is not { } viewer) return;
-            if (state.Host is not { } host || host.DataContext is not ITreeComponent viewModel) return;
 
-            var layout = viewModel.Layout;
-            var (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
-                localX, localY, viewer.Viewport.Width, viewer.Viewport.Height, layout);
-            var maxH = GetHorizontalScrollMaximum(viewer);
-            var maxV = GetVerticalScrollMaximum(viewer);
-
-            // 画布不够大时和滚轮/平移一样按差额长出去，而不是把目标夹到边上。
-            var clampedX = WorkflowSurfaceMath.ClampScrollOffset(desiredX, maxH, layout, horizontal: true);
-            var clampedY = WorkflowSurfaceMath.ClampScrollOffset(desiredY, maxV, layout, horizontal: false);
-            if (clampedX != desiredX || clampedY != desiredY)
-            {
-                // 负向增长会改动 ActualOffset，正向增长会改动 ActualSize；先让布局认下新范围，再按新偏移重算目标。
-                ApplyLayout(host, state);
-                viewer.UpdateLayout();
-                maxH = GetHorizontalScrollMaximum(viewer);
-                maxV = GetVerticalScrollMaximum(viewer);
-                (desiredX, desiredY) = WorkflowSurfaceMath.CenterScroll(
-                    localX, localY, viewer.Viewport.Width, viewer.Viewport.Height, layout);
-            }
-
+            // 只写传进来的那几轴：零增量的另一轴不许被夹回范围。
             viewer.Offset = new Vector(
-                WorkflowSurfaceMath.ClampValue(desiredX, 0d, maxH),
-                WorkflowSurfaceMath.ClampValue(desiredY, 0d, maxV));
+                horizontalOffset ?? viewer.Offset.X,
+                verticalOffset ?? viewer.Offset.Y);
         }
+
+        public void ExpandCanvas()
+        {
+            if (state.Host is not { } host) return;
+
+            // 一次 UpdateLayout 就是整棵树一次布局 pass（Avalonia 没有逐控件重排）。
+            ApplyLayout(host, state);
+            state.ScrollViewer?.UpdateLayout();
+        }
+    }
+
+    // 视口恢复的宿主层：延迟到 Loaded 相、检查仍然挂着、把恢复结果写进 ScrollViewer。
+    private sealed class AvaloniaViewportRestoreHost : ISurfaceViewportRestoreHost
+    {
+        private readonly UserControl host;
+        private readonly SurfaceState state;
+
+        public AvaloniaViewportRestoreHost(UserControl host, SurfaceState state)
+        {
+            this.host = host;
+            this.state = state;
+        }
+
+        public bool IsRestoreEnabled => GetIsEnabled(host) && state.ScrollViewer is not null;
+
+        public double HorizontalMaximum
+            => state.ScrollViewer is { } viewer ? GetHorizontalScrollMaximum(viewer) : 0d;
+
+        public double VerticalMaximum
+            => state.ScrollViewer is { } viewer ? GetVerticalScrollMaximum(viewer) : 0d;
+
+        public void ApplyOffset(double horizontalOffset, double verticalOffset)
+        {
+            if (state.ScrollViewer is not { } viewer) return;
+
+            viewer.Offset = new Vector(horizontalOffset, verticalOffset);
+        }
+
+        public void DeferRestore(Action restore)
+            => Dispatcher.UIThread.Post(restore, DispatcherPriority.Loaded);
     }
 
     // 内层闸门用：沿可视祖先链找**最近的、且不是画布自己那台的**滚动容器，判它沿这一笔方向还有没有余量。
@@ -1274,17 +1221,14 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (host.DataContext is not ITreeComponent viewModel || state.ScrollViewer is null)
             return;
 
-        UpdateGridDecorator(viewModel, state);
-        UpdateMinimapOverlay(viewModel, state);
-        var viewportX = WorkflowSurfaceMath.ToCanvasLocal(state.ScrollViewer.Offset.X, viewModel.Layout.ActualOffset.Horizontal);
-        var viewportY = WorkflowSurfaceMath.ToCanvasLocal(state.ScrollViewer.Offset.Y, viewModel.Layout.ActualOffset.Vertical);
-        viewModel.GetHelper().Viewport = new Viewport(
-            viewportX, viewportY,
-            state.ScrollViewer.Viewport.Width,
-            state.ScrollViewer.Viewport.Height);
+        var metrics = ReadMetrics(viewModel, state);
+        if (state.GridDecorator is IWorkflowGridDecorator decorator)
+            SurfaceMetricsPush.PushGrid(metrics, decorator, viewModel);
 
-        // 持久化视口位置，使其能熬过序列化往返。
-        viewModel.Layout.ViewportOffset = new Offset(viewportX, viewportY);
+        if (state.MinimapOverlay is IWorkflowMinimapOverlay minimap)
+            SurfaceMetricsPush.PushMinimap(metrics, minimap, viewModel);
+
+        SurfaceMetricsPush.PushViewport(metrics, viewModel);
     }
 
     private static void UpdateGridDecorator(ITreeComponent viewModel, SurfaceState state)
@@ -1292,13 +1236,7 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (state.GridDecorator is not IWorkflowGridDecorator decorator || state.ScrollViewer is null)
             return;
 
-        decorator.ScrollOffsetX = state.ScrollViewer.Offset.X;
-        decorator.ScrollOffsetY = state.ScrollViewer.Offset.Y;
-        decorator.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
-        decorator.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
-
-        // 让虚拟化可见区修正与装饰器的浮动标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
-        viewModel.SetVirtualizeInset(left: decorator.RulerBand, top: decorator.RulerBand);
+        SurfaceMetricsPush.PushGrid(ReadMetrics(viewModel, state), decorator, viewModel);
     }
 
     private static void UpdateMinimapOverlay(ITreeComponent viewModel, SurfaceState state)
@@ -1306,20 +1244,36 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
         if (state.MinimapOverlay is not IWorkflowMinimapOverlay minimap || state.ScrollViewer is null)
             return;
 
-        minimap.ScrollOffsetX = state.ScrollViewer.Offset.X;
-        minimap.ScrollOffsetY = state.ScrollViewer.Offset.Y;
-        minimap.ContentOffsetX = viewModel.Layout.ActualOffset.Horizontal;
-        minimap.ContentOffsetY = viewModel.Layout.ActualOffset.Vertical;
-        minimap.ViewportWidth = state.ScrollViewer.Viewport.Width;
-        minimap.ViewportHeight = state.ScrollViewer.Viewport.Height;
-        minimap.WorkflowTree = viewModel;
+        SurfaceMetricsPush.PushMinimap(ReadMetrics(viewModel, state), minimap, viewModel);
+    }
 
-        // 小地图贴在“内容区右上角”：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
-        var overlayWidth = state.MinimapOverlay?.Bounds.Width ?? state.ScrollViewer.Bounds.Width;
-        var overlayHeight = state.MinimapOverlay?.Bounds.Height ?? state.ScrollViewer.Bounds.Height;
-        minimap.AvailableRight = Math.Max(0, overlayWidth - GetVisibleScrollBarThickness(state.ScrollViewer, Avalonia.Layout.Orientation.Vertical));
-        minimap.AvailableTop = state.GridDecorator is IWorkflowGridDecorator decorator ? decorator.RulerBand : 0d;
-        minimap.AvailableBottom = Math.Max(0, overlayHeight - GetVisibleScrollBarThickness(state.ScrollViewer, Avalonia.Layout.Orientation.Horizontal));
+    // 平台读数 → Core 的快照。可用右/上/下边缘的减法在 SurfaceMetrics.Create 里，本类只报事实。
+    private static SurfaceMetrics ReadMetrics(ITreeComponent viewModel, SurfaceState state)
+    {
+        var viewer = state.ScrollViewer;
+        if (viewer is null)
+            return default;
+
+        var overlayWidth = state.MinimapOverlay?.Bounds.Width ?? viewer.Bounds.Width;
+        var overlayHeight = state.MinimapOverlay?.Bounds.Height ?? viewer.Bounds.Height;
+        var verticalBar = GetVisibleScrollBarThickness(viewer, Avalonia.Layout.Orientation.Vertical);
+        var horizontalBar = GetVisibleScrollBarThickness(viewer, Avalonia.Layout.Orientation.Horizontal);
+        var rulerBand = state.GridDecorator is IWorkflowGridDecorator decorator ? decorator.RulerBand : 0d;
+        var margin = state.MinimapOverlay is IWorkflowMinimapOverlay minimap ? minimap.MinimapMargin : 0d;
+
+        return SurfaceMetrics.Create(
+            viewer.Offset.X,
+            viewer.Offset.Y,
+            viewModel.Layout.ActualOffset.Horizontal,
+            viewModel.Layout.ActualOffset.Vertical,
+            viewer.Viewport.Width,
+            viewer.Viewport.Height,
+            overlayWidth,
+            overlayHeight,
+            rulerBand,
+            verticalBar,
+            horizontalBar,
+            margin);
     }
 
     // Avalonia 11 的 ScrollViewer 没有公开“计算后的滚动条可见性”（WPF 的 Computed*ScrollBarVisibility），

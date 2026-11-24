@@ -17,7 +17,7 @@ internal sealed class AvaloniaHeadlessSurface : IDisposable
     private const double CanvasWidth = 8000d;
     private const double CanvasHeight = 6000d;
 
-    public AvaloniaHeadlessSurface(TestGraph graph, bool enable = true)
+    public AvaloniaHeadlessSurface(TestGraph graph, bool enable = true, bool withMinimap = false)
     {
         Graph = graph;
         Tree = graph.Tree;
@@ -58,6 +58,11 @@ internal sealed class AvaloniaHeadlessSurface : IDisposable
 
         Scroll.Content = Canvas;
         Decorator.Children.Add(Scroll);
+        if (withMinimap)
+        {
+            Minimap = new Behaviors.WorkflowMinimapOverlay { IsMinimapVisible = true };
+            Decorator.Children.Add(Minimap);
+        }
         Border.Child = Decorator;
         Host.Content = Border;
 
@@ -68,6 +73,10 @@ internal sealed class AvaloniaHeadlessSurface : IDisposable
         scope.Register("PART_Canvas", Canvas);
         scope.Register("PART_GridDecorator", Decorator);
         scope.Register("PART_SurfaceBorder", Border);
+        if (Minimap is not null)
+        {
+            scope.Register("PART_Minimap", Minimap);
+        }
         scope.Complete();
 
         Behaviors.WorkflowSurfaceBehavior.SetScrollViewerName(Host, "PART_ScrollViewer");
@@ -75,6 +84,10 @@ internal sealed class AvaloniaHeadlessSurface : IDisposable
         Behaviors.WorkflowSurfaceBehavior.SetGridDecoratorName(Host, "PART_GridDecorator");
         Behaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(Host, "PART_SurfaceBorder");
         Behaviors.WorkflowSurfaceBehavior.SetZoomEnabled(Host, true);
+        if (Minimap is not null)
+        {
+            Behaviors.WorkflowSurfaceBehavior.SetMinimapOverlayName(Host, "PART_Minimap");
+        }
 
         Window = new Window
         {
@@ -107,6 +120,9 @@ internal sealed class AvaloniaHeadlessSurface : IDisposable
     public Canvas Canvas { get; }
 
     public TestGridDecorator Decorator { get; }
+
+    /// <summary>The optional minimap overlay added to the fixture.</summary>
+    public Behaviors.WorkflowMinimapOverlay? Minimap { get; }
 
     /// <summary>Moves the scroll viewer and lets the ScrollChanged → Refresh path run.</summary>
     public void ScrollTo(double horizontal, double vertical)
