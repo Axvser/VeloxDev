@@ -102,19 +102,38 @@ public partial class LinkView : UserControl
     public static readonly DependencyProperty CanRenderProperty =
         DependencyProperty.Register(nameof(CanRender), typeof(bool), typeof(LinkView), new PropertyMetadata(true, OnRenderChanged));
 
+    /// <summary>Whether the curve is drawn dashed as a virtual link.</summary>
+    public static readonly DependencyProperty IsVirtualProperty =
+        DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnRenderChanged));
+
     /// <summary>The stroke colour.</summary>
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(LinkView),
             new PropertyMetadata(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF), OnRenderChanged));
 
+    /// <summary>The stroke width.</summary>
+    public static readonly DependencyProperty LineThicknessProperty =
+        DependencyProperty.Register(nameof(LineThickness), typeof(double), typeof(LinkView),
+            new PropertyMetadata((double)2, OnRenderChanged));
+
     /// <summary>Whether the link should be drawn at all.</summary>
     public bool CanRender { get => GetValue(CanRenderProperty) is true; set => SetValue(CanRenderProperty, value); }
+
+    /// <summary>Whether the curve is drawn dashed as a virtual link.</summary>
+    public bool IsVirtual { get => GetValue(IsVirtualProperty) is true; set => SetValue(IsVirtualProperty, value); }
 
     /// <summary>The stroke colour.</summary>
     public Color LineColor
     {
         get => GetValue(LineColorProperty) is Color color ? color : Colors.White;
         set => SetValue(LineColorProperty, value);
+    }
+
+    /// <summary>The stroke width.</summary>
+    public double LineThickness
+    {
+        get => GetValue(LineThicknessProperty) is double value ? value : 2;
+        set => SetValue(LineThicknessProperty, value);
     }
 
     private static void OnRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -337,7 +356,7 @@ public partial class LinkView : UserControl
         // canvas-local space. Replace this together with BuildCurve if you change the shape.
         PublishCurve(link, LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
 
-        const double thickness = 2d;
+        var thickness = LineThickness;
         var geometry = BuildCurve();
 
         // VeloxDev customization: the hover glow. Delete this block to ship without it.
@@ -348,7 +367,7 @@ public partial class LinkView : UserControl
         }
 
         var brush = new SolidColorBrush(LineColor);
-        var pen = IsVirtualLink(link)
+        var pen = IsVirtual || IsVirtualLink(link)
             ? new Pen(brush, thickness) { DashStyle = new DashStyle([4d, 2d], 0d) }
             : new Pen(brush, thickness);
 

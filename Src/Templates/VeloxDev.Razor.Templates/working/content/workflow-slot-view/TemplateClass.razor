@@ -10,8 +10,8 @@
              width="@(SlotSizeCss)" height="@(SlotSizeCss)"
              viewBox="0 0 1024 1024">
             <path d="TemplateSlotPath"
-                  fill="@FillColor"
-                  stroke="@StrokeColor"
+                  fill="@WorkflowPresentation.SlotStateColor(Slot.State, WorkflowPresentation.ToCss("TemplateSlotColor"))"
+                  stroke="@WorkflowPresentation.ToCss("TemplateSlotBorderColor")"
                   stroke-width="8"
                   stroke-linejoin="round" />
         </svg>

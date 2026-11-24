@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace TemplateNamespace;
@@ -17,6 +18,12 @@ public class TemplateClass : WorkflowMinimapOverlay
         MinimapBorderBrush = CreateBrush("TemplateMinimapBorder");
         NodeBrush = CreateBrush("TemplateNodeFill");
         ViewportStroke = CreateBrush("TemplateViewportStroke");
+    }
+
+    /// <summary>Customize the minimap drawing here; keep the base call unless you replace it entirely.</summary>
+    protected override void DrawMinimap(DrawingContext dc, MinimapDrawContext context)
+    {
+        base.DrawMinimap(dc, context);
     }
 
     private static Brush CreateBrush(string hex)

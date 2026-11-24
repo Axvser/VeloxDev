@@ -498,19 +498,24 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         var mmW = Math.Max(Math.Max(1, MinimapMinSize), Math.Min(MinimapWidth, ActualWidth));
         var mmH = Math.Max(Math.Max(1, MinimapMinSize), Math.Min(MinimapHeight, ActualHeight));
 
-        var gb = _lastGlobalBounds;
-        bool hasData = gb.Width > 0 && gb.Height > 0;
+        DrawMinimap(CreateDrawContext(mmW, mmH));
+    }
 
+    /// <summary>
+    /// Draws the minimap from <paramref name="context"/>. Override and call <c>base</c> to add to the default drawing.
+    /// </summary>
+    protected virtual void DrawMinimap(MinimapDrawContext context)
+    {
         // 确保背景/边框
         if (_bgRect is null)
         {
             _bgRect = new Rectangle();
             Children.Add(_bgRect);
         }
-        _bgRect.Width = mmW;
-        _bgRect.Height = mmH;
+        _bgRect.Width = context.MinimapWidth;
+        _bgRect.Height = context.MinimapHeight;
         _bgRect.Fill = MinimapBackground;
-        _bgRect.RadiusX = _bgRect.RadiusY = Math.Max(0, MinimapCornerRadius);
+        _bgRect.RadiusX = _bgRect.RadiusY = Math.Max(0, context.MinimapCornerRadius);
 
         if (MinimapBorderBrush is not null)
         {
@@ -519,25 +524,22 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
                 _borderRect = new Rectangle();
                 Children.Add(_borderRect);
             }
-            _borderRect.Width = mmW;
-            _borderRect.Height = mmH;
+            _borderRect.Width = context.MinimapWidth;
+            _borderRect.Height = context.MinimapHeight;
             _borderRect.Stroke = MinimapBorderBrush;
             _borderRect.StrokeThickness = MinimapBorderThickness;
-            _borderRect.RadiusX = _borderRect.RadiusY = Math.Max(0, MinimapCornerRadius);
+            _borderRect.RadiusX = _borderRect.RadiusY = Math.Max(0, context.MinimapCornerRadius);
         }
 
-        if (!hasData || WorkflowTree?.Nodes is null || WorkflowTree.Nodes.Count == 0)
+        if (!context.HasContent)
         {
             foreach (var r in _nodeRects) r.Visibility = Visibility.Collapsed;
             _viewportRect?.Visibility = Visibility.Collapsed;
             return;
         }
 
-        var (ox, oy, _, _, sc) = ComputeTransform(gb);
-
         // 节点
-        var ncr = Math.Max(0, NodeCornerRadius);
-        while (_nodeRects.Count < _lastNodeRects.Count)
+        while (_nodeRects.Count < context.MappedNodes.Count)
         {
             var rect = new Rectangle();
             _nodeRects.Add(rect);
@@ -546,18 +548,15 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         for (int i = 0; i < _nodeRects.Count; i++)
         {
             var rect = _nodeRects[i];
-            if (i < _lastNodeRects.Count)
+            if (i < context.MappedNodes.Count)
             {
-                var (nx, ny, nw, nh) = _lastNodeRects[i];
-                var (rx, ry) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, ox, oy, sc);
-                var rw = WorkflowSurfaceMath.MinThumbSize(nw, sc, 2.0);
-                var rh = WorkflowSurfaceMath.MinThumbSize(nh, sc, 2.0);
-                SetLeft(rect, rx);
-                SetTop(rect, ry);
-                rect.Width = rw;
-                rect.Height = rh;
+                var node = context.MappedNodes[i];
+                SetLeft(rect, node.Left);
+                SetTop(rect, node.Top);
+                rect.Width = node.Width;
+                rect.Height = node.Height;
                 rect.Fill = NodeBrush;
-                rect.RadiusX = rect.RadiusY = ncr;
+                rect.RadiusX = rect.RadiusY = context.NodeCornerRadius;
                 rect.Visibility = Visibility.Visible;
             }
             else
@@ -567,31 +566,78 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
         }
 
         // 视口指示块
-        var vp = _lastViewport;
-        if (!vp.IsEmpty)
+        if (context.HasViewport && !context.MappedViewport.IsEmpty)
         {
             if (_viewportRect is null)
             {
                 _viewportRect = new Rectangle();
                 Children.Add(_viewportRect);
             }
-            // 与 GetViewportRectInMinimap 相同的共用拟合 + 夹取。
-            var (vpx, vpy, vpw, vph) = WorkflowSurfaceMath.MinimapViewportRect(
-                ox, oy, sc, vp.Left, vp.Top, vp.Width, vp.Height,
-                gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);
-            SetLeft(_viewportRect, vpx);
-            SetTop(_viewportRect, vpy);
-            _viewportRect.Width = vpw;
-            _viewportRect.Height = vph;
+            var vp = context.MappedViewport;
+            SetLeft(_viewportRect, vp.Left);
+            SetTop(_viewportRect, vp.Top);
+            _viewportRect.Width = vp.Width;
+            _viewportRect.Height = vp.Height;
             _viewportRect.Fill = ViewportFill;
             _viewportRect.Stroke = ViewportStroke;
             _viewportRect.StrokeThickness = ViewportStrokeThickness;
-            _viewportRect.RadiusX = _viewportRect.RadiusY = ncr;
+            _viewportRect.RadiusX = _viewportRect.RadiusY = context.NodeCornerRadius;
             _viewportRect.Visibility = Visibility.Visible;
         }
         else
         {
             _viewportRect?.Visibility = Visibility.Collapsed;
         }
+    }
+
+    /// <summary>Builds the geometry for one draw pass from the cached content and viewport bounds.</summary>
+    private MinimapDrawContext CreateDrawContext(double mmW, double mmH)
+    {
+        var gb = _lastGlobalBounds;
+        var pad = Math.Max(0, ContentPadding);
+        var (ox, oy, sc) = gb.IsEmpty
+            ? (0d, 0d, 0d)
+            : WorkflowSurfaceMath.MinimapFit(
+                gb.Width, gb.Height,
+                Math.Max(1, mmW - pad * 2), Math.Max(1, mmH - pad * 2), pad);
+
+        var nodes = new List<WorkflowBounds>(_lastNodeRects.Count);
+        var mapped = new List<WorkflowBounds>(_lastNodeRects.Count);
+        foreach (var (nx, ny, nw, nh) in _lastNodeRects)
+        {
+            nodes.Add(WorkflowBounds.FromNode(nx, ny, nw, nh));
+            var (rx, ry) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, ox, oy, sc);
+            mapped.Add(WorkflowBounds.FromNode(rx, ry,
+                WorkflowSurfaceMath.MinThumbSize(nw, sc, 2.0),
+                WorkflowSurfaceMath.MinThumbSize(nh, sc, 2.0)));
+        }
+
+        var viewport = _lastViewport;
+        var mappedViewport = default(WorkflowBounds);
+        if (!viewport.IsEmpty)
+        {
+            var (vpx, vpy, vpw, vph) = WorkflowSurfaceMath.MinimapViewportRect(
+                ox, oy, sc, viewport.Left, viewport.Top, viewport.Width, viewport.Height,
+                gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);
+            mappedViewport = WorkflowBounds.FromNode(vpx, vpy, vpw, vph);
+        }
+
+        return new MinimapDrawContext
+        {
+            Tree = WorkflowTree,
+            ContentBounds = gb,
+            ViewportBounds = viewport,
+            Nodes = nodes,
+            MappedNodes = mapped,
+            MappedViewport = mappedViewport,
+            MinimapWidth = mmW,
+            MinimapHeight = mmH,
+            Padding = pad,
+            OriginX = ox,
+            OriginY = oy,
+            Scale = sc,
+            NodeCornerRadius = Math.Max(0, NodeCornerRadius),
+            MinimapCornerRadius = Math.Max(0, MinimapCornerRadius),
+        };
     }
 }

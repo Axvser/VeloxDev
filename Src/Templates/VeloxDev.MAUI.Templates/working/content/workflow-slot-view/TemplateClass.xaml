@@ -1,12 +1,20 @@
-<!-- VeloxDev customization: Customize the connector glyph in TemplateClass.xaml.cs (SlotDrawable); keep WorkflowSlotConnectionBehavior enabled for interactive links. -->
+<!-- VeloxDev customization: Customize the connector glyph or colors; keep WorkflowSlotConnectionBehavior enabled for interactive links. -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:controls="clr-namespace:TemplateNamespace"
              xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.MAUI"
              x:Class="TemplateNamespace.TemplateClass"
              BackgroundColor="TemplateSlotBackground"
              behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
+    <ContentView.Resources>
+        <behaviors:SlotStateBrushConverter x:Key="SlotStateBrush"
+                                           StandByColor="TemplateSlotColor"
+                                           BorderColor="TemplateSlotBorderColor" />
+    </ContentView.Resources>
     <Grid BackgroundColor="Transparent">
-        <GraphicsView x:Name="IconView" />
+        <Path Data="TemplateSlotPath"
+              Aspect="Uniform"
+              Fill="{Binding State, Converter={StaticResource SlotStateBrush}}"
+              Stroke="{Binding State, Converter={StaticResource SlotStateBrush}, ConverterParameter=Border}"
+              StrokeThickness="2" />
     </Grid>
 </ContentView>

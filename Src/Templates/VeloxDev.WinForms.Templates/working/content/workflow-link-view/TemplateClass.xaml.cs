@@ -57,21 +57,6 @@ public sealed partial class TemplateClass : Easel.Visuals.Controls.UserControl
         nameof(LineThickness), typeof(float), typeof(TemplateClass),
         new PropertyMetadata(ParseThickness("TemplateLinkThickness")) { AffectsRender = true });
 
-    /// <summary>The line colour used while the link is highlighted.</summary>
-    public static readonly DependencyProperty HighlightColorProperty = DependencyProperty.Register(
-        nameof(HighlightColor), typeof(Color), typeof(TemplateClass),
-        new PropertyMetadata(Color.White) { AffectsRender = true });
-
-    /// <summary>The line width used while the link is highlighted.</summary>
-    public static readonly DependencyProperty HighlightThicknessProperty = DependencyProperty.Register(
-        nameof(HighlightThickness), typeof(float), typeof(TemplateClass),
-        new PropertyMetadata(ParseThickness("TemplateLinkThickness") * 1.75f) { AffectsRender = true });
-
-    /// <summary>Whether the link is highlighted.</summary>
-    public static readonly DependencyProperty IsHighlightedProperty = DependencyProperty.Register(
-        nameof(IsHighlighted), typeof(bool), typeof(TemplateClass),
-        new PropertyMetadata(false) { AffectsRender = true });
-
     /// <summary>Creates the view and keeps it out of the hit-test path.</summary>
     public TemplateClass()
     {
@@ -102,15 +87,6 @@ public sealed partial class TemplateClass : Easel.Visuals.Controls.UserControl
 
     /// <summary>The resting line width.</summary>
     public float LineThickness { get => (float)GetValue(LineThicknessProperty)!; set => SetValue(LineThicknessProperty, value); }
-
-    /// <summary>The line colour used while the link is highlighted.</summary>
-    public Color HighlightColor { get => (Color)GetValue(HighlightColorProperty)!; set => SetValue(HighlightColorProperty, value); }
-
-    /// <summary>The line width used while the link is highlighted.</summary>
-    public float HighlightThickness { get => (float)GetValue(HighlightThicknessProperty)!; set => SetValue(HighlightThicknessProperty, value); }
-
-    /// <summary>Whether the link is highlighted.</summary>
-    public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty)!; set => SetValue(IsHighlightedProperty, value); }
 
     #endregion
 
@@ -171,9 +147,9 @@ public sealed partial class TemplateClass : Easel.Visuals.Controls.UserControl
 
         link.PublishCurve(curve, this);
 
-        var color = IsHighlighted ? HighlightColor : LineColor;
+        var color = LineColor;
         var isVirtual = IsVirtual || (link.Sender?.Parent is null && link.Receiver?.Parent is null);
-        var thickness = IsHighlighted ? HighlightThickness : LineThickness;
+        var thickness = LineThickness;
 
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         using var path = new GraphicsPath();

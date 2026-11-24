@@ -1,5 +1,6 @@
 using Jalium.UI;
 using Jalium.UI.Media;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
@@ -15,6 +16,12 @@ public class MinimapOverlay : WorkflowMinimapOverlay
         MinimapBorderBrush = CreateBrush("#DC94A3B8");
         NodeBrush = CreateBrush("#DC38BDF8");
         ViewportStroke = CreateBrush("#F0FFFFFF");
+    }
+
+    /// <summary>Customize the minimap drawing here; keep the base call unless you replace it entirely.</summary>
+    protected override void DrawMinimap(DrawingContext dc, MinimapDrawContext context)
+    {
+        base.DrawMinimap(dc, context);
     }
 
     private static Brush CreateBrush(string hex)

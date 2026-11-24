@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 using VeloxDev.WorkflowSystem;
@@ -6,7 +6,7 @@ using VeloxDev.WorkflowSystem;
 namespace Demo.Views.Workflow;
 
 /// <summary>
-/// Assign the four DataTemplate properties in XAML resources, then use this
+/// Assign the three DataTemplate properties in XAML resources, then use this
 /// selector with ViewPool.TemplateSelector or another ItemsControl.
 /// </summary>
 public sealed class CustomTemplateSelector : DataTemplateSelector
@@ -17,7 +17,6 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
 
     public DataTemplate? LinkTemplate { get; set; }
 
-    public DataTemplate? TreeTemplate { get; set; }
 
     public override DataTemplate SelectTemplate(object item, DependencyObject container)
         => item switch
@@ -28,8 +27,6 @@ public sealed class CustomTemplateSelector : DataTemplateSelector
                 ?? throw new InvalidOperationException("SlotTemplate is not set."),
             INodeComponent => NodeTemplate
                 ?? throw new InvalidOperationException("NodeTemplate is not set."),
-            ITreeComponent => TreeTemplate
-                ?? throw new InvalidOperationException("TreeTemplate is not set."),
             _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")
         };
 }

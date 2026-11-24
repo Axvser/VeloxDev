@@ -31,21 +31,43 @@
                         @BodyContent
                     }
 
-                    @if (InputSlots is not null)
-                    {
-                        <div class="veloxdev-wf-node-input-host"
-                             style="position:absolute;left:2px;top:50%;transform:translateY(-50%);z-index:1;">
+                    <div class="veloxdev-wf-node-input-host"
+                         style="position:absolute;left:2px;top:50%;transform:translateY(-50%);z-index:1;">
+                        @if (InputSlots is not null)
+                        {
                             @InputSlots
-                        </div>
-                    }
+                        }
+                        else
+                        {
+                            foreach (var slot in WorkflowPresentation.InputSlotsOf(Node))
+                            {
+                                <SlotView Slot="slot" Tree="Tree" SlotSize="18" />
+                            }
+                        }
+                    </div>
 
-                    @if (OutputSlots is not null)
-                    {
-                        <div class="veloxdev-wf-node-output-host"
-                             style="position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:1;">
+                    <div class="veloxdev-wf-node-output-host"
+                         style="position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:1;">
+                        @if (OutputSlots is not null)
+                        {
                             @OutputSlots
-                        </div>
-                    }
+                        }
+                        else
+                        {
+                            var names = WorkflowPresentation.SlotNamesOf(Node);
+                            foreach (var slot in WorkflowPresentation.OutputSlotsOf(Node))
+                            {
+                                names.TryGetValue(slot, out var name);
+                                <div style="display:flex;align-items:center;">
+                                    @if (name is not null)
+                                    {
+                                        <span style="margin-left:auto;margin-right:8px;color:@WorkflowPresentation.NodeForegroundCss;font-size:11px;white-space:nowrap;">@name</span>
+                                    }
+                                    <SlotView Slot="slot" Tree="Tree" SlotSize="14" />
+                                </div>
+                            }
+                        }
+                    </div>
                 </div>
             </div>
         </WorkflowNodeDragBehavior>

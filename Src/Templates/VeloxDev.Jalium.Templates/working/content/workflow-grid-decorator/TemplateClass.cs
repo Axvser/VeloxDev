@@ -33,7 +33,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
     /// <summary>Default ruler band thickness, in pixels; the value <see cref="RulerThickness"/> defaults to.</summary>
     public const double DefaultRulerThickness = 36;
 
-    // 两层自绘子元素：底层填表面 + 世界网格，顶层画浮动标尺带。内容子元素由模板插在两者之间（ZIndex 100）。
+    // Two self-drawn layers: the grid behind the content and the ruler band above it.
     private readonly GridLayer _gridLayer;
     private readonly RulerLayer _rulerLayer;
 
@@ -62,9 +62,9 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         nameof(ContentOffsetY), typeof(double), typeof(TemplateClass),
         new PropertyMetadata(0d, OnVisualPropertyChanged));
 
-    /// <summary>Identifies the <see cref="GridStep"/> dependency property.</summary>
-    public static readonly DependencyProperty GridStepProperty = DependencyProperty.Register(
-        nameof(GridStep), typeof(double), typeof(TemplateClass),
+    /// <summary>Identifies the <see cref="GridSpacing"/> dependency property.</summary>
+    public static readonly DependencyProperty GridSpacingProperty = DependencyProperty.Register(
+        nameof(GridSpacing), typeof(double), typeof(TemplateClass),
         new PropertyMetadata(40d, OnVisualPropertyChanged));
 
     /// <summary>Identifies the <see cref="MajorLineEvery"/> dependency property.</summary>
@@ -121,8 +121,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         _gridLayer = new GridLayer(this) { IsHitTestVisible = false };
         _rulerLayer = new RulerLayer(this) { IsHitTestVisible = false };
 
-        // 顶层标尺必须压过模板插进来的内容子元素，所以给它一个高 ZIndex；底层网格与内容默认同层，
-        // 靠「先加的先画」落在内容之下。
+        // The ruler layer must render above the content the template inserts.
         Panel.SetZIndex(_rulerLayer, 100);
 
         Children.Add(_gridLayer);
@@ -136,7 +135,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         RulerTickColor = ParseColor("TemplateRulerTickColor");
         RulerDividerColor = ParseColor("TemplateRulerDividerColor");
         SurfaceBackground = ParseColor("TemplateGridBackground");
-        GridStep = TemplateGridSpacing;
+        GridSpacing = TemplateGridSpacing;
         MajorLineEvery = TemplateMajorLineEvery;
 
         SizeChanged += (_, _) =>
@@ -187,10 +186,10 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
     }
 
     /// <summary>World distance between minor grid lines, in pixels.</summary>
-    public double GridStep
+    public double GridSpacing
     {
-        get => Read(GridStepProperty, 40d);
-        set => SetValue(GridStepProperty, value);
+        get => Read(GridSpacingProperty, 40d);
+        set => SetValue(GridSpacingProperty, value);
     }
 
     /// <summary>How many minor lines make a major one. Values below one are treated as one.</summary>
@@ -257,20 +256,17 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
     }
 
     /// <summary>World distance between major grid lines.</summary>
-    public double MajorStep => Math.Max(1, GridStep) * Math.Max(1, MajorLineEvery);
+    public double MajorStep => Math.Max(1, GridSpacing) * Math.Max(1, MajorLineEvery);
 
     /// <inheritdoc />
     public double RulerBand => RulerThickness;
 
-    // 本层是视口局部坐标系（原点在装饰器左上角），而 DrawGrid/DrawRulers 收的是画布系参数：
-    // 画布系 x = 世界 + 内容偏移 + 标尺reserve，视口局部 x = 画布系 x − 滚动偏移 ——
-    // 把两者折进 origin，滚动就由调用方以 scroll=0 传入，原有数学一行不用改。
+    // Folds the scroll offset into the canvas-local origin so the draw code keeps one coordinate system.
     private double LayerOriginX => ContentOffsetX + RulerThickness - ScrollOffsetX;
 
     private double LayerOriginY => ContentOffsetY + RulerThickness - ScrollOffsetY;
 
-    // 值类型 DP 都有非 null 默认值，取回来必是该类型；`GetValue` 返回 `object?`，直接拆箱会触 CS8605，
-    // 所以统一走这个带回退的读取器（与 WorkflowMinimapOverlay 同形）。
+    // DP reads go through this fallback reader to avoid unboxing null.
     private T Read<T>(DependencyProperty property, T fallback) where T : struct
         => GetValue(property) is T value ? value : fallback;
 
@@ -283,7 +279,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         }
     }
 
-    // 颜色走单独的回调：只有颜色变才重建缓存笔刷。滚动/内容偏移每帧都在变，走上面那条，不碰缓存。
+    // Only colour changes rebuild the cached pens; offsets change every frame and reuse them.
     private static void OnColorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is TemplateClass decorator)
@@ -318,19 +314,19 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
     private SolidColorBrush? _rulerLabelBrush;
     private SolidColorBrush? _surfaceBrush;
 
-    // 底层第一笔：整块表面填充，网格画在它上面。
+    // Surface fill first; the grid draws on top.
     private void DrawSurface(DrawingContext dc, double width, double height)
     {
         EnsureResources();
         dc.DrawRectangle(_surfaceBrush!, null, new Rect(0, 0, width, height));
     }
 
-    // 世界网格。origin 是画布系原点的视口局部投影（见 LayerOriginX）；width/height 是视口尺寸。
+    // World grid; origin is the viewport-local projection of the canvas origin.
     private void DrawGrid(DrawingContext dc, double originX, double originY, double width, double height)
     {
         EnsureResources();
 
-        double step = Math.Max(1, GridStep);
+        double step = Math.Max(1, GridSpacing);
         double majorStep = step * Math.Max(1, MajorLineEvery);
 
         double worldLeft = -originX;
@@ -352,8 +348,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         }
     }
 
-    // 顶层标尺带。scrollX/scrollY 传 0：视口局部坐标系里视口左上角就是原点，滚动已折进 origin。
-    // viewportWidth/viewportHeight 是视口尺寸。
+    // Ruler band; scroll is already folded into origin, so scrollX/scrollY stay 0.
     private void DrawRulers(
         DrawingContext dc,
         double originX, double originY,
@@ -363,7 +358,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         EnsureResources();
 
         double ruler = Math.Max(0, RulerThickness);
-        double step = Math.Max(1, GridStep);
+        double step = Math.Max(1, GridSpacing);
         double majorStep = step * Math.Max(1, MajorLineEvery);
 
         var bg = new SolidColorBrush(RulerBackground);
@@ -372,7 +367,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         dc.DrawLine(_dividerPen!, new Point(scrollX + ruler, scrollY), new Point(scrollX + ruler, scrollY + viewportHeight));
         dc.DrawLine(_dividerPen!, new Point(scrollX, scrollY + ruler), new Point(scrollX + viewportWidth, scrollY + ruler));
 
-        // 上标尺：刻度落在穿过视口的世界网格线上，画布 x = world + originX。
+        // Top ruler ticks at the world grid lines crossing the viewport.
         double worldLeft = WorkflowSurfaceMath.GridCanvasLeft(scrollX, originX);
         for (double g = WorkflowSurfaceMath.GridFirstLine(worldLeft, step); g + originX <= scrollX + viewportWidth; g += step)
         {
@@ -390,7 +385,7 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
             }
         }
 
-        // 左标尺：刻度落在穿过视口的世界网格线上，画布 y = world + originY。
+        // Left ruler ticks at the world grid lines crossing the viewport.
         double worldTop = WorkflowSurfaceMath.GridCanvasTop(scrollY, originY);
         for (double g = WorkflowSurfaceMath.GridFirstLine(worldTop, step); g + originY <= scrollY + viewportHeight; g += step)
         {
@@ -421,10 +416,10 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         return Math.Round(value / 1000000.0, 1).ToString() + "M";
     }
 
-    // 底层：表面填充 + 世界网格。撑满装饰器，画到标尺带下面。
+    // Bottom layer: surface fill + world grid, under the ruler band.
     private sealed class GridLayer(TemplateClass owner) : FrameworkElement
     {
-        // Size 必须全限定：Core 的 VeloxDev.WorkflowSystem.Size 是外层命名空间的类型，会盖过 using 进来的 Jalium.UI.Size。
+        // Fully qualify Size: Core's Size shadows Jalium.UI.Size here.
         protected override Jalium.UI.Size MeasureOverride(Jalium.UI.Size availableSize) => availableSize;
 
         protected override void OnRender(DrawingContext context)
@@ -437,10 +432,10 @@ public sealed class TemplateClass : Grid, IWorkflowGridDecorator
         }
     }
 
-    // 顶层：浮动标尺带，最后画以压在内容之上。
+    // Top layer: the floating ruler band, drawn last.
     private sealed class RulerLayer(TemplateClass owner) : FrameworkElement
     {
-        // Size 必须全限定，理由同 GridLayer。
+        // Fully qualify Size for the same reason as GridLayer.
         protected override Jalium.UI.Size MeasureOverride(Jalium.UI.Size availableSize) => availableSize;
 
         protected override void OnRender(DrawingContext context)

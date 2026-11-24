@@ -27,7 +27,7 @@
         </Grid>
 
         <Grid Grid.Row="1" ZIndex="6" InputTransparent="True" CascadeInputTransparent="False">
-            <controls:SlotView x:Name="PART_InputSlot" BindingContext="{Binding InputSlot}" SlotState="{Binding State}"
+            <controls:SlotView x:Name="PART_InputSlot" BindingContext="{Binding InputSlot}"
                                        WidthRequest="18"
                                        HeightRequest="18"
                                        HorizontalOptions="Start"
@@ -48,7 +48,7 @@
                                HorizontalTextAlignment="End"
                                VerticalTextAlignment="Center"
                                Margin="0,0,10,0" />
-                        <controls:SlotView BindingContext="{Binding Slot}" SlotState="{Binding State}"
+                        <controls:SlotView BindingContext="{Binding Slot}"
                                                    Grid.Column="1"
                                                    WidthRequest="14"
                                                    HeightRequest="14"

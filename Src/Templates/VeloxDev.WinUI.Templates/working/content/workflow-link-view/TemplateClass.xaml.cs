@@ -61,7 +61,7 @@ public sealed partial class TemplateClass : UserControl
         // overhanging ports. WPF links are OnRender-drawn and never clipped, which is why they survive;
         // this null chain reproduces that "no clip" behavior for the retained Path.
         var container = new Grid { Clip = null };
-        _path = new Path { Stroke = _strokeBrush, StrokeThickness = TemplateLinkThickness, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false, Clip = null };
+        _path = new Path { Stroke = _strokeBrush, StrokeThickness = LineThickness, StrokeLineJoin = PenLineJoin.Round, IsHitTestVisible = false, Clip = null };
         container.Children.Add(_path);
         this.Content = container;
 
@@ -87,6 +87,8 @@ public sealed partial class TemplateClass : UserControl
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnChanged));
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Windows.UI.Color), typeof(TemplateClass), new PropertyMetadata(ParseColor("TemplateLinkColor"), OnChanged));
+    public static readonly DependencyProperty LineThicknessProperty =
+        DependencyProperty.Register(nameof(LineThickness), typeof(double), typeof(TemplateClass), new PropertyMetadata((double)TemplateLinkThickness, OnChanged));
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
@@ -95,6 +97,7 @@ public sealed partial class TemplateClass : UserControl
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public bool IsVirtual { get => (bool)GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Windows.UI.Color LineColor { get => (Windows.UI.Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
+    public double LineThickness { get => (double)GetValue(LineThicknessProperty); set => SetValue(LineThicknessProperty, value); }
 
     private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -282,7 +285,7 @@ public sealed partial class TemplateClass : UserControl
 
         BuildCurve(ox, oy);
         _strokeBrush.Color = LineColor;
-        _path.StrokeThickness = TemplateLinkThickness;
+        _path.StrokeThickness = LineThickness;
 
         if (IsVirtualLink)
             _path.StrokeDashArray = VirtualStrokeDashArray;

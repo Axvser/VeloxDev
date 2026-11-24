@@ -88,6 +88,7 @@ $configs = [ordered]@{
         Aliases         = [ordered]@{}
         Expected        = @{
             'tree' = 'the demo tree is the host shell: it keeps the template tree''s markup under the demo namespace and the template ships an empty link menu - all host wiring (key/wheel policy, link-menu builder) lives in MainForm'
+            'link' = 'the mirror carries the demo-only hover highlight; Core, the adapters and the templates no longer paint one'
         }
         ProbeShell      = 'Microsoft.NET.Sdk'
         UseWPF          = $false

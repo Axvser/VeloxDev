@@ -1,17 +1,17 @@
-using Microsoft.AspNetCore.Components;
+﻿using Microsoft.AspNetCore.Components;
 using VeloxDev.WorkflowSystem;
 
 namespace Demo.Components.Workflow;
 
 /// <summary>
-/// Dispatches a workflow item to one of the four item templates (node, slot, link, tree)
+/// Dispatches a workflow item to one of the three item templates (node, slot, link)
 /// based on its view-model type, mirroring the WPF template's DataTemplateSelector.
 /// Wire the templates and provide an items source, then use it anywhere a collection of
 /// workflow view-models needs to be rendered.
 /// </summary>
 public partial class CustomTemplateSelector : ComponentBase
 {
-    /// <summary>Gets or sets the workflow items to render (nodes, slots, links, trees).</summary>
+    /// <summary>Gets or sets the workflow items to render (nodes, slots, links).</summary>
     [Parameter]
     public System.Collections.IEnumerable? Items { get; set; }
 
@@ -31,10 +31,6 @@ public partial class CustomTemplateSelector : ComponentBase
     [Parameter]
     public RenderFragment<ILinkComponent>? LinkTemplate { get; set; }
 
-    /// <summary>Gets or sets the template for <see cref="ITreeComponent"/> items.</summary>
-    [Parameter]
-    public RenderFragment<ITreeComponent>? TreeTemplate { get; set; }
-
     private RenderFragment? Select(object item)
         => item switch
         {
@@ -47,9 +43,6 @@ public partial class CustomTemplateSelector : ComponentBase
             INodeComponent node => NodeTemplate is null
                 ? throw new InvalidOperationException("NodeTemplate is not set.")
                 : NodeTemplate(node),
-            ITreeComponent tree => TreeTemplate is null
-                ? throw new InvalidOperationException("TreeTemplate is not set.")
-                : TreeTemplate(tree),
             _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")
         };
 }

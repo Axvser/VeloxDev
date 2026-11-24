@@ -96,13 +96,25 @@ public partial class TemplateClass : UserControl
     public static readonly DependencyProperty CanRenderProperty =
         DependencyProperty.Register(nameof(CanRender), typeof(bool), typeof(TemplateClass), new PropertyMetadata(true, OnRenderChanged));
 
+    /// <summary>Whether the curve is drawn dashed as a virtual link.</summary>
+    public static readonly DependencyProperty IsVirtualProperty =
+        DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnRenderChanged));
+
     /// <summary>The stroke colour.</summary>
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(TemplateClass),
             new PropertyMetadata(ParseColor("TemplateLinkColor", Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)), OnRenderChanged));
 
+    /// <summary>The stroke width.</summary>
+    public static readonly DependencyProperty LineThicknessProperty =
+        DependencyProperty.Register(nameof(LineThickness), typeof(double), typeof(TemplateClass),
+            new PropertyMetadata((double)TemplateLinkThickness, OnRenderChanged));
+
     /// <summary>Whether the link should be drawn at all.</summary>
     public bool CanRender { get => GetValue(CanRenderProperty) is true; set => SetValue(CanRenderProperty, value); }
+
+    /// <summary>Whether the curve is drawn dashed as a virtual link.</summary>
+    public bool IsVirtual { get => GetValue(IsVirtualProperty) is true; set => SetValue(IsVirtualProperty, value); }
 
     /// <summary>The stroke colour.</summary>
     public Color LineColor
@@ -111,10 +123,17 @@ public partial class TemplateClass : UserControl
         set => SetValue(LineColorProperty, value);
     }
 
+    /// <summary>The stroke width.</summary>
+    public double LineThickness
+    {
+        get => GetValue(LineThicknessProperty) is double value ? value : TemplateLinkThickness;
+        set => SetValue(LineThicknessProperty, value);
+    }
+
     private static void OnRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TemplateClass)d).Refresh();
 
-    // 颜色 token 在生成时被替换成字面量；解不出来就退回默认色。
+    // Colour tokens are replaced at generation time; fall back when parsing fails.
     private static Color ParseColor(string text, Color fallback)
         => ColorConverter.ConvertFromString(text) is Color color ? color : fallback;
 
@@ -124,7 +143,7 @@ public partial class TemplateClass : UserControl
 
     private void OnDataContextChanged(object? sender, DependencyPropertyChangedEventArgs e)
     {
-        // 换绑：先把上一条的曲线收回，免得池化视图留一条陈旧曲线替别人回答命中。
+        // Rebind: retract the previous curve so a pooled view cannot answer for it.
         _publishedLink?.PublishCurve(null);
         _publishedLink = null;
         Rebind();
@@ -142,9 +161,7 @@ public partial class TemplateClass : UserControl
             _receiver = link?.Receiver;
             _modelChanged = (_, _) => ScheduleRefresh();
 
-            // 订两端**以及它们各自的节点**：节点动的时候，槽的锚点是适配器在稍后的
-            // DispatcherPriority.Render 那一拍重测出来的 —— 只订槽会漏掉「节点已经在动、锚点还没写回」
-            // 的那一段（症状是连线整条冻在拖动前的几何上）。
+            // Watch both slots and their nodes: a moving node re-measures its slots later in the frame.
             Watch(_sender);
             Watch(_receiver);
             Watch(link);
@@ -167,7 +184,7 @@ public partial class TemplateClass : UserControl
             notifying.PropertyChanged += _modelChanged;
         }
 
-        // 节点的锚点变了，它这张卡上的每个槽都要重新量一次 —— 所以也订节点。
+        // A node's anchor change invalidates every slot on its card.
         var node = model is ISlotComponent slot ? slot.Parent : null;
         if (node is not null && _watchedModels.Contains(node) is false)
         {
@@ -192,7 +209,7 @@ public partial class TemplateClass : UserControl
         _modelChanged = null;
     }
 
-    // 排到 Render 优先级的下一拍再量：槽锚点的重测也排在那一拍，先来后到保证读到的是重测后的值。
+    // Defer to the render tick so slot anchors have been re-measured.
     private void ScheduleRefresh()
     {
         if (_refreshPending)
@@ -220,7 +237,7 @@ public partial class TemplateClass : UserControl
             return;
         }
 
-        // 绑定送来的可能是 NaN（占位槽的默认锚点就是 NaN），NaN 进盒子会让渲染器抛「宽高为负」。
+        // Bound values may be NaN before the slots are measured.
         if (double.IsNaN(StartLeft) || double.IsNaN(StartTop) || double.IsNaN(EndLeft) || double.IsNaN(EndTop))
         {
             InvalidateVisual();
@@ -234,7 +251,7 @@ public partial class TemplateClass : UserControl
             return;
         }
 
-        // 四个控制点一起进盒子 —— 曲线的凸包由它们界定；只按两端点算盒子，会把鼓出端点矩形的那一段切掉。
+        // Size the box to all four control points; the endpoints alone clip the curve's bulge.
         foreach (var (x, y) in points)
         {
             _curve.Add(new Point(x, y));
@@ -253,8 +270,7 @@ public partial class TemplateClass : UserControl
     {
         base.OnRender(ctx);
 
-        // 模型没让画、或者几何还没量过（盒子也还没摆）—— 一笔都不画。
-        // 这一步挡掉的正是「刚建好那一瞬从原点画一条」：那时模型还没说这条线可见。
+        // Draw nothing until the model says visible and the geometry has been measured.
         if (!_hasBounds || _link is not { } link || _curve.Count < 4)
         {
             return;
@@ -264,16 +280,16 @@ public partial class TemplateClass : UserControl
         // canvas-local space. Replace this together with BuildCurve if you change the shape.
         PublishCurve(link, LinkCurve.BuildLinkCubic(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
 
-        const double thickness = TemplateLinkThickness;
+        var thickness = LineThickness;
         var brush = new SolidColorBrush(LineColor);
-        var pen = IsVirtualLink(link)
+        var pen = IsVirtual || IsVirtualLink(link)
             ? new Pen(brush, thickness) { DashStyle = new DashStyle([4d, 2d], 0d) }
             : new Pen(brush, thickness);
 
         ctx.DrawGeometry(null, pen, BuildCurve());
     }
 
-    // 拖拽预览：两端都是占位槽（没有父节点），也就是一条还没落到任何卡片上的线。
+    // Drag preview: both endpoints are parentless placeholder slots.
     private static bool IsVirtualLink(ILinkComponent link)
         => link.Sender.Parent is null && link.Receiver.Parent is null;
 

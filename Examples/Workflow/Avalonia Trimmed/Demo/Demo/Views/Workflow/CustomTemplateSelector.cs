@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using VeloxDev.WorkflowSystem;
@@ -6,9 +6,9 @@ using VeloxDev.WorkflowSystem;
 namespace Demo;
 
 /// <summary>
-/// Selects a view template for each of the four workflow component interfaces.
+/// Selects a view template for each of the three workflow component interfaces.
 /// Add this selector to resources, assign NodeTemplate, SlotTemplate,
-/// LinkTemplate, and TreeTemplate, then pass it to behaviors:ViewPool.TemplateSelector.
+/// LinkTemplate, then pass it to behaviors:ViewPool.TemplateSelector.
 /// </summary>
 public sealed class CustomTemplateSelector : IDataTemplate
 {
@@ -18,7 +18,6 @@ public sealed class CustomTemplateSelector : IDataTemplate
 
     public IDataTemplate? LinkTemplate { get; set; }
 
-    public IDataTemplate? TreeTemplate { get; set; }
 
     public Control Build(object? parameter)
         => SelectTemplate(parameter).Build(parameter)
@@ -28,8 +27,7 @@ public sealed class CustomTemplateSelector : IDataTemplate
     public bool Match(object? data)
         => data is INodeComponent
             or ISlotComponent
-            or ILinkComponent
-            or ITreeComponent;
+            or ILinkComponent;
 
     private IDataTemplate SelectTemplate(object? item)
         => item switch
@@ -40,8 +38,6 @@ public sealed class CustomTemplateSelector : IDataTemplate
                 ?? throw new InvalidOperationException("SlotTemplate is not set."),
             INodeComponent => NodeTemplate
                 ?? throw new InvalidOperationException("NodeTemplate is not set."),
-            ITreeComponent => TreeTemplate
-                ?? throw new InvalidOperationException("TreeTemplate is not set."),
             _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")
         };
 }

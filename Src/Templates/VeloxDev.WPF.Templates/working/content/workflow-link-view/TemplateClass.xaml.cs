@@ -47,6 +47,8 @@ public partial class TemplateClass : UserControl
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(TemplateClass), new PropertyMetadata(false, OnRenderChanged));
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(TemplateClass), new PropertyMetadata((Color)ColorConverter.ConvertFromString("TemplateLinkColor"), OnRenderChanged));
+    public static readonly DependencyProperty LineThicknessProperty =
+        DependencyProperty.Register(nameof(LineThickness), typeof(double), typeof(TemplateClass), new PropertyMetadata((double)TemplateLinkThickness, OnRenderChanged));
 
     public double StartLeft { get => (double)GetValue(StartLeftProperty); set => SetValue(StartLeftProperty, value); }
     public double StartTop { get => (double)GetValue(StartTopProperty); set => SetValue(StartTopProperty, value); }
@@ -55,6 +57,7 @@ public partial class TemplateClass : UserControl
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public bool IsVirtual { get => (bool)GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Color LineColor { get => (Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
+    public double LineThickness { get => (double)GetValue(LineThicknessProperty); set => SetValue(LineThicknessProperty, value); }
 
     private static void OnRenderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TemplateClass)d).InvalidateVisual();
@@ -89,7 +92,7 @@ public partial class TemplateClass : UserControl
         // canvas-local space. Replace this together with BuildCurve if you change the shape.
         PublishCurve(LinkCurve.BuildLinkCubic(DataContext as ILinkComponent, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
 
-        var thickness = TemplateLinkThickness;
+        var thickness = LineThickness;
         var geometry = BuildCurve(DataContext as ILinkComponent);
 
         var brush = new SolidColorBrush(LineColor);

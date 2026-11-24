@@ -1,4 +1,4 @@
-// VeloxDev customization: The workflow grid. The whole grid lives here — the world-coordinate maths,
+﻿// VeloxDev customization: The workflow grid. The whole grid lives here — the world-coordinate maths,
 // the tick layout and the label formatting — so this file is where its look and its spacing are decided.
 using System;
 using Jalium.UI;
@@ -62,9 +62,9 @@ public sealed class GridDecorator : Grid, IWorkflowGridDecorator
         nameof(ContentOffsetY), typeof(double), typeof(GridDecorator),
         new PropertyMetadata(0d, OnVisualPropertyChanged));
 
-    /// <summary>Identifies the <see cref="GridStep"/> dependency property.</summary>
-    public static readonly DependencyProperty GridStepProperty = DependencyProperty.Register(
-        nameof(GridStep), typeof(double), typeof(GridDecorator),
+    /// <summary>Identifies the <see cref="GridSpacing"/> dependency property.</summary>
+    public static readonly DependencyProperty GridSpacingProperty = DependencyProperty.Register(
+        nameof(GridSpacing), typeof(double), typeof(GridDecorator),
         new PropertyMetadata(40d, OnVisualPropertyChanged));
 
     /// <summary>Identifies the <see cref="MajorLineEvery"/> dependency property.</summary>
@@ -136,7 +136,7 @@ public sealed class GridDecorator : Grid, IWorkflowGridDecorator
         RulerTickColor = ParseColor("#555555");
         RulerDividerColor = ParseColor("#3A3D40");
         SurfaceBackground = ParseColor("#1E1E1E");
-        GridStep = 40d;
+        GridSpacing = 40d;
         MajorLineEvery = 5;
 
         SizeChanged += (_, _) =>
@@ -187,10 +187,10 @@ public sealed class GridDecorator : Grid, IWorkflowGridDecorator
     }
 
     /// <summary>World distance between minor grid lines, in pixels.</summary>
-    public double GridStep
+    public double GridSpacing
     {
-        get => Read(GridStepProperty, 40d);
-        set => SetValue(GridStepProperty, value);
+        get => Read(GridSpacingProperty, 40d);
+        set => SetValue(GridSpacingProperty, value);
     }
 
     /// <summary>How many minor lines make a major one. Values below one are treated as one.</summary>
@@ -257,7 +257,7 @@ public sealed class GridDecorator : Grid, IWorkflowGridDecorator
     }
 
     /// <summary>World distance between major grid lines.</summary>
-    public double MajorStep => Math.Max(1, GridStep) * Math.Max(1, MajorLineEvery);
+    public double MajorStep => Math.Max(1, GridSpacing) * Math.Max(1, MajorLineEvery);
 
     /// <inheritdoc />
     public double RulerBand => RulerThickness;
@@ -330,7 +330,7 @@ public sealed class GridDecorator : Grid, IWorkflowGridDecorator
     {
         EnsureResources();
 
-        double step = Math.Max(1, GridStep);
+        double step = Math.Max(1, GridSpacing);
         double majorStep = step * Math.Max(1, MajorLineEvery);
 
         double worldLeft = -originX;
@@ -363,7 +363,7 @@ public sealed class GridDecorator : Grid, IWorkflowGridDecorator
         EnsureResources();
 
         double ruler = Math.Max(0, RulerThickness);
-        double step = Math.Max(1, GridStep);
+        double step = Math.Max(1, GridSpacing);
         double majorStep = step * Math.Max(1, MajorLineEvery);
 
         var bg = new SolidColorBrush(RulerBackground);

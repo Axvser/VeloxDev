@@ -129,11 +129,6 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
         }
 
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var rect = new RectangleF(0f, 0f, width, height);
-        using var background = new SolidBrush(_minimapBackground);
-        using var border = new DrawingPen(_minimapBorderBrush, 1f);
-        graphics.FillRectangle(background, rect);
-        graphics.DrawRectangle(border, 0f, 0f, Math.Max(0f, width - 1f), Math.Max(0f, height - 1f));
 
         var layout = ComputeLayout(_nodeRects);
         if (layout is null)
@@ -141,19 +136,72 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
             return;
         }
 
-        var fitted = layout.Value;
+        DrawMinimap(graphics, CreateDrawContext(layout.Value, width, height));
+    }
+
+    /// <summary>
+    /// Draws the minimap from <paramref name="context"/>. Override and call <c>base</c> to add to the default drawing.
+    /// </summary>
+    protected virtual void DrawMinimap(Graphics graphics, MinimapDrawContext context)
+    {
+        var width = (float)context.MinimapWidth;
+        var height = (float)context.MinimapHeight;
+        var rect = new RectangleF(0f, 0f, width, height);
+        using var background = new SolidBrush(_minimapBackground);
+        using var border = new DrawingPen(_minimapBorderBrush, 1f);
+        graphics.FillRectangle(background, rect);
+        graphics.DrawRectangle(border, 0f, 0f, Math.Max(0f, width - 1f), Math.Max(0f, height - 1f));
+
         using var nodeBrush = new SolidBrush(_nodeBrush);
-        using var viewportPen = new DrawingPen(_viewportStroke, 1.5f);
-        foreach (var (nx, ny, nw, nh) in _nodeRects)
+        foreach (var node in context.MappedNodes)
         {
-            var (x, y) = WorkflowSurfaceMath.MinimapLocal(nx, ny, fitted.Left, fitted.Top, fitted.Ox, fitted.Oy, fitted.Scale);
-            var w = WorkflowSurfaceMath.MinThumbSize(nw, fitted.Scale, 2d);
-            var h = WorkflowSurfaceMath.MinThumbSize(nh, fitted.Scale, 2d);
-            graphics.FillRectangle(nodeBrush, (float)x, (float)y, (float)w, (float)h);
+            graphics.FillRectangle(nodeBrush, (float)node.Left, (float)node.Top, (float)node.Width, (float)node.Height);
         }
 
-        var viewport = ViewportRect(fitted);
-        graphics.DrawRectangle(viewportPen, viewport.X, viewport.Y, viewport.Width, viewport.Height);
+        if (context.HasViewport && !context.MappedViewport.IsEmpty)
+        {
+            using var viewportPen = new DrawingPen(_viewportStroke, 1.5f);
+            var vp = context.MappedViewport;
+            graphics.DrawRectangle(viewportPen, (float)vp.Left, (float)vp.Top, (float)vp.Width, (float)vp.Height);
+        }
+    }
+
+    /// <summary>Builds the geometry for one draw pass from the computed layout and cached node rects.</summary>
+    private MinimapDrawContext CreateDrawContext(MinimapLayout layout, float width, float height)
+    {
+        var nodes = new List<WorkflowBounds>(_nodeRects.Count);
+        var mapped = new List<WorkflowBounds>(_nodeRects.Count);
+        foreach (var (nx, ny, nw, nh) in _nodeRects)
+        {
+            nodes.Add(WorkflowBounds.FromNode(nx, ny, nw, nh));
+            var (x, y) = WorkflowSurfaceMath.MinimapLocal(nx, ny, layout.Left, layout.Top, layout.Ox, layout.Oy, layout.Scale);
+            mapped.Add(WorkflowBounds.FromNode(x, y,
+                WorkflowSurfaceMath.MinThumbSize(nw, layout.Scale, 2d),
+                WorkflowSurfaceMath.MinThumbSize(nh, layout.Scale, 2d)));
+        }
+
+        var viewport = ViewportRect(layout);
+        var viewportBounds = WorkflowBounds.FromNode(
+            ScrollOffsetX - ContentOffsetX, ScrollOffsetY - ContentOffsetY, ViewportWidth, ViewportHeight);
+        var mappedViewport = viewport.Width > 0 && viewport.Height > 0
+            ? WorkflowBounds.FromNode(viewport.X, viewport.Y, viewport.Width, viewport.Height)
+            : default;
+
+        return new MinimapDrawContext
+        {
+            Tree = WorkflowTree,
+            ContentBounds = WorkflowBounds.FromNode(layout.Left, layout.Top, layout.Width, layout.Height),
+            ViewportBounds = viewportBounds,
+            Nodes = nodes,
+            MappedNodes = mapped,
+            MappedViewport = mappedViewport,
+            MinimapWidth = width,
+            MinimapHeight = height,
+            Padding = Math.Max(0d, ContentPadding),
+            OriginX = layout.Ox,
+            OriginY = layout.Oy,
+            Scale = layout.Scale,
+        };
     }
 
     /// <inheritdoc />
@@ -251,7 +299,7 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
             Math.Max(1d, Bounds.Width - (padding * 2d)),
             Math.Max(1d, Bounds.Height - (padding * 2d)),
             padding);
-        return new MinimapLayout(global.Left, global.Top, scale, ox, oy);
+        return new MinimapLayout(global.Left, global.Top, global.Width, global.Height, scale, ox, oy);
     }
 
     private RectangleF ViewportRect(MinimapLayout layout)
@@ -272,10 +320,12 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
         return new RectangleF((float)x, (float)y, (float)width, (float)height);
     }
 
-    private readonly struct MinimapLayout(double left, double top, double scale, double ox, double oy)
+    private readonly struct MinimapLayout(double left, double top, double width, double height, double scale, double ox, double oy)
     {
         public double Left { get; } = left;
         public double Top { get; } = top;
+        public double Width { get; } = width;
+        public double Height { get; } = height;
         public double Scale { get; } = scale;
         public double Ox { get; } = ox;
         public double Oy { get; } = oy;

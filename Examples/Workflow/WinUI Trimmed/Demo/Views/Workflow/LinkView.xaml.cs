@@ -86,6 +86,8 @@ public sealed partial class LinkView : UserControl
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnChanged));
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Windows.UI.Color), typeof(LinkView), new PropertyMetadata(ParseColor("#DDFFFFFF"), OnChanged));
+    public static readonly DependencyProperty LineThicknessProperty =
+        DependencyProperty.Register(nameof(LineThickness), typeof(double), typeof(LinkView), new PropertyMetadata((double)2, OnChanged));
     public static readonly DependencyProperty IsHighlightedProperty =
         DependencyProperty.Register(nameof(IsHighlighted), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnChanged));
     public static readonly DependencyProperty HighlightColorProperty =
@@ -98,6 +100,7 @@ public sealed partial class LinkView : UserControl
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public bool IsVirtual { get => (bool)GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Windows.UI.Color LineColor { get => (Windows.UI.Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
+    public double LineThickness { get => (double)GetValue(LineThicknessProperty); set => SetValue(LineThicknessProperty, value); }
     public bool IsHighlighted { get => (bool)GetValue(IsHighlightedProperty); set => SetValue(IsHighlightedProperty, value); }
     // Extension point: the white glow shown while this link is highlighted. White is deliberate — the line
     // reads as lit rather than recoloured, and the halo drawn around it is what makes it a glow.
@@ -337,7 +340,7 @@ public sealed partial class LinkView : UserControl
         // Extension point: the white glow shown while this link is highlighted. White is deliberate — the line
     // reads as lit rather than recoloured, and the halo drawn around it is what makes it a glow.
         var color = IsHighlighted ? HighlightColor : LineColor;
-        var thickness = IsHighlighted ? 2 + 1.5 : 2;
+        var thickness = IsHighlighted ? LineThickness + 1.5 : LineThickness;
         _strokeBrush.Color = color;
         _path.StrokeThickness = thickness;
 

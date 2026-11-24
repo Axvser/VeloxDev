@@ -11,5 +11,9 @@
                             BorderColor="@Border"
                             NodeFill="@NodeFill"
                             ViewportFill="transparent"
-                            ViewportStroke="@ViewportStroke" />
+                            ViewportStroke="@ViewportStroke">
+        @* Razor has no render override: this fragment is the customization point after the default drawing. *@
+        <DrawMinimap Context="minimap">
+        </DrawMinimap>
+    </WorkflowMinimapOverlay>
 }

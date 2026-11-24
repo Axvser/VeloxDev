@@ -8,16 +8,12 @@ namespace TemplateNamespace;
 
 /// <summary>
 /// A Blazor workflow slot view drawn from the <c>TemplateSlotPath</c> SVG path data.
-/// The fill/stroke colors follow the WPF template contract:
-/// Sender + Receiver = Violet, Sender = Tomato, Receiver = Lime, otherwise the
-/// standby <c>TemplateSlotColor</c>. Wrapping itself in
-/// <see cref="WorkflowSlotConnectionBehavior"/> makes the slot participate in
-/// link creation (drag from slot to slot).
+/// The fill follows the shared <see cref="WorkflowPresentation.SlotStateColor"/> mapping; wrapping the
+/// glyph in <see cref="WorkflowSlotConnectionBehavior"/> makes it participate in link creation.
 /// </summary>
 public partial class TemplateClass : ComponentBase, IDisposable
 {
     private const double IconSize = 20;
-    private const double ViewBoxSize = 1024;
 
     /// <summary>Gets or sets the slot rendered by this view.</summary>
     [Parameter]
@@ -39,62 +35,6 @@ public partial class TemplateClass : ComponentBase, IDisposable
 
     // The SVG width/height attributes are parsed by the browser — keep the '.' decimal separator.
     private string SlotSizeCss => SlotSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
-
-    private string FillColor => SlotStateColor(Slot?.State ?? SlotState.StandBy);
-    private string StrokeColor => ToCss("TemplateSlotBorderColor");
-
-    private static string SlotStateColor(SlotState state)
-    {
-        // WPF template contract: Sender+Receiver → Violet, Sender → Tomato,
-        // Receiver → Lime, else the standby color.
-        if (state.HasFlag(SlotState.Sender) && state.HasFlag(SlotState.Receiver))
-        {
-            return "#EE82EE";
-        }
-
-        if (state.HasFlag(SlotState.Sender))
-        {
-            return "#FF6347";
-        }
-
-        if (state.HasFlag(SlotState.Receiver))
-        {
-            return "#32CD32";
-        }
-
-        return ToCss("TemplateSlotColor");
-    }
-
-    /// <summary>
-    /// Converts XAML-style <c>#AARRGGBB</c> color literals (as used by the template symbols)
-    /// into CSS color values, so symbol-driven colors work in Razor views. Also passes
-    /// through named colors and CSS <c>rgb()/rgba()</c> strings unchanged.
-    /// </summary>
-    private static string ToCss(string value)
-    {
-        var text = value.Trim();
-        if (text.Length == 9 && text[0] == '#')
-        {
-            var alpha = text.Substring(1, 2);
-            var rgb = text.Substring(3);
-            if (byte.TryParse(alpha, System.Globalization.NumberStyles.HexNumber,
-                    System.Globalization.CultureInfo.InvariantCulture, out var a))
-            {
-                return FormattableString.Invariant(
-                    $"rgba({HexByte(rgb, 0)},{HexByte(rgb, 2)},{HexByte(rgb, 4)},{a / 255d:0.###})");
-            }
-        }
-
-        if (text.Length == 7 && text[0] == '#')
-        {
-            return text;
-        }
-
-        return text;
-    }
-
-    private static int HexByte(string hex, int offset)
-        => Convert.ToInt32(hex.Substring(offset, 2), 16);
 
     /// <inheritdoc />
     protected override void OnInitialized()

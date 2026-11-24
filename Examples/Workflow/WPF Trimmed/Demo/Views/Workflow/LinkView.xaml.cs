@@ -49,6 +49,8 @@ public partial class LinkView : UserControl
         DependencyProperty.Register(nameof(IsVirtual), typeof(bool), typeof(LinkView), new PropertyMetadata(false, OnRenderChanged));
     public static readonly DependencyProperty LineColorProperty =
         DependencyProperty.Register(nameof(LineColor), typeof(Color), typeof(LinkView), new PropertyMetadata((Color)ColorConverter.ConvertFromString("#DDFFFFFF"), OnRenderChanged));
+    public static readonly DependencyProperty LineThicknessProperty =
+        DependencyProperty.Register(nameof(LineThickness), typeof(double), typeof(LinkView), new PropertyMetadata((double)2, OnRenderChanged));
     public static readonly DependencyProperty HighlightColorProperty =
         DependencyProperty.Register(nameof(HighlightColor), typeof(Color), typeof(LinkView), new PropertyMetadata((Color)ColorConverter.ConvertFromString("#FFFFFFFF"), OnRenderChanged));
     public static readonly DependencyProperty IsHighlightedProperty =
@@ -61,6 +63,7 @@ public partial class LinkView : UserControl
     public bool CanRender { get => (bool)GetValue(CanRenderProperty); set => SetValue(CanRenderProperty, value); }
     public bool IsVirtual { get => (bool)GetValue(IsVirtualProperty); set => SetValue(IsVirtualProperty, value); }
     public Color LineColor { get => (Color)GetValue(LineColorProperty); set => SetValue(LineColorProperty, value); }
+    public double LineThickness { get => (double)GetValue(LineThicknessProperty); set => SetValue(LineThicknessProperty, value); }
 
     /// <summary>The soft light the link turns into while it is hovered.</summary>
     public Color HighlightColor { get => (Color)GetValue(HighlightColorProperty); set => SetValue(HighlightColorProperty, value); }
@@ -143,7 +146,7 @@ public partial class LinkView : UserControl
         PublishCurve(LinkCurve.BuildLinkCubic(DataContext as ILinkComponent, StartLeft, StartTop, EndLeft, EndTop, MinimumPull));
 
         var color = IsHighlighted ? HighlightColor : LineColor;
-        var thickness = 2;
+        var thickness = LineThickness;
         var geometry = BuildCurve(DataContext as ILinkComponent);
 
         // Extension point: this is the hover feedback. Swap the halo's width or alpha, or HighlightColor,

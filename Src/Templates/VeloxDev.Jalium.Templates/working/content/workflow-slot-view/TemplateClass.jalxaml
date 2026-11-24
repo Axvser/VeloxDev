@@ -5,8 +5,15 @@
              x:Class="TemplateNamespace.TemplateClass"
              Background="TemplateSlotBackground"
              behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
+    <UserControl.Resources>
+        <behaviors:SlotStateBrushConverter x:Key="SlotStateBrush"
+                                           StandByColor="TemplateSlotColor"
+                                           BorderColor="TemplateSlotBorderColor" />
+    </UserControl.Resources>
     <Viewbox>
-        <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+        <Path Fill="{Binding State, Converter={StaticResource SlotStateBrush}}"
+              Stroke="{Binding State, Converter={StaticResource SlotStateBrush}, ConverterParameter=Border}"
+              StrokeThickness="48"
               Data="TemplateSlotPath" />
     </Viewbox>
 </UserControl>

@@ -1,4 +1,5 @@
 using Microsoft.Maui.Graphics;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Controls;
@@ -17,5 +18,11 @@ public class MinimapOverlay : WorkflowMinimapOverlay
         MinimapBorderColor = Color.FromArgb("#DC94A3B8");
         NodeFillColor = Color.FromArgb("#DC38BDF8");
         ViewportStrokeColor = Color.FromArgb("#F0FFFFFF");
+    }
+
+    /// <summary>Customize the minimap drawing here; keep the base call unless you replace it entirely.</summary>
+    protected override void DrawMinimap(ICanvas canvas, MinimapDrawContext context)
+    {
+        base.DrawMinimap(canvas, context);
     }
 }

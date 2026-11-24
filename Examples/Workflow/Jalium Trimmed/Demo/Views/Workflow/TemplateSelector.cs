@@ -1,4 +1,4 @@
-// VeloxDev customization: Points each kind of workflow item at the DataTemplate that renders it. The tree view's
+﻿// VeloxDev customization: Points each kind of workflow item at the DataTemplate that renders it. The tree view's
 // resources construct this and hand it to behaviors:ViewPool.TemplateSelector; rename the template keys there if
 // you rename them here.
 using System;
@@ -23,7 +23,6 @@ public sealed class TemplateSelector : DataTemplateSelector
     public DataTemplate? LinkTemplate { get; set; }
 
     /// <summary>The template used for <see cref="ITreeComponent"/> items.</summary>
-    public DataTemplate? TreeTemplate { get; set; }
 
     /// <inheritdoc />
     public override DataTemplate SelectTemplate(object? item, DependencyObject container)
@@ -35,8 +34,6 @@ public sealed class TemplateSelector : DataTemplateSelector
                 ?? throw new InvalidOperationException("SlotTemplate is not set."),
             INodeComponent => NodeTemplate
                 ?? throw new InvalidOperationException("NodeTemplate is not set."),
-            ITreeComponent => TreeTemplate
-                ?? throw new InvalidOperationException("TreeTemplate is not set."),
             _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")
         };
 }

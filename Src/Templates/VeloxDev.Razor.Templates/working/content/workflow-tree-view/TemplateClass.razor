@@ -50,28 +50,6 @@
 
     /// <summary>Default node template used when the caller does not supply <see cref="TemplateClass.NodeTemplate"/>.</summary>
     private RenderFragment<INodeComponent> RenderGenericNode => node => @<text>
-        @{ var names = WorkflowPresentation.SlotNamesOf(node); }
-        <NodeView Node="node" Tree="Tree" AllowOverflow="true">
-            <InputSlots>
-                @* SlotView already opens the connection behavior; do not wrap it in another pointer target. *@
-                @foreach (var slot in WorkflowPresentation.InputSlotsOf(node))
-                {
-                    <SlotView Slot="slot" Tree="Tree" SlotSize="18" />
-                }
-            </InputSlots>
-            <OutputSlots>
-                @foreach (var slot in WorkflowPresentation.OutputSlotsOf(node))
-                {
-                    names.TryGetValue(slot, out var name);
-                    <div style="display:flex;align-items:center;">
-                        @if (name is not null)
-                        {
-                            <span style="margin-left:auto;margin-right:8px;color:@WorkflowPresentation.NodeForegroundCss;font-size:11px;white-space:nowrap;">@name</span>
-                        }
-                        <SlotView Slot="slot" Tree="Tree" SlotSize="14" />
-                    </div>
-                }
-            </OutputSlots>
-        </NodeView>
+        <NodeView Node="node" Tree="Tree" AllowOverflow="true" />
     </text>;
 }

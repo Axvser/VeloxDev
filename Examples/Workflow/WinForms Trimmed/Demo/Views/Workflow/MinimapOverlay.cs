@@ -1,6 +1,8 @@
 // VeloxDev customization: The minimap overlay. The adapter's WorkflowMinimapOverlay already owns the layout
 // maths, the drag mapping and the top-right anchoring; this file supplies the palette only. Name it
 // PART_MinimapOverlay in TreeView.xaml and the surface behavior wires it up.
+using System.Drawing;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace Demo.Views.Workflow;
@@ -17,5 +19,11 @@ public sealed class MinimapOverlay : WorkflowMinimapOverlay
         MinimapBorderBrush = ParseColor("#DC94A3B8");
         NodeBrush = ParseColor("#DC38BDF8");
         ViewportStroke = ParseColor("#F0FFFFFF");
+    }
+
+    /// <summary>Customize the minimap drawing here; keep the base call unless you replace it entirely.</summary>
+    protected override void DrawMinimap(Graphics graphics, MinimapDrawContext context)
+    {
+        base.DrawMinimap(graphics, context);
     }
 }

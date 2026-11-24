@@ -9,7 +9,7 @@ namespace TemplateNamespace;
 /// Points each kind of workflow item at the <c>DataTemplate</c> that renders it.
 /// </summary>
 /// <remarks>
-/// Assign the four properties in the tree view's resources and hand the instance to
+/// Assign the three properties in the tree view's resources and hand the instance to
 /// <c>behaviors:ViewPool.TemplateSelector</c>:
 /// <code>
 /// &lt;local:TemplateClass x:Key="WorkflowTemplateSelector"
@@ -29,9 +29,6 @@ public sealed class TemplateClass : DataTemplateSelector
     /// <summary>The template used for <see cref="ILinkComponent"/> items.</summary>
     public DataTemplate? LinkTemplate { get; set; }
 
-    /// <summary>The template used for <see cref="ITreeComponent"/> items.</summary>
-    public DataTemplate? TreeTemplate { get; set; }
-
     /// <inheritdoc />
     public override DataTemplate SelectTemplate(object? item, DependencyObject container)
         => item switch
@@ -42,8 +39,6 @@ public sealed class TemplateClass : DataTemplateSelector
                 ?? throw new InvalidOperationException("SlotTemplate is not set."),
             INodeComponent => NodeTemplate
                 ?? throw new InvalidOperationException("NodeTemplate is not set."),
-            ITreeComponent => TreeTemplate
-                ?? throw new InvalidOperationException("TreeTemplate is not set."),
             _ => throw new InvalidOperationException($"Unsupported workflow item: {item?.GetType().FullName}")
         };
 }

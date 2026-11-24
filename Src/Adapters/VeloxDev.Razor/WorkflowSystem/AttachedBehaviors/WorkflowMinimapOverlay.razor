@@ -20,6 +20,10 @@
                 <rect class="veloxdev-wf-minimap-viewport"
                       fill="@ViewportFill" stroke="@ViewportStroke"
                       stroke-width="@ViewportStrokeWidthCss" rx="2" />
+                @if (DrawMinimap is not null)
+                {
+                    @DrawMinimap(DrawContext)
+                }
             </svg>
         </div>
     </div>

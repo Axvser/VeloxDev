@@ -36,7 +36,7 @@
         </Grid>
 
         <Grid Grid.Row="1" Canvas.ZIndex="6" Clip="{x:Null}">
-            <local:SlotView x:Name="PART_InputSlot" DataContext="{Binding InputSlot}" SlotState="{Binding State}"
+            <local:SlotView x:Name="PART_InputSlot" DataContext="{Binding InputSlot}"
                                     Width="18"
                                     Height="18"
                                     Margin="2,0,0,0"
@@ -59,7 +59,7 @@
                                    Margin="0,0,10,0"
                                    HorizontalAlignment="Right"
                                    VerticalAlignment="Center" />
-                        <local:SlotView DataContext="{Binding Slot}" SlotState="{Binding State}"
+                        <local:SlotView DataContext="{Binding Slot}"
                                                 Grid.Column="1"
                                                 Width="14"
                                                 Height="14"

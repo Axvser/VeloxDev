@@ -31,21 +31,37 @@ public partial class LinkView : ComponentBase, IDisposable
     [Parameter]
     public double CanvasHeight { get; set; } = 1080;
 
-    /// <summary>Gets or sets an optional line-color override (defaults to <c>#DDFFFFFF</c>).</summary>
+    /// <summary>Gets or sets the sender endpoint's canvas-local X; read from the model when omitted.</summary>
     [Parameter]
-    public string? LineColorOverride { get; set; }
+    public double? StartLeft { get; set; }
 
-    /// <summary>Gets or sets an optional thickness override (defaults to <c>2</c>).</summary>
+    /// <summary>Gets or sets the sender endpoint's canvas-local Y; read from the model when omitted.</summary>
     [Parameter]
-    public string? ThicknessOverride { get; set; }
+    public double? StartTop { get; set; }
 
-    /// <summary>Gets or sets an explicit virtual-link override (defaults to the sender/receiver-parent heuristic).</summary>
+    /// <summary>Gets or sets the receiver endpoint's canvas-local X; read from the model when omitted.</summary>
     [Parameter]
-    public bool? IsVirtualOverride { get; set; }
+    public double? EndLeft { get; set; }
 
-    /// <summary>Gets or sets an explicit visibility override (defaults to <see cref="ILinkComponent.IsVisible"/>).</summary>
+    /// <summary>Gets or sets the receiver endpoint's canvas-local Y; read from the model when omitted.</summary>
     [Parameter]
-    public bool? CanRenderOverride { get; set; }
+    public double? EndTop { get; set; }
+
+    /// <summary>Gets or sets whether the link should be drawn; defaults to the model's visibility.</summary>
+    [Parameter]
+    public bool? CanRender { get; set; }
+
+    /// <summary>Gets or sets whether the curve is a virtual link; defaults to the parentless-endpoint heuristic.</summary>
+    [Parameter]
+    public bool? IsVirtual { get; set; }
+
+    /// <summary>Gets or sets the line color; defaults to <c>#DDFFFFFF</c>.</summary>
+    [Parameter]
+    public string? LineColor { get; set; }
+
+    /// <summary>Gets or sets the line width; defaults to <c>2</c>.</summary>
+    [Parameter]
+    public double? LineThickness { get; set; }
 
     // The surface cascades itself down, so a link view drawn inside one can forward the pointer
     // into the shared input route; null when the view is rendered outside a surface.
@@ -84,21 +100,17 @@ public partial class LinkView : ComponentBase, IDisposable
         }
     }
 
-    private string LineColor => LineColorOverride ?? ToCss("#DDFFFFFF");
-    private double Thickness
-    {
-        get
-        {
-            if (ThicknessOverride is not null
-                && double.TryParse(ThicknessOverride, NumberStyles.Float,
-                    CultureInfo.InvariantCulture, out var t))
-            {
-                return t;
-            }
+    private string EffectiveLineColor => LineColor ?? ToCss("#DDFFFFFF");
 
-            return double.Parse("2", CultureInfo.InvariantCulture);
-        }
-    }
+    private double EffectiveLineThickness => LineThickness ?? 2;
+
+    private double EffectiveStartLeft => StartLeft ?? Link?.Sender?.Anchor.Horizontal ?? 0;
+    private double EffectiveStartTop => StartTop ?? Link?.Sender?.Anchor.Vertical ?? 0;
+    private double EffectiveEndLeft => EndLeft ?? Link?.Receiver?.Anchor.Horizontal ?? 0;
+    private double EffectiveEndTop => EndTop ?? Link?.Receiver?.Anchor.Vertical ?? 0;
+
+    private bool EffectiveCanRender => CanRender ?? (Link?.IsVisible == true);
+    private bool EffectiveIsVirtual => IsVirtual ?? IsVirtualLink(Link);
 
     /// <summary>
     /// Converts XAML-style <c>#AARRGGBB</c> color literals (as used by the template symbols)
@@ -130,21 +142,15 @@ public partial class LinkView : ComponentBase, IDisposable
 
     private static int HexByte(string hex, int offset)
         => Convert.ToInt32(hex.Substring(offset, 2), 16);
-    private bool CanRender { get; set; } = true;
-    private bool IsVirtual { get; set; }
-
-    private bool EffectiveCanRender => CanRenderOverride ?? CanRender;
-    private bool EffectiveIsVirtual => IsVirtualOverride ?? IsVirtual;
 
     // Keep these invariant — the strings land in SVG/CSS attributes, where a culture's comma decimal
     // separator would serialize an unparseable value.
     private string CanvasWidthCss => CanvasWidth.ToString("0.#", CultureInfo.InvariantCulture);
     private string CanvasHeightCss => CanvasHeight.ToString("0.#", CultureInfo.InvariantCulture);
-    private string ThicknessCss => Thickness.ToString("0.#", CultureInfo.InvariantCulture);
 
     // 高亮只换这条 path 的颜色与线宽：线本身是白的这版，高亮取更亮的浅青
-    private string StrokeColor => _hover ? HighlightColor : LineColor;
-    private string StrokeWidthCss => (_hover ? Thickness + HighlightWidthBonus : Thickness).ToString("0.#", CultureInfo.InvariantCulture);
+    private string StrokeColor => _hover ? HighlightColor : EffectiveLineColor;
+    private string StrokeWidthCss => (_hover ? EffectiveLineThickness + HighlightWidthBonus : EffectiveLineThickness).ToString("0.#", CultureInfo.InvariantCulture);
 
     private void OnPointerEntered(object? sender, PointerEnteredEventArgs e) => IsHighlighted = true;
 
@@ -167,9 +173,6 @@ public partial class LinkView : ComponentBase, IDisposable
     private void Sync(ILinkComponent? link)
     {
         if (link is null) return;
-
-        CanRender = link.IsVisible;
-        IsVirtual = IsVirtualLink(link);
 
         if (link is INotifyPropertyChanged n)
         {
@@ -201,29 +204,7 @@ public partial class LinkView : ComponentBase, IDisposable
 
     private void OnLinkChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(ILinkComponent.IsVisible) or null or "")
-        {
-            CanRender = Link?.IsVisible == true;
-        }
-
-        if (e.PropertyName is nameof(ILinkComponent.Sender)
-            or nameof(ILinkComponent.Receiver)
-            or null or "")
-        {
-            IsVirtual = IsVirtualLink(Link);
-        }
-
         InvokeAsync(StateHasChanged);
-    }
-
-    /// <inheritdoc />
-    protected override void OnParametersSet()
-    {
-        base.OnParametersSet();
-        if (IsVirtualOverride is not null || CanRenderOverride is not null)
-        {
-            InvokeAsync(StateHasChanged);
-        }
     }
 
     private void OnEndpointChanged(object? sender, PropertyChangedEventArgs e)
@@ -247,14 +228,6 @@ public partial class LinkView : ComponentBase, IDisposable
         var link = Link;
         if (link is null) return "";
 
-        var sender = link.Sender;
-        var receiver = link.Receiver;
-        if (sender is null || receiver is null)
-        {
-            link.PublishCurve(null);
-            return "";
-        }
-
         // NaN gate: slot anchors default to NaN (unmeasured placeholder). Rendering before
         // the GUI measures the endpoints would serialize NaN coordinates and paint a stale
         // frame that jumps back once measurement lands — the first-entry flicker the XAML
@@ -267,10 +240,10 @@ public partial class LinkView : ComponentBase, IDisposable
             return "";
         }
 
-        double sx = sender.Anchor.Horizontal;
-        double sy = sender.Anchor.Vertical;
-        double ex = receiver.Anchor.Horizontal;
-        double ey = receiver.Anchor.Vertical;
+        double sx = EffectiveStartLeft;
+        double sy = EffectiveStartTop;
+        double ex = EffectiveEndLeft;
+        double ey = EffectiveEndTop;
 
         // Placeholder endpoints (VirtualLink gesture) can still carry NaN anchors on the
         // reset intermediate frames (Reset nulls the anchors before clearing IsVisible), which

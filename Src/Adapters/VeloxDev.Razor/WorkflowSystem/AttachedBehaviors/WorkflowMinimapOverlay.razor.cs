@@ -82,6 +82,16 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     [Parameter]
     public string? ScrollViewerId { get; set; }
 
+    /// <summary>
+    /// Gets or sets extra minimap content rendered after the default nodes and viewport block.
+    /// </summary>
+    /// <remarks>
+    /// Blazor components cannot override a base component's render tree, so this render fragment is the
+    /// equivalent of the <c>DrawMinimap</c> override the class-based adapters expose.
+    /// </remarks>
+    [Parameter]
+    public RenderFragment<MinimapDrawContext>? DrawMinimap { get; set; }
+
     /// <inheritdoc />
     public double ScrollOffsetX { get; set; }
 
@@ -135,6 +145,8 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     private CancellationTokenSource? _throttleCts;
 
     private IReadOnlyList<Mapped>? MappedNodes { get; set; }
+
+    private MinimapDrawContext DrawContext { get; set; } = new();
 
     // CSS style 属性内无单位长度无效（浏览器会丢弃，元素塌成 0×0）。这些值喂给内联 width/height 样式，下面 SVG 的 width/height 属性也接受 px 后缀。
     // 固定不变并用 '.' 分隔：它们喂给 style 与 SVG 长度属性，逗号小数文化会序列化出浏览器解析不了的值。
@@ -334,6 +346,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         if (tree is null)
         {
             MappedNodes = null;
+            DrawContext = new MinimapDrawContext();
             return;
         }
 
@@ -341,6 +354,7 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         if (nodes.Length == 0)
         {
             MappedNodes = Array.Empty<Mapped>();
+            DrawContext = new MinimapDrawContext();
             return;
         }
 
@@ -374,6 +388,38 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             var (x, y) = WorkflowSurfaceMath.MinimapLocal(n.Anchor.Horizontal, n.Anchor.Vertical, minX, minY, ox, oy, scale);
             return new Mapped(x, y, Math.Max(1, n.Size.Width * scale), Math.Max(1, n.Size.Height * scale));
         }).ToArray();
+
+        var contentBounds = WorkflowBounds.FromNode(minX, minY, bw, bh);
+        var viewportBounds = WorkflowBounds.FromNode(
+            WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetX, ContentOffsetX),
+            WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetY, ContentOffsetY),
+            ViewportWidth, ViewportHeight);
+        var mappedViewport = default(WorkflowBounds);
+        if (!viewportBounds.IsEmpty)
+        {
+            var (vx, vy, vw, vh) = WorkflowSurfaceMath.MinimapViewportRect(
+                ox, oy, scale, viewportBounds.Left, viewportBounds.Top, viewportBounds.Width, viewportBounds.Height,
+                minX, minY, Width, Height, minRectSize: 2.0);
+            mappedViewport = WorkflowBounds.FromNode(vx, vy, vw, vh);
+        }
+
+        DrawContext = new MinimapDrawContext
+        {
+            Tree = tree,
+            ContentBounds = contentBounds,
+            ViewportBounds = viewportBounds,
+            Nodes = nodes.Select(n => WorkflowBounds.FromNode(
+                n.Anchor.Horizontal, n.Anchor.Vertical, n.Size.Width, n.Size.Height)).ToArray(),
+            MappedNodes = MappedNodes.Select(n => WorkflowBounds.FromNode(n.X, n.Y, n.W, n.H)).ToArray(),
+            MappedViewport = mappedViewport,
+            MinimapWidth = Width,
+            MinimapHeight = Height,
+            Padding = pad,
+            OriginX = ox,
+            OriginY = oy,
+            Scale = scale,
+            NodeCornerRadius = NodeRadius,
+        };
 
         // 视口块不在这里计算/渲染：它完全归 JS（setMinimapViewport），.NET 重建因此永远不会用陈旧坐标覆盖它。
     }

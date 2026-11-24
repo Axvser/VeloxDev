@@ -6,10 +6,19 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450" Background="TemplateSlotBackground"
              x:Class="TemplateNamespace.TemplateClass"
              xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
-             behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True" >
+             x:CompileBindings="False"
+             behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True">
+
+    <UserControl.Resources>
+        <behaviors:SlotStateBrushConverter x:Key="SlotStateBrush"
+                                           StandByColor="TemplateSlotColor"
+                                           BorderColor="TemplateSlotBorderColor" />
+    </UserControl.Resources>
 
     <Viewbox>
-        <Path Fill="{Binding $parent[UserControl].Foreground}"
+        <Path Fill="{Binding State, Converter={StaticResource SlotStateBrush}}"
+              Stroke="{Binding State, Converter={StaticResource SlotStateBrush}, ConverterParameter=Border}"
+              StrokeThickness="48"
               Data="TemplateSlotPath" />
     </Viewbox>
 

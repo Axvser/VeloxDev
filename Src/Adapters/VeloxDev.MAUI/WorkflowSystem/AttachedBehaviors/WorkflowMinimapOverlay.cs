@@ -772,66 +772,111 @@ public class WorkflowMinimapOverlay : GraphicsView, IDrawable, IWorkflowMinimapO
             if (WorkflowTree?.Nodes is null || WorkflowTree.Nodes.Count == 0) return;
 
             ComputeDrawing(w, h);
-            var gb = _drawGb;
-            if (gb.IsEmpty || gb.Width <= 0 || gb.Height <= 0 || _sc <= 0) return;
+            var context = CreateDrawContext();
+            if (!context.HasContent || context.Scale <= 0) return;
 
-            var cr = Math.Max(0, (float)MinimapCornerRadius);
-
-            if (MinimapBackgroundColor is not null)
-            {
-                canvas.FillColor = MinimapBackgroundColor;
-                canvas.FillRoundedRectangle(0, 0, _mmW, _mmH, cr);
-            }
-            if (MinimapBorderColor is not null)
-            {
-                canvas.StrokeColor = MinimapBorderColor;
-                canvas.StrokeSize = (float)MinimapBorderThickness;
-                canvas.DrawRoundedRectangle(0, 0, _mmW, _mmH, cr);
-            }
-
-            canvas.SaveState();
-            canvas.ClipRectangle(0, 0, _mmW, _mmH);
-            try
-            {
-                if (NodeFillColor is not null)
-                {
-                    canvas.FillColor = NodeFillColor;
-                    var ncr = Math.Max(0, (float)NodeCornerRadius);
-                    foreach (var (nx, ny, nw, nh) in _lastNodeRects)
-                    {
-                        // MinimapLocal：local = origin + (world − contentOrigin)·scale。
-                        var (lx, ly) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, _ox, _oy, _sc);
-                        canvas.FillRoundedRectangle(
-                            (float)lx, (float)ly,
-                            Math.Max(2f, (float)(nw * _sc)),
-                            Math.Max(2f, (float)(nh * _sc)), ncr);
-                    }
-                }
-
-                var (vpx, vpy, vpw, vph) = GetClampedViewportRect();
-                if (vpw > 0 && vph > 0 && !float.IsNaN(vpx) && !float.IsNaN(vpy))
-                {
-                    var ncr = Math.Max(0, (float)NodeCornerRadius);
-
-                    if (ViewportFillColor is not null)
-                    {
-                        canvas.FillColor = ViewportFillColor;
-                        canvas.FillRoundedRectangle(vpx, vpy, vpw, vph, ncr);
-                    }
-                    if (ViewportStrokeColor is not null)
-                    {
-                        canvas.StrokeColor = ViewportStrokeColor;
-                        canvas.StrokeSize = (float)ViewportStrokeThickness;
-                        canvas.DrawRoundedRectangle(vpx, vpy, vpw, vph, ncr);
-                    }
-                }
-            }
-            finally { canvas.RestoreState(); }
+            DrawMinimap(canvas, context);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             System.Diagnostics.Debug.WriteLine(
                 $"[Minimap] Draw error: {ex.GetType().Name}: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Draws the minimap from <paramref name="context"/>. Override and call <c>base</c> to add to the default drawing.
+    /// </summary>
+    protected virtual void DrawMinimap(ICanvas canvas, MinimapDrawContext context)
+    {
+        var cr = Math.Max(0, (float)context.MinimapCornerRadius);
+
+        if (MinimapBackgroundColor is not null)
+        {
+            canvas.FillColor = MinimapBackgroundColor;
+            canvas.FillRoundedRectangle(0, 0, (float)context.MinimapWidth, (float)context.MinimapHeight, cr);
+        }
+        if (MinimapBorderColor is not null)
+        {
+            canvas.StrokeColor = MinimapBorderColor;
+            canvas.StrokeSize = (float)MinimapBorderThickness;
+            canvas.DrawRoundedRectangle(0, 0, (float)context.MinimapWidth, (float)context.MinimapHeight, cr);
+        }
+
+        canvas.SaveState();
+        canvas.ClipRectangle(0, 0, (float)context.MinimapWidth, (float)context.MinimapHeight);
+        try
+        {
+            if (NodeFillColor is not null)
+            {
+                canvas.FillColor = NodeFillColor;
+                var ncr = Math.Max(0, (float)context.NodeCornerRadius);
+                foreach (var node in context.MappedNodes)
+                {
+                    canvas.FillRoundedRectangle(
+                        (float)node.Left, (float)node.Top,
+                        (float)node.Width, (float)node.Height, ncr);
+                }
+            }
+
+            if (context.HasViewport && !context.MappedViewport.IsEmpty)
+            {
+                var vp = context.MappedViewport;
+                var ncr = Math.Max(0, (float)context.NodeCornerRadius);
+
+                if (ViewportFillColor is not null)
+                {
+                    canvas.FillColor = ViewportFillColor;
+                    canvas.FillRoundedRectangle((float)vp.Left, (float)vp.Top, (float)vp.Width, (float)vp.Height, ncr);
+                }
+                if (ViewportStrokeColor is not null)
+                {
+                    canvas.StrokeColor = ViewportStrokeColor;
+                    canvas.StrokeSize = (float)ViewportStrokeThickness;
+                    canvas.DrawRoundedRectangle((float)vp.Left, (float)vp.Top, (float)vp.Width, (float)vp.Height, ncr);
+                }
+            }
+        }
+        finally { canvas.RestoreState(); }
+    }
+
+    /// <summary>Builds the geometry for one draw pass from the computed transform and cached node rects.</summary>
+    private MinimapDrawContext CreateDrawContext()
+    {
+        var gb = _drawGb;
+        var nodes = new List<WorkflowBounds>(_lastNodeRects.Count);
+        var mapped = new List<WorkflowBounds>(_lastNodeRects.Count);
+        foreach (var (nx, ny, nw, nh) in _lastNodeRects)
+        {
+            nodes.Add(WorkflowBounds.FromNode(nx, ny, nw, nh));
+            // MinimapLocal：local = origin + (world − contentOrigin)·scale。
+            var (lx, ly) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, _ox, _oy, _sc);
+            mapped.Add(WorkflowBounds.FromNode(lx, ly,
+                Math.Max(2d, nw * _sc),
+                Math.Max(2d, nh * _sc)));
+        }
+
+        var (vpx, vpy, vpw, vph) = GetClampedViewportRect();
+        var mappedViewport = vpw > 0 && vph > 0 && !float.IsNaN(vpx) && !float.IsNaN(vpy)
+            ? WorkflowBounds.FromNode(vpx, vpy, vpw, vph)
+            : default;
+
+        return new MinimapDrawContext
+        {
+            Tree = WorkflowTree,
+            ContentBounds = gb,
+            ViewportBounds = _lastViewport,
+            Nodes = nodes,
+            MappedNodes = mapped,
+            MappedViewport = mappedViewport,
+            MinimapWidth = _mmW,
+            MinimapHeight = _mmH,
+            Padding = Math.Max(0, ContentPadding),
+            OriginX = _ox,
+            OriginY = _oy,
+            Scale = _sc,
+            NodeCornerRadius = Math.Max(0, NodeCornerRadius),
+            MinimapCornerRadius = Math.Max(0, MinimapCornerRadius),
+        };
     }
 }
