@@ -70,7 +70,7 @@ internal sealed class NodeBoundsProvider : ISpatialBoundsProvider, IDisposable
     {
         var h = _node.Anchor.Horizontal;
         var v = _node.Anchor.Vertical;
-        // Anchor defaults to NaN before the view layer positions the node.
+        // A NaN or infinite anchor means the node has no usable position.
         // Return empty bounds so the spatial grid places this in the pending
         // queue rather than indexing at NaN coordinates.
         if (double.IsNaN(h) || double.IsNaN(v) ||

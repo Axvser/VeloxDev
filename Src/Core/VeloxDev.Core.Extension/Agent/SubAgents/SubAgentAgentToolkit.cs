@@ -271,7 +271,7 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             // silent, not an error, which is the failure mode this whole paragraph exists to pre-empt.
             sb.AppendLine("Title each one with `name`: it is what the user reads on the panel, so it wants the work in a few words rather than a sentence or an identifier. Omitted, the child is listed under a generated number instead.");
             // "It cannot ask you questions" was true until the child started inheriting the host's interaction
-            // configuration (SubAgentScope.cs:514). It still cannot ask *you* — nothing it says reaches you but
+            // configuration (SubAgentScope.GrantInteractionTo). It still cannot ask *you* — nothing it says reaches you but
             // its final reply — but it may now put a question to the user directly. Leaving the old sentence
             // would have been the same defect the grant list is careful about: prose that promises a tool is
             // absent while the tool is on the child's surface.

@@ -3,9 +3,9 @@ namespace VeloxDev.WorkflowSystem;
 /// <summary>
 /// Core check for whether a Link is render-ready on the virtualized canvas.
 ///
-/// A Slot anchor's default value is a "no value" placeholder — <see cref="Anchor"/> defaults its
-/// horizontal/vertical coordinates to <see cref="double.NaN"/> (meaning: unmeasured / awaiting GUI positioning),
-/// and no real GUI measurement can produce exactly NaN. Before rendering a link, both endpoint anchors are checked:
+/// A Slot anchor starts as a "no value" placeholder — <see cref="double.NaN"/> for both horizontal and
+/// vertical coordinates (meaning: unmeasured / awaiting GUI positioning), and no real GUI measurement can
+/// produce exactly NaN. Before rendering a link, both endpoint anchors are checked:
 /// if either endpoint is still NaN, rendering is blocked, avoiding drawing a misaligned frame that then jumps back
 /// (visual flicker).
 ///

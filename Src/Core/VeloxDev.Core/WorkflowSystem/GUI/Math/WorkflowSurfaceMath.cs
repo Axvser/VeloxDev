@@ -92,8 +92,7 @@ public static class WorkflowSurfaceMath
     /// with NaN guards; WinForms reports a sentinel maximum through its viewport host, so no expansion can trigger).
     ///
     /// <paramref name="threshold"/> is a dead-band on the overshoot magnitude: the canvas only expands when
-    /// the overshoot exceeds it. WPF/Avalonia/WinUI pass <c>0</c> (always expand); the MAUI minimap passes
-    /// <c>0.5</c> to avoid expanding for sub-pixel jitter.
+    /// the overshoot exceeds it. Every adapter passes <c>0</c> (always expand).
     ///
     /// <paramref name="extendRatio"/> makes expansion discrete instead of pixel-for-pixel. When &gt; 0 the written
     /// growth is <c>max(excess, extendRatio × axis extent)</c>, so one pan past an edge buys headroom proportional

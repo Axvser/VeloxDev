@@ -387,22 +387,22 @@ public sealed partial class RuntimeContext : IRuntimeContext
     /// <summary>Reads a shared variable.</summary>
     public bool TryGet(string key, out object? value) => _variables.TryGetValue(key, out value);
 
-    /// <summary>Registers the node's output for this run (written by the engine after DriveAsync drives it), stamped with the current pass.</summary>
+    /// <summary>Registers the node's output for this run (written by the engine after a drive — a failed drive registers <see langword="null"/>), stamped with the current pass.</summary>
     public void RegisterOutput(INodeComponent node, object? value)
     {
         if (node is null) return;
         _outputs[node] = (Attempt, value);
 
-        // 登记即「这个节点本轮成功了」，补偿走的就是这个信号。放在这里而不是引擎的调用点上，是因为这个方法
-        // 本身就是成功信号 —— 引擎在驱动不带异常返回后紧接着写它。重跑把它移到末尾：一轮结束时还立着的效果，
-        // 是这个节点最近一次成功留下的那个。
+        // 登记即「这个节点本轮驱动过」，补偿走的就是这个信号；失败的驱动同样在这里登记 null。
+        // 放在这里而不是引擎的调用点上，是因为这个方法本身就是驱动完毕的信号。重跑把它移到末尾：一轮结束时
+        // 立着的效果，是这个节点最近一次驱动留下的那个。
         _completed.RemoveAll(entry => ReferenceEquals(entry.Node, node));
         _completed.Add((node, value));
     }
 
     /// <summary>
     /// Clears the output registry (once at the start of each RunAsync; redirect re-runs do not clear it → stale
-    /// outputs are filtered by pass stamp, and <see cref="CompletedThisRun"/> keeps the whole run's successes).
+    /// outputs are filtered by pass stamp, and <see cref="CompletedThisRun"/> keeps every node the run drove).
     /// </summary>
     public void ResetOutputs()
     {

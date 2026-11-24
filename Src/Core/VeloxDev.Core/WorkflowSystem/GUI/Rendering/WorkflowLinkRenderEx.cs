@@ -4,7 +4,7 @@ namespace VeloxDev.WorkflowSystem;
 /// The render-readiness contract for Links.
 ///
 /// On the virtualized canvas, a Link and its two endpoint nodes are realized in adjacent batches by the
-/// ViewManager; each GUI's slot-layout behavior asynchronously measures and writes the Slot anchors into
+/// view pool; each GUI's slot-layout behavior asynchronously measures and writes the Slot anchors into
 /// <c>slot.Anchor</c> at render priority. If a Link renders before the measurement lands, it reads the default
 /// "no value" anchor (<see cref="double.NaN"/>), drawing a misaligned frame that then jumps back — visual flicker.
 ///

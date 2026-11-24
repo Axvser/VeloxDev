@@ -25,8 +25,8 @@ namespace VeloxDev.AI.Safety;
 ///   <description>Everything in one <see cref="AgentActionCategory"/>.</description>
 /// </item>
 /// <item>
-///   <term><c>source:mcp:*</c>, <c>source:mcp:filesystem</c>, <c>source:skill</c></term>
-///   <description>Where the tool came from.</description>
+///   <term><c>source:mcp:*</c>, <c>source:mcp:filesystem</c>, <c>source:mcp:management</c></term>
+///   <description>Where the tool came from; only MCP tools carry a source.</description>
 /// </item>
 /// </list>
 /// <para>

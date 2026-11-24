@@ -14,9 +14,10 @@ namespace VeloxDev.AI.Safety;
 /// <param name="Name">The tool's name, as the model calls it.</param>
 /// <param name="Category">What the tool does.</param>
 /// <param name="Source">
-/// Where it came from, or <see langword="null"/> for the workflow's own tools — <c>mcp:&lt;server&gt;</c>,
-/// <c>skill</c>, <c>subagent</c>, <c>custom</c>. Two MCP servers can export a tool of the same name, so a rule
-/// aimed at one of them needs this.
+/// Where it came from. An MCP server's tool carries <c>mcp:&lt;server&gt;</c>, and the MCP management toolkit
+/// carries <c>mcp:management</c>; every other tool — the workflow's own, skills, sub-agents and object tools —
+/// is <see langword="null"/>. Two MCP servers can export a tool of the same name, so a rule aimed at one of them
+/// needs this.
 /// </param>
 /// <param name="Arguments">The arguments the model supplied, as they arrived.</param>
 public sealed record ToolInvocation(

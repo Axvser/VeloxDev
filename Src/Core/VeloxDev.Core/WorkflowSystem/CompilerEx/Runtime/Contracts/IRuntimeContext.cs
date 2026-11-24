@@ -129,7 +129,7 @@ public interface IRuntimeContext : ITaskContext
     /// <summary>Reads a shared variable.</summary>
     bool TryGet(string key, out object? value);
 
-    /// <summary>Registers a node's output for this run (written by the engine after DriveAsync drives it), stamped with the current pass, for downstream join points to aggregate.</summary>
+    /// <summary>Registers a node's output for this run (written by the engine after a drive — a failed drive registers <see langword="null"/>), stamped with the current pass, for downstream join points to aggregate.</summary>
     void RegisterOutput(INodeComponent node, object? value);
 
     /// <summary>Clears the output registry (once at the start of each <see cref="RuntimeEngine.RunAsync"/>).</summary>

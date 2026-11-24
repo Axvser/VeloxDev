@@ -84,17 +84,14 @@ public static class WorkflowSpatialEx
     /// 
     /// <param name="viewport">
     /// The viewport defining the visible area of the workflow tree. Determines which nodes and links should be present
-    /// in the observable collection.
+    /// in the observable collection. A viewport with zero or negative width or height is a no-op.
     /// </param>
-    /// 
+    ///
     /// <exception cref="ArgumentNullException">
     /// Thrown if the spatial map has not been enabled for the workflow tree.
     /// Use <see cref="EnableMap{T}(ITreeComponent, double, T)"/> to enable spatial indexing first.
     /// </exception>
-    /// 
-    /// <exception cref="ArgumentException">
-    /// Thrown if the viewport has invalid dimensions (e.g., zero or negative width/height).
-    /// </exception>
+    ///
     public static void Virtualize(this ITreeComponent tree, Viewport viewport)
     {
         if (viewport.Width <= 0 || viewport.Height <= 0)
@@ -270,21 +267,19 @@ public static class WorkflowSpatialEx
     /// <param name="viewport">
     /// The rectangular region to query for intersecting nodes.
     /// Defined by its left (X), top (Y), width, and height coordinates.
+    /// A viewport with zero or negative width or height yields an empty sequence.
     /// </param>
-    /// 
+    ///
     /// <returns>
     /// An enumerable collection of <see cref="INodeComponent"/> instances
     /// that intersect with the specified viewport.
     /// </returns>
-    /// 
+    ///
     /// <exception cref="ArgumentNullException">
     /// Thrown if the spatial map has not been enabled for the workflow tree.
     /// Use <see cref="EnableMap{T}(ITreeComponent, double, T)"/> to enable spatial indexing first.
     /// </exception>
-    /// 
-    /// <exception cref="ArgumentException">
-    /// Thrown if the viewport has invalid dimensions (e.g., zero or negative width/height).
-    /// </exception>
+    ///
     public static IEnumerable<INodeComponent> QueryNodes(this ITreeComponent tree, Viewport viewport)
     {
         if (viewport.Width <= 0 || viewport.Height <= 0)

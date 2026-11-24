@@ -666,7 +666,7 @@ public sealed class RuntimeEngine
         }
     }
 
-    // 把这一轮成功驱动的节点按逆序交给可选的补偿器 —— 前提是运行以 Failed/Cancelled 收尾。
+    // 把这一轮驱动过的节点按逆序交给可选的补偿器（失败的驱动也以 null 登记）—— 前提是运行以 Failed/Cancelled 收尾。
     // 引擎自己什么都不回滚：一个节点的副作用是什么、哪些可逆，只有宿主知道。
     private static async Task CompensateAsync(
         RuntimeContext? session, IRuntimeContext context,

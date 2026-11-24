@@ -191,11 +191,11 @@ namespace VeloxDev.Generators.Writers
 
         // 形状判定：**返回类型**决定「值怎么变成 Task」，**形参**决定「走哪个构造入口」与「属性强不强类型」。
         //
-        // 前导形参只支持 0 个或 1 个，末尾可再跟一个 CancellationToken：
-        //   0 个      → 命令参数用不上（token 只有在末尾才有意义）
-        //   1 个      → 命令参数就是它
-        // 多于 1 个前导形参不在这里支持 —— 那要求调用方传元组或 DTO，是另一个设计；
-        // 让方法组原样落地去报错，不会静默生成错东西。
+        // 前导形参（末尾可再跟一个 CancellationToken）取 0..MaxLeadingParameters 个：
+        //   0 个     → 非强类型，命令参数用不上
+        //   1 个     → object? 走非强类型，其余类型走强类型
+        //   2..15 个 → 强类型，走 arity 族的构造
+        // 超过上限的签名不在此生成 —— 调用点会拿到诊断，而不是一个编不过的产物。
         //
         // 强类型只在「T 已知」时成立，分两种：
         //   情形 1  参数类型里的类型参数全由所属类声明 -> 属性类型写得出 IVeloxCommand<P>
@@ -279,7 +279,6 @@ namespace VeloxDev.Generators.Writers
                 : string.Join(", ", parameters.Take(leading).Select(static parameter =>
                     $"{FullyQualifiedWithNullability(parameter.Type)} {(SyntaxFacts.GetKeywordKind(parameter.Name) != SyntaxKind.None ? "@" + parameter.Name : parameter.Name)}"));
 
-            // object? 形参维持今天的非强类型形态 —— 它本来就没有类型可强。
             // 单个 object? 形参维持非强类型（它本来就没有类型可强）；其余一律强类型，元数 >= 2 走 arity 族。
             bool isTyped = leading >= 1 && !(leading == 1 && isObjectParam);
             string? parameterType = isTyped
