@@ -24,7 +24,7 @@ public class MinimapPipelineBenchmarks
             _tree.Nodes.Add(new NodeDefaultViewModel
             {
                 Anchor = new Anchor(i % 20 * 220d, i / 20 * 160d, 0),
-                Size = new Size(160d, 90d),
+                Size = new VeloxDev.WorkflowSystem.Size(160d, 90d),
             });
         }
 
