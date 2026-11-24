@@ -25,7 +25,7 @@ namespace VeloxDev.Serialization.Benchmarks;
     ReferenceHandler = System.Text.Json.Serialization.JsonKnownReferenceHandler.Preserve,
     WriteIndented = true,
     NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)]
-[System.Text.Json.Serialization.JsonSerializable(typeof(VeloxDev.WorkflowSystem.TreeDefaultComponent))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(VeloxDev.WorkflowSystem.TreeDefaultViewModel))]
 internal partial class CorpusJsonContext : System.Text.Json.Serialization.JsonSerializerContext
 {
 }
@@ -52,7 +52,7 @@ internal partial class CorpusJsonContext : System.Text.Json.Serialization.JsonSe
 public class ComparisonBenchmarks : ScaleAwareBenchmarks
 {
 
-    private TreeDefaultComponent _tree = null!;
+    private TreeDefaultViewModel _tree = null!;
     private string _archive = null!;
     private string _systemTextJson = null!;
     private string _systemTextJsonSourceGen = null!;
@@ -144,12 +144,12 @@ public class ComparisonBenchmarks : ScaleAwareBenchmarks
     {
         if (!Verified.Add(NodeCount)) return;
 
-        Check("archive", VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(_archive));
-        Check("stj", Stj.Deserialize<TreeDefaultComponent>(_systemTextJson, _stj));
-        Check("stj (srcgen)", Stj.Deserialize<TreeDefaultComponent>(_systemTextJsonSourceGen, _stjSourceGen));
-        Check("newtonsoft", Nst.DeserializeObject<TreeDefaultComponent>(_newtonsoft, _nst));
+        Check("archive", VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(_archive));
+        Check("stj", Stj.Deserialize<TreeDefaultViewModel>(_systemTextJson, _stj));
+        Check("stj (srcgen)", Stj.Deserialize<TreeDefaultViewModel>(_systemTextJsonSourceGen, _stjSourceGen));
+        Check("newtonsoft", Nst.DeserializeObject<TreeDefaultViewModel>(_newtonsoft, _nst));
 
-        void Check(string who, TreeDefaultComponent? restored)
+        void Check(string who, TreeDefaultViewModel? restored)
         {
             if (restored is null) throw new InvalidOperationException($"{who}: the read produced null.");
 
@@ -179,7 +179,7 @@ public class ComparisonBenchmarks : ScaleAwareBenchmarks
     /// <summary>Reads the graph back with this library's archive engine.</summary>
     /// <returns>The graph, or the JSON literal's <see langword="null"/>.</returns>
     [Benchmark]
-    public TreeDefaultComponent? Archive_Deserialize() => VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(_archive);
+    public TreeDefaultViewModel? Archive_Deserialize() => VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(_archive);
 
     /// <summary>Writes the graph with <c>System.Text.Json</c>.</summary>
     /// <returns>The document.</returns>
@@ -205,7 +205,7 @@ public class ComparisonBenchmarks : ScaleAwareBenchmarks
     /// </para>
     /// </remarks>
     [Benchmark]
-    public TreeDefaultComponent? Stj_Deserialize() => Stj.Deserialize<TreeDefaultComponent>(_systemTextJson, _stj);
+    public TreeDefaultViewModel? Stj_Deserialize() => Stj.Deserialize<TreeDefaultViewModel>(_systemTextJson, _stj);
 
     /// <summary>Writes the graph with <c>System.Text.Json</c> and its source-generated metadata.</summary>
     /// <returns>The document.</returns>
@@ -215,8 +215,8 @@ public class ComparisonBenchmarks : ScaleAwareBenchmarks
     /// <summary>Reads the graph back with <c>System.Text.Json</c> and its source-generated metadata.</summary>
     /// <returns>The graph.</returns>
     [Benchmark]
-    public TreeDefaultComponent? StjSourceGen_Deserialize()
-        => Stj.Deserialize<TreeDefaultComponent>(_systemTextJsonSourceGen, _stjSourceGen);
+    public TreeDefaultViewModel? StjSourceGen_Deserialize()
+        => Stj.Deserialize<TreeDefaultViewModel>(_systemTextJsonSourceGen, _stjSourceGen);
 
     /// <summary>Writes the graph with Newtonsoft.Json.</summary>
     /// <returns>The document.</returns>
@@ -226,5 +226,5 @@ public class ComparisonBenchmarks : ScaleAwareBenchmarks
     /// <summary>Reads the graph back with Newtonsoft.Json.</summary>
     /// <returns>The graph.</returns>
     [Benchmark]
-    public TreeDefaultComponent? Nst_Deserialize() => Nst.DeserializeObject<TreeDefaultComponent>(_newtonsoft, _nst);
+    public TreeDefaultViewModel? Nst_Deserialize() => Nst.DeserializeObject<TreeDefaultViewModel>(_newtonsoft, _nst);
 }

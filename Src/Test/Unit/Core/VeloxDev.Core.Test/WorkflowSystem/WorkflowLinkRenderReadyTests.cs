@@ -15,7 +15,7 @@ public class WorkflowLinkRenderReadyTests
 {
     private static INodeComponent NodeWithSlots(params ISlotComponent[] slots)
     {
-        var node = new NodeDefaultComponent();
+        var node = new NodeDefaultViewModel();
         foreach (var slot in slots)
         {
             slot.Parent = node;
@@ -24,17 +24,17 @@ public class WorkflowLinkRenderReadyTests
         return node;
     }
 
-    private static ISlotComponent Slot() => new SlotDefaultComponent();
+    private static ISlotComponent Slot() => new SlotDefaultViewModel();
 
     private static ILinkComponent Link(ISlotComponent sender, ISlotComponent receiver)
-        => new LinkDefaultComponent { Sender = sender, Receiver = receiver, IsVisible = true };
+        => new LinkDefaultViewModel { Sender = sender, Receiver = receiver, IsVisible = true };
 
     [TestMethod]
     public void NotVisible_NotReady()
     {
         var a = NodeWithSlots(Slot());
         var b = NodeWithSlots(Slot());
-        var link = new LinkDefaultComponent { Sender = a.Slots[0], Receiver = b.Slots[0] };
+        var link = new LinkDefaultViewModel { Sender = a.Slots[0], Receiver = b.Slots[0] };
         a.Slots[0].Anchor = new Anchor(100, 50, 0);
         b.Slots[0].Anchor = new Anchor(300, 50, 0);
         Assert.IsFalse(link.IsVisible);
@@ -158,7 +158,7 @@ public class WorkflowLinkRenderReadyTests
         // A link endpoint references a slot that does not exist on its node → no measurement source, rendering is blocked.
         var a = NodeWithSlots();
         var b = NodeWithSlots(Slot());
-        var link = Link(new SlotDefaultComponent { Parent = a }, b.Slots[0]);
+        var link = Link(new SlotDefaultViewModel { Parent = a }, b.Slots[0]);
         Assert.IsFalse(link.IsRenderReady());
     }
 

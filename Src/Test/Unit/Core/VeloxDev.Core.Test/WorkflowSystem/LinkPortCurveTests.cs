@@ -27,7 +27,7 @@ public sealed class LinkPortCurveTests
     public void PortOutward_APortWithNoNode_HasNoDirection()
     {
         // 没有节点的口报零向量 = 「不知道方向」，而不是替它猜一条边。
-        AssertDirection((0, 0), new SlotDefaultComponent());
+        AssertDirection((0, 0), new SlotDefaultViewModel());
     }
 
     [TestMethod]
@@ -36,7 +36,7 @@ public sealed class LinkPortCurveTests
         // 拖拽预览的两端都是占位插槽（Parent 为 null），没有边可读。此时**整条**退回房规，
         // 否则两端都不拉，橡皮筋会被拉成一条直线。
         var source = SlotOn(Node(0, 0, 200, 100), 200, 50);
-        var freeEnd = new SlotDefaultComponent { Anchor = new Anchor(320, 240, 0) };
+        var freeEnd = new SlotDefaultViewModel { Anchor = new Anchor(320, 240, 0) };
 
         var points = LinkCurvePoints(Link(source, freeEnd));
         var house = LinkCurve.BuildCubic(200, 50, 320, 240, Minimum);
@@ -145,7 +145,7 @@ public sealed class LinkPortCurveTests
 
     private static INodeComponent Node(double x, double y, double width, double height)
     {
-        var node = new NodeDefaultComponent();
+        var node = new NodeDefaultViewModel();
         node.Anchor = new Anchor(x, y, 0);
         node.Size = new Size { Width = width, Height = height };
         return node;
@@ -153,7 +153,7 @@ public sealed class LinkPortCurveTests
 
     private static ISlotComponent SlotOn(INodeComponent node, double x, double y)
     {
-        var slot = new SlotDefaultComponent { Anchor = new Anchor(x, y, 0) };
+        var slot = new SlotDefaultViewModel { Anchor = new Anchor(x, y, 0) };
         slot.Parent = node;
         node.Slots.Add(slot);
         return slot;
@@ -161,17 +161,17 @@ public sealed class LinkPortCurveTests
 
     // 端点坐标一律取两口自己的 Anchor —— 与视图从绑定里读到的那两个数是同一份
     // （视图的 StartLeft/Top 就绑在 Sender.Anchor 上），所以画的与发布的不会各推一遍。
-    private static LinkDefaultComponent Link(ISlotComponent sender, ISlotComponent receiver)
+    private static LinkDefaultViewModel Link(ISlotComponent sender, ISlotComponent receiver)
         => new() { Sender = sender, Receiver = receiver };
 
-    private static (double X, double Y)[] LinkCurvePoints(LinkDefaultComponent link)
+    private static (double X, double Y)[] LinkCurvePoints(LinkDefaultViewModel link)
         => LinkCurve.LinkCurvePoints(
             link,
             link.Sender.Anchor.Horizontal, link.Sender.Anchor.Vertical,
             link.Receiver.Anchor.Horizontal, link.Receiver.Anchor.Vertical,
             Minimum);
 
-    private static void AssertPulledOutward(LinkDefaultComponent link)
+    private static void AssertPulledOutward(LinkDefaultViewModel link)
     {
         var (nx, ny) = LinkCurve.PortOutward(link.Sender);
         var points = LinkCurve.LinkCurvePoints(

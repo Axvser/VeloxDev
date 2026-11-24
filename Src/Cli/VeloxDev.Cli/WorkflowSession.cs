@@ -563,7 +563,7 @@ internal sealed class WorkflowSession : IAsyncDisposable
     private static Type ResolveRootType(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return typeof(TreeDefaultComponent);
+            return typeof(TreeDefaultViewModel);
 
         // The registry's names are the ones the document itself carries ("Full.Type.Name, Assembly"), so a
         // plugin type loaded a moment ago is found here before any reflection fallback.

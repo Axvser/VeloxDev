@@ -35,7 +35,7 @@ When nothing in the hierarchy already supplies the notification plumbing, the cl
 
 ```csharp
 [VeloxProperty] private string _name = string.Empty;                  // field form
-[VeloxProperty] public partial SlotDefaultComponent InputSlot { get; set; }  // property form
+[VeloxProperty] public partial SlotDefaultViewModel InputSlot { get; set; }  // property form
 ```
 
 ⚙ The field form always emits a `public` property. The property form preserves the accessibility and accessor visibility you declared.

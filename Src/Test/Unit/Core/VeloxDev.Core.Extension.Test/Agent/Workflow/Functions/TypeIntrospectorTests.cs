@@ -29,7 +29,7 @@ public class TypeIntrospectorTests
     [TestMethod]
     public void AComponentSchemaCarriesItsPropertiesWithFriendlyTypeNames()
     {
-        var schema = JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(TreeDefaultComponent)))!;
+        var schema = JsonNode.Parse(TypeIntrospector.GetTypeSchema(typeof(TreeDefaultViewModel)))!;
 
         Assert.AreEqual("class", schema["kind"]?.GetValue<string>());
 
@@ -77,7 +77,7 @@ public class TypeIntrospectorTests
     [TestMethod]
     public void ResolveTypeIsClosedWorld()
     {
-        Assert.AreEqual(typeof(TreeDefaultComponent), TypeIntrospector.ResolveType(typeof(TreeDefaultComponent).FullName!));
+        Assert.AreEqual(typeof(TreeDefaultViewModel), TypeIntrospector.ResolveType(typeof(TreeDefaultViewModel).FullName!));
         Assert.IsNull(TypeIntrospector.ResolveType("System.String"), "the tree carries no entry for a BCL type");
     }
 

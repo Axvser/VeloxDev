@@ -127,8 +127,8 @@ public sealed class WorkflowSpatialExTests
     [TestMethod]
     public void QueryingWithoutASpatialMapReportsWhatIsMissing()
     {
-        var tree = new TreeDefaultComponent();
-        tree.Nodes.Add(new NodeDefaultComponent
+        var tree = new TreeDefaultViewModel();
+        tree.Nodes.Add(new NodeDefaultViewModel
         {
             Parent = tree,
             Anchor = new Anchor(0, 0, 0),
@@ -141,12 +141,12 @@ public sealed class WorkflowSpatialExTests
     }
 
     // 摆几个节点：左上角在 (left, top)，边长 NodeSize。节点先摆好再开索引，建表时就会把它们收进去。
-    private static TreeDefaultComponent Tree(params (double Left, double Top)[] positions)
+    private static TreeDefaultViewModel Tree(params (double Left, double Top)[] positions)
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         foreach (var (left, top) in positions)
         {
-            tree.Nodes.Add(new NodeDefaultComponent
+            tree.Nodes.Add(new NodeDefaultViewModel
             {
                 Parent = tree,
                 Anchor = new Anchor(left, top, 0),

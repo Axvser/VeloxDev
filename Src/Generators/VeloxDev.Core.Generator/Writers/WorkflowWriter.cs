@@ -316,20 +316,20 @@ namespace VeloxDev.Generators.Writers
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualLinkType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultComponent")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultComponent");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultViewModel")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.LinkDefaultViewModel");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultVirtualSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultComponent")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultComponent");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel");
         }
 
         private INamedTypeSymbol? GetConcreteDefaultSlotType()
         {
-            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultComponent")
-                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultComponent");
+            return GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel")
+                   ?? GetTypeSymbolFromReferencedAssemblies("VeloxDev.WorkflowSystem.SlotDefaultViewModel");
         }
 
         private INamedTypeSymbol? GetTypeSymbolFromReferencedAssemblies(string fullyQualifiedName)
@@ -932,7 +932,7 @@ namespace VeloxDev.Generators.Writers
                         catch
                         {
                         }
-                        return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotDefaultComponent();
+                        return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotDefaultViewModel();
                     }
                     protected virtual void OnSlotComponentAdded({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent slot)
                     {

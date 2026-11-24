@@ -120,9 +120,9 @@ public class AnchorSizeCollapseTests
     [TestMethod]
     public void NodeWorldExtensions_RecoverTheStoredValue()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.Layout.Scale = new Scale(2, 0.5);
-        var node = new NodeDefaultComponent
+        var node = new NodeDefaultViewModel
         {
             Parent = tree,
             Anchor = new Anchor(-140, 100, 7),

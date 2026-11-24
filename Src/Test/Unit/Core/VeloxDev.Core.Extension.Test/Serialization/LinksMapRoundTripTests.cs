@@ -17,23 +17,23 @@ namespace VeloxDev.Core.Extension.Test.Serialization;
 public class LinksMapRoundTripTests
 {
     /// <summary>A tree with one connection, so its <c>LinksMap</c> holds one entry.</summary>
-    private static TreeDefaultComponent BuildConnectedTree()
+    private static TreeDefaultViewModel BuildConnectedTree()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
 
-        var source = new NodeDefaultComponent();
+        var source = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(source);
         source.Anchor = new Anchor(100d, 100d, 0);
         source.Size = new Size { Width = 200d, Height = 100d };
         // OneTarget = 「可主动连出的目标数」，也就是发送端；OneSource 相反，是被连入的那一端。
-        var output = new SlotDefaultComponent { Channel = SlotChannel.OneTarget };
+        var output = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
         source.CreateSlotCommand.Execute(output);
 
-        var target = new NodeDefaultComponent();
+        var target = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(target);
         target.Anchor = new Anchor(400d, 100d, 0);
         target.Size = new Size { Width = 200d, Height = 100d };
-        var input = new SlotDefaultComponent { Channel = SlotChannel.OneSource };
+        var input = new SlotDefaultViewModel { Channel = SlotChannel.OneSource };
         target.CreateSlotCommand.Execute(input);
 
         tree.SendConnectionCommand.Execute(output);
@@ -50,7 +50,7 @@ public class LinksMapRoundTripTests
         Assert.AreEqual(1, tree.Links.Count, "the connection was made");
         Assert.AreEqual(1, tree.LinksMap.Count, "and the map indexes it — otherwise this test proves nothing");
 
-        var restored = VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(VeloxJsonSerializer.Serialize(tree))!;
+        var restored = VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(VeloxJsonSerializer.Serialize(tree))!;
 
         Assert.AreEqual(1, restored.Links.Count, "the link came back");
         Assert.AreEqual(1, restored.LinksMap.Count, "the map came back with it");
@@ -67,7 +67,7 @@ public class LinksMapRoundTripTests
         await VeloxJsonSerializer.WriteToAsync(text, tree);
         Assert.AreEqual(document, text.ToString(), "the async writer disagrees with the sync one");
 
-        var restored = await VeloxJsonSerializer.DeserializeAsync<TreeDefaultComponent>(new ChunkedTextReader(document, 1));
+        var restored = await VeloxJsonSerializer.DeserializeAsync<TreeDefaultViewModel>(new ChunkedTextReader(document, 1));
 
         Assert.AreEqual(1, restored!.LinksMap.Count, "the interface-keyed map came back on the async face too");
     }
@@ -79,7 +79,7 @@ public class LinksMapRoundTripTests
         var tree = BuildConnectedTree();
         var document = VeloxJsonSerializer.Serialize(tree);
 
-        var restored = VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(document)!;
+        var restored = VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(document)!;
 
         Assert.AreEqual(document, VeloxJsonSerializer.Serialize(restored));
     }

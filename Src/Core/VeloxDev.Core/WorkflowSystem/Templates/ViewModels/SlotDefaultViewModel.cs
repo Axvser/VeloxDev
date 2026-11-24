@@ -4,7 +4,7 @@ using VeloxDev.MVVM;
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>The default implementation of <see cref="ISlotComponent"/>.</summary>
-public sealed partial class SlotDefaultComponent : ISlotComponent, IRuntimeIdentifiable
+public sealed partial class SlotDefaultViewModel : ISlotComponent, IRuntimeIdentifiable
 {
     private ISlotHelper helper = new SlotHelper();
 
@@ -25,7 +25,7 @@ public sealed partial class SlotDefaultComponent : ISlotComponent, IRuntimeIdent
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>Creates the component and installs its default helper.</summary>
-    public SlotDefaultComponent() { InitializeWorkflow(); }
+    public SlotDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private ObservableCollection<ISlotComponent> targets = [];
     [VeloxProperty] private ObservableCollection<ISlotComponent> sources = [];

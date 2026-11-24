@@ -17,7 +17,7 @@ public partial class TickerNode
 {
     public TickerNode() => InitializeWorkflow();
 
-    [VeloxProperty] public partial SlotDefaultComponent OutputSlot { get; set; }
+    [VeloxProperty] public partial SlotDefaultViewModel OutputSlot { get; set; }
 }
 
 public class TickerHelper : NodeHelper<TickerNode>
@@ -33,7 +33,7 @@ public class TickerHelper : NodeHelper<TickerNode>
 
 ⚙ **The class is `partial`, carries the attribute, and calls `InitializeWorkflow()` from its own constructor.** The generator emits no constructor.
 
-Optional attribute arguments: `Tree(…, virtualLinkType, virtualSlotType)` overrides the transient drag link and its slots — both default to Core's `LinkDefaultComponent` / `SlotDefaultComponent`. `Link(slotType)` overrides the type of the `Sender`/`Receiver` the link creates.
+Optional attribute arguments: `Tree(…, virtualLinkType, virtualSlotType)` overrides the transient drag link and its slots — both default to Core's `LinkDefaultViewModel` / `SlotDefaultViewModel`. `Link(slotType)` overrides the type of the `Sender`/`Receiver` the link creates.
 
 Geometry defaults for a node come from `[DefaultAnchor(h, v, layer)]` / `[DefaultSize(w, h)]` on the class.
 
@@ -79,8 +79,8 @@ Each command forwards to a `protected virtual Task Xxx(object?, CancellationToke
 Two shapes, and the compiler tells you which is which:
 
 ```csharp
-[VeloxProperty] public partial SlotDefaultComponent InputSlot { get; set; }              // one slot
-[VeloxProperty] public partial SlotEnumerator<SlotDefaultComponent> OutputSlots { get; set; }  // a fan-out set
+[VeloxProperty] public partial SlotDefaultViewModel InputSlot { get; set; }              // one slot
+[VeloxProperty] public partial SlotEnumerator<SlotDefaultViewModel> OutputSlots { get; set; }  // a fan-out set
 ```
 
 ⚙ **A slot property is written as `[VeloxProperty] public partial T X { get; set; }`.** The generator synthesises the backing field as `_camelCase` and `InitializeWorkflowCore` references that exact name.
@@ -112,7 +112,7 @@ Two shapes, and the compiler tells you which is which:
 
 *Target* counts outgoing connections from this slot, *Source* incoming ones. Per direction the rule is `Multiple > One > None`.
 
-⚙ **The two default slot implementations differ.** A generator-created slot body defaults to `SlotChannel.MultipleBoth`; the shipped `SlotDefaultComponent` defaults to `SlotChannel.OneBoth`. A node type inherits the default of the slot class it declares.
+⚙ **The two default slot implementations differ.** A generator-created slot body defaults to `SlotChannel.MultipleBoth`; the shipped `SlotDefaultViewModel` defaults to `SlotChannel.OneBoth`. A node type inherits the default of the slot class it declares.
 
 ⚙ **`One*` channels clean up on connect.** Connecting to a slot whose channel is `OneTarget`/`OneSource`/`OneBoth` removes the conflicting existing links first; `Multiple*` keeps them. The "clean the opposite direction too" case is gated on `HasFlag(OneBoth)`.
 
@@ -142,7 +142,7 @@ The drag preview runs the same rule set the completed connection will run, so th
 | `ConnectionCheck` | `readonly struct`: `IsValid`, `Reason` (`ConnectionRejectReason`), `Message`; `ConnectionCheck.Valid`, `ConnectionCheck.Rejected(reason, message)` |
 | `ConnectionRejectReason` | `None`, `SenderCannotSend`, `ReceiverCannotReceive`, `SameNode`, `RejectedByRule`, `RejectedByHost` |
 | `ConnectionPreviewState` | `None`, `Started`, `ValidTarget`, `InvalidTarget` |
-| `IConnectionPreviewLink` | optional capability of the virtual link: `Preview` and `SetPreview(state)`; `LinkDefaultComponent` implements it |
+| `IConnectionPreviewLink` | optional capability of the virtual link: `Preview` and `SetPreview(state)`; `LinkDefaultViewModel` implements it |
 
 ```csharp
 // Pure: no events, no state changes. Direction, same-node, then the helper's rule.
@@ -203,7 +203,7 @@ if (DataContext is IConnectionPreviewLink link)
 }
 ```
 
-⚙ **The stage is published on the tree's `VirtualLink`.** `LinkDefaultComponent` implements `IConnectionPreviewLink` and raises `PropertyChanged` for `Preview`; a custom virtual link may implement the same interface. Subscribe the link's `INotifyPropertyChanged` (what the demos do) or `WorkflowInput.PreviewChanged`; both describe the same snapshot. A link view reads the component it is bound to, because pooled views are rebound.
+⚙ **The stage is published on the tree's `VirtualLink`.** `LinkDefaultViewModel` implements `IConnectionPreviewLink` and raises `PropertyChanged` for `Preview`; a custom virtual link may implement the same interface. Subscribe the link's `INotifyPropertyChanged` (what the demos do) or `WorkflowInput.PreviewChanged`; both describe the same snapshot. A link view reads the component it is bound to, because pooled views are rebound.
 
 ### Conditional slot sets
 
@@ -212,7 +212,7 @@ For a node with a variable number of ports (a python worker whose ports depend o
 ```csharp
 [VeloxProperty]
 [SlotSelectors(typeof(MyPortProvider))]   // your own ISlotProvider — declare it on your side
-public partial SlotEnumerator<SlotDefaultComponent> InputSlots { get; set; }
+public partial SlotEnumerator<SlotDefaultViewModel> InputSlots { get; set; }
 ```
 
 `SlotEnumerator<TSlot>` holds `Items` (`ConditionalSlot<TSlot>` — a name, a value and a slot), a `SelectorType` and a `CurrentValue`. `SetSelector` (the model-side method; the Agent tool that reaches it is `SetEnumSlotCollection`) accepts three shapes: an `enum` or `bool` `Type`, a fully-qualified type-name `string`, or an `ISlotProvider` returning named `SlotDefinition`s.
@@ -240,7 +240,7 @@ public class MyPortProvider : ISlotProvider { … }
 ```csharp
 // The factory you override to use your own Link ViewModel:
 public virtual ILinkComponent CreateLink(ISlotComponent sender, ISlotComponent receiver)
-    => new LinkDefaultComponent() { Sender = sender, Receiver = receiver };
+    => new LinkDefaultViewModel() { Sender = sender, Receiver = receiver };
 ```
 
 ⚙ **Connecting uses the two-phase `SendConnection` / `ReceiveConnection` protocol.** It is also what the GUI drag uses.

@@ -47,8 +47,8 @@ public class BudgetResetTests
 
     private static WorkflowAgentScope SpendBudget(int limit = 1)
     {
-        var tree = new TreeDefaultComponent();
-        var node = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
         return new WorkflowAgentScope(tree).WithMaxToolCalls(limit);
     }
@@ -168,7 +168,7 @@ public class BudgetResetTests
         // The mode's promise is that nothing is put to the user. A count the model could only get past by
         // asking is a dialog it cannot reach, so the three call-count gates stand down — while the counters
         // keep moving, because sub-agent grants are computed from them.
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var scope = new WorkflowAgentScope(tree)
             .WithMaxToolCalls(0)
             .WithMaxReadToolCalls(0)
@@ -213,7 +213,7 @@ public class BudgetResetTests
     {
         // A token cap is a spend limit, not a call count: Bypass turns off the requests, not the ceiling the
         // host put on what the conversation may cost.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithMaxTokens(100)
             .WithPermissionMode(AgentPermissionMode.Bypass);
         scope.AddUsage(new UsageDetails { InputTokenCount = 60, OutputTokenCount = 40, TotalTokenCount = 100 });
@@ -240,7 +240,7 @@ public class BudgetResetTests
     public void WhenNoLimitIsSet_ThereIsNothingToExtend()
     {
         // No budget configured: the tool answers rather than asking the user a pointless question.
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var scope = new WorkflowAgentScope(tree);
         var asked = 0;
         scope.WithConfirmationHandler(args =>
@@ -261,7 +261,7 @@ public class BudgetResetTests
     {
         // It touches the budget, not the workflow. Classified as a mutation it would spend a mutation slot
         // — and, with auto-dirty on, mark a graph it never touched.
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var scope = new WorkflowAgentScope(tree).WithMaxWriteToolCalls(1);
         scope.WithConfirmationHandler(args =>
         {
@@ -284,7 +284,7 @@ public class BudgetResetTests
     [TestMethod]
     public void ReportedTokens_AccumulateFromBothPipelineEvents()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
 
         scope.Pipeline.PublishAsync(new VeloxDev.AI.Pipelines.AgentUsageReported(
             new UsageDetails { InputTokenCount = 10, OutputTokenCount = 5, TotalTokenCount = 15 }))
@@ -302,7 +302,7 @@ public class BudgetResetTests
     [TestMethod]
     public void TheTokenCap_RefusesCallsOnceTheReportedSpendReachesIt()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMaxTokens(100);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMaxTokens(100);
         scope.AddUsage(new UsageDetails { InputTokenCount = 60, OutputTokenCount = 40, TotalTokenCount = 100 });
 
         var refused = JObject.Parse(Invoke(scope, "ValidateWorkflow"));
@@ -314,7 +314,7 @@ public class BudgetResetTests
     [TestMethod]
     public void ResettingTokenUsage_ReopensTheTokenCap()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMaxTokens(100);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMaxTokens(100);
         scope.AddUsage(new UsageDetails { TotalTokenCount = 100 });
         Assert.AreEqual(100, scope.TotalTokens);
 
@@ -330,7 +330,7 @@ public class BudgetResetTests
     {
         // The envelope must agree with the gate. Printing "cap 10" in Bypass describes a wall the model
         // cannot hit, and a model that believes it is one call from the end stops early for no reason.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithMaxToolCalls(10)
             .WithPermissionMode(AgentPermissionMode.Bypass);
 
@@ -345,7 +345,7 @@ public class BudgetResetTests
     [TestMethod]
     public void ThePrompt_TellsTheAgentToAskRatherThanRetry()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMaxToolCalls(10);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMaxToolCalls(10);
         var prompt = scope.ProvideProgressiveContextPrompt();
 
         StringAssert.Contains(prompt, WorkflowAgentToolkit.ResetBudgetToolName);

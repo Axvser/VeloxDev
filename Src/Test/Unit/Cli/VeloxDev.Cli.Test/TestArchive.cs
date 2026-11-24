@@ -41,10 +41,10 @@ internal sealed class TestArchive : IDisposable
         return Path;
     }
 
-    public static TreeDefaultComponent TreeWithOneNode(out NodeDefaultComponent node)
+    public static TreeDefaultViewModel TreeWithOneNode(out NodeDefaultViewModel node)
     {
-        var tree = new TreeDefaultComponent();
-        node = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
         return tree;
     }

@@ -24,7 +24,7 @@ Package: **`VeloxDev.Core`** (runtime, namespace `VeloxDev.MVVM`) plus the analy
 ```
 
 ```csharp
-[VeloxProperty] public partial SlotDefaultComponent InputSlot { get; set; }   // property form: generates the backing field
+[VeloxProperty] public partial SlotDefaultViewModel InputSlot { get; set; }   // property form: generates the backing field
 ```
 
 The workflow idiom is **fields for plain state, `partial` properties for anything with a lifecycle** — see [the workflow model reference](../veloxdev-create-workflow/references/practices/model.md).

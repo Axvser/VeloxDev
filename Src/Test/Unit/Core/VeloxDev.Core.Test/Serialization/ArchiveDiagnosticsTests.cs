@@ -190,7 +190,7 @@ public class ArchiveDiagnosticsTests
 
         public partial class Model
         {
-            [VeloxProperty] private SlotEnumerator<SlotDefaultComponent>? enumerator;
+            [VeloxProperty] private SlotEnumerator<SlotDefaultViewModel>? enumerator;
         }
         """;
 
@@ -215,7 +215,7 @@ public class ArchiveDiagnosticsTests
 
         public partial class Model
         {
-            [VeloxProperty] private Envelope<SlotDefaultComponent>.Inner<SlotDefaultComponent>? nested;
+            [VeloxProperty] private Envelope<SlotDefaultViewModel>.Inner<SlotDefaultViewModel>? nested;
         }
         """;
 
@@ -229,8 +229,8 @@ public class ArchiveDiagnosticsTests
 
         StringAssert.Contains(
             generated,
-            "\"Probe.Envelope<VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core>"
-                + "+Inner<VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core>, Probe\"",
+            "\"Probe.Envelope<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>"
+                + "+Inner<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>, Probe\"",
             GeneratorProbe.Describe(diagnostics));
     }
 
@@ -244,7 +244,7 @@ public class ArchiveDiagnosticsTests
 
         StringAssert.Contains(
             generated,
-            "\"VeloxDev.WorkflowSystem.SlotEnumerator<VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core>, VeloxDev.Core\"",
+            "\"VeloxDev.WorkflowSystem.SlotEnumerator<VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core>, VeloxDev.Core\"",
             "without the argument, SlotEnumerator<A> and SlotEnumerator<B> would register the same name");
     }
 

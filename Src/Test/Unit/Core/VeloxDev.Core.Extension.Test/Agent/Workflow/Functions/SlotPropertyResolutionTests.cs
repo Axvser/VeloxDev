@@ -34,7 +34,7 @@ public class SlotPropertyResolutionTests
 {
     private static WorkflowAgentScope ScopeWith(params object[] nodes)
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         foreach (var node in nodes) tree.GetHelper().CreateNode((INodeComponent)node);
         return new WorkflowAgentScope(tree);
     }
@@ -120,11 +120,11 @@ public class SlotPropertyResolutionTests
     [TestMethod]
     public void ConnectByProperty_ResolvesTheSingleSlot()
     {
-        var producer = new NodeDefaultComponent();
+        var producer = new NodeDefaultViewModel();
         var consumer = new EnumSelectorNodeViewModel();
-        var senderSlot = new SlotDefaultComponent { Channel = SlotChannel.OneTarget };
+        var senderSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
 
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.GetHelper().CreateNode(producer);
         tree.GetHelper().CreateNode(consumer);
         producer.GetHelper().CreateSlot(senderSlot);
@@ -154,7 +154,7 @@ public class SlotPropertyResolutionTests
 
         var refused = Json(WorkflowToolInvoker.Invoke(scope, "AddSlotToCollection",
             ("nodeIndex", 0), ("propertyName", "InputSlots"),
-            ("fullSlotTypeName", typeof(SlotDefaultComponent).FullName!), ("channel", "OneBoth")));
+            ("fullSlotTypeName", typeof(SlotDefaultViewModel).FullName!), ("channel", "OneBoth")));
 
         Assert.AreEqual("error", refused["status"]?.Value<string>(), refused.ToString());
         StringAssert.Contains(refused["message"]!.Value<string>()!, "SetEnumSlotCollection",

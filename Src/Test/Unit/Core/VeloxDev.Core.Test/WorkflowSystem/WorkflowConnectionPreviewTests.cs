@@ -13,14 +13,14 @@ namespace VeloxDev.Core.Test.WorkflowSystem;
 [TestClass]
 public class WorkflowConnectionPreviewTests
 {
-    private static (TreeDefaultComponent Tree, NodeDefaultComponent Node, SlotDefaultComponent Slot) NodeWithSlot(
-        TreeDefaultComponent? tree = null, double x = 0d, double y = 0d)
+    private static (TreeDefaultViewModel Tree, NodeDefaultViewModel Node, SlotDefaultViewModel Slot) NodeWithSlot(
+        TreeDefaultViewModel? tree = null, double x = 0d, double y = 0d)
     {
-        tree ??= new TreeDefaultComponent();
-        var node = new NodeDefaultComponent();
+        tree ??= new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
 
-        var slot = new SlotDefaultComponent { Parent = node, Anchor = new Anchor(x, y, 0) };
+        var slot = new SlotDefaultViewModel { Parent = node, Anchor = new Anchor(x, y, 0) };
         node.Slots.Add(slot);
         return (tree, node, slot);
     }
@@ -61,7 +61,7 @@ public class WorkflowConnectionPreviewTests
     public void PreviewReceiver_OnTheSameNode_IsReportedAsInvalid()
     {
         var (tree, node, sender) = NodeWithSlot();
-        var receiver = new SlotDefaultComponent { Parent = node };
+        var receiver = new SlotDefaultViewModel { Parent = node };
         node.Slots.Add(receiver);
 
         tree.GetHelper().SendConnection(sender);
@@ -97,7 +97,7 @@ public class WorkflowConnectionPreviewTests
 
         Assert.IsTrue(tree.StandardCheckConnection(sender, receiver).IsValid);
 
-        var sameNode = new SlotDefaultComponent { Parent = node };
+        var sameNode = new SlotDefaultViewModel { Parent = node };
         node.Slots.Add(sameNode);
         var sameNodeCheck = tree.StandardCheckConnection(sender, sameNode);
         Assert.IsFalse(sameNodeCheck.IsValid);
@@ -144,7 +144,7 @@ public class WorkflowConnectionPreviewTests
     public void PreviewValidating_IsNotOfferedAFrameworkRejectedCandidate()
     {
         var (tree, node, sender) = NodeWithSlot();
-        var sameNode = new SlotDefaultComponent { Parent = node };
+        var sameNode = new SlotDefaultViewModel { Parent = node };
         node.Slots.Add(sameNode);
         var input = WorkflowInput.For(tree);
         var calls = 0;

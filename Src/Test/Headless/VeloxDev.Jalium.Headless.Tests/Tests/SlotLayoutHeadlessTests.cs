@@ -16,8 +16,8 @@ public sealed class SlotLayoutHeadlessTests
     {
         var graph = TestGraph.Create(connect: false);
         var node = graph.Left;
-        var input = new SlotDefaultComponent();
-        var output = new SlotDefaultComponent();
+        var input = new SlotDefaultViewModel();
+        var output = new SlotDefaultViewModel();
         node.GetHelper().CreateSlot(input);
         node.GetHelper().CreateSlot(output);
 

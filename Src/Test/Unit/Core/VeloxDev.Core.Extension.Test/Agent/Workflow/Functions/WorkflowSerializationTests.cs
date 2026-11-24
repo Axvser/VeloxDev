@@ -27,7 +27,7 @@ public partial class TestEnumNode
 
     [VeloxProperty]
     [SlotSelectors(typeof(TestRouteKind))]
-    public partial SlotEnumerator<SlotDefaultComponent> OutputSlots { get; set; }
+    public partial SlotEnumerator<SlotDefaultViewModel> OutputSlots { get; set; }
 }
 
 [TestClass]
@@ -41,7 +41,7 @@ public class WorkflowSerializationTests
     [TestMethod]
     public void TreeWithEnumNode_RoundTripsSelectorType()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var node = new TestEnumNode();
         tree.GetHelper().CreateNode(node);
         node.OutputSlots.CurrentValue = TestRouteKind.Beta;
@@ -49,7 +49,7 @@ public class WorkflowSerializationTests
         Assert.AreEqual(typeof(TestRouteKind), node.OutputSlots.SelectorType, "precondition: selector set in constructor");
 
         var json = tree.Serialize();
-        var restored = json.Deserialize<TreeDefaultComponent>();
+        var restored = json.Deserialize<TreeDefaultViewModel>();
 
         var restoredNode = restored.Nodes.OfType<TestEnumNode>().SingleOrDefault();
         Assert.IsNotNull(restoredNode, "deserialized tree should contain the enum node");
@@ -75,11 +75,11 @@ public class WorkflowSerializationTests
     [TestMethod]
     public void TreeWithAViewport_RoundTripsItsViewportOffset()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.Layout.NegativeOffset = new Offset(50, 30);
         tree.Layout.ViewportOffset = new Offset(420, 260);
 
-        var restored = tree.Serialize().Deserialize<TreeDefaultComponent>();
+        var restored = tree.Serialize().Deserialize<TreeDefaultViewModel>();
         restored.Layout.UpdateCommand.Execute(null);
 
         Assert.AreEqual(420d, restored.Layout.ViewportOffset.Horizontal);
@@ -98,21 +98,21 @@ public class WorkflowSerializationTests
     [TestMethod]
     public void TreeWithAConnection_RoundTripsItsLinksMap()
     {
-        var tree = new TreeDefaultComponent();
-        var source = new NodeDefaultComponent();
-        var sink = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var source = new NodeDefaultViewModel();
+        var sink = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(source);
         tree.GetHelper().CreateNode(sink);
 
-        source.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneTarget });
-        sink.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneSource });
+        source.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneTarget });
+        sink.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneSource });
         tree.GetHelper().SendConnection(source.Slots[0]);
         tree.GetHelper().ReceiveConnection(sink.Slots[0]);
 
         Assert.HasCount(1, tree.Links, "precondition: the nodes are connected before saving");
         Assert.HasCount(1, tree.LinksMap, "precondition: the map index was filled");
 
-        var restored = tree.Serialize().Deserialize<TreeDefaultComponent>();
+        var restored = tree.Serialize().Deserialize<TreeDefaultViewModel>();
 
         Assert.HasCount(1, restored.Links, "the connection must survive");
         Assert.HasCount(1, restored.LinksMap, "the map-of-maps index must survive, not just the flat list");
@@ -161,7 +161,7 @@ public class WorkflowSerializationTests
         const double worldWidth = 300d;
         const double worldHeight = 200d;
 
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.Layout.Scale = new Scale(scale, scale);
         var node = new TestEnumNode();
         tree.GetHelper().CreateNode(node);
@@ -182,7 +182,7 @@ public class WorkflowSerializationTests
         Assert.AreEqual(worldLeft, (double)nodeJson["Horizontal"]!, 1e-9, "JSON must store the raw/world Anchor.Horizontal");
         Assert.AreEqual(worldTop, (double)nodeJson["Vertical"]!, 1e-9, "JSON must store the raw/world Anchor.Vertical");
 
-        var restored = json.Deserialize<TreeDefaultComponent>();
+        var restored = json.Deserialize<TreeDefaultViewModel>();
 
         Assert.AreEqual(new Scale(scale, scale), restored.Layout.Scale, "zoom level must survive the round-trip");
 
@@ -213,13 +213,13 @@ public class WorkflowSerializationTests
 
     /// <summary>
     /// Same regression as <see cref="TreeZoomedBeforeSave_NodesVisibleAfterRoundTrip"/> but for the
-    /// hand-written <see cref="NodeDefaultComponent"/> template (no SlotEnumerator). Its Anchor/Size
+    /// hand-written <see cref="NodeDefaultViewModel"/> template (no SlotEnumerator). Its Anchor/Size
     /// getters collapse by scale exactly like the generated nodes, so it exercises the same
     /// ObjectCreationHandling.Auto setter-skip path on load — the shared Anchor/Size serialization
     /// hooks must restore the raw values for it too.
     /// </summary>
     [TestMethod]
-    public void TreeZoomedBeforeSave_NodeDefaultComponent_KeepsAnchorAndSize()
+    public void TreeZoomedBeforeSave_NodeDefaultViewModel_KeepsAnchorAndSize()
     {
         const double scale = 2d;
         const double worldLeft = 1400d;
@@ -227,9 +227,9 @@ public class WorkflowSerializationTests
         const double worldWidth = 300d;
         const double worldHeight = 200d;
 
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.Layout.Scale = new Scale(scale, scale);
-        var node = new NodeDefaultComponent();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
         node.Anchor = new Anchor(worldLeft, worldTop, 0);
         node.Size = new Size(worldWidth, worldHeight);
@@ -237,10 +237,10 @@ public class WorkflowSerializationTests
         Assert.AreEqual(worldLeft / scale, node.Anchor.Horizontal, 1e-9, "precondition: getter collapses by scale");
 
         var json = tree.Serialize();
-        var restored = json.Deserialize<TreeDefaultComponent>();
+        var restored = json.Deserialize<TreeDefaultViewModel>();
 
         Assert.AreEqual(new Scale(scale, scale), restored.Layout.Scale, "zoom level must survive the round-trip");
-        var restoredNode = restored.Nodes.OfType<NodeDefaultComponent>().SingleOrDefault();
+        var restoredNode = restored.Nodes.OfType<NodeDefaultViewModel>().SingleOrDefault();
         Assert.IsNotNull(restoredNode, "deserialized tree should contain the node");
         Assert.AreEqual(worldLeft / scale, restoredNode!.Anchor.Horizontal, 1e-9,
             "Anchor must collapse exactly once after load — the JSON must have stored the raw/world value");
@@ -257,9 +257,9 @@ public class WorkflowSerializationTests
     [TestMethod]
     public void AgentTools_RoundTripTheWholeTree()
     {
-        var tree = new TreeDefaultComponent();
-        tree.GetHelper().CreateNode(new NodeDefaultComponent());
-        tree.GetHelper().CreateNode(new NodeDefaultComponent());
+        var tree = new TreeDefaultViewModel();
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
         var scope = new WorkflowAgentScope(tree);
 
         var document = WorkflowToolInvoker.Invoke(scope, "SerializeWorkflow");

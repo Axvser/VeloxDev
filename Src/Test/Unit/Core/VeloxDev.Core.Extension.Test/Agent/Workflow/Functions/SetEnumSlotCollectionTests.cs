@@ -57,21 +57,21 @@ public partial class TestPortProviderNode
     /// <summary>A non-enum provider whose type the archive does not carry.</summary>
     [VeloxProperty]
     [SlotSelectors(typeof(NotArchivablePortProvider))]
-    public partial SlotEnumerator<SlotDefaultComponent> Ports { get; set; }
+    public partial SlotEnumerator<SlotDefaultViewModel> Ports { get; set; }
 
     /// <summary>A whitelist naming an enum the tree holds only as a reference.</summary>
     [VeloxProperty]
     [SlotSelectors(typeof(TestRouteKind))]
-    public partial SlotEnumerator<SlotDefaultComponent> Kinds { get; set; }
+    public partial SlotEnumerator<SlotDefaultViewModel> Kinds { get; set; }
 
     /// <summary>A whitelist naming an enum the tree holds as a type.</summary>
     [VeloxProperty]
     [SlotSelectors(typeof(TestPortKind))]
-    public partial SlotEnumerator<SlotDefaultComponent> Modes { get; set; }
+    public partial SlotEnumerator<SlotDefaultViewModel> Modes { get; set; }
 
     /// <summary>No whitelist at all — the only shape the <c>bool</c> route is reachable from.</summary>
     [VeloxProperty]
-    public partial SlotEnumerator<SlotDefaultComponent> Any { get; set; }
+    public partial SlotEnumerator<SlotDefaultViewModel> Any { get; set; }
 }
 
 /// <summary>
@@ -114,7 +114,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void TheNonEnumProviderPath_RebuildsThePythonNodesPorts()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var node = new PythonScriptNodeViewModel();
         tree.GetHelper().CreateNode(node);
 
@@ -155,7 +155,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void ReshapingThePortsASecondTime_AppliesTheNewSet()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var node = new PythonScriptNodeViewModel();
         tree.GetHelper().CreateNode(node);
 
@@ -187,7 +187,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void GrowingThePythonNodesPorts_KeepsTheLinksThatFeedThem()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var node = new PythonScriptNodeViewModel();
         tree.GetHelper().CreateNode(node);
 
@@ -199,9 +199,9 @@ public class SetEnumSlotCollectionTests
         // Two producers feeding the first two ports.
         foreach (var index in new[] { 0, 1 })
         {
-            var producer = new NodeDefaultComponent();
+            var producer = new NodeDefaultViewModel();
             tree.GetHelper().CreateNode(producer);
-            var slot = new SlotDefaultComponent { Channel = SlotChannel.OneTarget };
+            var slot = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
             producer.GetHelper().CreateSlot(slot);
 
             tree.GetHelper().SendConnection(slot);
@@ -238,7 +238,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void ANonEnumProviderWithNoReader_SaysToAddArchivable()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.GetHelper().CreateNode(new TestPortProviderNode());
 
         var message = MessageOf(Set(new WorkflowAgentScope(tree), "Ports",
@@ -255,7 +255,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void TheEnumPath_CreatesOneSlotPerMember()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var node = new TestPortProviderNode();
         tree.GetHelper().CreateNode(node);
 
@@ -282,7 +282,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void AnEnumTheTreeHoldsOnlyAsAReference_DoesNotResolve()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.GetHelper().CreateNode(new TestPortProviderNode());
 
         var message = MessageOf(Set(new WorkflowAgentScope(tree), "Kinds", typeof(TestRouteKind).FullName!));
@@ -295,7 +295,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void TheBooleanPath_CreatesFalseAndTrue()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var node = new TestPortProviderNode();
         tree.GetHelper().CreateNode(node);
 
@@ -310,7 +310,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void ATypeOffTheWhitelist_IsRefusedWithTheAllowedList()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.GetHelper().CreateNode(new TestPortProviderNode());
 
         // Resolvable (it carries [AgentContext]) but not the one this property allows.
@@ -325,7 +325,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void AnUnknownPropertyOrAWrongKindOfType_IsRefusedByName()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.GetHelper().CreateNode(new TestPortProviderNode());
 
         var scope = new WorkflowAgentScope(tree);
@@ -341,7 +341,7 @@ public class SetEnumSlotCollectionTests
     [TestMethod]
     public void APlainProperty_IsRefusedAsNotAnEnumerator()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.GetHelper().CreateNode(new PythonScriptNodeViewModel());
 
         StringAssert.Contains(MessageOf(Set(new WorkflowAgentScope(tree), "Title", "System.Boolean")),

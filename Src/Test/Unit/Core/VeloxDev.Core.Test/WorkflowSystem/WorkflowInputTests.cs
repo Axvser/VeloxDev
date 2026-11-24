@@ -245,7 +245,7 @@ public class WorkflowInputTests : WorkflowInputTestBase
         // 链的树一律取路由自己那棵，**不从模型的 Parent 推**：拖拽预览的插槽、还没挂上树的节点，Parent 都是
         // null，而适配器手里那棵永远是对的。这条钉住「树永远在最后一级」。
         var tree = TreeWith();
-        var orphan = new SlotDefaultComponent();
+        var orphan = new SlotDefaultViewModel();
         var heard = 0;
         Events(tree).Input.KeyDown += (_, _) => heard++;
 

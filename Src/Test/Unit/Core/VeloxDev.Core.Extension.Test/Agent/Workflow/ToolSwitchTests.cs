@@ -16,7 +16,7 @@ public class ToolSwitchTests
     [TestMethod]
     public void SwitchedOffTool_LeavesEveryToolPath()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
 
         Assert.IsTrue(scope.SetToolEnabled("ListNodes", false));
 
@@ -35,7 +35,7 @@ public class ToolSwitchTests
     [TestMethod]
     public void SameValueSwitch_ReportsNoChange_AndRaisesNoEvent()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithToolEnabled("ListNodes", false);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithToolEnabled("ListNodes", false);
         var events = 0;
         scope.Changed += (_, _) => events++;
 
@@ -50,7 +50,7 @@ public class ToolSwitchTests
     [TestMethod]
     public void RealSwitch_RaisesExactlyOneEvent_AndIsIdempotentOnTheWayBack()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
         var events = 0;
         scope.Changed += (_, _) => events++;
 
@@ -66,7 +66,7 @@ public class ToolSwitchTests
     [TestMethod]
     public void FluentForm_ConfiguresBeforeUse()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithToolEnabled("ListNodes", false);
 
         Assert.IsFalse(scope.IsToolEnabled("ListNodes"));
@@ -78,7 +78,7 @@ public class ToolSwitchTests
     {
         // Captured before the switch, so this pins the refusal rather than the omission: a tool handed out
         // earlier must stop working the moment the host switches it off.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
         var tool = (AIFunction)scope.ProvideTools().Single(t => t.Name == "ListNodes");
 
         scope.SetToolEnabled("ListNodes", false);
@@ -91,7 +91,7 @@ public class ToolSwitchTests
     [TestMethod]
     public void AnUnknownName_IsHarmless()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
         var before = scope.ProvideTools().Count;
 
         Assert.IsTrue(scope.SetToolEnabled("no-such-tool", false), "the switch is recorded; nothing owns it yet");

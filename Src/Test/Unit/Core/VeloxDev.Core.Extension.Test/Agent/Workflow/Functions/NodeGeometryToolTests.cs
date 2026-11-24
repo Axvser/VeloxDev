@@ -16,12 +16,12 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 public class NodeGeometryToolTests
 {
     /// <summary>Two mounted nodes — one to move with the tool, one to move by hand for comparison.</summary>
-    private static (TreeDefaultComponent Tree, WorkflowAgentScope Scope) TwoNodes()
+    private static (TreeDefaultViewModel Tree, WorkflowAgentScope Scope) TwoNodes()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var helper = tree.GetHelper();
-        helper.CreateNode(new NodeDefaultComponent());
-        helper.CreateNode(new NodeDefaultComponent());
+        helper.CreateNode(new NodeDefaultViewModel());
+        helper.CreateNode(new NodeDefaultViewModel());
         return (tree, new WorkflowAgentScope(tree));
     }
 
@@ -159,16 +159,16 @@ public class NodeGeometryToolTests
     [TestMethod]
     public void CreateNode_AvoidsOverlapAtANonUnitScale()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var helper = tree.GetHelper();
-        helper.CreateNode(new NodeDefaultComponent());
+        helper.CreateNode(new NodeDefaultViewModel());
         tree.Nodes[0].SetAnchorCommand.Execute(new Anchor(1000, 1000, 0));
         tree.Nodes[0].SetSizeCommand.Execute(new Size(200, 100));
         tree.Layout.Scale = new Scale(0.5, 0.5);
         var scope = new WorkflowAgentScope(tree);
 
         var created = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultComponent).FullName!),
+            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!),
             ("left", 1000d), ("top", 1000d), ("width", 200d), ("height", 100d)));
 
         Assert.AreEqual("ok", created["status"]?.Value<string>());

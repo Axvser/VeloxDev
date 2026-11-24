@@ -43,7 +43,7 @@ public partial class FieldPayloadHolderNode
 [TestClass]
 public class ComponentContextDiscoveryTests
 {
-    private static WorkflowAgentScope Scope() => new(new TreeDefaultComponent());
+    private static WorkflowAgentScope Scope() => new(new TreeDefaultViewModel());
 
     private static string Context(string fullTypeName, string language = "English")
         => WorkflowToolInvoker.Invoke(Scope(), "GetComponentContext",
@@ -205,8 +205,8 @@ public class ComponentContextDiscoveryTests
         Assert.IsNotEmpty(slots, "and its slot components: " + listed);
 
         // 接口那一档（框架自己的四个组件由实现接口识别）。
-        CollectionAssert.Contains(nodes, typeof(NodeDefaultComponent).FullName);
-        CollectionAssert.Contains(slots, typeof(SlotDefaultComponent).FullName);
+        CollectionAssert.Contains(nodes, typeof(NodeDefaultViewModel).FullName);
+        CollectionAssert.Contains(slots, typeof(SlotDefaultViewModel).FullName);
 
         // [WorkflowBuilder.*] 那一档（消费方唯一会写下的声明），Node 与 Slot 各验一次。
         CollectionAssert.Contains(nodes, typeof(UnannotatedNode).FullName);

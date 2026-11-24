@@ -144,12 +144,6 @@ public static class VeloxJsonRegistry
             return new Snapshot(Writers, Readers, ContainerFactories, names, typesByName);
         }
 
-        // 别名只加读取方向：TypesByName 多一个键，写出去的名字不变。
-        internal Snapshot WithAlias(string alias, Type type)
-        {
-            var typesByName = new Dictionary<string, Type>(TypesByName, StringComparer.Ordinal) { [alias] = type };
-            return new Snapshot(Writers, Readers, ContainerFactories, Names, typesByName);
-        }
     }
 
     /// <summary>
@@ -248,29 +242,6 @@ public static class VeloxJsonRegistry
         if (name is null) throw new ArgumentNullException(nameof(name));
 
         lock (Gate) _snapshot = _snapshot.WithName(type, name);
-    }
-
-    /// <summary>
-    /// Registers an additional name the reader accepts for <paramref name="type"/>, without changing the name the
-    /// type is written as.
-    /// </summary>
-    /// <param name="type">The type to resolve the alias to.</param>
-    /// <param name="alias">
-    /// A name an older document may carry, in the same <c>Namespace.Type, AssemblyName</c> form as
-    /// <see cref="RegisterName(Type, string)"/>.
-    /// </param>
-    /// <remarks>
-    /// Use this for types renamed after documents were written: the current name is the only one written, and the
-    /// alias exists so those documents still read. Reading the same alias as two types is not detected here; the
-    /// later registration wins.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">Either argument is <see langword="null"/>.</exception>
-    public static void RegisterAlias(Type type, string alias)
-    {
-        if (type is null) throw new ArgumentNullException(nameof(type));
-        if (alias is null) throw new ArgumentNullException(nameof(alias));
-
-        lock (Gate) _snapshot = _snapshot.WithAlias(alias, type);
     }
 
     /// <summary>The name a type is written as, or <see langword="null"/> when it has none.</summary>

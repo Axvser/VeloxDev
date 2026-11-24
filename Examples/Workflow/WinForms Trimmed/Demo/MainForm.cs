@@ -199,7 +199,7 @@ public sealed class MainForm : Form
         // One visible link so the trimmed demo exercises the visual link policy, not only the unit graph.
         if (nodes[2].OutputSlots.Items.FirstOrDefault()?.Slot is { } sender)
         {
-            tree.Links.Add(new LinkDefaultComponent
+            tree.Links.Add(new LinkDefaultViewModel
             {
                 Sender = sender,
                 Receiver = nodes[3].InputSlot,

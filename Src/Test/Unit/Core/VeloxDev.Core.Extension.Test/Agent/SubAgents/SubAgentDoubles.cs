@@ -338,8 +338,8 @@ internal sealed class SubAgentFixture : IAsyncDisposable
         IEnumerable<AITool>? customTools = null,
         AgentLanguages language = AgentLanguages.English)
     {
-        Tree = new TreeDefaultComponent();
-        Tree.GetHelper().CreateNode(new NodeDefaultComponent());
+        Tree = new TreeDefaultViewModel();
+        Tree.GetHelper().CreateNode(new NodeDefaultViewModel());
 
         Scope = new WorkflowAgentScope(Tree);
         if (maxToolCalls is { } cap) Scope.WithMaxToolCalls(cap);
@@ -362,7 +362,7 @@ internal sealed class SubAgentFixture : IAsyncDisposable
         Scope.WithSubAgents(SubAgents);
     }
 
-    public TreeDefaultComponent Tree { get; }
+    public TreeDefaultViewModel Tree { get; }
     public WorkflowAgentScope Scope { get; }
     public SubAgentScope SubAgents { get; }
 

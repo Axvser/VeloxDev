@@ -168,7 +168,7 @@ public class CompiledGraphSerializationTests
     public async Task ARestoredGraph_DynamicallyRoutesOnItsEnumKey()
     {
         var router = new ProbeRouterNode { Resolved = ProbeGrade.Low };
-        router.LowBranch = new NodeDefaultComponent();
+        router.LowBranch = new NodeDefaultViewModel();
         router.HighBranch = new TestEnumNode();
 
         var graphs = await new CompilerViewModel().CompileAsync(router, CompileRole.Root);
@@ -184,7 +184,7 @@ public class CompiledGraphSerializationTests
 
         Assert.AreEqual("Completed", session.Status);
         Assert.IsFalse(session.EndedWithError);
-        Assert.IsTrue(session.Logs.Any(l => l.Contains(nameof(NodeDefaultComponent))),
+        Assert.IsTrue(session.Logs.Any(l => l.Contains(nameof(NodeDefaultViewModel))),
             $"the Low branch must have been driven; logs were: {string.Join(" | ", session.Logs)}");
         Assert.IsFalse(session.Logs.Any(l => l.Contains(nameof(TestEnumNode))),
             "the High branch must not have been driven");

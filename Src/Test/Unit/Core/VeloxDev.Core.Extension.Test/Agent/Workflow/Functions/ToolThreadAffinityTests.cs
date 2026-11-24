@@ -69,7 +69,7 @@ public class ToolThreadAffinityTests
     /// A node helper that reports when the node's own business code runs, so a test can tell which
     /// thread the execution engine drove it on.
     /// </summary>
-    private sealed class ThreadRecordingHelper(Func<Task> onReceive) : NodeHelper<NodeDefaultComponent>
+    private sealed class ThreadRecordingHelper(Func<Task> onReceive) : NodeHelper<NodeDefaultViewModel>
     {
         public override async Task<object?> ReceiveAsync(ITaskContext context, CancellationToken ct)
         {
@@ -107,7 +107,7 @@ public class ToolThreadAffinityTests
             return "ok";
         }, "ProbeTool");
 
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithSynchronizationContext(context)
             .WithTools(null, probe);
 
@@ -132,7 +132,7 @@ public class ToolThreadAffinityTests
             return "ok";
         }, "ProbeTool");
 
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithTools(null, probe);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithTools(null, probe);
         var tool = scope.ProvideTools().Single(t => t.Name == "ProbeTool");
 
         Assert.AreEqual("ok", Invoke(tool));
@@ -144,7 +144,7 @@ public class ToolThreadAffinityTests
     {
         // Every built-in tool must go through the tracking wrapper; one registered raw would silently
         // lose marshalling, call accounting and the tool-call callback together.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMaxToolCalls(5);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMaxToolCalls(5);
         var tools = scope.ProvideTools();
 
         Assert.IsNotEmpty(tools);
@@ -164,10 +164,10 @@ public class ToolThreadAffinityTests
         using var context = new SingleThreadContext();
         var receiveThreads = new ConcurrentQueue<int>();
 
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         for (int i = 0; i < 2; i++)
         {
-            var node = new NodeDefaultComponent();
+            var node = new NodeDefaultViewModel();
             tree.GetHelper().CreateNode(node);
             node.SetHelper(new ThreadRecordingHelper(async () =>
             {
@@ -201,8 +201,8 @@ public class ToolThreadAffinityTests
         using var context = new SingleThreadContext();
         int? receiveThread = null;
 
-        var tree = new TreeDefaultComponent();
-        var node = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
         node.SetHelper(new ThreadRecordingHelper(() => { receiveThread = Environment.CurrentManagedThreadId; return Task.CompletedTask; }));
 

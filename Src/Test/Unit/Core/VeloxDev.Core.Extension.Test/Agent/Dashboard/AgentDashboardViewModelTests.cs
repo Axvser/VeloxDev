@@ -48,7 +48,7 @@ public class AgentDashboardViewModelTests
         return skills;
     }
 
-    private static WorkflowAgentScope ScopeWithSkills() => new WorkflowAgentScope(new TreeDefaultComponent())
+    private static WorkflowAgentScope ScopeWithSkills() => new WorkflowAgentScope(new TreeDefaultViewModel())
         .WithSkills(EmbeddedSkills());
 
     /// <summary>A server with tools but no transport — the seam that covers everything downstream of a connect.</summary>
@@ -80,7 +80,7 @@ public class AgentDashboardViewModelTests
     [TestMethod]
     public void Create_WithoutSkills_LeavesTheSkillToolGroupEmpty()
     {
-        using var panel = AgentDashboardViewModel.Create(new WorkflowAgentScope(new TreeDefaultComponent()));
+        using var panel = AgentDashboardViewModel.Create(new WorkflowAgentScope(new TreeDefaultViewModel()));
 
         Assert.IsEmpty(panel.SkillTools);
         Assert.IsEmpty(panel.Skills);
@@ -92,7 +92,7 @@ public class AgentDashboardViewModelTests
     {
         // Node execution is off by default and the tools are still registered; they just refuse. The row
         // has to say so, or the panel shows a usable-looking tool that can never work.
-        using var panel = AgentDashboardViewModel.Create(new WorkflowAgentScope(new TreeDefaultComponent()));
+        using var panel = AgentDashboardViewModel.Create(new WorkflowAgentScope(new TreeDefaultViewModel()));
 
         var execute = panel.SystemTools.Single(t => t.Name == "ExecuteNode");
         Assert.IsTrue(execute.IsEnabled, "the tool is offered; it is the policy behind it that refuses");
@@ -109,7 +109,7 @@ public class AgentDashboardViewModelTests
     [TestMethod]
     public void UncheckingATool_TakesItOutOfTheTurnToolSet_AndRestores()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
         using var panel = AgentDashboardViewModel.Create(scope);
 
         var row = panel.SystemTools.Single(t => t.Name == "ListNodes");
@@ -130,7 +130,7 @@ public class AgentDashboardViewModelTests
     [TestMethod]
     public void UncheckingATool_ReRendersTheContextProvidersToolList()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
         var provider = new WorkflowAgentContextProvider(scope);
 
         var before = provider.BuildContext().Tools;
@@ -169,7 +169,7 @@ public class AgentDashboardViewModelTests
     public void ARefusedTool_IsReportedToTheModel_AndDoesNotCountAsACall()
     {
         // A refused call never reaches AfterCall, so it must not inflate the activity column either.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMaxToolCalls(10);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMaxToolCalls(10);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         var tool = (AIFunction)scope.ProvideTools().Single(t => t.Name == "ListNodes");
@@ -210,7 +210,7 @@ public class AgentDashboardViewModelTests
     public void CallCount_AlsoLandsOnAnMcpServerTool()
     {
         var mcp = McpWithSeededServer("seeded", "server_tool");
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         var server = panel.McpServers.Single();
@@ -231,7 +231,7 @@ public class AgentDashboardViewModelTests
     public void UncheckingASkill_DisablesItInTheScope_AndDropsItsTextFromThePrompt()
     {
         var skills = EmbeddedSkills();
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithSkills(skills);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSkills(skills);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         Assert.Contains("Smart Layout", skills.BuildEmbeddedBlock(AgentLanguages.English));
@@ -246,7 +246,7 @@ public class AgentDashboardViewModelTests
     public void ASkillDisabledInTheScope_FlowsBackToTheCheckbox()
     {
         var skills = EmbeddedSkills();
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithSkills(skills);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSkills(skills);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         Assert.IsTrue(panel.Skills.Single(s => s.Name == "smart-layout").IsEnabled);
@@ -262,7 +262,7 @@ public class AgentDashboardViewModelTests
     public void ASkillAddedByARefresh_AppearsInThePanel()
     {
         var skills = EmbeddedSkills();
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithSkills(skills);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSkills(skills);
         using var panel = AgentDashboardViewModel.Create(scope);
         var before = panel.Skills.Count;
 
@@ -280,7 +280,7 @@ public class AgentDashboardViewModelTests
     {
         // The standalone MCP panel used to own these counts; the merged panel has to keep reporting them.
         var mcp = McpWithSeededServer("seeded", "tool_a");
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         Assert.AreEqual("存活 1 · 错误 0", panel.McpStatusText);
@@ -295,7 +295,7 @@ public class AgentDashboardViewModelTests
     [TestMethod]
     public async Task ReloadAllServersAsync_WithNothingRegistered_IsANoOp()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(new McpScope());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(new McpScope());
         using var panel = AgentDashboardViewModel.Create(scope);
 
         await panel.ReloadAllServersAsync();
@@ -307,7 +307,7 @@ public class AgentDashboardViewModelTests
     [TestMethod]
     public async Task ReloadAllServersAsync_WithoutAnMcpScope_IsANoOp()
     {
-        using var panel = AgentDashboardViewModel.Create(new WorkflowAgentScope(new TreeDefaultComponent()));
+        using var panel = AgentDashboardViewModel.Create(new WorkflowAgentScope(new TreeDefaultViewModel()));
 
         Assert.IsFalse(panel.CanReloadMcp);
         await panel.ReloadAllServersAsync();   // must not throw when nothing is attached
@@ -317,7 +317,7 @@ public class AgentDashboardViewModelTests
     public void McpServerRow_StartsWithItsToolsVisible_AndToggles()
     {
         var mcp = McpWithSeededServer("seeded", "tool_a");
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         var server = panel.McpServers.Single();
@@ -337,7 +337,7 @@ public class AgentDashboardViewModelTests
     public void McpServerRow_ExposesItsSubTools()
     {
         var mcp = McpWithSeededServer("seeded", "server_tool_a", "server_tool_b");
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         var server = panel.McpServers.Single();
@@ -353,7 +353,7 @@ public class AgentDashboardViewModelTests
     public void DisablingAServer_KeepsItConnected_ButDropsItsTools()
     {
         var mcp = McpWithSeededServer("seeded", "server_tool");
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         var server = panel.McpServers.Single();
@@ -375,7 +375,7 @@ public class AgentDashboardViewModelTests
     public void DisablingOneServerTool_LeavesTheOtherExposed()
     {
         var mcp = McpWithSeededServer("seeded", "tool_a", "tool_b");
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         var server = panel.McpServers.Single();
@@ -389,7 +389,7 @@ public class AgentDashboardViewModelTests
     public async Task UnloadingAServer_EmptiesItsToolsAndReportsZero()
     {
         var mcp = McpWithSeededServer("seeded", "server_tool");
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         await panel.McpServers.Single().UnloadAsync();
@@ -405,7 +405,7 @@ public class AgentDashboardViewModelTests
     public void AServerDisabledBeforeItLoads_StaysDisabledOnceItAppears()
     {
         var mcp = new McpScope();
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         // No row exists yet — the switch has to be remembered anyway.
@@ -423,7 +423,7 @@ public class AgentDashboardViewModelTests
     public void SwitchingFromThePanel_PushesOnceAndDoesNotEchoBack()
     {
         var skills = EmbeddedSkills();
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithSkills(skills);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSkills(skills);
         using var panel = AgentDashboardViewModel.Create(scope);
 
         var row = panel.Skills.Single(s => s.Name == "smart-layout");
@@ -440,7 +440,7 @@ public class AgentDashboardViewModelTests
     [TestMethod]
     public void SwitchingAnAlreadyMatchingValue_IsANoOp()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
         using var panel = AgentDashboardViewModel.Create(scope);
 
         var row = panel.SystemTools.Single(t => t.Name == "ListNodes");
@@ -483,7 +483,7 @@ public class AgentDashboardViewModelTests
     {
         using var context = new SingleThreadContext();
         var skills = EmbeddedSkills();
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithSkills(skills);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSkills(skills);
 
         AgentDashboardViewModel panel = null!;
         var built = new ManualResetEventSlim();

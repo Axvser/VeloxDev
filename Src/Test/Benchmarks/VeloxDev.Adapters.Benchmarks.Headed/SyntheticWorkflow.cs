@@ -10,7 +10,7 @@ namespace VeloxDev.Adapters.Benchmarks.Headed;
 /// </remarks>
 public sealed class SyntheticWorkflow
 {
-    private SyntheticWorkflow(TreeDefaultComponent tree, double contentWidth, double contentHeight)
+    private SyntheticWorkflow(TreeDefaultViewModel tree, double contentWidth, double contentHeight)
     {
         Tree = tree;
         ContentWidth = contentWidth;
@@ -18,7 +18,7 @@ public sealed class SyntheticWorkflow
     }
 
     /// <summary>Gets the generated tree.</summary>
-    public TreeDefaultComponent Tree { get; }
+    public TreeDefaultViewModel Tree { get; }
 
     /// <summary>Gets the full content width including the grid margins.</summary>
     public double ContentWidth { get; }
@@ -31,8 +31,8 @@ public sealed class SyntheticWorkflow
     /// <returns>The created workflow.</returns>
     public static SyntheticWorkflow Create(HeadedOptions options)
     {
-        var tree = new TreeDefaultComponent();
-        tree.SetHelper(new TreeHelper<TreeDefaultComponent>(options.CellSize));
+        var tree = new TreeDefaultViewModel();
+        tree.SetHelper(new TreeHelper<TreeDefaultViewModel>(options.CellSize));
 
         var columns = Math.Max(1, (int)Math.Ceiling(Math.Sqrt(options.Nodes * 1.6d)));
         var rows = (int)Math.Ceiling(options.Nodes / (double)columns);
@@ -46,15 +46,15 @@ public sealed class SyntheticWorkflow
         {
             var column = index % columns;
             var row = index / columns;
-            var node = new NodeDefaultComponent
+            var node = new NodeDefaultViewModel
             {
                 Parent = tree,
                 Anchor = new Anchor(origin + column * stepX, origin + row * stepY, 0),
                 Size = new WfSize(options.NodeWidth, options.NodeHeight),
             };
 
-            var input = new SlotDefaultComponent { Parent = node, Channel = SlotChannel.MultipleBoth };
-            var output = new SlotDefaultComponent { Parent = node, Channel = SlotChannel.MultipleBoth };
+            var input = new SlotDefaultViewModel { Parent = node, Channel = SlotChannel.MultipleBoth };
+            var output = new SlotDefaultViewModel { Parent = node, Channel = SlotChannel.MultipleBoth };
             node.Slots.Add(input);
             node.Slots.Add(output);
             inputs[index] = input;
@@ -80,7 +80,7 @@ public sealed class SyntheticWorkflow
                 receiver = (receiver + 1) % options.Nodes;
             }
 
-            tree.Links.Add(new LinkDefaultComponent
+            tree.Links.Add(new LinkDefaultViewModel
             {
                 Sender = outputs[sender],
                 Receiver = inputs[receiver],

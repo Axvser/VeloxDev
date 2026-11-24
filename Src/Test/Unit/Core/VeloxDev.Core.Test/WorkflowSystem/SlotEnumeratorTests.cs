@@ -157,11 +157,11 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void WhenSelectorChanges_UndoOnceRestoresSlotsAndConnections()
     {
-        var tree = new TreeDefaultComponent();
-        var senderNode = new NodeDefaultComponent();
-        var receiverNode = new NodeDefaultComponent();
-        var receiverSlot = new SlotDefaultComponent { Channel = SlotChannel.OneSource };
-        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
+        var tree = new TreeDefaultViewModel();
+        var senderNode = new NodeDefaultViewModel();
+        var receiverNode = new NodeDefaultViewModel();
+        var receiverSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneSource };
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
 
         tree.GetHelper().CreateNode(senderNode);
         tree.GetHelper().CreateNode(receiverNode);
@@ -528,10 +528,10 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void WhenSetSelectorSwitchesType_CurrentValuePreservedByName_ElseDefaultsToFirst_AndUndoRestores()
     {
-        var tree = new TreeDefaultComponent();
-        var node = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
-        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
         enumerator.Install(node, "OutputSlots");
 
         enumerator.SetSelector(typeof(BranchKind));   // Yes, No
@@ -546,7 +546,7 @@ public class SlotEnumeratorTests
         Assert.AreEqual(typeof(AlternateBranchKind), enumerator.SelectorType);
         Assert.AreEqual("First", enumerator.CurrentValue,
             "an old value with no same-named member in the new type defaults to the new type's first member");
-        Assert.IsTrue(notified.Contains(nameof(SlotEnumerator<SlotDefaultComponent>.CurrentValue)),
+        Assert.IsTrue(notified.Contains(nameof(SlotEnumerator<SlotDefaultViewModel>.CurrentValue)),
             "the type switch must notify CurrentValue so a bound dropdown refreshes");
 
         // Undo restores BranchKind and the current value captured for it.
@@ -571,10 +571,10 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void WhenTypeSwitchThenSelection_UndoPerSetSelector_RestoresRememberedValue()
     {
-        var tree = new TreeDefaultComponent();
-        var node = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
-        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
         enumerator.Install(node, "OutputSlots");
 
         enumerator.SetSelector(typeof(BranchKind));          // Yes, No
@@ -612,10 +612,10 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void WhenSwitchingBackAndForth_EachSelectorRestoresItsLastSelectedValue()
     {
-        var tree = new TreeDefaultComponent();
-        var node = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
-        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
         enumerator.Install(node, "OutputSlots");
 
         enumerator.SetSelector(typeof(BranchKind));   // Yes, No
@@ -645,10 +645,10 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void WhenMultipleCredentialsWithUndoRedo_EachRestoresItsLastSelectedValue()
     {
-        var tree = new TreeDefaultComponent();
-        var node = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
-        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
         enumerator.Install(node, "OutputSlots");
 
         enumerator.SetSelector(typeof(BranchKind));
@@ -682,18 +682,18 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void WhenSwitchingBetweenTypes_EachTypesConnectionsAreRestored()
     {
-        var tree = new TreeDefaultComponent();
-        var sender = new NodeDefaultComponent();
-        var receiver = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var sender = new NodeDefaultViewModel();
+        var receiver = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(sender);
         tree.GetHelper().CreateNode(receiver);
-        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
         enumerator.Install(sender, "OutputSlots");
 
         enumerator.SetSelector(typeof(BranchKind));   // Yes, No
         var yesSlot = enumerator.TrySelect(BranchKind.Yes, out var s) ? s : null;
         yesSlot!.Channel = SlotChannel.OneTarget;
-        var receiverSlot = new SlotDefaultComponent { Channel = SlotChannel.OneSource };
+        var receiverSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneSource };
         receiver.GetHelper().CreateSlot(receiverSlot);
         tree.GetHelper().SendConnection(yesSlot);
         tree.GetHelper().ReceiveConnection(receiverSlot);
@@ -719,10 +719,10 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void WhenTransientNullWrittenToCurrentValue_RememberedValueSurvives()
     {
-        var tree = new TreeDefaultComponent();
-        var node = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(node);
-        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
         enumerator.Install(node, "OutputSlots");
 
         enumerator.SetSelector(typeof(BranchKind));   // Yes, No
@@ -828,11 +828,11 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void RebuildingAProvidersSlots_KeepsTheLinksThatFeedThem()
     {
-        var tree = new TreeDefaultComponent();
-        var senderNode = new NodeDefaultComponent();
-        var receiverNode = new NodeDefaultComponent();
-        var senderSlot = new SlotDefaultComponent { Channel = SlotChannel.OneTarget };
-        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
+        var tree = new TreeDefaultViewModel();
+        var senderNode = new NodeDefaultViewModel();
+        var receiverNode = new NodeDefaultViewModel();
+        var senderSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
 
         tree.GetHelper().CreateNode(senderNode);
         tree.GetHelper().CreateNode(receiverNode);
@@ -870,11 +870,11 @@ public class SlotEnumeratorTests
     [TestMethod]
     public void RebuildingAProvidersSlots_PairsBranchesByName_NotByPosition()
     {
-        var tree = new TreeDefaultComponent();
-        var senderNode = new NodeDefaultComponent();
-        var receiverNode = new NodeDefaultComponent();
-        var senderSlot = new SlotDefaultComponent { Channel = SlotChannel.OneTarget };
-        var enumerator = new SlotEnumerator<SlotDefaultComponent>();
+        var tree = new TreeDefaultViewModel();
+        var senderNode = new NodeDefaultViewModel();
+        var receiverNode = new NodeDefaultViewModel();
+        var senderSlot = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
+        var enumerator = new SlotEnumerator<SlotDefaultViewModel>();
 
         tree.GetHelper().CreateNode(senderNode);
         tree.GetHelper().CreateNode(receiverNode);

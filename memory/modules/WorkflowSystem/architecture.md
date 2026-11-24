@@ -35,11 +35,11 @@
 | 组件 | 组件拥有（可序列化的状态） | Helper 拥有（运行时状态） | 依据 |
 |---|---|---|---|
 | Tree | `Layout`、`Nodes`、`Links`、`LinksMap`、`VirtualLink` | 撤销/重做栈（`TreeCache`）、`VisibleItems`、`Viewport`、`CurrentSender`、`SpatialManager` | `Interfaces/WorkflowSystem/Components/ITreeComponent.cs` 的 `Layout` / `VirtualLink` / `Nodes` / `Links` / `LinksMap`；`StandardEx/WorkflowTreeEx.cs` 的 `_cache` 与 `TreeCache` |
-| Node | `Parent`、`Anchor`、`Size`、`Slots` | `_scaleTracker`、子 Helper 的并发信号量 | `Interfaces/WorkflowSystem/Components/INodeComponent.cs` 的 `Parent` / `Anchor` / `Size` / `Slots`；`Templates/ViewModels/NodeDefaultComponent.cs` 的 `_scaleTracker` |
+| Node | `Parent`、`Anchor`、`Size`、`Slots` | `_scaleTracker`、子 Helper 的并发信号量 | `Interfaces/WorkflowSystem/Components/INodeComponent.cs` 的 `Parent` / `Anchor` / `Size` / `Slots`；`Templates/ViewModels/NodeDefaultViewModel.cs` 的 `_scaleTracker` |
 | Slot | `Parent`、`Channel`、`State`、`Anchor`、`Targets`、`Sources` | 无独立运行时状态（`SlotHelper<T>` 只有事件） | `Interfaces/WorkflowSystem/Components/ISlotComponent.cs` 的 `Targets` / `Sources` / `Parent` / `Channel` / `State` / `Anchor`；`Templates/Helpers/SlotHelper.cs` 的 `SlotHelper<T>` |
 | Link | `Sender`、`Receiver`、`IsVisible` | 无 | `Interfaces/WorkflowSystem/Components/ILinkComponent.cs` 的 `Sender` / `Receiver` / `IsVisible`；`Templates/Helpers/LinkHelper.cs` 的 `LinkHelper<T>` |
 
-**Helper 是「按实例挂」的，不是全局单例**。`EnsureComponentHelper()` 里 `if (Helper is not <具体类型>) Helper = new <具体类型>()` 是生成器写的（`Src/Generators/VeloxDev.Core.Generator/Writers/WorkflowWriter.cs` 的 `GenerateWorkflowLifecycleBody`），所以**手写组件必须自己在构造函数里调 `InitializeWorkflow()`**，见 `Templates/ViewModels/NodeDefaultComponent.cs` 的 `NodeDefaultComponent()` 构造函数。
+**Helper 是「按实例挂」的，不是全局单例**。`EnsureComponentHelper()` 里 `if (Helper is not <具体类型>) Helper = new <具体类型>()` 是生成器写的（`Src/Generators/VeloxDev.Core.Generator/Writers/WorkflowWriter.cs` 的 `GenerateWorkflowLifecycleBody`），所以**手写组件必须自己在构造函数里调 `InitializeWorkflow()`**，见 `Templates/ViewModels/NodeDefaultViewModel.cs` 的 `NodeDefaultViewModel()` 构造函数。
 
 ### 唯一写者（single writer）
 
@@ -60,7 +60,7 @@
 
 ### 一个反直觉点：`Anchor` / `Size` 的 getter 返回的是「折叠后的临时对象」
 
-`NodeDefaultComponent.Anchor` 的 getter 是 `anchor.Collapse(Parent?.Layout?.Scale)`（`Templates/ViewModels/NodeDefaultComponent.cs` 的 `Anchor` getter），字段里存的是**世界坐标原值**。源码注释写得很明确：
+`NodeDefaultViewModel.Anchor` 的 getter 是 `anchor.Collapse(Parent?.Layout?.Scale)`（`Templates/ViewModels/NodeDefaultViewModel.cs` 的 `Anchor` getter），字段里存的是**世界坐标原值**。源码注释写得很明确：
 
 > `Src/Core/VeloxDev.Core/WorkflowSystem/StandardEx/WorkflowNodeEx.cs`（`StandardSetAnchor` 上方）——「The Anchor/Size getters collapse toward the world origin by Layout.Scale (value / scale), so in-place mutation of the returned value would write to a discarded copy. All mutations must go through the property setters, which store the ORIGINAL world value.」
 
@@ -87,7 +87,7 @@
                                                           TreeHelper.Submit(ActionPair)   ← 唯一入栈口
 ```
 
-- 命令是生成器按约定成员名生成的（`NodeDefaultComponent.cs` 里手写的 `Move` … `Close` 命令成员是手写版，生成版见 `Writers/WorkflowWriter.cs`）。命令体的形状是 `if (parameter is not X) return; Helper.Y(...)`。
+- 命令是生成器按约定成员名生成的（`NodeDefaultViewModel.cs` 里手写的 `Move` … `Close` 命令成员是手写版，生成版见 `Writers/WorkflowWriter.cs`）。命令体的形状是 `if (parameter is not X) return; Helper.Y(...)`。
 - `IActionPair` 只是 `(Action Redo, Action Undo)`（`ActionPair.cs` 的 `ActionPair`）。
 - 栈在 `TreeCache` 里（`ConditionalWeakTable<ITreeComponent, TreeCache>`，`StandardEx/WorkflowTreeEx.cs` 的 `_cache` 与 `TreeCache`），**按 Tree 实例隔离**。
 
@@ -115,7 +115,7 @@ ReceiveConnection(receiverSlot) → 校验 receiver 方向 → ValidateConnectio
                  └ WorkflowInput.PreviewState / PreviewCheck → 虚拟连线的 IConnectionPreviewLink.Preview
 ```
 
-- 状态全部挂在每棵树的 `WorkflowInput.For(tree)`：`ConnectionSender` / `PreviewReceiver` / `PreviewState` / `PreviewCheck` / `PreviewChanged` / `PreviewValidating`。虚拟连线通过可选能力接口 `IConnectionPreviewLink` 拿到 `Preview`（`LinkDefaultComponent` 实现；真实链接不必实现）。
+- 状态全部挂在每棵树的 `WorkflowInput.For(tree)`：`ConnectionSender` / `PreviewReceiver` / `PreviewState` / `PreviewCheck` / `PreviewChanged` / `PreviewValidating`。虚拟连线通过可选能力接口 `IConnectionPreviewLink` 拿到 `Preview`（`LinkDefaultViewModel` 实现；真实链接不必实现）。
 - **`ConnectionCheck` 是显式查询口**：`var check = tree.StandardCheckConnection(sender, receiver)`，纯函数、无事件、不改状态，可在拖动前批量预判。它和预览共用同一套规则；`Connecting` 不在这套规则里（松手时按次否决）。
 - **`PreviewCheck` 是当前候选的结果缓存**：没有候选时为 `null`；无效候选也带原因。`PreviewChanged` 的 args 同时带 `Check`。`PreviewValidating` 只在**框架已判定有效**的新候选上触发（同一候选只触发一次），宿主只能把有效收窄为 `RejectedByHost`，不能把框架的拒绝翻成有效。
 - **`StandardRefreshConnectionPreview()` 是异步校验收尾口**：宿主在 `PreviewValidating` 里先 `Reject("checking")`，异步结果回来后调它重跑当前候选。`StandardSetPreviewReceiver` 在候选未变时不会重跑 `ValidateConnection`，所以频繁拖动不会每帧调用户的规则。
@@ -167,7 +167,7 @@ RuntimeEngine.RunAsync(graph, IRuntimeContext, ct)         CompilerEx/Runtime/Ru
 - **`WorkflowSurfaceMath` 是全模块的坐标数学**（`GUI/Math/WorkflowSurfaceMath.cs` 的 `WorkflowSurfaceMath`）。
 - **连线的形状归 Core 算，视图不重复推导**：`LinkCurve.LinkCurvePoints(link, 起点, 终点, pullMinimum)` 给出要画的四个控制点，`LinkCurve.BuildLinkCubic(...)` 把同一条采样成命中用的 `LinkCurve` —— 两个函数同源，所以「画出来的」与「能点中的」不可能不一致（`GUI/Interaction/LinkCurve.cs` 的 `LinkCurvePoints` / `BuildLinkCubic`）。控制点沿**每个口自己那条边**的外法线拉，不是写死水平（`LinkPortCurveTests.cs` 的 `LinkCurvePoints_NeverFoldsIntoItsOwnNode` 钉的就是这条）。**任一端没有节点就整条退回房规**（起点 +x、终点 −x）—— 拖拽预览的两端都是占位插槽、没有边可读，而两端都不拉会把橡皮筋拉成直线。
 - **方向只看两个端点各自相对于父节点的实际位置**（`PortOutward(x, y, node)`，即 `LinkCurve.PortOutward(double, double, INodeComponent?)`）：不读 `slot.Anchor`，也不看谁是发送端、端口画在哪条边 —— 调用方传进来的坐标就是判据。**前提是那两个坐标与 `node.Anchor` / `node.Size` 同系**：坐标是**别的**系时，调用方必须先把它们搬过去再调（WinForms 的 Trimmed 那条路就是 —— 它的 `slot.Anchor` 是客户区坐标，差一个表面投影，见 [`adapters/winforms.md`](adapters/winforms.md) §4.12）。同系的各家（七家都从绑定读 `slot.Anchor` —— Jalium 也由 `WorkflowSlotLayoutBehavior` 实测写回 `slot.Anchor`，与其余六家同一契约）直接用，不用改公式。
-- **NaN = 未测量**这个约定是渲染就绪门的全部内容。注意**只有 slot 的 anchor 默认 NaN**：`Anchor` 类本身的构造默认是 `0d`（`GUI/GeometryModels/Anchor.cs` 的 `Anchor(double left = 0d, double top = 0d, int layer = 0)`），是 slot 的字段给了 NaN —— 生成器版 `Writers/WorkflowWriter.cs` 的 `GenerateSlotBody`（注释：「Slot anchor defaults to NaN (no value): links don't render until both anchors are measured by the GUI」），默认实现版 `Templates/ViewModels/SlotDefaultComponent.cs` 的 `anchor` 字段。node 的 anchor 默认 `0` 或 `[DefaultAnchor]`（`Writers/WorkflowWriter.cs` 的 `GenerateNodeAnchorInitializer`），`VirtualLink` 双端在重置时**故意**回到 NaN 而不是原点（`StandardEx/WorkflowTreeEx.cs` 的 `StandardResetVirtualLink`）。检查在 `GUI/Rendering/WorkflowSlotUpdateGate.cs` 的 `IsLinkRenderReady`，包装在 `GUI/Rendering/WorkflowLinkRenderEx.cs` 的 `IsRenderReady`（额外看 `IsVisible`）。**不需要任何事件订阅或时间戳** —— 测量写入真实坐标后绑定自动刷新。未挂到节点的 slot（`Parent is null`，如拖拽预览）直接算就绪（`WorkflowSlotUpdateGate.cs` 的 `EndpointReady`）。
+- **NaN = 未测量**这个约定是渲染就绪门的全部内容。注意**只有 slot 的 anchor 默认 NaN**：`Anchor` 类本身的构造默认是 `0d`（`GUI/GeometryModels/Anchor.cs` 的 `Anchor(double left = 0d, double top = 0d, int layer = 0)`），是 slot 的字段给了 NaN —— 生成器版 `Writers/WorkflowWriter.cs` 的 `GenerateSlotBody`（注释：「Slot anchor defaults to NaN (no value): links don't render until both anchors are measured by the GUI」），默认实现版 `Templates/ViewModels/SlotDefaultViewModel.cs` 的 `anchor` 字段。node 的 anchor 默认 `0` 或 `[DefaultAnchor]`（`Writers/WorkflowWriter.cs` 的 `GenerateNodeAnchorInitializer`），`VirtualLink` 双端在重置时**故意**回到 NaN 而不是原点（`StandardEx/WorkflowTreeEx.cs` 的 `StandardResetVirtualLink`）。检查在 `GUI/Rendering/WorkflowSlotUpdateGate.cs` 的 `IsLinkRenderReady`，包装在 `GUI/Rendering/WorkflowLinkRenderEx.cs` 的 `IsRenderReady`（额外看 `IsVisible`）。**不需要任何事件订阅或时间戳** —— 测量写入真实坐标后绑定自动刷新。未挂到节点的 slot（`Parent is null`，如拖拽预览）直接算就绪（`WorkflowSlotUpdateGate.cs` 的 `EndpointReady`）。
   > ⚠️ `WorkflowSlotUpdateGate` 类声明上方 XML 注释里「A Slot anchor's default value is a "no value" placeholder — `Anchor` defaults its horizontal/vertical coordinates to `double.NaN`」那两句写的是「`Anchor` 默认 horizontal/vertical 为 `double.NaN`」—— **那句话与代码不符**（`Anchor.cs` 的构造默认是 `0d`），它表达的是 **slot 的约定**，不是 `Anchor` 类的默认值。
 - **同一套 NaN 约定还贯穿空间索引**：bounds 为空/NaN 的条目会被登记用于变更跟踪但**不进网格**（`GUI/Virtualization/SpatialGridHashMap.cs` 的 `Insert` 里 `if (!b.IsEmpty) IndexItem(...) else _unindexed.Add(item)`），端点未定位时连线对返回 `Empty` bounds（`GUI/Virtualization/NodePairBoundsProvider.cs` 的 `CalculateBounds` 里 `if (bA.IsEmpty || bB.IsEmpty) return Viewport.Empty;`），所以未测量的节点不会以 NaN 坐标进索引。
 - 坐标系约定：`SlotAnchorFromVisualCenter` = `视觉中心 − ActualOffset`（即画布局部），`SlotAnchorFromNode` = 节点锚点 + 局部偏移，`SlotAnchorFromCanvasLocal` 用于已经是画布局部坐标的情形。三个都在 `GUI/Math/WorkflowSurfaceMath.cs` 的 `SlotAnchorFromVisualCenter` / `SlotAnchorFromNode` / `SlotAnchorFromCanvasLocal`。
@@ -315,7 +315,7 @@ WorkflowLayoutProblemBuilder.Build(tree, options)      ← 唯一读模型的一
 9. **`SlotEnumerator` 的 slot 属性必须写成 `[VeloxProperty] public partial T X { get; set; }`。** 生成器按 `_camelCase` 合成后备字段并在 `InitializeWorkflowCore` 里引用它，手写一个别的名字的字段会让生成的初始化代码失效（`Src/Generators/VeloxDev.Core.Generator/Writers/WorkflowWriter.cs` 的 `GetNodeInitMembers` 合成后备字段、`GenerateInitializeWorkflowBody` 在 `InitializeWorkflowCore` 里引用；生成规则见 `skills/veloxdev-create-workflow/references/model.md`）。
 10. **`InitializeWorkflowCore` 注册 slot 时刻意绕过 `CreateSlotCommand`**，因为那时 `node.Parent == null`。手写这条路会踩到 `WorkflowNodeEx.StandardCreateSlot` 里的幂等守卫（`StandardEx/WorkflowNodeEx.cs` 的 `StandardCreateSlot` 里 `if (component.Slots.Any(s => ReferenceEquals(s, slot))) return;`：同引用的 slot 二次派发直接 `return`）—— 守卫的存在正是为了不让「迟到的延迟派发」推进一个幽灵 undo 项，其 Undo 会把 slot 撕出来。
 11. **`Channel` 的自动清理只发生在 `One*` 通道上**。`ShouldCleanupConnections` 只看 `OneTarget`/`OneSource`/`OneBoth` 位（`StandardEx/WorkflowTreeEx.cs` 的 `ShouldCleanupConnections`），`Multiple*` 从不删任何东西；「顺带清理反方向」那一条门控在 `HasFlag(OneBoth)`（两个 one 位同时存在），所以 `MultipleBoth` 不触发。
-12. **两种 Slot 实现的默认 Channel 不一致**：生成器造的 slot 体默认 `MultipleBoth`（`Writers/WorkflowWriter.cs` 的 `GenerateSlotBody`），而 `SlotDefaultComponent` 默认 `OneBoth`（`Templates/ViewModels/SlotDefaultComponent.cs` 的 `channel` 字段）。行为对不上 demo 时先查这里。
+12. **两种 Slot 实现的默认 Channel 不一致**：生成器造的 slot 体默认 `MultipleBoth`（`Writers/WorkflowWriter.cs` 的 `GenerateSlotBody`），而 `SlotDefaultViewModel` 默认 `OneBoth`（`Templates/ViewModels/SlotDefaultViewModel.cs` 的 `channel` 字段）。行为对不上 demo 时先查这里。
 13. **自动布局只在 applier 里写模型，一次 `Apply` 只入栈一次。** 阶段只读快照、写 `WorkflowLayoutState`；`WorkflowLayoutApplier.Apply` 把全部移动包成一个 `IActionPair` 交给 `tree.GetHelper().Submit(...)`，结束后只 `MarkDirty()` 一次。pinned 节点既不写也不入栈；没有移动时不提交（不造空 undo 项）。模型在 Solve 之后被改过、或节点已离开树的，跳过不覆盖，计入 `WorkflowLayoutResult.SkippedCount`。详见 [layout.md](layout.md) §五。
 14. **`VirtualLink` 是可写属性，可能为 null，端点也可能为空。** `StandardEx/WorkflowTreeEx.cs` 的 `StandardSendConnection`、`StandardSetPointer`、`StandardResetVirtualLink` 在解引用前验形（`VirtualLink` 与 `Sender`/`Receiver` 都非空）；反序列化出的树可以把它写成 null。适配器侧同样用 `VirtualLink is { IsVisible: true }` 防守。
 
@@ -346,7 +346,7 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 |---|---|
 | 节点收到数据时算什么 | `Templates/Helpers/NodeHelper.cs` 的 `ReceiveAsync`（`Interfaces/WorkflowSystem/Components/INodeComponent.cs` 的 `ReceiveAsync` 是契约）。默认返回 `null` = 静默不往下传 |
 | 一条边能不能连 | `Templates/Helpers/TreeHelper.cs` 的 `ValidateConnection`（`TreeHelper<T>.ValidateConnection`，默认 `true`）。协议见 §3.2 |
-| 用户拖出的连线用什么类型 | `TreeHelper<T>.CreateLink`（`Templates/Helpers/TreeHelper.cs` 的 `CreateLink`，默认 `LinkDefaultComponent`） |
+| 用户拖出的连线用什么类型 | `TreeHelper<T>.CreateLink`（`Templates/Helpers/TreeHelper.cs` 的 `CreateLink`，默认 `LinkDefaultViewModel`） |
 | 连接的容量/自动清理规则 | `Interfaces/WorkflowSystem/Enums/SlotChannel.cs` 的 `SlotChannel` + `StandardEx/WorkflowTreeEx.cs` 的 `ShouldCleanupConnections` |
 | slot 的状态位怎么算 | `StandardEx/WorkflowSlotEx.cs` 的 `StandardUpdateState`（由 `Targets.Count`/`Sources.Count` 推导） |
 | 改通道时旧连接怎么清 | `StandardEx/WorkflowSlotEx.cs` 的 `StandardSetChannel`（按**旧**通道的位决定删哪些） |

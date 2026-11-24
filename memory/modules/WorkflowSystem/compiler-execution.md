@@ -83,7 +83,7 @@ Node 侧接口按方向分：
 
 ## 七、测试在哪、什么没测
 
-- 引擎子集在 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`：**全部用手写探针**（`ProbeNodeBase` 只有拓扑与调用记录；`ProbeNode` 加 `ICompileTimeAware` / `IRuntimeAware`；`PlainNode` 两者都不实现；`RedirectableNode : ProbeNode` 实现 `IRedirectable`），**从不针对真实的 `NodeDefaultComponent`/`TreeDefaultComponent`**。`CompileIdentityOwnershipTests` 用 `PlainNode` 钉住「不实现通知接口时汇合/重定向/状态码仍正确」。
+- 引擎子集在 `Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/CompilerEx/`：**全部用手写探针**（`ProbeNodeBase` 只有拓扑与调用记录；`ProbeNode` 加 `ICompileTimeAware` / `IRuntimeAware`；`PlainNode` 两者都不实现；`RedirectableNode : ProbeNode` 实现 `IRedirectable`），**从不针对真实的 `NodeDefaultViewModel`/`TreeDefaultViewModel`**。`CompileIdentityOwnershipTests` 用 `PlainNode` 钉住「不实现通知接口时汇合/重定向/状态码仍正确」。
 - 并发契约由 `ParallelExecutionTests` 钉住（其中 `FanOut_CompilesToAParallelSegment` 是前置确认）：时间窗相交、上限为 1 时串行、分支只看得到扇出源载荷、**日志按真实时序**（因果交错：A 先记一行、等 B 记完再记第二行 → 断言 `A1 < B1 < A2`，成块合并必然读成 `A1, A2, B1`）、重定向取分支序最先。其中有的在串行引擎下必然失败（时间窗不相交 / `s0.Calls == 2`）。
 - 日志 sink 与上限另由 `CompilerLogWriterTests`（`Core.Test`）钉住：writer 与 `Logs` 逐行同序、上限只裁内存（`0` = 只落 writer）、**writer 抛异常不改变运行**（吞掉并报 `LogWriteFailed`）、分支的 `Warn` 不置会话的 `RedirectRequested`；Agent 路径那条在 `Core.Extension.Test` 的 `WorkflowLifecycleFidelityTests.WithLogWriter_RoutesACompiledRunsLinesToTheHostsSink`。
 - **没测**：`ControllerViewModel` 整个（`Examples/` 没有测试工程）；Agent 侧 `CompileWorkflow`/`GetCompileStatus`/`GetExecutionLog` 这几个工具；`ChainIndex`/`Offset`/`Segment.Id`/`Depth` 的值。（重定向上限 50 次那条路由 `RuntimeRedirectTests.RedirectLoopsExceedingLimit_AbortWithException` 钉住。）

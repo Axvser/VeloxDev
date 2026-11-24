@@ -37,7 +37,7 @@ public string Something([Description("...")] string arg) => ...;
 4. 清单是**归档自带的**输入：不要让它把一个字段变成任意路径/任意代码的入口。
 
 现有字段：`assemblies`（相对路径、锁在清单目录内）、`allowExecution`、`rootType`（具体树类型）。
-文档不总带根 `$type`，不给 `rootType` 就会退化成 `TreeDefaultComponent`。
+文档不总带根 `$type`，不给 `rootType` 就会退化成 `TreeDefaultViewModel`。
 `WorkflowSession.ResolveRootType` 的查找顺序是注册表 → `Type.GetType` → 已加载程序集；`--root-type`
 覆盖清单值。
 

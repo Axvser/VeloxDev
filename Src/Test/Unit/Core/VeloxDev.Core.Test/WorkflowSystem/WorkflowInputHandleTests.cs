@@ -72,11 +72,11 @@ public class WorkflowInputHandleTests : WorkflowInputTestBase
     [TestMethod]
     public void Route_BubblesFromASlotThroughItsNodeToTheTree()
     {
-        var tree = new TreeDefaultComponent();
-        var node = new NodeDefaultComponent { Parent = tree };
-        var a = new NodeDefaultComponent { Parent = tree };
-        var slot = new SlotDefaultComponent { Parent = node };
-        var other = new SlotDefaultComponent { Parent = a };
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel { Parent = tree };
+        var a = new NodeDefaultViewModel { Parent = tree };
+        var slot = new SlotDefaultViewModel { Parent = node };
+        var other = new SlotDefaultViewModel { Parent = a };
         node.Slots.Add(slot);
         a.Slots.Add(other);
         tree.Nodes.Add(node);

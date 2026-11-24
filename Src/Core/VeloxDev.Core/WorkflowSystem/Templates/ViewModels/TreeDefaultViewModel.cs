@@ -4,7 +4,7 @@ using VeloxDev.MVVM;
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>The default implementation of <see cref="ITreeComponent"/>.</summary>
-public sealed partial class TreeDefaultComponent : ITreeComponent, IRuntimeIdentifiable
+public sealed partial class TreeDefaultViewModel : ITreeComponent, IRuntimeIdentifiable
 {
     private ITreeHelper helper = new TreeHelper();
 
@@ -25,10 +25,10 @@ public sealed partial class TreeDefaultComponent : ITreeComponent, IRuntimeIdent
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>Creates the component and installs its default helper.</summary>
-    public TreeDefaultComponent() { InitializeWorkflow(); }
+    public TreeDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private CanvasLayout layout = new();
-    [VeloxProperty] private ILinkComponent virtualLink = new LinkDefaultComponent() { Sender = new SlotDefaultComponent(), Receiver = new SlotDefaultComponent() };
+    [VeloxProperty] private ILinkComponent virtualLink = new LinkDefaultViewModel() { Sender = new SlotDefaultViewModel(), Receiver = new SlotDefaultViewModel() };
     [VeloxProperty] private ObservableCollection<INodeComponent> nodes = [];
     [VeloxProperty] private ObservableCollection<ILinkComponent> links = [];
     [VeloxProperty] private Dictionary<ISlotComponent, Dictionary<ISlotComponent, ILinkComponent>> linksMap = [];

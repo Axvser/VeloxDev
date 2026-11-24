@@ -49,11 +49,11 @@ public class ToolApprovalTests
     /// has no default on purpose: the first version of this file defaulted it to <c>true</c>, which silently
     /// turned the "gate is off" test into a second denial test.
     /// </summary>
-    private static (TreeDefaultComponent Tree, WorkflowAgentScope Scope) OneNodeScope(
+    private static (TreeDefaultViewModel Tree, WorkflowAgentScope Scope) OneNodeScope(
         bool approval, Func<AgentConfirmationEventArgs, Task>? confirm = null)
     {
-        var tree = new TreeDefaultComponent();
-        tree.GetHelper().CreateNode(new NodeDefaultComponent());
+        var tree = new TreeDefaultViewModel();
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
 
         // The tool-approval axis is now the mode's: Manual puts every non-read action to the user, and Auto
         // — the library default — runs graph work without asking. Same two behaviours, one knob.

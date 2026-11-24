@@ -108,7 +108,7 @@ The document is the library's serializer output. Dependencies and options live i
 ```
 
 - `assemblies` — resolved relative to the manifest and **may not escape the manifest's directory**. Loading runs module initializers; the listed assemblies register their component and serializer types.
-- `rootType` — needed when the document was serialized through a concrete tree type (`treeViewModel.Serialize()` writes no root `$type`). Without it the CLI reads the graph into `TreeDefaultComponent`.
+- `rootType` — needed when the document was serialized through a concrete tree type (`treeViewModel.Serialize()` writes no root `$type`). Without it the CLI reads the graph into `TreeDefaultViewModel`.
 - `allowExecution` — the manifest may opt into execution. `--allow-execution` does the same from the command line. Without either, execution tools are absent.
 
 ⚙ A missing dependency fails before deserialization with the type name. Add it to the manifest or `--assembly`; do not expect a directory scan.

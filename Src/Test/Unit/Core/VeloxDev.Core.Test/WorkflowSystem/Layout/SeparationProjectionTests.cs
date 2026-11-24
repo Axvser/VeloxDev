@@ -12,7 +12,7 @@ public class SeparationProjectionTests
     [TestMethod]
     public void OverlappingNodes_ArePushedToTheMinimumRowGap()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var top = LayoutTestKit.AddNode(tree, 0, 0);
         var bottom = LayoutTestKit.AddNode(tree, 0, 10);
 
@@ -36,7 +36,7 @@ public class SeparationProjectionTests
     [TestMethod]
     public void HardViolation_IsFixedEvenWhenToleranceWouldPreserveThePosition()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         LayoutTestKit.AddNode(tree, 0, 0);
         LayoutTestKit.AddNode(tree, 0, 10);
 
@@ -56,7 +56,7 @@ public class SeparationProjectionTests
     [TestMethod]
     public void PinnedNode_DoesNotMove_AndTheOtherNodeMovesAway()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var pinned = LayoutTestKit.AddNode(tree, 0, 0);
         LayoutTestKit.AddNode(tree, 0, 10);
 
@@ -78,7 +78,7 @@ public class SeparationProjectionTests
     [TestMethod]
     public void FanOut_ChildrenAlignTheirGroupCentreWithTheParent()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var parent = LayoutTestKit.AddNode(tree, 0, 80);
         var first = LayoutTestKit.AddNode(tree, 164, 0, height: 20);
         var second = LayoutTestKit.AddNode(tree, 164, 30, height: 20);
@@ -111,7 +111,7 @@ public class SeparationProjectionTests
     [TestMethod]
     public void NegativeAndOutOfBoundsPositions_AreNotClamped_AndGrowTheBounds()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var parent = LayoutTestKit.AddNode(tree, 0, -20);
         var first = LayoutTestKit.AddNode(tree, 164, 0, height: 20);
         var second = LayoutTestKit.AddNode(tree, 164, 30, height: 20);
@@ -143,7 +143,7 @@ public class SeparationProjectionTests
     [TestMethod]
     public void ScaleIsHonoured_WhenSnapshottingAndApplying()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.Layout.Scale = new Scale(2, 2);
         var first = LayoutTestKit.AddNode(tree, 0, 0);
         var second = LayoutTestKit.AddNode(tree, 0, 5);
@@ -171,7 +171,7 @@ public class SeparationProjectionTests
     [TestMethod]
     public void OverlapAcrossDifferentColumnAndRowBands_IsRepairedGlobally()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var first = LayoutTestKit.AddNode(tree, 0, 0);
         var second = LayoutTestKit.AddNode(tree, 90, 30);
 
@@ -201,7 +201,7 @@ public class SeparationProjectionTests
     [TestMethod]
     public void TwoPinnedOverlappingNodes_AreLeftInPlace_AndReported()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var first = LayoutTestKit.AddNode(tree, 0, 0);
         var second = LayoutTestKit.AddNode(tree, 90, 30);
 

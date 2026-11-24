@@ -21,7 +21,7 @@ public partial class UnsetSelectorNode
 
     [VeloxProperty]
     [SlotSelectors(typeof(UnsetRouteKind))]
-    public partial SlotEnumerator<SlotDefaultComponent> OutputSlots { get; set; }
+    public partial SlotEnumerator<SlotDefaultViewModel> OutputSlots { get; set; }
 }
 
 /// <summary>
@@ -31,16 +31,16 @@ public partial class UnsetSelectorNode
 [TestClass]
 public class ValidateWorkflowTests
 {
-    private static (TreeDefaultComponent Tree, WorkflowAgentScope Scope) TwoNodes()
+    private static (TreeDefaultViewModel Tree, WorkflowAgentScope Scope) TwoNodes()
     {
-        var tree = new TreeDefaultComponent();
-        var first = new NodeDefaultComponent
+        var tree = new TreeDefaultViewModel();
+        var first = new NodeDefaultViewModel
         {
             Parent = tree,
             Anchor = new Anchor(0, 0, 0),
             Size = new Size(100, 40),
         };
-        var second = new NodeDefaultComponent
+        var second = new NodeDefaultViewModel
         {
             Parent = tree,
             Anchor = new Anchor(300, 0, 0),
@@ -59,17 +59,17 @@ public class ValidateWorkflowTests
         var second = tree.Nodes[1];
 
         // IsVisible defaults to false; the lint reasons about the links a user can see.
-        tree.Links.Add(new LinkDefaultComponent
+        tree.Links.Add(new LinkDefaultViewModel
         {
             IsVisible = true,
-            Sender = new SlotDefaultComponent { Parent = first },
-            Receiver = new SlotDefaultComponent { Parent = second },
+            Sender = new SlotDefaultViewModel { Parent = first },
+            Receiver = new SlotDefaultViewModel { Parent = second },
         });
-        tree.Links.Add(new LinkDefaultComponent
+        tree.Links.Add(new LinkDefaultViewModel
         {
             IsVisible = true,
-            Sender = new SlotDefaultComponent { Parent = second },
-            Receiver = new SlotDefaultComponent { Parent = first },
+            Sender = new SlotDefaultViewModel { Parent = second },
+            Receiver = new SlotDefaultViewModel { Parent = first },
         });
 
         var result = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "ValidateWorkflow"));
@@ -86,11 +86,11 @@ public class ValidateWorkflowTests
     {
         var (tree, scope) = TwoNodes();
 
-        tree.Links.Add(new LinkDefaultComponent
+        tree.Links.Add(new LinkDefaultViewModel
         {
             IsVisible = true,
-            Sender = new SlotDefaultComponent { Parent = tree.Nodes[0] },
-            Receiver = new SlotDefaultComponent { Parent = tree.Nodes[1] },
+            Sender = new SlotDefaultViewModel { Parent = tree.Nodes[0] },
+            Receiver = new SlotDefaultViewModel { Parent = tree.Nodes[1] },
         });
 
         var result = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "ValidateWorkflow"));
@@ -108,7 +108,7 @@ public class ValidateWorkflowTests
     [TestMethod]
     public void ValidateWorkflow_ReportsAnUnconfiguredSlotEnumerator()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var node = new UnsetSelectorNode { Parent = tree };
         tree.Nodes.Add(node);
 

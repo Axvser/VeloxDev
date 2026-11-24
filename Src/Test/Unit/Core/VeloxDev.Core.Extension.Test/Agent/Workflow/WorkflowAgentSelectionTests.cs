@@ -18,11 +18,11 @@ namespace VeloxDev.Core.Extension.Test.Agent.Workflow;
 [TestClass]
 public class WorkflowAgentSelectionTests
 {
-    private static (TreeDefaultComponent Tree, NodeDefaultComponent First, NodeDefaultComponent Second) TreeWithTwoNodes()
+    private static (TreeDefaultViewModel Tree, NodeDefaultViewModel First, NodeDefaultViewModel Second) TreeWithTwoNodes()
     {
-        var tree = new TreeDefaultComponent();
-        var first = new NodeDefaultComponent();
-        var second = new NodeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
+        var first = new NodeDefaultViewModel();
+        var second = new NodeDefaultViewModel();
         var helper = tree.GetHelper();
         helper.CreateNode(first);
         helper.CreateNode(second);
@@ -39,7 +39,7 @@ public class WorkflowAgentSelectionTests
         var text = new WorkflowAgentScope(tree).BuildDynamicInstructions()!;
         StringAssert.Contains(text, "Current Node Selection");
         StringAssert.Contains(text, first.RuntimeId);
-        StringAssert.Contains(text, nameof(NodeDefaultComponent));
+        StringAssert.Contains(text, nameof(NodeDefaultViewModel));
         StringAssert.Contains(text, "**1** node");
     }
 
@@ -137,7 +137,7 @@ public class WorkflowAgentSelectionTests
     [TestMethod]
     public void AnUnattachedNode_CannotBeAdded()
     {
-        var orphan = new NodeDefaultComponent();
+        var orphan = new NodeDefaultViewModel();
 
         Assert.IsFalse(orphan.SelectForAgent());
         Assert.AreEqual(0, new List<INodeComponent> { orphan }.SelectForAgent());
@@ -147,7 +147,7 @@ public class WorkflowAgentSelectionTests
     public void ANodeNotMountedInTheTree_CannotBeAdded()
     {
         var (tree, _, _) = TreeWithTwoNodes();
-        var detached = new NodeDefaultComponent { Parent = tree };
+        var detached = new NodeDefaultViewModel { Parent = tree };
 
         Assert.IsFalse(detached.SelectForAgent());
     }
@@ -247,13 +247,13 @@ public class WorkflowAgentSelectionTests
     [TestMethod]
     public void ALargeSelection_ReportsTheFullCountAndCapsTheList()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var helper = tree.GetHelper();
         var nodes = new List<INodeComponent>();
 
         for (var i = 0; i <= WorkflowAgentSelection.MaxRenderedNodes; i++)
         {
-            var node = new NodeDefaultComponent();
+            var node = new NodeDefaultViewModel();
             helper.CreateNode(node);
             nodes.Add(node);
         }
@@ -290,7 +290,7 @@ public class WorkflowAgentSelectionTests
     public void DeselectingSeveralNodes_PreservesTheRemainingOrder()
     {
         var (tree, first, second) = TreeWithTwoNodes();
-        var third = new NodeDefaultComponent();
+        var third = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(third);
         new List<INodeComponent> { first, second, third }.SelectForAgent();
 
@@ -429,7 +429,7 @@ public class WorkflowAgentSelectionTests
     [TestMethod]
     public void DeselectingAnUnattachedNode_IsIgnored()
     {
-        var orphan = new NodeDefaultComponent();
+        var orphan = new NodeDefaultViewModel();
 
         Assert.IsFalse(orphan.DeselectForAgent());
         Assert.AreEqual(0, new List<INodeComponent> { orphan }.DeselectForAgent());
@@ -447,7 +447,7 @@ public class WorkflowAgentSelectionTests
     public void GetAgentSelection_ReturnsASnapshot()
     {
         var (tree, first, second) = TreeWithTwoNodes();
-        var third = new NodeDefaultComponent();
+        var third = new NodeDefaultViewModel();
         tree.GetHelper().CreateNode(third);
         new List<INodeComponent> { first, second }.SelectForAgent();
 

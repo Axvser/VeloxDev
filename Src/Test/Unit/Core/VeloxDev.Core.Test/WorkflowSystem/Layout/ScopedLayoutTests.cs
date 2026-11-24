@@ -24,7 +24,7 @@ public class ScopedLayoutTests
     [TestMethod]
     public void DownstreamScopeMovesTheChild_ButNotTheStartOrAnUnrelatedNode()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var start = LayoutTestKit.AddNode(tree, 0, 0);
         var child = LayoutTestKit.AddNode(tree, 0, 0);
         var unrelated = LayoutTestKit.AddNode(tree, 5000, 0);
@@ -47,7 +47,7 @@ public class ScopedLayoutTests
     [TestMethod]
     public void UpstreamScope_MovesTheParent_AndLeavesTheDownstreamChildAlone()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var parent = LayoutTestKit.AddNode(tree, 0, 0);
         var start = LayoutTestKit.AddNode(tree, 0, 0);
         var downstream = LayoutTestKit.AddNode(tree, 0, 0);
@@ -82,7 +82,7 @@ public class ScopedLayoutTests
     [TestMethod]
     public void NodeArrangeUsesTheSolverRegisteredOnTheTreeHelper()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var start = LayoutTestKit.AddNode(tree, 0, 0);
         var child = LayoutTestKit.AddNode(tree, 0, 0);
         LayoutTestKit.AddLink(tree, start, child);
@@ -106,7 +106,7 @@ public class ScopedLayoutTests
     [TestMethod]
     public void NodeArrangeWithoutATreeThrows()
     {
-        var detached = new NodeDefaultComponent();
+        var detached = new NodeDefaultViewModel();
 
         try
         {
@@ -121,9 +121,9 @@ public class ScopedLayoutTests
     [TestMethod]
     public void StartNodeMustBelongToTheTree()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         LayoutTestKit.AddNode(tree, 0, 0);
-        var foreign = LayoutTestKit.AddNode(new TreeDefaultComponent(), 0, 0);
+        var foreign = LayoutTestKit.AddNode(new TreeDefaultViewModel(), 0, 0);
 
         try
         {

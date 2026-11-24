@@ -4,7 +4,7 @@ using VeloxDev.MVVM;
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>The default implementation of <see cref="INodeComponent"/>.</summary>
-public sealed partial class NodeDefaultComponent : INodeComponent, IRuntimeIdentifiable
+public sealed partial class NodeDefaultViewModel : INodeComponent, IRuntimeIdentifiable
 {
     private INodeHelper helper = new NodeHelper();
 
@@ -25,7 +25,7 @@ public sealed partial class NodeDefaultComponent : INodeComponent, IRuntimeIdent
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>Creates the component and installs its default helper.</summary>
-    public NodeDefaultComponent() { InitializeWorkflow(); }
+    public NodeDefaultViewModel() { InitializeWorkflow(); }
 
     [VeloxProperty] private ITreeComponent? parent = null;
     private Anchor anchor = new();

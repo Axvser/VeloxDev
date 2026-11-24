@@ -9,10 +9,10 @@ namespace VeloxDev.Core.Test.WorkflowSystem.Layout;
 [TestClass]
 public class PositionToleranceTests
 {
-    private static (TreeDefaultComponent Tree, NodeDefaultComponent Parent, NodeDefaultComponent First, NodeDefaultComponent Second)
+    private static (TreeDefaultViewModel Tree, NodeDefaultViewModel Parent, NodeDefaultViewModel First, NodeDefaultViewModel Second)
         FanOutTree(double parentTop)
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var parent = LayoutTestKit.AddNode(tree, 0, parentTop);
         var first = LayoutTestKit.AddNode(tree, 164, 84, height: 20);
         var second = LayoutTestKit.AddNode(tree, 164, 112, height: 20);
@@ -62,7 +62,7 @@ public class PositionToleranceTests
     [TestMethod]
     public void ZeroTolerance_AlignsTheGroupStrictly()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var parent = LayoutTestKit.AddNode(tree, 0, 84);
         var first = LayoutTestKit.AddNode(tree, 164, 84, height: 20);
         var second = LayoutTestKit.AddNode(tree, 164, 112, height: 20);

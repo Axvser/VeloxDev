@@ -17,8 +17,8 @@ namespace VeloxDev.Core.Test.Serialization;
 /// </para>
 /// <para>
 /// Both halves are asserted here. The probe declares <c>Probe.Model</c> itself, and merely <b>names</b>
-/// <c>SlotEnumerator&lt;SlotDefaultComponent&gt;</c> — a closed generic declared in another assembly, whose
-/// instantiation only a consumer that can see <c>SlotDefaultComponent</c> ever names.
+/// <c>SlotEnumerator&lt;SlotDefaultViewModel&gt;</c> — a closed generic declared in another assembly, whose
+/// instantiation only a consumer that can see <c>SlotDefaultViewModel</c> ever names.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -34,7 +34,7 @@ public class RegistrationOwnershipEmissionTests
         {
             [VeloxProperty] private int count;
 
-            public SlotEnumerator<SlotDefaultComponent>? Slots { get; set; }
+            public SlotEnumerator<SlotDefaultViewModel>? Slots { get; set; }
         }
         """;
 
@@ -69,7 +69,7 @@ public class RegistrationOwnershipEmissionTests
     [TestMethod]
     public void AClosedGenericTheAssemblyOnlyNames_IsRegisteredAsAForeign()
     {
-        // `SlotEnumerator<>` 与 `SlotDefaultComponent` 都声明在 Core，探针只是**命名**了这个封闭实例 ——
+        // `SlotEnumerator<>` 与 `SlotDefaultViewModel` 都声明在 Core，探针只是**命名**了这个封闭实例 ——
         // 声明它们的那一侧命名不出 `Probe.*`，所以这一条只能由消费方发，而消费方不是声明方。
         var writer = WriterLineFor("global::VeloxDev.WorkflowSystem.SlotEnumerator<");
         StringAssert.Contains(writer, "declaresType: false", "a closed generic named from elsewhere is not this assembly's own");

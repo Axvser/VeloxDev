@@ -139,7 +139,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 **一树一个写者**：`WorkflowAgentScope.MutationGate` 是 `ConditionalWeakTable<ITreeComponent, SemaphoreSlim>` 里的每树一把锁，`TrackedAIFunction` 只对 `Edit` / `Execute` 类别取它（`Read` 不取）。同一棵树上两个 scope 的编辑因此串行，父子 scope 也一样。它防的是交错写，不是 lost update（没有版本检查）。
 
-**图的保存/恢复在工具面上**：`SerializeWorkflow` 默认 `mode=full` 返回 `Tree.Serialize()`；`skeleton` 只给节点位置/类型/槽数与链接，`summary` 只给计数/类型分布/槽位统计，两者都走 `CapText(maxChars)` 的截断信封。`LoadWorkflow` 走 `WorkflowAgentScope.WithWorkflowLoader`（默认 `TreeDefaultComponent` 反序列化）**换掉 scope 的 `Tree`**，并触发 `TreeChanged` —— 宿主必须把画布重新绑到新树，否则界面还连着旧树。
+**图的保存/恢复在工具面上**：`SerializeWorkflow` 默认 `mode=full` 返回 `Tree.Serialize()`；`skeleton` 只给节点位置/类型/槽数与链接，`summary` 只给计数/类型分布/槽位统计，两者都走 `CapText(maxChars)` 的截断信封。`LoadWorkflow` 走 `WorkflowAgentScope.WithWorkflowLoader`（默认 `TreeDefaultViewModel` 反序列化）**换掉 scope 的 `Tree`**，并触发 `TreeChanged` —— 宿主必须把画布重新绑到新树，否则界面还连着旧树。
 
 **token 预算**：`WithMaxTokens` + `WorkflowAgentScope.TokenUsageStage`（pipeline 阶段）把 `AgentTurnCompleted.Usage` 与 `AgentUsageReported` 都累加进 `Input/Output/TotalTokens`；`ResetTokenUsage` 清账。流式路径的用量是独立事件，不累加它就等于流式回合不花钱。
 

@@ -697,7 +697,7 @@ namespace VeloxDev.Generators.Writers
             if (Symbol == null)
                 return false;
 
-            var slotBaseSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.SlotDefaultComponent");
+            var slotBaseSymbol = ResolveTypeByMetadataName(Symbol.ContainingAssembly, "VeloxDev.WorkflowSystem.SlotDefaultViewModel");
             if (slotBaseSymbol == null)
                 return false;
 
@@ -1056,7 +1056,7 @@ namespace VeloxDev.Generators.Writers
                             catch
                             {
                             }
-                            return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotDefaultComponent();
+                            return (T)(object)new {{NAMESPACE_VELOX_WORKFLOW}}.SlotDefaultViewModel();
                         }
                         protected {{methodModifier}}void OnSlotComponentAdded({{NAMESPACE_VELOX_IWORKFLOW}}.ISlotComponent slot)
                         {

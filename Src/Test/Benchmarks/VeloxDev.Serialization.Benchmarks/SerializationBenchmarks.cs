@@ -20,7 +20,7 @@ namespace VeloxDev.Serialization.Benchmarks;
 public class SerializationBenchmarks : ScaleAwareBenchmarks
 {
 
-    private TreeDefaultComponent _tree = null!;
+    private TreeDefaultViewModel _tree = null!;
     private string _json = null!;
 
     /// <summary>Builds the corpus and the document, once per parameter value.</summary>
@@ -39,5 +39,5 @@ public class SerializationBenchmarks : ScaleAwareBenchmarks
     /// <summary>Reads the document back into a graph.</summary>
     /// <returns>The graph, or <see langword="null"/> when the document held the JSON literal.</returns>
     [Benchmark]
-    public TreeDefaultComponent? Deserialize() => VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(_json);
+    public TreeDefaultViewModel? Deserialize() => VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(_json);
 }

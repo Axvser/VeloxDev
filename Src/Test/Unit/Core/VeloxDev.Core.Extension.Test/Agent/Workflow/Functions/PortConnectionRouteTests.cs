@@ -36,7 +36,7 @@ public class PortConnectionRouteTests
         var source = new EnumSelectorNodeViewModel();     // OutputSlots, selected by VoltageRange
         var target = new PythonScriptNodeViewModel();     // InputSlots, selected by PythonPortProvider
 
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.GetHelper().CreateNode(source);
         tree.GetHelper().CreateNode(target);
 
@@ -65,7 +65,7 @@ public class PortConnectionRouteTests
         var source = new EnumSelectorNodeViewModel();
         var target = new PythonScriptNodeViewModel();
 
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.GetHelper().CreateNode(source);
         tree.GetHelper().CreateNode(target);
 
@@ -92,7 +92,7 @@ public class PortConnectionRouteTests
     [TestMethod]
     public void CreateNode_LeavesASelectorDrivenNodeWithNoPorts()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
 
         var created = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "CreateNode",
             ("fullTypeName", typeof(PythonScriptNodeViewModel).FullName!)));

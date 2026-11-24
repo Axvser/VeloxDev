@@ -19,8 +19,8 @@ public class SubAgentModelSelectionTests
 {
     private static WorkflowAgentScope ScopeWith(SubAgentScope subAgents)
     {
-        var tree = new TreeDefaultComponent();
-        tree.GetHelper().CreateNode(new NodeDefaultComponent());
+        var tree = new TreeDefaultViewModel();
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
         return new WorkflowAgentScope(tree).WithSubAgents(subAgents);
     }
 

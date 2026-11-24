@@ -26,7 +26,7 @@
 
 - **建图走 Helper，不走命令。** 命令的 `Execute` 是 `_ = ExecuteAsync(parameter)`（`Src/Core/VeloxDev.Core/MVVM/CommandPipeline{TParam,TResult}.cs` 的 `Execute(object?)`），
   返回时工作可能还没做完；Helper 的 `CreateNode` / `CreateSlot` / `SendConnection` 是同步的。
-- **必须换掉 `TreeDefaultComponent` 的默认 helper。** `TreeDefaultComponent` 构造时装的是 `new TreeHelper()`，
+- **必须换掉 `TreeDefaultViewModel` 的默认 helper。** `TreeDefaultViewModel` 构造时装的是 `new TreeHelper()`，
   而 `TreeHelper()` 的默认构造把 `useVirtualization` 设为 `false`。
   表面写 `Viewport` 是不带条件的（`WorkflowSurfaceBehavior.UpdateVisibleRegion`），
   虚拟化未启用时 `WorkflowSpatialEx.VirtualizeCore` 会抛 `ArgumentNullException`。

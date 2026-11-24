@@ -94,7 +94,7 @@ internal sealed class AvaloniaHeadlessSurface : IDisposable
 
     public TestGraph Graph { get; }
 
-    public VeloxDev.WorkflowSystem.TreeDefaultComponent Tree { get; }
+    public VeloxDev.WorkflowSystem.TreeDefaultViewModel Tree { get; }
 
     public Window Window { get; }
 

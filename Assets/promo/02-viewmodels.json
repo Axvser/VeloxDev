@@ -49,10 +49,10 @@
   },
   "VirtualLink": {
     "$id": "11",
-    "$type": "VeloxDev.WorkflowSystem.LinkDefaultComponent, VeloxDev.Core",
+    "$type": "VeloxDev.WorkflowSystem.LinkDefaultViewModel, VeloxDev.Core",
     "Sender": {
       "$id": "12",
-      "$type": "VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core",
+      "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
       "Targets": [],
       "Sources": [],
       "Parent": null,
@@ -67,7 +67,7 @@
     },
     "Receiver": {
       "$id": "14",
-      "$type": "VeloxDev.WorkflowSystem.SlotDefaultComponent, VeloxDev.Core",
+      "$type": "VeloxDev.WorkflowSystem.SlotDefaultViewModel, VeloxDev.Core",
       "Targets": [],
       "Sources": [],
       "Parent": null,

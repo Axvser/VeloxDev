@@ -43,9 +43,9 @@ public class VeloxJsonStreamingTests
 
     private static (string Name, Type Type)[] Corpus =>
     [
-        ("tree", typeof(TreeDefaultComponent)),
+        ("tree", typeof(TreeDefaultViewModel)),
         ("canvas-layout", typeof(CanvasLayout)),
-        ("slot-enumerator", typeof(SlotEnumerator<SlotDefaultComponent>)),
+        ("slot-enumerator", typeof(SlotEnumerator<SlotDefaultViewModel>)),
         ("compiled-graph", typeof(CompiledGraph)),
     ];
 
@@ -126,10 +126,10 @@ public class VeloxJsonStreamingTests
     {
         // 两个入口对同一个错误必须给同一个异常，否则调用方要为入口各写一条分支。
         Assert.ThrowsExactly<ArgumentException>(
-            () => VeloxJsonSerializer.Deserialize(new StringReader(string.Empty), typeof(TreeDefaultComponent)));
+            () => VeloxJsonSerializer.Deserialize(new StringReader(string.Empty), typeof(TreeDefaultViewModel)));
 
         Assert.ThrowsExactly<ArgumentException>(
-            () => VeloxJsonSerializer.Deserialize(string.Empty, typeof(TreeDefaultComponent)));
+            () => VeloxJsonSerializer.Deserialize(string.Empty, typeof(TreeDefaultViewModel)));
     }
 
     [TestMethod]
@@ -171,7 +171,7 @@ public class VeloxJsonStreamingTests
         static object? Read(string json)
         {
             var reader = new VeloxJsonReader(new ChunkedTextReader(json, 1), 1);
-            return VeloxJsonSerializer.ReadValue(reader, typeof(TreeDefaultComponent), null);
+            return VeloxJsonSerializer.ReadValue(reader, typeof(TreeDefaultViewModel), null);
         }
     }
 
@@ -219,14 +219,14 @@ public class VeloxJsonStreamingTests
     public async Task AStreamRoundTrip_MatchesTheFrozenDocument()
     {
         var frozen = Golden("tree");
-        var graph = VeloxJsonSerializer.Deserialize(frozen, typeof(TreeDefaultComponent));
+        var graph = VeloxJsonSerializer.Deserialize(frozen, typeof(TreeDefaultViewModel));
         Assert.IsNotNull(graph);
 
         using var stream = new MemoryStream();
         await VeloxJsonSerializer.WriteToAsync(stream, graph);
 
         stream.Position = 0;
-        var restored = await VeloxJsonSerializer.DeserializeAsync(stream, typeof(TreeDefaultComponent));
+        var restored = await VeloxJsonSerializer.DeserializeAsync(stream, typeof(TreeDefaultViewModel));
 
         Assert.IsNotNull(restored, "the stream round trip produced nothing");
         Assert.AreEqual(frozen, VeloxJsonSerializer.Serialize(restored), "the stream round trip changed the document");
@@ -236,6 +236,6 @@ public class VeloxJsonStreamingTests
     public async Task TheAsyncEntryPoints_RejectAnEmptySourceTheSameWayTheSyncOnesDo()
     {
         await Assert.ThrowsExactlyAsync<ArgumentException>(
-            () => VeloxJsonSerializer.DeserializeAsync(new StringReader(string.Empty), typeof(TreeDefaultComponent)));
+            () => VeloxJsonSerializer.DeserializeAsync(new StringReader(string.Empty), typeof(TreeDefaultViewModel)));
     }
 }

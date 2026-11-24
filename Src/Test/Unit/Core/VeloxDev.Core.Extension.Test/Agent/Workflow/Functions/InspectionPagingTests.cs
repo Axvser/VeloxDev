@@ -20,14 +20,14 @@ public class InspectionPagingTests
     public void ClearValidators() => WorkflowValidation.Clear();
 
     /// <summary>Three nodes in a chain (0 → 1 → 2) with two visible links.</summary>
-    private static (TreeDefaultComponent Tree, WorkflowAgentScope Scope) Chain()
+    private static (TreeDefaultViewModel Tree, WorkflowAgentScope Scope) Chain()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var nodes = new[]
         {
-            new NodeDefaultComponent { Parent = tree },
-            new NodeDefaultComponent { Parent = tree },
-            new NodeDefaultComponent { Parent = tree },
+            new NodeDefaultViewModel { Parent = tree },
+            new NodeDefaultViewModel { Parent = tree },
+            new NodeDefaultViewModel { Parent = tree },
         };
         foreach (var node in nodes)
         {
@@ -36,10 +36,10 @@ public class InspectionPagingTests
             node.SetSizeCommand.Execute(new Size(80, 40));
         }
 
-        nodes[0].CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneTarget });
-        nodes[1].CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneSource });
-        nodes[1].CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneTarget });
-        nodes[2].CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneSource });
+        nodes[0].CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneTarget });
+        nodes[1].CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneSource });
+        nodes[1].CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneTarget });
+        nodes[2].CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneSource });
 
         tree.GetHelper().SendConnection(nodes[0].Slots[0]);
         tree.GetHelper().ReceiveConnection(nodes[1].Slots[0]);
@@ -125,7 +125,7 @@ public class InspectionPagingTests
         Assert.AreEqual("summary", summary["mode"]?.Value<string>());
         Assert.AreEqual(3, summary["nodeCount"]!.Value<int>());
         Assert.AreEqual(2, summary["linkCount"]!.Value<int>());
-        Assert.AreEqual(3, summary["nodeTypes"]!["NodeDefaultComponent"]!.Value<int>());
+        Assert.AreEqual(3, summary["nodeTypes"]!["NodeDefaultViewModel"]!.Value<int>());
         Assert.IsNull(summary["nodes"], "summary does not carry the document");
     }
 

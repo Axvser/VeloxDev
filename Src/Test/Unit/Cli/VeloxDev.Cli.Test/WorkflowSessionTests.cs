@@ -94,9 +94,9 @@ public class WorkflowSessionTests
         var firstPath = first.WriteTree(TestArchive.TreeWithOneNode(out _));
 
         using var second = new TestArchive();
-        var secondTree = new TreeDefaultComponent();
-        secondTree.GetHelper().CreateNode(new NodeDefaultComponent());
-        secondTree.GetHelper().CreateNode(new NodeDefaultComponent());
+        var secondTree = new TreeDefaultViewModel();
+        secondTree.GetHelper().CreateNode(new NodeDefaultViewModel());
+        secondTree.GetHelper().CreateNode(new NodeDefaultViewModel());
         var secondPath = second.WriteTree(secondTree);
 
         await using var host = WorkflowSessionHost.Create(Options(firstPath));
@@ -137,7 +137,7 @@ public class WorkflowSessionTests
         await using (var session = WorkflowSession.Create(Options(path)))
         {
             using var created = await InvokeAsync(session, "CreateNode",
-                ("fullTypeName", typeof(NodeDefaultComponent).FullName!));
+                ("fullTypeName", typeof(NodeDefaultViewModel).FullName!));
             Assert.AreEqual("ok", created.RootElement.GetProperty("status").GetString(), created.RootElement.ToString());
 
             using var nodes = await InvokeAsync(session, "ListNodes");
@@ -151,7 +151,7 @@ public class WorkflowSessionTests
             Assert.AreEqual(path + ".bak", saved.BackupPath);
         }
 
-        var reloaded = ViewModelSerializer.Deserialize<TreeDefaultComponent>(File.ReadAllText(path));
+        var reloaded = ViewModelSerializer.Deserialize<TreeDefaultViewModel>(File.ReadAllText(path));
         Assert.AreEqual(2, reloaded.Nodes.Count);
     }
 
@@ -167,7 +167,7 @@ public class WorkflowSessionTests
         var beforeWrite = File.GetLastWriteTimeUtc(path);
 
         using var created = await InvokeAsync(session, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultComponent).FullName!));
+            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!));
         Assert.AreEqual("ok", created.RootElement.GetProperty("status").GetString(), created.RootElement.ToString());
 
         var dry = session.SaveArchive(dryRun: true);
@@ -194,7 +194,7 @@ public class WorkflowSessionTests
         Assert.AreEqual("compact", first.Format);
 
         using var created = await InvokeAsync(session, "CreateNode",
-            ("fullTypeName", typeof(NodeDefaultComponent).FullName!));
+            ("fullTypeName", typeof(NodeDefaultViewModel).FullName!));
         Assert.AreEqual("ok", created.RootElement.GetProperty("status").GetString(), created.RootElement.ToString());
 
         var second = session.SaveArchive();
@@ -204,7 +204,7 @@ public class WorkflowSessionTests
         Assert.AreEqual(firstDocument, File.ReadAllText(path + ".bak"), "the backup is the previous document");
         Assert.IsFalse(File.ReadAllText(path).Contains('\n'), "compact output has no formatting newlines");
 
-        var reloaded = ViewModelSerializer.Deserialize<TreeDefaultComponent>(File.ReadAllText(path));
+        var reloaded = ViewModelSerializer.Deserialize<TreeDefaultViewModel>(File.ReadAllText(path));
         Assert.AreEqual(2, reloaded.Nodes.Count);
     }
 
@@ -233,7 +233,7 @@ public class WorkflowSessionTests
         var path = fixture.WriteTree(tree);
 
         // Serializing through the concrete type wrote no root $type; the manifest supplies what the document
-        // cannot carry. Without it the loader would silently produce a TreeDefaultComponent.
+        // cannot carry. Without it the loader would silently produce a TreeDefaultViewModel.
         fixture.WriteManifest("""{ "rootType": "Demo.ViewModels.TreeViewModel" }""");
 
         await using var session = WorkflowSession.Create(Options(path));
@@ -315,7 +315,7 @@ public class WorkflowSessionTests
         // The session still owns the writer; read with a share mode that permits it.
         using var stream = new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         using var reader = new StreamReader(stream);
-        StringAssert.Contains(reader.ReadToEnd(), "NodeDefaultComponent");
+        StringAssert.Contains(reader.ReadToEnd(), "NodeDefaultViewModel");
     }
 
     [TestMethod]
@@ -360,7 +360,7 @@ public class WorkflowSessionTests
         Assert.AreEqual(path, info.RootElement.GetProperty("archive").GetString());
         Assert.AreEqual(1, info.RootElement.GetProperty("nodeCount").GetInt32());
         Assert.IsFalse(info.RootElement.GetProperty("executionEnabled").GetBoolean());
-        Assert.AreEqual(typeof(TreeDefaultComponent).FullName, info.RootElement.GetProperty("rootType").GetString());
+        Assert.AreEqual(typeof(TreeDefaultViewModel).FullName, info.RootElement.GetProperty("rootType").GetString());
         Assert.AreEqual(
             typeof(ITreeComponent).Assembly.GetName().Version?.ToString(),
             info.RootElement.GetProperty("coreVersion").GetString(),
@@ -463,7 +463,7 @@ public class WorkflowSessionTests
 
         var content = File.ReadAllText(csv!);
         StringAssert.StartsWith(content, "seq,record,level,phase,order,attempt,node,message");
-        StringAssert.Contains(content, "NodeDefaultComponent");
+        StringAssert.Contains(content, "NodeDefaultViewModel");
     }
 
     [TestMethod]
@@ -476,8 +476,8 @@ public class WorkflowSessionTests
 
         var operations = JsonSerializer.Serialize(new object[]
         {
-            new { tool = "CreateNode", arguments = new { fullTypeName = typeof(NodeDefaultComponent).FullName! } },
-            new { tool = "CreateNode", arguments = new { fullTypeName = typeof(NodeDefaultComponent).FullName! } },
+            new { tool = "CreateNode", arguments = new { fullTypeName = typeof(NodeDefaultViewModel).FullName! } },
+            new { tool = "CreateNode", arguments = new { fullTypeName = typeof(NodeDefaultViewModel).FullName! } },
         });
 
         using var answer = JsonDocument.Parse(await archiveTools.ApplyBatch(operations));
@@ -500,7 +500,7 @@ public class WorkflowSessionTests
 
         var operations = JsonSerializer.Serialize(new object[]
         {
-            new { tool = "CreateNode", arguments = new { fullTypeName = typeof(NodeDefaultComponent).FullName! } },
+            new { tool = "CreateNode", arguments = new { fullTypeName = typeof(NodeDefaultViewModel).FullName! } },
             new { tool = "CreateNode", arguments = new { fullTypeName = "No.Such.NodeType" } },
         });
 

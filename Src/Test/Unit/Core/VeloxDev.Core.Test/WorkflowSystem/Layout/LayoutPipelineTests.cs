@@ -9,7 +9,7 @@ public class LayoutPipelineTests
     [TestMethod]
     public void SerialAndParallel_ProduceTheSamePlacement()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         for (var i = 0; i < 120; i++)
         {
             LayoutTestKit.AddNode(tree, (i % 12) * 40, (i / 12) * 30);
@@ -41,7 +41,7 @@ public class LayoutPipelineTests
     [TestMethod]
     public void DryRun_DoesNotWriteTheModel()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         LayoutTestKit.AddNode(tree, 0, 0);
         var second = LayoutTestKit.AddNode(tree, 0, 10);
 
@@ -65,7 +65,7 @@ public class LayoutPipelineTests
     [TestMethod]
     public void Apply_IsOneUndoStep_ThatRestoresEveryAnchor()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var first = LayoutTestKit.AddNode(tree, 0, 0);
         var second = LayoutTestKit.AddNode(tree, 0, 10);
         var third = LayoutTestKit.AddNode(tree, 0, 20);
@@ -101,7 +101,7 @@ public class LayoutPipelineTests
     [TestMethod]
     public void CrossingsFollowSolvedPositions_NotPublishedCurves()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var a = LayoutTestKit.AddNode(tree, 0, 0);
         var b = LayoutTestKit.AddNode(tree, 300, 300);
         var c = LayoutTestKit.AddNode(tree, 0, 300);
@@ -140,9 +140,9 @@ public class LayoutPipelineTests
     [TestMethod]
     public void NonFiniteGeometry_IsSkipped_AndIndicesStayAligned()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         LayoutTestKit.AddNode(tree, 0, 0);
-        var unmeasured = new NodeDefaultComponent
+        var unmeasured = new NodeDefaultViewModel
         {
             Parent = tree,
             Anchor = new Anchor(double.NaN, 0, 0),
@@ -150,7 +150,7 @@ public class LayoutPipelineTests
         };
         tree.Nodes.Add(unmeasured);
         var third = LayoutTestKit.AddNode(tree, 0, 10);
-        var huge = new NodeDefaultComponent
+        var huge = new NodeDefaultViewModel
         {
             Parent = tree,
             Anchor = new Anchor(0, 500, 0),
@@ -189,8 +189,8 @@ public class LayoutPipelineTests
     [TestMethod]
     public void LargeGraph_CostStaysLocalAndOverlapIsZero()
     {
-        var tree = new TreeDefaultComponent();
-        var nodes = new List<NodeDefaultComponent>();
+        var tree = new TreeDefaultViewModel();
+        var nodes = new List<NodeDefaultViewModel>();
         for (var row = 0; row < 20; row++)
         {
             for (var column = 0; column < 25; column++)
@@ -230,7 +230,7 @@ public class LayoutPipelineTests
     [TestMethod]
     public void Apply_SkipsANodeWhoseAnchorChangedSinceTheSnapshot()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         LayoutTestKit.AddNode(tree, 0, 0);
         var second = LayoutTestKit.AddNode(tree, 0, 10);
         var third = LayoutTestKit.AddNode(tree, 0, 20);

@@ -14,7 +14,7 @@ internal static class AgentTypeNames
     /// <summary>
     /// The short name of a type given its full name.
     /// </summary>
-    /// <param name="fullName">A full name such as <c>VeloxDev.WorkflowSystem.NodeDefaultComponent</c>.</param>
+    /// <param name="fullName">A full name such as <c>VeloxDev.WorkflowSystem.NodeDefaultViewModel</c>.</param>
     /// <returns>The last segment, or an empty string when there is no name to shorten.</returns>
     internal static string Simple(string? fullName)
     {

@@ -57,7 +57,7 @@ internal sealed class WorkflowArchive
     /// <para>
     /// The serializer writes <c>$type</c> only when the runtime type differs from the declared one. Serializing a
     /// derived <c>TreeViewModel</c> through its own type therefore writes no root type marker at all, and a reader
-    /// that assumes <c>TreeDefaultComponent</c> silently loses the derived tree's behavior. This field is the
+    /// that assumes <c>TreeDefaultViewModel</c> silently loses the derived tree's behavior. This field is the
     /// missing half of the document.
     /// </para>
     /// </summary>

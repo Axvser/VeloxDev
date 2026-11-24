@@ -51,7 +51,7 @@
 - **不要把 GUI 类型放进 `VeloxDev.AdapterTestKit`。** 它只依赖 Core，七家共享；一旦引入 WPF/Avalonia，
   另一家就装不进来。平台差异留在各自 `Infrastructure/`。
 - **不要为了「七家都绿」把 WinUI/MAUI/Jalium 硬塞进同一个进程。** 见 `architecture.md` §六。
-- **不要在测试里用 `TreeDefaultComponent` 的默认 helper。** 它的虚拟化是关的（`TreeHelper()` 默认构造把 `useVirtualization` 设为 `false`），表面一写 `Viewport` 就抛
+- **不要在测试里用 `TreeDefaultViewModel` 的默认 helper。** 它的虚拟化是关的（`TreeHelper()` 默认构造把 `useVirtualization` 设为 `false`），表面一写 `Viewport` 就抛
   （`WorkflowSpatialEx.VirtualizeCore`）。用 `tree.SetHelper(new TreeHelper(200d))`。
 - **不要把行覆盖地板往下调。** `check-coverage.ps1` 的地板只许随新增测试上调；字面 100% 行覆盖不是
   验收线（多 TFM `#if`、窗口路径、GPU、JS 不在一次运行的统计里）。契约 100% 由各套件的

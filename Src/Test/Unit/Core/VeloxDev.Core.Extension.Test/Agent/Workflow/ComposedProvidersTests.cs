@@ -26,7 +26,7 @@ public class ComposedProvidersTests
 {
     /// <summary>A scope with both subsystems attached and the skill corpus actually discovered.</summary>
     private static WorkflowAgentScope Composed()
-        => new WorkflowAgentScope(new TreeDefaultComponent())
+        => new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithSkills(DiscoveredSkills())
             .WithMcps(new McpScope());
 
@@ -83,7 +83,7 @@ public class ComposedProvidersTests
         var mcp = new McpScope();
         mcp.SeedLoadedTools("seeded", [ServerTool("server_tool_a"), ServerTool("server_tool_b")]);
 
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithSkills(DiscoveredSkills())
             .WithMcps(mcp);
 
@@ -103,7 +103,7 @@ public class ComposedProvidersTests
         var mcp = new McpScope();
         mcp.SeedLoadedTools("seeded", [ServerTool("server_tool_a")]);
 
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithMcps(mcp);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithMcps(mcp);
         var workflowNames = Build(scope.CreateContextProvider()).Tools!.Select(t => t.Name).ToArray();
 
         CollectionAssert.DoesNotContain(workflowNames, "server_tool_a");
@@ -127,7 +127,7 @@ public class ComposedProvidersTests
         // The tension the design had to resolve: standalone subsystems are "thread only", but composed
         // into the workflow agent their tools must still count. This fails if a subsystem provider is
         // handed a policy of its own instead of the scope's.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithSkills(DiscoveredSkills())
             .WithMaxToolCalls(1);
 
@@ -166,7 +166,7 @@ public class ComposedProvidersTests
         // The skill tools change what the model is shown, never the graph. They must therefore be charged
         // to the query budget and never the mutation one — this held while the host registered them via
         // WithQueryTools, and has to keep holding now that the provider contributes them instead.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithSkills(DiscoveredSkills())
             .WithMaxWriteToolCalls(0)      // no mutation budget at all
             .WithMaxReadToolCalls(10);
@@ -234,7 +234,7 @@ public class ComposedProvidersTests
     public void SkeletonBuiltAfterSkills_LeavesTheCorpusToTheSkillSubsystem()
     {
         // The documented host order: configure everything, then build the skeleton.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithSkills(DiscoveredSkills());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSkills(DiscoveredSkills());
 
         var skeleton = scope.ProvideProgressiveContextPrompt();
 
@@ -249,7 +249,7 @@ public class ComposedProvidersTests
     {
         // The reverse order. The skeleton already said it, so the subsystem must not say it again — the
         // whole corpus duplicated is the failure this covers, and it costs nothing to reintroduce.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
 
         var skeleton = scope.ProvideProgressiveContextPrompt();
         scope.WithSkills(DiscoveredSkills());
@@ -265,7 +265,7 @@ public class ComposedProvidersTests
         // The price of leaving the corpus to the skeleton: the text cannot be recalled, so the switch has
         // to be stated instead. Silence here would make SetEnabled a no-op that reports success.
         var skills = DiscoveredSkills();
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
 
         scope.ProvideProgressiveContextPrompt();
         scope.WithSkills(skills);
@@ -285,7 +285,7 @@ public class ComposedProvidersTests
         var skills = DiscoveredSkills();
         skills.Disable("slot-enumerator");
 
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
         var skeleton = scope.ProvideProgressiveContextPrompt();
         scope.WithSkills(skills);
 

@@ -10,10 +10,10 @@ public class AgentTypeResolverTests
     public void ResolveType_ATypeInTheTree_Succeeds()
     {
         // 解析走的是目录登记过的访问器 —— 那个 typeof 字面量同时把类型给裁剪器 root 住了。
-        var type = AgentTypeResolver.ResolveType("VeloxDev.WorkflowSystem.SlotDefaultComponent");
+        var type = AgentTypeResolver.ResolveType("VeloxDev.WorkflowSystem.SlotDefaultViewModel");
 
         Assert.IsNotNull(type);
-        Assert.AreEqual(typeof(SlotDefaultComponent), type);
+        Assert.AreEqual(typeof(SlotDefaultViewModel), type);
     }
 
     [TestMethod]

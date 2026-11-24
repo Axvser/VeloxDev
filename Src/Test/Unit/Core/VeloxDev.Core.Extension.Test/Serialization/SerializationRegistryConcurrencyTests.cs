@@ -23,18 +23,18 @@ namespace VeloxDev.Core.Extension.Test.Serialization;
 [TestClass]
 public class SerializationRegistryConcurrencyTests
 {
-    private static TreeDefaultComponent BuildTree()
+    private static TreeDefaultViewModel BuildTree()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         tree.Layout.Scale = new Scale(2d, 2d);
 
         foreach (var (anchor, size) in new[] { (1400d, 300d), (200d, 150d) })
         {
-            var node = new NodeDefaultComponent();
+            var node = new NodeDefaultViewModel();
             tree.GetHelper().CreateNode(node);
             node.Anchor = new Anchor(anchor, 900d, 0);
             node.Size = new Size(size, 200d);
-            node.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneTarget });
+            node.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneTarget });
         }
 
         return tree;
@@ -43,16 +43,16 @@ public class SerializationRegistryConcurrencyTests
     [TestMethod]
     public void ManyThreads_ReadTheRegistryAtOnceAndAlwaysSeeAWholeTable()
     {
-        var expectedName = VeloxJsonRegistry.NameOf(typeof(TreeDefaultComponent));
+        var expectedName = VeloxJsonRegistry.NameOf(typeof(TreeDefaultViewModel));
 
         Assert.IsNotNull(expectedName, "the generated registration must have run before this test");
 
         Parallel.For(0, 4000, _ =>
         {
-            Assert.IsNotNull(VeloxJsonRegistry.WriterFor(typeof(TreeDefaultComponent)));
-            Assert.IsNotNull(VeloxJsonRegistry.ReaderFor(typeof(TreeDefaultComponent)));
-            Assert.AreEqual(expectedName, VeloxJsonRegistry.NameOf(typeof(TreeDefaultComponent)));
-            Assert.AreEqual(typeof(TreeDefaultComponent), VeloxJsonRegistry.TypeOf(expectedName));
+            Assert.IsNotNull(VeloxJsonRegistry.WriterFor(typeof(TreeDefaultViewModel)));
+            Assert.IsNotNull(VeloxJsonRegistry.ReaderFor(typeof(TreeDefaultViewModel)));
+            Assert.AreEqual(expectedName, VeloxJsonRegistry.NameOf(typeof(TreeDefaultViewModel)));
+            Assert.AreEqual(typeof(TreeDefaultViewModel), VeloxJsonRegistry.TypeOf(expectedName));
         });
     }
 
@@ -60,7 +60,7 @@ public class SerializationRegistryConcurrencyTests
     public void ManyThreads_SerializeAndDeserializeDifferentGraphsAtOnce()
     {
         // 每份文档写一次留作期望值：引用 id 是每次写各自分配的，所以并发写之间不该互相影响。
-        var documents = new TreeDefaultComponent[8];
+        var documents = new TreeDefaultViewModel[8];
         var expected = new string[documents.Length];
 
         for (var i = 0; i < documents.Length; i++)
@@ -76,7 +76,7 @@ public class SerializationRegistryConcurrencyTests
             Assert.AreEqual(expected[index], VeloxJsonSerializer.Serialize(documents[index]),
                 "a concurrent write must reproduce the same document");
 
-            var restored = VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(expected[index]);
+            var restored = VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(expected[index]);
 
             Assert.IsNotNull(restored);
             Assert.HasCount(2, restored.Nodes, "a concurrent read must restore the whole graph");

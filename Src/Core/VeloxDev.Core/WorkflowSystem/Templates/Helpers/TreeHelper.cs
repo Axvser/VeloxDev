@@ -227,7 +227,7 @@ public partial class TreeHelper<T> : ITreeHelper, ITreeEvents, IInputEvents, IWo
     public virtual ILinkComponent CreateLink(
         ISlotComponent sender,
         ISlotComponent receiver)
-        => new LinkDefaultComponent()
+        => new LinkDefaultViewModel()
         {
             Sender = sender,
             Receiver = receiver,

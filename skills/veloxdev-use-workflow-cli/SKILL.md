@@ -74,7 +74,7 @@ The archive is the library's serialized workflow document. Dependencies are decl
 
 ⚙ **Loading an assembly is code execution.** Its module initializers run and register types. Treat an archive and its manifest as executable input, and use `--workspace` when serving one project.
 
-⚙ **Name the root type when the document cannot.** Serializing through a concrete tree type writes no root `$type`; set `rootType` in the manifest or `--root-type`, or the CLI falls back to `TreeDefaultComponent` and the derived tree's behavior is lost.
+⚙ **Name the root type when the document cannot.** Serializing through a concrete tree type writes no root `$type`; set `rootType` in the manifest or `--root-type`, or the CLI falls back to `TreeDefaultViewModel` and the derived tree's behavior is lost.
 
 ## Launch
 
@@ -138,7 +138,7 @@ an empty directory, the path is in [references/practices/headless.md](references
    package brings the generator); `partial` node VMs with `[WorkflowBuilder.Node<THelper>]` and slot
    properties, `InitializeWorkflow()` from the constructor, helpers overriding `ReceiveAsync`. No adapter and
    no views.
-2. **Bootstrap the first archive.** A console app builds a `TreeDefaultComponent`, adds one node with
+2. **Bootstrap the first archive.** A console app builds a `TreeDefaultViewModel`, adds one node with
    `tree.GetHelper().CreateNode(...)`, and writes `tree.Serialize()`. Put `<archive>.manifest.json` beside it
    naming the DLL under `assemblies`, and copy the DLL into a folder under the manifest.
 3. **Edit through the tools.** `ListCreatableTypes` must list the DLL's types; then `CreateNode`,

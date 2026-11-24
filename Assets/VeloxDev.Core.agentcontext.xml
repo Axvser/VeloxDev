@@ -411,19 +411,19 @@
       <Text language="English">This node's input slot (receiver), nullable</Text>
     </Member>
   </Type>
-  <Type name="VeloxDev.WorkflowSystem.LinkDefaultComponent">
+  <Type name="VeloxDev.WorkflowSystem.LinkDefaultViewModel">
     <Text language="Chinese">工作流Link组件接口的默认实现类</Text>
     <Text language="English">The default implementation class of the workflow Link component interface</Text>
   </Type>
-  <Type name="VeloxDev.WorkflowSystem.NodeDefaultComponent">
+  <Type name="VeloxDev.WorkflowSystem.NodeDefaultViewModel">
     <Text language="Chinese">工作流Node组件接口的默认实现类</Text>
     <Text language="English">The default implementation class of the workflow Node component interface</Text>
   </Type>
-  <Type name="VeloxDev.WorkflowSystem.SlotDefaultComponent">
+  <Type name="VeloxDev.WorkflowSystem.SlotDefaultViewModel">
     <Text language="Chinese">工作流Slot组件接口的默认实现类</Text>
     <Text language="English">The default implementation class of the workflow Slot component interface</Text>
   </Type>
-  <Type name="VeloxDev.WorkflowSystem.TreeDefaultComponent">
+  <Type name="VeloxDev.WorkflowSystem.TreeDefaultViewModel">
     <Text language="Chinese">工作流Tree组件接口的默认实现类</Text>
     <Text language="English">The default implementation class of the workflow Tree component interface</Text>
   </Type>

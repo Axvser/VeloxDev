@@ -155,8 +155,8 @@ public class SubAgentLiveTests
         skills.Refresh();
         var only = skills.Names[0];
 
-        var tree = new TreeDefaultComponent();
-        tree.GetHelper().CreateNode(new NodeDefaultComponent());
+        var tree = new TreeDefaultViewModel();
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
 
         var scope = tree.AsAgentScope().WithMaxToolCalls(60);
         scope.WithSkills(skills);
@@ -259,8 +259,8 @@ public class SubAgentLiveTests
         var chapters = new[] { "alpha", "bravo", "charlie", "delta", "echo", "foxtrot" };
         var markers = chapters.ToDictionary(c => c, c => $"core-{c}-{c.Length}");
 
-        var tree = new TreeDefaultComponent();
-        tree.GetHelper().CreateNode(new NodeDefaultComponent());
+        var tree = new TreeDefaultViewModel();
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
 
         var scope = tree.AsAgentScope().WithMaxToolCalls(80);
         scope.WithTools("Reference chapters of the operating manual, one call each.",
@@ -327,8 +327,8 @@ public class SubAgentLiveTests
     {
         public LiveSession(IChatClient client)
         {
-            Tree = new TreeDefaultComponent();
-            Tree.GetHelper().CreateNode(new NodeDefaultComponent());
+            Tree = new TreeDefaultViewModel();
+            Tree.GetHelper().CreateNode(new NodeDefaultViewModel());
 
             Scope = Tree.AsAgentScope().WithMaxToolCalls(60);
             SubAgents = SubAgentScope.ForClient(client);
@@ -344,7 +344,7 @@ public class SubAgentLiveTests
             });
         }
 
-        public TreeDefaultComponent Tree { get; }
+        public TreeDefaultViewModel Tree { get; }
         public WorkflowAgentScope Scope { get; }
         public SubAgentScope SubAgents { get; }
         public AIAgent Host { get; }

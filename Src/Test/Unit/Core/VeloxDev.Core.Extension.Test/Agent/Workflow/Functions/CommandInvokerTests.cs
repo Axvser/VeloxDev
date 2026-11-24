@@ -18,9 +18,9 @@ public class CommandInvokerTests
     [TestMethod]
     public void DiscoveryCarriesTheParameterTypeTheInterfaceDeclared()
     {
-        var commands = CommandInvoker.DiscoverCommands(new TreeDefaultComponent());
+        var commands = CommandInvoker.DiscoverCommands(new TreeDefaultViewModel());
 
-        var create = commands.First(c => c.Name == nameof(TreeDefaultComponent.CreateNodeCommand));
+        var create = commands.First(c => c.Name == nameof(TreeDefaultViewModel.CreateNodeCommand));
         Assert.AreEqual(typeof(INodeComponent), create.ParameterType);
 
         // 说明文字写在 ITreeComponent 上，实现类的那个属性自己是空的。
@@ -32,7 +32,7 @@ public class CommandInvokerTests
     [TestMethod]
     public void ACommandWithoutAParameterTypeReportsNone()
     {
-        var commands = CommandInvoker.DiscoverCommands(new TreeDefaultComponent());
+        var commands = CommandInvoker.DiscoverCommands(new TreeDefaultViewModel());
 
         // [AgentCommandParameter] 不带参数 = 「不吃参数」，与「没标注」在这一列上同样是 null。
         var redo = commands.First(c => c.Name == "RedoCommand");
@@ -48,7 +48,7 @@ public class CommandInvokerTests
     [TestMethod]
     public void AnUnknownCommandIsReportedRatherThanThrown()
     {
-        var result = JObject.Parse(CommandInvoker.Invoke(new TreeDefaultComponent(), "NoSuchCommand", null));
+        var result = JObject.Parse(CommandInvoker.Invoke(new TreeDefaultViewModel(), "NoSuchCommand", null));
 
         Assert.AreEqual("error", result["status"]?.Value<string>());
         StringAssert.Contains(result["message"]?.Value<string>() ?? string.Empty, "not found");

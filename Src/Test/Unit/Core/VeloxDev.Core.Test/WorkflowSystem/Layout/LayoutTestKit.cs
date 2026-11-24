@@ -5,10 +5,10 @@ namespace VeloxDev.Core.Test.WorkflowSystem.Layout;
 /// <summary>Builds small trees and solves them without touching any adapter or view.</summary>
 internal static class LayoutTestKit
 {
-    public static NodeDefaultComponent AddNode(
-        TreeDefaultComponent tree, double x, double y, double width = 100d, double height = 40d)
+    public static NodeDefaultViewModel AddNode(
+        TreeDefaultViewModel tree, double x, double y, double width = 100d, double height = 40d)
     {
-        var node = new NodeDefaultComponent
+        var node = new NodeDefaultViewModel
         {
             Parent = tree,
             Anchor = new Anchor(x, y, 0),
@@ -18,20 +18,20 @@ internal static class LayoutTestKit
         return node;
     }
 
-    public static LinkDefaultComponent AddLink(
-        TreeDefaultComponent tree, INodeComponent sender, INodeComponent receiver)
+    public static LinkDefaultViewModel AddLink(
+        TreeDefaultViewModel tree, INodeComponent sender, INodeComponent receiver)
     {
-        var link = new LinkDefaultComponent
+        var link = new LinkDefaultViewModel
         {
-            Sender = new SlotDefaultComponent { Parent = sender },
-            Receiver = new SlotDefaultComponent { Parent = receiver },
+            Sender = new SlotDefaultViewModel { Parent = sender },
+            Receiver = new SlotDefaultViewModel { Parent = receiver },
         };
         tree.Links.Add(link);
         return link;
     }
 
     public static WorkflowLayoutSolution Solve(
-        TreeDefaultComponent tree,
+        TreeDefaultViewModel tree,
         out WorkflowLayoutProblem problem,
         WorkflowLayoutOptions? options = null,
         bool parallel = false)
@@ -43,6 +43,6 @@ internal static class LayoutTestKit
     }
 
     public static WorkflowLayoutResult Apply(
-        TreeDefaultComponent tree, WorkflowLayoutProblem problem, WorkflowLayoutSolution solution)
+        TreeDefaultViewModel tree, WorkflowLayoutProblem problem, WorkflowLayoutSolution solution)
         => new WorkflowLayoutApplier(tree).Apply(problem, solution);
 }

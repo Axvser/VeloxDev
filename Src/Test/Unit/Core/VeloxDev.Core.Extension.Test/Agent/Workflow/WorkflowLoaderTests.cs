@@ -19,13 +19,13 @@ public class WorkflowLoaderTests
     [TestMethod]
     public void LoadWorkflow_UsesTheHostLoader_AndRaisesTreeChanged()
     {
-        var original = new TreeDefaultComponent();
-        original.GetHelper().CreateNode(new NodeDefaultComponent());
-        original.GetHelper().CreateNode(new NodeDefaultComponent());
+        var original = new TreeDefaultViewModel();
+        original.GetHelper().CreateNode(new NodeDefaultViewModel());
+        original.GetHelper().CreateNode(new NodeDefaultViewModel());
         var document = original.Serialize();
 
-        var replacement = new TreeDefaultComponent();
-        replacement.GetHelper().CreateNode(new NodeDefaultComponent());
+        var replacement = new TreeDefaultViewModel();
+        replacement.GetHelper().CreateNode(new NodeDefaultViewModel());
 
         string? seen = null;
         var scope = new WorkflowAgentScope(original).WithWorkflowLoader(json =>
@@ -47,10 +47,10 @@ public class WorkflowLoaderTests
     }
 
     [TestMethod]
-    public void LoadWorkflow_WithoutALoader_FallsBackToTreeDefaultComponent()
+    public void LoadWorkflow_WithoutALoader_FallsBackToTreeDefaultViewModel()
     {
-        var original = new TreeDefaultComponent();
-        original.GetHelper().CreateNode(new NodeDefaultComponent());
+        var original = new TreeDefaultViewModel();
+        original.GetHelper().CreateNode(new NodeDefaultViewModel());
         var document = original.Serialize();
 
         var scope = new WorkflowAgentScope(original);
@@ -60,7 +60,7 @@ public class WorkflowLoaderTests
         var answer = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "LoadWorkflow", ("json", document)));
 
         Assert.AreEqual("ok", answer["status"]?.Value<string>(), answer.ToString());
-        Assert.IsInstanceOfType<TreeDefaultComponent>(scope.Tree);
+        Assert.IsInstanceOfType<TreeDefaultViewModel>(scope.Tree);
         Assert.AreEqual(1, changed);
         Assert.HasCount(1, scope.Tree.Nodes);
     }
@@ -68,10 +68,10 @@ public class WorkflowLoaderTests
     [TestMethod]
     public void LoadWorkflow_ReportsTheNodeCountOfTheRestoredTree()
     {
-        var original = new TreeDefaultComponent();
-        original.GetHelper().CreateNode(new NodeDefaultComponent());
-        original.GetHelper().CreateNode(new NodeDefaultComponent());
-        original.GetHelper().CreateNode(new NodeDefaultComponent());
+        var original = new TreeDefaultViewModel();
+        original.GetHelper().CreateNode(new NodeDefaultViewModel());
+        original.GetHelper().CreateNode(new NodeDefaultViewModel());
+        original.GetHelper().CreateNode(new NodeDefaultViewModel());
         var scope = new WorkflowAgentScope(original);
 
         var answer = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "LoadWorkflow", ("json", original.Serialize())));

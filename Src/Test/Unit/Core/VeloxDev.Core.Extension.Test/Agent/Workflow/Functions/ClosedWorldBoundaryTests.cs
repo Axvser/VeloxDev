@@ -183,7 +183,7 @@ public class ClosedWorldBoundaryTests
     private static IEnumerable<Type> AgentFacingTypes()
         => new[]
         {
-            typeof(TreeDefaultComponent).Assembly,          // VeloxDev.Core
+            typeof(TreeDefaultViewModel).Assembly,          // VeloxDev.Core
             typeof(WorkflowAgentScope).Assembly,            // VeloxDev.Core.Extension
             typeof(PythonPortProvider).Assembly,            // the demo Lib
             typeof(ClosedWorldBoundaryTests).Assembly,      // the fixtures here
@@ -194,10 +194,10 @@ public class ClosedWorldBoundaryTests
     /// <summary>One instance of every component whose commands the Agent can be handed.</summary>
     private static IEnumerable<object> ComponentInstances()
     {
-        yield return new TreeDefaultComponent();
-        yield return new NodeDefaultComponent();
-        yield return new SlotDefaultComponent();
-        yield return new LinkDefaultComponent();
+        yield return new TreeDefaultViewModel();
+        yield return new NodeDefaultViewModel();
+        yield return new SlotDefaultViewModel();
+        yield return new LinkDefaultViewModel();
 
         yield return new PythonScriptNodeViewModel();
         yield return new EnumSelectorNodeViewModel();

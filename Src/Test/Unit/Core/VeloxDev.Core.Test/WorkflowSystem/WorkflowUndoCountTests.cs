@@ -13,11 +13,11 @@ public class WorkflowUndoCountTests
     [TestMethod]
     public void DeleteSlotWithConnections_UndoOnceRestoresSlotAndConnections()
     {
-        var tree = new TreeDefaultComponent();
-        var node = new NodeDefaultComponent();
-        var otherNode = new NodeDefaultComponent();
-        var slot = new SlotDefaultComponent { Channel = SlotChannel.MultipleBoth };
-        var otherSlot = new SlotDefaultComponent { Channel = SlotChannel.MultipleBoth };
+        var tree = new TreeDefaultViewModel();
+        var node = new NodeDefaultViewModel();
+        var otherNode = new NodeDefaultViewModel();
+        var slot = new SlotDefaultViewModel { Channel = SlotChannel.MultipleBoth };
+        var otherSlot = new SlotDefaultViewModel { Channel = SlotChannel.MultipleBoth };
 
         tree.GetHelper().CreateNode(node);
         tree.GetHelper().CreateNode(otherNode);
@@ -45,11 +45,11 @@ public class WorkflowUndoCountTests
     [TestMethod]
     public void DeleteNodeWithConnections_UndoOnceRestoresLinksAndBookkeeping()
     {
-        var tree = new TreeDefaultComponent();
-        var removed = new NodeDefaultComponent();
-        var kept = new NodeDefaultComponent();
-        var sender = new SlotDefaultComponent { Channel = SlotChannel.MultipleBoth };
-        var receiver = new SlotDefaultComponent { Channel = SlotChannel.MultipleBoth };
+        var tree = new TreeDefaultViewModel();
+        var removed = new NodeDefaultViewModel();
+        var kept = new NodeDefaultViewModel();
+        var sender = new SlotDefaultViewModel { Channel = SlotChannel.MultipleBoth };
+        var receiver = new SlotDefaultViewModel { Channel = SlotChannel.MultipleBoth };
 
         tree.GetHelper().CreateNode(removed);
         tree.GetHelper().CreateNode(kept);

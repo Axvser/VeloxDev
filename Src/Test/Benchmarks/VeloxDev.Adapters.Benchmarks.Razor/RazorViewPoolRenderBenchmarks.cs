@@ -113,7 +113,7 @@ public class RazorViewPoolRenderBenchmarks
     // 防止有人绕过 BDN 直接调用基准方法。
     private static void WarnIfDependenciesAreUnoptimized()
     {
-        if (!IsUnoptimized(typeof(ViewPool)) && !IsUnoptimized(typeof(TreeDefaultComponent)))
+        if (!IsUnoptimized(typeof(ViewPool)) && !IsUnoptimized(typeof(TreeDefaultViewModel)))
         {
             return;
         }

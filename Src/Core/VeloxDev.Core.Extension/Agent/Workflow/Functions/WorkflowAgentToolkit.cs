@@ -3268,7 +3268,7 @@ public sealed class WorkflowAgentToolkit
         }
     }
 
-    [Description("Replaces the current workflow tree with a graph restored from a document produced by SerializeWorkflow. The host must rebind its surface to the restored tree; this scope's tools follow it immediately. Uses the host's registered workflow loader, or TreeDefaultComponent when none was registered.")]
+    [Description("Replaces the current workflow tree with a graph restored from a document produced by SerializeWorkflow. The host must rebind its surface to the restored tree; this scope's tools follow it immediately. Uses the host's registered workflow loader, or TreeDefaultViewModel when none was registered.")]
     private string LoadWorkflow(
         [Description("The graph document produced by SerializeWorkflow.")] string json)
     {

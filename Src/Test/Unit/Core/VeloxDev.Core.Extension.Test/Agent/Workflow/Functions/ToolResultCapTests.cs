@@ -16,9 +16,9 @@ public class ToolResultCapTests
 {
     private static WorkflowAgentScope TreeWith(int nodes)
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         for (var i = 0; i < nodes; i++)
-            tree.GetHelper().CreateNode(new NodeDefaultComponent());
+            tree.GetHelper().CreateNode(new NodeDefaultViewModel());
         return new WorkflowAgentScope(tree);
     }
 

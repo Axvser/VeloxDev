@@ -88,7 +88,7 @@ public class SerializationOrderTests
     [TestMethod]
     public void AllGeneratedMembers_AreWrittenInFieldOrder()
     {
-        AssertPredictionHolds(typeof(SlotDefaultComponent), new SlotDefaultComponent());
+        AssertPredictionHolds(typeof(SlotDefaultViewModel), new SlotDefaultViewModel());
         AssertPredictionHolds(typeof(CanvasLayout), new CanvasLayout());
         AssertPredictionHolds(typeof(Scale), new Scale(2, 3));
         AssertPredictionHolds(typeof(Anchor), new Anchor(1, 2, 3));
@@ -97,8 +97,8 @@ public class SerializationOrderTests
     [TestMethod]
     public void MixedHandWrittenAndGeneratedMembers_KeepThePredictedOrder()
     {
-        AssertPredictionHolds(typeof(TreeDefaultComponent), new TreeDefaultComponent());
-        AssertPredictionHolds(typeof(SlotEnumerator<SlotDefaultComponent>), new SlotEnumerator<SlotDefaultComponent>());
+        AssertPredictionHolds(typeof(TreeDefaultViewModel), new TreeDefaultViewModel());
+        AssertPredictionHolds(typeof(SlotEnumerator<SlotDefaultViewModel>), new SlotEnumerator<SlotDefaultViewModel>());
     }
 
     /// <summary>
@@ -108,7 +108,7 @@ public class SerializationOrderTests
     [TestMethod]
     public void HardBones_DumpTheirShape()
     {
-        var slot = new SlotDefaultComponent();
+        var slot = new SlotDefaultViewModel();
         var json = slot.Serialize();
 
         Assert.Contains("$id", json, "reference preservation is on, so objects carry $id");

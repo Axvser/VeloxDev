@@ -3,7 +3,7 @@ using VeloxDev.MVVM;
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>The default implementation of <see cref="ILinkComponent"/>.</summary>
-public sealed partial class LinkDefaultComponent : IConnectionPreviewLink, IRuntimeIdentifiable
+public sealed partial class LinkDefaultViewModel : IConnectionPreviewLink, IRuntimeIdentifiable
 {
     private ILinkHelper helper = new LinkHelper();
     private ConnectionPreviewState preview = ConnectionPreviewState.None;
@@ -25,10 +25,10 @@ public sealed partial class LinkDefaultComponent : IConnectionPreviewLink, IRunt
     public string RuntimeId { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>Creates the component and installs its default helper.</summary>
-    public LinkDefaultComponent() { InitializeWorkflow(); }
+    public LinkDefaultViewModel() { InitializeWorkflow(); }
 
-    [VeloxProperty] private ISlotComponent sender = new SlotDefaultComponent();
-    [VeloxProperty] private ISlotComponent receiver = new SlotDefaultComponent();
+    [VeloxProperty] private ISlotComponent sender = new SlotDefaultViewModel();
+    [VeloxProperty] private ISlotComponent receiver = new SlotDefaultViewModel();
     [VeloxProperty] private bool isVisible = false;
 
     [VeloxCommand]

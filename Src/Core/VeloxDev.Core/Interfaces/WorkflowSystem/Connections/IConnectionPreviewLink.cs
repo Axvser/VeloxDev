@@ -28,7 +28,7 @@ public enum ConnectionPreviewState
 /// </para>
 /// <para>
 /// The capability is kept off <see cref="ILinkComponent"/> for the same reason as the other optional event
-/// interfaces: adding a member there would break every implementer. <see cref="LinkDefaultComponent"/> implements it;
+/// interfaces: adding a member there would break every implementer. <see cref="LinkDefaultViewModel"/> implements it;
 /// a custom virtual link may implement it too.
 /// </para>
 /// </remarks>

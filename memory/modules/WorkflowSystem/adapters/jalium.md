@@ -244,7 +244,7 @@ Ctrl+滚轮缩放仍挂 `ScrollViewer.PreviewMouseWheel`（`HookZoom`，只在 `
 - `WorkflowMinimapOverlay.cs` 的 `OnMiniMouseDown` 先置 `_dragging` 再调 `PanToMini(...)` ⇒ **单击即居中**（不是"拖才动"）。这是小地图的既定语义，与 WPF 那份同款，**不是背离**。
 - `WorkflowMinimapOverlay.ScrollViewer` 仍是普通属性，但**适配器里有赋值者**了：`ScrollViewerName` DP + `ResolveScrollViewer()`（`FindName(name) is ScrollViewer viewer`，`Loaded` 时再兜一次）⇒ 模板只要写 `ScrollViewerName="PART_ScrollViewer"`（`workflow-tree-view/TemplateClass.jalxaml` 的 `MinimapOverlay` 元素）就接上了，宿主**不必**自己赋。（非 Trimmed demo `Examples/Workflow/Jalium/` 仍走 `Minimap(viewer)` 构造器那条路，那是它自己的选择。）
 - **小地图的内容（节点缩略框 + 包围盒）是带脏标记的缓存**（`WorkflowMinimapOverlay.cs` 的 `_nodeRects` / `_contentBounds` / `_pendingRefresh`，入口 `EnsureContent` / `MarkContentDirty`）：只有节点动过才重算（树的集合变化、节点 `Anchor`/`Size` 变更、换树）；视口、配色、尺寸的变化只 `InvalidateVisual`，不置脏 —— 它们只改那一趟 O(1) 的变换。这家的小地图在平移/缩放里每帧都被推着重画（宿主的 DP 变更 → `OnVisualChanged`），缓存因此是必需的：没有它每帧要把节点表走两遍（包围盒一趟、绘制一趟）。与 WPF / Avalonia / WinUI / MAUI 的同名 `_pendingRefresh` 是同一条规矩。
-- ⚠ **但只有脏标记会漏掉缩放**：节点的 `Anchor`/`Size` 是「原值 ÷ `Layout.Scale`」的折叠值（`NodeDefaultComponent.cs` 的 `Anchor` / `Size` getter），**缩放变化不让任何节点发 `PropertyChanged`**。所以 `EnsureContent` 除了脏标记还比一次 `Layout.Scale` 的两个分量。四家同名实现是靠「任何 DP 变化都置脏」把这件事顺带盖住的，这家把视口变化从脏标记里摘出去了（平移因此不必重算），所以 `EnsureContent` 自己补了这一句。
+- ⚠ **但只有脏标记会漏掉缩放**：节点的 `Anchor`/`Size` 是「原值 ÷ `Layout.Scale`」的折叠值（`NodeDefaultViewModel.cs` 的 `Anchor` / `Size` getter），**缩放变化不让任何节点发 `PropertyChanged`**。所以 `EnsureContent` 除了脏标记还比一次 `Layout.Scale` 的两个分量。四家同名实现是靠「任何 DP 变化都置脏」把这件事顺带盖住的，这家把视口变化从脏标记里摘出去了（平移因此不必重算），所以 `EnsureContent` 自己补了这一句。
 
 ---
 

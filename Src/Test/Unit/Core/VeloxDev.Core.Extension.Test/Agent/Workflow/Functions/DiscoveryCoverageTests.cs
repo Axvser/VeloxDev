@@ -106,7 +106,7 @@ public class DiscoveryCoverageTests
 {
     private static WorkflowAgentScope ScopeWith(params object[] nodes)
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         foreach (var node in nodes) tree.GetHelper().CreateNode((INodeComponent)node);
         return new WorkflowAgentScope(tree);
     }
@@ -128,7 +128,7 @@ public class DiscoveryCoverageTests
     [TestMethod]
     public void AComponentDeclaredOnlyWithWorkflowBuilder_IsCreatableByTheAgent()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
 
         var created = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "CreateNode",
             ("fullTypeName", typeof(UnannotatedNode).FullName!)));

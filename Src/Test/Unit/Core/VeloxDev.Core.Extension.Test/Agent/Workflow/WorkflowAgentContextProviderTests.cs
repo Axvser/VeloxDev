@@ -22,7 +22,7 @@ public class WorkflowAgentContextProviderTests
 {
     private static WorkflowAgentScope ScopeWithSkills()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithSkills(new SkillScope());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSkills(new SkillScope());
         scope.Skills!.WithSource(new EmbeddedSkillSource("Workflow"));
         scope.Skills.Refresh();
         return scope;
@@ -49,7 +49,7 @@ public class WorkflowAgentContextProviderTests
         // A scope with no skills and no MCP servers still has to produce an AIContext: the framework
         // dereferences the result, and a null there fails the whole invocation rather than contributing
         // nothing.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
         var context = new WorkflowAgentContextProvider(scope).BuildContext();
 
         Assert.IsNotNull(context);
@@ -116,8 +116,8 @@ public class WorkflowAgentContextProviderTests
     {
         // The framework throws when two providers attached to one agent share a state key, and the base
         // default is the concrete type name — so two trees would collide without an override.
-        var first = new WorkflowAgentContextProvider(new WorkflowAgentScope(new TreeDefaultComponent()));
-        var second = new WorkflowAgentContextProvider(new WorkflowAgentScope(new TreeDefaultComponent()));
+        var first = new WorkflowAgentContextProvider(new WorkflowAgentScope(new TreeDefaultViewModel()));
+        var second = new WorkflowAgentContextProvider(new WorkflowAgentScope(new TreeDefaultViewModel()));
 
         Assert.HasCount(1, first.StateKeys);
         Assert.AreNotEqual(first.StateKeys[0], second.StateKeys[0]);
@@ -126,7 +126,7 @@ public class WorkflowAgentContextProviderTests
     [TestMethod]
     public void CreateContextProviders_ComposesWorkflowThenSkillThenMcp()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithMcps(new McpScope())          // deliberately attached before skills
             .WithSkills(new SkillScope());
 
@@ -205,7 +205,7 @@ public class WorkflowAgentContextProviderTests
     {
         // Status.Skills is an ObservableCollection meant to be bound; if the context never reaches the
         // skill scope, a refresh mutates it from whatever thread happened to call.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithSkills(new SkillScope());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSkills(new SkillScope());
         var context = new CountingContext();
 
         scope.WithSynchronizationContext(context);
@@ -220,7 +220,7 @@ public class WorkflowAgentContextProviderTests
     {
         // The fluent chain is the host's to order; attaching in either order must end up bound.
         var context = new CountingContext();
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent()).WithSynchronizationContext(context);
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel()).WithSynchronizationContext(context);
 
         scope.WithSkills(new SkillScope());
         scope.Skills!.WithSource(new EmbeddedSkillSource("Workflow"));
@@ -234,7 +234,7 @@ public class WorkflowAgentContextProviderTests
     {
         // The tools read skill text while the prompt advertises it; if the two disagree, load_skill
         // answers in a language the conversation is not being held in.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithPromptLanguage(AgentLanguages.Chinese)
             .WithSkills(new SkillScope());
 
@@ -244,7 +244,7 @@ public class WorkflowAgentContextProviderTests
     [TestMethod]
     public void CreateSkillToolkit_WithoutSkills_SaysWhatIsMissing()
     {
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent());
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel());
 
         var ex = Assert.ThrowsExactly<InvalidOperationException>(() => scope.CreateSkillToolkit());
         Assert.Contains("WithSkills", ex.Message);
@@ -255,7 +255,7 @@ public class WorkflowAgentContextProviderTests
     {
         // A host may point at a directory that does not exist yet (a skill folder it creates at runtime);
         // the library's own documents must still be discoverable.
-        var scope = new WorkflowAgentScope(new TreeDefaultComponent())
+        var scope = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithSkills(Path.Combine(Path.GetTempPath(), "veloxdev-nonexistent-" + Guid.NewGuid().ToString("N")));
 
         Assert.HasCount(7, scope.Skills!.Status.Skills);

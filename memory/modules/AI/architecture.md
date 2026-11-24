@@ -173,7 +173,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 ### 三条坑
 
 1. **生成器之间看不见彼此的产物。** 目录里的 `Channel` 是 MVVM 生成器写出来的属性，`SaveCommand` 是 CommandWriter 写出来的 —— `AIContextTree` 生成器**看不到它们**，只能复现命名规则。所以规则抽在 `Base/AIContextNaming.cs`，`MVVMFieldAnalizer`（`Analizer.cs`，转调点 `GetPropertyNameFromFieldName`）与 `CommandWriter.ReadCommandConfig` 都转调它。改一处漏一处会让目录命名不存在的成员，报错落在消费方编译里。 ⚠ **多一个运行时依赖**：`AgentContextReader.EntryFor(MemberInfo)` 要靠这条规则把 `FieldInfo` 认回它那个提升条目（见 §七·十三）。它按**匹配**而不是按**构造**用规则（只认目录里已经存在的名字），所以规则改了它只会静默认不到 —— 症状是「字段的标注读不出来」。
-2. **`[VeloxCommand]` 方法在实现类里普遍是 `private`。** 生成出来的命令属性却是公开的，所以命令的收录**不能按方法可见性过滤** —— 按 `Public` 过滤会把整个命令面漏掉（`SlotDefaultComponent` 的命令全是 private）。
+2. **`[VeloxCommand]` 方法在实现类里普遍是 `private`。** 生成出来的命令属性却是公开的，所以命令的收录**不能按方法可见性过滤** —— 按 `Public` 过滤会把整个命令面漏掉（`SlotDefaultViewModel` 的命令全是 private）。
 3. **访问器够不着别的类型的 `private` 成员。** 提升属性靠的是**生成出来的那个属性**（同一个类里，编得过），不是字段本身。
 
 ### 明确不在目录里的东西
@@ -234,7 +234,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 ### 踩过的坑（测试锁定）
 
 - **`Anchor` / `Offset` / `Size` / `Scale` 是 class 不是 struct**，尽管名字像值对象。`GetTypeSchema` 的 `kind` 报的是 `class`，`IsValueType` 标志只对真的 struct（`CellKey`、`ThreadRef`）为真。
-- **`TreeDefaultComponent` 上没有 `Anchor`** —— 它是节点/插槽的属性。测「命令后备」那条要先把节点挂到树上（`tree.GetHelper().CreateNode(node)`），否则 `ResolveTree` 直接以「未挂载」拒绝。
+- **`TreeDefaultViewModel` 上没有 `Anchor`** —— 它是节点/插槽的属性。测「命令后备」那条要先把节点挂到树上（`tree.GetHelper().CreateNode(node)`），否则 `ResolveTree` 直接以「未挂载」拒绝。
 - **`FriendlyTypeName` 只把「特殊类型」写短**：`ObservableCollection<VeloxDev.WorkflowSystem.INodeComponent>` 里的类型实参仍是全名。
 - **`TreeProperty.Get` 要吞异常**：生成的 `TryGet` 是裸读（`value = t.X`），一个会抛的 getter 会逃出去。
 - **`GetType().Name` 不是反射警告源**：`Object.GetType` 与 `Type.Name`/`FullName` 都没有裁剪注解，所以那些「类型名标签」一行都不用改 —— 真正的警告来自 `GetProperties`/`GetProperty`/`GetMethod`/`GetInterfaces`/`GetCustomAttribute`/`Activator.CreateInstance` 这些**索取成员**的调用。

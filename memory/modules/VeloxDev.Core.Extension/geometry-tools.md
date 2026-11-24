@@ -13,7 +13,7 @@
 | 派发的命令 | **`MoveCommand` + `Offset` 增量**（七家适配器的 `WorkflowNodeDragBehavior`，如 WPF `WorkflowSystem/AttachedBehaviors/WorkflowNodeDragBehavior.cs` 的 `OnMouseMove`） | `MoveNode` 也派发 `MoveCommand`（世界位移），**不**用 `SetAnchorCommand` + 自算绝对锚点 |
 | 增量语义 | 视图空间增量，由 `StandardMove` 按 `Scale` 换算 | 无 |
 
-**铁律：`node.Anchor` 的 getter 返回的是被画布 `Scale` 坍缩过的值**（`NodeDefaultComponent.Anchor` 的 getter
+**铁律：`node.Anchor` 的 getter 返回的是被画布 `Scale` 坍缩过的值**（`NodeDefaultViewModel.Anchor` 的 getter
 → `Anchor.Collapse`），而 setter 把入参**当世界坐标直接存**。所以
 `new Anchor(node.Anchor.H + dx, …)` 再交给 `SetAnchorCommand` 是一个**读-改-写陷阱**：
 画布不是 1:1 时落点就错，越移越偏。**缩放越大错得越多，而这正是 agent 摆几十个节点时的状态**（要看全图必然缩小）。

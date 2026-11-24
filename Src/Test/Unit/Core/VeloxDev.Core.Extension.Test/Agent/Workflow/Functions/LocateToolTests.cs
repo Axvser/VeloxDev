@@ -29,11 +29,11 @@ public class LocateToolTests
     }
 
     /// <summary>Two nodes, one link, and one navigator registered the way an adapter registers it.</summary>
-    private static (TreeDefaultComponent Tree, WorkflowAgentScope Scope, RecordingNavigator Navigator) Scene()
+    private static (TreeDefaultViewModel Tree, WorkflowAgentScope Scope, RecordingNavigator Navigator) Scene()
     {
-        var tree = new TreeDefaultComponent();
-        var a = new NodeDefaultComponent { Parent = tree };
-        var b = new NodeDefaultComponent { Parent = tree };
+        var tree = new TreeDefaultViewModel();
+        var a = new NodeDefaultViewModel { Parent = tree };
+        var b = new NodeDefaultViewModel { Parent = tree };
         tree.Nodes.Add(a);
         tree.Nodes.Add(b);
 
@@ -42,8 +42,8 @@ public class LocateToolTests
         b.SetAnchorCommand.Execute(new Anchor(500, 600, 0));
         b.SetSizeCommand.Execute(new Size(100, 60));
 
-        a.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneTarget });
-        b.CreateSlotCommand.Execute(new SlotDefaultComponent { Channel = SlotChannel.OneSource });
+        a.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneTarget });
+        b.CreateSlotCommand.Execute(new SlotDefaultViewModel { Channel = SlotChannel.OneSource });
         tree.GetHelper().SendConnection(a.Slots[0]);
         tree.GetHelper().ReceiveConnection(b.Slots[0]);
         tree.Links[0].IsVisible = true;
@@ -113,8 +113,8 @@ public class LocateToolTests
     [TestMethod]
     public void LocateNode_WithoutANavigator_ReturnsAnError()
     {
-        var tree = new TreeDefaultComponent();
-        tree.GetHelper().CreateNode(new NodeDefaultComponent());
+        var tree = new TreeDefaultViewModel();
+        tree.GetHelper().CreateNode(new NodeDefaultViewModel());
         var scope = new WorkflowAgentScope(tree);
 
         var answer = JObject.Parse(WorkflowToolInvoker.Invoke(scope, "LocateNode", ("nodeIndex", 0)));

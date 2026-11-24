@@ -22,8 +22,8 @@ public sealed class WorkflowPresentationTests
     {
         var graph = TestGraph.Create(connect: false);
         var node = graph.Left;
-        var input = new SlotDefaultComponent { Channel = SlotChannel.OneSource };
-        var output = new SlotDefaultComponent { Channel = SlotChannel.OneTarget };
+        var input = new SlotDefaultViewModel { Channel = SlotChannel.OneSource };
+        var output = new SlotDefaultViewModel { Channel = SlotChannel.OneTarget };
         node.GetHelper().CreateSlot(input);
         node.GetHelper().CreateSlot(output);
 

@@ -56,7 +56,7 @@ public class MutationGateTests
     [TestMethod]
     public async Task TwoScopesOverOneTree_TakeTurns()
     {
-        var tree = new TreeDefaultComponent();
+        var tree = new TreeDefaultViewModel();
         var probe = new Probe();
 
         // Two separate scopes, two separate toolkits — only the tree is shared.

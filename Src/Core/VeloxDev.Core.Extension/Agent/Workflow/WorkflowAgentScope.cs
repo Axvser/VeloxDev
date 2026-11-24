@@ -272,7 +272,7 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
 
     /// <summary>
     /// Replaces this scope's tree with a graph deserialized from <paramref name="json"/>. The loader is the
-    /// host's (see <see cref="WithWorkflowLoader"/>), falling back to <see cref="TreeDefaultComponent"/>.
+    /// host's (see <see cref="WithWorkflowLoader"/>), falling back to <see cref="TreeDefaultViewModel"/>.
     /// The old tree is left untouched; the host owns closing it.
     /// </summary>
     public ITreeComponent LoadWorkflow(string json)
@@ -281,7 +281,7 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
 
         var restored = _workflowLoader is { } loader
             ? loader(json)
-            : VeloxDev.Serialization.ViewModelSerializer.Deserialize<TreeDefaultComponent>(json);
+            : VeloxDev.Serialization.ViewModelSerializer.Deserialize<TreeDefaultViewModel>(json);
         if (restored is null) throw new InvalidOperationException("The workflow loader returned null.");
 
         Tree = restored;

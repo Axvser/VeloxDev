@@ -50,7 +50,7 @@
 跨程序集的条目**分两种，只有一种会重复**：
 
 - **非泛型类型只有声明方能发**（`Base/VeloxJsonModel.cs` 的 `IsWritableType`，判据是 `DeclaredIn`）—— 消费方走到它也只是运行期去注册表里查声明方已经登记好的那份，自己不注册。不会重复。
-- **封闭泛型两边都可能发**：`SlotEnumerator<>` 的定义在 Core，而 `SlotEnumerator<Demo.ViewModels.SlotViewModel>` 只有见过它的 Lib 命名得出来；反过来 Core 也发得出 `SlotEnumerator<SlotDefaultComponent>`。当实参对两边都可见时，同一个 `Type` 就会两次到达注册处。
+- **封闭泛型两边都可能发**：`SlotEnumerator<>` 的定义在 Core，而 `SlotEnumerator<Demo.ViewModels.SlotViewModel>` 只有见过它的 Lib 命名得出来；反过来 Core 也发得出 `SlotEnumerator<SlotDefaultViewModel>`。当实参对两边都可见时，同一个 `Type` 就会两次到达注册处。
 
 注册处因此有一条**归属规则**（`VeloxJsonRegistry.cs`）：**声明方的注册永远写得上；消费方只在还没有条目时写得上**。`RegisterWriter` / `RegisterReader` **收一个 `declaresType` 参数**，由生成的注册代码给出。
 
@@ -63,8 +63,6 @@
 **两半各有守卫**：`RegistryOwnershipTests` 钉规则（声明方覆盖、消费方不覆盖、消费方在无人认领时能写上），`RegistrationOwnershipEmissionTests` 钉**产物里那个 flag** —— 走 `GeneratorProbe` 拿生成文本，断言探针自己声明的类型是 `true`、只是命名的封闭泛型是 `false`。
 
 `RegisterName` / `RegisterContainerFactory` **没有**加同一条：名字由类型自身的程序集与实参拼出，工厂是同一个构造表达式，重复写的就是同一份。
-
-**改名后的旧文档靠别名读取**：`RegisterAlias` 只往 `TypesByName` 加读取键，`NameOf` 写出的仍是现行名；WorkflowSystem 的四个默认组件在 `Serialization/WorkflowSerializationAliases.cs` 的模块初始化器里登记 `*DefaultViewModel`。
 
 > ⚠ **生成物与 Core 必须同版本**：两个注册方法多了一个必填参数，旧的 `.g.cs` 调新的 Core 编不过。耦合在 [extension.md](extension.md) §二 的联动清单里。当前各程序集的注册集合两两不相交，规则只在真的重复时才动作。
 
@@ -211,7 +209,7 @@
 
 **语料**（`Corpus.BuildTree`）**不覆盖新特性**：没有条件写出、没有 `EnumName`、没有必填成员、没有数组。它量的是**既有文档那条路**；新特性的开销只由用到它们的文档付。要量新特性，得先给 `Corpus` 加形状。
 
-⚠ **它也不覆盖这套格式最贵的那个形状**：树的 `LinksMap`（接口键套接口键的嵌套字典）在这张语料里是**空的**。只有 `SlotEnumerator` 会往它里面写（`SlotEnumerator.ConnectSlots`），而这棵树用的是 `NodeDefaultComponent` / `SlotDefaultComponent`；黄金文件 `tree.json` 同样写着 `"LinksMap": {}`，所以不是语料造错了。文档大小与耗时的对比里**没有「接口键字典」这一维**；要补上得让树带上 `SlotEnumerator`，而那会让 STJ 需要转换器（它的字典键必须是属性名），比较就不再是「配置对配置」了。
+⚠ **它也不覆盖这套格式最贵的那个形状**：树的 `LinksMap`（接口键套接口键的嵌套字典）在这张语料里是**空的**。只有 `SlotEnumerator` 会往它里面写（`SlotEnumerator.ConnectSlots`），而这棵树用的是 `NodeDefaultViewModel` / `SlotDefaultViewModel`；黄金文件 `tree.json` 同样写着 `"LinksMap": {}`，所以不是语料造错了。文档大小与耗时的对比里**没有「接口键字典」这一维**；要补上得让树带上 `SlotEnumerator`，而那会让 STJ 需要转换器（它的字典键必须是属性名），比较就不再是「配置对配置」了。
 
 ### 四·二、与 STJ / Newtonsoft 的同图对比
 

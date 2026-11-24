@@ -54,7 +54,7 @@ graph.json + lib/*.dll
    `RuntimeHelpers.RunModuleConstructor` 强制它跑，否则文档里的自定义类型会报「没有注册 reader」。
    **根类型不在文档里**：序列化器只在「运行时类型 ≠ 声明类型」时写 `$type`，宿主用
    `treeViewModel.Serialize()`（声明类型就是具体树）时根节点没有标记。CLI 因此支持清单的 `rootType`
-   与 `--root-type`；缺省才是 `TreeDefaultComponent`。`WorkflowSession.ResolveRootType` 先查注册表、
+   与 `--root-type`；缺省才是 `TreeDefaultViewModel`。`WorkflowSession.ResolveRootType` 先查注册表、
    再查 `Type.GetType`、最后扫已加载程序集，所以插件类型只要已载入就能被指名。
 2. **保存会补上根 `$type`。** `SaveArchive` 通过 `Scope.Tree.Serialize()`（静态类型是
    `ITreeComponent`）写盘，运行时类型与声明类型不同，所以保存的文件自带根类型标记；下次加载无需

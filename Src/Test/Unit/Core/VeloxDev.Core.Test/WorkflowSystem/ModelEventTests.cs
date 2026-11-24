@@ -16,7 +16,7 @@ public sealed class ModelEventTests
 {
     private static INodeComponent NodeIn(TreeHolder holder, double x = 0, double y = 0, int layer = 0)
     {
-        var node = new NodeDefaultComponent { Parent = holder.Tree, Anchor = new Anchor(x, y, layer) };
+        var node = new NodeDefaultViewModel { Parent = holder.Tree, Anchor = new Anchor(x, y, layer) };
         holder.Tree.Nodes.Add(node);
         return node;
     }
@@ -86,7 +86,7 @@ public sealed class ModelEventTests
         var notifications = 0;
         node.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(NodeDefaultComponent.Anchor)) notifications++;
+            if (e.PropertyName == nameof(NodeDefaultViewModel.Anchor)) notifications++;
         };
 
         node.MoveCommand.Execute(new Offset(5, 5));
@@ -152,7 +152,7 @@ public sealed class ModelEventTests
     {
         var holder = new TreeHolder();
         var node = NodeIn(holder);
-        var slot = new SlotDefaultComponent { Parent = node };
+        var slot = new SlotDefaultViewModel { Parent = node };
         node.Slots.Add(slot);
         var before = slot.Channel;
         SlotChannelEventArgs? changing = null;
@@ -178,8 +178,8 @@ public sealed class ModelEventTests
         var holder = new TreeHolder();
         var a = NodeIn(holder);
         var b = NodeIn(holder, 200, 0);
-        var sa = new SlotDefaultComponent { Parent = a };
-        var sb = new SlotDefaultComponent { Parent = b };
+        var sa = new SlotDefaultViewModel { Parent = a };
+        var sb = new SlotDefaultViewModel { Parent = b };
         a.Slots.Add(sa);
         b.Slots.Add(sb);
 
@@ -205,8 +205,8 @@ public sealed class ModelEventTests
         var holder = new TreeHolder();
         var a = NodeIn(holder);
         var b = NodeIn(holder, 200, 0);
-        var sa = new SlotDefaultComponent { Parent = a };
-        var sb = new SlotDefaultComponent { Parent = b };
+        var sa = new SlotDefaultViewModel { Parent = a };
+        var sb = new SlotDefaultViewModel { Parent = b };
         a.Slots.Add(sa);
         b.Slots.Add(sb);
         var connected = 0;
@@ -222,6 +222,6 @@ public sealed class ModelEventTests
     // 一颗树，用于把节点挂上去（节点的 Parent 就是它）。
     private sealed class TreeHolder
     {
-        public TreeDefaultComponent Tree { get; } = new();
+        public TreeDefaultViewModel Tree { get; } = new();
     }
 }

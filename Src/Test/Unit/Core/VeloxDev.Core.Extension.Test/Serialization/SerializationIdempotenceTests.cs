@@ -44,7 +44,7 @@ public class SerializationIdempotenceTests
     {
         var frozen = Golden("tree");
 
-        var tree = VeloxJsonSerializer.Deserialize<TreeDefaultComponent>(frozen);
+        var tree = VeloxJsonSerializer.Deserialize<TreeDefaultViewModel>(frozen);
 
         Assert.IsNotNull(tree);
         Assert.AreEqual(frozen, VeloxJsonSerializer.Serialize(tree), "write(read(tree.json)) must equal tree.json");
@@ -67,7 +67,7 @@ public class SerializationIdempotenceTests
         // 枚举器实现 IEnumerable，却被写成对象而不是数组；读回来若走了数组那条路，这里就不再相等。
         var frozen = Golden("slot-enumerator");
 
-        var enumerator = VeloxJsonSerializer.Deserialize<SlotEnumerator<SlotDefaultComponent>>(frozen);
+        var enumerator = VeloxJsonSerializer.Deserialize<SlotEnumerator<SlotDefaultViewModel>>(frozen);
 
         Assert.IsNotNull(enumerator);
         Assert.AreEqual(frozen, VeloxJsonSerializer.Serialize(enumerator), "write(read(slot-enumerator.json)) must equal slot-enumerator.json");
