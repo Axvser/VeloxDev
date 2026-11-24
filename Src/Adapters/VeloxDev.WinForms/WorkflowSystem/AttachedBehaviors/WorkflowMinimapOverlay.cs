@@ -4,6 +4,7 @@ using System.Drawing.Drawing2D;
 using Easel;
 using Easel.Visuals;
 using VeloxDev.WorkflowSystem.Platform;
+using VeloxDev.WorkflowSystem.ViewHosting;
 using DrawingPen = System.Drawing.Pen;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
@@ -19,9 +20,9 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// is hit-testable, so the rest of the layer lets pointer input through.
 /// </para>
 /// <para>
-/// The surface pushes offsets and the viewport through <see cref="IWorkflowMinimapOverlay"/>; a press or drag maps
-/// the pointer back to a world viewport origin and raises <see cref="ViewportScrollRequested"/>. The thumbnail and
-/// the viewport block share one content-fit transform, so clicking a point centres the surface there.
+/// Tree subscription, content/viewport mapping, placement and drag math live in the Core
+/// <see cref="MinimapPipeline"/>. This class keeps the palette, the platform drawing, the surface-pushed offsets
+/// and the pointer handlers that feed the input layer.
 /// </para>
 /// </remarks>
 public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource
@@ -30,25 +31,31 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
     private const double DefaultHeight = 140d;
     private const double MinimumSize = 20d;
     private const double ContentPadding = 4d;
+    private const double MinimumThumbSize = 2d;
 
     private Color _minimapBackground = Color.FromArgb(0x33, 0x1E, 0x1E, 0x1E);
     private Color _minimapBorderBrush = Color.FromArgb(0xDC, 0x94, 0xA3, 0xB8);
     private Color _nodeBrush = Color.FromArgb(0xDC, 0x38, 0xBD, 0xF8);
     private Color _viewportStroke = Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF);
-    private readonly List<(double X, double Y, double W, double H)> _nodeRects = [];
     private double _minimapWidth = DefaultWidth;
     private double _minimapHeight = DefaultHeight;
     private double _minimapMargin = 12d;
     private double _availableRight;
     private double _availableTop;
     private double _availableBottom;
-    private bool _dragging;
+
+    private readonly MinimapInputHost _inputHost;
+    private readonly MinimapPipeline _pipeline;
 
     /// <summary>Creates the overlay as a full-surface layer.</summary>
     public WorkflowMinimapOverlay()
     {
         IsHitTestVisible = true;
         ClipToBounds = true;
+
+        _inputHost = new MinimapInputHost(this);
+        _pipeline = new MinimapPipeline(new MinimapRenderer(this), new MinimapViewportHost(this), _inputHost);
+        _pipeline.RenderRequested += OnPipelineRenderRequested;
     }
 
     /// <inheritdoc />
@@ -118,12 +125,20 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
     /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public ITreeComponent? WorkflowTree { get; set; }
+    public ITreeComponent? WorkflowTree
+    {
+        get => _pipeline.Tree;
+        set => _pipeline.Tree = value;
+    }
 
     /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool IsMinimapVisible { get; set; } = true;
+    public bool IsMinimapVisible
+    {
+        get => _pipeline.IsVisible;
+        set { _pipeline.IsVisible = value; InvalidateVisual(); }
+    }
 
     /// <summary>The requested thumbnail width in surface pixels; the available corner may clamp it.</summary>
     public double MinimapWidth
@@ -178,7 +193,8 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
             return false;
         }
 
-        return ComputeMinimapRect().Contains(point);
+        RefreshPipelineSettings();
+        return _pipeline.HitTest(point.X, point.Y);
     }
 
     /// <inheritdoc />
@@ -189,20 +205,9 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
             return;
         }
 
-        var rect = ComputeMinimapRect();
-        if (rect.Width <= 0f || rect.Height <= 0f)
-        {
-            return;
-        }
-
-        var context = CreateDrawContext(rect);
-        if (context is null)
-        {
-            return;
-        }
-
+        RefreshPipelineSettings();
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        DrawMinimap(graphics, context);
+        _pipeline.Render(graphics);
     }
 
     /// <summary>
@@ -250,112 +255,61 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
         }
     }
 
-    // 一次绘制/拖拽所需的节点、视口与拟合变换，全部按小地图矩形的原点与尺寸算。
-    private MinimapDrawContext? CreateDrawContext(RectangleF rect)
+    /// <summary>Hands one pass to the overlay's draw hook; used by <see cref="MinimapRenderer"/>.</summary>
+    internal void DrawMinimapSurface(Graphics graphics, MinimapDrawContext context) => DrawMinimap(graphics, context);
+
+    /// <summary>Applies a navigation scroll in canvas-local space; used by <see cref="MinimapViewportHost"/>.</summary>
+    internal void ApplyMinimapScroll(double scrollX, double scrollY)
     {
-        var tree = WorkflowTree;
-        if (tree?.Nodes is null)
-        {
-            return null;
-        }
-
-        _nodeRects.Clear();
-        foreach (var node in tree.Nodes)
-        {
-            if (node.Anchor is not { } anchor || node.Size is not { } size)
-            {
-                continue;
-            }
-
-            _nodeRects.Add((anchor.Horizontal, anchor.Vertical, size.Width, size.Height));
-        }
-
-        if (_nodeRects.Count == 0)
-        {
-            return null;
-        }
-
-        var global = WorkflowBounds.FromNodes(_nodeRects);
-        var mmW = Math.Max(1d, rect.Width);
-        var mmH = Math.Max(1d, rect.Height);
-        var padding = Math.Max(0d, ContentPadding);
-        var (ox, oy, scale) = WorkflowSurfaceMath.MinimapFit(
-            global.Width,
-            global.Height,
-            Math.Max(1d, mmW - (padding * 2d)),
-            Math.Max(1d, mmH - (padding * 2d)),
-            padding);
-
-        var nodes = new List<WorkflowBounds>(_nodeRects.Count);
-        var mapped = new List<WorkflowBounds>(_nodeRects.Count);
-        foreach (var (nx, ny, nw, nh) in _nodeRects)
-        {
-            nodes.Add(WorkflowBounds.FromNode(nx, ny, nw, nh));
-            var (x, y) = WorkflowSurfaceMath.MinimapLocal(nx, ny, global.Left, global.Top, ox, oy, scale);
-            mapped.Add(WorkflowBounds.FromNode(x, y,
-                WorkflowSurfaceMath.MinThumbSize(nw, scale, 2d),
-                WorkflowSurfaceMath.MinThumbSize(nh, scale, 2d)));
-        }
-
-        var viewport = WorkflowBounds.FromNode(
-            ScrollOffsetX - ContentOffsetX, ScrollOffsetY - ContentOffsetY, ViewportWidth, ViewportHeight);
-        var mappedViewport = default(WorkflowBounds);
-        if (!viewport.IsEmpty)
-        {
-            var (vx, vy, vw, vh) = WorkflowSurfaceMath.MinimapViewportRect(
-                ox, oy, scale, viewport.Left, viewport.Top, viewport.Width, viewport.Height,
-                global.Left, global.Top, mmW, mmH, minRectSize: 4d);
-            mappedViewport = WorkflowBounds.FromNode(vx, vy, vw, vh);
-        }
-
-        var placement = CreatePlacementContext();
-        return new MinimapDrawContext
-        {
-            Tree = tree,
-            ContentBounds = global,
-            ViewportBounds = viewport,
-            Nodes = nodes,
-            MappedNodes = mapped,
-            MappedViewport = mappedViewport,
-            MinimapWidth = mmW,
-            MinimapHeight = mmH,
-            Padding = padding,
-            OriginX = ox,
-            OriginY = oy,
-            Scale = scale,
-            AvailableRight = placement.AvailableRight,
-            AvailableTop = placement.AvailableTop,
-            AvailableBottom = placement.AvailableBottom,
-            MinimapMargin = placement.MinimapMargin,
-        };
+        ScrollOffsetX = scrollX;
+        ScrollOffsetY = scrollY;
+        InvalidateVisual();
+        ViewportScrollRequested?.Invoke(scrollX, scrollY);
     }
 
-    // 命中、绘制与拖拽导航共用同一组放置输入。
-    private MinimapDrawContext CreatePlacementContext()
+    // 放置/绘制/命中/拖拽共用同一组输入：请求尺寸 + 可用角落（右侧让开竖条、顶部让开标尺、底部让开横条）。
+    private void RefreshPipelineSettings()
     {
         var width = Math.Max(0d, Bounds.Width);
         var height = Math.Max(0d, Bounds.Height);
         var top = Math.Max(0d, AvailableTop);
-        return new MinimapDrawContext
+
+        _pipeline.Metrics = new MinimapMetrics
         {
-            MinimapWidth = MinimapWidth,
-            MinimapHeight = MinimapHeight,
-            MinimapMargin = MinimapMargin,
-            AvailableRight = AvailableRight > 0d ? AvailableRight : width,
-            AvailableTop = top,
-            AvailableBottom = AvailableBottom > top ? AvailableBottom : height,
+            Width = MinimapWidth,
+            Height = MinimapHeight,
+            MinSize = MinimumSize,
+            Padding = ContentPadding,
+            NodeCornerRadius = 0d,
+            MinimapCornerRadius = 0d,
+            MinimumThumbSize = MinimumThumbSize,
+            Available = new SurfaceAvailableArea
+            {
+                Right = AvailableRight > 0d ? AvailableRight : width,
+                Top = top,
+                Bottom = AvailableBottom > top ? AvailableBottom : height,
+                Margin = MinimapMargin,
+            },
         };
     }
 
-    // 可用区来自 surface：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
-    private RectangleF ComputeMinimapRect()
+    private void OnPipelineRenderRequested(object? sender, EventArgs e)
     {
-        var bounds = CreatePlacementContext().GetMinimapRect(MinimumSize);
-        return new RectangleF(
-            (float)bounds.Left,
-            (float)bounds.Top,
-            (float)bounds.Width,
-            (float)bounds.Height);
+        // 节点/插槽的属性通知可能来自后台线程；InvalidateVisual 必须回到 UI 线程。
+        var surface = Surface;
+        if (surface is { IsHandleCreated: true, IsDisposed: false } && surface.InvokeRequired)
+        {
+            try
+            {
+                surface.BeginInvoke(new Action(InvalidateVisual));
+                return;
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+
+        InvalidateVisual();
     }
 
     /// <inheritdoc />
@@ -366,70 +320,53 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
             return;
         }
 
-        var rect = ComputeMinimapRect();
+        RefreshPipelineSettings();
         var point = args.GetPosition(this);
-        if (!rect.Contains(point))
+        _inputHost.PointerPosition = (point.X, point.Y);
+        _inputHost.IsPressed = true;
+        if (_pipeline.PointerPressed())
         {
-            return;
+            args.Handled = true;
         }
-
-        var context = CreateDrawContext(rect);
-        if (context is null)
-        {
-            return;
-        }
-
-        _dragging = true;
-        UpdateViewport(point, rect, context);
-        args.Handled = true;
     }
 
     /// <inheritdoc />
     protected override void OnPointerMoved(VisualPointerEventArgs args)
     {
-        if (!_dragging)
+        if (!_pipeline.IsDragging)
         {
             return;
         }
 
-        var rect = ComputeMinimapRect();
-        var context = CreateDrawContext(rect);
-        if (context is not null)
-        {
-            UpdateViewport(args.GetPosition(this), rect, context);
-        }
-
+        var point = args.GetPosition(this);
+        _inputHost.PointerPosition = (point.X, point.Y);
+        _pipeline.PointerMoved();
         args.Handled = true;
     }
 
     /// <inheritdoc />
     protected override void OnPointerReleased(VisualPointerEventArgs args)
     {
-        if (!_dragging)
+        _inputHost.IsPressed = false;
+        if (!_pipeline.IsDragging)
         {
             return;
         }
 
-        _dragging = false;
+        _pipeline.PointerReleased();
         args.Handled = true;
     }
 
-    private void UpdateViewport(PointF point, RectangleF rect, MinimapDrawContext context)
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
     {
-        // 指针是整层坐标，映射前先减掉小地图矩形的原点。
-        var (localX, localY) = WorkflowSurfaceMath.MinimapToCanvasLocal(
-            point.X - rect.Left,
-            point.Y - rect.Top,
-            context.OriginX,
-            context.OriginY,
-            context.Scale,
-            context.ContentBounds.Left,
-            context.ContentBounds.Top);
-        var (sx, sy) = WorkflowSurfaceMath.MinimapToScroll(
-            localX, localY, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
-        ScrollOffsetX = sx;
-        ScrollOffsetY = sy;
-        InvalidateVisual();
-        ViewportScrollRequested?.Invoke(sx, sy);
+        if (disposing)
+        {
+            // 流水线持有树的属性订阅；覆盖层释放时要一并退订，否则被移除的树仍被这张视图钉住。
+            _pipeline.RenderRequested -= OnPipelineRenderRequested;
+            _pipeline.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 }
