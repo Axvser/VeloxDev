@@ -9,7 +9,7 @@ Put a Unity-style lifecycle on a plain class — `Awake` / `Start` / `Update` / 
 
 Your class declares the attribute and calls one generated method; the Roslyn analyzer **`VeloxDev.Core.Generator`** writes the `ITickable` implementation and the hook forwarders, and you write the hooks as `partial void`.
 
-Package: **`VeloxDev.Core`**, namespace `VeloxDev.TimeLine`. The class is `partial`. Nothing here touches a GUI: a tick loop behaves identically on every platform. A repository `ProjectReference` does not carry analyzers, so a project using `[Tickable]` also references **`VeloxDev.Core.Generator`** — as a package, or as a `ProjectReference` with `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"`.
+Package: **`VeloxDev.Core`**, namespace `VeloxDev.TimeLine`. The class is `partial`. Nothing here touches a GUI: the same API works without a UI framework on every platform. A repository `ProjectReference` does not carry analyzers, so a project using `[Tickable]` also references **`VeloxDev.Core.Generator`** — as a package, or as a `ProjectReference` with `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"`.
 
 ## The declaration
 
@@ -39,7 +39,7 @@ TickManager.Start("physics");
 
 ⚙ **The attribute and the call together start the loop.** `InitializeTickable()` registers the behaviour; `TickManager.Start(channel)` starts the channel. Registration is a queue push: the update pump drains it before its next frame is sampled, so `Awake` → `Start` run there, always before the first `Update`, whether you registered before or after `Start`.
 
-⚙ **Call `InitializeTickable()` on a constructed instance, after its constructor.** The drain runs on another thread, so a call from the constructor can run `Awake` before construction finishes.
+⚙ **Call `InitializeTickable()` on a constructed instance, after its constructor.** The drain runs on the channel's update pump — a background thread or an async task, depending on `UseAsyncLoop` — so a call from the constructor can run `Awake` before construction finishes.
 
 ## Where to read next
 
@@ -63,7 +63,7 @@ TickManager.Start("physics");
 
 ⚙ `Examples/Tickable/WPF/Demo` — the working sample. The window itself is the tickable (`[Tickable(DemoChannel.Name)]` on `MainWindow`, in `MainWindow.Hooks.cs`; `DemoChannel.Name` is `TickManager.DEFAULT_CHANNEL`), registered in `Loaded`. Its hooks integrate a ball through `Update` and `FixedUpdate` so the two pumps can be compared, and the window half only polls, formats and draws. Close calls `CloseTickable()` and then a deliberately **un-awaited** `StopAsync` — the pumps are background threads or tasks depending on `UseAsyncLoop`, and the stop waits up to 1000 ms, so awaiting would only make the close look stuck.
 
-⚙ `Src/Core/VeloxDev.Core/TimeLine/` — `TickableAttribute`, `TickManager`, `FrameEventArgs` and its `TimeLineEventArgs` base; `TickChannelEventArgs` is declared in the same file as `TickManager`.
+⚙ `Src/Core/VeloxDev.Core/TimeLine/` — `TickableAttribute`, `TickManager`, `FrameEventArgs` and its `TimeLineEventArgs` base; `TickChannelEventArgs` and `TickBehaviorErrorEventArgs` are declared in the same file as `TickManager`.
 
 ⚙ `Src/Core/VeloxDev.Core/Interfaces/Tickable/ITickable.cs` — `InitializeTickable`, `CloseTickable` and the five `Invoke…` forwarders.
 

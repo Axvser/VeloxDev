@@ -84,7 +84,7 @@ NotStarted → Installing (local modes only) → Connecting → Connected | Erro
 | `LoadedTools` | the aggregate tool set |
 | `DisposeAsync()` | disposes every connected server's client |
 
-⚙ **`McpScope` exposes `DisposeAsync()`.** `await using var mcp = new McpScope()` works through the pattern; the class declaration does not add `IAsyncDisposable` to the public type list, so assign it through `await using` rather than through that interface.
+⚙ **`McpScope` implements `IAsyncDisposable`.** `await using var mcp = new McpScope()` disposes every connected client, and assigning the scope to `IAsyncDisposable` is valid.
 
 ⚙ **A failing server does not fail the batch.** `LoadOneAsync` catches everything except `OperationCanceledException`, records the message on that server's state, raises `ServerError(config, ex)`, and returns an empty array. Cancellation propagates.
 
@@ -144,7 +144,7 @@ Management tools — ten, all registered on a normal scope: `ListMcpServers`, `L
 
 ⚙ **Language selection maps `Chinese → "zh"` and everything else to `"en"`, with a per-file fallback to English.** A partially translated resource set degrades document by document.
 
-⚙ `GetComponentContext(fullTypeName, language)` maps a name containing `Chinese` to Chinese and every other value to English, even though `AgentLanguages` declares thirty-four names over thirty-three distinct values (`Chinese` is an alias of `ChineseSimplified`) and the resource set has two.
+⚙ `GetComponentContext(fullTypeName, language)` maps a name containing `Chinese` to Chinese and every other value to English, even though `AgentLanguages` declares many more members than the two the resource set ships (`Chinese` is an alias of `ChineseSimplified`).
 
 ⚙ The safety documents are prose injected into the prompt. They change what the model is *told*, not what the code lets it do.
 

@@ -1,13 +1,13 @@
 ﻿# Windows Forms — workflow surface
 
-`VeloxDev.WinForms` · targets `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` · version 13.0.0
+`VeloxDev.WinForms` · targets `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`
 
 ⚙ **Reference implementation:** `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` — the tree, node, slot
 and link views are markup; the tree is a whole visual tree hosted in a `VisualHost`, and one camera matrix
 scales the graph. `GridDecorator`, `MinimapOverlay` and `CustomTemplateSelector` are code-only. The Full demo at
 `Examples/Workflow/WinForms/Demo/Views/Workflow/` uses the same visual surface; its shell is ordinary WinForms.
 
-⚙ **The "Trimmed" in that path means *minimal demo*.** It is a demo-size choice, not a publish setting.
+⚙ **"Trimmed" means *minimal demo*, not a publish setting:** [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
 
 ## Runtime reference is external
 
@@ -146,9 +146,9 @@ same factor.
 ⚙ **The camera reports its world viewport to the tree**, so Core's visible set follows pan/zoom:
 `Viewport = (-(pan+content)/zoom, size/zoom)`.
 
-⚙ **A self-hosted canvas sets the virtualize inset before writing `Viewport`.** The tree has no
-decorator-hosted ruler to ask, so the reserve is passed explicitly (`RulerReserve` on both axes); skipping it
-culls nodes still visible under the ruler.
+⚙ **Set the virtualize inset before writing `Viewport`.** `tree.SetVirtualizeInset(left: band, top: band)` takes
+its band from the decorator's `RulerBand`; a self-hosted surface with no decorator passes the reserve explicitly.
+Skipping it culls nodes still visible under the ruler.
 
 ## The link context menu
 

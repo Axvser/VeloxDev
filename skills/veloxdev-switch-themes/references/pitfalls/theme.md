@@ -38,7 +38,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** `SetThemeValue` is called, but the property does not change.
 
-**Cause:** the value is stored verbatim, no converter runs. Passing an array such as `new object?[] { "#fff4d6" }` stores that array as the value; the immediate `SetValue` fails silently. The array is now the override for that theme.
+**Cause:** the value is stored verbatim, no converter runs. Passing an array such as `new object?[] { "#fff4d6" }` stores that array as the value; the immediate `SetValue` fails silently. The array is now the override for that theme, and the next switch to that theme uses it as the end value; WPF's brush sampler substitutes `Brushes.Transparent` for an end that is not a `Brush`, so a solid-brush start cross-fades to transparent.
 
 **Fix:** pass the type the property expects (a `Brush`, not a hex string). `RestoreThemeValue<T>` drops the whole override entry, every theme included.
 

@@ -6,7 +6,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/Jalium Trimmed/Demo/Views/Workflow/` — a `.jalxaml` + `.jalxaml.cs` pair for each of tree, node, slot and link, plus a single `.cs` for `GridDecorator`, `MinimapOverlay` and `TemplateSelector`. `InfoOverlay.*` beside them is the demo's debug HUD, not part of any pack.
 
-⚙ **The "Trimmed" in that path means *minimal demo*.** It is a demo-size choice, not a publish setting — see [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
+⚙ **"Trimmed" means *minimal demo*, not a publish setting:** [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
 
 ## Writing the surface
 

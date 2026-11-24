@@ -19,29 +19,48 @@ clock?.Unsubscribe(OnClockTick);
 ```csharp
 private sealed class FlowDriver : IWorkflowFlowDriver
 {
+    private readonly WorkflowFlowClock _clock;
     private readonly Transition<WorkflowFlowClock> _flow;
 
     public FlowDriver(WorkflowFlowClock clock)
     {
+        _clock = clock;
         _flow = Transition<WorkflowFlowClock>.Create()
             .Property(c => c.BandHead, BandFormed)
             .Property(c => c.BandIntensity, 1d)
-            .Effect(Phase(450))
+            .Effect(PhaseEffect(clock, TimeSpan.FromMilliseconds(450)))
             .Then()
             .Property(c => c.BandHead, BandLeaving)
-            .Effect(Phase(700))
+            .Effect(PhaseEffect(clock, TimeSpan.FromMilliseconds(700)))
             .Then()
             .Property(c => c.BandHead, 1d)
             .Property(c => c.BandIntensity, 0d)
-            .Effect(Phase(450))
+            .Effect(PhaseEffect(clock, TimeSpan.FromMilliseconds(450)))
             .Repeat(int.MaxValue);
+    }
+
+    public void Start() => _flow.Execute(_clock);
+
+    public void Stop() => Transition.Exit(_clock, IncludeMutual: true, IncludeNoMutual: true);
+
+    // Both scalars are written before this fans the frame out to every subscriber.
+    private static TransitionEffect PhaseEffect(WorkflowFlowClock clock, TimeSpan duration)
+    {
+        var effect = new TransitionEffect
+        {
+            Duration = duration,
+            Ease = Eases.Default,
+            FPS = 30,
+        };
+        effect.LateUpdate += clock.LateUpdateHandler;
+        return effect;
     }
 }
 ```
 
-⚙ **One `Transition<WorkflowFlowClock>` per tree.** The clock is cached in a `ConditionalWeakTable` keyed by the tree; `Subscribe` is reference-counted, so many links on one tree run exactly one timer. A tree with no attached links runs none.
+⚙ **One shared driver per tree.** The clock is cached in a `ConditionalWeakTable` keyed by the tree; `Subscribe` is reference-counted, so many links on one tree run exactly one timer. A tree with no attached links runs none. WPF, Avalonia and WinUI drive it with a single `Transition<WorkflowFlowClock>`; WinForms' driver is a `System.Threading.Timer` that calls `BeginSampling` / `Sample`.
 
-⚙ **`BandHead` and `BandIntensity` are written together, then the subscribers are notified.** `LateUpdate` fans one frame out to every subscriber, so a view never sees half a frame.
+⚙ **`BandHead` and `BandIntensity` are written together, then the subscribers are notified.** The clock fans one frame out only after both scalars are written, so a view never sees half a frame.
 
 ⚙ **The clock resolves a link's tree through its slot and node parents.** A link detached from any tree answers `null`; the view skips subscription.
 
@@ -49,20 +68,20 @@ private sealed class FlowDriver : IWorkflowFlowDriver
 
 | Platform | Who owns the motion | What the view does |
 |---|---|---|
-| WPF / Avalonia / WinUI | the tree's `WorkflowFlowClock` | subscribes in `Loaded` / `DataContextChanged`, copies `BandHead` / `BandIntensity`, repaints; unsubscribes in `Unloaded` / on rebind |
-| WinForms | the surface (`WorkflowCanvas`) — one `Transition<WorkflowCanvas>` | the canvas writes `BandHead` / `BandIntensity` and `Invalidate()`s; link renderers read the pair |
+| WPF / Avalonia / WinUI | the tree's `WorkflowFlowClock`, driven by one `Transition<WorkflowFlowClock>` | subscribes when attached and on rebind (`Loaded` / `Unloaded` on WPF and WinUI, `OnAttachedToVisualTree` / `OnDetachedFromVisualTree` on Avalonia), copies `BandHead` / `BandIntensity`, repaints; unsubscribes on detach/rebind |
+| WinForms | the tree's `WorkflowFlowClock`, driven by one shared `System.Threading.Timer` (`BeginSampling` / `Sample`) | subscribes on first draw (the visual tree has no `Loaded` event), copies `BandHead` / `BandIntensity`, invalidates the comet's bounds; unsubscribes on detach/rebind |
 | Jalium | the surface (`NodeEditorSurface`) — one `Transition<NodeEditorSurface>` | the surface writes a single `FlowPhase`; every link derives its arc-length position and intensity from it |
 | Blazor | `flow.js` — one `requestAnimationFrame` loop for every link | the component registers/updates geometry only when it changes; the JS owns per-frame geometry and alpha |
 
 ⚙ **The Blazor link has no `Phase` property.** Its per-frame work is in `flow.js` (30fps throttle, `IntersectionObserver` pause for off-screen links). The `Phase` scalar in the Blazor demo belongs to `TemplateSlotView`, where it drives the port ripple. Keep the two separate.
 
-⚙ **The WinForms and Jalium flows are surface-level.** One transition per surface, not per link; the surface redraws its links from the scalar.
+⚙ **The Jalium flow is surface-level.** One transition per surface, not per link; the surface redraws its links from the scalar.
 
 ## The shape of the phase
 
 ⚙ **Three phases, then `Repeat(int.MaxValue)`:** leave the sender and light up, travel fully lit, arrive and go dark. Both ends are the "no light" state, so the loop seam is invisible.
 
-⚙ **The band comes up from the resting colour over the first third of its travel, travels fully lit and unchanged for the middle third, and settles back over the last third.** The last phase is also what makes the loop seam invisible.
+⚙ **The band comes up from the resting colour over the first third of its travel, travels fully lit and unchanged for the middle third, and settles back over the last third.**
 
 ⚙ **The line rests dim and the band is the same colour at full strength.** Dim the resting line by alpha (about three fifths) and keep the hue. Pushing the link colour towards white changes one channel of three on a 2px line and is invisible.
 
@@ -80,7 +99,7 @@ private sealed class FlowDriver : IWorkflowFlowDriver
 
 ⚙ **Subscribe on attach and unsubscribe on detach.** Views are pooled; a released view handed a different link must stop sampling the previous flow. The shared clock starts on its first subscriber and stops on its last.
 
-⚙ **The flow is decoration.** The Trimmed demo suites leave it out; the full demos include it. A minimal editor can omit it entirely.
+⚙ **The flow is decoration.** The Trimmed demo suites and the MAUI demo leave it out; the full WPF, Avalonia, WinUI, WinForms, Jalium and Blazor demos include it. A minimal editor can omit it entirely.
 
 ## Writing your own flow
 

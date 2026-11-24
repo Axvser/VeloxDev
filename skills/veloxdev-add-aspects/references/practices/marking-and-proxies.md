@@ -63,14 +63,14 @@ var p = data.Aop();
 
 ## Calling through the proxy
 
-**This is the rule that decides whether an aspect fires at all:**
+**Interception depends on how the caller reaches the member:**
 
 ```csharp
 data.Aop().Name = "New Team Name";   // the aspect runs
 data.Name = "New Team Name";         // the proxy is bypassed
 ```
 
-⚙ **Calls made through the proxy are intercepted.** Every call the caller wants intercepted goes through `Aop()`.
+⚙ **Calls made through the proxy are intercepted.** The aspect is on the proxy, not on the class.
 
 ⚙ **A call the class makes on itself goes straight to the real member.** Route it through the proxy to make it interceptable — the shipped demo does exactly this:
 

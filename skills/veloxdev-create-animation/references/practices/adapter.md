@@ -49,7 +49,7 @@ WinUI does the same on `DependencyObject.DispatcherQueue`, falling back to a laz
 
 ⚙ WinUI reports both directions: `Lifetime.SetAlive(queue.TryEnqueue(...))`.
 
-⚙ WinForms subscribes once, on first capture: `Application.ApplicationExit += (_, _) => _isAppAlive = false;`.
+⚙ WinForms subscribes once, on first capture: `Application.ApplicationExit += OnApplicationExit;`, where `OnApplicationExit` sets `_isAppAlive = false`.
 
 ⚙ MAUI counts windows: `Application.Current?.Windows?.Count > 0`.
 
@@ -94,7 +94,7 @@ if (working is not Transform wt || wt.GetType() != startT.GetType()) { /* build 
 
 ### Colours
 
-⚙ **R/G/B share one bounded progress; alpha is its own range.** Interpolating channels independently lets red saturate while green climbs — which shifts the hue. Use `BoundedProgress(t, 0, 255)` for RGB (`(t, 0, 1)` where channels are floats, as in MAUI) and let alpha ride raw `t`.
+⚙ **R/G/B share one bounded progress; alpha is its own range.** Interpolating channels independently lets red saturate while green climbs — which shifts the hue. Use `new BoundedProgress(t, 0, 255)` for RGB (`new BoundedProgress(t, 0, 1)` where channels are floats, as in MAUI) and let alpha ride raw `t`.
 
 ⚙ **Saturate.** A bare byte cast turns 300 into 44.
 
@@ -161,7 +161,7 @@ public class Interpolator : InterpolatorCore
 
 ⚙ A registration for a concrete type is redundant when its base or interface is already registered — it still works but carries nothing extra. Register the general type unless a concrete one genuinely needs its own sampler.
 
-⚙ **The walk only goes up, so a concrete registration leaves base-declared properties unserved.** A property declared as `Effect` never reaches a sampler registered for `DropShadowEffect`; `Prepare` reports the path `Unsampled` and drops it, with nothing thrown and no fallback. Register the type your users will *declare*; if that is the abstract base, the sampler handles the whole family. WPF is the worked example: its `UIElement.Effect` DP is declared `Effect`, so it registers `typeof(Effect)` and its `DropShadowEffectSampler` serves the family — pairing two `DropShadowEffect`s field by field, and switching at `t >= 0.5` for a pair it cannot compare.
+⚙ **The walk only goes up, so a concrete registration leaves base-declared properties unserved.** A property declared as `Effect` never reaches a sampler registered for `DropShadowEffect`; the declaration is rejected at `Execute` with `TransitionPathUnsampleableException`, and `Prepare` reports `Unsampled` when driven directly. Register the type your users will *declare*; if that is the abstract base, the sampler handles the whole family. WPF is the worked example: its `UIElement.Effect` DP is declared `Effect`, so it registers `typeof(Effect)` and its `DropShadowEffectSampler` serves the family — pairing two `DropShadowEffect`s field by field, and switching at `t >= 0.5` for a pair it cannot compare.
 
 ⚙ **The key's type is the type your sampler gets handed — check that line against the cast in the sampler's body.** Two types sharing a *simple name* in different assemblies are two different keys and coexist happily; what breaks is a sampler that unboxes the *other* assembly's type, because the first frame throws `InvalidCastException` and the run is cancelled rather than degraded. The acceptance suite's key check resolves each entry's declared type against the live registry.
 
@@ -195,7 +195,7 @@ Use the framework's dispatcher-priority type when it has one, and `NonPriority` 
 
 ⚙ If the project also runs the acceptance suite, an adapter is registered in two places — `Drivers/DemoCatalog.cs` (one line) and `Suites/PlatformSuites.cs` (one class that opens and closes the demo). `Src/Test/AutoTest/AGENTS.md` is the operating guide.
 
-⚙ The acceptance suite verifies **every published sampler** (`Src/Test/AutoTest/Samplers/`): most against a closed form, and the framework-object samplers that cannot be constructed in a process with no XAML/MAUI runtime in a real running app by the AT suite. A coverage test fails if a published sampler has no entry in either list. Adding a sampler means adding its row there.
+⚙ The acceptance suite verifies **every published sampler** (`Src/Test/AutoTest/Samplers/`): most against a closed form; the framework-object samplers that cannot be constructed in a process without the XAML/MAUI runtime are exercised in a real running app by the AT suite. A coverage test fails if a published sampler has no entry in either list. Adding a sampler means adding its row there.
 
 ⚙ Each row also carries the **declared type of the property it animates**, and that type is the registration key. The suite resolves it against the live registry (it runs your adapter's `Interpolator` static constructor to get one) and fails when the key lands on a different sampler or on none at all.
 

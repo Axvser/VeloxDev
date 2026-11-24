@@ -53,35 +53,10 @@ Property(t => t.Items[i].Width, 120d)
 
 ⚙ An index **whose leaf is declared on a value type** cannot be written — `List<SomeStruct>[0].Width` reads a copy of the struct, so the assignment lands in a temporary. A value type that appears *earlier* on the path is harmless: a reference reached through it still points at the real object. The rule is about the last member.
 
-## Static reuse and per-call construction
-
-```csharp
-// Same shape and endpoint every time: declare once.
-private static readonly Transition<Rectangle> Fade = …;
-
-Fade.Execute(rect);
-```
-
-```csharp
-// Endpoint or path from the call: build at the call site.
-Transition<Border>.Create()
-    .Property(b => b.Width, requestedWidth)
-    .Effect(new TransitionEffect()
-    {
-        Duration = TimeSpan.FromMilliseconds(240),
-        Ease = Eases.Cubic.Out,
-    })
-    .Execute(border);
-```
-
-⚙ **The rule of thumb: same shape and same endpoint → `static readonly`; endpoint computed per call → create and discard.** Building a declaration allocates a handful of objects; when the endpoint varies per call, building on the spot is both cheaper and correct.
-
-⚙ **A declaration is immutable.** Holding it in a `static readonly` field and calling `Execute` many times — including on different targets at once — is the intended use.
+## Execution
 
 ⚙ `Execute(target)` is the only step with a side effect, and it returns immediately (the pipeline is `async void`). To know a run finished, read the target's real value, or sequence on it with `AwaitThen`.
 
 ⚙ **Mutual by default.** `Execute(target)` supersedes the target's running mutual animation. `Execute(target, CanMutualTask: false)` runs alongside instead; concurrent runs are tracked separately and are not cancelled by a later mutual `Execute`.
-
-⚙ **A declaration that reads a local is built per caller.** An endpoint local is passed by value and frozen when the declaration is built, so a cached declaration keeps the first caller's endpoint for every later `Execute`. An index local such as `Items[i]` is captured through the closure instance and read live on every frame, but the closure is shared by the cached declaration, so one later change to `i` drives every execution of it. Both belong in the create-and-discard form.
 
 ⚙ `Execute(target, timeline)` anchors several animations to one `ITimeSourceControl` when they must share one transport (pause / rate / seek act on it as a unit). The parameter is positional and named `timeline`. The default implementation is `TimeSourceCore` (`VeloxDev.Timing`), and `TimerCore.CreateTimeSource<ITimeSourceControl>()` resolves it. A tick channel's own source comes from `TickManager.Bus(channel)` (null until that channel has started), which is how an animation shares the frame loop's clock.

@@ -4,7 +4,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/Avalonia Trimmed/Demo/` — the project sits at `Demo/Demo/`, so the views are at `Demo/Demo/Views/Workflow/` and the ViewModels at `Demo/Demo/ViewModels/Workflow/`. `TreeView.axaml` is the surface and carries the compiled-binding `x:DataType` the template ships as a placeholder.
 
-⚙ **The "Trimmed" in that path means *minimal demo*.** It is a demo-size choice, not a publish setting — see [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
+⚙ **"Trimmed" means *minimal demo*, not a publish setting:** [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
 
 ## Writing the surface
 
@@ -87,7 +87,7 @@ Retained views overriding `Render(DrawingContext)`, with the render-ready gate a
 
 ## Focus
 
-⚙ Avalonia's focus API is not WPF's: `IFocusManager.ClearFocus()` **was removed in Avalonia 12**, `IsFocused` exists but there is no `IsKeyboardFocused`, and a control that takes focus can make the surrounding `ScrollViewer` jump — `BringIntoViewOnFocusChange` has to be turned off around any programmatic focus. The adapter is compiled against 11.1 and the demos run on 12.x, so code that touches focus has to be valid on both.
+⚙ Avalonia's focus API is not WPF's: `IFocusManager.ClearFocus()` exists, but there is no `IsKeyboardFocused` — use `IsFocused` or `IsKeyboardFocusWithin`. A control that takes focus can make the surrounding `ScrollViewer` jump, so turn off `BringIntoViewOnFocusChange` around programmatic focus. The adapter compiles against 11.1.0 and the demos reference 11.3.0, so keep focus code valid on both.
 
 ## Item templates — `VeloxDev.Avalonia.Templates`
 

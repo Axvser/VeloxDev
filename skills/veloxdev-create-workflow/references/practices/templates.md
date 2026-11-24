@@ -6,7 +6,7 @@ Each adapter ships a `dotnet new` item-template pack that generates the seven vi
 
 ⚙ **Install the pack that matches your adapter package.** A pack is built against the adapter it ships with; install the latest published version of both.
 
-⚙ **The generated node view's port set is the template's default surface, not the node model's contract.** On the attached-property packs, the item template draws one input and one output slot and registers those two controls with the layout behaviour; Razor supplies the same two through render fragments. A node type whose ViewModel exposes other slots keeps the same name-based correspondence for each slot it wants measured — see [view-layer.md](view-layer.md#ports-the-model--view-correspondence).
+⚙ **The generated node view's port set is the template's default surface, not the node model's contract.** A node type whose ViewModel exposes other slots keeps the same name-based correspondence for each slot it wants measured — see [view-layer.md](view-layer.md#ports-the-model--view-correspondence).
 
 ## The seven items
 

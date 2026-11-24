@@ -4,15 +4,15 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 ## A custom type never animates
 
-**Symptom:** the path is accepted, but the property does not change; `Warn` reports `Unsampled`.
+**Symptom:** a reference-type path throws `TransitionPathUnsampleableException` from `Execute`; a value-type path is accepted, does not change, and `Warn` reports `Unsampled`.
 
-**Cause:** no sampler is registered for the declared property type, or the sampler was registered after the declaration was prepared. A reference-type path with no sampler is dropped; a value-type path is dropped at frame time.
+**Cause:** no sampler is registered for the declared property type, or the sampler was registered after the declaration was executed. A reference-type leaf is rejected when the run starts; a value-type leaf is skipped once `Prepare` finds no sampler.
 
-**Fix:** register the sampler before building or executing the declaration. Register the type the property is *declared* as, not only its concrete runtime type.
+**Fix:** register the sampler before executing the declaration. Register the type the property is *declared* as, not only its concrete runtime type.
 
 ## A sampler registered for a base type is never reached
 
-**Symptom:** a property declared as `Effect` (or another abstract base) does not animate, even though a sampler exists for a concrete subclass.
+**Symptom:** `Execute` throws `TransitionPathUnsampleableException` for a property declared as `Effect` (or another abstract base), even though a sampler exists for a concrete subclass.
 
 **Cause:** the lookup walks exact type, then base classes, then interfaces — upward only. A concrete registration does not serve a base-declared property.
 

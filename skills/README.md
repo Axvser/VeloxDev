@@ -50,7 +50,7 @@ A skill has one `SKILL.md` and, when it needs depth, a `references/` directory w
 
 The seven developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, and `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`. A skill still works alone — only those cross-links go dead — so keep all seven together when you can, and read a dead cross-link as "that skill is not at hand, or find the same rule in this one".
 
-`veloxdev-use-workflow-cli` is a standalone operator skill: it covers obtaining and launching the CLI, and drives the workflow through the tool surface. It does not require the developer skills; its one cross-link to `veloxdev-drive-workflow-with-ai` is for the underlying tool semantics, and the CLI reference in the repository covers the same ground.
+`veloxdev-use-workflow-cli` is a standalone operator skill: it covers obtaining, launching and operating the CLI, and drives the workflow through the tool surface. It does not require the developer skills; its cross-links to `veloxdev-drive-workflow-with-ai` and `veloxdev-create-workflow` are for the underlying tool semantics and API, and the CLI reference in the repository covers the same ground.
 
 The **directory name is the skill name** — it has to match the `name:` in the file's frontmatter.
 
@@ -67,7 +67,7 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 | `veloxdev-add-aspects` | Wrapping behaviour around an existing member without editing it — `[AspectOriented]`, `Aop()`, and the before / instead-of / after hooks |
 | `veloxdev-write-viewmodels` | Writing ViewModels with the source generators — `[VeloxProperty]`, `[VeloxCommand]`, collection hooks, and interop with CommunityToolkit / Prism / ReactiveUI / Caliburn |
 | `veloxdev-tick-loop` | Putting a frame loop on any class — `[Tickable]`, `InitializeTickable()`, the `Awake` / `Start` / `Update` / `LateUpdate` / `FixedUpdate` hooks, channels, and `TickManager` |
-| `veloxdev-use-workflow-cli` | Operating a running workflow through the headless CLI and its stdio MCP server — obtaining/packing the tool, client configuration, archive and dependency manifest, inspection/editing/compile/run tools, isolated workers and background jobs, redirects, checkpoints, logs and saving |
+| `veloxdev-use-workflow-cli` | Operating a running workflow through the headless CLI and its stdio MCP server — obtaining/installing the tool, client configuration, archive and dependency manifest, inspection/editing/compile/run tools, isolated workers and background jobs, redirects, checkpoints, logs and saving |
 
 ## Skills with references
 
@@ -80,7 +80,7 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 | `veloxdev-add-aspects` | marking/proxies, hooks | aspects |
 | `veloxdev-tick-loop` | lifecycle, channels/manager | tick |
 | `veloxdev-write-viewmodels` | properties, commands, interop/diagnostics | MVVM |
-| `veloxdev-use-workflow-cli` | launch, tools | runtime |
+| `veloxdev-use-workflow-cli` | launch, tools, headless | runtime |
 
 ## Keeping them accurate
 

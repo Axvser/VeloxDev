@@ -38,7 +38,7 @@ collapsed = world / Scale          (per axis)
 
 ⚙ `ActualOffset` is what you want if you draw on the canvas yourself: `screen = world + ActualOffset`, and `collapsed = scroll − ActualOffset`. It moves with panning and with negative-world content.
 
-⚙ `OriginSize` defaults to `1920 × 1080` and is only a canvas *baseline*, not a world boundary; content may extend well past it. Change it through `layout.AdaptTo(...)` on a host resize if you care.
+⚙ `OriginSize` defaults to `1920 × 1080` and is only a canvas *baseline*, not a world boundary; content may extend well past it. On a host resize, replace the layout with the copy `layout.AdaptTo(...)` returns.
 
 ### Slot anchors and links
 
@@ -164,7 +164,7 @@ Scroll below `0` grows `NegativeOffset`; above `max` it grows `PositiveOffset`. 
 | `SlotAnchorFromCanvasLocal(x, y, layer)` | `(x, y, layer)` — identity | **already collapsed**, because the host applies the canvas translation itself |
 | `SlotAnchorFromNode(nodeX, nodeY, localX, localY, layer)` | `(nodeX + localX, nodeY + localY, layer)` | a **collapsed node anchor plus a local offset** — no coordinate host at all |
 
-All three return a **collapsed** value. WPF, Avalonia and Jalium use the first; WinUI/MAUI/WinForms the second and fall back to the third. **Razor calls none of them** — its JS measures the port and the code-behind assigns `slot.Anchor` directly, so there is no call site to choose. Every adapter measures a control and writes `slot.Anchor`.
+All three return a **collapsed** value. WPF, Avalonia and Jalium use the first, WinUI and MAUI the second; all five fall back to the third when their coordinate host is absent. WinForms uses the second alone. **Razor calls none of them** — its JS measures the port and the code-behind assigns `slot.Anchor` directly, so there is no call site to choose. Every adapter measures a control and writes `slot.Anchor`.
 
 ⚙ **WinForms' own comment states the failure mode:** using `SlotAnchorFromVisualCenter` there subtracts `ActualOffset` a second time and shifts every link by `−ActualOffset`.
 

@@ -38,7 +38,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** errors point into generated code after a member is marked.
 
-**Cause:** an unsupported member shape — an overloaded method (`CS0102`), a generic method, `ref` / `out` parameters, an expression-bodied property (`CS0548`), or a public static method (`CS0176`).
+**Cause:** an unsupported member shape — a generic method, `ref` / `out` parameters, an expression-bodied property (`CS0548`), or a public static method (`CS0176`).
 
 **Fix:** remove the attribute from the unsupported member or change its shape. The generator's error names the collision but points into generated code; check the member you just marked.
 

@@ -22,9 +22,9 @@ A **channel** is the loop itself, named by a string. The attribute's `channel` d
 | Membership | `RegisterBehaviour`, `UnregisterBehaviour` |
 | Rate and clock | `SetTargetFPS`, `SetFixedUpdateInterval`, `SetTimeScale`, `SetUseAsyncLoop`, `ClearUseAsyncLoopOverride`, `UseAsyncLoop` (global property) |
 | Queries | `IsRunning`, `IsPaused`, `CurrentFPS`, `TargetFPS`, `TotalTime`, `TotalTimeMs`, `TotalFrames`, `ActiveBehaviorCount`, `TimeScale`, `SystemStatus`, `IsUpdateThreadAlive`, `IsFixedUpdateThreadAlive`, `ChannelNames`, `Bus` |
-| Marshalling and events | `ExecuteOnMainThread`, `OnChannelStarted` / `OnChannelPaused` / `OnChannelResumed` / `OnChannelStopped` |
+| Marshalling and events | `ExecuteOnMainThread`, `OnChannelStarted` / `OnChannelPaused` / `OnChannelResumed` / `OnChannelStopped`, `OnBehaviorError` |
 
-The four events are static and process-wide, carry `TickChannelEventArgs` with a single `ChannelName`, and fire only on a real transition — a redundant `Start`, or `StopAsync` on a non-running channel, raises nothing. Filter by `ChannelName`; the sender is the private channel object, not `TickManager`.
+The four events are static and process-wide, carry `TickChannelEventArgs` with a single `ChannelName`, and fire only on a real transition — a redundant `Start`, or `StopAsync` on a non-running channel, raises nothing. Filter by `ChannelName`; the sender is the private channel object, not `TickManager`. A hook's unhandled exception is reported through the separate static `OnBehaviorError` event, whose `TickBehaviorErrorEventArgs` carries `ChannelName`, `Stage` and `Exception`.
 
 ## Timing
 
@@ -40,8 +40,8 @@ The four events are static and process-wide, carry `TickChannelEventArgs` with a
 
 ## What a hook can do
 
-⚙ **Anything a hook throws is swallowed** to `Debug.WriteLine` (and is silent in Release). A hook that throws contributes nothing and reports nothing; a loop that silently stops drawing is the failure mode to suspect first.
+⚙ **Anything a hook throws is swallowed.** The exception is written to `Debug.WriteLine` and raised through the static `OnBehaviorError` event, which names the channel, the stage and the exception. With no `OnBehaviorError` subscriber, a Release build logs nothing; a loop that stops drawing is the failure mode to suspect first.
 
-⚙ **A hook runs on a channel pump — a thread or an async task, depending on `UseAsyncLoop` — so it does not touch the UI.** `Update` / `LateUpdate` run on one pump and `FixedUpdate` on another, concurrently; any field both touch needs its own synchronisation. A `Dispatcher.Invoke` from a hook is exactly the case the swallow hides: the loop keeps running, the window stops updating, and nothing is logged. Publish a value from the hook and let the view poll it — that is what the demo does.
+⚙ **A hook runs on a channel pump — a thread or an async task, depending on `UseAsyncLoop` — so it does not touch the UI.** `Update` / `LateUpdate` run on one pump and `FixedUpdate` on another, concurrently; any field both touch needs its own synchronisation. A `Dispatcher.Invoke` from a hook is exactly the case the swallow hides: the loop keeps running, the window stops updating, and — with no `OnBehaviorError` subscriber — nothing is logged. Publish a value from the hook and let the view poll it — that is what the demo does.
 
 ⚙ **Performance:** registration is queued, and the add/remove drain rebuilds a sorted dispatch snapshot. The snapshot enumerates a `ConcurrentDictionary`, whose order is unspecified, so the insertion sort is `O(N²)` average and worst case; the rebuild runs on a membership change or at most once per second, not per frame.

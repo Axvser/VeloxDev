@@ -48,7 +48,7 @@ int sum = await vm.AddCommand.ExecuteAsync(2, 3, CancellationToken.None);
 
 ⚙ **`canValidate: true`** makes the generator declare `private partial bool CanExecute{Name}Command(...)` — you implement it, and the build fails loudly until you do. The validator's parameter list copies all leading parameters' types and names from the source method; a method with no leading parameter gets `object? parameter`. A generic method's validator is a generic partial method with the same type parameters and constraints. Any name mismatch is `CS8826`. Call `{Name}Command.Notify()` (or `Get{Name}Command<T>().Notify()`) when state that affects the predicate changes.
 
-⚙ **A validator accepts `null` when `TParam` is a reference type.** `CommandPipeline<TParam, TResult>.CanExecute(object?)` passes a null argument to `CanExecuteCore(default!)`, and WPF does exactly that when a button has no `CommandParameter`. Null-check the parameter. A value-typed parameter never reaches the predicate: the pipeline rejects the null first.
+⚙ **A validator accepts `null` when `TParam` is a reference type or a nullable value type.** `CommandPipeline<TParam, TResult>.CanExecute(object?)` passes a null argument to `CanExecuteCore(default!)`, and WPF does exactly that when a button has no `CommandParameter`. Null-check the parameter. A non-nullable value-typed parameter never reaches the predicate: the pipeline rejects the null first.
 
 ⚙ **`semaphore` is the command's concurrency capacity** (default 1, serialised). Generated commands clamp it with `Math.Max(1, semaphore)`; the `VeloxCommand` constructor and `ChangeSemaphore` throw `ArgumentOutOfRangeException` for a value below 1.
 

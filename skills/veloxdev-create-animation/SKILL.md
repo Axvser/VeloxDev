@@ -58,21 +58,7 @@ private static readonly Transition<Rectangle> Shift =
 
 ## Which form to use
 
-**Same shape and same endpoint every time → `static readonly`:**
-
-```csharp
-private static readonly Transition<Rectangle> Fade =
-    Transition<Rectangle>.Create()
-        .Property(r => r.Opacity, 0d)
-        .Effect(new TransitionEffect()
-        {
-            Duration = TimeSpan.FromSeconds(1),
-            Ease = Eases.Sine.InOut,
-        });
-
-// …elsewhere
-Fade.Execute(rect);
-```
+**Same shape and same endpoint every time → the `static readonly` canonical layout above.**
 
 **Endpoint or path computed per call → build at the call site and let it go:**
 

@@ -8,7 +8,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Cause:** one of four things — `GetHelper()` returned `null`, `ReceiveAsync` was not overridden (the base returns `null`), `AccessAsync` returned `false` and pruned the edge, or the node was compiled out because its slot topology did not reach it. The engine drives nodes itself; a node's own `BroadcastAsync` does nothing during a compiled run.
 
-**Fix:** check `node.GetHelper()`; return the value from `ReceiveAsync`; make `AccessAsync` answer `true` for a live edge; inspect the compiled plan (`CompileWorkflow`) for the node.
+**Fix:** check `node.GetHelper()`; return the value from `ReceiveAsync`; make `AccessAsync` answer `true` for a live edge; inspect the plan `CompileAsync` returned for the node.
 
 ## A fan-out branch sees another branch's data, or a sibling overwrites it
 
@@ -46,9 +46,9 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** `context.Data` is one branch's output, and `IGroupData` is absent.
 
-**Cause:** the join node does not implement `ICompileTimeAware`, so the engine has no compile context to guard the group injection; or the join was detected from slots fed by the same upstream node (not a join).
+**Cause:** the compiled `InputNodes` for the node has at most one entry, so no group is injected. A join boundary is detected from distinct upstream *nodes* across the input slots; two slots fed by the same upstream node are not a join.
 
-**Fix:** implement `ICompileTimeAware` on the join node. Confirm the inputs come from distinct source nodes.
+**Fix:** confirm the inputs come from distinct source nodes, then recompile so the node's `InputNodes` holds more than one entry.
 
 ## A reverse query reports a value but `TargetReached` is false
 

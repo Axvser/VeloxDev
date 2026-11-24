@@ -58,14 +58,6 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Fix:** reconfiguration connects first and releases the old connection only after the new one answers. Tool objects are `McpToolProxy` instances, so names stay stable while the client underneath is replaced; the render invalidates only when the name set changes.
 
-## Assigning `McpScope` to `IAsyncDisposable` does not compile
-
-**Symptom:** `IAsyncDisposable d = mcp;` fails.
-
-**Cause:** `McpScope` exposes `DisposeAsync()` but does not declare the interface.
-
-**Fix:** use `await using var mcp = new McpScope()`, which works through the pattern, or call `await mcp.DisposeAsync()` explicitly.
-
 ## Unloading does not terminate a stdio server
 
 **Symptom:** the child process keeps running.

@@ -11,7 +11,7 @@ This is not the .NET API skill. Writing a host, a custom tool or a component lib
 
 ## What it is
 
-⚙ **One process, one loaded archive, one session.** `veloxdev mcp` loads a workflow document at startup. In isolated execution mode `LoadArchive` can replace it without restarting; under `--in-process-execution` it refuses. Unsaved edits are discarded on a switch.
+⚙ **One process, one loaded archive, one session.** `veloxdev mcp` loads a workflow document at startup. In isolated execution mode `LoadArchive` can replace it without restarting; under `--in-process-execution` or `--single-archive` it refuses. Unsaved edits are discarded on a switch.
 
 ⚙ **The tools are the library's own commands.** `ListNodes`, `CreateNode`, `ConnectByProperty`, `CompileWorkflow`, `RunCompiledWorkflow` and the rest are the same `AIFunction`s an embedded Agent uses. Editing through them keeps the undo stack and the component-command path intact.
 
@@ -93,6 +93,10 @@ Translate that command and args into the client's own MCP configuration syntax.
 | `--archive <path>` | Required. The document loaded at startup. |
 | `--manifest <path>` | Sidecar path; defaults to `<archive>.manifest.json` when it exists. |
 | `--assembly <path>` | Extra dependency; repeatable. Also `--assemblies a.dll;b.dll`. |
+| `--strict-plugin-versions` | Refuse a plugin whose `VeloxDev.Core` / `VeloxDev.Core.Extension` reference has a different major version; the default loads it and warns. |
+| `--single-archive` | Serve one document for the process lifetime; `LoadArchive` is refused, so runtime IDs stay stable. |
+| `--no-assembly-copy` | Load dependency DLLs from their source directory instead of the per-process copy. |
+| `--no-run-csv` | Do not write execution results to the run CSV; the export is on by default. |
 | `--root-type <name>` | Concrete tree type when the document has no root `$type`. |
 | `--allow-execution` | Puts `RunCompiledWorkflow` / `GetNodeResult` and the job tools on the surface. |
 | `--in-process-execution` | Runs node code in the server; enables pause/resume and run handles; refuses `LoadArchive`; unsafe for untrusted graphs. |
@@ -119,7 +123,7 @@ veloxdev run --archive graph.json --start 0 --node-result        # terminal role
 3. **Edit through component commands.** `CreateNode`, `CreateSlotOnNode`, `ConnectByProperty`, `DisconnectSlots`, `PatchNodeProperties`, `SetEnumSlotCollection`, `ArrangeLayout`. `Undo` / `Redo` / `ClearHistory` are real; `TakeSnapshot` / `GetChangesSinceSnapshot` show what changed. For a multi-step edit, `ApplyBatch` runs up to 100 Mutation/Layout calls with an optional snapshot rollback (`stopOnError`).
 4. **Validate and compile.** `ValidateWorkflow` for structural lint; `CompileWorkflow` (root) or `CompileNodeResult` (terminal) to see the plan and `GetCompileStatus` to read compile identity without recompiling.
 5. **Save.** Editing changes memory only. `SaveArchive` writes the document atomically; with no path it overwrites the loaded archive. It writes compact JSON by default, keeps the previous file as `<path>.bak`, and `dryRun: true` reports what would be written without touching the disk.
-6. **Run.** `RunCompiledWorkflow(startNodeIndex)` blocks and returns outcome/data/failures/log; `GetNodeResult(nodeIndex)` computes one node's result. Every run also writes `tasks/<taskId>_<timestamp>/runs/<timestamp>.csv` and names it as `csvFile` (logs + failures, one row each). For long runs use `StartWorkflow` → `GetWorkflowJob` → `CancelWorkflowJob`; `ListWorkflowJobs` / `ClearFinishedJobs` manage the registry.
+6. **Run.** `RunCompiledWorkflow(startNodeIndex)` blocks and returns outcome/data/failures/log; `GetNodeResult(nodeIndex)` computes one node's result. Every run also writes `tasks/<taskId>_<timestamp>/runs/<timestamp>_<tool>.csv` and names it as `csvFile` (logs + failures, one row each). For long runs use `StartWorkflow` → `GetWorkflowJob` → `CancelWorkflowJob`; `ListWorkflowJobs` / `ClearFinishedJobs` manage the registry.
 7. **Recover.** `SetRedirectOnError(nodeIndex)` installs a session-wide fallback for nodes that report an error without implementing `IRedirectable`; `ClearRedirectOnError` removes it. A node's own contract always wins. Then re-run, or fix the graph and run again.
 8. **Adopt post-run state.** An isolated run is a snapshot; its node VM state is not merged back. The result names a `stateFile`; `LoadArchive(stateFile)` adopts it explicitly. This is deliberately not automatic, so edits made while the run was in flight are not overwritten.
 

@@ -35,7 +35,7 @@ When nothing in the hierarchy already supplies the notification plumbing, the cl
 
 ```csharp
 [VeloxProperty] private string _name = string.Empty;                  // field form
-[VeloxProperty] public partial SlotViewModel InputSlot { get; set; }  // property form
+[VeloxProperty] public partial SlotDefaultComponent InputSlot { get; set; }  // property form
 ```
 
 ⚙ The field form always emits a `public` property. The property form preserves the accessibility and accessor visibility you declared.
@@ -54,12 +54,12 @@ That is `SetterMode.Default`; on the `FrameworkSetProperty` path (CommunityToolk
 
 ## Collections
 
-A property whose type implements `INotifyCollectionChanged` gets extra members:
+A property whose type implements `INotifyCollectionChanged` gets extra members (`string` here is the collection's element type):
 
 ```csharp
-partial void OnItemAddedToItems(IEnumerable<Item> items);
-partial void OnItemRemovedFromItems(IEnumerable<Item> items);
-partial void OnItemMovedInItems(IEnumerable<Item> items);
+partial void OnItemAddedToItems(IEnumerable<string> items);
+partial void OnItemRemovedFromItems(IEnumerable<string> items);
+partial void OnItemMovedInItems(IEnumerable<string> items);
 partial void OnItemsResetInItems();
 ```
 

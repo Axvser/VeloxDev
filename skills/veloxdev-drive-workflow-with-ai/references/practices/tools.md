@@ -1,6 +1,6 @@
 # The tool surface
 
-**76 built-in tools** in the unconditional groups of `WorkflowToolCategory` (`Composite` is reserved and empty; `Layout` carries the three solution tools; the `Execution` / `Command` gates are checked inside each tool body). On top of them: `ResetToolCallLimit`, always; `RequestSelection` / `RequestConfirmation`, each when its handler exists; `EnterPlanMode` / `ExitPlanMode`, both when a confirmation handler exists. With both handlers configured that is **81**. The mode does not decide whether they exist: asking, and the Agent's own move into and out of Plan, are `Interact`, allowed in every mode.
+The **built-in tools** are every member of the unconditional `WorkflowToolCategory` groups (`Composite` is reserved and empty; `Layout` carries the three solution tools; the `Execution` / `Command` gates are checked inside each tool body). On top of them: `ResetToolCallLimit`, always; `RequestSelection` / `RequestConfirmation`, each when its handler exists; `EnterPlanMode` / `ExitPlanMode`, both when a confirmation handler exists. The mode does not decide whether they exist: asking, and the Agent's own move into and out of Plan, are `Interact`, allowed in every mode.
 
 `ResetToolCallLimit` is registered in every configuration, whatever the categories — it is the only way out of a spent budget. It asks the user through the confirmation handler and reopens the tree's budget on agreement.
 
@@ -52,7 +52,7 @@ A category of its own with exactly one member — its flag is neither `Query` no
 
 `TakeSnapshot` (R), `GetChangesSinceSnapshot` (R), `MarkDirty` (M) — the only writing member.
 
-⚙ `WorkflowStateTracker` builds its snapshots and diffs with `VeloxJsonObject` / `VeloxJsonFormat` from `VeloxDev.Serialization`, not Newtonsoft `JObject`. `TakeSnapshot` / `GetChangesSinceLastSnapshot` return indented JSON.
+⚙ `WorkflowStateTracker` builds its snapshots and diffs with `VeloxJsonObject` / `VeloxJsonFormat` from `VeloxDev.Serialization`, not Newtonsoft `JObject`. `GetChangesSinceSnapshot` returns the tracker's indented JSON; `TakeSnapshot` answers with a compact status / version / count summary.
 
 ## Mutation — undoable unless marked
 

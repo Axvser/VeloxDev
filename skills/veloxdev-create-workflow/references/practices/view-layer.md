@@ -2,7 +2,7 @@
 
 The canvas you put on screen is assembled from seven view roles, and the item templates generate all seven for you — see [templates.md](templates.md). This file is what you need in order to **customize and debug** them: how they are composed, which attached properties and interfaces carry the contract, and where each extension point is.
 
-⚙ **Default: generate all seven roles from the item templates.** The decorator is the floating ruler; the minimap is the thumbnail. The generated node view is the elastic container (`Viewbox` on WPF/Avalonia/WinUI/Jalium, the visual camera on WinForms, layout-only scaling on MAUI, the CSS transform on Razor); keep that container when you add content. Each `gui/<gui>.md` has the code.
+⚙ **Default: generate all seven roles from the item templates.** The decorator is the floating ruler; the minimap is the thumbnail. The generated node view is the elastic container (`Viewbox` on the XAML platforms, WinForms and Jalium, layout-only scaling on MAUI, the CSS transform on Razor); on WinForms a camera matrix scales the whole graph. Keep that container when you add content. Each `gui/<gui>.md` has the code.
 
 Open your GUI's reference alongside this one — it carries that framework's attached properties, parameters and template defaults.
 
@@ -12,7 +12,7 @@ Open your GUI's reference alongside this one — it carries that framework's att
 |---|---|---|
 | Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom, forwards link interaction and shows the link menu, and registers `WorkflowInput.Scroller`. On WinForms the host is a `VisualHost`; the surface owns the camera matrix on `PART_Canvas` and `ViewPool` materializes the items |
 | Canvas transform | `WorkflowCanvasTransformBehavior` — **Jalium spells it `WorkflowSurfaceBehavior.CanvasTransform`**; MAUI has no carrier; **WinForms has no separate carrier — `WorkflowSurfaceBehavior`'s camera owns pan and zoom** | owns the pan offset your node and link views bind to |
-| View pool | `ViewPool` / `ViewManager` — **WinForms' visual backend uses a generic visual `ViewPool` attached to `PART_Canvas`; it is not the Core pool** | object-pooled views over the visible-items collection |
+| View pool | `ViewPool` — **WinForms' visual backend uses a generic visual `ViewPool` attached to `PART_Canvas`; it is not the Core pool** | object-pooled views over the visible-items collection |
 | Node drag | `WorkflowNodeDragBehavior` | a drag on a node executes `MoveCommand` |
 | Slot connection | `WorkflowSlotConnectionBehavior` | press one slot, release on another, connect them; on the frameworks without a surface pointer-move hook it also reports the candidate receiver |
 | Slot layout | `WorkflowSlotLayoutBehavior` | measures each port and writes its anchor back |

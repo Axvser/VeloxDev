@@ -30,9 +30,7 @@ var agent = chatClient.AsAIAgent(new ChatClientAgentOptions
 var response = await agent.RunAsync(message, session);
 ```
 
-⚙ **`WithSynchronizationContext` is part of the contract.** Workflow components are UI-bound and every tool call is marshalled through it. Call it while on the UI thread; without it, tool calls touch the graph from a thread pool thread.
-
-⚙ **The whole call stays on that context — including everything after an `await`.** The wrapper posts the call, and a posted callback resumes on the context, so a tool's post-await work runs where the components live. The tool bodies carry no `ConfigureAwait(false)` for that reason. It applies to your own `WithTools` / `WithQueryTools` tools too: an `AIFunction` gets the same wrapper; any other `AITool` type passes through untouched.
+⚙ **`WithSynchronizationContext` is part of the contract.** Workflow components are UI-bound and every tool call is marshalled through it. Call it while on the UI thread; without it, tool calls touch the graph from a thread pool thread. The whole call stays on that context — including work after an `await` — and a custom `AIFunction` gets the same wrapper, while any other `AITool` passes through untouched. See [references/practices/wiring-and-policy.md](references/practices/wiring-and-policy.md).
 
 ⚙ **The prompt is built on the agent invocation thread, not on that context.** Anything read there must be thread-safe. `McpStatusViewModel.Snapshot` and `SkillsViewModel.Snapshot` are immutable copies republished on the bound thread whenever the collection changes. Read `Servers` / `Skills` from your UI, and the snapshots from anywhere else.
 
@@ -50,10 +48,10 @@ var response = await agent.RunAsync(message, session);
 
 ## Policy — off by default
 
-| Gate | Default | Unlocks |
+| Gate | Default | Effect |
 |---|---|---|
-| `WithAllowNodeExecution(bool)` | **off** | `ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`, `RunCompiledWorkflow`, `GetNodeResult`, `StartCompiledWorkflow`, `ContinueCompiledWorkflow`. The four handle operations (`GetCompiledRunStatus`, `PauseCompiledRun`, `ResumeCompiledRun`, `StopCompiledRun`) are **not** gated. |
-| `WithAllowedGenericCommands(params string[])` | **empty** | `ExecuteCommandOnNode`, `ExecuteCommandById` — and it *narrows* them to the listed names |
+| `WithAllowNodeExecution(bool)` | **off** | The eight tools that start or drive node code (`ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`, `RunCompiledWorkflow`, `GetNodeResult`, `StartCompiledWorkflow`, `ContinueCompiledWorkflow`) are registered either way and re-check this gate at call time, returning `disabled by host policy` until it is on. The four handle operations (`GetCompiledRunStatus`, `PauseCompiledRun`, `ResumeCompiledRun`, `StopCompiledRun`) are **not** gated. |
+| `WithAllowedGenericCommands(params string[])` | **empty** | Allowlists `ExecuteCommandOnNode` / `ExecuteCommandById` to the listed command names; both are registered either way and refuse a command that is not allowlisted. |
 | `WithSelectionHandler` / `WithConfirmationHandler` | **null** | registers `RequestSelection` / `RequestConfirmation`; a confirmation handler also backs every `Ask` decision and enables `EnterPlanMode` / `ExitPlanMode` |
 | `WithPermissionMode(AgentPermissionMode)` | `Auto` | `Plan` read-only · `Manual` every non-read asks · `AutoEdit` edits run, execution asks · `Auto` only curation asks · `Bypass` nothing asks |
 | `WithPermissionRule(decision, patterns…)` | none | the fine layer beneath the mode; `Deny` holds in every mode, `Bypass` included |
@@ -63,13 +61,13 @@ var response = await agent.RunAsync(message, session);
 | `WithAutoMarkDirty(bool)` | off | marks the tree dirty after every non-query tool call |
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | pre-flight caps; exceeding one returns an error object rather than throwing |
 
-`AgentPermissionMode` is `Plan` · `Manual` · `AutoEdit` · `Auto` (the default) · `Bypass`. A rule is `new AgentPermissionRule(PermissionDecision.X, pattern)`, where `X` is `Allow`, `Ask` or `Deny`; the pattern matches a tool name (`DeleteNode`, `Get*`), a category (`category:Edit`), or a source (`source:mcp:*`). Only MCP tools carry a source (`mcp:<server>`, `mcp:management`); skill and sub-agent tools carry a null source, so a `source:` rule matches neither today. `WithPermissionJudge` receives a `ToolInvocation` — `Name`, `Category` (an `AgentActionCategory`: `Read` / `Edit` / `Execute` / `Curate` / `Interact`), `Source`, `Arguments` — and runs only in `Auto`, for calls no rule settled. `SetPermissionMode` is the runtime switch and returns whether the mode moved; the policy is read per call.
+The mode is the coarse layer and `WithPermissionRule` the fine one beneath it; `Deny` holds in every mode. Only MCP tools carry a source (`mcp:<server>`, `mcp:management`), so a `source:` rule reaches them and not skill or sub-agent tools. `SetPermissionMode` is the runtime switch, and the policy is read per call. The full mode matrix, rule syntax and `ToolInvocation` shape are in [references/practices/wiring-and-policy.md](references/practices/wiring-and-policy.md).
 
 ⚙ **The handle operations sit outside the execution gate.** They act on a handle an earlier `StartCompiledWorkflow` / `ContinueCompiledWorkflow` produced.
 
-⚙ **The mode is enforced inside the call wrapper**, on the two hooks every slice shares, so it reaches MCP-sourced and skill-sourced tools as well.
+⚙ **The mode is enforced inside the call wrapper**, on the two hooks every slice shares, so it reaches MCP tools and the tools the skill subsystem contributes as well.
 
-⚙ **A confirmation is how an `Ask` is answered.** With no handler registered, an unanswerable prompt denies. The old separate tool-approval switch is gone; it was the same axis as the mode.
+⚙ **A confirmation is how an `Ask` is answered.** With no handler registered, an unanswerable prompt denies.
 
 ⚙ **A spent budget is not a dead end.** The model always has `ResetToolCallLimit`, which puts the question to the user through the confirmation handler and reopens the tree's budget only on agreement; every refusal that names a limit points at it.
 
@@ -77,7 +75,7 @@ var response = await agent.RunAsync(message, session);
 
 ## What the model gets
 
-**69 built-in tools** in the unconditional category groups, all documented in [references/practices/tools.md](references/practices/tools.md), plus `ResetToolCallLimit` and up to four handler-gated tools (two interaction, two plan-mode) — **74** when both handlers are registered.
+**The built-in tools** are every tool in the unconditional category groups, all documented in [references/practices/tools.md](references/practices/tools.md), plus `ResetToolCallLimit` and up to four handler-gated tools (two interaction, two plan-mode).
 
 - **Query** (read-only) — `GetWorkflowSummary`, `GetFullTopology`, `ListNodes`, `GetNodeDetail`, `FindNodes`, `ResolveSlotId`, `ListSlotProperties`, `GetTypeSchema`, `GetComponentContext`, `ValidateWorkflow`, `CompileWorkflow`, `CompileNodeResult`, …
 - **Mutation** — `CreateNode`, `DeleteNode`, `ConnectSlots` / `ConnectByProperty`, `DisconnectSlots`, `SetSlotChannel`, `PatchNodeProperties`, `SetEnumSlotCollection`, `Undo` / `Redo`, …

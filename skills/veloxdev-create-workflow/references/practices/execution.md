@@ -34,7 +34,7 @@ Task RunAsync(CompiledGraph graph, IRuntimeContext context, CancellationToken ct
 
 ## Run controls
 
-The run controls are capabilities configured on the `RuntimeContext`; every one is optional, and with none configured the run behaves exactly as it did before they existed.
+The run controls are capabilities configured on the `RuntimeContext`; every one is optional, and with none configured the run is a plain sequential drive.
 
 | Capability | Member | Effect |
 |---|---|---|
@@ -43,10 +43,10 @@ The run controls are capabilities configured on the `RuntimeContext`; every one 
 | Pause | `ExecutionGate` (`IExecutionGate`) | Awaited before each node, so a host can pause between nodes and resume. |
 | Observation | `Observer` (`IExecutionObserver`) | A structural observation stream at run / node / branch boundaries. |
 | Structured errors | `ErrorSink` (`IExecutionErrorSink`) | Every failure as an `ExecutionError` record. |
-| Compensation | `Compensator` (`IExecutionCompensation`) | Per-node callbacks in reverse order on failure or cancellation. |
+| Compensation | `Compensation` (`IExecutionCompensation`) | Per-node callbacks in reverse order on failure or cancellation. |
 | Fan-out cap | `MaxParallelBranches` (`int?`) | Caps a fan-out group; `null` means uncapped. |
 
-⚙ **The engine resolves these through the concrete `RuntimeContext`.** They are deliberately not members of `IRuntimeContext`: adding them would break every external implementation. A host that supplies its own `IRuntimeContext` gets none of them; a branch gets them through its `BranchRuntimeContext.Session`.
+⚙ **The engine resolves these through the concrete `RuntimeContext`.** They are deliberately not members of `IRuntimeContext`: adding them would break every external implementation. A host that supplies its own `IRuntimeContext` gets none of them; a branch reads them from the session it wraps.
 
 ## Compilation
 
@@ -107,7 +107,7 @@ Every reached node is handed an `ICompileContext`:
 | `Offset` | the counter's value at the graph's entry — sub-graphs carry an offset instead of resetting |
 | `InputNodes` | the distinct upstream nodes, when the node is a join |
 
-⚙ **`Order == -1` means absolute stop.** Such a node still gets a compile context, so read it through `IsCompileStopped`. It is never driven.
+⚙ **`Order == -1` means absolute stop.** Such a node still gets a compile context, so read its `Order` (`context is { Order: -1 }`). It is never driven.
 
 ## Node author contract
 
@@ -144,11 +144,10 @@ A node computes in `ReceiveAsync` and **returns its output**; the engine writes 
 
 ```text
 IContext                    Data (the payload; always null at compile time)
-├── IAccessContext          + IsCompilePhase, Sender, Receiver
-│   ├── ITaskContext        what ReceiveAsync receives
-│   └── ICompileContext     + Order, ChainIndex, Offset, InputNodes
-└── IRuntimeContext : ITaskContext
-                            + Uid, Logs, Status, Attempt, blackboard, Target, TargetReached, writable Data
+└── IAccessContext          + IsCompilePhase, Sender, Receiver
+    ├── ITaskContext        what ReceiveAsync receives
+    │   └── IRuntimeContext + Uid, Logs, Status, Attempt, blackboard, Target, TargetReached, writable Data
+    └── ICompileContext     + Order, ChainIndex, Offset, InputNodes
 ```
 
 The single discriminator a node uses inside `ReceiveAsync` is `ctx is IRuntimeContext`.
@@ -202,7 +201,7 @@ if (context.Data is IGroupData group && group.TryGetValue(sourceNode, out var va
 
 `IGroupData` is an `IReadOnlyDictionary<INodeComponent, object?>`, keyed by **source node reference identity**.
 
-⚙ **The join node implements `ICompileTimeAware`.** The injection is guarded on a non-null compile context; with the interface, the node receives the group. The join is how "wait for all inputs" is expressed: the fan-out group completes before the join runs.
+⚙ **The group injection is keyed on the compiled input set.** `IGroupData` replaces `context.Data` when the compiled `InputNodes` for that node has more than one entry; `ICompileTimeAware` is optional and plays no part. The join is how "wait for all inputs" is expressed: the fan-out group completes before the join runs.
 
 ⚙ **An upstream that never registered an output is simply absent** — `TryGetValue` returns `false` and the indexer throws.
 

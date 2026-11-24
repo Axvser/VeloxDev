@@ -18,7 +18,7 @@ p.SetProxy(ProxyMembers.Method, nameof(TeamViewModel.Reset), logStart, replace, 
 
 ⚙ **`ProxyMembers.Getter` / `Setter` / `Method` pick the kind, and the name is the plain member name** — `nameof(TeamViewModel.Name)`, not `get_Name`. A property needs its getter and setter hooked separately.
 
-⚙ **`parameters` are the call's arguments** — a snapshot, not a channel back into the member. `parameters[0]` is the first one: a setter's new value, a method's first parameter; a getter has none. Cast before reading (`parameters?[1] is NotifyCollectionChangedEventArgs e`).
+⚙ **`parameters` are the call's arguments.** `parameters[0]` is the first one: a setter's new value, a method's first parameter; a getter has none. Cast before reading (`parameters?[1] is NotifyCollectionChangedEventArgs e`).
 
 ## The stages
 

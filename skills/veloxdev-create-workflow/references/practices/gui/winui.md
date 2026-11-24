@@ -4,7 +4,7 @@
 
 ⚙ **Reference implementation:** `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/` — read `TreeView.xaml` and `LinkView.xaml` **together**; they are the pair that implements the offset frame described below. ViewModels at `Demo/ViewModels/Workflow/`.
 
-⚙ **The "Trimmed" in that path means *minimal demo*.** It is a demo-size choice, not a publish setting — see [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
+⚙ **"Trimmed" means *minimal demo*, not a publish setting:** [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
 
 ## Writing the surface
 
@@ -57,7 +57,7 @@ The point is to keep the geometry non-negative and inside the element's own box,
 
 ⚙ Slot anchors on this adapter are measured **canvas-local** and written through `SlotAnchorFromCanvasLocal` (the identity form), because the composition translation already inverts the canvas pan. The visual-centre form here subtracts `ActualOffset` a second time and shifts **every** link by a constant.
 
-⚙ Pooled views can lag a zoom by ~100 ms unless the surface virtualizes right after repositioning. The adapter does this for you; a custom surface does the same.
+⚙ Pooled views can lag a zoom unless the surface virtualizes right after repositioning. The adapter does this for you; a custom surface does the same.
 
 ## Item templates — `VeloxDev.WinUI.Templates`
 

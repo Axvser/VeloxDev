@@ -89,7 +89,7 @@ Two shapes, and the compiler tells you which is which:
 
 `InitializeWorkflowCore` registers each slot property against the node by its **backing field**, because the node is not in a tree yet.
 
-⚙ **`InputSlot` and `OutputSlots` are the item template's two default implementations.** They are ordinary slot properties: remove them, rename them, or add more, and register each slot's control with the layout behaviour — see [Ports: the model ↔ view correspondence](view-layer.md#ports-the-model--view-correspondence).
+⚙ **`InputSlot` and `OutputSlots` are the item template's two default implementations.** They are ordinary slot properties: remove them, rename them, or add more — see [Ports: the model ↔ view correspondence](view-layer.md#ports-the-model--view-correspondence) for the per-slot registration.
 
 ## The ViewModel / Helper split
 
@@ -127,7 +127,7 @@ tree.GetHelper().ReceiveConnection(receiverSlot);
 
 Two phases, and the whole connection is submitted as one undoable action.
 
-⚙ **All validation is on the receiver.** `SendConnection` checks that the slot may send and cleans up its own capacity. `ReceiveConnection` runs, in order: can this slot receive → `ITreeEvents.Connecting` (the per-drag host veto) → `tree.GetHelper().ValidateConnection(sender, receiver)` → reject same-node → clean up same-direction duplicates → clean up receiver capacity → create the link.
+⚙ **All validation is on the receiver.** `SendConnection` checks that the slot may send and cleans up its own capacity. `ReceiveConnection` runs, in order: can this slot receive → `ITreeEvents.Connecting` (the per-drag host veto) → reject same-node → `tree.GetHelper().ValidateConnection(sender, receiver)` → clean up same-direction duplicates → clean up receiver capacity → create the link.
 
 ⚙ **`TreeHelper.ValidateConnection` is virtual and returns `true`.** It is the single user-supplied connection predicate — override it for connection rules. `tree.StandardCheckConnection(sender, receiver)` is the pure form of the whole rule set (direction, same-node, then this predicate); use it to ask "would this connect?" before a drag starts.
 

@@ -20,7 +20,7 @@ var current = ThemeManager.Current;                      // a Type; defaults to 
 
 ## Animated switching
 
-⚙ **`SetPlatformInterpolator` is mandatory for animated switching.** It is what lets the switch run on the adapter's `TransitionSchedulerCore` — the same one a `Transition<T>` run uses. Without it the switch is not animated: every value is written at once, the same as `Jump`. A switch that looks like "the theme has no animation" usually has this line missing.
+⚙ **`SetPlatformInterpolator` is mandatory for animated switching.** It is what lets the switch run on the adapter's `TransitionSchedulerCore` — the same one a `Transition<T>` run uses. Without it the switch is not animated: every value is written at once, the same as `Jump`.
 
 ⚙ **A property whose type has no sampler** keeps its old value for the whole switch and jumps at the end, while its neighbours animate normally.
 
@@ -79,7 +79,7 @@ var declared = GetStaticThemeCache();   // what the attributes declared
 var overrides = GetActiveThemeCache();  // what has been changed at runtime
 ```
 
-⚙ **The value is stored verbatim — no converter runs.** `SetThemeValue<T>` is generic only to name the theme; its `newValue` is `object?`. Pass the type the property itself expects (for a WPF `Background`, a `Brush`). A raw `[ThemeConfig]` context array such as `new object?[] { "#fff4d6" }` is stored as data, and the immediate re-apply swallows the failed `SetValue` — so the edit looks like a no-op. It is not: the array stays in the active cache as that theme's value, and the next switch to that theme uses it as the end value. WPF's brush sampler substitutes `Brushes.Transparent` for an end that is not a `Brush`, so a solid-brush start cross-fades to transparent.
+⚙ **The value is stored verbatim — no converter runs.** `SetThemeValue<T>` is generic only to name the theme; its `newValue` is `object?`. Pass the type the property itself expects — for a WPF `Background`, a `Brush`, not a raw `[ThemeConfig]` context array.
 
 ⚙ `RestoreThemeValue<T>` removes the property's whole override entry — every theme, not only `T` — then re-applies the value for the current theme.
 

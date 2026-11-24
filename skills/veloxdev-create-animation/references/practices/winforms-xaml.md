@@ -55,9 +55,10 @@ Transition<Easel.Visuals.VisualElement>.Create()
   `[XamlProperty]`.
 - A code-behind transition writes the local priority layer each frame; a style/trigger value is overridden while
   it runs. Markup actions write `BindingPriority.Animation`.
-- A DP-backed setter invalidates through `AffectsMeasure`/`AffectsArrange`/`AffectsRender`. `Visual.Opacity`,
-  `Transform`, `Clip` and `Effect` are plain visual properties with no change notification; animate a DP that
-  feeds them or call `InvalidateVisual` yourself.
+- A DP-backed setter invalidates through `AffectsMeasure`/`AffectsArrange`/`AffectsRender`: `Margin`, `Padding`,
+  `Width` and `Height` are `AffectsMeasure`; `Opacity`, `Transform`, `Transform3D`, `Clip` and `Effect` are
+  `AffectsRender`. On a raw `Visual` (not a `VisualElement`), `Opacity`, `Transform`, `Clip` and `Effect` are
+  plain properties with no change notification; animate a DP that feeds them or call `InvalidateVisual` yourself.
 - A declaration is immutable and reusable. Cache a fixed-endpoint one in `static readonly`; build a computed
   one at the call site. A new animation on the same element supersedes the previous one.
 - Start the first animation on the UI thread; the WinForms adapter posts frames through `Control.BeginInvoke`.
@@ -65,9 +66,9 @@ Transition<Easel.Visuals.VisualElement>.Create()
 ## Sampled types
 
 VeloxDev's samplers cover `double`, `float`, `int`, `long`, `Color`, `Point`, `PointF`, `Size`, `SizeF`,
-`Rectangle`, `RectangleF`, `Vector2/3/4`, `Quaternion`, `Padding` and `Thickness`. `decimal`, `bool`, `string`
-and enums have no sampler and are rejected/unsampled; register an `ISampler` for a custom type before animating
-it.
+`Rectangle`, `RectangleF` (and nullable `RectangleF`), `Vector2/3/4`, `Quaternion`, `Padding`, `Thickness`,
+`Brush` (`Easel.Brush`) and `Matrix` (`System.Drawing.Drawing2D.Matrix`). `decimal`, `bool`, `string` and enums have no sampler and are
+rejected/unsampled; register an `ISampler` for a custom type before animating it.
 
 ## Workflow-view specifics
 

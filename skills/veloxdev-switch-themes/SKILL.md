@@ -18,7 +18,7 @@ One adapter reference, and Core comes with it:
 | one GUI adapter (`VeloxDev.WPF`, `VeloxDev.Avalonia`, `VeloxDev.WinUI`, `VeloxDev.MAUI`, `VeloxDev.WinForms`, `VeloxDev.Razor`, `VeloxDev.Jalium`) | the **converters** that turn a theme's parameters into that framework's value type, and — transitively — `VeloxDev.Core` |
 | `VeloxDev.Core` | `ITheme`, the theme classes, `[ThemeConfig]`, `ThemeManager`, and the generator |
 
-The adapter brings `VeloxDev.Core` in transitively, so one reference is enough. Add Core explicitly when you also want its non-UI parts.
+The adapter brings `VeloxDev.Core` in transitively, so one reference is enough. Add Core explicitly when you also want its non-UI parts. When you consume the adapter by `ProjectReference` instead of NuGet, analyzers do not flow through it either: reference `VeloxDev.Core.Generator` in the project that declares `[ThemeConfig]`, with `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"`.
 
 Core cannot do it alone: a theme's parameters are plain values (a hex string), and only the adapter knows how to make a `System.Windows.Media.Brush` or an `Avalonia.Media.IBrush` out of one. The adapter also supplies the `Interpolator` you register for animated switching — and, through it, the scheduler a switch runs on.
 
@@ -53,7 +53,8 @@ public partial class MainWindow : Window
 |---|---|
 | Declare a theme and its properties, pick a converter | [references/practices/declaring.md](references/practices/declaring.md) |
 | Switch instantly or with animation, control a switch in flight | [references/practices/switching.md](references/practices/switching.md) |
-| React to a theme change, edit a theme's values at runtime | [references/practices/switching.md](references/practices/switching.md#reacting-to-a-change) |
+| React to a theme change | [references/practices/switching.md](references/practices/switching.md#reacting-to-a-change) |
+| Edit a theme's values at runtime | [references/practices/switching.md](references/practices/switching.md#editing-a-themes-values-at-runtime) |
 | Check which converters a platform ships, or add your own | [references/practices/converters-and-platforms.md](references/practices/converters-and-platforms.md) |
 
 ## Pitfalls
@@ -72,4 +73,4 @@ public partial class MainWindow : Window
 
 ⚙ `Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/` — `ITheme`, `IThemeObject`, `IThemeValueConverter`. The implementations are next door in `Src/Core/VeloxDev.Core/DynamicTheme/` — `Dark`, `Light`, `ThemeCache`, `[ThemeConfig]` (`ThemeConfigAttribute.cs`) and `ThemeManager`.
 
-⚙ `Src/Adapters/VeloxDev.<GUI>/DynamicTheme/ThemeValueConverters.cs` — the converters a GUI supplies. Jalium has the transition half of the adapter but no theme converters.
+⚙ `Src/Adapters/VeloxDev.<GUI>/DynamicTheme/ThemeValueConverters.cs` — the converters a GUI supplies.

@@ -30,7 +30,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** a field is null in `Awake`, or state is half-initialized.
 
-**Cause:** `InitializeTickable()` was called from the constructor. The drain runs on another thread.
+**Cause:** `InitializeTickable()` was called from the constructor while the channel is running (or `Start` follows in the same constructor). The drain runs on the channel's update pump, not the construction thread.
 
 **Fix:** call it after construction, from `Loaded` / `OnStart` / host initialization.
 
@@ -46,9 +46,9 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** hooks continue; the UI freezes on the last frame; nothing is logged.
 
-**Cause:** a hook called `Dispatcher.Invoke` (or touched the UI). Hooks run on a channel pump, not the UI thread; the exception is swallowed to `Debug.WriteLine`.
+**Cause:** a hook called `Dispatcher.Invoke` (or touched the UI). Hooks run on a channel pump, not the UI thread; the exception is swallowed and reported only through `Debug.WriteLine` and `OnBehaviorError`.
 
-**Fix:** publish a value from the hook and let the view poll or repaint through its own dispatcher. Do not marshal UI work from inside the hook.
+**Fix:** publish a value from the hook and let the view poll or repaint through its own dispatcher. Do not marshal UI work from inside the hook. Subscribe to `TickManager.OnBehaviorError` to see the swallowed exception.
 
 ## A zero time scale freezes the channel and `Resume` does not help
 

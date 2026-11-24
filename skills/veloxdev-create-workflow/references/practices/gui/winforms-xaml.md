@@ -171,9 +171,9 @@ Enter/leave are synthesized by Core from target changes; the root raises exit wh
   point under the pointer fixed. There is no per-card collapse.
 - The visual path lays out in logical DIPs and paints at `DeviceDpi/96`; the 260-unit card is 260 DIPs at any
   monitor scale. Grid/ruler/minimap metrics scale with the same DpiScale.
-- The camera reports its world viewport to the tree so Core's visible set follows pan/zoom. A self-hosted
-  canvas sets the virtualize inset (`RulerReserve`) before writing `Viewport`, or it culls nodes still visible
-  under the ruler.
+- The camera reports its world viewport to the tree so Core's visible set follows pan/zoom. Set the
+  virtualize inset with `tree.SetVirtualizeInset(left: band, top: band)` before writing `Viewport`, or it culls
+  nodes still visible under the ruler.
 
 ## Link context menu
 

@@ -9,11 +9,11 @@ Wrap behaviour around an existing member — log it, veto it, replace it, react 
 
 ## What it is
 
-⚙ **Compile-time, and reflection-free.** The generators emit ordinary C# into your own assembly. There is no assembly scanning, runtime subclassing, runtime code generation or `dynamic` — a trimmed or NativeAOT-published app can use this, and an intercepted call costs no reflection lookup.
+⚙ **Compile-time.** The generators emit ordinary C# into your own assembly, so an intercepted call costs no reflection lookup and a trimmed or NativeAOT-published app can use it.
 
-⚙ **Only the members you mark exist on the proxy.** Everything else on the class is not reachable through it.
+⚙ **Only the members you mark exist on the proxy.**
 
-⚙ **Only calls made through the proxy are intercepted.** The aspect is on the proxy, not on the class; every call the caller wants intercepted goes through `Aop()`.
+⚙ **Only calls made through the proxy are intercepted.** The aspect is on the proxy, not on the class; route calls through `Aop()`.
 
 ⚙ Constructors and events cannot carry the attribute (`AttributeUsage` is `Method | Property | Field`). A public static method is collected but the generated proxy calls it through the target, which fails to compile. A field is a way to mark the property the MVVM generator creates from it — the property is what gets intercepted.
 

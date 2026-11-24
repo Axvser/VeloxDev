@@ -59,11 +59,4 @@ private void LoadTheme()
 
 ## Which converter
 
-| GUI | Converters shipped |
-|---|---|
-| WPF, Avalonia, WinUI, MAUI | `BrushConverter` plus double / point / thickness / corner-radius / color / object |
-| WinForms | `Double`, `Int`, `Float`, `Point`, `PointF`, `Size`, `SizeF`, `Rectangle`, `RectangleF`, `Padding`, `Color`, `Font`, `Object` — no `BrushConverter`; `ObjectConverter` makes a `SolidBrush` from a hex string |
-| Razor | `Double`, `String`, `Int`, `Bool` |
-| Jalium | no `ThemeValueConverters.cs`; write your own `IThemeValueConverter` |
-
-⚙ **Each adapter ships its own converter set.** Naming a converter your adapter does not ship is a compile error, not a runtime miss. See [converters-and-platforms.md](converters-and-platforms.md).
+See [converters-and-platforms.md](converters-and-platforms.md) for the converters each adapter ships and for writing your own `IThemeValueConverter`.

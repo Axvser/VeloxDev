@@ -64,7 +64,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Cause:** WPF asks `CanExecute(null)` for a button without a `CommandParameter`; the pipeline passes null to a reference-typed validator.
 
-**Fix:** null-check the parameter in the validator. A value-typed parameter never reaches the predicate.
+**Fix:** null-check the parameter in the validator. A non-nullable value-typed parameter never reaches the predicate; a nullable value-typed one does, with `null`.
 
 ## A command parameter type is `internal`
 

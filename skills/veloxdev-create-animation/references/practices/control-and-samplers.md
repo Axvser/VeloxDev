@@ -59,8 +59,6 @@ A UI framework gets animation support by implementing `UIThreadInspector`, the s
 
 ⚙ Start from the shipped adapter whose host most resembles yours (`Src/Adapters/VeloxDev.<GUI>/TransitionSystem/`).
 
-⚙ `CreateScheduler` is also what makes a theme switch animate on that platform: the switch runs on the transition system, and this is the one thing Core cannot answer for it. A missing `SetPlatformInterpolator(new Interpolator())` at startup means Core never reaches `CreateScheduler`, and the switch happens instantly, with nothing logged.
-
 ## Pitfalls
 
 When a run stops early, a loop cannot be stopped, or a custom type never animates, read [references/pitfalls/segments.md](../pitfalls/segments.md) and [references/pitfalls/samplers.md](../pitfalls/samplers.md).

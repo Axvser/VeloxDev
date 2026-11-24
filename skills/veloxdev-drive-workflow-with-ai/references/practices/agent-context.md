@@ -15,8 +15,11 @@ where the text lives, not about what the model can see.
 ```csharp
 [AgentContext(AgentLanguages.Chinese, "用来描述这个节点")]
 [AgentContext(AgentLanguages.English, "Describes what this node is for")]
-public sealed class MyNodeViewModel : NodeDefaultComponent   // your own node view model
+[WorkflowBuilder.Node<NodeHelper>]
+public partial class MyNodeViewModel          // your own node; the generator supplies the component half
 {
+    public MyNodeViewModel() => InitializeWorkflow();
+
     [AgentContext(AgentLanguages.English, "The title shown on the card")]
     public string? Title { get; set; }
 }

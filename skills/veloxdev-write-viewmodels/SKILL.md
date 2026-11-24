@@ -7,7 +7,7 @@ description: Write ViewModels with VeloxDev's source generators — observable p
 
 Write a class that the compile-time generators turn into a full ViewModel — properties that notify, commands with cancellation, a result channel and a semaphore, collection hooks — without hand-writing `INotifyPropertyChanged` plumbing or a `RelayCommand`.
 
-Package: **`VeloxDev.Core`** (runtime, namespace `VeloxDev.MVVM`) plus the analyzer-only package **`VeloxDev.Core.Generator`**. A NuGet reference to `VeloxDev.Core` brings the generator in as a dependency, so installing Core is enough. When you consume Core by `ProjectReference` instead, add the generator explicitly as an analyzer (`OutputItemType="Analyzer"`) — analyzers do not flow across project references. No GUI adapter is needed.
+Package: **`VeloxDev.Core`** (runtime, namespace `VeloxDev.MVVM`) plus the analyzer-only package **`VeloxDev.Core.Generator`**. A NuGet reference to `VeloxDev.Core` brings the generator in as a dependency, so installing Core is enough. When you consume Core by `ProjectReference` instead, add the generator explicitly as an analyzer (`OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"`) — analyzers do not flow across project references. No GUI adapter is needed.
 
 ⚙ **The class is `partial`.** Every generator matches on the `partial` modifier. A non-partial class produces no file, no warning and no error. A `partial record` or `partial struct` is not a target at all: the MVVM/command pipeline requires a `ClassDeclarationSyntax`, and the theme generator has its own `ClassDeclarationSyntax`-only predicate.
 
@@ -24,7 +24,7 @@ Package: **`VeloxDev.Core`** (runtime, namespace `VeloxDev.MVVM`) plus the analy
 ```
 
 ```csharp
-[VeloxProperty] public partial SlotViewModel InputSlot { get; set; }   // property form: generates the backing field
+[VeloxProperty] public partial SlotDefaultComponent InputSlot { get; set; }   // property form: generates the backing field
 ```
 
 The workflow idiom is **fields for plain state, `partial` properties for anything with a lifecycle** — see [the workflow model reference](../veloxdev-create-workflow/references/practices/model.md).

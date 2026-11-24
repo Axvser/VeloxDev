@@ -31,7 +31,7 @@ Answer these before writing code. Each one has a right answer determined by the 
 
 If the host gives you a scroll viewer and a canvas, take them: the surface behaviour resolves them by name, writes `Viewport` from the scroll offsets, and everything downstream is automatic. This is what WPF, Avalonia, WinUI and Blazor do.
 
-If it does not — a surface that places its own children, or a framework with no scroll viewer — **you** own the scroll: compute `scroll − ActualOffset`, write `Viewport` yourself, and clamp with `ClampScrollOffset`. WinForms is the worked example: its `WorkflowSurfaceBehavior` drives its own XAML `ScrollViewer`, positions node cards in code and paints links in one canvas pass; it is also the only adapter that synthesizes its scroll from `ViewportOffset`.
+If it does not — a surface that places its own children, or a framework with no scroll viewer — **you** own the scroll: compute `scroll − ActualOffset`, write `Viewport` yourself, and clamp with `ClampScrollOffset`. WinForms is the worked example: its `WorkflowSurfaceBehavior` drives its own XAML `ScrollViewer` under one camera matrix, the item templates bind model geometry and each link view publishes its own curve; it is also the only adapter that synthesizes its scroll from `ViewportOffset`.
 
 ⚙ Whichever you choose, `Viewport` is written **only by the adapter**, and always in canvas-local coordinates.
 
@@ -56,7 +56,7 @@ The single highest-risk choice in the whole adapter. Ask: **what frame is the me
 |---|---|---|
 | a screen-space centre, and nothing has applied the canvas pan for you | `SlotAnchorFromVisualCenter` | WPF, Avalonia, Jalium |
 | a centre already inside the canvas-local frame (the host applies the pan itself) | `SlotAnchorFromCanvasLocal` | WinUI, MAUI, WinForms |
-| no coordinate host at all, and nothing you can measure | compute the centre in your adapter from model geometry (`node.Anchor` + design-local · `node.Size/DesignSize`) | *(none of the seven — this is the fallback for a GUI whose ports are not controls)* |
+| no coordinate host at all, and nothing you can measure | compute the centre with `SlotAnchorFromNode` (`node.Anchor` + design-local) | the fallback WPF, Avalonia, Jalium, WinUI and MAUI use when their coordinate host is absent (WinForms writes nothing in that case) |
 | a value from outside the process, already canvas-local (e.g. JavaScript) | write `slot.Anchor` directly — no `SlotAnchorFrom*` call | Blazor (Razor) |
 
 ⚙ **Getting this wrong offsets every link in the graph by a constant** — by `−ActualOffset` in the visual-centre/identity mix-up. There is no exception, no log and no visual clue other than the offset.
