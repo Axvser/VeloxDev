@@ -67,7 +67,7 @@
 | `Nullable` + `ImplicitUsings` + `LangVersion latest` | 同名属性 | 全模块开可空 |
 | `GeneratePackageOnBuild` + `<Version>12.0.0</Version>` | 同名属性 | 与其余六家同；**没有** `GenerateDocumentationFile` |
 | Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core` | 两个引用项 | 与生成器那套双轨同形 |
-| Debug → `ProjectReference Easel/Src/Easel`／非 Debug → `PackageReference Easel 1.0.0` | Easel 引用 | 视觉运行时永远来自 Easel，不随本仓库发布 |
+| Debug → `ProjectReference Easel/Src/Easel`／非 Debug → `PackageReference WinForms.Easel 1.1.0` | Easel 引用 | 视觉运行时永远来自 Easel，不随本仓库发布；nuget.org 上 `Easel` 这个 ID 被保留，包名是 `WinForms.Easel` |
 | 四个 TFM 一起编 | — | 新写的 BCL 调用必须在 netframework4.6.1 与 netcoreapp3.0 上都存在 |
 
 **别用 `bin/`/`obj/` 目录名推支持的框架**：两个下游 demo 都是 `net10.0-windows`，解析到 `net8.0-windows` 那份资产。旧 TFM 的兼容层在 `Compat.cs`：IsExternalInit、UnconditionalSuppressMessageAttribute、Clamp/IsFinite/TickCount64。
@@ -82,6 +82,7 @@
 6. **视觉相机方向**：上滚 `zoom *= 1.1`，下滚 `/1.1`，夹在 `0.1..10`。
 7. **池化视图被移除后留在画布上**：`ViewContainer.Deactivate` 只清 `DataContext` 并设 `Collapsed`，`Detach` 不摘树 ⇒ `Canvas.Children.Count` 是「曾经物化过的视图数」，活动视图数看 `ViewPool.GetActiveViewCount`。管道销毁时 `ViewSourcePipeline.Dispose` 经 `ReleaseAll` 才真正移除并释放。
 8. **`Panel.ZIndex` 不是活动排序**：`ViewContainer.Attach` 只在首次挂载时按当前 `Panel.ZIndex` 插位（连线 -1 落在节点前），之后模板改 `Anchor.Layer` 不会重排；`SetZOrder` 是空实现，避免覆盖模板绑定。
+9. **`[ModuleInitializer]` 只在模块里有代码执行时才跑**：`EaselAnimationBootstrap` 靠它把适配器写进 `Easel.Animation.AnimationRuntime.Animator`，但引用程序集、甚至 `typeof` 取类型都不触发——只装适配器当动画后端、不碰 workflow 类型的宿主会拿到空后端，`VisualTransition` 抛 "no interpolator"。这类宿主启动时调一次 `EaselAnimationBootstrap.EnsureRegistered()`（幂等，且不覆盖宿主自带的后端）；gallery 的 `Program` 就是这条路径。
 
 ## 六、入口：我要改 X 先打开哪个文件
 

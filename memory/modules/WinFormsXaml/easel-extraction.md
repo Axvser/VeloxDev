@@ -9,7 +9,7 @@
 - **测试/示例**：`Src/Test/Unit/Easel.Test`、`Examples/XamlGallery` 已复制并改名。Easel 示例去掉了 Workflow graph 与 VeloxDev MVVM 卡片及对应依赖；Easel 测试去掉了依赖过渡引擎的动画行为测试（那些留在 VeloxDev 适配器侧）。
 - **动画契约**：`Easel/Animation/` 定义 `IEase` / `Eases` / `AnimationSpec` / `IVisualAnimator` / `AnimationRuntime.Animator`。`Easel.Visuals.VisualTransition` 只是门面，不实现引擎；没有注入适配器时 `AnimationRuntime.Animator` 是 `NullVisualAnimator`：`CanAnimate` 返回 false，启动动画（`VisualTransition` / 触发器动作）抛出明确的 `InvalidOperationException`。`TransitionAction` / `KeyFrameAnimation` 仍留在 `Easel.Visuals`，调用门面。
 - **VeloxDev 适配器**：`Src/Adapters/VeloxDev.WinForms/XamlAnimation/EaselVisualAnimator.cs` 实现 `IVisualAnimator`，把 Easel DP 包成 `ITransitionProperty`，用 `Easel.BindingPriority.Animation` 写帧、收尾落 `LocalValue`，`EaseBridge` 把 `IEase` 接到 `IEaseCalculator`；模块初始化器在程序集加载时赋值 `AnimationRuntime.Animator`。
-- **条件引用**：`VeloxDev.WinForms.csproj` 按配置分支 —— `Debug` 用子模块 `ProjectReference`（`..\..\..\Easel\Src\Easel\Easel.csproj`），其余配置用 `PackageReference Include="Easel"`，好让 nuspec 带上真实的 Easel 依赖。
+- **条件引用**：`VeloxDev.WinForms.csproj` 按配置分支 —— `Debug` 用子模块 `ProjectReference`（`..\..\..\Easel\Src\Easel\Easel.csproj`），其余配置用 `PackageReference Include="WinForms.Easel"`，好让 nuspec 带上真实的 Easel 依赖（`Easel` 这个 ID 在 nuget.org 上是保留的，推不上去）。
 - **验证**：Easel 解决方案（运行时/生成器/测试/示例）构建与测试通过；示例 `--smoke`/`--capture` 正常；独立探针加载 VeloxDev.WinForms 后 `AnimationRuntime.Animator` 为 `EaselVisualAnimator`，Easel `Border.Width` 10→100 动画完成。
 
 ## Easel 新增能力（VeloxDev 的 Xaml 副本尚未同步）
