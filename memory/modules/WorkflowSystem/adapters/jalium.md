@@ -192,6 +192,7 @@ Ctrl+滚轮缩放仍挂 `ScrollViewer.PreviewMouseWheel`（`HookZoom`，只在 `
 
 ### 2.5.1 视口写回与恢复
 
+- **26.11.1 的 `ScrollableWidth/Height` 跟随画布实际尺寸**（`ExtentWidth − ViewportWidth`）。无头夹具必须像 Avalonia/WPF 那样显式把 `CanvasLayout.OriginSize` 设成场景尺寸（两家的夹具都是 8000×6000）；默认 1920×1080 会把表面撑成 2000×2000、滚动范围被夹到 ~1212，小地图拖拽与 `Locate` 的断言就对不上。
 - **写回**：`ScrollChanged` → `Refresh` → `UpdateViewport(state, h, v)`，其中 `SetVirtualizeInset`、`helper.Viewport`、`layout.ViewportOffset` 三者同源于**一次** `WorkflowSurfaceMath.ViewportOffsetFromScroll(h, v, layout)`（单一换算点，世界坐标）。
 - **未测量那一支（`viewportWidth/Height <= 0`）刻意不写回**：那时写进去的是假的 `(0,0)`，会被当成存档。它照旧只做 `SetVirtualizeInset` 与整块画布的 `Helper.Viewport`，所以「首次 Virtualize 空转」那个原行为没变。
 - **恢复**：`CaptureViewportRestore`（按 `LastRestoreTree` 去重，`HasViewportRestore` 为真才存）→ `QueueViewportRestore`（`Dispatcher.BeginInvoke(DispatcherPriority.Loaded, …)`，`ClampValue` 夹到 `ScrollableWidth/Height` 再滚，随后补一次 `UpdateViewport` + `UpdateOverlays`）。

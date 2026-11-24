@@ -15,6 +15,10 @@ internal sealed class JaliumHeadlessSurface : IDisposable
     {
         Graph = graph;
 
+        // 画布原点尺寸必须显式给：默认 1920×1080 会被表面撑成 2000×2000，而场景里的远节点在 6000 处；
+        // Avalonia/WPF 的夹具同样设 8000×6000，三家的小地图/定位断言才对得上同一组数字。
+        graph.Tree.Layout.OriginSize = new VeloxDev.WorkflowSystem.Size(8000d, 6000d);
+
         Host = new UserControl { Width = 800d, Height = 600d };
         Border = new Border();
         Scroll = new ScrollViewer
