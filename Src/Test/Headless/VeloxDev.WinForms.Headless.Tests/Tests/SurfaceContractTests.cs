@@ -61,6 +61,7 @@ public sealed class SurfaceContractTests
                      "GetCanvasName", "SetCanvasName",
                      "GetGridDecoratorName", "SetGridDecoratorName",
                      "GetMinimapOverlayName", "SetMinimapOverlayName",
+                     "GetSurfaceName", "SetSurfaceName",
                      "GetVisualTemplateSelector", "SetVisualTemplateSelector",
                      "GetWorkflowTree", "SetWorkflowTree",
                      "GetZoom", "GetPan", "SetPan",

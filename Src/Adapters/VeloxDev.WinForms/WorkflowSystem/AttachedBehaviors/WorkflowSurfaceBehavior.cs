@@ -58,9 +58,17 @@ public sealed class WorkflowSurfaceBehavior
         "GridDecoratorName", typeof(string), typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(null, OnConfigurationChanged));
 
-    /// <summary>Name of the minimap overlay (an HWND sibling outside the visual tree).</summary>
+    /// <summary>Name of the minimap overlay part.</summary>
     public static readonly DependencyProperty MinimapOverlayNameProperty = DependencyProperty.RegisterAttached(
         "MinimapOverlayName", typeof(string), typeof(WorkflowSurfaceBehavior),
+        new PropertyMetadata(null, OnConfigurationChanged));
+
+    /// <summary>
+    /// Name of the visual subtree that is the workflow surface when the host's root also carries a workbench
+    /// shell. Unset means the host root itself is the surface.
+    /// </summary>
+    public static readonly DependencyProperty SurfaceNameProperty = DependencyProperty.RegisterAttached(
+        "SurfaceName", typeof(string), typeof(WorkflowSurfaceBehavior),
         new PropertyMetadata(null, OnConfigurationChanged));
 
     /// <summary>Kept for WPF parity; input is routed by the visual host, so no part is used as a press source.</summary>
@@ -163,6 +171,13 @@ public sealed class WorkflowSurfaceBehavior
     /// <summary>Names the minimap part.</summary>
     public static void SetMinimapOverlayName(Control element, string? value)
         => SetRequired(element, MinimapOverlayNameProperty, value);
+
+    /// <summary>Gets the embedded surface subtree name.</summary>
+    public static string? GetSurfaceName(Control element) => (string?)GetRequired(element, SurfaceNameProperty);
+
+    /// <summary>Names the visual subtree that is the surface inside a larger visual root.</summary>
+    public static void SetSurfaceName(Control element, string? value)
+        => SetRequired(element, SurfaceNameProperty, value);
 
     /// <summary>Gets the WPF-parity press-source name (unused by the visual path).</summary>
     public static string? GetPointerPressSourceName(Control element)
@@ -267,7 +282,7 @@ public sealed class WorkflowSurfaceBehavior
         EnsureTree(host, state);
         EnsurePool(host, state);
         ApplyCamera(state);
-        EnsureAttachedBehaviors(state.Root);
+        EnsureAttachedBehaviors(state.Surface ?? state.Root);
     }
 
     /// <summary>The camera scale; one means world units equal surface units.</summary>
@@ -297,9 +312,10 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
+        var origin = SurfaceOrigin(state);
         return new DrawingPointF(
-            (float)((surfacePoint.X - state.Pan.X - state.Content.X) / zoom),
-            (float)((surfacePoint.Y - state.Pan.Y - state.Content.Y) / zoom));
+            (float)(((surfacePoint.X - origin.X) - state.Pan.X - state.Content.X) / zoom),
+            (float)(((surfacePoint.Y - origin.Y) - state.Pan.Y - state.Content.Y) / zoom));
     }
 
     /// <summary>Converts a world point into surface coordinates.</summary>
@@ -310,9 +326,10 @@ public sealed class WorkflowSurfaceBehavior
             return worldPoint;
         }
 
+        var origin = SurfaceOrigin(state);
         return new DrawingPointF(
-            (float)((worldPoint.X * state.Zoom) + state.Pan.X + state.Content.X),
-            (float)((worldPoint.Y * state.Zoom) + state.Pan.Y + state.Content.Y));
+            (float)((worldPoint.X * state.Zoom) + state.Pan.X + state.Content.X) + origin.X,
+            (float)((worldPoint.Y * state.Zoom) + state.Pan.Y + state.Content.Y) + origin.Y);
     }
 
     /// <summary>Returns the visible region's top-left in world coordinates.</summary>
@@ -353,10 +370,12 @@ public sealed class WorkflowSurfaceBehavior
 
         var zoom = Math.Max(0.1d, Math.Min(10d, state.Zoom * factor));
         var world = SurfaceToWorld(host, surfacePoint);
+        var origin = SurfaceOrigin(state);
+        var local = new DrawingPointF(surfacePoint.X - origin.X, surfacePoint.Y - origin.Y);
         state.Zoom = zoom;
         state.Pan = new DrawingPointF(
-            (float)(surfacePoint.X - (world.X * zoom) - state.Content.X),
-            (float)(surfacePoint.Y - (world.Y * zoom) - state.Content.Y));
+            (float)(local.X - (world.X * zoom) - state.Content.X),
+            (float)(local.Y - (world.Y * zoom) - state.Content.Y));
         ApplyCamera(state);
     }
 
@@ -400,7 +419,7 @@ public sealed class WorkflowSurfaceBehavior
         EnsureTree(target, state);
         EnsurePool(target, state);
         ApplyCamera(state);
-        EnsureAttachedBehaviors(state.Root);
+        EnsureAttachedBehaviors(state.Surface ?? state.Root);
     }
 
     private static void OnLinkStyleChanged(Control target, DependencyPropertyChangedEventArgs e)
@@ -443,7 +462,7 @@ public sealed class WorkflowSurfaceBehavior
         EnsureTree(host, state);
         EnsurePool(host, state);
         ApplyCamera(state);
-        EnsureAttachedBehaviors(state.Root);
+        EnsureAttachedBehaviors(state.Surface ?? state.Root);
     }
 
     private static void Detach(Control host)
@@ -491,15 +510,19 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         var root = visualHost.Root as VisualElement;
-        if (!ReferenceEquals(root, state.Root))
+        var surface = ResolveSurface(host, root);
+        if (!ReferenceEquals(root, state.Root) || !ReferenceEquals(surface, state.Surface))
         {
             UnhookInput(state);
             state.Root = root;
+            state.Surface = surface;
             HookInput(state);
         }
 
-        state.Canvas = root is null ? null : FindVisualNamed(root, GetCanvasName(host));
-        var scroll = root is null ? null : FindVisualNamed(root, GetScrollViewerName(host));
+        // 表面子树之外是外壳，部件只在表面里找。
+        var scope = state.Surface ?? root;
+        state.Canvas = scope is null ? null : FindVisualNamed(scope, GetCanvasName(host));
+        var scroll = scope is null ? null : FindVisualNamed(scope, GetScrollViewerName(host));
         if (!ReferenceEquals(state.Scroll, scroll))
         {
             if (state.Scroll is VisualScrollViewer previous)
@@ -515,12 +538,12 @@ public sealed class WorkflowSurfaceBehavior
                 viewer.ScrollOffsetRequested += state.OnScrollOffsetRequested;
             }
         }
-        state.Grid = root is null ? null : FindVisualNamed(root, GetGridDecoratorName(host));
+        state.Grid = scope is null ? null : FindVisualNamed(scope, GetGridDecoratorName(host));
         state.GridDecorator = state.Grid as IWorkflowGridDecorator;
-        state.PressSource = root is null ? null : FindVisualNamed(root, GetPointerPressSourceName(host));
-        state.Info = root is null ? null : FindVisualNamed(root, "PART_InfoOverlay") as WorkflowInfoOverlay;
+        state.PressSource = scope is null ? null : FindVisualNamed(scope, GetPointerPressSourceName(host));
+        state.Info = scope is null ? null : FindVisualNamed(scope, "PART_InfoOverlay") as WorkflowInfoOverlay;
 
-        var minimap = root is null ? null : FindVisualNamed(root, GetMinimapOverlayName(host));
+        var minimap = scope is null ? null : FindVisualNamed(scope, GetMinimapOverlayName(host));
         if (!ReferenceEquals(state.Minimap, minimap))
         {
             if (state.Minimap is IWorkflowMinimapScrollSource previous)
@@ -554,10 +577,23 @@ public sealed class WorkflowSurfaceBehavior
         state.Info = null;
         state.PressSource = null;
         state.Root = null;
+        state.Surface = null;
         state.Canvas = null;
         state.Scroll = null;
         state.Grid = null;
         state.GridDecorator = null;
+    }
+
+    // 没设表面名时整棵根树就是表面，保持单视图宿主的原契约。
+    private static VisualElement? ResolveSurface(Control host, VisualElement? root)
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        var name = GetSurfaceName(host);
+        return string.IsNullOrWhiteSpace(name) ? root : FindVisualNamed(root, name);
     }
 
     private static VisualElement? FindVisualNamed(VisualElement root, string? name)
@@ -606,9 +642,9 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        if (state.Root is { } root)
+        if ((state.Surface ?? state.Root) is { } surface)
         {
-            root.DataContext = resolved;
+            surface.DataContext = resolved;
         }
 
         // The visual surface zooms through its camera, not through the model's collapse factor.
@@ -651,9 +687,9 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         state.Tree = null;
-        if (state.Root is { } root)
+        if ((state.Surface ?? state.Root) is { } surface)
         {
-            root.DataContext = null;
+            surface.DataContext = null;
         }
     }
 
@@ -690,7 +726,7 @@ public sealed class WorkflowSurfaceBehavior
             state.RefreshingPool = false;
         }
 
-        EnsureAttachedBehaviors(state.Root);
+        EnsureAttachedBehaviors(state.Surface ?? state.Root);
         ApplyLinkStyles(state);
     }
 
@@ -707,7 +743,7 @@ public sealed class WorkflowSurfaceBehavior
             return null;
         }
 
-        if (state.Root is { } root
+        if ((state.Surface ?? state.Root) is { } root
             && VisualResourceLookup.FindResource(root, key!) is VisualTemplateSelector treeSelector)
         {
             return treeSelector;
@@ -760,9 +796,9 @@ public sealed class WorkflowSurfaceBehavior
         var content = VisualContentOffset(state);
         state.Content = new DrawingPointF((float)content.Horizontal, (float)content.Vertical);
         var bounds = ScrollWorldBounds(state);
-        var hostClient = state.VisualHost?.LogicalClientSize ?? DrawingSize.Empty;
-        var extentWidth = (float)Math.Max(hostClient.Width, (bounds.MaxX - bounds.MinX) * cameraZoom);
-        var extentHeight = (float)Math.Max(hostClient.Height, (bounds.MaxY - bounds.MinY) * cameraZoom);
+        var surfaceSize = SurfaceSize(state);
+        var extentWidth = (float)Math.Max(surfaceSize.Width, (bounds.MaxX - bounds.MinX) * cameraZoom);
+        var extentHeight = (float)Math.Max(surfaceSize.Height, (bounds.MaxY - bounds.MinY) * cameraZoom);
         if (double.IsNaN(canvas.Width) || Math.Abs(canvas.Width - extentWidth) > 0.01)
         {
             canvas.Width = extentWidth;
@@ -853,10 +889,43 @@ public sealed class WorkflowSurfaceBehavior
                 (int)Math.Round(viewer.ViewportHeight));
         }
 
-        var client = state.VisualHost?.LogicalClientSize ?? DrawingSize.Empty;
+        var client = SurfaceSize(state);
         return new DrawingSize(
             Math.Max(0, client.Width - (int)Math.Ceiling(state.Content.X)),
             Math.Max(0, client.Height - (int)Math.Ceiling(state.Content.Y)));
+    }
+
+    // 输入/命中用宿主坐标，相机与平移用表面内坐标；两者差的就是这个原点。
+    private static DrawingPointF SurfaceOrigin(SurfaceState state)
+        => state.Surface?.AbsoluteBounds.Location ?? DrawingPointF.Empty;
+
+    // 排版前表面尺寸为零，此时沿用原来的整宿主行为。
+    private static bool IsOverSurface(SurfaceState state, DrawingPointF hostPoint)
+    {
+        if (state.Surface is not { } surface)
+        {
+            return true;
+        }
+
+        var bounds = surface.AbsoluteBounds;
+        return bounds.Width <= 0.5f || bounds.Height <= 0.5f || bounds.Contains(hostPoint);
+    }
+
+    // 排版前退回宿主客户区。
+    private static DrawingSize SurfaceSize(SurfaceState state)
+    {
+        if (state.Surface is { } surface)
+        {
+            var bounds = surface.AbsoluteBounds;
+            if (bounds.Width > 0.5f && bounds.Height > 0.5f)
+            {
+                return new DrawingSize(
+                    (int)Math.Round(bounds.Width),
+                    (int)Math.Round(bounds.Height));
+            }
+        }
+
+        return state.VisualHost?.LogicalClientSize ?? DrawingSize.Empty;
     }
 
     private static Wf.Offset VisualContentOffset(SurfaceState state)
@@ -1015,7 +1084,7 @@ public sealed class WorkflowSurfaceBehavior
 
     private static void HookInput(SurfaceState state)
     {
-        if (state.Root is not { } root)
+        if (state.Surface is not { } root)
         {
             return;
         }
@@ -1031,7 +1100,7 @@ public sealed class WorkflowSurfaceBehavior
 
     private static void UnhookInput(SurfaceState state)
     {
-        if (state.Root is not { } root)
+        if (state.Surface is not { } root)
         {
             return;
         }
@@ -1409,7 +1478,9 @@ public sealed class WorkflowSurfaceBehavior
         if (ResolveVisualLinkMenu(host, state) is { } visualMenu)
         {
             var surfacePoint = WorldToSurface(host, new DrawingPointF((float)e.Position.Horizontal, (float)e.Position.Vertical));
-            var target = state.Canvas is { } canvas ? FindLinkView(canvas, link) ?? state.Root : state.Root;
+            var target = state.Canvas is { } canvas
+                ? FindLinkView(canvas, link) ?? state.Surface ?? state.Root
+                : state.Surface ?? state.Root;
             if (target is not null)
             {
                 visualMenu.DataContext = link;
@@ -1441,7 +1512,7 @@ public sealed class WorkflowSurfaceBehavior
             return null;
         }
 
-        if (state.Root is { } root
+        if ((state.Surface ?? state.Root) is { } root
             && VisualResourceLookup.FindResource(root, key!) is VisualContextMenu treeMenu)
         {
             return treeMenu;
@@ -1499,7 +1570,7 @@ public sealed class WorkflowSurfaceBehavior
         public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
         {
             var lines = SystemInformation.MouseWheelScrollLines;
-            var client = state.VisualHost?.LogicalClientSize ?? DrawingSize.Empty;
+            var client = SurfaceSize(state);
             var stepX = lines > 0 ? lines * LineHeight : client.Width;
             var stepY = lines > 0 ? lines * LineHeight : client.Height;
             var dx = wheelDeltaX != 0d ? (wheelDeltaX / Notch) * stepX : 0d;
@@ -1510,7 +1581,7 @@ public sealed class WorkflowSurfaceBehavior
 
         public void CenterOn(double localX, double localY)
         {
-            var client = state.VisualHost?.LogicalClientSize ?? DrawingSize.Empty;
+            var client = SurfaceSize(state);
             state.Pan = new DrawingPointF(
                 (float)((client.Width / 2d) - (localX * state.Zoom) - state.Content.X),
                 (float)((client.Height / 2d) - (localY * state.Zoom) - state.Content.Y));
@@ -1544,6 +1615,9 @@ public sealed class WorkflowSurfaceBehavior
         public VisualHost? VisualHost { get; set; }
 
         public VisualElement? Root { get; set; }
+
+        // 根树里的工作流子树；单视图宿主时等于 Root。
+        public VisualElement? Surface { get; set; }
 
         public VisualElement? Canvas { get; set; }
 
@@ -1622,6 +1696,12 @@ public sealed class WorkflowSurfaceBehavior
             }
 
             var client = host.PointToClient(screen);
+            var scale = host.DpiScale <= 0f ? 1f : host.DpiScale;
+            if (!IsOverSurface(this, new DrawingPointF(client.X / scale, client.Y / scale)))
+            {
+                return false;
+            }
+
             var delta = unchecked((short)((long)m.WParam >> 16));
             var point = new DrawingPointF(client.X, client.Y);
             if (m.Msg == WmMouseHWheel)
@@ -1675,7 +1755,9 @@ public sealed class WorkflowSurfaceBehavior
                 return;
             }
 
-            if (!ReferenceEquals(e.Host, Canvas) && !ReferenceEquals(e.Host, Root))
+            if (!ReferenceEquals(e.Host, Canvas)
+                && !ReferenceEquals(e.Host, Root)
+                && !ReferenceEquals(e.Host, Surface))
             {
                 return;
             }
@@ -1696,7 +1778,7 @@ public sealed class WorkflowSurfaceBehavior
                         poolRefreshPending = false;
                         if (Attached)
                         {
-                            EnsureAttachedBehaviors(Root);
+                            EnsureAttachedBehaviors(Surface ?? Root);
                             ApplyLinkStyles(this);
                         }
                     }));
@@ -1708,7 +1790,7 @@ public sealed class WorkflowSurfaceBehavior
             }
 
             poolRefreshPending = false;
-            EnsureAttachedBehaviors(Root);
+            EnsureAttachedBehaviors(Surface ?? Root);
             ApplyLinkStyles(this);
         }
 
