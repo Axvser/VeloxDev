@@ -121,7 +121,7 @@ jobs:
             @{ Id = "VeloxDev.MAUI.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj" },
             @{ Id = "VeloxDev.Razor.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj" },
             @{ Id = "VeloxDev.WinForms.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj" },
-            @{ Id = "VeloxDev.Jalium.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj" },
+            @{ Id = "VeloxDev.Jalium.Templates"; Kind = "template"; Path = "Src/Templates/VeloxDev.Jalium.Templates/working/VeloxDev.Jalium.Templates.csproj" },
             @{ Id = "VeloxDev.Cli"; Kind = "dependent"; Path = "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj" }
           )
 
@@ -483,7 +483,7 @@ jobs:
             "VeloxDev.MAUI.Templates"  = "Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj"
             "VeloxDev.Razor.Templates" = "Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj"
             "VeloxDev.WinForms.Templates" = "Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj"
-            "VeloxDev.Jalium.Templates" = "Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj"
+            "VeloxDev.Jalium.Templates" = "Src/Templates/VeloxDev.Jalium.Templates/working/VeloxDev.Jalium.Templates.csproj"
             "VeloxDev.Cli"             = "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj"
           }
 

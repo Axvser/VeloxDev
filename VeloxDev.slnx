@@ -168,7 +168,7 @@
   </Folder>
   <Folder Name="/Templates/">
     <Project Path="Src/Templates/VeloxDev.Avalonia.Templates/working/VeloxDev.Avalonia.Templates.csproj" />
-    <Project Path="Src/Templates/VeloxDev.Jalium.Templates/VeloxDev.Jalium.Templates.csproj" />
+    <Project Path="Src/Templates/VeloxDev.Jalium.Templates/working/VeloxDev.Jalium.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.MAUI.Templates/working/VeloxDev.MAUI.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.Razor.Templates/working/VeloxDev.Razor.Templates.csproj" />
     <Project Path="Src/Templates/VeloxDev.WinForms.Templates/working/VeloxDev.WinForms.Templates.csproj" />

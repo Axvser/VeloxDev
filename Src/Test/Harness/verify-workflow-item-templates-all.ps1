@@ -99,7 +99,7 @@ $configs = [ordered]@{
     }
     Jalium = @{
         PackId          = 'VeloxDev.Jalium.Templates'
-        TemplateProject = 'Src\Templates\VeloxDev.Jalium.Templates\VeloxDev.Jalium.Templates.csproj'
+        TemplateProject = 'Src\Templates\VeloxDev.Jalium.Templates\working\VeloxDev.Jalium.Templates.csproj'
         AdapterProject  = 'Src\Adapters\VeloxDev.Jalium\VeloxDev.Jalium.csproj'
         MirrorRoot      = 'Examples\Workflow\Jalium Trimmed\Demo\Views\Workflow'
         MirrorNamespaces = @('Demo.Views.Workflow')
