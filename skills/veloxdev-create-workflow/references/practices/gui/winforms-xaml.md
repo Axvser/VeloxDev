@@ -150,7 +150,8 @@ parts. A node that needs extra slots names them and registers them with the same
 
 The link view is one visual per link. The template binds `StartLeft` / `StartTop` / `EndLeft` / `EndTop` to
 `Sender.Anchor.*` / `Receiver.Anchor.*` and `CanRender` to `IsVisible`; the surface writes `LineColor` /
-`HighlightColor` / `IsVirtual`; the view draws the cubic and calls `PublishCurve` in `OnRender`. Curves are
+`LineThickness` / `IsVirtual`; the view draws the cubic and calls `PublishCurve` in `OnRender`. Hover
+highlighting is demo-only (`Examples/Workflow/WinForms Trimmed/.../LinkView.xaml.cs`). Curves are
 world-space; the camera transforms only while painting. The hit radius is 6 DIPs and does not scale with zoom;
 the link view sets `IsHitTestVisible = false` so it does not swallow canvas gestures.
 

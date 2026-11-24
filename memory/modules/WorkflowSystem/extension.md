@@ -204,6 +204,7 @@ public TreeHelper(double cellSize) { useVirtualization = true;  }   // 开，且
 
 实现 `IWorkflowGridDecorator`（`ScrollOffsetX/Y`、`ContentOffsetX/Y`、只读 `RulerBand`）或 `IWorkflowMinimapOverlay`（额外 `ViewportWidth/Height`、`WorkflowTree`、`IsMinimapVisible`）。
 - `WorkflowSurfaceMath` 里已备好小地图数学：`MinimapFit` / `MinimapLocal` / `MinimapViewportRect` / `MinimapToCanvasLocal` / `MinimapToScroll`（`GUI/Math/WorkflowSurfaceMath.cs` 的这五个同名方法）—— 别自己推。
+- 小地图的绘制钩子：适配器类暴露 `protected virtual DrawMinimap(...)`，参数带 Core 的 `MinimapDrawContext`（树、内容/视口包围盒、节点与预映射矩形、拟合变换、圆角）；模板只覆写并默认 `base`。七家签名见 `memory/modules/Templates/architecture.md` §六·轴 3。
 - `RulerBand` 要转发给 `WorkflowSpatialEx.SetVirtualizeInset`，否则有标尺的那条边上的节点看不见。
 
 ### 3.9 加一家新平台适配器

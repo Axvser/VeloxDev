@@ -75,3 +75,33 @@
   - **WinForms**：条目由宿主在 code-behind 交给 `WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, …)`；
     适配器负责订阅、定位、弹出与开合上报，模板只保留 `InitializeComponent()`。
   ⇒ 反过来，**不要**为了「能点到连线」把连线视图改成吃掉整块画布的命中面（那会吞掉画布手势）；命中面必须仍然只是画出来的那道描边。
+
+---
+
+## 六、七个角色的统一标准
+
+> 用户口述（2026-11-24）。七家按同一张表交付；缺一项或写法走样都算不符。
+
+| 角色 | 标准 |
+|---|---|
+| TreeView | code-behind 极简到只有一个 `InitializeComponent()` 调用，不许有别的；UI 由 XAML 完成，交互全部由附加属性负责添加 |
+| TemplateSelector | 不预留属性，直接在函数里写返回；只做 Node / Link / Slot，Tree 不做 |
+| SlotView | 同 TreeView |
+| NodeView | 在 TreeView 的要求之上，预设左（单 slot）右（动态多 slot）槽位的渲染绑定 |
+| MinimapOverlay | 适配器层允许提供基类；模板必须把底层绘制暴露成可重写函数，且函数体默认写上 `base` 调用；该绘制函数要包含小地图所需的全部上下文。可行时在 Core 添加通用接口 / 管道、七家适配器统一实现（或仿照 grid-decorator：通用数据交换接口 + 自绘） |
+| LinkView | 各家自绘，但必须采用同一套属性定义来做绑定 |
+| GridDecorator | 同 LinkView；并且必须挂着 `IWorkflowGridDecorator` 接口来统一同步数据 |
+
+### 6.1 显式例外
+
+下面这些是**平台硬限制**造成的偏离，不算违反上表；新增平台不许拿它们当先例。
+
+| 平台 | 角色 | 偏离 | 硬限制 |
+|---|---|---|---|
+| Jalium | TreeView | code-behind 里有 `CanvasTransform` 镜像 DP 与 CLR 属性 | 绑定路径不解析 `(附加属性)` 括号语法，树只能把画布变换重新暴露成普通属性；交互仍全部由附着行为负责 |
+| MAUI | LinkView | 没有 per-link 端点属性，改用 overlay 级属性 | 每线一个 `GraphicsView` 在深缩放会超出 Win2D 纹理上限并静默消失，只能一个视口级 overlay 画完所有线 |
+| MAUI | NodeView | code-behind 有按宽度缩放的 `OnSizeAllocated` | 没有 `Viewbox`；渲染变换不参与布局，会破坏槽锚点测量，只能走布局尺寸 |
+| Razor | 全部 | 没有 `InitializeComponent`；组件参数与 `.razor.cs` 是声明路径 | Blazor 组件模型没有「标记 + 代码后置」的对应物 |
+| Razor | MinimapOverlay | 扩展点是 `DrawMinimap` render fragment，不是函数重写 | 组件无法覆写基组件的渲染树 |
+| Razor | LinkView | 端点属性是可选的覆盖值，默认从模型读 | 池化视图重渲染时父级不会重新求值传给它的参数，几何必须留在视图内读模型 |
+| Razor | GridDecorator / MinimapOverlay | `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` 挂在适配器组件上，模板条目是 wrapper | Blazor 用组件参数（`SurfaceViewport`）推送数据，没有附着属性那条管道 |

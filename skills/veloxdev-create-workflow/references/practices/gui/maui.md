@@ -81,6 +81,6 @@ private void ApplyScale(double width)
 
 ⚙ **The tree declares no `LinkTemplate` and the link view is a thin forwarding shell.** The generated link view forwards its properties to the adapter's sealed `WorkflowLinkOverlay`, and the tree's template selector carries a `NodeTemplate` only — links are not pooled as views. A pack that still ships a per-link `LinkTemplate` is behind the demo; copy `Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml` instead.
 
-⚙ **`slotPath` (`-sp`) is accepted and discarded**, and here it is genuinely meaningless: MAUI draws its ports from `SlotState` geometry, not from an SVG path. `StrokeShape="RoundRectangle TemplateNodeCornerRadius"` substitutes a `Shape`, not a numeric `CornerRadius`.
+⚙ **`slotPath` (`-sp`) drives the slot glyph.** The generated slot view is a `Path` with `Aspect="Uniform"`, so the SVG path is the glyph. Its fill and stroke bind the slot's `State` through `SlotStateBrushConverter` — the code-behind is only `InitializeComponent()`. `StrokeShape="RoundRectangle TemplateNodeCornerRadius"` substitutes a `Shape`, not a numeric `CornerRadius`.
 
 ⚙ **The link context menu is a `MenuFlyout` resource plus `LinkMenuKey`,** declared on the tree and pointed at by `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"`. On Windows the adapter turns it into a native flyout; on the other platforms it materializes its own overlay layer over the surface (positioned by `Margin`). Each `MenuFlyoutItem` is bound to the pressed link, so `Command="{Binding DeleteCommand}"` is a complete entry.

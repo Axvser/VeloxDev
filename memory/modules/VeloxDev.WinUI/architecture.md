@@ -42,7 +42,7 @@
 | 契约需要哪些成员、`FindOrCreate` 为什么必须用 | `memory/modules/TransitionSystem/extension.md` |
 | 「主题是什么」「切换什么时候发生」、转换器怎么被激活 | DynamicTheme 模块（激活由**生成器**做，见 `extension.md`） |
 | 生成器 / 分析器 | **本项目不引用分析器包**，自己一行 `[VeloxProperty]` 都没有 |
-| `dotnet new` 模板包 | `Src/Templates/VeloxDev.WinUI.Templates/` 是**纯内容包**（`IncludeBuildOutput=false`、`EnableDefaultCompileItems=false`、无任何 `ProjectReference`）⇒ 装模板**不会**带来 `VeloxDev.WinUI` 依赖，宿主必须自己引。**另外它有一条恒不匹配的 glob**：模板包把 `..\..\skills\...\references\**\*` 打进 `references/`，而相对路径算下来不是仓库根的 `skills/` ⇒ 这一条**静默什么都不打**；同样的 glob 在 Avalonia / MAUI / Razor / WPF / WinForms 五个包里逐字重复（Jalium 的 csproj 没有 `working/` 那层、也就没有这条）—— 整族模板包的同一个静默缺陷 |
+| `dotnet new` 模板包 | `Src/Templates/VeloxDev.WinUI.Templates/` 是**纯内容包**（`IncludeBuildOutput=false`、`EnableDefaultCompileItems=false`、无任何 `ProjectReference`）⇒ 装模板**不会**带来 `VeloxDev.WinUI` 依赖，宿主必须自己引。**另外它有一条恒不匹配的 glob**：模板包把 `..\..\skills\...\references\**\*` 打进 `references/`，而相对路径算下来不是仓库根的 `skills/` ⇒ 这一条**静默什么都不打**；同样的 glob 在 Avalonia / MAUI / Razor / WPF / WinForms 五个包里逐字重复（Jalium 的 csproj 没有这一条）—— 整族模板包的同一个静默缺陷 |
 | 网格装饰器本体 | **七家适配器都没有** `WorkflowGridDecorator` 的实现（`grep -rn "class WorkflowGridDecorator" Src/Adapters/` 零命中；契约 `IWorkflowGridDecorator` 只被当接口用），它是**示例产物**，`Examples/Workflow/` 下几个平台各有一份（WinUI 那份在 `Examples/Workflow/WinUI Trimmed/Demo/Views/Workflow/WorkflowGridDecorator.cs`，`sealed class : Grid, IWorkflowGridDecorator`）。但契约要求的 `RulerBand → SetVirtualizeInset` 转发**在适配器里**（见 §三·5） |
 
 ---

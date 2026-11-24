@@ -108,15 +108,15 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 |---|---|---|
 | tree | `jalium-v-tree` | the surface markup: behavior attributes, the node/link `DataTemplate`s, the pool binding, the link menu |
 | node | `jalium-v-node` | the card inside the design-size `Viewbox`; keep the `PART_*` names in step with the slot-layout attributes |
-| slot | `jalium-v-slot` | the glyph path and the by-state colours in `UpdateForeground` |
+| slot | `jalium-v-slot` | the glyph path; fill/stroke bind `State` through `SlotStateBrushConverter` |
 | link | `jalium-v-link` | the curve, its `MinimumPull`, the stroke |
 | decorator | `jalium-v-decorator` | the whole grid: palette, spacing, major-line count, the drawing |
-| minimap | `jalium-v-minimap` | the four palette colours |
+| minimap | `jalium-v-minimap` | the four palette colours and the `DrawMinimap` override |
 | selector | `jalium-v-selector` | which `DataTemplate` each item kind gets |
 
 ⚙ **`jalium-v-tree` has no `linkColor` symbol** (only `jalium-v-link` declares it), so `-lc` is rejected on the tree and the tree's `LinkView` entry takes the link item's own default. Change the link colour on `jalium-v-link`.
 
-⚙ **One symbol on this pack is accepted and discarded:** the slot's `slotBorderColor` (`-bc`) declares `replaces: TemplateSlotBorderColor`, but that token appears in no generated file — the slot view paints a filled `Path` tinted from its own `Foreground` and has no border element. Every other declared symbol's token is live.
+⚙ **Every declared slot symbol's token is live.** `slotColor` is the standby fill and `slotBorderColor` the glyph outline; both bind the slot `State` through `SlotStateBrushConverter`.
 
 ⚙ Colours are substituted into parser calls (`ColorConverter.ConvertFromString("TemplateSlotColor")`), not into literals — which is why the mirror comparison normalises colour spelling before diffing.
 

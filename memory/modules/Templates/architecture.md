@@ -15,7 +15,7 @@
 | 是模板包，不是类库 | 七份 csproj 都有 `<PackageType>Template</PackageType>`（WPF `VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj`） |
 | 内部一行 C# 都不编译 | 同文件的 `EnableDefaultCompileItems`、`IncludeBuildOutput` 两个属性都是 `false` |
 | 与被模板化的代码**没有编译期联系** | 七份 csproj 的 `ItemGroup` 里**零** `PackageReference` / `ProjectReference`，只有 `<None Include=… Pack="true">` |
-| 但仍然进解决方案 | `VeloxDev.slnx` 的 `/Templates/` 文件夹列了七个项目（Jalium 那行的路径没有 `working/`，见 §二） |
+| 但仍然进解决方案 | `VeloxDev.slnx` 的 `/Templates/` 文件夹列了七个项目，路径统一为 `Src/Templates/VeloxDev.<平台>.Templates/working/VeloxDev.<平台>.Templates.csproj` |
 
 ⇒ **模板产物编译不过，本仓库的任何构建都不会发现**。七家共用 `Src/Test/Harness/verify-workflow-item-templates-all.ps1`
 （装包 → 生成七个条目 → 一起编译 → 与镜像比对，并对残留的 `replaces` 占位符报错）；
@@ -37,12 +37,12 @@
 
 ---
 
-## 二、七份包共有的形状与唯一的离群
+## 二、七份包共有的形状
 
 | 事实 | 值 | 覆盖 |
 |---|---|---|
 | `TargetFramework` | `netstandard2.0` | 七家全部 |
-| `Version` | `11.0.0` | 七家全部 |
+| `Version` | `12.0.0` | 七家全部 |
 | `PackageId` | `VeloxDev.<平台>.Templates` | 七家全部 |
 | `sourceName` | `TemplateClass` | 全部条目 |
 | `preferNameDirectory` | `false` | 全部条目 |
@@ -50,17 +50,16 @@
 | `.template.config/` 内容 | **恰好两个文件**：`template.json` + `dotnetcli.host.json` | 每个条目各两个 |
 | 条目目录名 | 七个平台**同名同集** | 全部条目 |
 
-**Jalium 是唯一的结构离群**，四处都不一样：
+七家的 csproj 位置、`Pack` 的 content glob、logo 相对路径与元数据**完全同形**：
 
-| 项 | 其余六家 | Jalium |
-|---|---|---|
-| csproj 位置 | `working/VeloxDev.<平台>.Templates.csproj` | `VeloxDev.Jalium.Templates.csproj`（项目根，**没有 `working/`**） |
-| `Pack` 的 content glob | `content\**\*` | `working\content\**\*`（`VeloxDev.Jalium.Templates.csproj` 的 `<None Include>`） |
-| logo 相对路径 | `..\..\..\..\Assets\veloxdev-logo.png` | `..\..\..\Assets\veloxdev-logo.png`（同文件另一条 `None`，少一层） |
-| 元数据 | 有 `PackageTags` / `PackageLicenseExpression` / `RepositoryUrl` | 三项全无；多一条 `IncludeSymbols=false` |
+| 项 | 值（七家一致） |
+|---|---|
+| csproj 位置 | `working/VeloxDev.<平台>.Templates.csproj`（与 `content/` 同级） |
+| `Pack` 的 content glob | `content\**\*` |
+| logo 相对路径 | `..\..\..\..\Assets\veloxdev-logo.png` |
+| 元数据 | `PackageTags` / `PackageLicenseExpression` / `RepositoryUrl` / `PackageReadmeFile` 齐全 |
 
-⇒ Jalium 是"条目在 `working/content/` 下、csproj 在上一级"；另外六家是"csproj 与 `content/` 同在 `working/` 下"。
-两种都自洽，但对不上就是 path 全错。
+⇒ 新增平台时照这个形状建，不要另起结构。
 
 ---
 
@@ -77,6 +76,7 @@
 | `workflow-tree-view` | `TreeView` | `-tree` |
 
 - `shortName` 完整形式是 `<平台小写>-v-<后缀>`（`wpf-v-tree`、`jalium-v-decorator`、`winforms-v-minimap`…）。
+- `workflow-template-selector` 只暴露 Node / Slot / Link 三个模板属性；**没有 `TreeTemplate`**（树不进 `ViewPool`）。
 - `identity` 是 `VeloxDev.<平台>.<角色名>`（如 `VeloxDev.Jalium.WorkflowNodeView`）。
 - **`primaryOutputs` 列出的路径恰好等于条目目录里除 `.template.config/` 外的全部文件**：有标记语言的一家两个
   （`TemplateClass.xaml` + `TemplateClass.xaml.cs`；Razor 是 `.razor` + `.razor.cs`），纯代码的一家一个
@@ -191,17 +191,31 @@
 | **标记语言里的元素 + 代码给几何字符串** | Razor | `workflow-link-view/TemplateClass.razor` 的 `<path d=…>`（虚线的 `stroke-dasharray="@dash"`，`dash` 在 code-behind 里按 `IsVirtual` 取 `"6 4"`）；`data-veloxdev-link-curve="1"` 是给适配器缩放 JS 认的标记，不是样式 —— 见 `adapters/razor.md` §2 |
 | **复用适配器的视口级图层** | MAUI | `workflow-link-view/TemplateClass.xaml` 直接放 `behaviors:WorkflowLinkOverlay`；文件头的注释写明取舍：**每条线一个 `GraphicsView` 会在深缩放下超出 Win2D 纹理上限并静默消失**，所以一个表面只放**一个** link 层 |
 
+**连线的绑定属性七家统一**：`StartLeft` / `StartTop` / `EndLeft` / `EndTop` / `CanRender` / `IsVirtual` /
+`LineColor` / `LineThickness`。MAUI 是显式例外（单 overlay，改用 overlay 级属性，见
+[item-template-specifications.md](../../specifications/item-template-specifications.md) §6.1）；Razor 的端点属性是可选覆盖，
+默认从模型读。
+
 ⇒ **WPF / WinUI 那一对容易看错**：WPF 的 tree-view 给 `LinkView` 绑了 `Width/Height` 到
 `PART_Canvas` 的 `ActualWidth/ActualHeight`（`workflow-tree-view/TemplateClass.xaml` 的 `LinkTemplate`），
 WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree-view/TemplateClass.xaml` 的 `LinkTemplate` 注释：
 `Do not bind Width/Height here; LinkView sizes its own box.`）。
 两者最终都在代码里画，但"盒子谁给"是相反的。
 
-### 轴 3 · minimap 是薄壳还是自带实现
+### 轴 3 · minimap：适配器画，模板给可重写钩子
 
-七家全是薄壳：继承/配置框架或适配器给的实现，只设颜色，模板只给调色板（各家 `workflow-minimap-overlay/TemplateClass.*`）。
-WinForms 的小地图实现在适配器（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/WorkflowMinimapOverlay.cs`）；
-Jalium 的薄壳设四个颜色符号（`workflow-minimap-overlay/TemplateClass.cs`）。
+七家都是薄壳调色板，并各自留一个**空的绘制覆写**（默认只调 `base`），底层绘制全在适配器：
+
+| 平台 | 覆写入口 |
+|---|---|
+| WPF / Avalonia / Jalium | `protected virtual void DrawMinimap(DrawingContext, MinimapDrawContext)` |
+| WinUI | `protected virtual void DrawMinimap(MinimapDrawContext)`（池化 `Rectangle`） |
+| WinForms | `protected virtual void DrawMinimap(Graphics, MinimapDrawContext)` |
+| MAUI | `protected virtual void DrawMinimap(ICanvas, MinimapDrawContext)` |
+| Razor | 适配器组件的 `DrawMinimap` render fragment（组件不能覆写渲染树） |
+
+`MinimapDrawContext`（Core `Interfaces/WorkflowSystem/Surface/MinimapDrawContext.cs`）带树、内容/视口包围盒、
+节点世界矩形、预映射的节点/视口矩形、拟合原点与比例、圆角 —— 覆写方不再自己推这些。
 
 **WinForms 的七项不是「基类 + 派生」**：tree 是视觉 `UserControl` + `WorkflowSurfaceBehavior`；node / slot / link 都是视觉 `UserControl`，由 `ViewPool` 物化、`DataTemplate` 定位，`WorkflowSlotLayoutBehavior` 写锚点，`LinkView` 自己发布曲线；grid / minimap / selector 是纯 `.cs`。调度与平台机制在适配器，调色板、卡片样子与选择器策略在模板。颜色解析统一走 `XamlRuntime.ParseColor`。
 
@@ -223,10 +237,6 @@ Jalium 的薄壳设四个颜色符号（`workflow-minimap-overlay/TemplateClass.
 
 | 平台 | 条目 | 空转的 symbol |
 |---|---|---|
-| WPF | `workflow-slot-view` | `slotBorderColor` |
-| WinUI | `workflow-slot-view` | `slotBorderColor` |
-| Avalonia | `workflow-slot-view` | `slotColor`、`slotBorderColor` |
-| MAUI | `workflow-slot-view` | `slotPath` |
 | Razor | `workflow-slot-view` | `slotBackground` |
 | Razor | `workflow-grid-decorator` | `gridBackground`、`minorGridColor`、`majorGridColor` |
 | Razor | `workflow-tree-view` | `surfaceBorderBrush`、`surfaceBorderThickness`、`surfaceCornerRadius` |
@@ -236,13 +246,10 @@ Jalium 的薄壳设四个颜色符号（`workflow-minimap-overlay/TemplateClass.
 「Style parameters」一节）：七家接受**同一套参数名、同一套默认值**，命令行因此能在 GUI 之间原样搬。
 删参数会让 `dotnet new` 报未知参数；补的是**说明**，不是删参数，也不是硬造一个样式点。
 
-⚠ **`slotPath` 特别容易骗人**：七个平台的 `defaultValue` 是**逐字节相同**的一段 SVG 路径
-（viewBox 1024×1024 的圆环图标），但**只有六个真的替换它** ——
-MAUI 声明了却没有 `replaces`。⇒ 在 MAUI 上传 `--slotPath` 什么也不会发生，
-而图标看起来"是那段路径"，会让人以为换成功了。
+`slotPath` 与 `slotColor` / `slotBorderColor` 现已七家全部有 `replaces`：槽模板的 `Path` 绑
+`State` 经各家的 `SlotStateBrushConverter`，`slotPath` 是图形本体。
 
-⚠ **人面向文档只举了子集**（Razor 的树边框/圆角、MAUI 的 `slotPath`、WPF/WinUI/Avalonia 的 `slotBorderColor`、
-Avalonia 的 `slotColor`）；上表是跨平台的完整枚举。
+⚠ **人面向文档只举了子集**（Razor 的树边框/圆角）；上表是跨平台的完整枚举。
 
 ### 7.2 多份 csproj 里有一条匹配不到任何文件的 Pack glob
 
@@ -257,7 +264,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 `Src/Templates/skills/veloxdev-workflow-item-templates/references/**\*` —— 而 `Src/Templates/skills`
 **整个目录都不存在**。要够到仓库根的 `skills/` 得写**四级**（`..\..\..\..\skills\…`）。
 ⇒ **它匹配 0 个文件**：仓库根 `skills/` 下没有 `veloxdev-workflow-item-templates/` 这个子目录。
-**包内不会有 `references/` 目录**，而 `dotnet pack` 对空 glob 不报错。**Jalium 没有这一行**（它的 csproj 只有 `working\content\**\*` 与 logo 两条 `None`）。
+**包内不会有 `references/` 目录**，而 `dotnet pack` 对空 glob 不报错。**Jalium 没有这一行**（它的 csproj 只有 `content\**\*` 与 logo 两条 `None`）。
 
 ### 7.3 Avalonia 的 tree-view 生成出来就编译不过 —— 而它自己写明了
 
@@ -270,17 +277,16 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 
 ### 7.4 插槽状态着色：Avalonia 完全没有
 
-`SlotState`（决定插槽在连线手势下变紫/番茄红/青柠）在七家的实现方式：
+`SlotState`（决定插槽在连线手势下变紫/番茄红/青柠）七家都**由 slot-view 自己绑 DataContext 的 `State`**，
+node-view 不再传 `SlotState`：
 
-| 平台 | 方式 | 依据 |
-|---|---|---|
-| WPF | slot-view 有 `SlotStateProperty` DP，node-view 两侧都绑 | `workflow-slot-view/TemplateClass.xaml.cs` 的 `SlotStateProperty`；`workflow-node-view/TemplateClass.xaml` 的 `NodeTemplate` 输入/输出两行 |
-| WinUI | 同上，DP 在 slot-view，node-view 两侧都绑 | `workflow-slot-view/TemplateClass.xaml.cs` 的 `SlotStateProperty` / `UpdateForeground`；`workflow-node-view/TemplateClass.xaml` 的输入/输出两行 |
-| MAUI | `BindableProperty` + 绑 `Slot.State` / `State` | `workflow-slot-view/TemplateClass.xaml.cs` 的 `SlotStateProperty`；`workflow-node-view/TemplateClass.xaml` 的输入/输出两行 |
-| Jalium | 模板 slot-view 自己在 code-behind 里按 `SlotState` 算 `Foreground`；node-view 绑 `SlotState="{Binding State}"` | `workflow-slot-view/TemplateClass.jalxaml.cs` 的 `UpdateForeground`；`workflow-node-view/TemplateClass.jalxaml` |
-| Razor | 不绑，slot-view 在 C# 里算 | `workflow-slot-view/TemplateClass.razor.cs` 的 `FillColor` / `SlotStateColor` |
-| WinForms | slot-view 把 `PART_Glyph.Fill` 绑到模型 `State`，经 `SlotStateBrushConverter`；code-behind 只有 `InitializeComponent()` | `workflow-slot-view/TemplateClass.xaml` 的 `PART_Glyph` 绑定；`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/SlotStateBrushConverter.cs` |
-| **Avalonia** | **没有** —— slot-view 里搜 `SlotState` 零命中 | `workflow-slot-view/TemplateClass.axaml` 只把 `<Path Fill>` 绑到 `$parent[UserControl].Foreground`，而模板里没有任何地方写 `Foreground` |
+| 平台 | 方式 |
+|---|---|
+| WPF / Avalonia / WinUI / MAUI / Jalium | 各适配器的 `SlotStateBrushConverter`：`Fill="{Binding State, Converter=…}"`，`Stroke` 同转换器带 `ConverterParameter=Border`；`StandByColor` / `BorderColor` 由模板给 |
+| WinForms | 同一模式：`PART_Glyph.Fill` 经 `SlotStateBrushConverter`（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/SlotStateBrushConverter.cs`） |
+| Razor | 标记里调用 `WorkflowPresentation.SlotStateColor(Slot.State, …)` |
+
+⇒ slot-view 的 code-behind 回到只有 `InitializeComponent()`（Razor 只剩参数与 `PropertyChanged` 订阅）。
 
 ⇒ 在 Avalonia 上，插槽**永远不会变色**，而且不会报错。要修就得给 slot-view 加一个状态属性再绑上去。
 
@@ -376,15 +382,11 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 
 ⇒ **把标记语言控件改成自绘之前，先列出被删掉的那个根元素上都挂了什么。** 附着属性、`Background`、`x:Name`（会被别处按名字找）都算。
 
-### 9.3 输出槽的 `SlotState` 写成 `Slot.State` 会静默失败
+### 9.3 输出槽的 `State` 只能从槽自己的 DataContext 读
 
-输出槽在 `DataTemplate` 里（`ItemsSource="{Binding OutputSlots.Items}"`），那个 `DataTemplate` 的 DataContext 是**包装项**（成员是 `Slot` 与 `Name`，模板里两个都用到过）。所以 `DataContext="{Binding Slot}"` / `BindingContext="{Binding Slot}"` 是对的 —— 槽视图的上下文就该是槽自己。
+输出槽在 `DataTemplate` 里（`ItemsSource="{Binding OutputSlots.Items}"`），那个 `DataTemplate` 的 DataContext 是**包装项**（成员是 `Slot` 与 `Name`）。槽视图元素上写 `DataContext="{Binding Slot}"` / `BindingContext="{Binding Slot}"`，此后它的上下文就是槽自己 —— 所以槽内部统一写 `{Binding State}`。
 
-错的是**同一个元素上**再写 `SlotState="{Binding Slot.State}"`：`DataContext` 一被设成槽 VM，这一行就改在槽 VM 里求值，而 `ISlotComponent` 的成员只有 `Targets` / `Sources` / `Parent` / `Channel` / `State` / `Anchor`（`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/Components/ISlotComponent.cs`），**没有 `Slot`** ⇒ 绑定失败、槽永远拿不到自己的状态，而**不报错**：编译通过、槽照常画出来。
-
-正确写法是 `SlotState="{Binding State}"`（与输入槽那行 `{Binding State}` 同形 —— 输入槽的上下文本来就是槽）。
-
-三家模板的 `workflow-node-view/TemplateClass.xaml` 输出槽那一行都写成 `SlotState="{Binding State}"`（MAUI / WPF / WinUI），与三个 Trimmed demo 的 `NodeView` 一致；**改模板，不单独改 demo**，否则两边分叉。Avalonia 模板不设 `SlotState`（`TemplateClass.axaml` 的输入、输出两行只给 DataContext），没有这个问题。
+不要在同一元素上再写 `SlotState="{Binding Slot.State}"`：DataContext 已被改成槽 VM，这一行改在槽 VM 里求值，而 `ISlotComponent` 没有 `Slot` 成员 ⇒ 绑定失败、槽永远拿不到状态，且不报错。七家的 node-view 现在都不传 `SlotState`，状态配色由 slot-view 自己完成（§7.4）。
 
 ---
 

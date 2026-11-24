@@ -96,8 +96,7 @@ demo 侧位置（每个平台一个目录，**七个角色 + 一个 `InfoOverlay
 前提：该平台的适配器已就位（`Src/Adapters/VeloxDev.<平台>/WorkflowSystem/AttachedBehaviors/` 七角色齐全）。
 
 1. **建项目**：`Src/Templates/VeloxDev.<平台>.Templates/`。
-   - 目录结构照**六家的多数形态**（csproj 与 `content/` 同在 `working/` 下），**不要照 Jalium** ——
-     它的离群结构（`architecture.md` §二 那四条）会让 `content\**\*` 与 logo 的相对路径同时错。
+   - 目录结构照七家统一的形态（csproj 与 `content/` 同在 `working/` 下），见 `architecture.md` §二。
    - csproj 整份抄 `VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj`，只改
      `PackageId` / `Title` / `Description` / `PackageTags` 四处。
    - ⚠ **不要抄那条** `..\..\skills\veloxdev-workflow-item-templates\references\**\*` 的 `None` ——

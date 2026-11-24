@@ -366,7 +366,7 @@ Src/Adapters/VeloxDev.*/       七家 GUI 适配器
 | 可见集变化后怎么让视图刷新 | `Templates/Helpers/TreeHelper.cs` 的 `BroadcastVisibleItemLayout()`（对每个可见节点重发 `Anchor`/`Size`） |
 | 撤销/重做栈 | `StandardEx/WorkflowTreeEx.cs`（`StandardRedo`/`StandardSubmit`/`StandardUndo`/`StandardClearHistory`） |
 | slot 数量可变的节点（选择器） | `SelectorEx/SlotEnumerator.cs`、`SelectorEx/ConditionalSlot.cs`、`Interfaces/WorkflowSystem/Providers/IConditionalSlotProvider.cs`（**两个重载：泛型 + 非泛型，见下**） |
-| 网格装饰器 / 小地图的 Core 契约 | `Interfaces/WorkflowSystem/Surface/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs` |
+| 网格装饰器 / 小地图的 Core 契约 | `Interfaces/WorkflowSystem/Surface/IWorkflowGridDecorator.cs`、`IWorkflowMinimapOverlay.cs`、`MinimapDrawContext.cs` |
 
 ---
 

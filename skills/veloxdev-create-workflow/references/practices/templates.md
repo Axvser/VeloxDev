@@ -16,9 +16,9 @@ Each adapter ships a `dotnet new` item-template pack that generates the seven vi
 | slot | `SlotView` | one port's visual |
 | link | `LinkView` | one connection's visual — on MAUI the default surface draws links in one layer; on WinForms the visual path instantiates one per link |
 | tree | `TreeView` | the surface: scroll viewer, canvas, items host, decorators |
-| selector | `TemplateSelector` (`CustomTemplateSelector` on WinForms) | picks the node / link template; WinForms derives from `Easel.Visuals.VisualTemplateSelector` and returns visual UserControl instances |
+| selector | `TemplateSelector` (`CustomTemplateSelector` on WinForms) | picks the node / slot / link template; WinForms derives from `Easel.Visuals.VisualTemplateSelector` and returns visual UserControl instances |
 | decorator | `GridDecorator` | the grid and the ruler |
-| minimap | `MinimapOverlay` | thumbnail plus a draggable viewport indicator |
+| minimap | `MinimapOverlay` | thumbnail plus a draggable viewport indicator; override `DrawMinimap` to add your own drawing |
 
 Short names are `{prefix}-v-{kind}` on every pack — the decorator is `-v-decorator`, not `-v-grid`:
 
@@ -99,7 +99,7 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 
 ## The template's defaults
 
-The generated files are defaults, not fixtures. The node view's `InputSlot` / `OutputSlots` pair is the template's two default implementations; the link menu resource is empty; the selector maps the two template kinds. Edit the generated files for your node types, your menu entries and your template selection.
+The generated files are defaults, not fixtures. The node view's `InputSlot` / `OutputSlots` pair is the template's two default implementations; the link menu resource is empty; the selector maps the three template kinds. Edit the generated files for your node types, your menu entries and your template selection.
 
 ⚙ **The host shell is yours.** These are *item* templates — start from a normal GUI project and add the package. `App`, `Program`, `MainWindow` / `MainPage` / `MainForm`, `MauiProgram` and the app manifest are supplied by your GUI project.
 

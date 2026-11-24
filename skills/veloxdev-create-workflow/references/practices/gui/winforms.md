@@ -101,8 +101,10 @@ no per-frame `Refresh`/`SyncNow` pull is required.
 
 ⚙ `LinkTemplate` builds one `LinkView` per link; the template binds `StartLeft` / `StartTop` / `EndLeft` /
 `EndTop` to `Sender.Anchor.*` / `Receiver.Anchor.*` and `CanRender` to `IsVisible`, the surface writes
-`LineColor` / `HighlightColor` / `IsVirtual`, and the view draws the cubic and calls `PublishCurve` in
-`OnRender`. Hover sets `IsHighlighted`; the template maps it to `HighlightColor`.
+`LineColor` / `LineThickness` / `IsVirtual`, and the view draws the cubic and calls `PublishCurve` in
+`OnRender`. Hover is the demo's: `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/LinkView.xaml.cs`
+adds `HighlightColor` / `IsHighlighted` and drives them from `IInputEvents`. The generated template ships the
+passive view only.
 
 ⚙ **Curves are world-space.** `Start/End` are world coordinates and the published curve is the same object Core
 hit-tests; the camera transform is applied only while painting. Do not publish screen coordinates.
