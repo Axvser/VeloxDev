@@ -437,17 +437,25 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             // unlike TransformToAncestor, which returns only the element's origin. Transforming the
             // local CENTER is what keeps the anchor on the port when the card is scaled.
             var toCanvas = control.TransformToVisual(coordinateHost);
-            var centerOnCanvas = toCanvas.Transform(center);
-            var layout = node.Parent?.Layout;
-            if (layout is not null)
+            if (toCanvas is not null)
             {
-                slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(
-                    centerOnCanvas.X, centerOnCanvas.Y, slot.Anchor.Layer, layout);
-                return;
+                var centerOnCanvas = toCanvas.Transform(center);
+                var layout = node.Parent?.Layout;
+                if (layout is not null)
+                {
+                    slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(
+                        centerOnCanvas.X, centerOnCanvas.Y, slot.Anchor.Layer, layout);
+                    return;
+                }
             }
         }
 
         var toHost = control.TransformToVisual(host);
+        if (toHost is null)
+        {
+            return;
+        }
+
         var centerOnHost = toHost.Transform(center);
         slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromNode(
             node.Anchor.Horizontal,
