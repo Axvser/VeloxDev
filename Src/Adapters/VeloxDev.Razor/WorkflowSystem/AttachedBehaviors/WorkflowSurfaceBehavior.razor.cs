@@ -935,24 +935,25 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
             // 规范（上报）坐标系 —— 与 XAML 几家一致：预留标尺内缩与左/上越界增长都只是视觉平移，所以这里上报的 world-left 是 scroll − (ActualOffset + 越界量)。装饰器为刻度再加回标尺预留。
             var effX = contentX + Math.Max(0, _offsetX - RulerThickness);
             var effY = contentY + Math.Max(0, _offsetY - RulerThickness);
-            var viewportX = WorkflowSurfaceMath.ToCanvasLocal(scrollLeft, effX);
-            var viewportY = WorkflowSurfaceMath.ToCanvasLocal(scrollTop, effY);
 
             // 让虚拟化可见区修正与预留标尺带保持一致，标尺下方的节点才不会提前一个标尺厚度被剔除。
             Tree.SetVirtualizeInset(left: RulerThickness, top: RulerThickness);
+
+            // 视口记账交给共享的 SurfaceMetricsPush：视口尺寸、画布局部位置与持久化位置由一处写入。
+            // 这里构造的快照只为 PushViewport 服务；覆盖层（网格/小地图）由 JS 量出的可用区自行定位，
+            // 因为 RenderFragment 拿不到组件实例，无法走 PushGrid / PushMinimap。
+            var metrics = SurfaceMetrics.Create(
+                scrollLeft, scrollTop, effX, effY,
+                _viewportW, _viewportH,
+                Math.Max(1, _viewportW), Math.Max(1, _viewportH),
+                RulerThickness, 0d, 0d, 0d);
             try
             {
-                Tree.GetHelper().Viewport = new Viewport(viewportX, viewportY, _viewportW, _viewportH);
+                SurfaceMetricsPush.PushViewport(metrics, Tree);
             }
             catch
             {
                 // 尽力而为的视口记账；有些树可能不支持。
-            }
-
-            // 持久化视口位置（世界坐标）以熬过序列化往返 —— 与 XAML 几家 WorkflowSurfaceBehavior.UpdateVisibleRegion 一致。
-            if (layout is not null)
-            {
-                layout.ViewportOffset = new Offset(viewportX, viewportY);
             }
 
             _viewport = BuildViewport();
@@ -1051,10 +1052,11 @@ public partial class WorkflowSurfaceBehavior : ComponentBase, IAsyncDisposable
         if (Tree is null || !WorkflowSurfaceMath.HasViewportRestore(Tree.Layout)) return;
 
         var layout = Tree.Layout;
-        _pendingScrollX = layout.ViewportOffset.Horizontal + layout.ActualOffset.Horizontal
-                          + Math.Max(0, _offsetX - RulerThickness);
-        _pendingScrollY = layout.ViewportOffset.Vertical + layout.ActualOffset.Vertical
-                          + Math.Max(0, _offsetY - RulerThickness);
+        // 存档位置是画布局部坐标，Core 负责换回滚动坐标；本家还要补上「超出标尺预留」的 JS 越界量，
+        // 因为那段平移只存在于 DOM 边缘扩展里，模型 ActualOffset 不含它。
+        var restore = WorkflowSurfaceMath.ViewportRestoreScroll(layout);
+        _pendingScrollX = restore.Horizontal + Math.Max(0, _offsetX - RulerThickness);
+        _pendingScrollY = restore.Vertical + Math.Max(0, _offsetY - RulerThickness);
         _hasPendingRestore = true;
     }
 

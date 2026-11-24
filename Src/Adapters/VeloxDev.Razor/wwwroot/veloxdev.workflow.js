@@ -1701,11 +1701,29 @@ window.veloxdevWorkflow = (() => {
         // change with content), throttled to one report per frame.
         const scrollerEl = document.getElementById(scrollerId);
         let lastArea = null;
+        let lastMaxX = null;
+        let lastMaxY = null;
         let areaFrame = 0;
         let areaDisposed = false;
         const pushArea = function () {
             areaFrame = 0;
             if (areaDisposed || !dotnetRef) return;
+            // The Core viewport host reads the scroll range synchronously; the DOM can only be asked
+            // here, so report it whenever it changes (growth included) and let .NET cache it.
+            if (scrollerEl) {
+                const maxX = Math.max(0, scrollerEl.scrollWidth - scrollerEl.clientWidth);
+                const maxY = Math.max(0, scrollerEl.scrollHeight - scrollerEl.clientHeight);
+                if (maxX !== lastMaxX || maxY !== lastMaxY) {
+                    lastMaxX = maxX;
+                    lastMaxY = maxY;
+                    try {
+                        const pendingRange = dotnetRef.invokeMethodAsync('OnMinimapScrollRange', maxX, maxY);
+                        if (pendingRange && typeof pendingRange.catch === 'function') pendingRange.catch(function () { });
+                    } catch (_) {
+                        // The component was disposed: this measurement has no receiver.
+                    }
+                }
+            }
             const area = measureMinimapArea(scrollerId);
             if (!area) return;
             if (lastArea

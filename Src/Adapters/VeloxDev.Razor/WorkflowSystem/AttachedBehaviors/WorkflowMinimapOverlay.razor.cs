@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,13 +18,15 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// the content viewport's top-right corner (below the ruler band, left of the vertical scrollbar,
 /// above the horizontal one) using the available area measured by JavaScript.
 ///
-/// Mirrors the XAML adapters' architecture: the content-fit mapping and node rects are recomputed
-/// only when the tree content changes (nodes added/removed/moved — debounced 16ms), never on plain
-/// scroll. The viewport-block indicator is moved directly by JavaScript as the surface scrolls, so
-/// scrolling costs one tiny interop instead of a full .NET re-render of every node rect.
-///
-/// Navigation is grab-the-block (matching the other adapters): pressing must land on the viewport
-/// block; the grab point is centered on the surface viewport, and dragging pans with edge expansion.
+/// Tree subscription, content/viewport mapping, placement and the render context live in the Core
+/// <see cref="MinimapPipelineCore{TSurface,TRenderer,TViewport,TInput}"/>; this component supplies a
+/// marker renderer that hands the context to markup and the existing <see cref="DrawMinimap"/>
+/// fragment. The viewport-block indicator is moved directly by JavaScript as the surface scrolls, so
+/// scrolling costs one tiny interop instead of a full .NET re-render of every node rect. Drag
+/// navigation also stays in JavaScript: the Core drag math writes overscroll into
+/// <see cref="CanvasLayout.NegativeOffset"/> / <see cref="CanvasLayout.PositiveOffset"/>, while this
+/// adapter keeps overscroll in JS-only edge offsets outside the model, so applying it here would
+/// translate the content twice.
 /// </summary>
 public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOverlay, IAsyncDisposable
 {
@@ -141,20 +141,15 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     private DotNetObjectReference<WorkflowMinimapOverlay>? _dotNetRef;
     private IJSObjectReference? _handle;
 
-    // 渲染缩略图用的内容适配映射。它推给 JS，拖拽/点击导航才能反演同一份映射（而不是原始滚动范围比例 —— 画布越界扩展后它就会偏离、并过冲 n 倍）。只有下面这些字段随内容边界变化。
-    private double _scale;
-    private double _mapOx;
-    private double _mapOy;
-    private double _minX;
-    private double _minY;
-    private double _maxX;
-    private double _maxY;
+    // Core 状态下这层只保留渲染期快照与 JS 握手：订阅、缓存、映射、放置都在 MinimapPipelineCore。
+    private readonly RazorMinimapViewportHost _viewportHost;
+    private readonly RazorMinimapInputHost _inputHost;
+    private readonly MarkerMinimapRenderer _renderer;
+    private readonly MinimapPipelineCore<WorkflowMinimapOverlay, MarkerMinimapRenderer, RazorMinimapViewportHost, RazorMinimapInputHost> _pipeline;
 
-    private double _lastWidth;
-    private double _lastHeight;
-    private double _lastMargin;
+    private MinimapDrawContext? _drawContext;
+    private IReadOnlyList<WorkflowBounds>? _mappedNodes;
 
-    // 小地图矩形：由可用区（Available*）算出；绘制、内容映射与内层盒子的定位共用这一份。
     private double _rectLeft;
     private double _rectTop;
     private double _rectWidth = 180;
@@ -163,19 +158,33 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     private double _overlayWidth;
     private bool _areaMeasured;
 
+    // JS 回报的滚动上限；Core 的 viewport 契约是同步读，而 DOM 只能异步问，所以这里缓存最近一次读数。
+    private double _scrollableWidth;
+    private double _scrollableHeight;
+
+    private double _lastWidth = 180;
+    private double _lastHeight = 120;
+    private double _lastMargin = 12;
+
     private const double MinimapMinSize = 20;
 
-    // 事件驱动的内容跟踪：只在节点增/删/移动时（去抖地）重算映射/节点矩形，与 XAML 几家的 MarkDirty + 16ms 定时器一致。
-    private ITreeComponent? _subscribedTree;
-    private INotifyCollectionChanged? _nodesNotifier;
-    private readonly HashSet<INodeComponent> _subscribedNodes = [];
+    // 树内容变化由 Core 的 RenderRequested 通知；这里只做 16ms 去抖 + 编组到渲染器上下文。
     private readonly object _rebuildLock = new();
     private bool _rebuildScheduled;
     private CancellationTokenSource? _throttleCts;
+    private bool _suppressRenderRequested;
+    private bool _disposed;
 
-    private IReadOnlyList<Mapped>? MappedNodes { get; set; }
-
-    private MinimapDrawContext DrawContext { get; set; } = new();
+    /// <summary>Creates the overlay and its Core pipeline.</summary>
+    public WorkflowMinimapOverlay()
+    {
+        _viewportHost = new RazorMinimapViewportHost(this);
+        _inputHost = new RazorMinimapInputHost();
+        _renderer = new MarkerMinimapRenderer(this);
+        _pipeline = new MinimapPipelineCore<WorkflowMinimapOverlay, MarkerMinimapRenderer, RazorMinimapViewportHost, RazorMinimapInputHost>(
+            _renderer, _viewportHost, _inputHost);
+        _pipeline.RenderRequested += OnPipelineRenderRequested;
+    }
 
     // CSS style 属性内无单位长度无效（浏览器会丢弃，元素塌成 0×0）。这些值喂给内联 width/height 样式，下面 SVG 的 width/height 属性也接受 px 后缀。
     // 固定不变并用 '.' 分隔：它们喂给 style 与 SVG 长度属性，逗号小数文化会序列化出浏览器解析不了的值。
@@ -193,6 +202,11 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     private string NodeRadiusCss => Css(NodeRadius);
     private string ViewportStrokeWidthCss => ViewportStrokeWidth.ToString("0.#", CultureInfo.InvariantCulture);
 
+    // 渲染片段拿到的上下文；为空时用放置尺寸拼一个空上下文，与旧实现的 EmptyContext 同形。
+    private MinimapDrawContext DrawContext => _drawContext ?? EmptyContext();
+
+    private IReadOnlyList<WorkflowBounds>? MappedNodes => _mappedNodes;
+
     /// <inheritdoc />
     protected override void OnParametersSet()
     {
@@ -208,12 +222,40 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             ViewportWidth = vp.ViewportWidth;
             ViewportHeight = vp.ViewportHeight;
 
-            if (!ReferenceEquals(_subscribedTree, vp.Tree))
+            if (!ReferenceEquals(_pipeline.Tree, vp.Tree))
             {
+                _suppressRenderRequested = true;
+                try
+                {
+                    _pipeline.Tree = vp.Tree;
+                }
+                finally
+                {
+                    _suppressRenderRequested = false;
+                }
+
                 WorkflowTree = vp.Tree;
-                ResubscribeTree(vp.Tree);
                 recompute = true;
             }
+            else
+            {
+                WorkflowTree = vp.Tree;
+            }
+        }
+        else if (_pipeline.Tree is not null)
+        {
+            _suppressRenderRequested = true;
+            try
+            {
+                _pipeline.Tree = null;
+            }
+            finally
+            {
+                _suppressRenderRequested = false;
+            }
+
+            WorkflowTree = null;
+            recompute = true;
         }
 
         if (Math.Abs(Width - _lastWidth) > double.Epsilon
@@ -226,8 +268,10 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
             recompute = true;
         }
 
-        // 内容适配映射只取决于节点边界 + 缩略图尺寸，绝不取决于滚动；滚动由 JS 移动视口块处理，所以视口变化时不重算。
-        if (recompute)
+        ApplyMetrics();
+
+        // 内容适配映射只取决于节点边界 + 缩略图尺寸，绝不取决于滚动；滚动由 JS 移动视口块处理。
+        if (recompute || _pipeline.IsDirty)
         {
             Recompute();
         }
@@ -263,102 +307,131 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
     [JSInvokable]
     public void OnMinimapAreaMeasured(double availableRight, double availableTop, double availableBottom, double overlayWidth)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         AvailableRight = Math.Max(0, availableRight);
         AvailableTop = Math.Max(0, availableTop);
         AvailableBottom = Math.Max(0, availableBottom);
         _overlayWidth = Math.Max(0, overlayWidth);
         _areaMeasured = true;
 
-        // 可用区变了，矩形可能被夹小 —— 映射和视口块都按矩形尺寸重算，再让标记按新位置渲染。
+        // 可用区变了，矩形可能被夹小 —— 放置与映射都按新矩形重算，再让标记按新位置渲染。
+        ApplyMetrics();
         Recompute();
         _ = InvokeAsync(StateHasChanged);
     }
 
-    // ── 内容跟踪（事件驱动，与 XAML 几家一致）─────────────────────────────
-
-    private void ResubscribeTree(ITreeComponent? tree)
+    /// <summary>
+    /// Receives the surface's current scroll range from JavaScript. The Core
+    /// <see cref="IMinimapViewportHost"/> reads it synchronously; the DOM can only be asked
+    /// asynchronously, so the last reported value is kept here.
+    /// </summary>
+    /// <param name="maximumX">The maximum horizontal scroll offset.</param>
+    /// <param name="maximumY">The maximum vertical scroll offset.</param>
+    [JSInvokable]
+    public void OnMinimapScrollRange(double maximumX, double maximumY)
     {
-        if (_nodesNotifier is not null)
-        {
-            _nodesNotifier.CollectionChanged -= OnNodesChanged;
-            _nodesNotifier = null;
-        }
-
-        foreach (var node in _subscribedNodes)
-        {
-            if (node is INotifyPropertyChanged npc)
-            {
-                npc.PropertyChanged -= OnNodePropertyChanged;
-            }
-        }
-
-        _subscribedNodes.Clear();
-        _subscribedTree = tree;
-
-        if (tree?.Nodes is { } nodes)
-        {
-            if (nodes is INotifyCollectionChanged nc)
-            {
-                _nodesNotifier = nc;
-                nc.CollectionChanged += OnNodesChanged;
-            }
-
-            foreach (var node in nodes)
-            {
-                if (node is INotifyPropertyChanged npc)
-                {
-                    npc.PropertyChanged += OnNodePropertyChanged;
-                    _subscribedNodes.Add(node);
-                }
-            }
-        }
+        _scrollableWidth = Math.Max(0, maximumX);
+        _scrollableHeight = Math.Max(0, maximumY);
     }
 
-    private void OnNodesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    // ── 管线同步 ────────────────────────────────────────────────────────────
+
+    private void ApplyMetrics()
     {
-        if (e.NewItems is not null)
+        _pipeline.Metrics = new MinimapMetrics
         {
-            foreach (var item in e.NewItems)
+            Width = Math.Max(0, Width),
+            Height = Math.Max(0, Height),
+            MinSize = MinimapMinSize,
+            Padding = Math.Max(0, Padding),
+            NodeCornerRadius = Math.Max(0, NodeRadius),
+            // 旧实现的 DrawContext 未设置框圆角（CSS 边框负责外观），保持 0 以免改变自定义片段的可见结果。
+            MinimapCornerRadius = 0d,
+            // Razor 旧实现缩略图下限是 1px（Jalium 同），与其余几家的 2px 不同，保持本家现状。
+            MinimumThumbSize = 1d,
+            Available = new SurfaceAvailableArea
             {
-                if (item is INodeComponent node && node is INotifyPropertyChanged npc)
-                {
-                    npc.PropertyChanged += OnNodePropertyChanged;
-                    _subscribedNodes.Add(node);
-                }
-            }
-        }
-
-        if (e.OldItems is not null)
-        {
-            foreach (var item in e.OldItems)
-            {
-                if (item is INodeComponent node
-                    && _subscribedNodes.Remove(node)
-                    && node is INotifyPropertyChanged npc)
-                {
-                    npc.PropertyChanged -= OnNodePropertyChanged;
-                }
-            }
-        }
-
-        MarkDirty();
+                Right = AvailableRight,
+                Top = AvailableTop,
+                Bottom = AvailableBottom,
+                Margin = MinimapMargin,
+            },
+        };
+        _pipeline.IsVisible = IsMinimapVisible;
     }
 
-    private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    // 让 Core 重算映射并把上下文交给标记渲染器；无论有无内容都刷新放置矩形。
+    private void Recompute()
     {
-        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
-        {
-            MarkDirty();
-        }
+        _pipeline.Render(this);
+        _drawContext = _pipeline.DrawContext;
+        _mappedNodes = _drawContext?.MappedNodes;
+        UpdatePlacement();
+        PushMapping();
     }
+
+    // 可用区 → 小地图矩形。首次测量前 Available* 为 0，Core 退回原点 + 请求尺寸；内层盒子此时隐藏。
+    private void UpdatePlacement()
+    {
+        var bounds = _pipeline.MinimapRect;
+        _rectLeft = bounds.Left;
+        _rectTop = bounds.Top;
+        _rectWidth = Math.Max(1, bounds.Width);
+        _rectHeight = Math.Max(1, bounds.Height);
+        // 内层盒子用 top/right 定位；right 相对整块浮层（宽度 = 表面宽）来说。
+        _rectRight = Math.Max(0, _overlayWidth - (_rectLeft + _rectWidth));
+    }
+
+    private MinimapDrawContext EmptyContext()
+        => new()
+        {
+            MinimapWidth = _rectWidth,
+            MinimapHeight = _rectHeight,
+            Padding = Math.Max(0, Padding),
+            AvailableRight = AvailableRight,
+            AvailableTop = AvailableTop,
+            AvailableBottom = AvailableBottom,
+            MinimapMargin = MinimapMargin,
+        };
 
     /// <summary>
-    /// Throttles rapid content changes (e.g. a node being dragged fires Anchor changes every frame)
-    /// to at most one rebuild per 16ms — the same fixed-interval timer the XAML adapters' minimaps
-    /// use, so the node rects keep tracking a live drag instead of waiting for it to stop.
+    /// Pushes the content-fit mapping used to render the minimap to JS, so the JS-driven viewport
+    /// block inverts the SAME scale instead of a raw scroll-extent ratio (which diverges once the
+    /// canvas is edge-extended and overshoots by n×). Called on every content rebuild.
     /// </summary>
-    private void MarkDirty()
+    private void PushMapping()
     {
+        if (_module is null || string.IsNullOrWhiteSpace(ScrollViewerId))
+        {
+            return;
+        }
+
+        var context = _pipeline.DrawContext;
+        if (context is null || context.Scale <= 0d)
+        {
+            _ = _module.InvokeVoidAsync("setMinimapMapping", ScrollViewerId, 0d, 0d, 0d, 0d, 0d, 0d, 0d);
+            return;
+        }
+
+        var content = context.ContentBounds;
+        _ = _module.InvokeVoidAsync("setMinimapMapping",
+            ScrollViewerId,
+            context.Scale, context.OriginX, context.OriginY,
+            content.Left, content.Top, content.Right, content.Bottom);
+    }
+
+    // Core 的 RenderRequested 可能从任意线程来；去抖后编组回渲染器上下文。
+    private void OnPipelineRenderRequested(object? sender, EventArgs e)
+    {
+        if (_suppressRenderRequested || _disposed)
+        {
+            return;
+        }
+
         lock (_rebuildLock)
         {
             if (_rebuildScheduled)
@@ -399,159 +472,22 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         });
     }
 
-    // ── 映射 ────────────────────────────────────────────────────────────────
-
-    // 可用区 → 小地图矩形。首次测量前 Available* 为 0，Core 退回原点 + 请求尺寸；内层盒子此时隐藏。
-    private MinimapDrawContext CreatePlacementContext()
-        => new()
-        {
-            MinimapWidth = Width,
-            MinimapHeight = Height,
-            MinimapMargin = MinimapMargin,
-            AvailableRight = AvailableRight,
-            AvailableTop = AvailableTop,
-            AvailableBottom = AvailableBottom,
-        };
-
-    private void UpdatePlacement()
-    {
-        var bounds = CreatePlacementContext().GetMinimapRect(MinimapMinSize);
-        _rectLeft = bounds.Left;
-        _rectTop = bounds.Top;
-        _rectWidth = Math.Max(1, bounds.Width);
-        _rectHeight = Math.Max(1, bounds.Height);
-        // 内层盒子用 top/right 定位；right 相对整块浮层（宽度 = 表面宽）来说。
-        _rectRight = Math.Max(0, _overlayWidth - (_rectLeft + _rectWidth));
-    }
-
-    private MinimapDrawContext EmptyContext()
-        => new()
-        {
-            MinimapWidth = _rectWidth,
-            MinimapHeight = _rectHeight,
-            Padding = Math.Max(0, Padding),
-            AvailableRight = AvailableRight,
-            AvailableTop = AvailableTop,
-            AvailableBottom = AvailableBottom,
-            MinimapMargin = MinimapMargin,
-        };
-
-    private void Recompute()
-    {
-        UpdatePlacement();
-
-        var tree = WorkflowTree;
-        if (tree is null)
-        {
-            MappedNodes = null;
-            DrawContext = EmptyContext();
-            return;
-        }
-
-        var nodes = tree.Nodes?.ToArray() ?? Array.Empty<INodeComponent>();
-        if (nodes.Length == 0)
-        {
-            MappedNodes = Array.Empty<Mapped>();
-            DrawContext = EmptyContext();
-            return;
-        }
-
-        double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
-        foreach (var n in nodes)
-        {
-            minX = Math.Min(minX, n.Anchor.Horizontal);
-            minY = Math.Min(minY, n.Anchor.Vertical);
-            maxX = Math.Max(maxX, n.Anchor.Horizontal + n.Size.Width);
-            maxY = Math.Max(maxY, n.Anchor.Vertical + n.Size.Height);
-        }
-
-        var pad = Math.Max(0, Padding);
-        // 映射按矩形尺寸算（可用区可能把它夹得比请求的 Width/Height 小），绘制与拖拽反演才能对齐。
-        var drawW = Math.Max(1, _rectWidth - pad * 2);
-        var drawH = Math.Max(1, _rectHeight - pad * 2);
-        var bw = Math.Max(1, maxX - minX);
-        var bh = Math.Max(1, maxY - minY);
-        var (ox, oy, scale) = WorkflowSurfaceMath.MinimapFit(bw, bh, drawW, drawH, pad);
-
-        _scale = scale;
-        _mapOx = ox;
-        _mapOy = oy;
-        _minX = minX;
-        _minY = minY;
-        _maxX = maxX;
-        _maxY = maxY;
-        PushMapping();
-
-        MappedNodes = nodes.Select(n =>
-        {
-            var (x, y) = WorkflowSurfaceMath.MinimapLocal(n.Anchor.Horizontal, n.Anchor.Vertical, minX, minY, ox, oy, scale);
-            return new Mapped(x, y, Math.Max(1, n.Size.Width * scale), Math.Max(1, n.Size.Height * scale));
-        }).ToArray();
-
-        var contentBounds = WorkflowBounds.FromNode(minX, minY, bw, bh);
-        var viewportBounds = WorkflowBounds.FromNode(
-            WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetX, ContentOffsetX),
-            WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetY, ContentOffsetY),
-            ViewportWidth, ViewportHeight);
-        var mappedViewport = default(WorkflowBounds);
-        if (!viewportBounds.IsEmpty)
-        {
-            var (vx, vy, vw, vh) = WorkflowSurfaceMath.MinimapViewportRect(
-                ox, oy, scale, viewportBounds.Left, viewportBounds.Top, viewportBounds.Width, viewportBounds.Height,
-                minX, minY, _rectWidth, _rectHeight, minRectSize: 2.0);
-            mappedViewport = WorkflowBounds.FromNode(vx, vy, vw, vh);
-        }
-
-        DrawContext = new MinimapDrawContext
-        {
-            Tree = tree,
-            ContentBounds = contentBounds,
-            ViewportBounds = viewportBounds,
-            Nodes = nodes.Select(n => WorkflowBounds.FromNode(
-                n.Anchor.Horizontal, n.Anchor.Vertical, n.Size.Width, n.Size.Height)).ToArray(),
-            MappedNodes = MappedNodes.Select(n => WorkflowBounds.FromNode(n.X, n.Y, n.W, n.H)).ToArray(),
-            MappedViewport = mappedViewport,
-            MinimapWidth = _rectWidth,
-            MinimapHeight = _rectHeight,
-            Padding = pad,
-            OriginX = ox,
-            OriginY = oy,
-            Scale = scale,
-            NodeCornerRadius = NodeRadius,
-            AvailableRight = AvailableRight,
-            AvailableTop = AvailableTop,
-            AvailableBottom = AvailableBottom,
-            MinimapMargin = MinimapMargin,
-        };
-
-        // 视口块不在这里计算/渲染：它完全归 JS（setMinimapViewport），.NET 重建因此永远不会用陈旧坐标覆盖它。
-    }
-
-    /// <summary>
-    /// Pushes the content-fit mapping used to render the minimap to JS, so drag/click
-    /// navigation and the JS-driven viewport block invert the SAME scale instead of a raw
-    /// scroll-extent ratio (which diverges once the canvas is edge-extended and overshoots by n×).
-    /// Called on every content rebuild.
-    /// </summary>
-    private void PushMapping()
-    {
-        if (_module is not null && !string.IsNullOrWhiteSpace(ScrollViewerId))
-        {
-            _ = _module.InvokeVoidAsync("setMinimapMapping", ScrollViewerId, _scale, _mapOx, _mapOy, _minX, _minY, _maxX, _maxY);
-        }
-    }
+    // 标记渲染器：Blazor 没有可绘制的表面，真正绘制由标记读取这份上下文完成。
+    private void OnMinimapRendered(MinimapDrawContext context) => _drawContext = context;
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
+        _pipeline.RenderRequested -= OnPipelineRenderRequested;
+        _pipeline.Dispose();
+
         _throttleCts?.Cancel();
         _throttleCts?.Dispose();
         lock (_rebuildLock)
         {
             _rebuildScheduled = false;
         }
-
-        ResubscribeTree(null);
 
         if (_handle is not null)
         {
@@ -585,11 +521,71 @@ public partial class WorkflowMinimapOverlay : ComponentBase, IWorkflowMinimapOve
         }
     }
 
-    private sealed record Mapped(double X, double Y, double W, double H)
+    /// <summary>Hands every pipeline pass to the component's markup instead of a drawing surface.</summary>
+    private sealed class MarkerMinimapRenderer : IMinimapRenderer<WorkflowMinimapOverlay>
     {
-        public string XCss => X.ToString("0.#", CultureInfo.InvariantCulture);
-        public string YCss => Y.ToString("0.#", CultureInfo.InvariantCulture);
-        public string WCss => W.ToString("0.#", CultureInfo.InvariantCulture);
-        public string HCss => H.ToString("0.#", CultureInfo.InvariantCulture);
+        private readonly WorkflowMinimapOverlay owner;
+
+        public MarkerMinimapRenderer(WorkflowMinimapOverlay owner) => this.owner = owner;
+
+        /// <inheritdoc />
+        public void Render(WorkflowMinimapOverlay surface, MinimapDrawContext context)
+            => owner.OnMinimapRendered(context);
+    }
+
+    // Core 的滚动读写口。读值来自表面参数；滚动上限来自 JS 最近一次回报。
+    private sealed class RazorMinimapViewportHost : IMinimapViewportHost
+    {
+        private readonly WorkflowMinimapOverlay owner;
+
+        public RazorMinimapViewportHost(WorkflowMinimapOverlay owner) => this.owner = owner;
+
+        public double ScrollOffsetX => owner.ScrollOffsetX;
+
+        public double ScrollOffsetY => owner.ScrollOffsetY;
+
+        public double ContentOffsetX => owner.ContentOffsetX;
+
+        public double ContentOffsetY => owner.ContentOffsetY;
+
+        public double ViewportWidth => owner.ViewportWidth;
+
+        public double ViewportHeight => owner.ViewportHeight;
+
+        public double ScrollableWidth => owner._scrollableWidth;
+
+        public double ScrollableHeight => owner._scrollableHeight;
+
+        public void ApplyScroll(double x, double y)
+        {
+            // 管线拖拽路径当前不启用（见类注释的越界模型差异）；保留实现以便 Core 侧启用时可直接接上。
+            if (owner._module is null || string.IsNullOrWhiteSpace(owner.ScrollViewerId))
+            {
+                return;
+            }
+
+            _ = owner._module.InvokeVoidAsync("scrollToPosition", owner.ScrollViewerId, x, y);
+        }
+    }
+
+    // Core 需要指针层才能构造；拖拽导航仍在 JS（见类注释），所以这里只保留契约形状。
+    private sealed class RazorMinimapInputHost : IMinimapInputHost
+    {
+        public (double X, double Y) PointerPosition { get; set; }
+
+        public bool IsPressed { get; set; }
+
+        public bool IsCaptured { get; private set; }
+
+        public WorkflowBounds ClampRect { get; set; }
+
+        public bool Capture()
+        {
+            // JS 在 document 上跟踪拖拽，不需要额外捕获。
+            IsCaptured = true;
+            return true;
+        }
+
+        public void Release() => IsCaptured = false;
     }
 }
