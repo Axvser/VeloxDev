@@ -3,9 +3,7 @@ using Microsoft.Maui.Graphics;
 using PlatformInput = Microsoft.Maui.Controls;
 using Wf = VeloxDev.WorkflowSystem;
 using System;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.ComponentModel;
+using VeloxDev.WorkflowSystem.ViewHosting;
 #if WINDOWS
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
@@ -21,12 +19,17 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// whole host, while a second surface sized to the minimap rectangle carries the interactions, so canvas
 /// gestures pass through everywhere else.
 /// </summary>
+/// <remarks>
+/// Tree subscription, content/viewport mapping, placement and drag math live in the Core
+/// <see cref="MinimapPipeline"/>. This class keeps the bindable properties, the platform drawing, the
+/// two-surface layout, and the MAUI/WinUI input plumbing that feeds the input layer.
+/// </remarks>
 public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
 {
     // ── 可绑定属性 ──────────────────────────────────────────────────────────
 
     private static void OnVisualProp(BindableObject b, object o, object n)
-        => ((WorkflowMinimapOverlay)b).MarkDirty();
+        => ((WorkflowMinimapOverlay)b).OnSettingChanged();
 
     public static readonly BindableProperty ScrollOffsetXProperty = BindableProperty.Create(nameof(ScrollOffsetX), typeof(double), typeof(WorkflowMinimapOverlay), 0d, propertyChanged: OnVisualProp);
     public static readonly BindableProperty ScrollOffsetYProperty = BindableProperty.Create(nameof(ScrollOffsetY), typeof(double), typeof(WorkflowMinimapOverlay), 0d, propertyChanged: OnVisualProp);
@@ -115,17 +118,24 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
     private readonly GraphicsView _drawView;
     private readonly GraphicsView _inputView;
 
-    private WorkflowBounds _lastGlobalBounds;
-    private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
-    private WorkflowBounds _lastViewport;
-    private bool _pendingRefresh = true;
-    private bool _isDragging;
-    // Windows 上平移手势与原生指针探针会同时活着。只让其中一个驱动 NavigateToCanvasLocal；
-    // 两个都写时，绝对指针坐标与手势累计增量交替成为目标，X/Y 会以各自的节奏抖。
-    // 非 Windows 目标没有手势/原生探针路径，两个标记保持 false；Windows 在 #if 分支内改写。
+    private readonly MinimapPipeline _pipeline;
+    private readonly MinimapInputHost _inputHost;
+    private bool _invalidatePending;
+    // 最近一次放置的矩形（浮层局部坐标）；输入层的子坐标从这里换到浮层坐标。
+    private RectF _minimapRect;
+    private ContentView? _parentView;
+    private ScrollView? _scrollView;
+    // 目标没有 2px 以上变化就跳过 ScrollToAsync；点击/新手势前重置。
+    private double _lastScrollX = double.MinValue;
+    private double _lastScrollY = double.MinValue;
+    // 越界导航可能让 Core 改写画布模型的 Negative/PositiveOffset；画布元素只经表面的 ApplyLayout 长大，
+    // 所以尺寸一变就让表面刷新一趟（与旧的 layoutChanged 分支同一件事）。
+    private double _lastCanvasWidth = double.NaN;
+    private double _lastCanvasHeight = double.NaN;
+    // Windows 上平移手势与原生指针探针会同时活着。只让其中一个驱动管线，否则绝对指针坐标与
+    // 手势累计增量交替成为目标，X/Y 会以各自的节奏抖。非 Windows 目标两条标记恒为 false。
     private bool _panActive = false;
     private bool _nativePointerActive = false;
-    private ContentView? _parentView;
 #if WINDOWS
     // 原生平移手势借用输入层 GraphicsView 已捕获的 manipulation 管线（ManipulationMode=All），指针移出缩略图后增量照常到达；
     // 路由的 PointerMoved 监听不行 —— 一旦开始 manipulation，只有捕获者收得到指针事件，它会停在边界。
@@ -138,19 +148,7 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
     // 每个 handler 世代允许一次延后重试：HandlerChanged 早于平台视图创建，所以第一次挂接可以到 UI 线程重试。
     private bool _platformAttachPending;
 #endif
-
     private PointerGestureRecognizer? _parentPointerRecognizer;
-    private readonly HashSet<INodeComponent> _subscribedNodes = [];
-    private readonly HashSet<ILinkComponent> _subscribedLinks = [];
-    private ITreeComponent? _subscribedTree;
-    private ScrollView? _scrollView;
-
-    // 绘制的中间量（MAUI ICanvas 用 float）
-    private float _mmW, _mmH, _ox, _oy, _sc;
-    private WorkflowBounds _drawGb;
-    // 最近一次布局算出的可用区与放置矩形。矩形是浮层局部坐标；输入层的子坐标从矩形左上角起算。
-    private double _placementRight, _placementTop, _placementBottom, _placementMargin;
-    private RectF _minimapRect;
 
     public WorkflowMinimapOverlay()
     {
@@ -158,6 +156,10 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
         // 绘制层始终 InputTransparent；只有小地图矩形上的输入层接收指针。
         InputTransparent = true;
         CascadeInputTransparent = false;
+
+        _inputHost = new MinimapInputHost();
+        _pipeline = new MinimapPipeline(new MinimapRenderer(this), new MinimapViewportHost(this), _inputHost);
+        _pipeline.RenderRequested += OnPipelineRenderRequested;
 
         _drawView = new GraphicsView
         {
@@ -198,27 +200,6 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
         MarkDirty();
     }
 
-    // 可用区来自 surface：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
-    // MAUI 的滚动条是覆盖式的（不占宽高），surface 因此把整幅宽高作为可用区传下来。
-    private MinimapDrawContext CreatePlacement(double availableWidth, double availableHeight)
-    {
-        var width = SafeDim(availableWidth, 0);
-        var height = SafeDim(availableHeight, 0);
-        var top = double.IsNaN(AvailableTop) ? 0 : Math.Max(0, AvailableTop);
-        var right = double.IsNaN(AvailableRight) ? 0 : AvailableRight;
-        var bottom = double.IsNaN(AvailableBottom) ? 0 : AvailableBottom;
-
-        return new MinimapDrawContext
-        {
-            MinimapWidth = double.IsNaN(MinimapWidth) ? 0 : Math.Max(0, MinimapWidth),
-            MinimapHeight = double.IsNaN(MinimapHeight) ? 0 : Math.Max(0, MinimapHeight),
-            MinimapMargin = double.IsNaN(MinimapMargin) ? 0 : Math.Max(0, MinimapMargin),
-            AvailableRight = right > 0 ? right : width,
-            AvailableTop = top,
-            AvailableBottom = bottom > top ? bottom : height,
-        };
-    }
-
     private void OnLoaded(object? s, EventArgs e)
     {
         // 沿父链上溯找到根 ContentView（WorkflowView）；用于查 ScrollView 与拖出边界后的指针跟踪。
@@ -227,7 +208,7 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
         {
             if (el is ContentView cv)
             {
-                if (_parentView is null) _parentView = cv;
+                _parentView ??= cv;
                 if (!string.IsNullOrWhiteSpace(ScrollViewerName) && _scrollView is null)
                     _scrollView = cv.FindByName<ScrollView>(ScrollViewerName);
                 break;
@@ -287,43 +268,37 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
         {
             if (_inputView.Handler?.PlatformView is not UIElement mm) return;
 
-            if (_pendingRefresh) RefreshMinimapData();
-            var (sw, sh) = CurrentSurfaceSize();
-            if (sw <= 0 || sh <= 0) return;
-            ComputeDrawing(sw, sh);
+            RefreshPipelineSettingsForCurrentSize();
+            _minimapRect = ToRectF(_pipeline.MinimapRect);
 
             var pt = e.GetCurrentPoint(mm).Position;
-            // 输入层本就只覆盖小地图矩形；这里再挡一道，陈旧布局下也不会在矩形外起拖。
-            if (!IsInsideMinimapRect((float)pt.X, (float)pt.Y)) return;
+            if (!_pipeline.HitTest(pt.X + _minimapRect.Left, pt.Y + _minimapRect.Top)) return;
 
             // 新的一次按下：清掉上一次可能没收到 Completed 的手势标记；本次手势若随后 Started 会重新置位。
             _panActive = false;
             _nativePointerActive = true;
             // 尽力显式捕获：捕获期间只有此元素发指针事件，下面的 PointerMoved 移出边界也继续流动，直到释放（只能在 PointerPressed 期间取得）。
             mm.CapturePointer(e.Pointer);
-            // MAUI 的 StartInteraction 先经类 handler 再到本实例 handler，所以交互跑时 _isDragging 已为真，
+            // MAUI 的 StartInteraction 先经类 handler 再到本实例 handler，所以交互跑时管线已在拖拽，
             // 这里不能再用探针的坐标覆盖它已经记下的起点（两套坐标来源一旦混用，X/Y 会各走各的）。
-            if (_isDragging) return;
+            if (_pipeline.IsDragging) return;
             _dragStartX = (float)pt.X;
             _dragStartY = (float)pt.Y;
-            _lastScrollX = float.MinValue;
-            _lastScrollY = float.MinValue;
-            NavigateToCanvasLocal(_dragStartX, _dragStartY);
-            _isDragging = true;
+            PressAt(pt.X + _minimapRect.Left, pt.Y + _minimapRect.Top);
         };
         _nativeMovedHandler = (s, e) =>
         {
-            if (!_isDragging) return;
+            if (!_pipeline.IsDragging) return;
             // 原生探针是 Windows 上的首选：绝对坐标与缩略图同一套 DIP。PanGesture 的 TotalX/Y
             // 在 WinUI 上会带屏幕/元素偏移，拿它加到局部起点上会把目标一次推出上千像素。
             if (_inputView.Handler?.PlatformView is not UIElement mm) return;
             var pt = e.GetCurrentPoint(mm).Position;
-            NavigateToCanvasLocal((float)pt.X, (float)pt.Y);
+            MoveTo(pt.X + _minimapRect.Left, pt.Y + _minimapRect.Top);
         };
         _nativeReleasedHandler = (s, e) =>
         {
             _nativePointerActive = false;
-            _isDragging = false;
+            ReleaseDrag();
         };
         mmEl.AddHandler(UIElement.PointerPressedEvent, _nativePressedHandler, true);
         mmEl.AddHandler(UIElement.PointerMovedEvent, _nativeMovedHandler, true);
@@ -356,7 +331,7 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
     /// <summary>
     /// Drives the drag from native manipulation deltas. The manipulation holds pointer
     /// capture, so Running keeps arriving after the cursor leaves the minimap and only
-    /// ends at the real release (Completed/Canceled) — matching the other frameworks.
+    /// ends at the real release (Completed/Canceled).
     /// </summary>
     private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
     {
@@ -367,107 +342,37 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
                 break;
             case GestureStatus.Running:
                 // 原生探针已经按下时由它按绝对坐标驱动；只在探针没挂上时用累计增量兜底。
-                if (_isDragging && _panActive && !_nativePointerActive)
+                if (_pipeline.IsDragging && _panActive && !_nativePointerActive)
                 {
-                    var x = _dragStartX + (float)e.TotalX;
-                    var y = _dragStartY + (float)e.TotalY;
-                    NavigateToCanvasLocal(x, y);
+                    MoveTo(_dragStartX + e.TotalX + _minimapRect.Left,
+                           _dragStartY + e.TotalY + _minimapRect.Top);
                 }
                 break;
             case GestureStatus.Completed:
             case GestureStatus.Canceled:
                 _panActive = false;
-                _isDragging = false;
+                // 原生探针还在驱动时由它的释放/取消处理器收尾。
+                if (!_nativePointerActive) ReleaseDrag();
                 break;
         }
     }
 #endif
 
-    // ── 树管理 ──────────────────────────────────────────────────────────────
+    // ── 数据刷新 ─────────────────────────────────────────────────────────────
 
     private void OnTreeChanged(ITreeComponent? newTree)
     {
-        UnsubscribeFromTree();
-        _subscribedTree = newTree;
-        if (newTree is null) { MarkDirty(); return; }
-
-        if (newTree.Nodes is INotifyCollectionChanged nc)
-        {
-            nc.CollectionChanged += OnNodesChanged;
-            foreach (var n in newTree.Nodes) SubscribeNode(n);
-        }
-        if (newTree.Links is INotifyCollectionChanged lc)
-        {
-            lc.CollectionChanged += OnLinksChanged;
-            foreach (var l in newTree.Links) SubscribeLink(l);
-        }
+        _pipeline.Tree = newTree;
         MarkDirty();
     }
 
     // 没有节点就没有可画的小地图：输入层此时必须让开，否则右上角会凭空吞掉画布手势。
     private bool HasMinimapContent => WorkflowTree?.Nodes is { Count: > 0 };
 
-    private void UnsubscribeFromTree()
-    {
-        if (_subscribedTree is null) return;
-        if (_subscribedTree.Nodes is INotifyCollectionChanged nc) nc.CollectionChanged -= OnNodesChanged;
-        foreach (var n in _subscribedNodes) if (n is INotifyPropertyChanged npc) npc.PropertyChanged -= OnNodePropChanged;
-        _subscribedNodes.Clear();
-        if (_subscribedTree.Links is INotifyCollectionChanged lc) lc.CollectionChanged -= OnLinksChanged;
-        foreach (var l in _subscribedLinks)
-        {
-            if (l.Sender is INotifyPropertyChanged sp) sp.PropertyChanged -= OnSlotPropChanged;
-            if (l.Receiver is INotifyPropertyChanged rp) rp.PropertyChanged -= OnSlotPropChanged;
-        }
-        _subscribedLinks.Clear();
-        _subscribedTree = null;
-    }
-
-    private void SubscribeNode(INodeComponent n)
-    {
-        if (_subscribedNodes.Add(n) && n is INotifyPropertyChanged npc) npc.PropertyChanged += OnNodePropChanged;
-    }
-
-    private void SubscribeLink(ILinkComponent l)
-    {
-        if (!_subscribedLinks.Add(l)) return;
-        if (l.Sender is INotifyPropertyChanged sp) sp.PropertyChanged += OnSlotPropChanged;
-        if (l.Receiver is INotifyPropertyChanged rp) rp.PropertyChanged += OnSlotPropChanged;
-    }
-
-    private void OnNodesChanged(object? s, NotifyCollectionChangedEventArgs e)
-    {
-        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is INodeComponent n) SubscribeNode(n);
-        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is INodeComponent n && _subscribedNodes.Remove(n) && n is INotifyPropertyChanged npc) npc.PropertyChanged -= OnNodePropChanged;
-        MarkDirty();
-    }
-
-    private void OnLinksChanged(object? s, NotifyCollectionChangedEventArgs e)
-    {
-        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is ILinkComponent l) SubscribeLink(l);
-        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is ILinkComponent l && _subscribedLinks.Remove(l))
-            {
-                if (l.Sender is INotifyPropertyChanged sp) sp.PropertyChanged -= OnSlotPropChanged;
-                if (l.Receiver is INotifyPropertyChanged rp) rp.PropertyChanged -= OnSlotPropChanged;
-            }
-        MarkDirty();
-    }
-
-    private void OnNodePropChanged(object? s, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size)) MarkDirty();
-    }
-
-    private void OnSlotPropChanged(object? s, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(ISlotComponent.Anchor)) MarkDirty();
-    }
-
-    private bool _invalidatePending;
+    private void OnPipelineRenderRequested(object? s, EventArgs e) => MarkDirty();
 
     private void MarkDirty()
     {
-        _pendingRefresh = true;
         // 一帧内会连续写多个视觉 DP（ApplyVisibleRegion 一起写 ScrollOffsetX/Y、ContentOffsetX/Y、ViewportWidth/Height），
         // 拖缩略图时每个滚动增量又写一遍；每次 DP 写都是一次完整重绘，所以改为在下次主线程派发时统一冲刷，一帧只重绘一次。
         if (_invalidatePending)
@@ -489,42 +394,12 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
         _drawView.Invalidate();
     }
 
-    // ── 数据刷新 ─────────────────────────────────────────────────────────────
-
-    private void RefreshMinimapData()
+    private void OnSettingChanged()
     {
-        _pendingRefresh = false;
-        var tree = WorkflowTree;
-        if (tree is null) { ClearCache(); return; }
-
-        _lastNodeRects.Clear();
-
-        if (tree.Nodes is not null)
-            foreach (var node in tree.Nodes)
-            {
-                var (nx, ny, nw, nh) = (
-                    double.IsNaN(node.Anchor.Horizontal) ? 0 : node.Anchor.Horizontal,
-                    double.IsNaN(node.Anchor.Vertical) ? 0 : node.Anchor.Vertical,
-                    Math.Max(1, node.Size.Width),
-                    Math.Max(1, node.Size.Height));
-                _lastNodeRects.Add((nx, ny, nw, nh));
-            }
-        _lastGlobalBounds = WorkflowBounds.FromNodes(_lastNodeRects);
-
-        var rawVpX = WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetX, ContentOffsetX);
-        var rawVpY = WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetY, ContentOffsetY);
-        var vpX = double.IsNaN(rawVpX) ? 0 : rawVpX;
-        var vpY = double.IsNaN(rawVpY) ? 0 : rawVpY;
-        var vpW = double.IsNaN(ViewportWidth) ? 1 : Math.Max(1, ViewportWidth);
-        var vpH = double.IsNaN(ViewportHeight) ? 1 : Math.Max(1, ViewportHeight);
-        _lastViewport = WorkflowBounds.FromNode(vpX, vpY, vpW, vpH);
-    }
-
-    private void ClearCache()
-    {
-        _lastNodeRects.Clear();
-        _lastGlobalBounds = default;
-        _lastViewport = default;
+        RefreshPipelineSettingsForCurrentSize();
+        // 视口偏移不在 MinimapMetrics 里，Metrics 的相等比较看不出它变了；显式标脏让下一趟重算映射。
+        // Invalidate 会经 RenderRequested 走到 MarkDirty。
+        _pipeline.Invalidate();
     }
 
     // ── 布局与绘制中间量 ────────────────────────────────────────────────────
@@ -536,8 +411,47 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
         return (w, h);
     }
 
+    private void RefreshPipelineSettingsForCurrentSize()
+    {
+        var (w, h) = CurrentSurfaceSize();
+        RefreshPipelineSettings(w, h);
+    }
+
+    // 可用区来自 surface：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+    // MAUI 的滚动条是覆盖式的（不占宽高），surface 因此把整幅宽高作为可用区传下来。
+    private void RefreshPipelineSettings(double availableWidth, double availableHeight)
+    {
+        var width = SafeDim(availableWidth, 0);
+        var height = SafeDim(availableHeight, 0);
+        var top = double.IsNaN(AvailableTop) ? 0 : Math.Max(0, AvailableTop);
+        var right = double.IsNaN(AvailableRight) ? 0 : AvailableRight;
+        var bottom = double.IsNaN(AvailableBottom) ? 0 : AvailableBottom;
+
+        _pipeline.Metrics = new MinimapMetrics
+        {
+            Width = SafeNonNegative(MinimapWidth),
+            Height = SafeNonNegative(MinimapHeight),
+            MinSize = SafeNonNegative(MinimapMinSize),
+            Padding = SafeNonNegative(ContentPadding),
+            NodeCornerRadius = SafeNonNegative(NodeCornerRadius),
+            MinimapCornerRadius = SafeNonNegative(MinimapCornerRadius),
+            MinimumThumbSize = 2d,
+            Available = new SurfaceAvailableArea
+            {
+                Right = right > 0 ? right : width,
+                Top = top,
+                Bottom = bottom > top ? bottom : height,
+                Margin = SafeNonNegative(MinimapMargin),
+            },
+        };
+        _pipeline.IsVisible = IsMinimapVisible;
+    }
+
     private void UpdateInputPlacement()
-        => UpdateInputPlacement(SafeDim(Width, 0), SafeDim(Height, 0));
+    {
+        var (w, h) = CurrentSurfaceSize();
+        UpdateInputPlacement(w, h);
+    }
 
     // 把输入层贴到小地图矩形上：矩形外的一切命中因此落回画布。
     private void UpdateInputPlacement(double width, double height)
@@ -548,9 +462,9 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
             return;
         }
 
-        var placement = CreatePlacement(width, height);
-        var bounds = placement.GetMinimapRect(MinimapMinSize);
-        _minimapRect = new RectF((float)bounds.Left, (float)bounds.Top, (float)bounds.Width, (float)bounds.Height);
+        RefreshPipelineSettings(width, height);
+        var bounds = _pipeline.MinimapRect;
+        _minimapRect = ToRectF(bounds);
 
         _inputView.Margin = new Microsoft.Maui.Thickness(bounds.Left, bounds.Top, 0, 0);
         if (Math.Abs(_inputView.WidthRequest - bounds.Width) > 0.5) _inputView.WidthRequest = bounds.Width;
@@ -558,129 +472,30 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
         _inputView.IsVisible = IsMinimapVisible && HasMinimapContent && bounds.Width > 0 && bounds.Height > 0;
     }
 
-    private bool IsInsideMinimapRect(float x, float y)
-        => _minimapRect.Width > 0 && _minimapRect.Height > 0
-            && x >= -1f && y >= -1f
-            && x <= _minimapRect.Width + 1f && y <= _minimapRect.Height + 1f;
-
-    private void ComputeDrawing(double availWidth, double availHeight)
-    {
-        var gb = _lastGlobalBounds;
-        _drawGb = gb;
-
-        var placement = CreatePlacement(availWidth, availHeight);
-        var bounds = placement.GetMinimapRect(MinimapMinSize);
-        _placementRight = placement.AvailableRight;
-        _placementTop = placement.AvailableTop;
-        _placementBottom = placement.AvailableBottom;
-        _placementMargin = placement.MinimapMargin;
-
-        // 布局过渡期尺寸可能为 NaN；退回最小尺寸，绘制与命中都不至于拿到 NaN。
-        if (double.IsNaN(bounds.Width) || double.IsNaN(bounds.Height)
-            || double.IsInfinity(bounds.Width) || double.IsInfinity(bounds.Height)
-            || bounds.Width <= 0 || bounds.Height <= 0)
-        {
-            var fallback = (float)Math.Max(1, MinimapMinSize);
-            _minimapRect = new RectF(0f, 0f, fallback, fallback);
-            _mmW = fallback;
-            _mmH = fallback;
-            _ox = 0f;
-            _oy = 0f;
-            _sc = 1f;
-            return;
-        }
-
-        _minimapRect = new RectF((float)bounds.Left, (float)bounds.Top, (float)bounds.Width, (float)bounds.Height);
-        _mmW = (float)Math.Max(1, bounds.Width);
-        _mmH = (float)Math.Max(1, bounds.Height);
-
-        var pad = (float)Math.Max(0, ContentPadding);
-        var drawW = _mmW - pad * 2;
-        var drawH = _mmH - pad * 2;
-
-        // MinimapFit：scale = min(drawW/max(1,cw), drawH/max(1,ch))，origin = pad + (draw − content·scale)/2；
-        // 保留 MAUI 对拟合比例的 NaN/Infinity 防护（节点 Size 为 NaN 时 gb 边界也会是 NaN）。
-        var (fitOx, fitOy, fitSc) = WorkflowSurfaceMath.MinimapFit(
-            (float)gb.Width, (float)gb.Height, drawW, drawH, pad);
-        _sc = float.IsNaN((float)fitSc) || float.IsInfinity((float)fitSc) ? 1f : (float)fitSc;
-        _ox = (float)fitOx;
-        _oy = (float)fitOy;
-
-        // _ox/_oy 的最终 NaN 防护 —— 它们为 NaN 时全部命中测试都会失效。
-        if (float.IsNaN(_ox)) _ox = 0f;
-        if (float.IsNaN(_oy)) _oy = 0f;
-    }
+    private static RectF ToRectF(WorkflowBounds bounds)
+        => new((float)bounds.Left, (float)bounds.Top, (float)bounds.Width, (float)bounds.Height);
 
     // ── 触摸输入 ────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Returns the viewport rectangle's render position in minimap coordinates,
-    /// clamped so it always stays within the minimap's visible area.
-    /// This is the position used for drawing AND hit testing.
-    /// All return values are guaranteed non-NaN.
-    /// </summary>
-    private (float X, float Y, float W, float H) GetClampedViewportRect()
-    {
-        var vp = _lastViewport;
-        var gb = _lastGlobalBounds;
-        if (vp.IsEmpty || gb.IsEmpty || _sc <= 0 || float.IsNaN(_sc))
-            return (0, 0, 0, 0);
-
-        var w = Math.Max(2f, SafeFloatMul(vp.Width, _sc));
-        var h = Math.Max(2f, SafeFloatMul(vp.Height, _sc));
-        if (float.IsNaN(w) || float.IsNaN(h))
-            return (0, 0, 0, 0);
-
-        // MinimapViewportRect 用与内容相同的拟合变换把世界视口映射到缩略图，并把指示块夹在缩略图边界内（指示块最小 2px，与旧内联算法一致）。
-        var (x, y, rw, rh) = WorkflowSurfaceMath.MinimapViewportRect(
-            _ox, _oy, _sc,
-            vp.Left, vp.Top, vp.Width, vp.Height,
-            gb.Left, gb.Top,
-            _mmW, _mmH, minRectSize: 2.0);
-
-        // 保留 MAUI 对该 helper 原始输出的最终 NaN 防护。
-        return (float.IsNaN((float)x) ? 0f : (float)x,
-                float.IsNaN((float)y) ? 0f : (float)y,
-                float.IsNaN((float)rw) ? 0f : (float)rw,
-                float.IsNaN((float)rh) ? 0f : (float)rh);
-    }
-
-    /// <summary>Safe float multiplication guarding against NaN.</summary>
-    private static float SafeFloatMul(double a, double b)
-        => double.IsNaN(a) || double.IsNaN(b) ? 0f : (float)(a * b);
-
-    /// <summary>Returns a safe dimension value, guarding against NaN and <=0.</summary>
-    private static double SafeDim(double value, double fallback)
-        => double.IsNaN(value) || value <= 0 ? fallback : value;
 
     private void OnStartInteraction(object? sender, TouchEventArgs e)
     {
         try
         {
-            if (_isDragging) return;
-            if (_pendingRefresh) RefreshMinimapData();
-            var (sw, sh) = CurrentSurfaceSize();
-            if (sw <= 0 || sh <= 0) return;
-            ComputeDrawing(sw, sh);
+            if (_pipeline.IsDragging) return;
+            RefreshPipelineSettingsForCurrentSize();
+            _minimapRect = ToRectF(_pipeline.MinimapRect);
 
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
-            // 输入层只覆盖小地图矩形；这里再挡一道，陈旧布局下也不会在矩形外起拖。
-            if (!IsInsideMinimapRect(pt.X, pt.Y)) return;
-
-            // 新手势从当前指针重新起算；沿用上一轮的节流目标会把第一次滚动吞掉。
-            _lastScrollX = float.MinValue;
-            _lastScrollY = float.MinValue;
+            if (!_pipeline.HitTest(pt.X + _minimapRect.Left, pt.Y + _minimapRect.Top)) return;
 
             // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
 #if WINDOWS
             _dragStartX = pt.X;
             _dragStartY = pt.Y;
 #endif
-            NavigateToCanvasLocal(pt.X, pt.Y);
-            _isDragging = true;
-
-            SubscribeDragCapture();
+            PressAt(pt.X + _minimapRect.Left, pt.Y + _minimapRect.Top);
+            if (_pipeline.IsDragging) SubscribeDragCapture();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -693,12 +508,12 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
     {
         try
         {
-            if (!_isDragging) return;
+            if (!_pipeline.IsDragging) return;
             // Windows 上手势/原生探针已经在驱动；MAUI 触摸路径不要再补一份。
             if (_panActive || _nativePointerActive) return;
             if (e.Touches is null || e.Touches.Length == 0) return;
             var pt = e.Touches[0];
-            NavigateToCanvasLocal(pt.X, pt.Y);
+            MoveTo(pt.X + _minimapRect.Left, pt.Y + _minimapRect.Top);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -715,7 +530,7 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
             // （mmEl PointerReleased / pan Completed），它们能持续投递越界移动、在真正释放处才结束，所以这里不能因 EndInteraction 拆掉拖拽。
             return;
 #else
-            _isDragging = false;
+            ReleaseDrag();
             UnsubscribeDragCapture();
 #endif
         }
@@ -723,6 +538,28 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
         {
             System.Diagnostics.Debug.WriteLine($"[Minimap] EndInteraction error: {ex.Message}");
         }
+    }
+
+    // 按下：重置 2px 节流窗口，让输入层把这次点击交给管线。
+    private void PressAt(double overlayX, double overlayY)
+    {
+        _lastScrollX = double.MinValue;
+        _lastScrollY = double.MinValue;
+        _inputHost.PointerPosition = (overlayX, overlayY);
+        _inputHost.IsPressed = true;
+        _pipeline.PointerPressed();
+    }
+
+    private void MoveTo(double overlayX, double overlayY)
+    {
+        _inputHost.PointerPosition = (overlayX, overlayY);
+        _pipeline.PointerMoved();
+    }
+
+    private void ReleaseDrag()
+    {
+        _inputHost.IsPressed = false;
+        _pipeline.PointerReleased();
     }
 
     private void SubscribeDragCapture()
@@ -764,126 +601,74 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
 
     private void OnParentPointerMoved(object? sender, PlatformInput.PointerEventArgs e)
     {
-        if (!_isDragging) return;
-        // 父视图的指针事件是浮层局部坐标；输入层里的一切都从矩形左上角起算，这里换回去。
+        if (!_pipeline.IsDragging) return;
+        // 父视图的指针事件已经是浮层局部坐标，与管线一致。
         var pos = e.GetPosition(this);
         if (pos is null) return;
-        NavigateToCanvasLocal(
-            (float)(pos.Value.X - _minimapRect.Left),
-            (float)(pos.Value.Y - _minimapRect.Top));
+        MoveTo(pos.Value.X, pos.Value.Y);
     }
 
     private void OnParentPointerReleased(object? sender, PlatformInput.PointerEventArgs e)
     {
-        _isDragging = false;
+        ReleaseDrag();
         UnsubscribeDragCapture();
     }
 
-    // ── 输入/拖拽 ──────────────────────────────────────────────────────────
+    // ── 滚动写回（由 viewport 宿主调用）────────────────────────────────────
 
-    private float _lastScrollX = float.MinValue;
-    private float _lastScrollY = float.MinValue;
+    internal double SafeViewportWidth => SafeDim(ViewportWidth, SafeDim(_scrollView?.Width ?? 0, 1));
 
-    /// <summary>
-    /// Navigate the main workflow viewport to a point in minimap-local coordinates (the minimap
-    /// rectangle's top-left is the origin).
-    /// When the target scroll position exceeds the current canvas bounds, the
-    /// canvas model expands (PositiveOffset/NegativeOffset) and ApplyLayout
-    /// translates the content accordingly.  The IsRefreshing guard in
-    /// WorkflowSurfaceBehavior prevents the cascade that caused the original
-    /// crash — expansion is safe now.
-    /// </summary>
-    private void NavigateToCanvasLocal(float adjX, float adjY)
+    internal double SafeViewportHeight => SafeDim(ViewportHeight, SafeDim(_scrollView?.Height ?? 0, 1));
+
+    // 逻辑最大滚动取自画布模型（ActualSize − 视口），不用 ScrollView.ContentSize —— 后者滞后于异步 MAUI 布局。
+    internal double ModelScrollWidth => ModelScrollRange(_scrollView?.Width, WorkflowTree is { } tree ? tree.Layout.ActualSize.Width : 0d);
+
+    internal double ModelScrollHeight => ModelScrollRange(_scrollView?.Height, WorkflowTree is { } tree ? tree.Layout.ActualSize.Height : 0d);
+
+    internal void ApplyScrollOffsets(double x, double y)
     {
-        if (_drawGb.IsEmpty || _sc <= 0) return;
-
-        // MinimapToCanvasLocal：world = (mm − origin)/scale + contentLeft；MinimapToScroll 再把世界目标换算成能把它居中到视口的滚动偏移。
-        var (wcx, wcy) = WorkflowSurfaceMath.MinimapToCanvasLocal(
-            adjX, adjY, _ox, _oy, _sc, _drawGb.Left, _drawGb.Top);
-        var (scrollX, scrollY) = WorkflowSurfaceMath.MinimapToScroll(
-            wcx, wcy, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
-        if (_scrollView is null || WorkflowTree?.Layout is not { } layout) return;
-
-        // 最大滚动范围取自布局模型（ActualSize = OriginSize + offsets），下面的 ClampScrollOffset 一写越界量它就同步长大；
-        // _scrollView.ContentSize 滞后于异步 MAUI 布局，拿它夹取会把目标钉在当前边缘、2px 节流又跳过这次滚动，画布再也长不大 —— 在边界上自锁。
-        // 画布平移（WorkflowSurfaceBehavior）正是为此用模型。
-        var svW = _scrollView.Width;
-        var svH = _scrollView.Height;
-
-        var maxH = ComputeMaxScroll(layout.ActualSize.Width, svW);
-        var maxV = ComputeMaxScroll(layout.ActualSize.Height, svH);
-
-        // 拖到边缘时扩展画布模型：ClampScrollOffset 仅在越界量超过 0.5f 死区（亚像素抖动）时把它写进 NegativeOffset（原点前）
-        // 或 PositiveOffset（边缘外），并返回夹取后的滚动偏移。画布只经 ApplyLayout（由 WorkflowSurfaceBehavior.Refresh 驱动）长大，
-        // 所以扩展时就地应用布局（同 ApplyPanAsync），再从模型重算最大值（模型已反映增长）。
-        bool layoutChanged = (scrollX < 0 && -scrollX > 0.5f)
-            || (scrollX > maxH && scrollX - maxH > 0.5f)
-            || (scrollY < 0 && -scrollY > 0.5f)
-            || (scrollY > maxV && scrollY - maxV > 0.5f);
-
-        scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true, threshold: 0.5f);
-        scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false, threshold: 0.5f);
-
-        // 扩展后重算最大值（模型刚同步长大）。
-        if (layoutChanged)
-        {
-            if (_parentView is not null)
-            {
-                WorkflowSurfaceBehavior.Refresh(_parentView);
-            }
-            maxH = ComputeMaxScroll(layout.ActualSize.Width, _scrollView.Width);
-            maxV = ComputeMaxScroll(layout.ActualSize.Height, _scrollView.Height);
-        }
-
-        var clampedX = SafeClamp(scrollX, maxH);
-        var clampedY = SafeClamp(scrollY, maxV);
-
         // 节流：目标没有实质变化就跳过 ScrollToAsync。
-        if (Math.Abs(clampedX - _lastScrollX) < 2f &&
-            Math.Abs(clampedY - _lastScrollY) < 2f)
+        if (Math.Abs(x - _lastScrollX) < 2d && Math.Abs(y - _lastScrollY) < 2d)
         {
             return;
         }
 
-        _lastScrollX = clampedX;
-        _lastScrollY = clampedY;
+        _lastScrollX = x;
+        _lastScrollY = y;
+        SafeScrollTo(_scrollView, x, y);
 
-        SafeScrollTo(_scrollView, clampedX, clampedY);
+        // 越界导航改变了画布模型尺寸：让表面把新几何推到画布元素上。
+        if (_parentView is not null && WorkflowTree is { } tree)
+        {
+            var size = tree.Layout.ActualSize;
+            if (size.Width != _lastCanvasWidth || size.Height != _lastCanvasHeight)
+            {
+                _lastCanvasWidth = size.Width;
+                _lastCanvasHeight = size.Height;
+                WorkflowSurfaceBehavior.Refresh(_parentView);
+            }
+        }
     }
 
-    /// <summary>
-    /// Compute max scroll offset from content and viewport dimensions,
-    /// fully guarded against NaN/zero/infinity from async MAUI layout.
-    /// </summary>
-    private static float ComputeMaxScroll(double content, double viewport)
+    private static double ModelScrollRange(double? viewport, double content)
     {
-        if (double.IsNaN(content) || content <= 0 ||
-            double.IsNaN(viewport) || viewport <= 0)
-            return 0f;
-        return (float)Math.Max(0, content - viewport);
-    }
+        var v = viewport ?? 0d;
+        if (!double.IsFinite(v) || v <= 0d || !double.IsFinite(content))
+        {
+            return 0d;
+        }
 
-    /// <summary>
-    /// Clamp scroll offset within valid range, guarding against NaN/Infinity
-    /// that may propagate from intermediate layout state.
-    /// </summary>
-    private static float SafeClamp(double value, double max)
-    {
-        if (double.IsNaN(value) || double.IsInfinity(value)) return 0f;
-        if (double.IsNaN(max) || double.IsInfinity(max)) return 0f;
-        return (float)WorkflowSurfaceMath.ClampValue(value, 0, max);
+        return Math.Max(0d, content - v);
     }
 
     /// <summary>
     /// Call ScrollToAsync with exception protection.  NaN/Infinity values
     /// cause ArgumentException crashes in the native scroll viewer.
     /// </summary>
-    private static void SafeScrollTo(ScrollView? sv, float x, float y)
+    private static void SafeScrollTo(ScrollView? sv, double x, double y)
     {
         if (sv is null) return;
-        if (float.IsNaN(x) || float.IsInfinity(x) ||
-            float.IsNaN(y) || float.IsInfinity(y))
-            return;
+        if (!double.IsFinite(x) || !double.IsFinite(y)) return;
         try
         {
             _ = sv.ScrollToAsync(x, y, false);
@@ -904,7 +689,6 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
             // WinUI 上 MAUI GraphicsView 的 Draw 回调没有异常保护（dotnet/maui #14567）；
             // 渲染调用抛异常（如 NaN 坐标）会直接漏进 WinUI 的 UnhandledException。
             if (!IsMinimapVisible) return;
-            if (_pendingRefresh) RefreshMinimapData();
 
             // dirtyRect.Width/Height 可能为 NaN（已知 MAUI WinUI 问题）；必须用 IsNaN 判断 —— NaN > 0 为假，NaN <= 0 也为假。
             var dw = dirtyRect.Width;
@@ -912,13 +696,9 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
             var w = (!float.IsNaN(dw) && dw > 0) ? dw : (float)SafeDim(Width, 0);
             var h = (!float.IsNaN(dh) && dh > 0) ? dh : (float)SafeDim(Height, 0);
             if (w <= 0 || h <= 0) return;
-            if (WorkflowTree?.Nodes is null || WorkflowTree.Nodes.Count == 0) return;
 
-            ComputeDrawing(w, h);
-            var context = CreateDrawContext();
-            if (!context.HasContent || context.Scale <= 0) return;
-
-            DrawMinimap(canvas, context);
+            RefreshPipelineSettings(w, h);
+            _pipeline.Render(canvas);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -932,26 +712,38 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
     /// </summary>
     protected virtual void DrawMinimap(ICanvas canvas, MinimapDrawContext context)
     {
-        // 默认绘制把整幅缩略图平移到矩形左上角：context 里的映射仍是缩略图局部坐标（原点 0,0）。
+        // 节点坐标可能处于布局过渡期（NaN）；拟合比例或矩形一旦非有限，整趟绘制都没有意义。
+        if (!double.IsFinite(context.Scale) || context.Scale <= 0d) return;
+
         var bounds = context.GetMinimapRect(MinimapMinSize);
+        if (!double.IsFinite(bounds.Left) || !double.IsFinite(bounds.Top)
+            || !double.IsFinite(bounds.Width) || !double.IsFinite(bounds.Height))
+        {
+            return;
+        }
+
+        // 默认绘制把整幅缩略图平移到矩形左上角：context 里的映射仍是缩略图局部坐标（原点 0,0）。
         var offsetX = (float)bounds.Left;
         var offsetY = (float)bounds.Top;
+        var mmW = (float)context.MinimapWidth;
+        var mmH = (float)context.MinimapHeight;
+        if (!float.IsFinite(mmW) || !float.IsFinite(mmH) || mmW <= 0f || mmH <= 0f) return;
         var cr = Math.Max(0, (float)context.MinimapCornerRadius);
 
         if (MinimapBackgroundColor is not null)
         {
             canvas.FillColor = MinimapBackgroundColor;
-            canvas.FillRoundedRectangle(offsetX, offsetY, (float)context.MinimapWidth, (float)context.MinimapHeight, cr);
+            canvas.FillRoundedRectangle(offsetX, offsetY, mmW, mmH, cr);
         }
         if (MinimapBorderColor is not null)
         {
             canvas.StrokeColor = MinimapBorderColor;
             canvas.StrokeSize = (float)MinimapBorderThickness;
-            canvas.DrawRoundedRectangle(offsetX, offsetY, (float)context.MinimapWidth, (float)context.MinimapHeight, cr);
+            canvas.DrawRoundedRectangle(offsetX, offsetY, mmW, mmH, cr);
         }
 
         canvas.SaveState();
-        canvas.ClipRectangle(offsetX, offsetY, (float)context.MinimapWidth, (float)context.MinimapHeight);
+        canvas.ClipRectangle(offsetX, offsetY, mmW, mmH);
         try
         {
             if (NodeFillColor is not null)
@@ -960,13 +752,14 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
                 var ncr = Math.Max(0, (float)context.NodeCornerRadius);
                 foreach (var node in context.MappedNodes)
                 {
+                    if (!IsFinite(node)) continue;
                     canvas.FillRoundedRectangle(
                         offsetX + (float)node.Left, offsetY + (float)node.Top,
                         (float)node.Width, (float)node.Height, ncr);
                 }
             }
 
-            if (context.HasViewport && !context.MappedViewport.IsEmpty)
+            if (context.HasViewport && !context.MappedViewport.IsEmpty && IsFinite(context.MappedViewport))
             {
                 var vp = context.MappedViewport;
                 var ncr = Math.Max(0, (float)context.NodeCornerRadius);
@@ -987,47 +780,15 @@ public class WorkflowMinimapOverlay : Grid, IDrawable, IWorkflowMinimapOverlay
         finally { canvas.RestoreState(); }
     }
 
-    /// <summary>Builds the geometry for one draw pass from the computed transform and cached node rects.</summary>
-    private MinimapDrawContext CreateDrawContext()
-    {
-        var gb = _drawGb;
-        var nodes = new List<WorkflowBounds>(_lastNodeRects.Count);
-        var mapped = new List<WorkflowBounds>(_lastNodeRects.Count);
-        foreach (var (nx, ny, nw, nh) in _lastNodeRects)
-        {
-            nodes.Add(WorkflowBounds.FromNode(nx, ny, nw, nh));
-            // MinimapLocal：local = origin + (world − contentOrigin)·scale。
-            var (lx, ly) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, _ox, _oy, _sc);
-            mapped.Add(WorkflowBounds.FromNode(lx, ly,
-                Math.Max(2d, nw * _sc),
-                Math.Max(2d, nh * _sc)));
-        }
+    internal void DrawMinimapSurface(ICanvas canvas, MinimapDrawContext context) => DrawMinimap(canvas, context);
 
-        var (vpx, vpy, vpw, vph) = GetClampedViewportRect();
-        var mappedViewport = vpw > 0 && vph > 0 && !float.IsNaN(vpx) && !float.IsNaN(vpy)
-            ? WorkflowBounds.FromNode(vpx, vpy, vpw, vph)
-            : default;
+    private static bool IsFinite(WorkflowBounds bounds)
+        => double.IsFinite(bounds.Left) && double.IsFinite(bounds.Top)
+            && double.IsFinite(bounds.Width) && double.IsFinite(bounds.Height);
 
-        return new MinimapDrawContext
-        {
-            Tree = WorkflowTree,
-            ContentBounds = gb,
-            ViewportBounds = _lastViewport,
-            Nodes = nodes,
-            MappedNodes = mapped,
-            MappedViewport = mappedViewport,
-            MinimapWidth = _mmW,
-            MinimapHeight = _mmH,
-            Padding = Math.Max(0, ContentPadding),
-            OriginX = _ox,
-            OriginY = _oy,
-            Scale = _sc,
-            NodeCornerRadius = Math.Max(0, NodeCornerRadius),
-            MinimapCornerRadius = Math.Max(0, MinimapCornerRadius),
-            AvailableRight = _placementRight,
-            AvailableTop = _placementTop,
-            AvailableBottom = _placementBottom,
-            MinimapMargin = _placementMargin,
-        };
-    }
+    private static double SafeDim(double value, double fallback)
+        => double.IsNaN(value) || value <= 0 ? fallback : value;
+
+    private static double SafeNonNegative(double value)
+        => double.IsNaN(value) ? 0d : Math.Max(0d, value);
 }

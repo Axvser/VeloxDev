@@ -1,22 +1,40 @@
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using VeloxDev.WorkflowSystem;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
+/// <summary>
+/// MAUI attached behavior that measures a node template's declared slot parts and writes their canvas-local
+/// anchors back to the model.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Attach it to the node view root and name the parts with <see cref="SetSlotNames"/> and
+/// <see cref="SetSlotEnumeratorNames"/> (comma-separated names). The behavior owns only the platform half —
+/// the visual-tree walk, the screen→canvas center measurement, and the UI-thread hand-off; which parts to
+/// measure, their order, duplicate suppression and the re-measure schedule belong to
+/// <see cref="SlotLayoutPipelineCore"/>.
+/// </para>
+/// <para>
+/// MAUI measures a slot center by accumulating layout positions up to the coordinate host, which excludes the
+/// canvas <c>TranslationX/Y</c> render transform, so the locator reports
+/// <see cref="SlotCoordinateSpace.CanvasLocal"/>.
+/// </para>
+/// </remarks>
 public sealed class WorkflowSlotLayoutBehavior
 {
     private sealed class LayoutState
     {
+        public SlotLayoutPipelineCore? Pipeline { get; set; }
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
         public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
-        public HashSet<string> SlotPropertyNames { get; } = [];
 
         /// <summary>
-        /// WinUI-native LayoutUpdated hook (Windows). Object-typed so LayoutState compiles on
-        /// every TFM; only touched inside #if WINDOWS blocks. LayoutUpdated is the end-of-layout
-        /// pass signal the other workflow families sync on; MAUI's managed SizeChanged fires
-        /// mid-arrange and reads a transient frame.
+        /// WinUI-native LayoutUpdated hook (Windows). Object-typed so LayoutState compiles on every TFM;
+        /// only touched inside #if WINDOWS blocks. LayoutUpdated is the end-of-layout pass signal the other
+        /// workflow families sync on; MAUI's managed SizeChanged fires mid-arrange and reads a transient frame.
         /// </summary>
         public object? NativeLayoutElement { get; set; }
         public EventHandler<object>? NativeLayoutUpdatedHandler { get; set; }
@@ -34,25 +52,29 @@ public sealed class WorkflowSlotLayoutBehavior
         "SlotNames",
         typeof(string),
         typeof(WorkflowSlotLayoutBehavior),
-        null);
+        null,
+        propertyChanged: OnConfigurationChanged);
 
     public static readonly BindableProperty SlotEnumeratorNamesProperty = BindableProperty.CreateAttached(
         "SlotEnumeratorNames",
         typeof(string),
         typeof(WorkflowSlotLayoutBehavior),
-        null);
+        null,
+        propertyChanged: OnConfigurationChanged);
 
     public static readonly BindableProperty CoordinateHostNameProperty = BindableProperty.CreateAttached(
         "CoordinateHostName",
         typeof(string),
         typeof(WorkflowSlotLayoutBehavior),
-        null);
+        null,
+        propertyChanged: OnConfigurationChanged);
 
     public static readonly BindableProperty CoordinateHostTypeProperty = BindableProperty.CreateAttached(
         "CoordinateHostType",
         typeof(Type),
         typeof(WorkflowSlotLayoutBehavior),
-        null);
+        null,
+        propertyChanged: OnConfigurationChanged);
 
     private static readonly BindableProperty StateProperty = BindableProperty.CreateAttached(
         "State",
@@ -70,7 +92,10 @@ public sealed class WorkflowSlotLayoutBehavior
     public static void SetCoordinateHostName(BindableObject element, string? value) => element.SetValue(CoordinateHostNameProperty, value);
     public static Type? GetCoordinateHostType(BindableObject element) => (Type?)element.GetValue(CoordinateHostTypeProperty);
     public static void SetCoordinateHostType(BindableObject element, Type? value) => element.SetValue(CoordinateHostTypeProperty, value);
-    public static void Refresh(ContentView control) => RequestSync(control, force: true);
+
+    /// <summary>Re-measures a node view after the canvas zoom or scroll transform changed.</summary>
+    /// <param name="control">The node view root the behavior is attached to.</param>
+    public static void Refresh(ContentView control) => Measure(control, SlotLayoutTrigger.Viewport);
 
     private static void OnIsEnabledChanged(BindableObject bindable, object? oldValue, object? newValue)
     {
@@ -86,6 +111,19 @@ public sealed class WorkflowSlotLayoutBehavior
         }
 
         Detach(control);
+    }
+
+    private static void OnConfigurationChanged(BindableObject bindable, object? oldValue, object? newValue)
+    {
+        if (bindable is not ContentView control || control.GetValue(StateProperty) is not LayoutState)
+        {
+            return;
+        }
+
+        // 配置换了就得换一条流水线：部件名集合在构造时固化成 WatchedPropertyNames。
+        RebuildPipeline(control);
+        UpdatePropertyChangedSubscription(control);
+        Measure(control, SlotLayoutTrigger.Configuration);
     }
 
     private static void Attach(ContentView control)
@@ -108,8 +146,9 @@ public sealed class WorkflowSlotLayoutBehavior
         control.SizeChanged += OnNodeResized;
 #endif
 
+        RebuildPipeline(control);
         UpdatePropertyChangedSubscription(control);
-        RequestSync(control, force: true);
+        Measure(control, SlotLayoutTrigger.Attachment);
     }
 
     private static void Detach(ContentView control)
@@ -139,9 +178,11 @@ public sealed class WorkflowSlotLayoutBehavior
             {
                 state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
             }
+
+            state.Pipeline?.Stop();
+            state.Pipeline = null;
         }
 
-        CancelSync(control);
         control.ClearValue(StateProperty);
     }
 
@@ -178,10 +219,10 @@ public sealed class WorkflowSlotLayoutBehavior
             state.NativeLayoutUpdatedHandler = (_, _) =>
             {
                 // 在 LayoutUpdated 里同步执行：该子树布局已完成，插槽中心是最终值。共享批次先比指纹，
-                // 几何稳定后的重复趟直接跳过；SyncSlot 自己的脏检查再挡掉一次无变化的写入 —— 没有重排链，也不会卡死。
+                // 几何稳定后的重复趟直接跳过；流水线的脏检查再挡掉一次无变化的写入 —— 没有重排链，也不会卡死。
                 if (control.GetValue(StateProperty) is not null)
                 {
-                    RequestSync(control, force: false);
+                    Measure(control, SlotLayoutTrigger.Layout);
                 }
             };
             native.LayoutUpdated += state.NativeLayoutUpdatedHandler;
@@ -225,7 +266,7 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (sender is ContentView control)
         {
-            RequestSync(control, force: true);
+            Measure(control, SlotLayoutTrigger.Attachment);
         }
     }
 
@@ -233,7 +274,11 @@ public sealed class WorkflowSlotLayoutBehavior
     {
         if (sender is ContentView control)
         {
-            CancelSync(control);
+            // 卸载只丢排队工作，流水线留着：重载回来时同一份配置直接复用。
+            if (control.GetValue(StateProperty) is LayoutState { Pipeline: { } current })
+            {
+                current.CancelPending();
+            }
         }
     }
 
@@ -243,7 +288,7 @@ public sealed class WorkflowSlotLayoutBehavior
         // （见 git 历史：每格端点跳动）；Windows 改用平台 LayoutUpdated 同步。
         if (sender is ContentView control)
         {
-            RequestSync(control, force: false);
+            Measure(control, SlotLayoutTrigger.Layout);
         }
     }
 
@@ -254,8 +299,9 @@ public sealed class WorkflowSlotLayoutBehavior
             return;
         }
 
+        RebuildPipeline(control);
         UpdatePropertyChangedSubscription(control);
-        RequestSync(control, force: true);
+        Measure(control, SlotLayoutTrigger.Attachment);
     }
 
     private static void UpdatePropertyChangedSubscription(ContentView control)
@@ -272,253 +318,186 @@ public sealed class WorkflowSlotLayoutBehavior
             state.PropertyChangedHandler = null;
         }
 
-        if (control.BindingContext is INotifyPropertyChanged notify)
-        {
-            // 用直接捕获 ContentView 的 lambda：节点 VM 只是普通 INotifyPropertyChanged（不是 BindableObject/Element），无法从 sender 沿可视树找到对应视图。
-            PropertyChangedEventHandler handler = (_, e) =>
-            {
-                if (e.PropertyName is not null && state.SlotPropertyNames.Contains(e.PropertyName))
-                {
-                    RequestSync(control, force: true);
-                }
-            };
-            state.PropertyChangedSource = notify;
-            state.PropertyChangedHandler = handler;
-            notify.PropertyChanged += handler;
-        }
-    }
-
-    // 同一棵树的节点共用一个批次：布局 pass 的同步回写走 Flush（同帧），其余触发走 Schedule（一次定时器合并）。
-    // 指纹只看模型几何、实测尺寸与插槽控件数 —— 宿主每帧布局时，没动过的节点在这里就被挡掉了。
-    private static void RequestSync(ContentView control, bool force)
-    {
-        if (control.GetValue(StateProperty) is null
-            || control.BindingContext is not INodeComponent node)
+        if (state.Pipeline is not { } pipeline
+            || control.BindingContext is not INotifyPropertyChanged notify)
         {
             return;
         }
 
-        var dispatcher = control.Dispatcher;
-        var batch = WorkflowLayoutBatch.For(
-            OwnerOf(control, node), action => PostToUiThread(dispatcher, action));
-        // 已排队的工作可能在行为被摘掉之后才轮到：那一刻不要再量一次。
-        var work = new Action(() =>
+        // 用直接捕获 ContentView 的 lambda：节点 VM 只是普通 INotifyPropertyChanged（不是 BindableObject/Element），无法从 sender 沿可视树找到对应视图。
+        // 只看与插槽位置有关的属性名：标题、颜色这类变更不该重跑一遍测量。
+        PropertyChangedEventHandler handler = (_, e) =>
         {
-            if (control.GetValue(StateProperty) is not null)
+            if (e.PropertyName is not null && pipeline.WatchedPropertyNames.Contains(e.PropertyName))
             {
-                Sync(control);
-            }
-        });
-
-        if (force)
-        {
-            batch.Request(control, work);
-            batch.Schedule();
-            return;
-        }
-
-        var stamp = WorkflowLayoutStamp.Capture(
-            node, control.Width, control.Height, CountSlotControls(control));
-        if (batch.Request(control, stamp, work))
-        {
-            batch.Flush();
-        }
-    }
-
-    private static void CancelSync(ContentView control)
-    {
-        object owner = control.BindingContext is INodeComponent { Parent: { } tree } ? tree : control;
-        WorkflowLayoutBatch.For(owner).Cancel(control);
-    }
-
-    private static object OwnerOf(ContentView control, INodeComponent node)
-        => node.Parent ?? (object)control;
-
-    private static bool PostToUiThread(IDispatcher dispatcher, Action flush)
-    {
-        // 用 IDispatcherTimer（约一帧延迟）取代嵌套 BeginInvoke：MAUI 没有 WPF 的 DispatcherPriority.Render，
-        // 原来的两级派发是依赖队列顺序的脆弱 hack。共享批次保证一次请求潮只创建一个定时器。
-        var timer = dispatcher.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(16);  // ≈1 frame
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
-        {
-            try
-            {
-                timer.Stop();
-                flush();
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException)
-            {
-                // MAUI 不捕获 IDispatcherTimer.Tick 的异常，它会未处理地冒到 WinUI 的 UnhandledException；这是已知的 MAUI/WinUI 缺口（dotnet/maui #12245、#10341）。
-                System.Diagnostics.Debug.WriteLine(
-                    $"[WorkflowSlotLayout] Sync error: {ex.Message}");
+                pipeline.RequestMeasure(SlotLayoutTrigger.Model);
             }
         };
-        timer.Start();
-        return true;
+        state.PropertyChangedSource = notify;
+        state.PropertyChangedHandler = handler;
+        notify.PropertyChanged += handler;
     }
 
-    // 指纹里的插槽数：容器数量变了（枚举插槽增删、模板重建）必须重测，哪怕节点外框尺寸没变。
-    private static int CountSlotControls(ContentView control)
+    private static void RebuildPipeline(ContentView control)
     {
-        var count = 0;
-
-        foreach (var name in GetAllSlotNames(control))
+        if (control.GetValue(StateProperty) is not LayoutState state)
         {
-            if (!string.IsNullOrWhiteSpace(name) && control.FindByName<VisualElement>(name) is not null)
-            {
-                count++;
-            }
+            return;
         }
 
-        foreach (var name in GetAllSlotEnumeratorNames(control))
-        {
-            if (!string.IsNullOrWhiteSpace(name) && control.FindByName<Layout>(name) is { } layout)
-            {
-                count += layout.Children.Count;
-            }
-        }
+        state.Pipeline?.Stop();
+        state.Pipeline = null;
 
-        return count;
-    }
-
-    private static void Sync(ContentView control)
-    {
         if (control.BindingContext is not INodeComponent node)
         {
             return;
         }
 
-        var parentHost = control;
-        var coordinateHost = ResolveCoordinateHost(control, parentHost);
-        var slotNames = GetAllSlotNames(control);
-        var enumeratorNames = GetAllSlotEnumeratorNames(control);
+        var configuration = new SlotLayoutConfiguration(
+            GetSlotNames(control),
+            GetSlotEnumeratorNames(control),
+            GetCoordinateHostName(control),
+            GetCoordinateHostType(control));
 
-        // 重建「变化时该触发同步」的属性名集合。
-        if (control.GetValue(StateProperty) is LayoutState state)
+        state.Pipeline = new SlotLayoutPipelineCore(
+            node,
+            control,
+            new MauiSlotPartLocator(control),
+            new MauiSlotMeasurementHost(control),
+            configuration);
+    }
+
+    private static void Measure(ContentView control, SlotLayoutTrigger trigger)
+    {
+        if (control.GetValue(StateProperty) is LayoutState { Pipeline: { } pipeline })
         {
-            state.SlotPropertyNames.Clear();
-            state.SlotPropertyNames.Add(nameof(INodeComponent.Anchor));
-            state.SlotPropertyNames.Add(nameof(INodeComponent.Size));
-            // 控件名（如 "PART_OutputSlots"）与 ViewModel 属性名（"OutputSlots"）不同；两者都加，
-            // OnPropertyChanged("OutputSlots") 才匹配得上。
+            pipeline.RequestMeasure(trigger);
+        }
+    }
+
+    // ── 平台层：可视树遍历、坐标测量与坐标宿解析 ─────────────────────────────
+
+    private sealed class MauiSlotPartLocator(ContentView owner) : ISlotPartLocator
+    {
+        // 以画布（坐标宿）为基准累加布局位置得到的中心已排除画布 TranslationX/Y，所以是画布/世界坐标。
+        public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.CanvasLocal;
+
+        public ISlotPart? FindNamedSlot(string name)
+            => owner.FindByName<VisualElement>(name) is { } element ? new MauiSlotPart(owner, element) : null;
+
+        public IReadOnlyList<ISlotPart> FindEnumeratedSlots(string name)
+        {
+            if (owner.FindByName<Layout>(name) is not { } itemsLayout)
+            {
+                return Array.Empty<ISlotPart>();
+            }
+
+            var parts = new List<ISlotPart>();
+            foreach (var slotView in FindDescendants<VisualElement>(itemsLayout))
+            {
+                if (slotView.BindingContext is ISlotComponent)
+                {
+                    parts.Add(new MauiSlotPart(owner, slotView));
+                }
+            }
+
+            return parts;
+        }
+
+        public object? ResolveCoordinateHost(string? hostName, Type? hostType)
+        {
+            var type = hostType ?? typeof(AbsoluteLayout);
+            if (!string.IsNullOrWhiteSpace(hostName))
+            {
+                var namedHost = ResolveNamedHost(owner, hostName!);
+                if (namedHost is not null)
+                {
+                    return namedHost;
+                }
+            }
+
+            return EnumerateSelfAndAncestors(owner)
+                .OfType<VisualElement>()
+                .FirstOrDefault(x => type.IsAssignableFrom(x.GetType()));
+        }
+
+        public int CountSlots(IReadOnlyList<string> slotNames, IReadOnlyList<string> enumeratorNames)
+        {
+            // 指纹里的插槽数：容器增删、模板重建必须重测，哪怕节点外框尺寸没变。
+            var count = 0;
+
             foreach (var name in slotNames)
             {
-                state.SlotPropertyNames.Add(name);
-                if (name.StartsWith("PART_"))
-                    state.SlotPropertyNames.Add(name.Substring(5));
+                if (!string.IsNullOrWhiteSpace(name) && owner.FindByName<VisualElement>(name) is not null)
+                {
+                    count++;
+                }
             }
+
             foreach (var name in enumeratorNames)
             {
-                state.SlotPropertyNames.Add(name);
-                if (name.StartsWith("PART_"))
-                    state.SlotPropertyNames.Add(name.Substring(5));
+                if (!string.IsNullOrWhiteSpace(name) && owner.FindByName<Layout>(name) is { } layout)
+                {
+                    count += layout.Children.Count;
+                }
             }
-            // 标准属性名一律带兜底默认值，覆盖 ViewModel 直接属性与 SlotEnumerator 成员。
-            state.SlotPropertyNames.Add("InputSlot");
-            state.SlotPropertyNames.Add("OutputSlot");
-            state.SlotPropertyNames.Add("OutputSlots");
-        }
 
-        foreach (var slotName in slotNames)
-        {
-            SyncNamedSlot(parentHost, control, coordinateHost, node, slotName);
-        }
-
-        foreach (var enumeratorName in enumeratorNames)
-        {
-            SyncSlotEnumerator(parentHost, control, coordinateHost, node, enumeratorName);
+            return count;
         }
     }
 
-    private static void SyncNamedSlot(ContentView parentHost, ContentView host, VisualElement? coordinateHost, INodeComponent node, string? controlName)
+    private sealed class MauiSlotPart(ContentView nodeView, VisualElement element) : ISlotPart
     {
-        if (string.IsNullOrWhiteSpace(controlName))
-        {
-            return;
-        }
+        public ISlotComponent? Slot => element.BindingContext as ISlotComponent;
 
-        if (parentHost.FindByName<VisualElement>(controlName) is VisualElement slotControl)
+        public bool IsMeasured => element.Width > 0d && element.Height > 0d;
+
+        public SlotCenter? MeasureCenter(object? relativeTo)
         {
-            SyncSlot(host, coordinateHost, slotControl, node);
+            var target = relativeTo as VisualElement ?? nodeView;
+            return GetCenterRelativeTo(element, target) is { } center
+                ? new SlotCenter(center.X, center.Y)
+                : null;
         }
     }
 
-    private static void SyncSlotEnumerator(ContentView parentHost, ContentView host, VisualElement? coordinateHost, INodeComponent node, string enumeratorName)
+    private sealed class MauiSlotMeasurementHost(ContentView owner) : ISlotMeasurementHost
     {
-        if (parentHost.FindByName<Layout>(enumeratorName) is not Layout itemsLayout)
-        {
-            return;
-        }
+        public (double Width, double Height) ReadNodeSize() => (owner.Width, owner.Height);
 
-        foreach (var slotView in FindDescendants<VisualElement>(itemsLayout).Where(static x => x.BindingContext is ISlotComponent))
-        {
-            SyncSlot(host, coordinateHost, slotView, node);
-        }
-    }
+        public Anchor ReadAnchor(ISlotComponent slot) => slot.Anchor;
 
-    private static void SyncSlot(ContentView host, VisualElement? coordinateHost, VisualElement control, INodeComponent node)
-    {
-        if (control.BindingContext is not ISlotComponent slot || control.Width <= 0 || control.Height <= 0)
-        {
-            return;
-        }
+        public void WriteAnchor(ISlotComponent slot, Anchor anchor) => slot.Anchor = anchor;
 
-        Anchor newAnchor;
-        if (coordinateHost is not null)
+        public void InvalidateMeasure() => owner.InvalidateMeasure();
+
+        public bool Post(Action flush)
         {
-            var centerOnCanvas = GetCenterRelativeTo(control, coordinateHost);
-            if (centerOnCanvas is null)
+            // 用 IDispatcherTimer（约一帧延迟）取代嵌套 BeginInvoke：MAUI 没有 WPF 的 DispatcherPriority.Render，
+            // 原来的两级派发是依赖队列顺序的脆弱 hack。共享批次保证一次请求潮只创建一个定时器。
+            var timer = owner.Dispatcher.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(16);  // ≈1 frame
+            timer.IsRepeating = false;
+            timer.Tick += (_, _) =>
             {
-                return;
-            }
-
-            // MAUI 以画布（坐标宿）为基准、靠累加布局位置量中心，这排除了画布的 TranslationX 渲染变换 —— 结果已是画布/世界坐标，不必再减 ActualOffset。
-            // （Core 的 SlotAnchorFromVisualCenter 是给按屏幕空间测量的适配器用的。）
-            newAnchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(
-                centerOnCanvas.Value.X, centerOnCanvas.Value.Y, slot.Anchor.Layer);
+                try
+                {
+                    timer.Stop();
+                    flush();
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    // MAUI 不捕获 IDispatcherTimer.Tick 的异常，它会未处理地冒到 WinUI 的 UnhandledException；这是已知的 MAUI/WinUI 缺口（dotnet/maui #12245、#10341）。
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[WorkflowSlotLayout] Sync error: {ex.Message}");
+                }
+            };
+            timer.Start();
+            return true;
         }
-        else
-        {
-            var center = GetCenterRelativeTo(control, host);
-            if (center is null)
-            {
-                return;
-            }
-
-            // SlotAnchorFromNode：anchor = nodeAnchor + 局部偏移（无坐标宿）。
-            newAnchor = WorkflowSurfaceMath.SlotAnchorFromNode(
-                node.Anchor.Horizontal, node.Anchor.Vertical,
-                center.Value.X, center.Value.Y, slot.Anchor.Layer);
-        }
-
-        // 脏检查：锚点值没变就跳过，避免无限循环 SyncSlot → slot.Anchor setter → PropertyChanged → ApplyLayout → MAUI 布局 → SizeChanged/X/Y → 请求同步 → SyncSlot ……
-        if (slot.Anchor.Horizontal == newAnchor.Horizontal && slot.Anchor.Vertical == newAnchor.Vertical)
-            return;
-
-        slot.Anchor = newAnchor;
     }
 
-    private static VisualElement? ResolveCoordinateHost(ContentView control, ContentView parentHost)
-    {
-        var hostName = GetCoordinateHostName(control);
-        var hostType = GetCoordinateHostType(control) ?? typeof(AbsoluteLayout);
-        if (!string.IsNullOrWhiteSpace(hostName))
-        {
-            var namedHost = ResolveNamedHost(parentHost, hostName);
-            if (namedHost is not null)
-            {
-                return namedHost;
-            }
-        }
-
-        return EnumerateSelfAndAncestors(parentHost)
-            .OfType<VisualElement>()
-            .FirstOrDefault(x => hostType.IsAssignableFrom(x.GetType()));
-    }
-
-    private static VisualElement? ResolveNamedHost(Element control, string? hostName)
+    private static VisualElement? ResolveNamedHost(Element control, string hostName)
     {
         foreach (var current in EnumerateSelfAndAncestors(control))
         {
@@ -534,17 +513,6 @@ public sealed class WorkflowSlotLayoutBehavior
 
         return null;
     }
-
-    private static string[] GetAllSlotNames(ContentView control)
-        => EnumerateConfiguredNames(GetSlotNames(control)).Distinct(StringComparer.Ordinal).ToArray();
-
-    private static string[] GetAllSlotEnumeratorNames(ContentView control)
-        => EnumerateConfiguredNames(GetSlotEnumeratorNames(control)).Distinct(StringComparer.Ordinal).ToArray();
-
-    private static IEnumerable<string> EnumerateConfiguredNames(string? names)
-        => string.IsNullOrWhiteSpace(names)
-            ? Enumerable.Empty<string>()
-            : names.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0);
 
     private static Point? GetCenterRelativeTo(VisualElement element, VisualElement relativeTo)
     {
