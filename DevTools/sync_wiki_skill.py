@@ -9,10 +9,10 @@ The Wiki submodule owns the skill modules, the installer and the parity check; t
 script only fixes the paths for the host repository and adds a check mode.
 
 Usage:
-    python sync_wiki_skill.py                 # parity check + install (en)
-    python sync_wiki_skill.py --lang zh       # install the Chinese instruction build
-    python sync_wiki_skill.py --check         # report whether the installed copy is current
-    python sync_wiki_skill.py --no-parity     # skip the parity smoke test
+    python DevTools/sync_wiki_skill.py                 # parity check + install (en)
+    python DevTools/sync_wiki_skill.py --lang zh       # install the Chinese instruction build
+    python DevTools/sync_wiki_skill.py --check         # report whether the installed copy is current
+    python DevTools/sync_wiki_skill.py --no-parity     # skip the parity smoke test
 
 `--check` regenerates the assembled skill in the submodule (an ignored file) and
 compares it with `.claude/skills/cloud-glyph-wiki-create/SKILL.md`; it exits 0 when
@@ -30,7 +30,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS = REPO_ROOT / "Wiki" / "skills"
 INSTALLER = SKILLS / "claude_install.py"
 GENERATOR = SKILLS / "gen_skill.py"
@@ -79,7 +79,7 @@ def check(lang: str) -> int:
 
     print(
         f"stale ({lang}): {INSTALLED}\n"
-        "run `python sync_wiki_skill.py" + ("" if lang == "en" else f" --lang {lang}") + "` to install."
+        "run `python DevTools/sync_wiki_skill.py" + ("" if lang == "en" else f" --lang {lang}") + "` to install."
     )
     return 1
 

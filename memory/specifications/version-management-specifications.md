@@ -59,7 +59,10 @@
 
 ## 六、版本号提交
 
-- **版本号变更必须单独成提交**：只放 csproj 的 `<Version>` 变更，以及按 §三.6 必须同步修改的依赖引用版本；不要和代码、测试、模板、文档改动混在同一笔。代码改动先按自己的 `[类型][模块]` 提交，最后再用一笔 `[config][repo]` 提交版本号。
+- **专用类型**：首行固定 `[version][repo] English subject`。`version` 是包版本号提交的唯一类型；`config` 不用于版本号。
+- **单独成笔**：只放 csproj 的 `<Version>` 变更，以及按 §三.6 必须同步修改的依赖引用版本；不要和代码、测试、模板、文档改动混在同一笔。代码改动先按自己的 `[类型][模块]` 提交。
+- **位于待推送范围的最后一笔**：版本提交之后不能再接任何未推送提交。写完版本提交又要改代码时，先提交新改动，再把版本提交移到顶端；不要带着中间的版本提交推送。
+- **推送前校验**：运行 `python DevTools/verify_version_commits.py`；另按 [模块记忆维护](memory-maintenance-specifications.md) §七 运行记忆门禁。版本脚本以 `master` 的上游（缺省 `origin/master`）为基线检查未推送提交，以下任一情况退出码为 1：改动 `Src/` 包 csproj 的 `<Version>` 却没有 `[version]` 类型；`[version]` 提交没有改 `<Version>`；`[version]` 提交动了 csproj 以外的文件；版本提交不是未推送范围里的最后一笔。修正后再推送。单个版本提交位置不对时，`python DevTools/verify_version_commits.py --fix` 会把它移到顶端（要求工作区干净、范围内无 merge）；未用 `[version]`、混入其他文件或有多个版本提交时，先用 `git rebase -i` 拆分、改类型、重排。
 - 同一轮多个包同步提升时，放在**同一笔版本提交**里，在表格中逐行列出；不要一个包一笔。
 - **提交信息必须列出四个维度**，缺任何一列都不合规：
 
@@ -74,10 +77,12 @@
   - **提升后的版本**：改动后的 `<Version>`；
   - **修改简述**：为什么提这一位（破坏性 / 功能增量 / 优化修复），一句话。
 
-- 版本号提交的 body 仍按 [commit-message-specifications.md](commit-message-specifications.md) 的 `[what]` / `[why]` / `[how]` 写；上表放在 `[what]` 下。首行示例：`[config][repo] the packages move to 11.1.0`。
+- 版本号提交的 body 仍按 [commit-message-specifications.md](commit-message-specifications.md) 的 `[what]` / `[why]` / `[how]` 写；上表放在 `[what]` 下。首行示例：`[version][repo] the packages move to 11.1.0`。
 
 **自查（提交版本号之前）**：
 
 - [ ] 这一笔是否只包含 `<Version>` 与按 §三.6 必须同步的依赖引用版本？
 - [ ] 四列表（包名 / 原版本 / 提升后的版本 / 修改简述）是否齐全，每行一个包？
-- [ ] 首行是否是 `[config][repo] ...`，且没有把代码/测试/文档混进来？
+- [ ] 首行是否是 `[version][repo] ...`，且没有把代码/测试/文档混进来？
+- [ ] 这一笔是否是待推送范围里的最后一笔？
+- [ ] 推送前 `python DevTools/verify_version_commits.py` 是否以 0 退出？

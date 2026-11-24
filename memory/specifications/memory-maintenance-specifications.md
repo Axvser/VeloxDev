@@ -140,3 +140,30 @@ memory/
 4. 模块有平台差异轴吗？有的话 `adapters/` 下七家的文件齐吗（缺文件 ≠ 无差异）？契约有没有被重复七遍？
 5. 新写的坑点带依据了吗？依据是树里的**路径 + 符号/原文引文**，**不是行号，更不是 commit**。行号只作可选辅助，不能当作「已核实」的证据。**行为依据**的数字留了吗？**机械清点**的数字（测试条数/通过数、文件数、接口数、整套耗时）删了吗？复核不到的数字标出来了吗？
 6. 动过的旧记忆，你是**改**了它，还是在下面追加了一段？
+7. 推送前 `python DevTools/verify_memory_commits.py` 是否以 0 退出，修复是否已 amend / autosquash 进原修改提交？
+
+---
+
+## 七、推送前校验
+
+每次 `git push` 前运行 `python DevTools/verify_memory_commits.py`。脚本以 `master` 的上游（缺省 `origin/master`）为基线，逐笔检查未推送提交里的 `memory/modules/` 改动。
+
+**机械检查（退出码 1）**：
+
+- 动过的模块缺 `architecture.md` / `extension.md`；
+- 有 `adapters/` 却缺七家平台文件；
+- 模块索引文件、日期文件名；
+- 明确的历史叙述：`已删除` / `曾经` / `旧版` / `旧实现` / `原先` / `自 20xx…起`；
+- 机械清点：测试条数、通过 / 失败数、文件 / 类型 / 接口计数、测试或构建耗时、TRX / run 号；
+- 反引号里以仓库根（`Src/` / `Examples/` / `memory/` / `skills/` / `Wiki/` 等）开头的路径解析不到；
+- 同一文件里重复标题。
+
+**待复核**（脚本不判错，按 [memory-density-specifications.md](memory-density-specifications.md) §一 判断）：因果词（`因为` / `所以` / `否则`）、历史措辞（`以前` / `不再` / `原来`）、修辞（`真正` / `最重要的`）、未来推测（`将来` / `下次`），`architecture.md` / `pitfalls.md` 里的维护建议，相对路径解析不到或同名文件超过一处，`adapters/` 下七家之外的文件、非 Markdown 文件，同一句话被加进多个记忆文件，同一记忆文件被多笔未推送提交改动，以及模块记忆为空/被删除或 merge 提交带记忆改动。
+
+**修复落点**：脚本给每处问题标出引入它的未推送提交。改完把修复 amend 进那笔提交：
+
+- 它就是当前顶端：`git add <file> && git commit --amend --no-edit`；
+- 在更早的位置：`git add -p <file> && git commit --fixup=<sha>`，再 `git rebase -i --autosquash <上游>`；修复让原提交变空时按提示 `git rebase --skip`。
+- **不要为修复新增独立提交**；脚本会继续在原提交里看到违规行。
+
+`fixup!` / `squash!` 提交必须 autosquash 掉，推送前不能留在历史里。`memory/specifications/` 的改动只报待复核提醒 —— 规范由用户口述，agent 不自行修改。修完重跑脚本；退出码 0 且 §六 的人工复核通过后才能推送。
