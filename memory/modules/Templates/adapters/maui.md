@@ -72,16 +72,18 @@
 ### 2.5 node-view 的"弹性缩放"是 code-behind 算的，不是布局
 
 `workflow-node-view/TemplateClass.xaml.cs` 里 `ApplyScale` 的注释：code-behind 按
-`collapsed width / 260` 缩放标题行、字号与插槽字形，让内容重排进折叠后的盒子、不裁切。
+`collapsed width / 260` 缩放标题行、字号、插槽字形，以及输出槽栈的 `Spacing` / `Margin` 与标签边距 ——
+**位置和尺寸一起缩**，让内容重排进折叠后的盒子、不裁切。只缩尺寸不缩间距会把端口推到卡片外，
+连线随后锚到那些盒子外的点。
 ⇒ 设计尺寸 `260` 在这一家是 **`workflow-node-view/TemplateClass.xaml.cs` 的 `DesignWidth` 常量**，
 不是标记里的 `Width="260"`（WPF/WinUI 那边是标记里的固定 `Grid Width="260" Height="180"`）。
 **改节点设计尺寸时两家的改法不同。**
 
-### 2.6 插槽状态是 `BindableProperty` + 两侧绑定
+### 2.6 插槽状态由转换器着色
 
-`SlotState` 在 slot-view 里注册（`workflow-slot-view/TemplateClass.xaml.cs` 的 `SlotStateProperty`），
-变更回调只做 `Invalidate()`（同文件的 `OnSlotStateChanged`）；node-view 两处都绑上
-（`workflow-node-view/TemplateClass.xaml` 的输入槽绑 `State`、输出槽先设 `BindingContext="{Binding Slot}"` 再绑 `State`）。
+slot-view 是 `Ellipse`（共享 SVG 路径在本家解析不出来），`Fill` / `Stroke` 经
+`SlotStateBrushConverter` 绑 `{Binding State}`，`StandByColor` / `BorderColor` 由模板给；
+code-behind 只有 `InitializeComponent()`。node-view 不再传 `SlotState`。
 
 ---
 

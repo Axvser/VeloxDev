@@ -119,6 +119,18 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     /// <summary>Sets the <c>CoordinateHostType</c> attached property on <paramref name="element"/>.</summary>
     public static void SetCoordinateHostType(DependencyObject element, Type? value) => element.SetValue(CoordinateHostTypeProperty, value);
 
+    /// <summary>Re-measures the slots of a node view after the canvas transform or scale changed.</summary>
+    public static void Refresh(FrameworkElement control) => RequestSync(control);
+
+    /// <summary>Re-measures the slots immediately, for callers that already ran the layout pass.</summary>
+    public static void SyncNow(FrameworkElement control)
+    {
+        if (control.GetValue(StateProperty) is not null)
+        {
+            Sync(control);
+        }
+    }
+
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not FrameworkElement element)
@@ -421,28 +433,27 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
         if (coordinateHost is not null)
         {
-            // Jalium 的 TransformToAncestor 交回的是**元素在祖先坐标里的原点**（实测：不是 WPF 那个
-            // GeneralTransform），所以中心要自己加半个尺寸。
-            //
-            // 世界位移现在发布在**宿主的附着属性**上、由节点/连线模板绑进各自的 RenderTransform
-            // （见 WorkflowSurfaceBehavior.CanvasTransform）—— 位移在坐标宿主之内，所以这里与其余六家
-            // 用同一条契约：减去 ActualOffset。
-            var origin = control.TransformToAncestor(coordinateHost);
+            // TransformToVisual composes the full chain (Viewbox scale + the node's CanvasTransform),
+            // unlike TransformToAncestor, which returns only the element's origin. Transforming the
+            // local CENTER is what keeps the anchor on the port when the card is scaled.
+            var toCanvas = control.TransformToVisual(coordinateHost);
+            var centerOnCanvas = toCanvas.Transform(center);
             var layout = node.Parent?.Layout;
             if (layout is not null)
             {
                 slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(
-                    origin.X + center.X, origin.Y + center.Y, slot.Anchor.Layer, layout);
+                    centerOnCanvas.X, centerOnCanvas.Y, slot.Anchor.Layer, layout);
                 return;
             }
         }
 
-        var hostOrigin = control.TransformToAncestor(host);
+        var toHost = control.TransformToVisual(host);
+        var centerOnHost = toHost.Transform(center);
         slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromNode(
             node.Anchor.Horizontal,
             node.Anchor.Vertical,
-            hostOrigin.X + center.X,
-            hostOrigin.Y + center.Y,
+            centerOnHost.X,
+            centerOnHost.Y,
             slot.Anchor.Layer);
     }
 

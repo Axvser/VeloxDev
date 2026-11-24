@@ -110,6 +110,7 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     private readonly HashSet<INodeComponent> _subscribedNodes = [];
     private readonly HashSet<ILinkComponent> _subscribedLinks = [];
     private bool _invalidatePending;
+    private bool _followUpPending;
 
     private double _bandCentre;
     private double _bandMix;
@@ -1484,6 +1485,21 @@ public sealed class WorkflowLinkOverlay : GraphicsView
     {
         _invalidatePending = false;
         Invalidate();
+
+        // The slot anchors are written at the END of the layout pass; an Invalidate raised during that
+        // pass can be absorbed by the frame already being composed, leaving the links at their pre-zoom
+        // endpoints until the next input event. Request one more repaint after the queued layout work.
+        if (_followUpPending)
+        {
+            return;
+        }
+
+        _followUpPending = true;
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            _followUpPending = false;
+            Invalidate();
+        });
     }
 
     // ── 绘制 ────────────────────────────────────────────────────────────────

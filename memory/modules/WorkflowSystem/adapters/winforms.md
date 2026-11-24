@@ -39,6 +39,7 @@
 
 - `WorkflowSurfaceBehavior` 在 `VisualHost.Root` 上订阅 `PreviewPointerPressed` 与 `PointerPressed/Moved/Released/Wheel/Exited`、`KeyDown/KeyUp`（由 `VisualHost` 冒泡）。**按下在预览相路由**（`OnPreviewPressed` → `RoutePressed`），句柄先落在表面里，节点拖动/插槽连接行为在自己的 `PointerPressed` 里读 `GetPressHandle`；命中后把屏幕点经相机逆矩阵换成世界坐标，再 `WorkflowInput.Route`。
 - **滚轮**：`VisualHost.OnMouseWheel` → `ProcessPointerWheel` → 根视觉元素的 `PointerWheel` → `WorkflowSurfaceBehavior.HandleWheel`。`HandleWheel` 先路由 Core 并读 `PreventDefault`，再按 Ctrl 缩放（`ZoomAt`）、Shift 横滚、默认竖滚。**画布上不挂 `MouseWheel`**。
+- **路由出去的 `DeltaX`/`DeltaY` 是原始轮刻度（一格 120）**，与 `IWorkflowSurfaceScroller.ScrollBy` 同一单位 —— 不要在这里再除 120，宿主的 `ScrollBy(-e.DeltaY, 0)` 会因此再缩一次而几乎不动。**Shift+竖向滚轮仍按竖向事件路由**（带 Shift 修饰键），不要改写成 `ProcessPointerHWheel`：那样 `DeltaY` 会变成 0，宿主拦下默认动作后横滚量为 0。
 - ⚠ 实测：`WM_MOUSEWHEEL` 在 `HKCU\Control Panel\Desktop\MouseWheelRouting = 2`（「悬停时滚动非活动窗口」开着）下按指针派发；关掉时是否退化为按焦点派发未验证。
 
 ### 2.3 相机：一条矩阵，世界坐标，输入走逆矩阵
@@ -65,7 +66,10 @@
 ### 2.6 连线：选择器给每条 link 一个 LinkView
 
 - `ViewPool` 通过 tree 的 `LinkTemplate` 为每条 link（含 virtual link）实例化一个视图；`DataTemplate` 把 `StartLeft/StartTop/EndLeft/EndTop` 绑到 `Sender.Anchor.*` / `Receiver.Anchor.*`，把 `CanRender` 绑到 `IsVisible`；表面 `ApplyLinkStyles` 再写 `LineColor`/`LineThickness`/`HighlightColor`/`HighlightThickness`/`IsVirtual`（视图 DP 与附着属性同型 `float`，缺属性就跳过）。视图 `OnRender` 画 cubic 并 `PublishCurve`。
-- **`LinkView` 的 `Bounds` 是整张画布，曲线可能画到负世界坐标**；`GetInvalidationBounds()` 必须按贝塞尔控制点的包围盒算脏区（Full 和 WinForms Trimmed 的 LinkView 都这样做）。默认 Bounds 只覆盖 0..画布，负象限的悬停高亮不会重画，整面重画（如系统截图）才“突然”完整。
+- **`LinkView` 的 `Bounds` 是整张画布，曲线可能画到负世界坐标**；`GetInvalidationBounds()` 按贝塞尔控制点的包围盒算脏区（Full 和 WinForms Trimmed 的 LinkView 都这样做），并**并入上一帧的包围盒** —— 只按新曲线算，旧线段留在脏区外，缩放后靠近端口的段会被切成缺口，直到整面重画（如系统截图）才补齐。
+- **视图构造里设 `UnboundedHitTest = true`**：Easel 的 `IntersectsRenderDamage` 按 `Bounds` 剔除子树，画布尺寸的盒子会漏掉整个负世界象限（表现是虚拟连线只在 x>0,y>0 渲染）；该开关让 cull 放行，命中仍由 `IsHitTestVisible = false` 关着。
+- **虚拟连线（橡皮筋）的脏区 = 整视图 ∪ 曲线包围盒**：它每个指针帧都在动，且可跨到负世界坐标；只返回整视图（local `0..Width`，只覆盖正象限）会正好把负象限那一段截掉 —— 这就是「虚拟连线只在一个象限渲染」的根因。
+- **隐藏 / 解绑时回退到最后画过的包围盒**：松开鼠标重置虚拟连线时当前几何已经没了，基础盒（`0..Width`）又不覆盖负象限，旧虚线会留在屏上直到下一次重绘；`GetInvalidationBounds` 因此把基础盒与 `_lastInvalidationBounds` 求并集。
 - **曲线是世界坐标**；相机变换只在绘制时加。`Start/End` 与发布给 Core 命中测试的是同一条曲线。
 - 命中在世界坐标里按半径判：半径取 `WorkflowInput.HitRadius`（demo 设 `LinkHitRadius = 6f`）。节点卡是不透明的，压在下面的那段线不画、也不应答，端口附近除外。
 - **WinForms 的 ViewPool 是 Core 池的闭包**：`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/ViewHosting/` 组合 `ViewSourcePipelineCore<Panel,VisualElement,IWorkflowComponent,NonPriority,…>`；`ViewFactory` 直接调 `VisualTemplateSelector`，`ViewContainer` 把视图留在画布上（`Deactivate` 清 DataContext + `Collapsed`，复用后重新 `Activate`），回收桶、批大小、Replace 归 Core（默认 `AdaptiveViewPoolPolicy`）。新视图先挂父级再写 DataContext，`ElementName`/祖先绑定才能解析；首次挂载按模板 `Panel.ZIndex` 插位（连线 -1 在节点前）。有句柄时调度用 `BeginInvoke`，无句柄同步排空；`Changed` 每批一次。

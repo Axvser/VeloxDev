@@ -32,6 +32,11 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         public FrameworkElement? PointerPressSource { get; set; }
         public PointerEventHandler? WheelHandler { get; set; }
 
+        /// <summary>The element the wheel handler is attached to: the scroll content presenter when
+        /// available (it spans the whole viewport, including the blank area left/top of a translated
+        /// canvas), otherwise the canvas.</summary>
+        public UIElement? WheelHost { get; set; }
+
         // 这一笔按下已被路由过（组件自己路由的，或表面在平移那一处路由的）。
         // 不能用 e.Handled 代替：表面的按下处理器是 handledEventsToo:true 挂的，它无视 Handled 照跑，
         // 于是同一笔会被路由第二遍。这个标记是那一笔「已经路由」的唯一凭据。
@@ -584,20 +589,64 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
     // 挂接**不跟缩放开关走**：普通滚轮的汇报与缩放是两件事，关掉缩放的宿主一样要收得到。
     private static void HookWheel(SurfaceState state)
     {
-        if (state.Canvas is not null && state.WheelHandler is null)
+        if (state.WheelHandler is not null)
         {
+            return;
+        }
+
+        state.WheelHost = FindScrollContentPresenter(state.ScrollViewer) ?? (UIElement?)state.Canvas;
+        if (state.WheelHost is not null)
+        {
+            // A ContentPresenter without a Background is not hit-testable: blank areas left/top of the
+            // translated canvas would fall through to the surface border, and the wheel handler would
+            // never see them (the "zoom only works in the positive quadrant" symptom). A transparent
+            // brush makes the presenter the hit target without painting anything.
+            if (state.WheelHost is ScrollContentPresenter presenter && presenter.Background is null)
+            {
+                presenter.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            }
+
             state.WheelHandler = new PointerEventHandler(OnSurfaceWheel);
-            state.Canvas.AddHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler, true);
+            state.WheelHost.AddHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler, true);
         }
     }
 
     private static void UnhookWheel(SurfaceState state)
     {
-        if (state.Canvas is not null && state.WheelHandler is not null)
+        if (state.WheelHost is not null && state.WheelHandler is not null)
         {
-            state.Canvas.RemoveHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler);
-            state.WheelHandler = null;
+            state.WheelHost.RemoveHandler(UIElement.PointerWheelChangedEvent, state.WheelHandler);
         }
+
+        state.WheelHost = null;
+        state.WheelHandler = null;
+    }
+
+    // The canvas is translated by ActualOffset; blank areas left/top of it (negative world) hit the
+    // scroll content presenter instead, so the wheel must be hooked there. The presenter is inside the
+    // ScrollPresenter, so it still sees the event before the platform scrolls.
+    private static ScrollContentPresenter? FindScrollContentPresenter(DependencyObject? root)
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        if (root is ScrollContentPresenter presenter)
+        {
+            return presenter;
+        }
+
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            if (FindScrollContentPresenter(VisualTreeHelper.GetChild(root, i)) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     // 内层闸门：指针底下最近的、画布**之内**的滚动容器，沿这一笔方向还有没有余量。

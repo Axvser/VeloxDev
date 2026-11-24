@@ -143,6 +143,10 @@ C# 收到的是**已翻号**的 `wheelDelta`（正数 = 上滚），所以 `fact
 - **两个竞态**：`pressWhenAllowed` 等裁决时挂一次性 `mouseup`，回来若已松开就不起手势（否则留下没有按键在场的
   pan/drag 态）；缩放的 `e.preventDefault()` 必须同步调（等回来页面已经滚了），所以裁决排在它之后，一段突发只问一次
   （`verdictBusy`），否决则丢掉整段 `pending`。
+- **`initSlotConnection` 同样有这条竞态**（原先漏了）：按下到裁决回来之间松开，`mouseup` 因 `active=false` 被忽略，
+  裁决回来却起了手势 —— 橡皮筋从此没人收。现在 JS 侧用 `released` 标记，裁决回来若已松开就不起手势。
+- **缩放后的槽位重测要排到下一帧**：`veloxdev-wf-layout-changed` 可能在节点 wrapper 的新 transform 落地之前派发；
+  `initSlotLayout` 的 `onRelayout` 除立即 `measure()` 外再排两帧 rAF，槽锚点（及由它算出的连线端点）才会收敛。
 
 **代价（已知且接受）。** Blazor WASM 下这次 await 只让出一次微任务，可忽略；**Blazor Server 下它是一个 SignalR RTT**
 （本机个位数 ms、跨网数十 ms），手势的 DOM 起步会晚这么多（delta 不丢：快照取自 mousedown，回来会追上）。

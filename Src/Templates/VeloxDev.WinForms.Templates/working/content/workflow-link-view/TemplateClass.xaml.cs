@@ -14,6 +14,7 @@ public sealed partial class TemplateClass : Easel.Visuals.Controls.UserControl
 {
     private const double MinimumPull = 40d;
     private ILinkComponent? _publishedLink;
+    private RectangleF _lastInvalidationBounds;
 
     #region Dependency properties
 
@@ -62,6 +63,10 @@ public sealed partial class TemplateClass : Easel.Visuals.Controls.UserControl
     {
         InitializeComponent();
         IsHitTestVisible = false;
+        // Easel culls a visual by its Bounds; this view spans the canvas but draws into negative
+        // world coordinates outside that box. UnboundedHitTest opts it out of the damage cull
+        // (hit-testing stays off), so links render in every quadrant.
+        UnboundedHitTest = true;
     }
 
     /// <summary>The sender port's world X.</summary>
@@ -120,10 +125,35 @@ public sealed partial class TemplateClass : Easel.Visuals.Controls.UserControl
             var maxY = points.Max(point => point.Y);
             var bounds = RectangleF.FromLTRB((float)minX, (float)minY, (float)maxX, (float)maxY);
             bounds.Inflate(12f, 12f);
+
+            // The rubber band moves every pointer frame and can run into negative world coordinates:
+            // cover the whole view AND the curve's own box. The view box alone is 0..Width (positive
+            // only), which is what clipped the rubber band to the positive quadrant.
+            if (IsVirtual || (link.Sender?.Parent is null && link.Receiver?.Parent is null))
+            {
+                return RectangleF.Union(new RectangleF(0f, 0f, Bounds.Width, Bounds.Height), bounds);
+            }
+
+            // A partial repaint clipped to the NEW curve leaves the previous segment stale (and can
+            // clip the new one at the old damage edge); cover both the old and the new curve.
+            if (_lastInvalidationBounds.Width > 0f && _lastInvalidationBounds.Height > 0f)
+            {
+                bounds = RectangleF.Union(bounds, _lastInvalidationBounds);
+            }
+
             return bounds;
         }
 
-        return base.GetInvalidationBounds();
+        // Hiding / unbinding (the rubber band is reset on a blank release) must erase the LAST drawn
+        // curve: the current geometry is already gone, and the base box (0..Width) misses every
+        // negative-world segment, so the old dashes would stay on screen until something repaints.
+        var fallback = base.GetInvalidationBounds();
+        if (_lastInvalidationBounds.Width > 0f && _lastInvalidationBounds.Height > 0f)
+        {
+            return RectangleF.Union(fallback, _lastInvalidationBounds);
+        }
+
+        return fallback;
     }
 
     /// <inheritdoc />
@@ -135,6 +165,13 @@ public sealed partial class TemplateClass : Easel.Visuals.Controls.UserControl
         }
 
         var points = LinkCurve.LinkCurvePoints(link, StartLeft, StartTop, EndLeft, EndTop, MinimumPull);
+        var drawnMinX = points.Min(point => point.X);
+        var drawnMinY = points.Min(point => point.Y);
+        var drawnMaxX = points.Max(point => point.X);
+        var drawnMaxY = points.Max(point => point.Y);
+        _lastInvalidationBounds = RectangleF.FromLTRB((float)drawnMinX, (float)drawnMinY, (float)drawnMaxX, (float)drawnMaxY);
+        _lastInvalidationBounds.Inflate(12f, 12f);
+
         var curve = LinkCurve.FromCubic(
             points[0].X, points[0].Y, points[1].X, points[1].Y,
             points[2].X, points[2].Y, points[3].X, points[3].Y);

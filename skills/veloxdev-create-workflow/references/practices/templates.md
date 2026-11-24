@@ -71,7 +71,7 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 | slot | `-bg` `slotBackground` | slot hit-test / backing fill |
 | | `-sc` `slotColor` | slot standby colour |
 | | `-bc` `slotBorderColor` | slot border colour (where the slot draws a border) |
-| | `-sp` `slotPath` | the SVG path the slot glyph is drawn from |
+| | `-sp` `slotPath` | the SVG path the slot glyph is drawn from (MAUI draws an ellipse and ignores it) |
 | link | `-lc` `linkColor` | settled link stroke |
 | | `-lt` `linkThickness` | settled link stroke width |
 | tree | `-bg` `surfaceBackground` | surface fill |

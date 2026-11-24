@@ -1232,8 +1232,11 @@ public sealed class WorkflowSurfaceBehavior
             ToModifiers(modifiers),
             state.VisualHost,
             ResolveTarget(state, surfacePoint),
-            horizontalWheel ? delta / 120d : 0d,
-            horizontalWheel ? 0d : delta / 120d,
+            // Raw wheel delta (one notch = 120), the same scale ScrollBy consumes and the same
+            // PointerWheelEventArgs carries on the other adapters. Normalizing here made a host's
+            // documented `ScrollBy(-e.DeltaY, 0)` divide by 120 a second time (barely any movement).
+            horizontalWheel ? delta : 0d,
+            horizontalWheel ? 0d : delta,
             wheelHandle));
 
         if (wheelHandle.PreventDefault)
@@ -1709,13 +1712,9 @@ public sealed class WorkflowSurfaceBehavior
                 return host.ProcessPointerHWheel(point, delta);
             }
 
-            // Some Windows configurations deliver Shift+vertical wheel as a horizontal message elsewhere; when the
-            // vertical message does arrive, route it to the same axis instead of letting WinForms swallow it.
-            if ((Control.ModifierKeys & Keys.Shift) != 0)
-            {
-                return host.ProcessPointerHWheel(point, -delta);
-            }
-
+            // Shift+vertical wheel stays a VERTICAL report carrying the Shift modifier: the adapter's own
+            // wheel path and the host's documented `ScrollBy(-e.DeltaY, 0)` both expect DeltaY. Turning it
+            // into a horizontal report here left DeltaY at 0, so a host that refused the default scrolled by 0.
             return host.ProcessPointerWheel(point, delta);
         }
 

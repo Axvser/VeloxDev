@@ -101,6 +101,7 @@
 | Jalium | TreeView | code-behind 里有 `CanvasTransform` 镜像 DP 与 CLR 属性 | 绑定路径不解析 `(附加属性)` 括号语法，树只能把画布变换重新暴露成普通属性；交互仍全部由附着行为负责 |
 | MAUI | LinkView | 没有 per-link 端点属性，改用 overlay 级属性 | 每线一个 `GraphicsView` 在深缩放会超出 Win2D 纹理上限并静默消失，只能一个视口级 overlay 画完所有线 |
 | MAUI | NodeView | code-behind 有按宽度缩放的 `OnSizeAllocated` | 没有 `Viewbox`；渲染变换不参与布局，会破坏槽锚点测量，只能走布局尺寸 |
+| MAUI | SlotView | 用 `Ellipse` 画端口，`slotPath` 不参与 | MAUI 的 `Path` 解析不渲染共享那套 SVG 路径（含 `a` 弧线命令），实测端口消失 |
 | Razor | 全部 | 没有 `InitializeComponent`；组件参数与 `.razor.cs` 是声明路径 | Blazor 组件模型没有「标记 + 代码后置」的对应物 |
 | Razor | MinimapOverlay | 扩展点是 `DrawMinimap` render fragment，不是函数重写 | 组件无法覆写基组件的渲染树 |
 | Razor | LinkView | 端点属性是可选的覆盖值，默认从模型读 | 池化视图重渲染时父级不会重新求值传给它的参数，几何必须留在视图内读模型 |

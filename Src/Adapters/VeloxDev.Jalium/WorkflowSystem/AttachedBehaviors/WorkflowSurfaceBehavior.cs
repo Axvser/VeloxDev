@@ -353,6 +353,42 @@ public static class WorkflowSurfaceBehavior
         UpdateViewport(state, horizontalOffset, verticalOffset);
         tree.GetHelper().Virtualize(tree.GetHelper().Viewport);
         UpdateOverlays(state);
+
+        // The slots are measured through the canvas transform, which just changed with the new
+        // ActualOffset/Scale. Without a re-measure the anchors (and every link anchored to them)
+        // stay at the pre-zoom visual, and the error survives zooming back out.
+        if (state.Canvas is not null)
+        {
+            foreach (var child in state.Canvas.Children)
+            {
+                if (child is FrameworkElement view && view.DataContext is INodeComponent)
+                {
+                    // NotifyZoomCommitted runs after the caller's UpdateLayout, so the slot geometry is
+                    // final: measure inline. Scheduling it for the render batch leaves one frame where
+                    // the nodes have moved and the links still use the previous anchors (jitter).
+                    WorkflowSlotLayoutBehavior.SyncNow(view);
+                }
+            }
+
+            // The slot anchors are written later in the render batch; repaint the link views once
+            // after it so a zoom notch never lands with the previous frame's endpoints.
+            host.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+            {
+                if (state.Canvas is null)
+                {
+                    return;
+                }
+
+                foreach (var child in state.Canvas.Children)
+                {
+                    if (child is FrameworkElement view && view.DataContext is ILinkComponent)
+                    {
+                        view.InvalidateVisual();
+                    }
+                }
+            }));
+        }
+
         host.InvalidateVisual();
     }
 
@@ -1589,9 +1625,20 @@ public static class WorkflowSurfaceBehavior
         return handle;
     }
 
-    // 画布自己带着世界位移，所以它的局部系就是模型系。
+    // 画布局部系带 ActualOffset（负向覆盖/缩放扩展会改它），模型系要减掉它 —— 与其余六家同一条换算。
     private static Point WorldPoint(SurfaceState state, MouseEventArgs e)
-        => state.Canvas is null ? e.GetPosition(state.Host) : e.GetPosition(state.Canvas);
+    {
+        if (state.Canvas is null || state.Tree is null)
+        {
+            return e.GetPosition(state.Host);
+        }
+
+        var point = e.GetPosition(state.Canvas);
+        var layout = state.Tree.Layout;
+        return new Point(
+            WorkflowSurfaceMath.ToCanvasLocal(point.X, layout.ActualOffset.Horizontal),
+            WorkflowSurfaceMath.ToCanvasLocal(point.Y, layout.ActualOffset.Vertical));
+    }
 
     // 「空白」= 按下的东西是表面自己的部件之一，而不是落在卡片或端口上。
     // 判据与 WPF 同形：先排除节点与端口的视觉，再排除滚动条，最后要求命中链上出现

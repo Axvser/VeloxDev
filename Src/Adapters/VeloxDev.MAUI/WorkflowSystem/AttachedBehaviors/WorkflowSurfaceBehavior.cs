@@ -969,8 +969,28 @@ public sealed class WorkflowSurfaceBehavior
                 ApplyLayout(control, state);
                 UpdateVisibleRegion(control, state);
             }
+
+            RefreshSlotLayouts(state);
         }
         e.Handled = true;
+    }
+
+    // Slots are measured through the canvas translation; after a zoom commits, re-measure them so
+    // link anchors follow the new ActualOffset/Scale instead of the pre-zoom visual.
+    private static void RefreshSlotLayouts(SurfaceState state)
+    {
+        if (state.Canvas is null)
+        {
+            return;
+        }
+
+        foreach (var child in state.Canvas.Children)
+        {
+            if (child is ContentView view && view.BindingContext is INodeComponent)
+            {
+                WorkflowSlotLayoutBehavior.Refresh(view);
+            }
+        }
     }
 
     // 滚轮不能挂在 ScrollViewer 自己身上：本家没有隧道相，平台的 ScrollViewer 在冒泡路径上比这一层更晚
@@ -1247,6 +1267,7 @@ public sealed class WorkflowSurfaceBehavior
             var y = WorkflowSurfaceMath.ClampValue(desiredY, 0d, GetNativeScrollMaximum(state, horizontal: false));
             ApplyOffset(viewer, 1d, 1d, x, y);
             UpdateVisibleRegion(host, state);
+            RefreshSlotLayouts(state);
         }
 
         // 落滚只写增量非零的那一轴：另一轴传 null，免得把它夹回范围里（零增量不许动那一轴）。
@@ -1668,6 +1689,10 @@ public sealed class WorkflowSurfaceBehavior
     /// </summary>
 #if WINDOWS
     private static readonly Dictionary<Microsoft.UI.Xaml.UIElement, SurfaceState> PlatformPanStates = [];
+    private static readonly Microsoft.UI.Xaml.Input.PointerEventHandler PanPressedHandler = OnPlatformPanPressed;
+    private static readonly Microsoft.UI.Xaml.Input.PointerEventHandler PanMovedHandler = OnPlatformPanMoved;
+    private static readonly Microsoft.UI.Xaml.Input.PointerEventHandler PanReleasedHandler = OnPlatformPanReleased;
+    private static readonly Microsoft.UI.Xaml.Input.PointerEventHandler PanCaptureLostHandler = OnPlatformPanCaptureLost;
 
     /// <summary>Press-source views that belong to a surface, so the handler can find its state.
     /// The state lives on the host <c>ContentView</c>, NOT on the press source — reading
@@ -1696,10 +1721,12 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        element.PointerPressed += OnPlatformPanPressed;
-        element.PointerMoved += OnPlatformPanMoved;
-        element.PointerReleased += OnPlatformPanReleased;
-        element.PointerCaptureLost += OnPlatformPanCaptureLost;
+        // handledEventsToo: the scroll presenter handles the press first when the pointer is over the
+        // canvas, and a CLR `+=` handler would then never run — the whole viewport looked unpannable.
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, PanPressedHandler, true);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerMovedEvent, PanMovedHandler, true);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerReleasedEvent, PanReleasedHandler, true);
+        element.AddHandler(Microsoft.UI.Xaml.UIElement.PointerCaptureLostEvent, PanCaptureLostHandler, true);
         PlatformPanStates[element] = state;
         state.PlatformPressSource = element;
     }
@@ -1711,10 +1738,10 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        state.PlatformPressSource.PointerPressed -= OnPlatformPanPressed;
-        state.PlatformPressSource.PointerMoved -= OnPlatformPanMoved;
-        state.PlatformPressSource.PointerReleased -= OnPlatformPanReleased;
-        state.PlatformPressSource.PointerCaptureLost -= OnPlatformPanCaptureLost;
+        state.PlatformPressSource.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerPressedEvent, PanPressedHandler);
+        state.PlatformPressSource.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerMovedEvent, PanMovedHandler);
+        state.PlatformPressSource.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerReleasedEvent, PanReleasedHandler);
+        state.PlatformPressSource.RemoveHandler(Microsoft.UI.Xaml.UIElement.PointerCaptureLostEvent, PanCaptureLostHandler);
         PlatformPanStates.Remove(state.PlatformPressSource);
         state.PlatformPressSource = null;
     }

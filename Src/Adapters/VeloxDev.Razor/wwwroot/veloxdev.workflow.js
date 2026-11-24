@@ -1240,11 +1240,16 @@ window.veloxdevWorkflow = (() => {
     function initSlotConnection(slotEl, dotnetRef) {
         if (!slotEl) return null;
         let active = false;
+        // The press verdict is an async .NET round-trip. A quick press+release can finish BEFORE the
+        // verdict callback runs; without this flag `active` was still false on mouseup, the release was
+        // ignored, and the callback then started a rubber band that nothing would ever end.
+        let released = false;
 
         slotEl.addEventListener('mousedown', function (e) {
             if (e.button !== 0) return;
             e.preventDefault();
             e.stopPropagation();
+            released = false;
             // Measure this slot's own world position up-front so the virtual link starts from the
             // slot even if its anchor was never laid out (e.g. freshly created selector slots).
             const canvasEl = slotEl.closest('.veloxdev-wf-canvas');
@@ -1258,6 +1263,8 @@ window.veloxdevWorkflow = (() => {
             }
             // Connecting is the framework's own hand: route the press first, and a refusal skips the gesture.
             pressWhenAllowed(dotnetRef, canvasEl, e, function () {
+                // Released while the verdict was in flight: do not start a gesture nobody will end.
+                if (released) return;
                 active = true;
                 if (dotnetRef) dotnetRef.invokeMethodAsync('OnSlotConnectionStart', worldX, worldY);
             });
@@ -1290,6 +1297,7 @@ window.veloxdevWorkflow = (() => {
         };
 
         const onUp = function (e) {
+            released = true;
             if (!active) return;
             active = false;
             if (!dotnetRef) return;
@@ -1420,7 +1428,16 @@ window.veloxdevWorkflow = (() => {
         // toward the origin, so slot anchors (and the links drawn from them) track the collapsed nodes
         // immediately instead of waiting for the next drag/resize. The drag events above already cover
         // the drag path; measure() is idempotent (lastKey dedupe) so extra triggers are cheap.
-        const onRelayout = function () { measure(); };
+        const onRelayout = function () {
+            measure();
+            // The zoom handler may dispatch before the node wrappers' new CSS transform is applied.
+            // Measure again after the frame so the slot anchors (and the links built from them)
+            // converge instead of keeping the pre-zoom positions until the next unrelated event.
+            requestAnimationFrame(function () {
+                measure();
+                requestAnimationFrame(measure);
+            });
+        };
         document.addEventListener('veloxdev-wf-layout-changed', onRelayout);
 
         return {

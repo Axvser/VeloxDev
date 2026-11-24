@@ -99,7 +99,7 @@ no per-frame `Refresh`/`SyncNow` pull is required.
 
 ## Links — one LinkView per link
 
-⚙ `LinkTemplate` builds one `LinkView` per link; the template binds `StartLeft` / `StartTop` / `EndLeft` /
+⚙ `LinkTemplate` builds one `LinkView` per link. The view sets `UnboundedHitTest = true` so Easel's `Bounds`-based damage cull does not drop it in the negative-world quadrants (the box is canvas-sized and starts at 0,0); hit-testing stays off. The template binds `StartLeft` / `StartTop` / `EndLeft` /
 `EndTop` to `Sender.Anchor.*` / `Receiver.Anchor.*` and `CanRender` to `IsVisible`, the surface writes
 `LineColor` / `LineThickness` / `IsVirtual`, and the view draws the cubic and calls `PublishCurve` in
 `OnRender`. Hover is the demo's: `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/LinkView.xaml.cs`

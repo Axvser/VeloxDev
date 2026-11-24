@@ -44,7 +44,8 @@
 
 **还有一个坐标事实**：`Visual.TransformToAncestor(ancestor)` 返回的是 **`Jalium.UI.Point`**
 （元素在祖先坐标系里的**原点**），**不是** WPF 那个 `GeneralTransform`。⇒ 要拿「控件中心在画布上的位置」
-得自己加半个 `ActualWidth/ActualHeight`，没有 `TranslatePoint(p, ancestor)` 这种一步到位的写法。
+用 `TransformToVisual(ancestor).Transform(center)`；它组合整条链（含 Viewbox 的缩放与节点的
+`CanvasTransform`），而 `TransformToAncestor` 只给原点、半个尺寸不会跟着 Viewbox 缩放。
 
 ---
 
@@ -104,8 +105,11 @@
 
 ⚠ **坐标系**：世界位移发布在**宿主的附着属性**上、由节点/连线模板绑进各自的 `RenderTransform`
 （见 §2.4），所以位移在坐标宿主**之内** —— 这里与其余六家同一条契约：`SlotAnchorFromVisualCenter`
-（减去 `ActualOffset`）。另：`Visual.TransformToAncestor(ancestor)` 在这家返回 **`Jalium.UI.Point`**
-（元素在祖先系里的原点），不是 WPF 的 `GeneralTransform`，取中心要自己加半个尺寸。
+（减去 `ActualOffset`）。中心用 `TransformToVisual(coordinateHost).Transform(localCenter)` 量：
+`TransformToAncestor` 只给原点，半个尺寸在 Viewbox 缩放下不成立。
+
+⚠ **缩放提交时的时序**：`NotifyZoomCommitted` 在调用方 `UpdateLayout()` 之后同步 `SyncNow` 重测所有节点，
+再在 Render 优先级给连线视图补一次重绘。把测量排队到 Render 批次会让节点先动、连线晚一拍 —— 缩放中端点抖动。
 
 ### 2.4 画布变换：附着属性发出去，模板绑**普通属性**
 

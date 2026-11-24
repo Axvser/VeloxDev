@@ -237,6 +237,7 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 
 | 平台 | 条目 | 空转的 symbol |
 |---|---|---|
+| MAUI | `workflow-slot-view` | `slotPath`（端口画 `Ellipse`，SVG 路径解析不出来） |
 | Razor | `workflow-slot-view` | `slotBackground` |
 | Razor | `workflow-grid-decorator` | `gridBackground`、`minorGridColor`、`majorGridColor` |
 | Razor | `workflow-tree-view` | `surfaceBorderBrush`、`surfaceBorderThickness`、`surfaceCornerRadius` |
@@ -282,7 +283,7 @@ node-view 不再传 `SlotState`：
 
 | 平台 | 方式 |
 |---|---|
-| WPF / Avalonia / WinUI / MAUI / Jalium | 各适配器的 `SlotStateBrushConverter`：`Fill="{Binding State, Converter=…}"`，`Stroke` 同转换器带 `ConverterParameter=Border`；`StandByColor` / `BorderColor` 由模板给 |
+| WPF / Avalonia / WinUI / MAUI / Jalium | 各适配器的 `SlotStateBrushConverter`：`Fill="{Binding State, Converter=…}"`，`Stroke` 同转换器带 `ConverterParameter=Border`；`StandByColor` / `BorderColor` 由模板给。MAUI 的图形是 `Ellipse`（SVG 路径解析不出来），其余是 `Path Data=TemplateSlotPath` |
 | WinForms | 同一模式：`PART_Glyph.Fill` 经 `SlotStateBrushConverter`（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/SlotStateBrushConverter.cs`） |
 | Razor | 标记里调用 `WorkflowPresentation.SlotStateColor(Slot.State, …)` |
 

@@ -24,9 +24,11 @@ WorkflowSurfaceBehavior.Refresh(host);                 // after a mutation
 
 ## Adding your own content to a node
 
-⚙ **MAUI has no `Viewbox`, and the adapter deliberately does not use a render transform.** It scales by measuring and resizing in code — the header row height, the title and label font sizes and the slot glyphs — because a render transform would break the coordinates the slot-layout behaviour reads.
+⚙ **MAUI has no `Viewbox`, and the adapter deliberately does not use a render transform.** It scales by resizing every layout metric in code — the header row height, the title and label fonts, the slot glyphs, and the slot stack's margins and spacing — because a render transform would break the coordinates the slot-layout behaviour reads.
 
-⚙ **Content you add scales through the same code path.** Extend the node view's `OnSizeAllocated` / `ApplyScale` with your own sizes, following the factor the view already computes (`collapsedWidth / 260`, where 260 is that node's design width).
+⚙ **Scale positions as well as sizes.** The generated view multiplies every design metric by `k = collapsedWidth / 260`; leaving a spacing or margin at its design value pushes the ports outside the collapsed card, and the links then anchor to those out-of-card points.
+
+⚙ **Content you add scales through the same code path.** Extend the node view's `OnSizeAllocated` / `ApplyScale` with your own metrics, following the same factor.
 
 ```csharp
 private const double DesignWidth = 260;
@@ -39,9 +41,11 @@ protected override void OnSizeAllocated(double width, double height)
 
 private void ApplyScale(double width)
 {
-    var k = Math.Max(0.1, width / DesignWidth);
-    // The generated view already scales the header, title font and slot glyphs by k.
-    myLabel.FontSize = Math.Max(4, 11 * k);   // example for content you add
+    var k = Math.Max(0.02, width / DesignWidth);
+    // The generated view already scales the header, fonts, slot sizes and the stack's spacing/margins by k.
+    myLabel.FontSize = Math.Max(3, 11 * k);          // sizes by k
+    myLabel.Margin = new Thickness(0, 0, 10 * k, 0); // positions by k too
+    myStack.Spacing = Math.Max(0, 6 * k);
 }
 ```
 
@@ -81,6 +85,6 @@ private void ApplyScale(double width)
 
 ⚙ **The tree declares no `LinkTemplate` and the link view is a thin forwarding shell.** The generated link view forwards its properties to the adapter's sealed `WorkflowLinkOverlay`, and the tree's template selector carries a `NodeTemplate` only — links are not pooled as views. A pack that still ships a per-link `LinkTemplate` is behind the demo; copy `Examples/Workflow/MAUI Trimmed/Demo/Controls/Workflow/TreeView.xaml` instead.
 
-⚙ **`slotPath` (`-sp`) drives the slot glyph.** The generated slot view is a `Path` with `Aspect="Uniform"`, so the SVG path is the glyph. Its fill and stroke bind the slot's `State` through `SlotStateBrushConverter` — the code-behind is only `InitializeComponent()`. `StrokeShape="RoundRectangle TemplateNodeCornerRadius"` substitutes a `Shape`, not a numeric `CornerRadius`.
+⚙ **`slotPath` (`-sp`) is accepted and discarded on this pack.** The generated slot view is an `Ellipse` whose fill and stroke bind the slot's `State` through `SlotStateBrushConverter`; the shared SVG path is not rendered by this GUI's `Path` parser. Change the generated slot view when you need a different glyph. `StrokeShape="RoundRectangle TemplateNodeCornerRadius"` substitutes a `Shape`, not a numeric `CornerRadius`.
 
 ⚙ **The link context menu is a `MenuFlyout` resource plus `LinkMenuKey`,** declared on the tree and pointed at by `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"`. On Windows the adapter turns it into a native flyout; on the other platforms it materializes its own overlay layer over the surface (positioned by `Margin`). Each `MenuFlyoutItem` is bound to the pressed link, so `Command="{Binding DeleteCommand}"` is a complete entry.

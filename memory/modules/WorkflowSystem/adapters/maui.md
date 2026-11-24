@@ -68,6 +68,8 @@ dotnet/maui #13452（`WorkflowMinimapOverlay.cs` 的 `OnStartInteraction`）：`
 ### 4. Win2D 的 ~16k 设备像素纹理上限（决策了整个链接层的形状）
 
 `WorkflowLinkOverlay.cs` 的类文档：**画布尺寸**的 `GraphicsView` 在深缩放下超过 Win2D 纹理上限，整层**静默消失**。
+
+⚠ **缩放后的连线上限时机**：槽锚点在布局趟的尾部才写回；`WorkflowLinkOverlay.FlushInvalidate` 除当前帧外再排一次主线程重绘。只发当前那一帧会被正在合成的帧吞掉，连线沿用旧端点，直到下一次指针/滚动事件。
 于是链接层取**视口尺寸**、住在装饰器坐标系里（网格/标尺用的同一身份：
 `px = RulerThickness + c + ContentOffset − ScrollOffset`），并因此**必须自己做包围盒裁剪**
 （`CullMargin = 24`，裁剪判定在 `IDrawable.Draw` 里用 `IntersectsViewport`）。这一层永远是满屏**视口**尺寸，不是内容尺寸，裁剪不能省。
