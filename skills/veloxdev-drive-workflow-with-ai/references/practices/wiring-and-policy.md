@@ -45,7 +45,7 @@ The policy is read per call, so the next call obeys a mid-session change.
 | `WithoutPermissionRules()` | — | Removes every rule; the mode is untouched. |
 | `WithPermissionJudge(Func<ToolInvocation, PermissionDecision>)` | none | Decides what `Auto` would otherwise settle; a judge that throws denies. |
 | `WithModePrompt(mode, text)` | none | Appends host rules after the shipped Shared and mode text. |
-| `WithAutoMarkDirty(bool)` | off | Marks the tree dirty after every non-query tool call. |
+| `WithAutoMarkDirty(bool)` | — | Retained for source compatibility; the parameter is ignored. Dirty marking is unconditional. |
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | Pre-flight caps; exceeding one returns an error object rather than throwing. **Not enforced in `Bypass` and not counted either** — that mode asks nothing, and a count the model could only pass by asking would be a dialog it cannot reach. With no spend recorded, delegation is bounded by the granted number each level hands down (and `SpawnBudget` at the root), not by a shared pot. |
 | `WithMaxTokens(int)` | unlimited | Cap on provider-reported tokens. `TokenUsageStage` adds `AgentTurnCompleted.Usage` and `AgentUsageReported`; once `TotalTokens` reaches the cap, tool calls are refused (the model can still answer). `ResetTokenUsage()` clears the ledger. **Still enforced in `Bypass`**: it caps spend, not call count. |
 | `WithMaxToolResultChars(int)` | 64 KiB | Cap on one tool result's text. A longer result is replaced by a truncation envelope; `0` disables. Per-tool `max*` parameters give a better answer than this last line of defence. |
@@ -78,11 +78,11 @@ The policy is read per call, so the next call obeys a mid-session change.
 
 ⚙ **Skills and sub-agent tools are query tools for the budget** (their names are read from `SkillAgentToolkit.ToolNames` / `SubAgentAgentToolkit.ToolNames`), and `Execute` for the permission mode. The budget and the permission gate read different things. MCP joins through `McpAgentToolkit.ReadToolNames` — the six reading tools (`List`/`Describe`, resources, prompts) count as queries; `Load`/`Unload`/`Add`/`SetArguments` count as writes.
 
-⚙ **`WithAutoMarkDirty` marks the tree after every non-query call.** A query-only custom tool registered with `WithQueryTools` is never marked dirty.
+⚙ **Dirty marking is unconditional.** The toolkit marks the tree dirty after every successful call and after a failure (a failed edit may have changed the graph halfway); queries included. The frame driver coalesces the marks, so there is no performance reason to skip one.
 
 ⚙ **`ToolCalled` fires after every *successful* wrapped call.** Refused and failed calls do not raise it; they are published on `scope.Pipeline` as `AgentToolCallCompleted` with an `AgentToolOutcome`. Use `ToolCalled` for host-side logging or UI feedback.
 
-⚙ **Edits are serialised per tree.** `WorkflowAgentScope.MutationGate` is one lock per tree shared by every scope over it; the wrapper takes it for `Edit` and `Execute` calls and not for `Read`. Two agents over one tree cannot interleave their edits, but reads are not protected and there is no version check (last write still wins at the semantic level).
+⚙ **Every tool call is serialised per tree.** `WorkflowAgentScope.MutationGate` is one lock per tree shared by every scope over it; the wrapper takes it for every category — reads included — because a query that enumerates the live graph while another scope writes is as unsafe as two writers. The single exemption is the sub-agent wait tool, which must not hold the gate while the children it waits for need it. There is still no version check (last write wins at the semantic level).
 
 ## Custom tools
 

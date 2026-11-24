@@ -58,7 +58,7 @@ var response = await agent.RunAsync(message, session);
 | `WithoutPermissionRules()` | — | removes every rule; the mode is untouched |
 | `WithPermissionJudge(Func<ToolInvocation, PermissionDecision>)` | none | decides what `Auto` would otherwise settle; a judge that throws denies |
 | `WithModePrompt(mode, text)` | none | appends host rules after the shipped Shared and mode text |
-| `WithAutoMarkDirty(bool)` | off | marks the tree dirty after every non-query tool call |
+| `WithAutoMarkDirty(bool)` | — | retained for source compatibility; the parameter is ignored (dirty marking is unconditional) |
 | `WithMaxToolCalls` / `WithMaxReadToolCalls` / `WithMaxWriteToolCalls` | unlimited | pre-flight caps; exceeding one returns an error object rather than throwing |
 
 The mode is the coarse layer and `WithPermissionRule` the fine one beneath it; `Deny` holds in every mode. Only MCP tools carry a source (`mcp:<server>`, `mcp:management`), so a `source:` rule reaches them and not skill or sub-agent tools. `SetPermissionMode` is the runtime switch, and the policy is read per call. The full mode matrix, rule syntax and `ToolInvocation` shape are in [references/practices/wiring-and-policy.md](references/practices/wiring-and-policy.md).

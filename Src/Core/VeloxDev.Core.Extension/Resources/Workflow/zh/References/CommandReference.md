@@ -85,12 +85,7 @@
 
 ## 脏标记规则
 
-脏标记行为由 `WorkflowAgentScope.WithAutoMarkDirty(bool)` 控制：
+框架在**每次**工具调用后都会把图标记为脏（查询调用也一样）——画布自行重算，与你是否调用 `MarkDirty` 无关。
 
-| 模式 | 配置方式 | Agent 行为 |
-|---|---|---|
-| **手动（默认）** | `WithAutoMarkDirty(false)` 或不调用 | 完成所有变更后，在任务末尾**调用一次 `MarkDirty`** |
-| **自动** | `WithAutoMarkDirty(true)` | 每次变更工具调用后框架自动标脏，**无需调用 `MarkDirty`** |
-
-- 纯查询任务（`ListNodes`、`FindNodes`、`GetFullTopology` 等）**永不触发**自动标脏。
-- 自动模式下 `MarkDirty` 工具仍可调用，不产生副作用。
+- **不需要**调用 `MarkDirty`；它仍然可用，调用也无副作用。
+- `WorkflowAgentScope.WithAutoMarkDirty` 只为源码兼容保留，不再改变行为。

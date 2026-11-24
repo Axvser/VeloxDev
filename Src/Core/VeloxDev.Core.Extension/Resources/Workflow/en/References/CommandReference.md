@@ -85,12 +85,7 @@ You do NOT need to call `GetWorkflowSummary` or `GetComponentContext` every turn
 
 ## Dirty Marking Rule
 
-Dirty-marking behavior is controlled by `WorkflowAgentScope.WithAutoMarkDirty(bool)`:
+The framework marks the graph dirty after **every** tool call — queries included — so the canvas repaints whether or not you call `MarkDirty`.
 
-| Mode | Configuration | Agent Behavior |
-|---|---|---|
-| **Manual (default)** | `WithAutoMarkDirty(false)` or omitted | Call **`MarkDirty` exactly once** at the end of a mutation task |
-| **Automatic** | `WithAutoMarkDirty(true)` | Framework marks dirty after every mutation tool call — **no need to call `MarkDirty`** |
-
-- Pure query tools (`ListNodes`, `FindNodes`, `GetFullTopology`, etc.) **never trigger** auto dirty marking.
-- In automatic mode the `MarkDirty` tool can still be called explicitly without side effects.
+- You do **not** need to call `MarkDirty`. It remains available and never hurts.
+- `WorkflowAgentScope.WithAutoMarkDirty` is retained for source compatibility; it no longer changes behaviour.

@@ -75,12 +75,13 @@ public class CapabilityEnvelopeTests
     }
 
     [TestMethod]
-    public void Gates_SayWhichWayDirtyMarkingIsConfigured()
+    public void Gates_SayDirtyMarkingIsUnconditional()
     {
-        // CommandReference.md documents both modes side by side and cannot say which one is live, so a
-        // model that guesses wrong either marks dirty twice or not at all.
-        StringAssert.Contains(Envelope(Scope()), "Automatic dirty marking: **OFF");
-        StringAssert.Contains(Envelope(Scope().WithAutoMarkDirty(true)), "Automatic dirty marking: **ON");
+        // 标脏不再是一个宿主开关：包络必须无条件这样告诉模型，否则模型会按旧文本在末尾补一次 MarkDirty。
+        StringAssert.Contains(Envelope(Scope()), "Automatic dirty marking: **ON (unconditional)");
+        StringAssert.Contains(
+            Envelope(Scope().WithAutoMarkDirty(false)), "Automatic dirty marking: **ON (unconditional)",
+            "the retained switch must not change what the model is told");
     }
 
     [TestMethod]
@@ -210,7 +211,8 @@ public class CapabilityEnvelopeTests
         StringAssert.Contains(boundaries, "SetMcpServerArguments",
             "the rule has to name the sanctioned route. Without it the text reads as a ban on widening reach by "
             + "any means — and the sanctioned route is the one the host built the tool for");
-        StringAssert.Contains(boundaries, "going around", "while the thing it does forbid is the way round it");
+        StringAssert.Contains(boundaries, "Going around that route is forbidden",
+            "while the thing it does forbid is the way round it");
 
         var chinese = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithPromptLanguage(AgentLanguages.Chinese)

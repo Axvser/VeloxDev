@@ -305,7 +305,7 @@ public class SubAgentDispatchTests
             "delegation is stated as required for a kind of work, not as something merely allowed");
         StringAssert.Contains(prompt, "web search",
             "and the kind of work is named, so the model does not have to infer which tasks qualify");
-        StringAssert.Contains(prompt, "omit them to hand down the lot",
+        StringAssert.Contains(prompt, "Omit a capability argument to inherit it",
             "what a spawn hands down is stated where the model reads it, not only in the tool schema");
 
         // The escape clause is the part that has to stay narrow, and it used to be wide enough to swallow the

@@ -321,8 +321,7 @@ public sealed class WorkflowAgentToolkit
 
     /// <summary>
     /// The stage that turns a completed call into conversation state: it counts the call against the three
-    /// budgets' counters, raises the scope's callback, and marks the tree dirty for a mutation when the
-    /// host asked for that.
+    /// budgets' counters, raises the scope's callback, and marks the tree dirty.
     /// <para>
     /// This used to be the policy's <c>AfterCall</c> delegate, which could only ever feed one observer and
     /// never saw a refusal or a failure. Registered by the scope on its pipeline.
@@ -335,11 +334,16 @@ public sealed class WorkflowAgentToolkit
         public async ValueTask OnEventAsync(
             AgentEvent agentEvent, Func<AgentEvent, ValueTask> next, CancellationToken cancellationToken)
         {
-            // Succeeded only, which is what AfterCall saw: a refused or failed call never ran its body, and
-            // counting it would spend budget on something the model did not get. A host that wants those
-            // has them on the pipeline.
-            if (agentEvent is AgentToolCallCompleted { Outcome: AgentToolOutcome.Succeeded } completed)
-                await owner.AccountAsync(completed.ToolName, completed.Result).ConfigureAwait(false);
+            if (agentEvent is AgentToolCallCompleted completed)
+            {
+                // Succeeded only for the counters: a refused call never ran its body, and a failed one may have
+                // produced nothing worth counting. A failure is still marked dirty below, because an edit that
+                // threw halfway may have left the graph changed.
+                if (completed.Outcome == AgentToolOutcome.Succeeded)
+                    await owner.AccountAsync(completed.ToolName, completed.Result).ConfigureAwait(false);
+                else if (completed.Outcome == AgentToolOutcome.Failed)
+                    owner.MarkTreeDirty();
+            }
 
             await next(agentEvent).ConfigureAwait(false);
         }
@@ -414,8 +418,7 @@ public sealed class WorkflowAgentToolkit
     }
 
     /// <summary>
-    /// Tool names that are purely read-only queries and must never trigger a dirty mark.
-    /// Every other tool is treated as a mutation when <see cref="WorkflowAgentScope.AutoMarkDirty"/> is enabled.
+    /// Tool names that are purely read-only queries; they are charged to the read budget and never to the write one.
     /// </summary>
     private static readonly HashSet<string> QueryToolNames = BuildQueryToolNames();
 
@@ -458,9 +461,13 @@ public sealed class WorkflowAgentToolkit
     }
 
     /// <summary>
-    /// Counts a completed call, raises the scope's callback, and marks the tree dirty when
-    /// <see cref="WorkflowAgentScope.AutoMarkDirty"/> is enabled.
+    /// Counts a completed call, raises the scope's callback, and marks the tree dirty.
     /// </summary>
+    /// <remarks>
+    /// Marking is unconditional — every call, every category. The workflow's frame driver coalesces repeated marks
+    /// into one layout/virtualization pass, so the cost of marking after a query is a flag exchange, and the cost of
+    /// <i>not</i> marking after an edit is a canvas that silently shows the old graph.
+    /// </remarks>
     private async Task AccountAsync(string toolName, string result)
     {
         // The budget's own tool does not spend the budget — and this is not a nicety. Accounting runs after
@@ -469,6 +476,7 @@ public sealed class WorkflowAgentToolkit
         if (IsBudgetTool(toolName))
         {
             await _scope.RaiseToolCalledAsync(toolName, result, _ledger.Usage.ToolCalls).ConfigureAwait(false);
+            MarkTreeDirty();
             return;
         }
 
@@ -479,9 +487,11 @@ public sealed class WorkflowAgentToolkit
             _ledger.Spend(IsQueryTool(toolName));
 
         await _scope.RaiseToolCalledAsync(toolName, result, _ledger.Usage.ToolCalls).ConfigureAwait(false);
-        if (_scope.AutoMarkDirty && !QueryToolNames.Contains(toolName) && !_scope.IsQueryOnlyCustomTool(toolName))
-            Tree.GetHelper().MarkDirty();
+        MarkTreeDirty();
     }
+
+    /// <summary>Marks the scope's tree dirty so the host's frame driver recomputes the canvas.</summary>
+    internal void MarkTreeDirty() => Tree.GetHelper().MarkDirty();
 
     /// <summary>Whether the name belongs to a tool that manages the budget rather than spending it.</summary>
     private static bool IsBudgetTool(string toolName)

@@ -58,8 +58,12 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     /// </summary>
     public int? MaxToolCalls { get; private set; }
 
-    /// <summary>Whether mutating tool calls automatically mark the tree dirty. Set by <see cref="WithAutoMarkDirty"/>.</summary>
-    public bool AutoMarkDirty { get; private set; }
+    /// <summary>
+    /// Whether the framework marks the tree dirty after a tool call. Always <see langword="true"/>: the toolkit
+    /// marks after every successful call and after a failure, whatever the category. Retained so existing code and
+    /// prompt text that reads it stay valid.
+    /// </summary>
+    public bool AutoMarkDirty => true;
 
     /// <summary>
     /// Raised after a successful Agent tool call. Refused and failed calls are published on
@@ -124,7 +128,7 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
 
     /// <summary>
     /// Read-only tools registered by the developer via <see cref="WithQueryTools"/>.
-    /// They are never auto-marked dirty, even when <see cref="WithAutoMarkDirty"/> is enabled.
+    /// They are never counted as writes; dirty marking is unconditional and applies to them too.
     /// </summary>
     internal IReadOnlyList<AITool> QueryOnlyCustomTools => _queryOnlyCustomTools;
 
@@ -250,8 +254,9 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ITreeComponent, SemaphoreSlim> TreeGates = new();
 
     /// <summary>
-    /// One writer at a time per tree, shared by every scope over that tree (and by every subsystem the scope
-    /// composes). Queries do not take it; edits and executions do.
+    /// One tool call at a time per tree, shared by every scope over that tree (and by every subsystem the scope
+    /// composes). Every category takes it: queries enumerate the same collections writes mutate, so they are
+    /// serialized with writes rather than exempted.
     /// </summary>
     internal SemaphoreSlim MutationGate => TreeGates.GetValue(Tree, static _ => new SemaphoreSlim(1, 1));
 
@@ -294,8 +299,8 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     /// Registers mutation-capable custom <see cref="AITool"/> instances merged into the tool list
     /// returned by <see cref="ProvideTools"/>. Each tool is wrapped with the same tracked wrapper as the
     /// built-in tools, so it receives UI-thread marshalling (<see cref="WithSynchronizationContext"/>),
-    /// <see cref="WithMaxToolCalls"/> accounting, the <see cref="WithToolCallCallback"/> notification, and
-    /// (when <see cref="WithAutoMarkDirty"/> is enabled) automatic dirty marking. A tool that is not an
+    /// <see cref="WithMaxToolCalls"/> accounting, the <see cref="WithToolCallCallback"/> notification, the
+    /// tree's tool gate, and automatic dirty marking. A tool that is not an
     /// <c>AIFunction</c> is added as-is and gets none of that — wrap it with the SDK's
     /// <c>ToAIFunction()</c>/<c>AsAIFunction()</c> to opt in. MCP client tools are <c>AIFunction</c>s and
     /// are therefore wrapped by default; attaching an <see cref="McpScope"/> via
@@ -422,18 +427,15 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     }
 
     /// <summary>
-    /// Configures whether every mutation tool call automatically marks the workflow tree as dirty.
-    /// When enabled (<c>true</c>), the framework marks dirty after every mutation tool call and the
-    /// Agent can rely on framework-managed dirty marking — it does not need to call <c>MarkDirty</c>.
-    /// When disabled (<c>false</c>, the default), the framework does not auto-mark; the injected prompt
-    /// (CommandReference.md) instead instructs the Agent to call <c>MarkDirty</c> exactly once at the
-    /// end of a mutation task. Pure query tools never trigger auto dirty marking.
+    /// Retained for source compatibility. Dirty marking is unconditional now: the framework marks the tree dirty
+    /// after every successful tool call (and after a failure, which may have mutated the graph halfway), so there is
+    /// nothing left for a host to switch. The parameter is ignored.
     /// </summary>
-    public WorkflowAgentScope WithAutoMarkDirty(bool enabled = false)
+    /// <param name="enabled">Ignored.</param>
+    public WorkflowAgentScope WithAutoMarkDirty(bool enabled = true)
     {
-        AutoMarkDirty = enabled;
-        // The embedded CommandReference.md documents both modes side by side and cannot say which one is
-        // live, so the capability envelope is what resolves it — and that needs the version to move.
+        // 参数刻意忽略：标脏已改为无条件，保留这个方法只为不让既有宿主代码编译失败。
+        _ = enabled;
         BumpVersion();
         return this;
     }
@@ -2234,8 +2236,8 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
             : $"- Running node business code (`ExecuteNode` / `ExecuteNodes` / `BroadcastNode` / `ReverseBroadcastNode`): **{(AllowNodeExecution ? "ALLOWED" : "DENIED")}**");
 
         sb.AppendLine(chinese
-            ? $"- 自动标脏：**{(AutoMarkDirty ? "开启 —— 每次变更调用后框架自动标脏，不要调用 `MarkDirty`" : "关闭 —— 变更任务结束时你自己调用一次 `MarkDirty`")}**"
-            : $"- Automatic dirty marking: **{(AutoMarkDirty ? "ON — the framework marks dirty after every mutating call; do not call `MarkDirty`" : "OFF — call `MarkDirty` yourself, exactly once, at the end of a mutation task")}**");
+            ? "- 自动标脏：**开启（无条件）—— 每次工具调用后框架都会标脏，`MarkDirty` 可选、永远不必调用**"
+            : "- Automatic dirty marking: **ON (unconditional) — the framework marks the tree dirty after every tool call; `MarkDirty` is optional and never required**");
 
         var commands = AllowedGenericCommands;
         var generic = chinese

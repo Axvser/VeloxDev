@@ -61,8 +61,10 @@ public sealed class ToolPipeline(Func<AgentTranscript?>? transcript = null, Func
     public Func<int?>? MaxResultChars { get; set; }
 
     /// <summary>
-    /// The gate that serialises graph-mutating calls across every scope on one tree, resolved per call.
-    /// <c>null</c> leaves calls ungated. Read and execute tools acquire it; queries do not.
+    /// The gate that serializes tool calls across every scope on one tree, resolved per call.
+    /// <c>null</c> leaves calls ungated. Every category takes it — reads and interactions included — because the
+    /// graph is read by queries too, and a query enumerating it while another scope writes is as unsafe as two
+    /// writers. The sub-agent wait tool is the only exemption.
     /// </summary>
     public Func<SemaphoreSlim?>? MutationGate { get; set; }
 

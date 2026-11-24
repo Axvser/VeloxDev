@@ -64,15 +64,21 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
 
     /// <summary>
     /// Creates the tools wrapped so that every call obeys <paramref name="tools"/> — marshalled onto the
-    /// host's thread, gated against the same budget as every other call, and reported afterwards. This is
-    /// what the context provider contributes.
+    /// host's thread, gated against the same budget and the same tree gate as every other call, and reported
+    /// afterwards. This is what the context provider contributes.
     /// </summary>
     public IList<AITool> CreateTools(ToolPipeline tools, AgentPipeline? pipeline = null)
     {
         if (tools is null) throw new ArgumentNullException(nameof(tools));
         return [.. CreateTools().Select(tool =>
-            tool is AIFunction function ? (AITool)new TrackedAIFunction(function, tools, pipeline) : tool)];
+            tool is AIFunction function
+                ? (AITool)new TrackedAIFunction(function, tools, pipeline, gated: !IsWaitTool(tool.Name))
+                : tool)];
     }
+
+    // 等孩子的那个工具不能持有树门：它要等到子代理跑完才返回，而子代理继续跑就要取同一把门 ——
+    // 持门等待等于把双方一起锁死（只能等到超时）。它不读写工作流图，放行它是安全的。
+    private static bool IsWaitTool(string name) => string.Equals(name, ToolNames[1], StringComparison.Ordinal);
 
     // ────────────────────────── the tools ──────────────────────────
 
@@ -92,7 +98,7 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         [Description("A separate cap on its calls that change the graph. Omitted, inherits yours.")] int? maxWriteToolCalls = null,
         [Description("Whether it may run node business code. Refused unless you have that ability yourself. Default false.")] bool? allowNodeExecution = null,
         [Description("Generic node commands it may run, e.g. \"ReceiveCommand\". Refused for any command you are not allowlisted for. Default none.")] string[]? allowedGenericCommands = null,
-        [Description("Whether its graph edits should mark the graph dirty. Omitted, follows your setting.")] bool? autoMarkDirty = null,
+        [Description("Ignored: the framework marks the graph dirty after every tool call, so there is nothing to grant. Omit it.")] bool? autoMarkDirty = null,
         [Description("Free-form context for the sub-agent, appended to what it is told about itself.")] string? notes = null,
         [Description("Optional model name the host registered for sub-agents. Omit for the host's default. A name the host did not register makes the spawn fail with the host's message; it does not fall back silently.")] string? model = null)
         => Task.FromResult(Spawn(new SubAgentRequest
@@ -276,6 +282,10 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
             // would have been the same defect the grant list is careful about: prose that promises a tool is
             // absent while the tool is on the child's surface.
             sb.AppendLine("It cannot ask you anything, and nothing it says reaches you but its final reply, so give it a complete instruction — one that can be finished without your judgement. (It may put a question to the user directly if the host allows that; it will never put one to you.) A sub-agent may dispatch sub-agents of its own on the same terms and with what it was given.");
+            // The tool schema states this too, but the model plans a spawn before it reads a schema. The panel
+            // showed the cost of the omission: a model that assumed an empty spawn inherited nothing did the
+            // reading itself instead of delegating it.
+            sb.AppendLine("Omit a capability argument to inherit it — tools, skills and MCP servers default to the ones you have. Name them explicitly to grant less.");
             sb.AppendLine("Budgets default to as much of yours as can be granted, and every sub-agent spends from the same allowance you do — the tree has one pot, not one per agent.");
             sb.AppendLine("Then collect with WaitSubAgents — do not poll in a loop, and do not do the delegated work yourself as well.");
         }

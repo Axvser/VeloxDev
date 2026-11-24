@@ -9,12 +9,11 @@
 1. 在 `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs` 加方法并配
    `[Description]`；
 2. 在 `CreateAllTools` 里用 `T(...)` 注册，选对类别（`Query` / `Mutation` / `Execution` / …）；
-3. 如果它属于只读语义，把名字并入 `BuildQueryToolNames` 的集合（决定读预算与 `AutoMarkDirty`）；
+3. 如果它属于只读语义，把名字并入 `BuildQueryToolNames` 的集合（决定读预算；标脏已无条件，与这条无关）；
 4. CLI 侧：`WorkflowSession.BaseCategories` 已覆盖六类，执行类由开关控制；只有新类别才需要改那里。
    如果这是 CLI 不该暴露的工具（需要 UI、需要换树、需要预算出口），把名字加进 `WorkflowSession.Excluded`。
 
-CLI 的 MCP 工具面是 `TrackedAIFunction`（**internal**）转成 `McpServerTool.Create(AIFunction, options)`；
-测试/扩展里只能以公开基类 `AIFunction` 持有它，不能引用内部类型。
+CLI 的 MCP 工具面把 toolkit 的 `TrackedAIFunction`（Extension internal）再包一层 `SessionBoundAIFunction`（CLI internal，见 §五）交给 `McpServerTool.Create(AIFunction, options)`；测试/扩展里只能以公开基类 `AIFunction` 持有它，不能引用内部类型。
 
 ## 二、加一个归档级工具
 
@@ -26,7 +25,7 @@ CLI 的 MCP 工具面是 `TrackedAIFunction`（**internal**）转成 `McpServerT
 public string Something([Description("...")] string arg) => ...;
 ```
 
-`McpHost` 用 `.WithTools(new ArchiveTools(session))` 注册它，不需要改别处。返回值是字符串；JSON 用
+`McpHost` 用 `.WithTools(new ArchiveTools(host))` 注册它，不需要改别处。返回值是字符串；JSON 用
 `System.Text.Json` 自己拼，和工具的 `{"status":"ok"|"error"}` 约定保持一致。
 
 ## 三、加一个清单字段

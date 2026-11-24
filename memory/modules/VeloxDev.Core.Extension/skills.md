@@ -80,7 +80,7 @@
 `SkillAgentToolkit.ToolNames` = `["ListSkills","load_skill","UnloadSkill","read_skill_resource"]`。
 
 - 工具名故意用 Agent Skills 约定的 `load_skill` / `read_skill_resource`（下划线而非 Pascal），其余是 Pascal。
-- **这组名字必须被工作流工具包读到**：`WorkflowAgentToolkit.BuildQueryToolNames` 把它们整体并进「只读」集合，于是技能工具**无论从哪来**（宿主注册的 or provider 贡献的）都**计入读预算、且永不标脏**（`BuildQueryToolNames` 的字面量集合）。**所以在这里加一个新工具名，只读分类会自动跟上。**
+- **这组名字必须被工作流工具包读到**：`WorkflowAgentToolkit.BuildQueryToolNames` 把它们整体并进「只读」集合，于是技能工具**无论从哪来**（宿主注册的 or provider 贡献的）都**计入读预算**。在这里加一个新工具名，只读分类会自动跟上。
 - `CreateTools()` 不包装，`CreateTools(ToolPipeline, AgentPipeline?)` 包装。provider 用的是**后者**（`SkillAgentContextProvider.BuildContext`），所以从 provider 走出来的技能工具同样受预算闸门管。
 
 ---

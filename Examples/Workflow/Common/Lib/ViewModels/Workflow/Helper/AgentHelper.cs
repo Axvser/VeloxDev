@@ -270,7 +270,6 @@ public class AgentHelper() : TreeHelper<TreeViewModel>(200)
             .WithOutputLanguage(AgentLanguages.Chinese)   // default output language
             // Auto-discover every component the compiled agent context tree carries
             .WithAutoDiscovery()
-            .WithAutoMarkDirty(false)               // whether the view auto-marks itself dirty
             .WithMaxToolCalls(200)                  // maximum tool call count
             .WithAllowNodeExecution(true)           // explicitly allow the Agent to run node business code (safely off by default; the demo needs it)
             .WithSynchronizationContext(SynchronizationContext.Current) // marshal tool calls to the UI thread (components are UI-bound)

@@ -12,7 +12,8 @@ namespace VeloxDev.AI;
 
 /// <summary>
 /// Wraps an <see cref="AIFunction"/> so that a call to it is subject to the owning layer's
-/// <see cref="ToolPipeline"/>: marshalled onto the host's thread, gated, and reported into the pipeline.
+/// <see cref="ToolPipeline"/>: marshalled onto the host's thread, gated against the tree's tool gate, and reported
+/// into the pipeline.
 /// <para>
 /// <b>The tool bodies deliberately contain no <c>ConfigureAwait(false)</c>.</b> A posted callback runs
 /// with the dispatcher installed as <see cref="SynchronizationContext.Current"/>, so a bare
@@ -24,6 +25,12 @@ namespace VeloxDev.AI;
 /// waits on this wrapper's own task, which run on the caller's thread, not the UI's.
 /// </para>
 /// <para>
+/// The tree's gate is taken for <b>every</b> call, not only for mutations: the graph is read by queries too, and a
+/// query that enumerates it while another scope writes is as unsafe as two writers. The gate is keyed by the tree and
+/// shared by every scope over it, so sub-agents are serialized with their parent. The single exemption is the
+/// sub-agent wait tool, which must not hold the gate while the children it waits for need it.
+/// </para>
+/// <para>
 /// A tool that is not an <see cref="AIFunction"/> cannot be wrapped and is passed through unchanged; see
 /// the callers' factory methods.
 /// </para>
@@ -33,9 +40,17 @@ internal sealed class TrackedAIFunction(
     ToolPipeline? tools = null,
     AgentPipeline? pipeline = null,
     AgentActionCategory category = AgentActionCategory.Execute,
-    string? source = null) : DelegatingAIFunction(inner)
+    string? source = null,
+    bool gated = true) : DelegatingAIFunction(inner)
 {
     private readonly ToolPipeline _tools = tools ?? new ToolPipeline();
+
+    /// <summary>
+    /// Whether this call takes the tree's tool gate. Every tool does, reads included: a read that enumerates the
+    /// live graph while an edit removes a node fails the same way two concurrent edits do. The one exemption is the
+    /// sub-agent wait tool — it blocks until children finish, and the children need the same gate to make progress.
+    /// </summary>
+    private readonly bool _gated = gated;
 
     /// <summary>
     /// What this tool does, declared once — on the line that registers it — because the permission gate is a
@@ -97,13 +112,12 @@ internal sealed class TrackedAIFunction(
         if (_pipeline is not null)
             await _pipeline.PublishAsync(new AgentToolCallStarted(Name), cancellationToken);
 
-        // One graph has one writer at a time, whichever scope the call came from. The gate belongs to the
-        // tree (not to this wrapper), so two agents over the same tree cannot interleave their edits.
-        var mutationGate = _category is AgentActionCategory.Edit or AgentActionCategory.Execute
-            ? _tools.MutationGate?.Invoke()
-            : null;
-        if (mutationGate is not null)
-            await mutationGate.WaitAsync(cancellationToken);
+        // One call at a time per tree, whatever its category and whichever scope it came from. Writes stay
+        // exclusive; reads, interactions and executions are serialized with them because a read enumerating
+        // the live graph while a write mutates it is the same failure two concurrent writes would produce.
+        var treeGate = _gated ? _tools.MutationGate?.Invoke() : null;
+        if (treeGate is not null)
+            await treeGate.WaitAsync(cancellationToken);
 
         try
         {
@@ -124,7 +138,7 @@ internal sealed class TrackedAIFunction(
         }
         finally
         {
-            mutationGate?.Release();
+            treeGate?.Release();
         }
     }
 

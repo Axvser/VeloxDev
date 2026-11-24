@@ -19,8 +19,8 @@
 | 一个 MCP 管理工具 | `McpAgentToolkit` 加方法 + 在 `CreateTools()` 注册 | `Agent/MCP/McpAgentToolkit.cs` 的 `CreateTools` | 是 |
 | 一个 MCP 运行模式 | 枚举 + `GetRuntimeDir` + 装载分支 + 选项白名单 + 提示文案 | `Agent/MCP/McpScope.cs`（见 `mcp.md` §六） | 是 |
 | 一个宿主可开关的成员 | 继承 `AgentMemberViewModel` + `ApplyToScope` | `Agent/Dashboard/AgentMemberViewModel.cs` 的 `AgentMemberViewModel`、`ApplyToScope` | 是（必须穿透到 scope） |
-| 宿主提供只读工具 | `WithQueryTools(promptContext, tools…)` | `WorkflowAgentScope.WithQueryTools` | 是（计入读预算、不标脏） |
-| 宿主提供任意工具 | `WithTools(promptContext, tools…)` | `WorkflowAgentScope.WithTools` | 是（计入写预算、可标脏） |
+| 宿主提供只读工具 | `WithQueryTools(promptContext, tools…)` | `WorkflowAgentScope.WithQueryTools` | 是（计入读预算） |
+| 宿主提供任意工具 | `WithTools(promptContext, tools…)` | `WorkflowAgentScope.WithTools` | 是（计入写预算） |
 | 宿主接对话记录 | `WithTranscript(AgentTranscript)` | `WorkflowAgentScope.WithTranscript` | **只能设一次**，重复抛 `InvalidOperationException` |
 | 出 OpenTelemetry 埋点 | `UseAgentTelemetry(AIAgentBuilder, 源名?, 敏感数据?)` / `WithAgentTelemetry(AIAgent, …)` | `AgentTelemetryExtensions.cs` | 库自己**不产出任何埋点**，只是把框架的接线收成一次调用；宿主仍须自己 `AddSource(源名)` 与持有导出器。默认 `EnableSensitiveData = false` |
 | 写工具要人工批准 | 由权限模式决定：`Manual` 把每个非读动作都问人，`Auto` / `AutoEdit` 只问它们各自仍管的那几类 | `ToolPipeline.Confirm` → `WorkflowAgentToolkit.ConfirmMutationAsync` → `AgentPermissionPolicy.Evaluate` | **没有 handler 也拒绝**（fail-closed）。以**工具名**为键，`AllowAlways` 对该工具整会话生效 |
@@ -54,7 +54,7 @@
 | 让技能、MCP 的工具受预算管 | 什么都不做：`CreateContextProviders()` 把**同一个** `ToolPipeline` 递给每个子系统 | 自己 `new ToolPipeline(...)` —— 会得到**另一本账本**，预算形同虚设 |
 | 关掉一个工具 | `SetToolEnabled(name, false)` | 只在宿主侧过滤 `ProvideTools()` 的结果。模型那一侧走的是 provider 渲染的集合，过滤不掉，而且不推进 `Version` ⇒ 缓存不失效 |
 | 关掉一个技能 | `SkillScope.SetEnabled(name, false)` —— 它会推 `Version`。**内置技能关掉后，提示词里会出现一份「已停用」清单**（`SkillScope.BuildWithdrawnBlock`）：骨架若已把语料冻进去，撤不回，只能告诉模型忽略那几篇 | 直写 `SkillStatusViewModel.IsEnabled` —— 绕过 `Version` 自增，缓存的提示继续送旧文本（`AgentMemberViewModel` 的类注释） |
-| 加一个「只读」工具 | 把名字加进 `BuildQueryToolNames`（`WorkflowAgentToolkit.BuildQueryToolNames`） | 不登记 —— 它会计入 `MaxWriteToolCalls`，并在 `AutoMarkDirty` 打开时**把图标脏** |
+| 加一个「只读」工具 | 把名字加进 `BuildQueryToolNames`（`WorkflowAgentToolkit.BuildQueryToolNames`） | 不登记 —— 它会计入 `MaxWriteToolCalls` |
 | 加一个技能工具 | 加进 `SkillAgentToolkit.ToolNames` | 另起一个名字或另写一个常量集合 —— 只读分类只认 `ToolNames` 里那几个（自动并入点在 `BuildQueryToolNames` 里并入技能工具名的那段） |
 | 让子代理的工具也算只读 | 加进 `SubAgentAgentToolkit.ToolNames`（已并入 `BuildQueryToolNames`） | 在 `SubAgentAgentToolkit` 里另写一份名字清单 —— 迁移到别处时会漏掉只读分类 |
 | 给模型派子代理的能力 | `scope.WithSubAgents(SubAgentScope.ForClient(client))`，窄化由子系统按父的实时能力算 | 自己 `new WorkflowAgentScope(tree)` 当孩子 —— 它**不**继承父的账本、UI 上下文与开关，等于给了模型一个能力不受限的第二棵工作流（见 `sub-agents.md` §二、§三） |
@@ -75,7 +75,7 @@
 
 1. `Agent/Workflow/Functions/WorkflowAgentToolkit.cs`：加一个 `private async Task<string> Xxx(...)`，参数上用 `[Description]` 写清每个参数；返回 `Ok(...)` / `Error(...)` 信封。
 2. 同一个文件，在 `CreateAllTools` 里选一个 `WorkflowToolCategory` 并 `Add(类别, T(Xxx, nameof(Xxx)))`。**类别只影响 `ProvideTools(类别)` 的切片**；`Composite` 是保留位。`Layout` 已注册 `GetLayoutInfo` / `PreviewLayout` / `ArrangeLayout`，它们走 `Tree.Arrange`，不要在 toolkit 里另写一套布局算法。
-3. **若它是只读的**：加进 `BuildQueryToolNames` 的字面量集合。这决定它计入读还是写预算，以及 `AutoMarkDirty` 打开时会不会标脏。
+3. **若它是只读的**：加进 `BuildQueryToolNames` 的字面量集合。这决定它计入读还是写预算。
 4. **若它会在提示里被点名**：`WorkflowAgentScope.ProvideProgressiveContextPrompt` 与 `ProvideAllContexts`；失败协议里的工具名清单在 `BuildFailureHandlingProtocol`。**另加**：闸门 / 关闭开关 / 预算上限若属于这个工具的语义，包络（`RenderEnvelope`）也要跟着说。
 5. **若它属于某个能力闸门**：闸门判定在 `WorkflowAgentScope.cs`（`AllowNodeExecution` / `IsGenericCommandAllowed`），注册的条件也在这里判断，不是「注册了再拒」——见 `WorkflowAgentToolkit.CreateAllTools` 里按 handler 非空注册的那段。
 6. 文档同步：`skills/veloxdev-drive-workflow-with-ai/references/tools.md` 与 `Src/Core/VeloxDev.Core.Extension/README.md`（README 里写着工具数量，`Description` 属性里也有）。

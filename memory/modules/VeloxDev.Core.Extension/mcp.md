@@ -138,7 +138,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
   实测一行 `VeloxJsonValue.From(config.Options)` 就能把 `Bearer …` 与 client secret 原样序列化进提示词 ——
   守卫是 `McpParameterSwitchTests.ListMcpServers_NeverCarriesTheHostsOptionBag`（按**原始 JSON 串**断言，
   所以对将来新加的字段也成立）。
-- **只读分类按 `McpAgentToolkit.ReadToolNames` 走**：`ListMcpServers` / `DescribeMcpServer` / `ListMcpResources` / `ReadMcpResource` / `ListMcpPrompts` / `GetMcpPrompt` 在这一组里，`WorkflowAgentToolkit.BuildQueryToolNames` 会并入它。因此它们花的是只读预算、不花写入预算、也不在 `AutoMarkDirty = true` 时标脏；`Load` / `Unload` / `Add` / `SetArguments` 仍然是写调用。新增读工具必须加进 `ReadToolNames`，否则会被当成变更。
+- **只读分类按 `McpAgentToolkit.ReadToolNames` 走**：`ListMcpServers` / `DescribeMcpServer` / `ListMcpResources` / `ReadMcpResource` / `ListMcpPrompts` / `GetMcpPrompt` 在这一组里，`WorkflowAgentToolkit.BuildQueryToolNames` 会并入它。因此它们花的是只读预算、不花写入预算；`Load` / `Unload` / `Add` / `SetArguments` 仍然是写调用。新增读工具要加进 `ReadToolNames`；漏加会被当成变更调用。
 - **resources / prompts 也有工具面**：`ListMcpResources` / `ReadMcpResource` / `ListMcpPrompts` / `GetMcpPrompt` 调 `McpScope.ListResourcesAsync` / `ReadResourceAsync` / `ListPromptsAsync` / `GetPromptAsync`，后者经 `HostedMcpServer.WithClientAsync` 在**重建门**内读当前 client。资源正文按 `maxChars` 截断；二进制内容只报 `byteLength`，不把 base64 塞进上下文。提示词用 `GetPromptResult.ToChatMessages()` 展开，`maxChars` 是**整段消息文本**的预算。四个读工具在授权视图里也注册（它们是读），写工具不在。
 **sampling 不支持**：服务器不能反过来借宿主的模型；它需要宿主提供采样回调，而不是一组工具。
 
