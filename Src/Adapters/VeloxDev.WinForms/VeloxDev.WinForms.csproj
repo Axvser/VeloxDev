@@ -35,7 +35,7 @@
 		<!-- Easel is a git submodule at the repository root. Debug builds it from source; Release resolves
 		     the published package so the adapter's nuspec carries the real Easel dependency. -->
 		<ProjectReference Include="..\..\..\Easel\Src\Easel\Easel.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="WinForms.Easel" Version="1.2.0" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="WinForms.Easel" Version="1.2.1" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 	<ItemGroup>
