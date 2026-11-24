@@ -359,11 +359,14 @@ public class WorkflowMinimapOverlay : Canvas, IWorkflowMinimapOverlay
 
     internal void ApplyScrollOffsets(double x, double y)
     {
+        // 没解析到滚动容器时旧实现不导航：Core 会把上限当 0，直接写就会把画布拽回原点。
+        if (_scrollViewer is null) return;
+
         // 走表面的统一写入口：它会记下在途目标并补偿画布平移；绕过它会让表面上一笔尚未落地的滚动
         // 把画面钉在旧位置。找不到表面时退回直接 ChangeView。
         if (!WorkflowSurfaceBehavior.TryRequestScroll(this, x, y))
         {
-            _scrollViewer?.ChangeView(x, y, null, true);
+            _scrollViewer.ChangeView(x, y, null, true);
         }
     }
 
