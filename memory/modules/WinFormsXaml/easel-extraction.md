@@ -44,8 +44,8 @@
 
 ## 发布
 
-- Easel 独立仓的 `.github/workflows/publish.yml` 与 VeloxDev 同构：`version` 读 `Easel.csproj` / `Easel.Generator.csproj` 各自的 `<Version>` 并 HEAD flatcontainer，只发 NuGet 缺的版本；push 需仓库变量 `AUTO_PUBLISH=true`，`workflow_dispatch.force` 把两个包都当作缺失重跑；顺序是 `Easel.Generator` 先推并轮询到可下载，再打包并推送 `Easel`，最后按 `x3` unlist 同线旧 patch。
-- `Easel` 包不声明 `Easel.Generator` 依赖（源项目对生成器是 Analyzer `ProjectReference`，消费者按 README 同时装两个包），所以工作流里的等待保证的是发布顺序，不是 restore 依赖。
+- Easel 独立仓的 `.github/workflows/publish.yml` 与 VeloxDev 同构：`version` 读 `Easel.csproj` / `Easel.Generator.csproj` 各自的 `<Version>` 并 HEAD flatcontainer，只发 NuGet 缺的版本；push 需仓库变量 `AUTO_PUBLISH=true`，`workflow_dispatch.force` 把两个包都当作缺失重跑；顺序是 `WinForms.Easel.Generator` 先推并轮询到可下载，再打包并推送 `WinForms.Easel`，最后按 `x3` unlist 同线旧 patch。
+- `WinForms.Easel` 包不声明 `WinForms.Easel.Generator` 依赖（源项目对生成器是 Analyzer `ProjectReference`，消费者按 README 同时装两个包），所以工作流里的等待保证的是发布顺序，不是 restore 依赖。
 - CI 的 publish job 是唯一校验 nupkg 里四个 TFM 资产齐全的地方（`scripts/pack-local.ps1` 只建 `net8.0-windows`）；推送前检查 `lib/net461*`、`lib/net5.0-windows*`、`lib/netcoreapp3.0*`、`lib/net8.0-windows*` 都存在。
 
 ## 未完成

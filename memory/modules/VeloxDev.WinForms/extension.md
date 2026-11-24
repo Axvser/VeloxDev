@@ -8,7 +8,7 @@
 
 | 我想加 | 挂点 | 位置 |
 |---|---|---|
-| 一张新的工作流表面 | `VisualHost` + `WorkflowSurfaceBehavior`：设 `IsEnabled`/`ZoomEnabled`/`VisualTemplateSelector`（或 `VisualTemplateSelectorKey`）与部件 `*Name`；tree 是视觉 `UserControl`，`PART_Canvas` 是视觉 `Canvas` 并挂 `behaviors:ViewPool` | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`；示例 `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/TreeView.xaml` |
+| 一张新的工作流表面 | `VisualHost` + `WorkflowSurfaceBehavior`：设 `IsEnabled`/`ZoomEnabled`/`VisualTemplateSelector`（或 `VisualTemplateSelectorKey`）与部件 `*Name`；tree 是视觉 `UserControl`，`PART_Canvas` 是视觉 `Canvas` 并挂 `behaviors:ViewPool`。表面嵌在更大的视觉树里时再设 `SurfaceName` | `WorkflowSystem/AttachedBehaviors/WorkflowSurfaceBehavior.cs`；示例 `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/TreeView.xaml`、`Examples/Workflow/WinForms/Demo/Views/Workbench/WorkbenchView.xaml` |
 | node/slot/link 视觉模板 | 视觉 `UserControl` 根；node `Viewbox > Grid 260×180` + `PART_InputSlot`/`PART_OutputSlots`，slot `Viewbox > Path`，link DP + `OnRender` 发布曲线；选择器派生 `VisualTemplateSelector`，tree 资源用 `DataTemplate` 包住它们 | 模板 `workflow-node-view` / `workflow-slot-view` / `workflow-link-view`；池 `ViewPool.cs` + `WorkflowSystem/ViewHosting/` |
 | 换网格/标尺外观 | 模板条目实现 `IWorkflowGridDecorator`，设调色板与间距；宿主用 `GridDecoratorName` 接上 | 模板 `workflow-grid-decorator/TemplateClass.cs` |
 | 「item 类型 → 视图」的选择器 | 派生 `VisualTemplateSelector`（`SelectTemplate` 返回 `VisualElement`） | `Easel.Visuals.VisualTemplateSelector` + 模板派生类 |
@@ -31,13 +31,14 @@
 | 6 | 不写 `CoordinateHostName` 就以为锚点另有默认 | 默认只找最近的视觉 `Canvas`，找不到才退到树根；锚点写在该宿主的局部坐标里 | 节点/插槽显式给 `CoordinateHostName`（模板用 `PART_Canvas`） | `WorkflowSlotLayoutBehavior.ResolveCoordinateHost` |
 | 7 | 在视觉画布里用 `layout.Scale` 模拟缩放 | 视觉树要一条相机矩阵；树的 `Scale` 会被表面复位成 1 | 用 `WorkflowSurfaceBehavior` 的相机 | `ApplyCamera` |
 | 8 | 把弹层/原生控件塞进视觉子树 | 原生 HWND 浮在视觉树之上，不能被变换/裁剪 | 用 `VisualPopup`；原生内容只经 `NativeControlHost` | `VisualHost` / `NativeControlHost` |
+| 9 | 整个工作台都塞进 `Root`，却把行为挂到表面子控件上或漏设 `SurfaceName` | 行为只认 `VisualHost`；不设名字时部件/输入/视口按整棵根树解析，外壳里同名 `PART_Canvas` 会先命中 | 宿主仍是 `VisualHost`，表面根写 `x:Name` 并 `SetSurfaceName`；坐标换算走 `SurfaceToWorld`/`WorldToSurface` | `WorkflowSurfaceBehavior.EnsureParts` / `SurfaceOrigin` |
 
 ## 三、步骤清单
 
 ### 3.1 搭一张工作流表面
 
 1. 根控件（或 XAML 根）派生 `VisualElement`；写 `PART_Canvas` / `PART_ScrollViewer` / `PART_GridDecorator` 的 `x:Name`。
-2. `new VisualHost { Root = treeRoot }`，在宿主上设 `IsEnabled`、`ZoomEnabled`、`VisualTemplateSelector`（或让 tree 资源里的 `VisualTemplateSelectorKey` 解析）与 `*Name`。
+2. `new VisualHost { Root = treeRoot }`，在宿主上设 `IsEnabled`、`ZoomEnabled`、`VisualTemplateSelector`（或让 tree 资源里的 `VisualTemplateSelectorKey` 解析）与 `*Name`。工作台外壳与表面同一棵树时，`Root` 换成外壳根，表面根命名后设 `SurfaceName`。
 3. 节点/插槽/连线是视觉 `UserControl`；tree 用 `DataTemplate` 包住它们，`PART_Canvas` 挂 `behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"` 与 `behaviors:ViewPool.TemplateSelector`。
 4. 节点/插槽模板在根上挂对应的 `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior`；网格/小地图：模板条目实现 `IWorkflowGridDecorator`、派生 `WorkflowMinimapOverlay`，按名字接上。
 5. `SetWorkflowTree(host, tree)`；模型变更后 `Refresh(host)`。
@@ -74,7 +75,6 @@
 
 ### 4.1 改任何 `Set*` / `Get*` 的名字或语义
 
-- [ ] **本模块 README**（`Src/Adapters/VeloxDev.WinForms/README.md`）
 - [ ] **七个模板条目**（`Src/Templates/VeloxDev.WinForms.Templates/working/content/*/`：tree 是视觉 `UserControl` + `WorkflowSurfaceBehavior`；node/slot/link 是视觉视图；grid/minimap/selector 纯 `.cs`）
 - [ ] **两个 Workflow demo**：`Examples/Workflow/WinForms/Demo/` 与 `Examples/Workflow/WinForms Trimmed/Demo/`
 - [ ] `skills/veloxdev-create-workflow/references/practices/gui/winforms.md`、`winforms-xaml.md`

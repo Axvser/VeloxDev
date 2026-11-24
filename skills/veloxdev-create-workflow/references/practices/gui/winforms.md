@@ -5,7 +5,9 @@
 ⚙ **Reference implementation:** `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/` — the tree, node, slot
 and link views are markup; the tree is a whole visual tree hosted in a `VisualHost`, and one camera matrix
 scales the graph. `GridDecorator`, `MinimapOverlay` and `CustomTemplateSelector` are code-only. The Full demo at
-`Examples/Workflow/WinForms/Demo/Views/Workflow/` uses the same visual surface; its shell is ordinary WinForms.
+`Examples/Workflow/WinForms/Demo/` keeps the same surface subtree inside a visual workbench shell: one
+`VisualHost`, `SurfaceName="WorkflowSurface"`, and the title strip, sidebar, inspector, dialogs and status bar are
+all Easel XAML too.
 
 ⚙ **"Trimmed" means *minimal demo*, not a publish setting:** [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
 

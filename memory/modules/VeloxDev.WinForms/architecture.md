@@ -1,7 +1,7 @@
 ﻿# VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`SlotStateBrushConverter`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32/DPI 辅助）、视觉 XAML 运行时已移到 Easel 子模块（`Easel/Src/Easel/`）。同目录另有一份 `README.md`。
-> 包版本 12.0.0；生成器独立在 `Src/Generators/Easel.Generator/`。
+> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`SlotStateBrushConverter`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32/DPI 辅助）、视觉 XAML 运行时已移到 Easel 子模块（`Easel/Src/Easel/`）。
+> 包版本见 csproj；生成器独立在 `Src/Generators/Easel.Generator/`。
 > **单一 XAML 后端**：控件是 `Xaml.Visuals.Controls` 下的 `VisualElement`，`VisualHost` 是唯一 HWND；工作流表面是 `VisualHost` 上的附着行为。每个可见 item 由 `ViewPool` 经 Core 池物化为一个视觉元素，没有第二个 HWND。`Xaml.Controls` 只留共享原语。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台。它在三条轴上的平台差异分别落在
@@ -65,9 +65,9 @@
 | `<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows` | `TargetFrameworks` | 七家里只有这家与 WPF 是这个四元组 |
 | `UseWindowsForms` + `SuppressTfmSupportBuildWarnings` | 同名属性 | `netcoreapp3.0` 不带 `-windows`，靠后者压掉兼容告警 |
 | `Nullable` + `ImplicitUsings` + `LangVersion latest` | 同名属性 | 全模块开可空 |
-| `GeneratePackageOnBuild` + `<Version>12.0.0</Version>` | 同名属性 | 与其余六家同；**没有** `GenerateDocumentationFile` |
+| `GeneratePackageOnBuild` + `<Version>` | 同名属性 | 与其余六家同；**没有** `GenerateDocumentationFile` |
 | Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core` | 两个引用项 | 与生成器那套双轨同形 |
-| Debug → `ProjectReference Easel/Src/Easel`／非 Debug → `PackageReference WinForms.Easel 1.1.0` | Easel 引用 | 视觉运行时永远来自 Easel，不随本仓库发布；nuget.org 上 `Easel` 这个 ID 被保留，包名是 `WinForms.Easel` |
+| Debug → `ProjectReference Easel/Src/Easel`／非 Debug → `PackageReference WinForms.Easel` | Easel 引用 | 视觉运行时永远来自 Easel，不随本仓库发布；nuget.org 上 `Easel` 这个 ID 被保留，包名是 `WinForms.Easel` |
 | 四个 TFM 一起编 | — | 新写的 BCL 调用必须在 netframework4.6.1 与 netcoreapp3.0 上都存在 |
 
 **别用 `bin/`/`obj/` 目录名推支持的框架**：两个下游 demo 都是 `net10.0-windows`，解析到 `net8.0-windows` 那份资产。旧 TFM 的兼容层在 `Compat.cs`：IsExternalInit、UnconditionalSuppressMessageAttribute、Clamp/IsFinite/TickCount64。
@@ -83,6 +83,9 @@
 7. **池化视图被移除后留在画布上**：`ViewContainer.Deactivate` 只清 `DataContext` 并设 `Collapsed`，`Detach` 不摘树 ⇒ `Canvas.Children.Count` 是「曾经物化过的视图数」，活动视图数看 `ViewPool.GetActiveViewCount`。管道销毁时 `ViewSourcePipeline.Dispose` 经 `ReleaseAll` 才真正移除并释放。
 8. **`Panel.ZIndex` 不是活动排序**：`ViewContainer.Attach` 只在首次挂载时按当前 `Panel.ZIndex` 插位（连线 -1 落在节点前），之后模板改 `Anchor.Layer` 不会重排；`SetZOrder` 是空实现，避免覆盖模板绑定。
 9. **`[ModuleInitializer]` 只在模块里有代码执行时才跑**：`EaselAnimationBootstrap` 靠它把适配器写进 `Easel.Animation.AnimationRuntime.Animator`，但引用程序集、甚至 `typeof` 取类型都不触发——只装适配器当动画后端、不碰 workflow 类型的宿主会拿到空后端，`VisualTransition` 抛 "no interpolator"。这类宿主启动时调一次 `EaselAnimationBootstrap.EnsureRegistered()`（幂等，且不覆盖宿主自带的后端）；gallery 的 `Program` 就是这条路径。
+10. **`SurfaceName` 只选子树，不换宿主**：行为仍只认 `VisualHost`；输入/命中用宿主坐标，相机用表面内坐标，`SurfaceToWorld`/`WorldToSurface` 里的 `SurfaceOrigin` 负责两者之差。自己算坐标必须走这两个 API；名字写错时部件、输入、视口都按整棵根树解析（`WorkflowSurfaceBehavior.EnsureParts` / `SurfaceOrigin`）。
+11. **Easel `Border` 默认 `Padding=12`**：把它当布局容器（外壳侧栏、标题条、列表行）而不显式写 `Padding="0"`，子内容会被挤小或裁掉（`Easel/Src/Easel/Visuals/Controls/CoreControls.cs` 的 `Border()` 构造）。
+12. **`PointFromSurface` 必须从根往叶反解**：先减祖先 `Bounds` / 反祖先 `Transform`，最后才是元素自己。叶到根的顺序会在祖先有偏移时把偏移再缩放一次；嵌入在偏移工作台里的画布一缩放，槽锚点就漂移、连线错位。回归 `PointFromSurface_UndoesAncestorOffsetsBeforeTheChildTransform`（`Easel/Src/Test/Unit/Easel.Test/VisualBackendTests.cs`）。
 
 ## 六、入口：我要改 X 先打开哪个文件
 
@@ -111,9 +114,8 @@
 
 ## Demo 工作台外壳（示例侧）
 
-`Examples/Workflow/WinForms/Demo/Form1.cs` 的 `BuildWorkbenchFrame` 在 Designer 的 `splitContainer` 外面套标题条 + 状态条，`BuildSidebar` 把 `Panel1` 换成活动栏 + 侧栏；`Panel1/2.Padding=Empty`、`SplitterWidth=4`、`SplitterDistance=320` 是工作台版式。外壳（菜单、检查器、运行管理器、状态条）是普通 WinForms；工作流表面是 `Views/Workflow/WorkflowSurfaceView.xaml`（视觉 `UserControl`，`PART_*` + `behaviors:ViewPool`）+ `WorkflowCanvas.xaml.cs`（`VisualHost` + `WorkflowSurfaceBehavior` 接线），节点卡与端口经 `DataTemplate` + `CustomTemplateSelector` 物化（`ControllerView` / `TimerNodeView` / `PythonNodeView` / `EnumSelectorNodeView` / `WorkflowNodeCard`、`FullSlotView`、`LinkView`），网格/小地图在 `GridDecorator.cs` / `MinimapOverlay.cs`。
+`Examples/Workflow/WinForms/Demo` 是全视觉工作台：`Program` 建一个 `Form` + 一个 `VisualHost`，根是 `Views/Workbench/WorkbenchView.xaml`（标题条 / `VisualMenu`、活动栏、侧栏、编辑器标签、检查器、状态栏、`DialogOverlay`）。工作流表面是同一棵树里的 `Views/Workflow/WorkflowSurfaceView.xaml`，用 `WorkflowSurfaceBehavior.SetSurfaceName(host, "WorkflowSurface")` 指定；部件、输入和视口按该子树解析，相机坐标仍是宿主坐标（`SurfaceOrigin` 补原点差）。窗口只能是 WinForms `Form`（Easel 没有 Window），保存/打开仍是系统文件对话框；其余 UI 都是视觉元素。
 
-- 节点卡显示名称与端口；每类型的富内联编辑器、节点右键自动布局与 code-first 节点视图不在视觉 demo 里，编辑仍在检查器完成。连线流光在 `LinkView.xaml.cs`：静态构造函数向 `WorkflowFlowClock.RegisterDriver` 注册按树共享的 30fps **线程池 `Timer` + UI 投递**驱动（不是 `Transition`，避免其 async 续体投回 WinForms 同步上下文），时钟按真实时间采样，绘制路径也采样。
-- **标题条菜单**：`BuildTitleStrip` 用 `GhostButton` 做菜单与命令中心，下拉是 `Views/Workbench/DarkPopupMenu`（无边框 `Form`）。**实测 2026-11-18**：`ContextMenuStrip` 即使设自定义 renderer 与暗色模式仍是浅色面板 + 浅色字。
-- **元素表是自建的 `ElementRowList.cs`**：每行 Label + 定位/删除图标按钮；`Dock=Top` 的控件后加的在上，所以 `SetEntries` 要反向添加。
-- **脚本化验证**：WinForms 坐标点击在 150% DPI 下不可靠，用 UI Automation 按 `Name=Compile/Run` 的 `InvokePattern`。
+- 节点卡与端口经 `DataTemplate` + `CustomTemplateSelector` 物化（`ControllerView` / `TimerNodeView` / `PythonNodeView` / `EnumSelectorNodeView` / `WorkflowNodeCard`、`FullSlotView`、`LinkView`），网格/小地图在 `GridDecorator.cs` / `MinimapOverlay.cs`。节点右键自动布局/布局容差在 `WorkbenchView.OnSurfacePointerPressed` / `EnsureNodeMenu`；元素表是 `ElementListView`（Easel 行）。
+- 连线流光在 `LinkView.xaml.cs`：静态构造函数向 `WorkflowFlowClock.RegisterDriver` 注册按树共享的 30fps **线程池 `Timer` + UI 投递**驱动（不是 `Transition`，避免其 async 续体投回 WinForms 同步上下文），时钟按真实时间采样，绘制路径也采样。
+- 模态对话框是根树里的 `DialogOverlay`（半透明背景 + `DialogContent`），不是 `VisualPopup`；因此能盖住画布与全部外壳。

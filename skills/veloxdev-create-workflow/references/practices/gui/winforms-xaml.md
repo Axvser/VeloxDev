@@ -39,7 +39,7 @@ and attaches `WorkflowSurfaceBehavior` to the host:
 ```csharp
 var treeView = new TreeView();                       // visual UserControl (generated tree item)
 var host = new VisualHost { Dock = DockStyle.Fill, Root = treeView };
-shell.Controls.Add(host);                             // HUD/minimap can be WinForms siblings here
+shell.Controls.Add(host);                             // HUD/minimap are visual siblings inside the tree
 
 WorkflowSurfaceBehavior.SetCanvasName(host, "PART_Canvas");
 WorkflowSurfaceBehavior.SetScrollViewerName(host, "PART_ScrollViewer");
@@ -48,6 +48,17 @@ WorkflowSurfaceBehavior.SetZoomEnabled(host, true);
 WorkflowSurfaceBehavior.SetIsEnabled(host, true);
 WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);
 ```
+
+When the root also carries a visual workbench shell, keep one `VisualHost` and name the surface subtree:
+
+```csharp
+var host = new VisualHost { Dock = DockStyle.Fill, Root = new WorkbenchView() };
+WorkflowSurfaceBehavior.SetSurfaceName(host, "WorkflowSurface");   // x:Name on the surface UserControl
+WorkflowSurfaceBehavior.SetIsEnabled(host, true);
+```
+
+Parts, input and the viewport are then resolved inside that subtree; the public camera API still speaks host
+coordinates, so `SurfaceToWorld` / `WorldToSurface` remain the conversion points.
 
 `WorkflowSurfaceBehavior` owns the camera (one matrix on `PART_Canvas`), routes input into Core's
 `WorkflowInput`, materializes items through `ViewPool`, and resolves the template selector. `PART_*` are
