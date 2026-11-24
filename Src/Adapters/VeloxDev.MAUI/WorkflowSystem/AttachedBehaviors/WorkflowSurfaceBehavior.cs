@@ -975,24 +975,6 @@ public sealed class WorkflowSurfaceBehavior
         e.Handled = true;
     }
 
-    // Slots are measured through the canvas translation; after a zoom commits, re-measure them so
-    // link anchors follow the new ActualOffset/Scale instead of the pre-zoom visual.
-    private static void RefreshSlotLayouts(SurfaceState state)
-    {
-        if (state.Canvas is null)
-        {
-            return;
-        }
-
-        foreach (var child in state.Canvas.Children)
-        {
-            if (child is ContentView view && view.BindingContext is INodeComponent)
-            {
-                WorkflowSlotLayoutBehavior.Refresh(view);
-            }
-        }
-    }
-
     // 滚轮不能挂在 ScrollViewer 自己身上：本家没有隧道相，平台的 ScrollViewer 在冒泡路径上比这一层更晚
     // 处理这一笔、且已经滚过一段，等处理器跑到 ScrollViewer 再置 Handled 已经晚了（WinUI 同形，实测挂在
     // ScrollViewer 上照样漏一格）。挂在做滚动那一层**之前**的祖先上，置 Handled 才拦得住 ——
@@ -1152,6 +1134,25 @@ public sealed class WorkflowSurfaceBehavior
         }
     }
 #endif
+
+    // Slots are measured through the canvas translation; after a zoom commits, re-measure them so
+    // link anchors follow the new ActualOffset/Scale instead of the pre-zoom visual.
+    // Lives outside the WINDOWS block: SurfaceScroller.CenterOnAsync uses it on every target.
+    private static void RefreshSlotLayouts(SurfaceState state)
+    {
+        if (state.Canvas is null)
+        {
+            return;
+        }
+
+        foreach (var child in state.Canvas.Children)
+        {
+            if (child is ContentView view && view.BindingContext is INodeComponent)
+            {
+                WorkflowSlotLayoutBehavior.Refresh(view);
+            }
+        }
+    }
 
     // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
     // 与 ScrollView 自己那一手一致，否则接管之后手感会变。
