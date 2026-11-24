@@ -17,7 +17,7 @@
 
 ⚙ **Easing is not clamped.** `Back` and `Elastic` are meant to leave `[0,1]` and overshoot the end value. What an overshoot *means* is per-sampler: numeric samplers extrapolate past the endpoint, while the remaining ones pin to it.
 
-⚙ Adapters also ship ready-made effects: `TransitionEffects.Empty` is a zero-duration one for "land here now", `TransitionEffects.Theme` is the duration the theme switch uses, and `TransitionEffects.Hover` is a starting point; no shipped demo consumes it.
+⚙ Adapters also ship ready-made effects: `TransitionEffects.Empty` is a zero-duration one for "land here now", `TransitionEffects.Theme` is the effect the theme switch uses, and `TransitionEffects.Hover` is a starting point.
 
 ⚙ **The event args carry position, not an outcome triple.** The seven lifecycle events (`Awaked`, `Start`, `Update`, `LateUpdate`, `Canceled`, `Completed`, `Finally`) are `EventHandler<TransitionEventArgs>`. `TransitionEventArgs` has `Loop` (`int`, the pass of the running segment, `0` on its first) and `Cycle` (`long`, the target's pass count), plus `Handled` / `DeltaTime` / `TotalTime` inherited from `TimeLineEventArgs`; setting `Handled = true` ends the run.
 

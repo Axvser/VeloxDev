@@ -9,7 +9,7 @@
 | ResolveSlotId × 2 + ConnectSlots | **ConnectByProperty** | 2 次调用 |
 | ListNodes + GetNodeDetail × N + ListConnections | **GetFullTopology** | N+1 次调用 |
 
-> **大结果会被封顶，而不是整段送来。** `GetFullTopology` 有 `maxNodes`，`GetExecutionLog` 有 `maxEntries`，`ListNodes`/`FindNodes` 有 `maxNodes`/`maxMatches`；被截断的回复会带 `truncated` 与总数。任何工具结果超过宿主的字符上限时也会被替换成截断信封。回复说被截断时，收窄查询，不要原样重试。
+> **大结果会被封顶，而不是整段送来。** `GetFullTopology` 有 `maxNodes`，`GetExecutionLog` 有 `maxEntries`，`ListNodes`/`FindNodes` 有 `maxNodes`/`maxMatches`；被截断的回复会带 `truncated` 与总数。工具结果超过宿主的字符上限时会被替换成截断信封。回复说被截断时，收窄查询，不要原样重试。
 
 **其他提效工具：**
 
@@ -18,7 +18,7 @@
 - **SearchForward / SearchReverse / SearchAllRelative** — 通过图遍历找相连节点，避免手动逐连接查找。
 - **IsConnected** — 一次调用检查可达性。
 - **FindPath** — 查找两节点间的最短路径。
-- **ExecuteNodes** — 一次触发多个节点的接收路径。
+- **ExecuteNodes** — 一次调用触发多个节点的接收路径（逐个等待完成）。
 - **ValidateWorkflow** — 在询问用户前先检查是否存在问题。
 - **ListCreatableTypes** — 发现可用的节点/插槽类型。
 - **ResolveSlotId** — 通过属性名直接获取插槽 ID，无需完整的 GetNodeDetail。

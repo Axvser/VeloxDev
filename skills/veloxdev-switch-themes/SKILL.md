@@ -15,7 +15,7 @@ One adapter reference, and Core comes with it:
 
 | | provides |
 |---|---|
-| one GUI adapter (`VeloxDev.WPF`, `VeloxDev.Avalonia`, `VeloxDev.WinUI`, `VeloxDev.MAUI`, `VeloxDev.WinForms`, `VeloxDev.Razor`, `VeloxDev.Jalium`) | the **converters** that turn a theme's parameters into that framework's value type, and — transitively — `VeloxDev.Core` |
+| one GUI adapter (`VeloxDev.WPF`, `VeloxDev.Avalonia`, `VeloxDev.WinUI`, `VeloxDev.MAUI`, `VeloxDev.WinForms`, `VeloxDev.Razor`, `VeloxDev.Jalium`) | the **converters** that turn a theme's parameters into that framework's value type (Jalium ships none — see [converters-and-platforms.md](references/practices/converters-and-platforms.md)), and — transitively — `VeloxDev.Core` |
 | `VeloxDev.Core` | `ITheme`, the theme classes, `[ThemeConfig]`, `ThemeManager`, and the generator |
 
 The adapter brings `VeloxDev.Core` in transitively, so one reference is enough. Add Core explicitly when you also want its non-UI parts. When you consume the adapter by `ProjectReference` instead of NuGet, analyzers do not flow through it either: reference `VeloxDev.Core.Generator` in the project that declares `[ThemeConfig]`, with `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"`.
@@ -73,4 +73,4 @@ public partial class MainWindow : Window
 
 ⚙ `Src/Core/VeloxDev.Core/Interfaces/DynamicTheme/` — `ITheme`, `IThemeObject`, `IThemeValueConverter`. The implementations are next door in `Src/Core/VeloxDev.Core/DynamicTheme/` — `Dark`, `Light`, `ThemeCache`, `[ThemeConfig]` (`ThemeConfigAttribute.cs`) and `ThemeManager`.
 
-⚙ `Src/Adapters/VeloxDev.<GUI>/DynamicTheme/ThemeValueConverters.cs` — the converters a GUI supplies.
+⚙ `Src/Adapters/VeloxDev.<GUI>/DynamicTheme/ThemeValueConverters.cs` — the converters a GUI supplies (all adapters except Jalium).

@@ -77,7 +77,7 @@ Every `PointerEventArgs` carries:
 | `PreviewChanged` | a snapshot whenever the sender, receiver or state changes |
 | `PreviewValidating` | once per new framework-valid candidate, before it is marked valid; a subscriber may refuse it for this preview only |
 | `Scroller` | the surface's `IWorkflowSurfaceScroller`, or `null` until an adapter registers one |
-| `Navigator` | the surface's `IWorkflowSurfaceNavigator`, or `null` until an adapter registers one; `Locate()` asks it to center a world point |
+| `Navigator` | the surface's `IWorkflowSurfaceNavigator`, or `null` until an adapter registers one; `Locate()` asks it to center a canvas-local point |
 | `IsSuspended` | while set, pointer movement stops updating `PointerTarget` — the route still delivers events |
 | `HitRadius` | the reach passed to link hit-testing; `LinkHitTestEx.DefaultHitRadius` (6) by default |
 
@@ -150,9 +150,9 @@ The tree is the last element of every route, so a subscription on its helper hea
 private ITreeComponent? _tree;
 private IInputEvents? _input;
 
-// Call whenever the surface is handed a tree: DataContextChanged on WPF/Avalonia,
+// Call whenever the surface is handed a tree: DataContextChanged on WPF/Avalonia/Jalium,
 // BindingContextChanged on MAUI, OnParametersSet on Blazor,
-// WorkflowSurfaceBehavior.SetWorkflowTree on WinForms, the tree attached property on Jalium.
+// WorkflowSurfaceBehavior.SetWorkflowTree on WinForms.
 private void BindTree(ITreeComponent? tree)
 {
     if (_input is not null) _input.Input.KeyDown -= OnKeyDown;

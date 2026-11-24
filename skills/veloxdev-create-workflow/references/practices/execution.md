@@ -50,7 +50,7 @@ The run controls are capabilities configured on the `RuntimeContext`; every one 
 
 ## Compilation
 
-`CompileAsync` requires a **node** (anything else throws `ArgumentException`), clears and refills `Compiler.Graphs`, and currently returns exactly one graph.
+`CompileAsync` requires a **node** (anything else throws `ArgumentException`), clears and refills `Compiler.Graphs`, and returns exactly one graph.
 
 `RuntimeContext.Target` is caller-set and `TargetReached` is engine-set. Set `Target` on **any** run — forward or reverse — to have the engine report whether that node was driven.
 
@@ -233,7 +233,7 @@ public interface IRedirectable
 | Interface | Fires | What you do with it |
 |---|---|---|
 | `ICompileTimeAware` | once per reached node, when compilation finishes | keep the `ICompileContext`; show `Order` in the UI; `context is { Order: -1 }` means stopped |
-| `IRuntimeAware` | before **every** drive of that node, once per pass | keep the session for logging and shared variables |
+| `IRuntimeAware` | before **every** drive of that node | keep the session for logging and shared variables |
 | `IRedirectable` | when a redirect is requested | return an upstream node, or `null` to decline |
 
 ⚙ `AttachCompileTimeContext` is called for reached nodes. A node without a compile context is outside the plan.

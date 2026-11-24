@@ -6,7 +6,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** a connection exists in the model, but nothing is drawn.
 
-**Cause:** the slot's `Anchor` is still `(NaN, NaN, 0)`. Core never computes a port position; only the layout behaviour writes it after measuring a registered control. The render-ready gate suppresses a link with an unmeasured end.
+**Cause:** the slot's `Anchor` is still `(NaN, NaN, 0)`. Core never computes a port position; the layout behaviour writes it after measuring a registered control (on MAUI and Razor a connection press also pins the pressed slot). The render-ready gate suppresses a link with an unmeasured end.
 
 **Fix:** confirm the node view registers the port control through `SlotNames` / `SlotEnumeratorNames` and that the control's `DataContext` is the slot. Check `slot.Anchor.Horizontal` for `NaN`. The correspondence is described in [view-layer.md](../practices/view-layer.md#ports-the-model--view-correspondence).
 

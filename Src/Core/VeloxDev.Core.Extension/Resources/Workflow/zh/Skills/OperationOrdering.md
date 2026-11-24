@@ -1,6 +1,6 @@
 ---
 name: operation-ordering
-description: 遵守变更生命周期 CreateNode、PatchNodeProperties/SetEnumSlotCollection、CreateSlotOnNode/AddSlotToCollection、ConnectSlots/ConnectByProperty、ExecuteNode/BroadcastNode——倒序为何破坏插槽，以及 Parent == null 时调用返回 status ok 却无效果的静默陷阱
+description: 遵守变更生命周期 CreateNode、PatchNodeProperties/SetEnumSlotCollection、CreateSlotOnNode/AddSlotToCollection、ConnectSlots/ConnectByProperty、ExecuteNode/BroadcastNode——倒序为何破坏插槽；未挂载组件上命令路径静默无操作，而补丁器会拒绝
 ---
 
 ## Skill: 操作顺序协议（关键）
@@ -27,14 +27,14 @@ description: 遵守变更生命周期 CreateNode、PatchNodeProperties/SetEnumSl
 
 | 错误顺序 | 导致的问题 |
 |---|---|
-| PatchNodeProperties 在 CreateNode 之前 | 节点无 Parent；插槽生命周期钩子不触发（节点不在树中） |
+| PatchNodeProperties 在 CreateNode 之前 | 补丁被拒绝：目标没有父链，未挂载到树中 |
 | ConnectSlots 在插槽存在之前 | 插槽 ID 查找失败，或连接到错误插槽 |
-| SetEnumSlotCollection 在 CreateNode 之前 | OutputSlots 被创建但 OnSlotComponentAdded 无法在树中注册它们 |
+| SetEnumSlotCollection 在 CreateNode 之前 | 选择器状态以脱离树的方式应用——不注册到树，也不产生撤销记录 |
 | ExecuteNode 在连接建立之前 | 接收无下游效果 |
 
 ### ⚠ 静默跳过警告
 
-如果违反以上顺序，框架的扩展方法将**静默返回，不执行任何操作，也不报告任何错误**。你会看到 `status: "ok"`，但实际上操作**没有任何效果**。
+在 release 构建中，下列命令路径的扩展方法会**静默返回，不执行任何操作，也不报告任何错误**——工具仍会返回 `status: "ok"`，但什么也没发生。`PatchNodeProperties` 是例外：它会对未挂载目标返回 `status: "error"` 拒绝写入。
 
 | 违规操作 | 实际后果 |
 |---|---|

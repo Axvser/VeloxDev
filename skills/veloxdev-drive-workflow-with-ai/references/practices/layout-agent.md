@@ -6,13 +6,7 @@ The full contract (pipeline, options, planner/stage/cost, DryRun and the one-und
 
 ## The three tools
 
-| Tool | Effect |
-|---|---|
-| `GetLayoutInfo()` **R** | solver type, whether the helper hosts a custom solver, node count, and the default option values |
-| `PreviewLayout(...)` **R** | solves with `DryRun` and returns every placement, cost and diagnostic without writing anchors |
-| `ArrangeLayout(...)` **M** | solves and applies in one undoable `ActionPair`; returns the same shape plus applied/skipped counts |
-
-Shared parameters: `nodeIndex?`, `traversal` (`Downstream` / `Upstream` / `Both`), `maxDepth` (0 = unlimited), `pinStartNode`, `positionTolerance` (0 = strict canonical), `columnGap`, `rowGap`, `maxSweeps`, `tileSize`, `measureCost`, and `pinnedNodeIndicesJson` (a JSON array such as `"[0,2]"`). The result is `{status, mode, applied, dryRun, appliedCount, skipped, cost, bounds, placements, diagnostics}`.
+`GetLayoutInfo`, `PreviewLayout` and `ArrangeLayout` are catalogued in [tools.md](tools.md), with their shared parameters and result shape. What matters here is where they get the solution they run: the tree.
 
 ⚙ **The default pipeline treats every link as a hierarchy edge.** `WorkflowLayoutProblem` stores node rectangles and directed edges; it has no record of which slot a link came from, so every link is a parent→child edge to `HierarchyAlignmentStage`. A graph that mixes semantics — a sequence/timeline chain beside ownership fan-out — interleaves the sequence successor into its predecessor's fan-out group.
 

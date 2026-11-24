@@ -51,17 +51,17 @@ dotnet new wpf-v-minimap   -n MinimapOverlay   -ns MyApp.Views -o Views
 dotnet build
 ```
 
-⚙ **Generate the whole suite.** The tree names its selector, decorator and minimap siblings through the namespace alias. Leaving one out means editing the tree by hand, and leaving out the decorator or minimap ships a canvas with no floating rulers or thumbnail. `preferNameDirectory` is `false` on every item, so `-o Views` puts the files directly in `Views/` with no per-name subfolder.
+⚙ **Generate the whole suite.** The tree resolves its selector, decorator and minimap siblings through the namespace alias; leaving one out means editing the tree by hand. `preferNameDirectory` is `false` on every item, so `-o Views` puts the files directly in `Views/` with no per-name subfolder.
 
-⚙ **`-n` is load-bearing.** The tree view references its siblings by the default class names through a namespace alias, so renaming one means editing the tree by hand. Generate with the defaults unless you are prepared to do that. On WinForms the selector's default name is **`CustomTemplateSelector`**, because `TemplateSelector` is the generic base it derives from; the tree template already references `local:CustomTemplateSelector`.
+⚙ **`-n` is load-bearing.** The tree view references its siblings by the default class names through a namespace alias, so renaming one means editing the tree by hand. Generate with the defaults unless you are prepared to do that. On WinForms the selector's default name is **`CustomTemplateSelector`** — its base is `Easel.Visuals.VisualTemplateSelector` — and the tree template already references `local:CustomTemplateSelector`.
 
 ⚙ **All seven items go into one namespace.** That is how the tree resolves its siblings. Splitting them across two namespaces gives you a tree that cannot find its node view.
 
-⚙ **On WinForms the tree type-references `GridDecorator`, `CustomTemplateSelector`, and the node/slot/link views inside its `DataTemplate`s.** The minimap is a separate `WorkflowMinimapOverlay` assigned by name, so a missing minimap is a host-wiring gap rather than a tree compile error.
+⚙ **On WinForms the tree type-references `GridDecorator`, `CustomTemplateSelector`, `MinimapOverlay`, and the node/slot/link views inside its `DataTemplate`s.** A missing sibling breaks the tree build, so generate the whole suite — the minimap is not an optional host-wiring piece.
 
 ## The style contract
 
-Beyond `namespace`, the parameters only affect colours and geometry, and **all seven packs expose the same names with the same CLI aliases** — so a command line moves between GUIs unchanged. Each item's aliases live in `.template.config/dotnetcli.host.json` (`symbolInfo.shortName`); `template.json` declares the symbol and its default. Both files are required to reproduce the CLI surface — an alias in `template.json` alone does nothing.
+Beyond `namespace`, the parameters only affect colours and geometry, and **the symbols in the table carry the same names and CLI aliases on every pack** — so a command line moves between GUIs unchanged, except where a per-GUI reference notes an addition or omission. Each item's aliases live in `.template.config/dotnetcli.host.json` (`symbolInfo.shortName`); `template.json` declares the symbol and its default. Both files are required to reproduce the CLI surface — an alias in `template.json` alone does nothing.
 
 | Item | Option (short → symbol) | Meaning |
 |---|---|---|
@@ -97,7 +97,7 @@ Beyond `namespace`, the parameters only affect colours and geometry, and **all s
 
 ⚙ **A colour symbol is a contract even where the framework has no consumer.** Where a framework draws no border or no separate glyph surface, the pack still declares the symbol for CLI parity and says so in its own `template.json`. The command line stays uniform; the generated file documents the inert value. When a colour refuses to appear, edit the generated file directly rather than the command line.
 
-⚙ **The colour symbols also appear inside comments in the generated files**, so a substitution rewrites doc text as well. That is cosmetic.
+⚙ **A colour symbol can also appear inside a doc comment in a generated file** (Razor's do), so a substitution rewrites that text as well. That is cosmetic.
 
 ## The template's defaults
 
@@ -105,11 +105,11 @@ The generated files are defaults, not fixtures. The node view's `InputSlot` / `O
 
 ⚙ **The host shell is yours.** These are *item* templates — start from a normal GUI project and add the package. `App`, `Program`, `MainWindow` / `MainPage` / `MainForm`, `MauiProgram` and the app manifest are supplied by your GUI project.
 
-⚙ **The ViewModels are yours.** The tree, node, slot and link ViewModels, your node types and their helpers — see [model.md](model.md). The minimal working set to copy is `Examples/Workflow/<GUI> Trimmed/Demo/ViewModels/Workflow/` in a source checkout, or on GitHub if you installed from NuGet.
+⚙ **The ViewModels are yours.** The tree, node, slot and link ViewModels, your node types and their helpers — see [model.md](model.md). The minimal working set to copy is the Trimmed demo's `ViewModels/Workflow/` folder in a source checkout, or on GitHub if you installed from NuGet.
 
 ⚙ **The wiring is yours.** Add the `VeloxDev.<GUI>` package, set the tree's `DataContext` (or `Tree` parameter) to your `ITreeComponent`, and make sure your node view's `DataContext` is your node ViewModel.
 
-⚙ **The link menu is declared and empty.** The tree item declares the menu and wires the right-press to it — `LinkMenuKey` plus a resource on the markup platforms (WPF/Avalonia/WinUI/MAUI/Jalium), a `<LinkMenu>` fragment on Razor, a `WorkflowSurfaceBehavior.SetLinkMenuBuilder` delegate in the WinForms tree's code-behind — and every entry is yours. Add the entries there rather than writing right-press code; each entry is bound to the pressed link, so `Command="{Binding DeleteCommand}"` (or the GUI's equivalent) is the whole entry. See [view-layer.md](view-layer.md#the-link-context-menu).
+⚙ **The link menu is declared and empty.** The tree item declares the menu and wires the right-press to it — `LinkMenuKey` plus a resource on the markup platforms (WPF/Avalonia/WinUI/MAUI/Jalium), a `<LinkMenu>` fragment on Razor, an empty `VisualContextMenu` resource (opened through `LinkMenuKey`) or a `SetLinkMenuBuilder` delegate on WinForms — and every entry is yours. Add the entries there rather than writing right-press code; each entry is bound to the pressed link, so `Command="{Binding DeleteCommand}"` (or the GUI's equivalent) is the whole entry. See [view-layer.md](view-layer.md#the-link-context-menu).
 
 ⚙ **The debug HUD is not part of the packs.** The demos carry an `InfoOverlay` read-only diagnostics panel; it is a debugging aid supplied by the host.
 

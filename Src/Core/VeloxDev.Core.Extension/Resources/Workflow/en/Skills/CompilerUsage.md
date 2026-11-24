@@ -80,7 +80,7 @@ Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset,
 1. **Start** — `StartCompiledWorkflow(nodeIndex, seed?)` returns a handle at once; the run keeps going on the host's thread.
 2. **Poll** — `GetCompiledRunStatus(handle)` reports `isRunning`, `runStatus`, `outcome` (`Completed` / `Cancelled` / `Failed` — the precise reading, since `runStatus` shares `Stopped` between failure and cancellation), `isPaused`, attempts, failures, final data and the log tail. `ListCompiledRuns` finds a handle you lost.
 3. **Hold or end** — `PauseCompiledRun` / `ResumeCompiledRun` / `StopCompiledRun`.
-4. **Continue after a checkpoint** — `ContinueCompiledWorkflow(...)` restarts from a saved checkpoint rather than from the entry node.
+4. **Continue after a checkpoint** — `ContinueCompiledWorkflow(...)` carries on from the saved checkpoint: nodes it records as done are not driven again.
 5. **Retire** — `ClearFinishedRuns` releases finished handles; running ones are left alone.
 
 The waiting entries — `RunCompiledWorkflow`, `GetNodeResult`, `ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode` — accept `timeoutMs`. Use it instead of letting a stuck node hold the turn. A timed-out call returns an error; work already done is not rolled back, so check what ran before continuing.

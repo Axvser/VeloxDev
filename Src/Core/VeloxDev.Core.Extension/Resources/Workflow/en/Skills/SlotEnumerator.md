@@ -18,8 +18,7 @@ SetEnumSlotCollection(nodeIndex, "OutputSlots", "Demo.ViewModels.MyEnum")
 
 A selector-driven node is created with **no ports**: its slots exist only once a selector is set. `ListSlotProperties` reporting `count: 0` on a SlotEnumerator property means exactly that, not that the property is missing.
 
-- The node's `[AgentContext]` description names the enumerator property and its `allowedSelectorTypes`. Read it before calling.
-- You do not need `ListSlotProperties` to set the selector; the allowed types are already in `[AgentContext]`.
+- Read `allowedSelectorTypes` before choosing: `ListSlotProperties` reports it reliably, and `GetComponentContext` shows it when the property has no description of its own. The one-line type summary does not carry member detail.
 
 ### Changing Selector on an Existing Node
 

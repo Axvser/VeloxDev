@@ -27,9 +27,9 @@ since `10.0.1` — a matching major is not the test.
 dotnet list MyNodes.csproj package --include-transitive
 ```
 
-Once the CLI is running, `ArchiveInfo.compatibility` is the authoritative reading: it reports `wanted`
-(component) and `loaded` (CLI) for every assembly it checked (step 3). The package list above is the
-pre-install shortcut.
+Once the CLI is running, `ArchiveInfo.compatibility` is the authoritative reading: for every mismatch it
+found, `mismatches[]` reports `wanted` (component) and `loaded` (CLI) (step 3). The package list above is
+the pre-install shortcut.
 
 **2. Find and install the newest stable CLI.**
 
@@ -66,8 +66,10 @@ only when you need a reproducible build. The package is a **tool**, not a librar
 Load the archive, call `ListCreatableTypes`, run `ValidateWorkflow`, then a small run. A pairing that passes
 those is the real answer.
 
-⚙ `--strict-plugin-versions` refuses a major mismatch at load. It is an opt-in policy, not the compatibility
-rule: it ignores minor/patch drift, the `10.0.1` Core floor, and Extension risk.
+⚙ `--strict-plugin-versions` refuses a major mismatch at load, for `VeloxDev.Core` and
+`VeloxDev.Core.Extension` alike. It is an opt-in policy, not the compatibility rule: minor/patch drift still
+loads with a warning, the `10.0.1` Core floor is not applied, and an Extension minor/patch difference is not
+called out.
 
 ⚙ **Coverage limit.** Only assemblies passed to `--assembly`, listed in the manifest, or loaded through
 `LoadAssemblies` are checked; a transitive dependency the resolver finds on its own is not.
@@ -126,7 +128,7 @@ The document is the library's serializer output. Dependencies and options live i
 | `--no-run-csv` | Do not write execution results to `tasks/<taskId>_<timestamp>/runs/<timestamp>_<tool>.csv`. The CSV export is on by default. |
 | `--root-type <name>` | Concrete tree type; overrides the manifest. |
 | `--allow-execution` | Adds blocking and background execution tools. |
-| `--in-process-execution` | Runs node code in the server. Adds the toolkit's pause/resume/handle tools; refuses `LoadArchive`; a crash takes the server down. |
+| `--in-process-execution` | With execution enabled, runs node code in the server. Adds the toolkit's pause/resume/handle tools; refuses `LoadArchive`; a crash takes the server down. |
 | `--redirect-on-error <n>` | Session-level fallback node for failures without `IRedirectable`. |
 | `--checkpoint-file <path>` | `FileCheckpointStore`; survives a restart. |
 | `--log-file <path>` | Full run log on disk; run results name it as `logFile`. |

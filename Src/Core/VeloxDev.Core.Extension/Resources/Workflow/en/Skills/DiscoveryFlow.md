@@ -42,6 +42,8 @@ Even in speed-first mode, refresh live state after operations that may invalidat
 - `CreateNode`, `DeleteNode`, `DeleteSlot`
 - `CreateSlotOnNode`, `AddSlotToCollection`, `RemoveSlotFromCollection`
 - `SetEnumSlotCollection` (old enum-slot IDs and connections become obsolete)
+- `Undo` / `Redo` (the command stack can add or remove nodes and links)
+- `LoadWorkflow` (the tree is replaced)
 - any user action or external process that may have changed the tree outside the current tool chain
 
 > You do NOT need to follow every step every time. Preserve the Agent's freedom to trade safety for speed, but never reuse stale indices or stale slot IDs after structure-changing operations.

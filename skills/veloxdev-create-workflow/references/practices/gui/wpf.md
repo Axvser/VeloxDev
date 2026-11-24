@@ -1,6 +1,6 @@
 # WPF
 
-`VeloxDev.WPF` · targets `net461;net5.0-windows;netcoreapp3.0;net8.0-windows`
+`VeloxDev.WPF` · targets `netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows`
 
 ⚙ **Reference implementation:** `Examples/Workflow/WPF Trimmed/Demo/Views/Workflow/` — `TreeView.xaml` (the surface and both templates), `NodeView.xaml`, `SlotView.xaml`, `LinkView.xaml`, `CustomTemplateSelector.cs`, `WorkflowGridDecorator.cs`, `MinimapOverlay.cs`. ViewModels beside it at `Demo/ViewModels/Workflow/`. The demo names its selector and decorator `CustomTemplateSelector` / `WorkflowGridDecorator`; the templates use `TemplateSelector` / `GridDecorator`.
 
@@ -87,7 +87,7 @@ protected override void OnRender(DrawingContext dc)
 }
 ```
 
-⚙ Slot anchors on this adapter are measured in **screen space** and converted with `SlotAnchorFromVisualCenter`. The canvas itself is not translated for the child views, so the visual centre genuinely is a screen coordinate here.
+⚙ Slot anchors on this adapter are measured in **scroll space** (the centre still includes `ActualOffset`) and converted with `SlotAnchorFromVisualCenter`. The canvas itself is not translated for the child views, so the visual centre genuinely is a scroll-space coordinate here.
 
 ⚙ **Link input is Core's, forwarded by this adapter.** The surface translates the platform's pointer and keys into the standard input and routes them through `WorkflowInput.For(tree)`, resolving which link is under the pointer with `HitTestVisibleLinks` and taking keyboard focus when one is hovered. A host subscribes the routed `KeyDown`, checks the link, and runs `DeleteCommand`: the trimmed demo subscribes on the link view itself and reads its own `DataContext`; the full demo uses the tree-level shape (`Input.KeyDown`, then `e.Target is ILinkComponent`). The right-press link menu is wired through `WorkflowSurfaceBehavior.LinkMenuKey` plus a `ContextMenu` resource (closed when `GetHelper().LinkRemoved` names that link). Hover appearance is the host's — subscribe the link's own `IInputEvents` (see [view-layer.md](../view-layer.md#making-a-link-interactive)).
 

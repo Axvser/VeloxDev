@@ -76,7 +76,7 @@ The problem stores **directed edges without slot identity**. Every link is a par
 | `PositionTolerance` | A node within this distance of its solved position is treated as unmoved. `0` asks for strict canonical placement. |
 | `MaxSweeps` | Maximum separation sweeps. |
 | `TileSize` | Tile size for the separation index. |
-| `ParallelThreshold` | Node count above which the pipeline may use the parallel separation path. |
+| `ParallelThreshold` | Band count at or above which a stage may run its bands in parallel. |
 | `MeasureCost` | Whether to compute the cost. |
 | `DryRun` | Solve and report without applying anchors. |
 

@@ -13,7 +13,7 @@ This is not the .NET API skill. Writing a host, a custom tool or a component lib
 
 ⚙ **One process, one loaded archive, one session.** `veloxdev mcp` loads a workflow document at startup. In isolated execution mode `LoadArchive` can replace it without restarting; under `--in-process-execution` or `--single-archive` it refuses. Unsaved edits are discarded on a switch.
 
-⚙ **The tools are the library's own commands.** `ListNodes`, `CreateNode`, `ConnectByProperty`, `CompileWorkflow`, `RunCompiledWorkflow` and the rest are the same `AIFunction`s an embedded Agent uses. Editing through them keeps the undo stack and the component-command path intact.
+⚙ **The inspection and editing tools are the library's own commands.** `ListNodes`, `CreateNode`, `ConnectByProperty`, `CompileWorkflow` and the rest are the same `AIFunction`s an embedded Agent uses; editing through them keeps the undo stack and the component-command path intact. The CLI adds archive-level and redirect tools, and in isolated mode runs execution through a child `veloxdev run` under the library's execution names.
 
 ⚙ **Execution runs in a child process by default.** A node that hangs, calls `Environment.Exit`, or crashes a native library kills the worker, not the MCP server. `--in-process-execution` trades that isolation for the toolkit's pause/resume and handle-based runs. It is opt-in and unsafe for untrusted graphs.
 
@@ -120,10 +120,10 @@ veloxdev run --archive graph.json --start 0 --node-result        # terminal role
 
 1. **Orient.** `ArchiveInfo` (or the `veloxdev://archive/info` resource) says which archive, root type, counts, execution mode, compatibility and warnings are in force. `GetCapabilities` lists every exposed tool and the result cap in one call; `GetAuditLog` shows what recent calls did. `GetWorkflowSummary` and `ListNodes` describe the graph; `ListCreatableTypes` says what can be created.
 2. **Understand before editing.** `GetNodeDetail` / `GetNodeDetailById` for one node, `GetComponentContext` / `GetTypeSchema` for a component's API, `ListComponentCommands` for its commands. Use indices from the latest `ListNodes`; structural edits shift them.
-3. **Edit through component commands.** `CreateNode`, `CreateSlotOnNode`, `ConnectByProperty`, `DisconnectSlots`, `PatchNodeProperties`, `SetEnumSlotCollection`, `ArrangeLayout`. `Undo` / `Redo` / `ClearHistory` are real; `TakeSnapshot` / `GetChangesSinceSnapshot` show what changed. For a multi-step edit, `ApplyBatch` runs up to 100 Mutation/Layout calls with an optional snapshot rollback (`stopOnError`).
+3. **Edit through component commands.** `CreateNode`, `CreateSlotOnNode`, `ConnectByProperty`, `DisconnectSlots`, `PatchNodeProperties`, `SetEnumSlotCollection`, `ArrangeLayout`. `Undo` / `Redo` / `ClearHistory` are real; `TakeSnapshot` / `GetChangesSinceSnapshot` show what changed. For a multi-step edit, `ApplyBatch` runs up to 100 Mutation/Layout calls with snapshot rollback on by default (`stopOnError`).
 4. **Validate and compile.** `ValidateWorkflow` for structural lint; `CompileWorkflow` (root) or `CompileNodeResult` (terminal) to see the plan and `GetCompileStatus` to read compile identity without recompiling.
 5. **Save.** Editing changes memory only. `SaveArchive` writes the document atomically; with no path it overwrites the loaded archive. It writes compact JSON by default, keeps the previous file as `<path>.bak`, and `dryRun: true` reports what would be written without touching the disk.
-6. **Run.** `RunCompiledWorkflow(startNodeIndex)` blocks and returns outcome/data/failures/log; `GetNodeResult(nodeIndex)` computes one node's result. Every run also writes `tasks/<taskId>_<timestamp>/runs/<timestamp>_<tool>.csv` and names it as `csvFile` (logs + failures, one row each). For long runs use `StartWorkflow` → `GetWorkflowJob` → `CancelWorkflowJob`; `ListWorkflowJobs` / `ClearFinishedJobs` manage the registry.
+6. **Run.** `RunCompiledWorkflow(startNodeIndex)` blocks and returns outcome/data/failures/logs; `GetNodeResult(nodeIndex)` computes one node's result. Every run also writes `tasks/<taskId>_<timestamp>/runs/<timestamp>_<tool>.csv` and names it as `csvFile` (logs + failures, one row each). For long runs use `StartWorkflow` → `GetWorkflowJob` → `CancelWorkflowJob`; `ListWorkflowJobs` / `ClearFinishedJobs` manage the registry.
 7. **Recover.** `SetRedirectOnError(nodeIndex)` installs a session-wide fallback for nodes that report an error without implementing `IRedirectable`; `ClearRedirectOnError` removes it. A node's own contract always wins. Then re-run, or fix the graph and run again.
 8. **Adopt post-run state.** An isolated run is a snapshot; its node VM state is not merged back. The result names a `stateFile`; `LoadArchive(stateFile)` adopts it explicitly. This is deliberately not automatic, so edits made while the run was in flight are not overwritten.
 
@@ -134,10 +134,10 @@ The full tool catalogue and the exact execution/job semantics are in [references
 An archive must exist before the CLI starts; it loads one, it does not create one. When the starting point is
 an empty directory, the path is in [references/practices/headless.md](references/practices/headless.md). The shape:
 
-1. **Build a component library.** A plain `net8.0` class library referencing `VeloxDev.Core` (the NuGet
-   package brings the generator); `partial` node VMs with `[WorkflowBuilder.Node<THelper>]` and slot
-   properties, `InitializeWorkflow()` from the constructor, helpers overriding `ReceiveAsync`. No adapter and
-   no views.
+1. **Build a component library.** A plain `net8.0` class library referencing `VeloxDev.Core` — a NuGet
+   reference also brings the generator, while a `ProjectReference` needs it as an analyzer reference;
+   `partial` node VMs with `[WorkflowBuilder.Node<THelper>]` and slot properties, `InitializeWorkflow()` from
+   the constructor, helpers overriding `ReceiveAsync`. No adapter and no views.
 2. **Bootstrap the first archive.** A console app builds a `TreeDefaultViewModel`, adds one node with
    `tree.GetHelper().CreateNode(...)`, and writes `tree.Serialize()`. Put `<archive>.manifest.json` beside it
    naming the DLL under `assemblies`, and copy the DLL into a folder under the manifest.
@@ -177,7 +177,7 @@ Symptom-first entries, with the rule each one violates and the fix, are in [refe
 | `The workflow archive was not found: ...` | The CLI loads an archive; it never creates one. Bootstrap it first — [headless.md](references/practices/headless.md). |
 | `has no registered JSON reader for the type name ...` | Load the assembly that declares it (`--assembly` or the manifest `assemblies`) before the document. |
 | `The worker exited with code N` | A node died or crashed. Read the worker's stderr in the result; fix the node, or use `run` to reproduce. |
-| `outcome: Cancelled` | The timeout or a cancel killed the worker. Check `timeoutMs` and `--worker-kill-grace-ms`; inspect `cancelled` / `timedOut`. |
+| `outcome: Cancelled` | The worker ignored its timeout or a cancel killed it. Check `timeoutMs` and `--worker-kill-grace-ms`; inspect `cancelled` / `timedOut`. |
 | `LoadArchive is unavailable with --in-process-execution` | Restart with isolated execution to switch archives. |
 | `... is outside the workspace` | Move the file under `--workspace`, or launch without the sandbox. |
 | `Tool 'X' is not available in the current session` | The tool was not registered for this launch (execution off, or in-process split). Relaunch with the right flag. |

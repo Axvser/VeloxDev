@@ -1,7 +1,7 @@
 ### SlotEnumerator 选择器类型约束
 
 - 提供路由凭证选项时，必须**完全来自**组件的 `allowedSelectorTypes`。
-- 框架内部枚举（`SlotChannel`、`SlotState` 以及 `VeloxDev.WorkflowSystem` 命名空间下的任何类型）是底层管道类型，不是路由凭证——绝不能作为选项出现。
+- 框架内部枚举（归在 `Framework/Enums` 下——`SlotChannel`、`SlotState`、`RouterCompileMode` 等）是底层管道类型，不是路由凭证——绝不能作为选项出现。
 - 若 `allowedSelectorTypes` 只有一个条目，直接使用，无需询问。
 
 ### 宿主边界

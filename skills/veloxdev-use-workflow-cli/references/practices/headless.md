@@ -62,9 +62,12 @@ public sealed class SinkHelper : NodeHelper<SinkNode>
 }
 ```
 
-⚙ **`VeloxDev.Core` from NuGet brings the generator.** A `ProjectReference` to Core does not: analyzers do
-not flow across project references, so that project also needs `VeloxDev.Core.Generator` with
-`OutputItemType="Analyzer"`.
+⚙ **A NuGet reference to `VeloxDev.Core` brings the generator analyzer; a `ProjectReference` does not.** The
+SDK passes the analyzer to csc for a NuGet reference, so the sample above needs nothing else. A project that
+references Core by project needs the generator as an analyzer reference:
+`<ProjectReference Include="…/VeloxDev.Core.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />`.
+Add the generator's package directly only when you want its build-time Roslyn check (`VELOXCFG0001`) — that
+target's build assets are not carried by Core's dependency.
 
 ⚙ **The generator emits four pieces, and all four matter.** The node's ViewModel half, its MVVM partial,
 the VeloxJson reader/writer registration (without it the archive cannot be read), and the AIContextTree

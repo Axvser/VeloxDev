@@ -56,7 +56,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Cause:** the old connection was released before the new one answered, or the new configuration offers a different tool set.
 
-**Fix:** reconfiguration connects first and releases the old connection only after the new one answers. Tool objects are `McpToolProxy` instances, so names stay stable while the client underneath is replaced; the render invalidates only when the name set changes.
+**Fix:** reconfiguration connects first and releases the old connection only after the new one answers. Tool objects are `McpToolProxy` instances, so names stay stable while the client underneath is replaced; the provider re-renders on the next turn when `McpScope.Version` advances.
 
 ## Unloading does not terminate a stdio server
 

@@ -22,7 +22,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Symptom:** the generated property is missing or the build reports a conflict.
 
-**Cause:** two members map to one property name; a same-named non-field member exists; or an existing field is const/static/read-only or of a different type and cannot back the property.
+**Cause:** two fields map to one property name; a non-field, non-property member on the type occupies the backing-field name; or an existing field cannot back the property — static, const or read-only when the property is writable, or a different type.
 
 **Fix:** rename one member, remove the competing member, or give the field a compatible writable declaration.
 

@@ -1,6 +1,6 @@
 ﻿# Your views
 
-The canvas you put on screen is assembled from seven view roles, and the item templates generate all seven for you — see [templates.md](templates.md). This file is what you need in order to **customize and debug** them: how they are composed, which attached properties and interfaces carry the contract, and where each extension point is.
+The canvas you put on screen is assembled from seven view roles, and the item templates generate all seven for you — see [templates.md](templates.md). This file is what you need to **customize and debug** them: how they are composed, which attached properties and interfaces carry the contract, and where each extension point is.
 
 ⚙ **Default: generate all seven roles from the item templates.** The decorator is the floating ruler; the minimap is the thumbnail. The generated node view is the elastic container (`Viewbox` on the XAML platforms, WinForms and Jalium, layout-only scaling on MAUI, the CSS transform on Razor); on WinForms a camera matrix scales the whole graph. Keep that container when you add content. Each `gui/<gui>.md` has the code.
 
@@ -90,7 +90,7 @@ outer collapsed box      positioned at the node's Anchor, sized to its Size
 
 ### Ports: the model ↔ view correspondence
 
-The model never computes a port's position. A slot's `Anchor` begins as `(NaN, NaN, 0)`; on the markup adapters the only writer is `WorkflowSlotLayoutBehavior`, which measures a named control and stores its visual centre. On WinForms the same behavior measures the named part and writes its centre in the coordinate host's local space (default the nearest visual `Canvas`). The behaviour finds the control through the name lists on the node view:
+The model never computes a port's position. A slot's `Anchor` begins as `(NaN, NaN, 0)`; `WorkflowSlotLayoutBehavior` measures a named control and stores its visual centre. On WinForms the same behavior measures the named part and writes its centre in the coordinate host's local space (default the nearest visual `Canvas`); on MAUI and Razor the connection behaviour also pins the pressed slot's anchor from the press point, so the rubber band starts at the slot. The behaviour finds the control through the name lists on the node view:
 
 | Model side | View side | Registered through |
 |---|---|---|
@@ -117,20 +117,20 @@ A link view binds its endpoints to `Sender.Anchor` / `Receiver.Anchor` and draws
 if (DataContext is ILinkComponent link && !link.IsRenderReady()) return;
 ```
 
-A link whose endpoints have not been measured draws nothing. Some adapters spell the same predicate as a `CanRender` property that combines `IsVisible` with a finite-anchor check; the meaning is identical. The finite check is part of the gate: an unmeasured endpoint carries `NaN`.
+A link whose endpoints have not been measured draws nothing. Some adapters bind a `CanRender` flag to `IsVisible` and then also call `IsRenderReady()`; the meaning is identical. The finite check is part of the gate: an unmeasured endpoint carries `NaN`.
 
 ⚙ **Keep the geometry local.** Every coordinate stays bounded; if you customize a link view on a framework with a size limit, use the technique its adapter uses — a viewport-sized overlay (MAUI), an offset frame (WinUI), or self-bounding geometry (Jalium).
 
 ### Making a link interactive
 
-Links are hit-testable, highlight on hover and delete on Delete **by default**. Two lines in the view:
+A link becomes hit-testable as soon as its view publishes the curve it drew — one line:
 
 ```csharp
 if (DataContext is ILinkComponent link)
     link.PublishCurve(curve, this);   // the curve you just drew, and the control that drew it
 ```
 
-Then subscribe to the routed pointer events on that link's own helper:
+Hover highlight and Delete are the host's. Subscribe the routed pointer and key events on that link's own helper:
 
 ```csharp
 // _lit is a field on the link view; h is that link's own routed input.
@@ -152,7 +152,7 @@ h.Input.PointerExited  += (_, _) => { _lit = false; InvalidateVisual(); };
 
 Publishing the curve is the whole opt-in. The framework answers the rest, and these rules decide what a click near a line hits:
 
-⚙ **Six canvas units either side, and the radius does not scale with zoom.** `LinkHitTestEx.DefaultHitRadius` is 6; a pointer is a physical thing. An adapter passes `WorkflowInput.HitRadius` (same default) when it resolves a target, so a surface can widen it for touch without touching the curve.
+⚙ **Six units either side, in the space the curve was published in.** `LinkHitTestEx.DefaultHitRadius` is 6. An adapter passes `WorkflowInput.HitRadius` (same default) when it resolves a target, so a surface can widen it for touch without touching the curve.
 
 ⚙ **`ILinkHitTestable` is a capability of the link's Helper.** `LinkHelper` — the helper every generated link uses — implements it, so a normal link is hittable. A hand-written helper that does not derive from `LinkHelper` implements `ILinkHitTestable` itself.
 
@@ -202,12 +202,12 @@ Right-pressing a link shows the menu the surface declares: the adapter resolves 
 | WPF / WinUI / MAUI | `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` on the tree root, plus a menu resource with that key |
 | Avalonia | the same property with the key its template emits (`WorkflowTreeMenu`) |
 | Razor | a `<LinkMenu Context="link">…</LinkMenu>` fragment parameter on the surface component |
-| WinForms | `WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, (menu, link) => …)` in the generated tree's code-behind |
+| WinForms | an empty `VisualContextMenu` resource the surface opens by `LinkMenuKey`, or `WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, (menu, link) => …)` in code |
 | Jalium | the same `LinkMenuKey` + menu resource the markup platforms use |
 
 ⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms adds or removes items in the `SetLinkMenuBuilder` delegate; Jalium declares them in the menu resource.
 
-⚙ **The generated menus are empty, and WinForms' builder adds nothing.** The packs declare the resource/fragment/builder and wire it; every entry is yours, including Delete. The library supplies the event and the timing; the host decides the actions.
+⚙ **The generated menus are empty.** The packs declare the resource/fragment and wire the right-press; every entry is yours, including Delete. The library supplies the event and the timing; the host decides the actions.
 
 ⚙ **The surface owns the open/closed bookkeeping.** It sets `WorkflowInput.IsSuspended` while its menu is up, so the pointer travelling onto the menu cannot clear the link the menu acts on, and releases it on close. When the link an open menu was about leaves the tree (Delete, Undo, an agent edit) the tree reports it through `GetHelper().LinkRemoved` — close your popup when it names yours. The surface opens the menu off the routed right-press.
 
@@ -232,7 +232,7 @@ relay.PointerWheelChanged += (_, e) =>
 
 ⚙ **`Scroller` is a capability, not route state.** The attached surface registers an `IWorkflowSurfaceScroller` when it binds to a tree and clears it on detach, so a host reads it as nullable. The deltas are **wheel deltas** — the same values as `PointerWheelEventArgs.DeltaX` / `DeltaY`, not scroll offsets: positive X is towards the content on the right, positive Y is away from the user. The adapter converts them to its platform's step (a WPF line count, a DOM scroll, a translated canvas), clamps to the reachable range, and leaves an axis alone when its delta is zero.
 
-⚙ **`Navigator` is the absolute twin of `Scroller`.** The same surface object implements `IWorkflowSurfaceNavigator` and registers it at `WorkflowInput.Navigator` on attach (clearing only its own on detach). `CenterOn(worldX, worldY)` puts that world point at the viewport centre; Core's `WorkflowNavigationEx` turns a component into the point:
+⚙ **`Navigator` is the absolute twin of `Scroller`.** The same surface object implements `IWorkflowSurfaceNavigator` and registers it at `WorkflowInput.Navigator` on attach (clearing only its own on detach). `CenterOn(localX, localY)` puts that canvas-local point at the viewport centre; Core's `WorkflowNavigationEx` turns a component into the point:
 
 ```csharp
 using VeloxDev.WorkflowSystem.StandardEx;
@@ -258,7 +258,7 @@ A settled link carries a **travelling highlight**, so its direction is read from
 
 ⚙ **The line rests dim and the band is the same colour at full strength.** Dim the resting line by alpha (about three fifths) and keep the hue; the contrast then sits where the eye finds it. Pushing the link's colour towards white changes one channel of three on a 2px line and is invisible.
 
-⚙ **The band is a phase of the cycle, not a colour swap.** It comes up from the resting colour over the first third of its travel, travels fully lit and unchanged for the middle third, and settles back over the last third — the last phase also makes the loop seam invisible, since the line is uniformly dim at both ends of a cycle.
+⚙ **The band is a phase of the cycle, not a colour swap.** It comes up from the resting colour over the first 30% of its travel, stays fully lit to 78%, and settles over the rest — the last phase also hides the loop seam, since the line is uniformly dim at both ends of a cycle.
 
 ⚙ **A virtual link (the rubber band under the pointer) and a selected link keep a flat pen.** One is not a settled connection and the other is already highlighted.
 
@@ -276,11 +276,11 @@ Handled for you, and you normally never touch it.
 
 ## Two ways the surface can work
 
-The adapters fall into two camps, and which one you are in decides whether you must refresh by hand:
+The shipped adapters are all notification-driven. A custom surface can be pull-driven, and which one you are in decides whether you must refresh by hand:
 
 | | Notification-driven | Pull-driven |
 |---|---|---|
-| Frameworks | WPF, Avalonia, WinUI, MAUI, Jalium, Blazor, WinForms | — |
+| Frameworks | all seven | a custom surface you write |
 | Node position | bound to the collapsed `Anchor`, or arranged from it in the visual tree | repositioned in code, every pass |
 | After a mutation | automatic | you must call `Refresh(host)` |
 

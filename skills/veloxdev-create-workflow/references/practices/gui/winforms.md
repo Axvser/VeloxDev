@@ -109,7 +109,7 @@ passive view only.
 ⚙ **Curves are world-space.** `Start/End` are world coordinates and the published curve is the same object Core
 hit-tests; the camera transform is applied only while painting. Do not publish screen coordinates.
 
-⚙ **The hit radius is 6 DIPs and does not scale with zoom.** It is the painted stroke, not the view's box; a
+⚙ **The hit radius is 6 world units; the camera makes its on-screen reach scale with zoom.** It is the painted stroke, not the view's box; a
 link view sets `IsHitTestVisible = false` so it never swallows canvas gestures.
 
 ## Input
@@ -156,15 +156,17 @@ Skipping it culls nodes still visible under the ruler.
 
 ## The link context menu
 
-⚙ **The menu is built in code, not markup.** In the tree's code-behind:
+⚙ **The trimmed demo fills the menu in code.** In the form that wires the surface:
 
 ```csharp
 WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, static (menu, link) =>
     menu.Items.Add("Delete", null, (_, _) => link.DeleteCommand.Execute(null)));
 ```
 
-The surface opens the strip on a right-press on a link, positions it, and suspends input routing while it is
-open. **The generated template adds no entries** — including Delete.
+The generated tree also declares an empty `VisualContextMenu` resource keyed `LinkContextMenu`; point the
+surface at it with `SetLinkMenuKey` when you want the menu in markup. The surface opens the strip on a
+right-press on a link, positions it, and suspends input routing while it is open. **The generated template adds
+no entries** — including Delete.
 
 ## Item templates — `VeloxDev.WinForms.Templates`
 
@@ -175,11 +177,11 @@ minimap.
 | --- | --- | --- |
 | tree | visual `UserControl` with visual `GridDecorator > ScrollViewer > Canvas`; hosted in a generic `VisualHost` | the palette, the visual selector resource, the link colours/width |
 | node | visual `UserControl` root: `Viewbox > Grid 260×180`, chrome `Border`, title, `PART_InputSlot`, `PART_OutputSlots` ItemsControl | the card shell, title and port-row template |
-| slot | visual `UserControl` with an `Ellipse`; the glyph colour is fixed | glyph and colours |
+| slot | visual `UserControl` with an `Ellipse`; its fill and stroke use the slot colour symbols | glyph and colours |
 | link | visual `UserControl` with endpoint DPs and `OnRender`; publishes its curve | curve drawing and colors |
 | selector | code-only `VisualTemplateSelector` | item type → view mapping |
 | decorator | code-only `GridDecorator` | grid/ruler metrics |
-| minimap | code-only HWND overlay | the minimap frame |
+| minimap | code-only visual overlay | the minimap frame |
 
 The XAML runtime rules (generator setup, root rules, resources, bindings, styles, themes, 3D, animation
 contract) are in the Easel skill; the workflow markup contract (behaviors, parts, `ViewPool`, preview) is in

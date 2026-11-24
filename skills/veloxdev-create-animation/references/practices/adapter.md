@@ -1,5 +1,7 @@
 # Building an adapter
 
+> The umbrella map of Core's adapter interfaces and shared pipelines is [veloxdev-create-adapter](../../../veloxdev-create-adapter/SKILL.md); this page carries the transition half in full.
+
 A GUI gets support by implementing a handful of small classes against Core's interfaces. Nothing in Core knows about any UI framework — that is why an unsupported GUI is a contained job rather than a fork.
 
 Put them in a namespace of your choosing and mirror the seven official adapters (`Src/Adapters/VeloxDev.<GUI>/TransitionSystem/`), which are the reference implementations.

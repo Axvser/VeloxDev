@@ -11,7 +11,7 @@ Package: **`VeloxDev.Core`** (runtime, namespace `VeloxDev.MVVM`) plus the analy
 
 ⚙ **The class is `partial`.** Every generator matches on the `partial` modifier. A non-partial class produces no file, no warning and no error. A `partial record` or `partial struct` is not a target at all: the MVVM/command pipeline requires a `ClassDeclarationSyntax`, and the theme generator has its own `ClassDeclarationSyntax`-only predicate.
 
-⚙ **A non-partial `[VeloxProperty]` property cannot be completed.** The generator only adds code; it cannot complete accessors you already wrote. Mark the property `partial` or drop the attribute; this reports `VELOX_MVVM_PROP003`.
+⚙ **A non-partial `[VeloxProperty]` property cannot be completed.** Mark the property `partial` or drop the attribute; this reports `VELOX_MVVM_PROP003`.
 
 ⚙ **The generator sees a class only while its file compiles as syntax.** A file excluded from the compilation, or a class behind a false preprocessor branch, is skipped.
 

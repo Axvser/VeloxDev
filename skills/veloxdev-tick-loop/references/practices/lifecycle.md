@@ -9,7 +9,7 @@ public partial class PhysicsComponent { … }
 
 ⚙ **`[Tickable]` is the real attribute.** The generator matches the full name `VeloxDev.TimeLine.TickableAttribute`; an attribute of your own with the same short name is ignored without a word. It applies to classes only, is not inherited, and allows one instance per class.
 
-⚙ **`TickableAttribute.Channel` is get-only.** Pass the channel positionally; a named `Channel = ...` is `CS0617`. `TargetFPS` is settable, so `[Tickable("physics", TargetFPS = 60)]` is the form. The generator reads named arguments after positional ones, and a named value wins.
+⚙ **`TickableAttribute.Channel` is get-only.** Pass the channel to the constructor (`channel:` or positional); a named `Channel = ...` is `CS0617`. `TargetFPS` is settable, so `[Tickable("physics", TargetFPS = 60)]` is the form. The generator reads named arguments after positional ones, and a named value wins.
 
 ⚙ **The class is `partial`.** The hook name and signature match exactly, or the build fails: the generator emits the defining `partial void` declarations, so a hook with a body but no matching declaration is `CS0759`, and a non-partial method with the exact signature collides with the generated one (`CS0111`).
 

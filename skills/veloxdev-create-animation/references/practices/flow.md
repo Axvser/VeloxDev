@@ -58,7 +58,7 @@ private sealed class FlowDriver : IWorkflowFlowDriver
 }
 ```
 
-⚙ **One shared driver per tree.** The clock is cached in a `ConditionalWeakTable` keyed by the tree; `Subscribe` is reference-counted, so many links on one tree run exactly one timer. A tree with no attached links runs none. WPF, Avalonia and WinUI drive it with a single `Transition<WorkflowFlowClock>`; WinForms' driver is a `System.Threading.Timer` that calls `BeginSampling` / `Sample`.
+⚙ **One shared driver per tree.** The clock is cached in a `ConditionalWeakTable` keyed by the tree; `Subscribe` is reference-counted, so many links on one tree run exactly one timer. A tree with no attached links runs none.
 
 ⚙ **`BandHead` and `BandIntensity` are written together, then the subscribers are notified.** The clock fans one frame out only after both scalars are written, so a view never sees half a frame.
 
@@ -70,7 +70,7 @@ private sealed class FlowDriver : IWorkflowFlowDriver
 |---|---|---|
 | WPF / Avalonia / WinUI | the tree's `WorkflowFlowClock`, driven by one `Transition<WorkflowFlowClock>` | subscribes when attached and on rebind (`Loaded` / `Unloaded` on WPF and WinUI, `OnAttachedToVisualTree` / `OnDetachedFromVisualTree` on Avalonia), copies `BandHead` / `BandIntensity`, repaints; unsubscribes on detach/rebind |
 | WinForms | the tree's `WorkflowFlowClock`, driven by one shared `System.Threading.Timer` (`BeginSampling` / `Sample`) | subscribes on first draw (the visual tree has no `Loaded` event), copies `BandHead` / `BandIntensity`, invalidates the comet's bounds; unsubscribes on detach/rebind |
-| Jalium | the surface (`NodeEditorSurface`) — one `Transition<NodeEditorSurface>` | the surface writes a single `FlowPhase`; every link derives its arc-length position and intensity from it |
+| Jalium | the surface (`NodeEditorSurface`) — one `Transition<NodeEditorSurface>` | the surface draws every link itself and derives each one's arc-length position and intensity from a single `FlowPhase` |
 | Blazor | `flow.js` — one `requestAnimationFrame` loop for every link | the component registers/updates geometry only when it changes; the JS owns per-frame geometry and alpha |
 
 ⚙ **The Blazor link has no `Phase` property.** Its per-frame work is in `flow.js` (30fps throttle, `IntersectionObserver` pause for off-screen links). The `Phase` scalar in the Blazor demo belongs to `TemplateSlotView`, where it drives the port ripple. Keep the two separate.

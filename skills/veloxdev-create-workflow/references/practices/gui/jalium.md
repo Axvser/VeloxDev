@@ -76,7 +76,7 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 
 ⚙ **Nothing enumerates `node.Slots`, so a slot the card shows must be named.** Rename a `PART_` in the markup and rename it in the behavior attribute too. The enumerator branch reads containers through `ItemContainerGenerator` because the slot inside an `ItemsControl` item template is out of the host's name scope.
 
-⚙ **The whole grid renderer lives in the template.** `GridDecorator.cs` is `sealed class GridDecorator : Grid, IWorkflowGridDecorator` — the world-coordinate maths, the ruler tick layout and label formatting, and two self-drawn, hit-test-transparent layers: a bottom one filling the surface and drawing the grid, and a top one (`Panel.ZIndex = 100`) drawing the viewport-fixed ruler bands. The adapter ships no such class. Its palette, `GridStep` and `MajorLineEvery` are assigned in the constructor from the `Template*` symbols.
+⚙ **The whole grid renderer lives in the template.** `GridDecorator.cs` is `sealed class GridDecorator : Grid, IWorkflowGridDecorator` — the world-coordinate maths, the ruler tick layout and label formatting, and two self-drawn, hit-test-transparent layers: a bottom one filling the surface and drawing the grid, and a top one (`Panel.ZIndex = 100`) drawing the viewport-fixed ruler bands. The adapter ships no such class. Its palette, `GridSpacing` and `MajorLineEvery` are assigned in the constructor from the `Template*` symbols.
 
 ## Zoom and pan
 
@@ -118,6 +118,6 @@ RenderTransform="{Binding CanvasTransform, RelativeSource={RelativeSource Ancest
 
 ⚙ **Every declared slot symbol's token is live.** `slotColor` is the glyph fill and `slotBorderColor` the glyph outline; both are static template colours.
 
-⚙ Colours are substituted into parser calls (`ColorConverter.ConvertFromString("TemplateSlotColor")`), not into literals — which is why the mirror comparison normalises colour spelling before diffing.
+⚙ Colours are substituted into attribute values and into `ParseColor("Template…")` calls (a `ColorConverter.ConvertFromString` wrapper), not into literals — which is why the mirror comparison normalises colour spelling before diffing.
 
 ⚙ Verification is one script for all seven platforms: `Src/Test/Harness/verify-workflow-item-templates-all.ps1 -Platform Jalium -Strict`. It packs, installs, generates all seven, compiles them together against the adapter, compares each against its `Examples/Workflow/Jalium Trimmed/` mirror (normalising the colour spelling first), and **fails any generated file that still contains a `replaces` placeholder token**.

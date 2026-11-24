@@ -20,7 +20,7 @@ Use this skill to arrange multiple nodes — creating them fresh, reorganizing a
 
 ### Step 1 — Read the Topology First
 
-Before placing any node, call `ListNodes` and examine the connection graph:
+Before placing any node, call `ListNodes` for positions and sizes and `ListConnections` (or `GetFullTopology`) for the edges — `ListNodes` carries no links:
 
 - Identify **source nodes** (no incoming connections, in-degree = 0). These are layout anchors.
 - Identify **sink nodes** (no outgoing connections, out-degree = 0).

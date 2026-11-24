@@ -18,8 +18,7 @@ SetEnumSlotCollection(nodeIndex, "OutputSlots", "Demo.ViewModels.MyEnum")
 
 选择器驱动的节点创建时**没有任何端口**：插槽只在设置选择器之后才存在。`ListSlotProperties` 对 SlotEnumerator 属性报告 `count: 0` 就是这个意思，而不是属性缺失。
 
-- 节点的 `[AgentContext]` 描述中写有枚举属性名及其 `allowedSelectorTypes`——调用前先读取。
-- 设置选择器不需要先调 `ListSlotProperties`，允许的类型已在 `[AgentContext]` 中。
+- 选择选择器前先读 `allowedSelectorTypes`：`ListSlotProperties` 一定会报告它；`GetComponentContext` 在属性没有自带描述时也会显示它。一句话类型摘要不含成员级细节。
 
 ### 修改已有节点的选择器
 

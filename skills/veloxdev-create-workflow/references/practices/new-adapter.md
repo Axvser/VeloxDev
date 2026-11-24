@@ -1,5 +1,7 @@
 # Supporting a GUI that has no adapter
 
+> The umbrella map of Core's adapter interfaces and shared pipelines is [veloxdev-create-adapter](../../../veloxdev-create-adapter/SKILL.md); read it alongside this page for the pipeline contract.
+
 The model, the canvas math and the execution engine are in `VeloxDev.Core` with **zero UI dependencies**. That is the design decision that makes this a contained job: you are writing a view layer, not porting a framework.
 
 The seven shipped adapters are your reference implementations. Read the one whose host most resembles yours before you start — [view-layer.md](view-layer.md) is the shared contract, `gui/*.md` the divergent part.
@@ -54,10 +56,10 @@ The single highest-risk choice in the whole adapter. Ask: **what frame is the me
 
 | Your measurement gives you… | Use | Adapters |
 |---|---|---|
-| a screen-space centre, and nothing has applied the canvas pan for you | `SlotAnchorFromVisualCenter` | WPF, Avalonia, Jalium |
+| a scroll-space centre (it still includes `ActualOffset`), and nothing has applied the canvas pan for you | `SlotAnchorFromVisualCenter` | WPF, Avalonia, Jalium |
 | a centre already inside the canvas-local frame (the host applies the pan itself) | `SlotAnchorFromCanvasLocal` | WinUI, MAUI, WinForms |
-| no coordinate host at all, and nothing you can measure | compute the centre with `SlotAnchorFromNode` (`node.Anchor` + design-local) | the fallback WPF, Avalonia, Jalium, WinUI and MAUI use when their coordinate host is absent (WinForms writes nothing in that case) |
-| a value from outside the process, already canvas-local (e.g. JavaScript) | write `slot.Anchor` directly — no `SlotAnchorFrom*` call | Blazor (Razor) |
+| no coordinate host at all, and nothing you can measure | compute the centre with `SlotAnchorFromNode` (`node.Anchor` + design-local) | the fallback every shipped adapter uses when its coordinate host is absent |
+| a value from outside the process, already canvas-local (e.g. JavaScript) | feed it to the layout pipeline as `CanvasLocal` | Blazor (Razor) |
 
 ⚙ **Getting this wrong offsets every link in the graph by a constant** — by `−ActualOffset` in the visual-centre/identity mix-up. There is no exception, no log and no visual clue other than the offset.
 
@@ -91,7 +93,7 @@ Take whatever the framework actually provides, and expect it to be different fro
 | Blazor | a non-passive JS `wheel` listener |
 | Jalium | `ScrollViewer.PreviewMouseWheel` with a Ctrl gate, like WPF |
 
-⚙ **Wheel-up is zoom-in, and zoom-in divides `Scale` by 1.1.** `Scale` is a collapse factor; writing `delta > 0 ? 1.1 : 1/1.1` inverts the gesture. This was wrong across all seven adapters once and has been fixed everywhere.
+⚙ **Wheel-up is zoom-in, and zoom-in divides `Scale` by 1.1.** `Scale` is a collapse factor; writing `delta > 0 ? 1.1 : 1/1.1` inverts the gesture.
 
 ⚙ **Clamp `Scale` to `[0.1, 10]`** in the gesture, as every shipped adapter does.
 
@@ -127,8 +129,8 @@ A workable order, bottom-up — each step is verifiable on its own:
 6. **The node, slot and link behaviours** — drag, connect, slot measurement, and translating the platform's pointer and keys into the standard input route (`WorkflowInput.For(tree).Route(...)`, resolving the target with `HitTestVisibleLinks`; the route, the handle and the argument types are in [input.md](input.md), the link-hit rules in [view-layer.md](view-layer.md#how-the-surface-picks-a-link)). Three details belong here:
    - **The connection preview feed.** On every pointer move while `tree.VirtualLink.IsVisible`, report the slot under the pointer: `tree.StandardSetPreviewReceiver(SlotHitTestEx.HitTest(tree, x, y))`. Find the candidate from the **measured slot anchors**, not the visual tree — the rubber band covers the surface. Keep hover routing off during the drag; otherwise every link the pointer crosses lights up. See [model.md](model.md#the-connection-preview).
    - **The wheel and its scroller.** Take the non-Ctrl wheel from the platform, route it as `PointerWheelEventArgs`, and then apply the platform's default scroll yourself unless a subscriber set `PreventDefault`. Register an `IWorkflowSurfaceScroller` at `WorkflowInput.For(tree).Scroller` when the surface attaches and clear it (only if it is still yours) when it detaches. Its `ScrollBy(deltaX, deltaY)` takes wheel deltas and converts them to this platform's step.
-   - **The navigator.** Implement `IWorkflowSurfaceNavigator` on the same object and register it at `WorkflowInput.For(tree).Navigator`, again clearing only your own on detach. `CenterOn(worldX, worldY)` places that world point at the viewport center: compute the target with `WorkflowSurfaceMath.CenterScroll`, and when it falls outside the current extent grow the canvas by the excess (`ClampScrollOffset` with `extendRatio: 0`), force the layout pass, re-read the extent and then apply the scroll. A surface that cannot grow clamps instead. `WorkflowNavigationEx`'s `node/slot/link.Locate()` is the host-facing side.
-   - **The connection candidate on the seven shipped adapters** is reported from the surface behaviour on WPF/Avalonia/WinUI/Jalium and from the slot-connection behaviour on MAUI/WinForms/Razor. Match whichever shape your host has.
+   - **The navigator.** Implement `IWorkflowSurfaceNavigator` on the same object and register it at `WorkflowInput.For(tree).Navigator`, again clearing only your own on detach. `CenterOn(localX, localY)` places that canvas-local point at the viewport center: compute the target with `WorkflowSurfaceMath.CenterScroll`, and when it falls outside the current extent grow the canvas by the excess (`ClampScrollOffset` with `extendRatio: 0`), force the layout pass, re-read the extent and then apply the scroll. A surface that cannot grow clamps instead. `WorkflowNavigationEx`'s `node/slot/link.Locate()` is the host-facing side.
+   - **The connection candidate on the seven shipped adapters** is reported from the surface behaviour on WPF/Avalonia/WinUI/Jalium/WinForms and from the slot-connection behaviour on MAUI/Razor. Match whichever shape your host has.
 7. **The grid decorator and minimap**, implementing Core's `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay`.
 
 ⚙ **Core supplies the link hit test and the input route.** The adapter translates the platform's events in; the hover highlight and the Delete command belong to the host/view, which subscribe to the link's own input events. The link context menu is the same split — the entries are yours (a menu resource, a fragment, or a build hook) and the adapter opens it and suspends the input router while it is open (see [view-layer.md](view-layer.md#the-link-context-menu)).

@@ -160,11 +160,11 @@ Scroll below `0` grows `NegativeOffset`; above `max` it grows `PositiveOffset`. 
 
 | Function | Formula | Use when the measured centre is in… |
 |---|---|---|
-| `SlotAnchorFromVisualCenter(x, y, layer, layout)` | `(x − ActualOffset.H, y − ActualOffset.V, layer)` | **screen** space, and the host does *not* already translate its children by `ActualOffset` |
+| `SlotAnchorFromVisualCenter(x, y, layer, layout)` | `(x − ActualOffset.H, y − ActualOffset.V, layer)` | **scroll** space (the centre still includes `ActualOffset`), and the host does *not* already translate its children |
 | `SlotAnchorFromCanvasLocal(x, y, layer)` | `(x, y, layer)` — identity | **already collapsed**, because the host applies the canvas translation itself |
 | `SlotAnchorFromNode(nodeX, nodeY, localX, localY, layer)` | `(nodeX + localX, nodeY + localY, layer)` | a **collapsed node anchor plus a local offset** — no coordinate host at all |
 
-All three return a **collapsed** value. WPF, Avalonia and Jalium use the first, WinUI and MAUI the second; all five fall back to the third when their coordinate host is absent. WinForms uses the second alone. **Razor calls none of them** — its JS measures the port and the code-behind assigns `slot.Anchor` directly, so there is no call site to choose. Every adapter measures a control and writes `slot.Anchor`.
+All three return a **collapsed** value. WPF, Avalonia and Jalium declare the first, WinUI, MAUI and WinForms the second; the shared pipeline falls back to the third when a coordinate host is absent. **Razor has no call site to choose** — its JS measures the port and feeds canvas-local centres to the same pipeline. Every adapter measures a control and writes `slot.Anchor`.
 
 ⚙ **WinForms' own comment states the failure mode:** using `SlotAnchorFromVisualCenter` there subtracts `ActualOffset` a second time and shifts every link by `−ActualOffset`.
 

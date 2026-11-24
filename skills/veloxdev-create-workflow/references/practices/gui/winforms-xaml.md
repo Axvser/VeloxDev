@@ -138,8 +138,8 @@ parts. A node that needs extra slots names them and registers them with the same
 </local:NodeView>
 ```
 
-- `SlotNames` / `SlotEnumeratorNames` are comma-separated **visual element names**; the default is
-  `PART_InputSlot` / `PART_OutputSlots`.
+- `SlotNames` / `SlotEnumeratorNames` are comma-separated **visual element names**; the generated template
+  uses `PART_InputSlot` / `PART_OutputSlots`.
 - A node drags only when some element marks `WorkflowNodeDragBehavior.IsEnabled="True"`; without it the card
   does not drag. Only that element and its descendants start the drag.
 - A slot connects only when its view root marks `WorkflowSlotConnectionBehavior.IsEnabled="True"`.
@@ -152,7 +152,8 @@ The link view is one visual per link. The template binds `StartLeft` / `StartTop
 `Sender.Anchor.*` / `Receiver.Anchor.*` and `CanRender` to `IsVisible`; the surface writes `LineColor` /
 `LineThickness` / `IsVirtual`; the view draws the cubic and calls `PublishCurve` in `OnRender`. Hover
 highlighting is demo-only (`Examples/Workflow/WinForms Trimmed/.../LinkView.xaml.cs`). Curves are
-world-space; the camera transforms only while painting. The hit radius is 6 DIPs and does not scale with zoom;
+world-space; the camera transforms only while painting. The hit radius is 6 world units, so the camera makes
+its on-screen reach scale with zoom;
 the link view sets `IsHitTestVisible = false` so it does not swallow canvas gestures.
 
 ## Connection preview
@@ -189,15 +190,16 @@ Enter/leave are synthesized by Core from target changes; the root raises exit wh
 
 ## Link context menu
 
-The menu is built in code, not markup:
+The demo fills the menu in code:
 
 ```csharp
 WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, static (menu, link) =>
     menu.Items.Add("Delete", null, (_, _) => link.DeleteCommand.Execute(null)));
 ```
 
-The surface opens the strip on a right-press on a link and suspends input while it is open. The generated
-template adds no entries, including Delete.
+The generated tree also declares an empty `VisualContextMenu` resource keyed `LinkContextMenu`; point the
+surface at it with `SetLinkMenuKey`. The surface opens the strip on a right-press on a link and suspends input
+while it is open. The generated template adds no entries, including Delete.
 
 ## Verification
 

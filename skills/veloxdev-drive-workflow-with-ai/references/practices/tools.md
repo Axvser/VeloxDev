@@ -16,8 +16,8 @@ The **built-in tools** are every member of the unconditional `WorkflowToolCatego
 | `GetNodeDetail(nodeIndex)` | one node with its slots and connections |
 | `GetNodeDetailById(runtimeId)` | the same, addressed by a stable id |
 | `FindNodes(typeName, propertyName, propertyValue, maxMatches?)` | filtered node list, cheaper than listing everything. With `maxMatches`, `matchCount` still counts every match |
-| `SerializeWorkflow()` | the tree's library JSON document — save it with a host file tool, or pass it back to `LoadWorkflow` |
-| `LocateNode(nodeIndex)` / `LocateSlot(nodeIndex, slotIndex)` / `LocateLink(linkId)` | scroll the host canvas so the thing is centred; read-only, zoom preserved. Fails when the host attached no surface navigator |
+| `SerializeWorkflow(mode?, maxChars?)` | the tree's library JSON document (`full`, the default) — pass it back to `LoadWorkflow`; `skeleton` and `summary` are shorter views, capped by `maxChars` |
+| `LocateNode(nodeIndex)` / `LocateSlot(nodeIndex, slotIndex)` / `LocateLink(linkId)` | scroll the host canvas so the node, the slot's parent node, or the link's midpoint is centred; read-only, zoom preserved. Fails when the host attached no surface navigator |
 | `ListCompiledRuns()` | every run handle this scope still holds, with running state and outcome |
 | `GetExecutionLog(maxEntries?)` | the tree's execution log; `maxEntries` keeps the newest N and reports `truncated` |
 | `ListConnections` | visible links as `{id, sid, rid}` |
@@ -26,7 +26,7 @@ The **built-in tools** are every member of the unconditional `WorkflowToolCatego
 | `ListSlotProperties(nodeIndex)` | single slots, slot collections and enumerators, with `allowedSelectorTypes` |
 | `GetEnumSlotByValue(nodeIndex, propertyName, conditionValue)` | the slot inside an enumerator for a given enum or bool value |
 | `GetTypeSchema(fullTypeName, maxChars?)` | a .NET type as a JSON schema — properties, types, current values. Over `maxChars` (default 32 KiB) the reply is a truncation envelope with a preview |
-| `GetComponentContext(fullTypeName, language, maxChars?)` | the runtime agent-context documentation for a type, from `[AgentContext]` or a `*.agentcontext.xml` resource. The tool maps a language name containing `Chinese` to Chinese and every other value to English. Same `maxChars` envelope |
+| `GetComponentContext(fullTypeName, language, maxChars?)` | the runtime agent-context documentation for a type, from `[AgentContext]` or a `*.agentcontext.xml` resource. The tool maps a language name containing `Chinese` or `chinese` to Chinese and every other value to English. Same `maxChars` envelope |
 | `ListComponentCommands(nodeIndex)` | command names and parameter types |
 | `ListCreatableTypes` | concrete node and slot types the compiled context tree carries (framework and customer roots) that have a public parameterless constructor |
 | `ValidateWorkflow` | structural lint: zero-size nodes, isolated nodes, slot-less nodes, duplicate links, cycles (one `error` per back edge), and SlotEnumerators with no selector |
@@ -59,7 +59,7 @@ A category of its own with exactly one member — its flag is neither `Query` no
 | Tool | Effect |
 |---|---|
 | `CreateNode` | creates a node of a discovered type; lands exactly at `(left, top)` when there is no overlap, otherwise shifts right past each overlapping node with a 30 px gap in a retry loop. Sizes from the type's default, else 300 × 260 |
-| `DeleteNode` | an atomic four-phase cascade — connections, slots, node, index |
+| `DeleteNode` | an atomic four-phase cascade — connections, slots, node, then the affected components' state |
 | `CreateSlotOnNode` / `AddSlotToCollection` / `RemoveSlotFromCollection` | slot lifecycle |
 | `DeleteSlot` | removes a slot and its connections |
 | `ConnectSlots` / `ConnectSlotsById` | connect two slots |
@@ -108,7 +108,7 @@ The eight that start or drive node code re-check the policy at call time and ret
 
 `ExecuteCommandOnNode(nodeIndex, commandName, jsonParameter?)`, `ExecuteCommandById(runtimeId, commandName, jsonParameter?)`.
 
-⚙ Calling `WithAllowedGenericCommands("Receive", "Delete")` **restricts** these two tools to that set. The `"Command"` suffix is appended automatically and matching is case-insensitive.
+⚙ Calling `WithAllowedGenericCommands("Receive", "Delete")` **restricts** these two tools to that set. The `"Command"` suffix is added when the name does not already end with it, and matching is case-insensitive.
 
 ## Layout — the tree's registered solution
 
@@ -120,9 +120,7 @@ Registered under `WorkflowToolCategory.Layout`. `PreviewLayout` and `ArrangeLayo
 | `PreviewLayout(...)` **R** | solves with `DryRun` and returns every placement, cost and diagnostic without writing anchors |
 | `ArrangeLayout(...)` **M** | solves and applies in one undoable `ActionPair`; returns the same shape plus applied/skipped counts |
 
-Shared parameters: `nodeIndex?` (omit for the whole tree; when set, only the reachable subgraph moves and the start node is pinned by default), `traversal` (`Downstream` / `Upstream` / `Both`), `maxDepth` (0 = unlimited), `pinStartNode`, `positionTolerance` (0 = strict canonical), `columnGap`, `rowGap`, `maxSweeps`, `tileSize`, `measureCost`, and `pinnedNodeIndicesJson` (a JSON array such as `"[0,2]"`). The result is `{status, mode, applied, dryRun, appliedCount, skipped, cost, bounds, placements, diagnostics}`.
-
-⚙ **Omit `nodeIndex` for a pure hierarchy.** The default pipeline treats every link as a hierarchy edge, so a graph that also carries a sequence/timeline chain interleaves that chain with the fan-out columns on a whole-tree run. Every demo menu passes a start node.
+Shared parameters: `nodeIndex?` (omit for the whole tree; when set, only the reachable subgraph moves and the start node is pinned by default), `traversal` (`Downstream` / `Upstream` / `Both`), `maxDepth` (0 = unlimited), `pinStartNode`, `positionTolerance` (0 = strict canonical), `columnGap`, `rowGap`, `maxSweeps`, `tileSize`, `measureCost`, `pinnedNodeIndicesJson` (a JSON array such as `"[0,2]"`), `summaryOnly` (counts, cost and bounds only), `changedOnly` (only placements that moved) and `maxPlacements`. The result is `{status, mode, applied, dryRun, appliedCount, skipped, changedCount, totalPlacements, placementsReturned, placementsTruncated, cost, bounds, diagnostics, placements}`; `summaryOnly` omits `placements`.
 
 ## Composite — reserved, no tools
 

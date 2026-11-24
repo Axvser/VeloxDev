@@ -1,6 +1,6 @@
 # Skills
 
-Skills this repository ships. The seven developer skills are for developers using the
+Skills this repository ships. The eight developer skills are for developers using the
 library; `veloxdev-use-workflow-cli/` is an operator skill for the shipped headless CLI/MCP server.
 All of them are part of the repository, not of anyone's local configuration.
 
@@ -48,7 +48,7 @@ A skill has one `SKILL.md` and, when it needs depth, a `references/` directory w
 
 ⚙ **No line-number citations.** A skill is self-contained outside this repository: it names types, members, files and commands, and it carries the guiding code. Line numbers rot when the source moves.
 
-The seven developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, and `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`. A skill still works alone — only those cross-links go dead — so keep all seven together when you can, and read a dead cross-link as "that skill is not at hand, or find the same rule in this one".
+The eight developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`, and `veloxdev-create-adapter` links to `veloxdev-create-workflow`, `veloxdev-create-animation` and `veloxdev-switch-themes`. A skill still works alone — only those cross-links go dead — so keep all eight together when you can, and read a dead cross-link as "that skill is not at hand, or find the same rule in this one".
 
 `veloxdev-use-workflow-cli` is a standalone operator skill: it covers obtaining, launching and operating the CLI, and drives the workflow through the tool surface. It does not require the developer skills; its cross-links to `veloxdev-drive-workflow-with-ai` and `veloxdev-create-workflow` are for the underlying tool semantics and API, and the CLI reference in the repository covers the same ground.
 
@@ -60,9 +60,10 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 
 | Skill | When it fires |
 | --- | --- |
-| `veloxdev-create-workflow` | Building a workflow editor — authoring Tree / Node / Slot / Link ViewModels, compiling and running a graph, arranging a graph, scaffolding all seven item-template views (floating rulers and minimap included), putting the canvas on screen on any of the seven supported GUIs, or designing an adapter and item templates for a GUI that has none. WinForms XAML UI itself is covered by [Easel's skill](../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md). |
+| `veloxdev-create-workflow` | Building a workflow editor — authoring Tree / Node / Slot / Link ViewModels, compiling and running a graph, arranging a graph, scaffolding all seven item-template views (floating rulers and minimap included), putting the canvas on screen on any of the seven supported GUIs, or customizing the item templates. Building an adapter for a GUI that has none is `veloxdev-create-adapter`. WinForms XAML UI itself is covered by [Easel's skill](../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md). |
 | `veloxdev-drive-workflow-with-ai` | Letting an LLM inspect, build and run a workflow graph — the Workflow Agent tool surface, host policy gates and call budgets, `[AgentContext]` / `*.agentcontext.xml` documentation, switchable skills, MCP servers, and background sub-agents |
-| `veloxdev-create-animation` | Writing VeloxDev interpolation animations — which adapter package to reference, the canonical declaration layout, static-reuse versus create-and-discard, the index forms, flow animations, and building an adapter for a GUI with no official one |
+| `veloxdev-create-animation` | Writing VeloxDev interpolation animations — which adapter package to reference, the canonical declaration layout, static-reuse versus create-and-discard, the index forms, flow animations, and the transition half of an adapter for a GUI with no official one (the umbrella is `veloxdev-create-adapter`) |
+| `veloxdev-create-adapter` | Designing or building a GUI adapter from `VeloxDev.Core` — surface metrics, scroll and viewport restore, slot layout, input routing, link hit testing, minimap and grid, the transition scheduler and theme switch, package and TFM layout, and the pitfalls that produce silent misalignment. Use when porting the workflow surface to a GUI the seven official adapters do not cover |
 | `veloxdev-switch-themes` | Runtime themes that can animate when they change — declaring a theme, `[ThemeConfig]`, `InitializeTheme()`, and switching with `SetCurrent` / `Jump` / `Transition` |
 | `veloxdev-add-aspects` | Wrapping behaviour around an existing member without editing it — `[AspectOriented]`, `Aop()`, and the before / instead-of / after hooks |
 | `veloxdev-write-viewmodels` | Writing ViewModels with the source generators — `[VeloxProperty]`, `[VeloxCommand]`, collection hooks, and interop with CommunityToolkit / Prism / ReactiveUI / Caliburn |
@@ -75,7 +76,8 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 | --- | --- | --- |
 | `veloxdev-create-workflow` | model, canvas math, execution, view layer, input, templates, auto-layout, new adapter, `gui/<gui>` × 7 | model/connections, geometry/viewport, execution, view/input, templates |
 | `veloxdev-drive-workflow-with-ai` | wiring/policy, tools, agent context, skills, MCP, sub-agents, framework providers, Agent layout | wiring, permissions/budget, MCP, skills/sub-agents |
-| `veloxdev-create-animation` | declarations, segments/effects, control/samplers, flow, adapter | declarations, segments, samplers, flow, adapter |
+| `veloxdev-create-animation` | declarations, segments/effects, control/samplers, flow, adapter, winforms XAML | declarations, segments, samplers, flow, adapter |
+| `veloxdev-create-adapter` | interfaces, pipelines, build and package | adapter |
 | `veloxdev-switch-themes` | declaring, switching, converters/platforms | theme |
 | `veloxdev-add-aspects` | marking/proxies, hooks | aspects |
 | `veloxdev-tick-loop` | lifecycle, channels/manager | tick |

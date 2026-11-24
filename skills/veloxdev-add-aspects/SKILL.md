@@ -25,7 +25,7 @@ Wrap behaviour around an existing member — log it, veto it, replace it, react 
 
 ⚙ `AspectOrientedAttribute` and the hook types live in `VeloxDev.AspectOriented`; `IAspectOriented` is the marker every generated interface inherits. The NuGet package brings `VeloxDev.Core.Generator` as a dependency, so referencing `VeloxDev.Core` is enough; an in-repo `ProjectReference` does not carry analyzers, which is why the demos add the generator separately.
 
-⚙ The toolchain floor is Roslyn 4.0+ / VS 2022 17.0+ / .NET SDK 6+ (`VeloxDev.Core.Generator.targets`); on an older Roslyn the generator reports `VELOXCFG0001` and disables itself. Its `LanguageVersionCheck` warns `VELOX_LANGVERSION001` when `LangVersion` maps below C# 12. Set `LangVersion` to `12` or `latest`; that option needs Roslyn 4.8 or later, so the practical floor is a .NET 8 SDK (or VS 2022 17.8+).
+⚙ The toolchain floor is Roslyn 4.0+ / VS 2022 17.0+ / .NET SDK 6+ (`VeloxDev.Core.Generator.targets`, which runs when the generator package is referenced directly); on an older Roslyn that target reports `VELOXCFG0001`. The analyzer's `LanguageVersionCheck` warns `VELOX_LANGVERSION001` when `LangVersion` maps below C# 12. Set `LangVersion` to `12` or `latest`; that option needs Roslyn 4.8 or later, so the practical floor is a .NET 8 SDK (or VS 2022 17.8+).
 
 ## Where to read next
 

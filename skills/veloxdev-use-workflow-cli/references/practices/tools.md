@@ -1,18 +1,20 @@
 # The tool surface
 
-All names are the library's own. An MCP client sees them unchanged. Tools not listed as always-available depend on launch flags.
+The inspection and editing tools are the library's own `AIFunction`s; an MCP client sees their names and
+schemas unchanged. The CLI adds the archive-level, redirect and isolated-worker tools. Tools not listed as
+always-available depend on launch flags.
 
 ## Context and session
 
 | Tool | Use |
 |---|---|
 | `ArchiveInfo` | Archive path, root type, node/link counts, execution mode, redirect target, checkpoint and log files, loaded assemblies, plugin warnings, structured compatibility status, assembly copy/staging directory, task and run-log directories, and the runtime-ID scope. Call it first. |
-| `LoadArchive` | Switch documents (isolated mode only). Unsaved edits are discarded. Can load new assemblies first. |
+| `LoadArchive` | Switch documents (isolated mode only; refused under `--single-archive`). Unsaved edits are discarded. Can load new assemblies first. |
 | `SaveArchive` | Write the current graph atomically. No path = overwrite the loaded archive. Compact by default; `backup=false` skips the `.bak`, `compact=false` writes indented JSON, `dryRun=true` reports without writing. |
 | `LoadAssemblies` | Load dependency assemblies at runtime; their registered types become creatable. Loading runs code. |
 | `GetCapabilities` | One call: exposed tool names, execution mode, result cap, workspace, compatibility status. Prefer it over guessing limits from individual descriptions. |
 | `GetAuditLog` | Recent tool calls (native and archive-level): tool, time, duration, success, result size, 400-char argument summary. `maxEntries` keeps the newest N. |
-| `ApplyBatch` | Apply up to 100 Mutation/Layout calls in one request: `[{"tool":"CreateNode","arguments":{...}}]`. `stopOnError=true` snapshots first and, on failure, reloads the snapshot as the live session (`stateFile`); the archive file is untouched. Refused with stopOnError under `--in-process-execution`. |
+| `ApplyBatch` | Apply up to 100 Mutation/Layout calls in one request: `[{"tool":"CreateNode","arguments":{...}}]`. `stopOnError=true` (the default) snapshots first and, on failure, reloads the snapshot as the live session (`stateFile`); the archive file is untouched. Refused with stopOnError under `--in-process-execution`; under `--single-archive` a failure cannot roll back (the reload is refused). |
 | `SetRedirectOnError` / `ClearRedirectOnError` | Session-wide host fallback for nodes without `IRedirectable`. Registered only when execution is enabled. |
 
 Resources: `veloxdev://archive/info`, `veloxdev://archive/manifest`.
@@ -80,11 +82,14 @@ Requires `--allow-execution` or the manifest flag.
 | `CancelWorkflowJob(id)` | Kills the worker. |
 | `ListWorkflowJobs` / `ClearFinishedJobs` | Registry inspection and cleanup. |
 
-⚙ Each isolated run gets a snapshot of the live graph. Edits made after the call/job starts are not in that run.
+⚙ Each isolated run serializes the live graph when its worker starts. Edits made after that snapshot are not
+in the run; a queued job does see edits made while it waited.
 
-⚙ A worker crash is an error result (`The worker exited with code N`); the server survives. A timeout or cancel
-kills the process tree after `timeoutMs + --worker-kill-grace-ms` and returns `outcome: Cancelled` with
-`cancelled` / `timedOut`.
+⚙ A worker crash is an error result (`The worker exited with code N`); the server survives. A cooperative
+timeout is the child's own `status: error` (exit 1), surfaced here as a worker-exit error with the child's
+output. If the worker ignores the timeout, the server kills the process tree after
+`timeoutMs + --worker-kill-grace-ms` and returns `outcome: Cancelled` with `timedOut: true`; a cancel kills
+the worker and sets `cancelled: true`.
 
 ⚙ `stateFile` is the post-run tree. Nothing is merged back automatically; `LoadArchive(stateFile)` adopts it.
 This is how you keep run-produced node state without clobbering concurrent edits.
@@ -96,9 +101,9 @@ job sits in `Queued` until one frees.
 
 The toolkit's full execution surface, running in the server:
 
-`StartCompiledWorkflow`, `ContinueCompiledWorkflow`, `GetCompiledRunStatus`, `PauseCompiledRun`,
-`ResumeCompiledRun`, `StopCompiledRun`, `ListCompiledRuns`, `ClearFinishedRuns`,
-`ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`.
+`RunCompiledWorkflow`, `GetNodeResult`, `StartCompiledWorkflow`, `ContinueCompiledWorkflow`,
+`GetCompiledRunStatus`, `PauseCompiledRun`, `ResumeCompiledRun`, `StopCompiledRun`, `ListCompiledRuns`,
+`ClearFinishedRuns`, `ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode`.
 
 ⚙ This mode is the only place with pause/resume and run handles. It is also the only mode where a node crash,
 `Environment.Exit`, or a native fault takes the MCP server down. Do not use it for an archive you do not trust.
@@ -121,8 +126,8 @@ surface writes the same checkpoint file but has no continuation handle.
 
 ## Save, logs and results
 
-- Editing changes memory. `SaveArchive` is the only implicit-free way to persist; a direct JSON edit is invisible
-  to the session and will be overwritten.
+- Editing changes memory. `SaveArchive` is the only way to persist; a direct JSON edit is invisible to the
+  session and will be overwritten.
 - `--log-file` writes every run's lines to disk and the result names it. Without it, the returned logs are the
   in-memory view and the whole result is subject to the 64 KiB cap.
 - `ArchiveInfo.logFile` / `checkpointFile` / `workspace` tell you what the process is configured with.

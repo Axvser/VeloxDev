@@ -309,8 +309,8 @@ await writer.WriteAsync(json);
 
 var restored = json.Deserialize<TreeViewModel>();          // or TryDeserialize, which never throws
 restored.Layout.UpdateCommand.Execute(null);               // recompute ActualSize / ActualOffset
-// Hand the restored tree to the surface. Notification-driven adapters re-bind;
-// on WinForms (pull-driven) also call WorkflowSurfaceBehavior.Refresh(view).
+// Hand the restored tree to the surface; notification-driven adapters re-bind.
+// On WinForms, also call WorkflowSurfaceBehavior.Refresh(view) after a wholesale change.
 ```
 
 ⚙ **The world is closed.** A type takes part in the document when the generator compiled a writer for it: a workflow component, a type carrying `[VeloxProperty]` / `[VeloxCommand]` / `[Archivable]`, or a type reachable from one of those along a member's *declared* type. A plain POCO that nothing declares cannot be written — it throws `MissingWriter`. That closure is what removes reflection, and it is why a type you want in the file either carries `[Archivable]` or is declared from something that is already in. `[Archivable(typeof(A), typeof(B))]` names further types to pull in with the same declaration.
@@ -325,14 +325,14 @@ restored.Layout.UpdateCommand.Execute(null);               // recompute ActualSi
 
 ⚙ `SlotEnumerator` re-resolves its selector type from the serialized `SelectorTypeName` on read — the constructor's default does not survive.
 
-⚙ **The saved viewport comes back with the tree.** The surface restores `Layout.ViewportOffset` when the tree is handed to it; the adapter persists `Layout.ViewportOffset` with `ViewportOffsetFromScroll` and restores it with `ViewportRestoreScroll` / `HasViewportRestore`. The host supplies `Layout.UpdateCommand`, the binding that delivers the tree, and `Refresh` on a pull-driven adapter.
+⚙ **The saved viewport comes back with the tree.** The surface restores `Layout.ViewportOffset` when the tree is handed to it; the adapter persists `Layout.ViewportOffset` with `ViewportOffsetFromScroll` and restores it with `ViewportRestoreScroll` / `HasViewportRestore`. The host supplies `Layout.UpdateCommand`, the binding that delivers the tree, and `Refresh` on WinForms after a wholesale change.
 
 ### Compiled plans
 
 `VeloxDev.Core.Extension` adds `CompiledGraphEx`:
 
 ```csharp
-using VeloxDev.Core.Extension;
+using VeloxDev.Serialization;
 
 var json = graph.SerializeCompiledGraph(includeTree: false);
 var restored = json.DeserializeCompiledGraph();

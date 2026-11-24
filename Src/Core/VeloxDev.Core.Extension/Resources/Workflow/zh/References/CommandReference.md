@@ -1,6 +1,6 @@
 ## ⚠️ 命令优先原则
 
-**所有结构性变更必须通过命令（IVeloxCommand）执行。** 禁止直接调用 Helper 方法或通过反射设置命令驱动的属性。命令负责 UI 线程调度、撤销/重做追踪与视图同步，绕过命令会导致静默失效。没有对应命令的自定义属性是唯一例外——由 `PatchNodeProperties` / `PatchComponentById` 直接写入。
+**结构性变更走框架的命令/撤销管道。** 禁止直接调用 Helper 方法或通过反射设置命令驱动的属性。管道负责 UI 线程调度与视图同步；只有会记录历史的操作才进入撤销栈——位置、尺寸与通道写入不会。绕过工具会导致静默失效。没有对应命令的自定义属性是唯一例外——由 `PatchNodeProperties` / `PatchComponentById` 直接写入。
 
 | 操作 | 工具 | 对应命令 |
 |---|---|---|
@@ -21,7 +21,7 @@
 | 修改自定义属性 | PatchNodeProperties / PatchComponentById | 直接设置（仅非命令属性） |
 | 向集合添加插槽 | AddSlotToCollection | Node.CreateSlotCommand |
 | 从集合移除插槽 | RemoveSlotFromCollection | Slot.DeleteCommand |
-| 设置枚举插槽集合 | SetEnumSlotCollection | 清除并重建枚举驱动集合 |
+| 设置枚举插槽集合 | SetEnumSlotCollection | SlotEnumerator.SetSelector（重建分支，一次可撤销操作） |
 | 按条件查找节点 | FindNodes | 仅只读查询 |
 | 通过属性解析插槽 ID | ResolveSlotId | 仅只读查询 |
 | **完整图快照** | **GetFullTopology** | 一次调用获取所有节点+插槽+连接 |
@@ -45,7 +45,7 @@
 
 ## 上下文层级
 
-所有节点执行都走唯一的接收路径：**Node.ReceiveCommand → Helper.ReceiveAsync(ITaskContext, ct) → Task<object?>**。
+节点执行只有一个最终路径：**`INodeHelper.ReceiveAsync(ITaskContext, ct) → Task<object?>`**。主动唤起经 **`Node.ReceiveCommand`** 进入；编译引擎则自己调用 `Helper.ReceiveAsync`（不派发 `ReceiveCommand`）。
 
 - `IContext` — 工作流上下文体系的根契约，统一携带负载 `Data`（运行期为真实数据、编译身份为 null）。
 - `IAccessContext` — 一次数据流访问（边）：`IsCompilePhase`（true = 编译期静态检测，false = 运行期实时检测）、`Sender` / `Receiver`；节点的 `AccessAsync` 门禁入参。

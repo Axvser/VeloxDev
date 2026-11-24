@@ -1,6 +1,6 @@
 ## ⚠️ Command-First Rule
 
-**Every structural mutation goes through commands (IVeloxCommand).** Do NOT call Helper methods directly or set command-backed properties via reflection. Commands handle UI thread dispatching, undo/redo tracking, and view synchronization; bypassing them causes invisible changes. A custom property with no backing command is the one exception — `PatchNodeProperties` / `PatchComponentById` write it directly.
+**Structural mutations go through the framework's command/undo pipeline.** Do NOT call Helper methods directly or set command-backed properties via reflection. The pipeline dispatches on the UI thread and synchronizes the view; it feeds the undo stack only for operations that record history — position, size and channel writes do not. Bypassing the tools causes invisible changes. A custom property with no backing command is the one exception — `PatchNodeProperties` / `PatchComponentById` write it directly.
 
 | Operation | Tool | Command Used |
 |---|---|---|
@@ -21,7 +21,7 @@
 | Patch custom props | PatchNodeProperties / PatchComponentById | Direct (non-command props only) |
 | Add slot to collection | AddSlotToCollection | Node.CreateSlotCommand |
 | Remove slot from collection | RemoveSlotFromCollection | Slot.DeleteCommand |
-| Set enum on slot collection | SetEnumSlotCollection | Clears + rebuilds enum-driven collection |
+| Set enum on slot collection | SetEnumSlotCollection | SlotEnumerator.SetSelector (rebuilds branches as one undoable step) |
 | Find nodes by filter | FindNodes | Introspection (no mutation) |
 | Resolve slot ID by property | ResolveSlotId | Introspection (no mutation) |
 | **Full graph snapshot** | **GetFullTopology** | All nodes + slots + connections in one call |
@@ -45,7 +45,7 @@
 
 ## Context Hierarchy
 
-All node execution goes through the single receive path: **Node.ReceiveCommand → Helper.ReceiveAsync(ITaskContext, ct) → Task<object?>**.
+Node execution has one terminal path: **`INodeHelper.ReceiveAsync(ITaskContext, ct) → Task<object?>`**. A direct invoke enters through **`Node.ReceiveCommand`**; the compiled engine calls `Helper.ReceiveAsync` itself (it does not dispatch `ReceiveCommand`).
 
 - `IContext` — root contract of the workflow context hierarchy, carrying the universal payload `Data` (real at runtime, null at compile identity).
 - `IAccessContext` — a dataflow access (edge): `IsCompilePhase` (true = compile-time static check, false = runtime real-time), `Sender` / `Receiver`; the parameter of the node's `AccessAsync` gate.

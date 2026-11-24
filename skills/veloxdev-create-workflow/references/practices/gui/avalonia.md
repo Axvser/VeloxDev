@@ -83,11 +83,11 @@ The decorator has two hit-test-transparent layers: the grid at the bottom and th
 
 Retained views overriding `Render(DrawingContext)`, with the render-ready gate as the first line.
 
-⚙ Slot anchors are measured in **screen space** and converted with `SlotAnchorFromVisualCenter`, the same frame contract as WPF.
+⚙ Slot anchors are measured in **scroll space** and converted with `SlotAnchorFromVisualCenter`, the same frame contract as WPF.
 
 ## Focus
 
-⚙ Avalonia's focus API is not WPF's: `IFocusManager.ClearFocus()` exists, but there is no `IsKeyboardFocused` — use `IsFocused` or `IsKeyboardFocusWithin`. A control that takes focus can make the surrounding `ScrollViewer` jump, so turn off `BringIntoViewOnFocusChange` around programmatic focus. The adapter compiles against 11.1.0 and the demos reference 11.3.0, so keep focus code valid on both.
+⚙ Avalonia's focus API is not WPF's: `IFocusManager.ClearFocus()` exists, but there is no `IsKeyboardFocused` — use `IsFocused` or `IsKeyboardFocusWithin`. A control that takes focus can make the surrounding `ScrollViewer` jump, so turn off `BringIntoViewOnFocusChange` around programmatic focus. The adapter compiles against 11.1.0 and the Workflow demos reference 12.0.x, so keep focus code valid on both.
 
 ## Item templates — `VeloxDev.Avalonia.Templates`
 

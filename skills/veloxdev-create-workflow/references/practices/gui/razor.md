@@ -92,6 +92,6 @@ private string BackgroundCss => Background ?? ToCss("TemplateNodeBackground");
 
 A colour can be set at generation time or at render time, which the other packs cannot do.
 
-⚙ **There is no decorator with a `RulerBand` to ask.** The surface passes its `RulerThickness` parameter straight into `Tree.SetVirtualizeInset(left: RulerThickness, top: RulerThickness)`, so nodes under the ruler are not culled.
+⚙ **The surface does not ask the decorator fragment for a `RulerBand`.** It passes its own `RulerThickness` parameter straight into `Tree.SetVirtualizeInset(left: RulerThickness, top: RulerThickness)`, so nodes under the ruler are not culled.
 
 ⚙ **The generic node's input slot does not wrap `WorkflowSlotConnectionBehavior`** — `SlotView` already wraps itself, and wrapping twice doubles both the anchor measurement and the gesture. The demo carries the same rule.

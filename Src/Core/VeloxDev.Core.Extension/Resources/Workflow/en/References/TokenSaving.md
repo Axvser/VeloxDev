@@ -9,7 +9,7 @@ Prefer read-side batching and stable handles over unnecessary re-reading:
 | ResolveSlotId × 2 + ConnectSlots | **ConnectByProperty** | 2 calls |
 | ListNodes + GetNodeDetail × N + ListConnections | **GetFullTopology** | N+1 calls |
 
-> **Large results are capped, not delivered whole.** `GetFullTopology` takes `maxNodes`, `GetExecutionLog` takes `maxEntries`, and `ListNodes`/`FindNodes` take `maxNodes`/`maxMatches`; a capped reply reports `truncated` and the total. Every tool result is also replaced by a truncation envelope past the host's character limit. When a reply says it was truncated, narrow the query — do not repeat the same call.
+> **Large results are capped, not delivered whole.** `GetFullTopology` takes `maxNodes`, `GetExecutionLog` takes `maxEntries`, and `ListNodes`/`FindNodes` take `maxNodes`/`maxMatches`; a capped reply reports `truncated` and the total. A tool result over the host's character limit is replaced by a truncation envelope. When a reply says it was truncated, narrow the query — do not repeat the same call.
 
 **Other efficiency tools:**
 
@@ -18,7 +18,7 @@ Prefer read-side batching and stable handles over unnecessary re-reading:
 - **SearchForward / SearchReverse / SearchAllRelative** — graph traversal without walking connections manually.
 - **IsConnected** — check reachability in one call.
 - **FindPath** — shortest route between two nodes.
-- **ExecuteNodes** — trigger the receive path on multiple nodes at once.
+- **ExecuteNodes** — trigger the receive path on several nodes in one call (each is awaited in turn).
 - **ValidateWorkflow** — check for issues before prompting the user.
 - **ListCreatableTypes** — discover available node/slot types.
 - **ResolveSlotId** — get slot ID by property name without full GetNodeDetail.

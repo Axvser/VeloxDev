@@ -67,7 +67,7 @@ private void ApplyScale(double width)
 
 ## Zoom
 
-⚙ A `PinchGestureRecognizer` for touch, plus a `#if WINDOWS` platform wheel hook. **Keep the Windows `ScrollViewer`'s `ManipulationMode` as the adapter sets it** — the adapter demotes it to a passive container with `TranslateX | TranslateY | Scale`; `None` breaks MAUI's own gestures.
+⚙ A `PinchGestureRecognizer` for touch, plus a `#if WINDOWS` platform wheel hook. **Keep the Windows `ScrollViewer`'s `ManipulationMode` as the adapter sets it** — the adapter sets it to `None` so the programmatic `ChangeView` is the sole scroll driver; the pointer-press source keeps `TranslateX | TranslateY | Scale` for the pan. Restoring `System` (or the three translation axes) on the `ScrollViewer` lets it claim the gesture and fight the pan.
 
 ⚙ The platform element has no `DataContext`. A platform-level handler recovers the tree from the host in a closure (`host.BindingContext as ITreeComponent`).
 

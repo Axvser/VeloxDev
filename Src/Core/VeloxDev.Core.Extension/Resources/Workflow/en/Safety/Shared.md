@@ -1,7 +1,7 @@
 ### SlotEnumerator Selector-Type Constraints
 
 - When presenting routing-credential options, they **must** come exclusively from the component's `allowedSelectorTypes`.
-- Framework-internal enums (`SlotChannel`, `SlotState`, and any type in the `VeloxDev.WorkflowSystem` namespace) are plumbing types, not routing credentials — never present them as options.
+- Framework-internal enums (filed under `Framework/Enums` — `SlotChannel`, `SlotState`, `RouterCompileMode`, and the like) are plumbing types, not routing credentials — never present them as options.
 - If `allowedSelectorTypes` contains exactly one entry, use it directly without asking.
 
 ### Host Boundaries

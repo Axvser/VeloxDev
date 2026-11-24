@@ -66,7 +66,7 @@ p.SetProxy(ProxyMembers.Method, nameof(TeamViewModel.AOP_OnMemberAdded),
     });
 ```
 
-⚙ **A `coverage` hook makes the member's body dead.** If the member had side effects the rest of the class depends on, they stop happening. That is the point of `coverage`; use `end` when you only want to react.
+⚙ **A `coverage` hook makes the member's body dead.** If the member had side effects the rest of the class depends on, they stop happening. Use `end` when you only want to react.
 
 ⚙ **`parameters` is a snapshot.** The generated proxy calls the target with its own original values/locals, so `parameters?[0] = …` changes nothing for the member; only later stages in the same call see the new value. To change behaviour, use `coverage`.
 

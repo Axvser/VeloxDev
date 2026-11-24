@@ -9,23 +9,25 @@ on Easel elements.
 ## Injection
 
 **Install `VeloxDev.WinForms` 12.0.0 or later.** The package contains `EaselVisualAnimator`, an
-`IVisualAnimator` bridge to `VeloxDev.TransitionSystem`; its module initializer installs it as soon as the
-assembly loads, so any Easel trigger action or `VisualTransition` immediately has an engine. No separate
-animation package or manual `AnimationRuntime.Animator` assignment is needed. V12 is the minimum version that
-wires Easel animations automatically.
+`IVisualAnimator` bridge to `VeloxDev.TransitionSystem`, and registers it through a module initializer. A
+module initializer runs before the first execution of code from the assembly — not on reference — so a host
+that installs the package only for the animation backend calls the public bootstrap once at startup:
 
 ```csharp
-[ModuleInitializer]
-internal static void Initialize() => AnimationRuntime.Animator = new EaselVisualAnimator();
+EaselAnimationBootstrap.EnsureRegistered();   // VeloxDev.WinForms.XamlAnimation
 ```
+
+No separate animation package or manual `AnimationRuntime.Animator` assignment is needed.
 
 Consequences:
 
-- Load `VeloxDev.WinForms` before using markup trigger actions or `VisualTransition`; otherwise Easel's null
-  animator throws the explicit "No IVisualAnimator is registered" exception.
+- Ensure a type from `VeloxDev.WinForms` has run, or call `EaselAnimationBootstrap.EnsureRegistered()`, before
+  using markup trigger actions or `VisualTransition`; otherwise Easel's null animator throws the explicit
+  "No IVisualAnimator is registered" exception.
 - A host may overwrite `AnimationRuntime.Animator` with its own implementation. The most recently assigned
   animator wins.
-- `CanAnimate` reflects VeloxDev's sampler table: a DP with no sampler is rejected at start, not silently held.
+- `CanAnimate` reflects VeloxDev's sampler table and `ISampleable` value types: a DP with neither is rejected at
+  start, not silently held.
 - The bridge writes frames at `Easel.BindingPriority.Animation` and holds the reached value at local precedence
   when the animation completes, is superseded or is stopped. It bridges `IEase` to VeloxDev's `IEaseCalculator`.
 
@@ -53,8 +55,8 @@ Transition<Easel.Visuals.VisualElement>.Create()
 - `T` is the object the transition writes. For an Easel element use `VisualElement` or the concrete control, and
   name a DP-backed property: `Margin`, `Padding`, `Width`, `Height`, `CornerRadius`, `Background`, or a custom
   `[XamlProperty]`.
-- A code-behind transition writes the local priority layer each frame; a style/trigger value is overridden while
-  it runs. Markup actions write `BindingPriority.Animation`.
+- A code-behind transition writes frames at `BindingPriority.Animation`, the same layer a markup action
+  writes, so either overrides a style/trigger value while it runs.
 - A DP-backed setter invalidates through `AffectsMeasure`/`AffectsArrange`/`AffectsRender`: `Margin`, `Padding`,
   `Width` and `Height` are `AffectsMeasure`; `Opacity`, `Transform`, `Transform3D`, `Clip` and `Effect` are
   `AffectsRender`. On a raw `Visual` (not a `VisualElement`), `Opacity`, `Transform`, `Clip` and `Effect` are
@@ -67,7 +69,7 @@ Transition<Easel.Visuals.VisualElement>.Create()
 
 VeloxDev's samplers cover `double`, `float`, `int`, `long`, `Color`, `Point`, `PointF`, `Size`, `SizeF`,
 `Rectangle`, `RectangleF` (and nullable `RectangleF`), `Vector2/3/4`, `Quaternion`, `Padding`, `Thickness`,
-`Brush` (`Easel.Brush`) and `Matrix` (`System.Drawing.Drawing2D.Matrix`). `decimal`, `bool`, `string` and enums have no sampler and are
+`Brush` (`Easel.Brush`), `Transform3D` (`Easel.Transform3D`) and `Matrix` (`System.Drawing.Drawing2D.Matrix`). `decimal`, `bool`, `string` and enums have no sampler and are
 rejected/unsampled; register an `ISampler` for a custom type before animating it.
 
 ## Workflow-view specifics
@@ -77,8 +79,8 @@ rejected/unsampled; register an `ISampler` for a custom type before animating it
   concurrently with a pan/zoom gesture. Animate a card, not the camera, unless you own the gesture lifecycle.
 - The parent `Viewbox`/camera scales a node's design grid; an animation inside the node template runs in design
   coordinates and is scaled with the card.
-- Native islands (a focused `TextBox` editor, `NativeControlHost`, the workflow minimap HUD) are not part of the
-  visual animation.
+- Native islands (the focused text editor's IME window, OS file dialogs) are not part of the visual animation;
+  the workflow minimap, HUD and slot views are `VisualElement`s in the same tree.
 - Stop/dispose animations when a pooled view is recycled; a reused view must not keep an animation writing its
   old DataContext.
 

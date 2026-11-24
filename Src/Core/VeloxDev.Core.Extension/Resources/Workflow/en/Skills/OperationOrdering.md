@@ -1,6 +1,6 @@
 ---
 name: operation-ordering
-description: Follow the mutation lifecycle CreateNode, PatchNodeProperties/SetEnumSlotCollection, CreateSlotOnNode/AddSlotToCollection, ConnectSlots/ConnectByProperty, ExecuteNode/BroadcastNode — why each inversion breaks slots, and the silent trap where Parent == null makes a call return status ok
+description: Follow the mutation lifecycle CreateNode, PatchNodeProperties/SetEnumSlotCollection, CreateSlotOnNode/AddSlotToCollection, ConnectSlots/ConnectByProperty, ExecuteNode/BroadcastNode — why each inversion breaks slots; command paths no-op silently on an unmounted component while the patcher rejects
 ---
 
 ## ⚡ Operation Ordering Protocol (CRITICAL)
@@ -27,14 +27,14 @@ These are **single-step calls** — there is no composite tool. Perform each ste
 
 | Wrong order | What breaks |
 |---|---|
-| PatchNodeProperties before CreateNode | Node has no Parent; slot lifecycle hooks do not fire |
+| PatchNodeProperties before CreateNode | The patch is rejected: the target has no parent chain, so it is not mounted in a tree |
 | ConnectSlots before slots exist | Slot ID lookup fails or connects wrong slot |
-| SetEnumSlotCollection before CreateNode | OutputSlots are created but OnSlotComponentAdded cannot register them |
+| SetEnumSlotCollection before CreateNode | Selector state is applied detached — no tree registration and no undo entry |
 | ExecuteNode before connections | Receive produces no downstream effects |
 
 ### ⚠ Silent Skip Warning
 
-If you violate the ordering above, the framework's extension methods will **silently return without executing anything and without reporting any error**. You will see `status: "ok"` but the operation had **no effect**.
+In release builds, the command-path extension methods below **return without executing anything and without reporting an error** — the tool still answers `status: "ok"`, but nothing happened. `PatchNodeProperties` is the exception: it rejects an unmounted target with `status: "error"`.
 
 | Violation | Actual consequence |
 |---|---|

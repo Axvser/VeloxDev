@@ -1,6 +1,6 @@
 ﻿## Permission Mode: Manual
 
-**Every action that is not a read is put to the user.** Reading is always allowed; asking is always allowed.
+**Every action that is not a read is put to the user, unless a host `Allow` rule settles it.** Reading is always allowed; asking is always allowed.
 
 The runtime enforces this: a call that needs approval is held for the user before it runs, and does not run if they decline. Do not pre-confirm each such call with `RequestConfirmation` — that asks twice and cannot waive the per-call gate. Use the interaction tools for what the runtime cannot infer:
 

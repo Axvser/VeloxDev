@@ -39,7 +39,7 @@ TickManager.Start("physics");
 
 ⚙ **The attribute and the call together start the loop.** `InitializeTickable()` registers the behaviour; `TickManager.Start(channel)` starts the channel. Registration is a queue push: the update pump drains it before its next frame is sampled, so `Awake` → `Start` run there, always before the first `Update`, whether you registered before or after `Start`.
 
-⚙ **Call `InitializeTickable()` on a constructed instance, after its constructor.** The drain runs on the channel's update pump — a background thread or an async task, depending on `UseAsyncLoop` — so a call from the constructor can run `Awake` before construction finishes.
+⚙ **Call `InitializeTickable()` on a constructed instance, after its constructor.** The drain runs on the channel's update pump, so a call from the constructor can run `Awake` before construction finishes.
 
 ## Where to read next
 
@@ -61,7 +61,7 @@ TickManager.Start("physics");
 
 ## Reference
 
-⚙ `Examples/Tickable/WPF/Demo` — the working sample. The window itself is the tickable (`[Tickable(DemoChannel.Name)]` on `MainWindow`, in `MainWindow.Hooks.cs`; `DemoChannel.Name` is `TickManager.DEFAULT_CHANNEL`), registered in `Loaded`. Its hooks integrate a ball through `Update` and `FixedUpdate` so the two pumps can be compared, and the window half only polls, formats and draws. Close calls `CloseTickable()` and then a deliberately **un-awaited** `StopAsync` — the pumps are background threads or tasks depending on `UseAsyncLoop`, and the stop waits up to 1000 ms, so awaiting would only make the close look stuck.
+⚙ `Examples/Tickable/WPF/Demo` — the working sample. The window itself is the tickable (`[Tickable(DemoChannel.Name)]` on `MainWindow`, in `MainWindow.Hooks.cs`; `DemoChannel.Name` is `TickManager.DEFAULT_CHANNEL`), registered in `Loaded`. Its hooks integrate a ball through `Update` and `FixedUpdate` so the two pumps can be compared, and the window half only polls, formats and draws. Close calls `CloseTickable()` and then a deliberately **un-awaited** `StopAsync` — the stop waits up to 1000 ms, so awaiting would only make the close look stuck.
 
 ⚙ `Src/Core/VeloxDev.Core/TimeLine/` — `TickableAttribute`, `TickManager`, `FrameEventArgs` and its `TimeLineEventArgs` base; `TickChannelEventArgs` and `TickBehaviorErrorEventArgs` are declared in the same file as `TickManager`.
 

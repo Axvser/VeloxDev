@@ -80,7 +80,7 @@ Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持�
 1. **启动** —— `StartCompiledWorkflow(nodeIndex, seed?)` 立刻返回句柄；运行继续在宿主线程上进行。
 2. **轮询** —— `GetCompiledRunStatus(handle)` 报告 `isRunning`、`runStatus`、`outcome`（`Completed` / `Cancelled` / `Failed`——`runStatus` 的 `Stopped` 同时覆盖失败与取消，`outcome` 才是准确读数）、`isPaused`、attempts、failures、最终数据与日志尾部。弄丢句柄时用 `ListCompiledRuns` 找回。
 3. **暂停或结束** —— `PauseCompiledRun` / `ResumeCompiledRun` / `StopCompiledRun`。
-4. **从检查点续跑** —— `ContinueCompiledWorkflow(...)` 从已保存的检查点继续，而不是从入口节点重跑。
+4. **从检查点续跑** —— `ContinueCompiledWorkflow(...)` 从已保存的检查点继续：已记为完成的节点不会被再次驱动。
 5. **回收** —— `ClearFinishedRuns` 释放已结束的句柄；仍在运行的不会被碰。
 
 会等待结果的入口——`RunCompiledWorkflow`、`GetNodeResult`、`ExecuteNode`、`ExecuteNodes`、`BroadcastNode`、`ReverseBroadcastNode`——接受 `timeoutMs`。与其让一个卡住的节点拖住整轮对话，不如设超时。超时的调用返回错误；已经执行的部分不会回滚，继续之前先查明跑了什么。

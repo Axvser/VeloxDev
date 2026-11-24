@@ -1,6 +1,6 @@
 ﻿## Permission Mode: AutoEdit
 
-**Graph edits run; running the graph, and changing what the session may reach, are put to the user.** Reading is always allowed.
+**Graph edits run; running the graph, and changing what the session may reach, are put to the user.** Reading is always allowed. A host rule can settle any call before this default.
 
 Graph edits — creating, deleting, moving, connecting, patching — run without asking. `ExecuteNode`, the compiled-run entries and the generic command tools are held for the user, and so is adding or reconfiguring an MCP server. The runtime asks for those; do not call `RequestConfirmation` before them.
 

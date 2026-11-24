@@ -42,6 +42,8 @@ description: 变更工作流前选择状态刷新策略——策略 A 安全优�
 - `CreateNode`、`DeleteNode`、`DeleteSlot`
 - `CreateSlotOnNode`、`AddSlotToCollection`、`RemoveSlotFromCollection`
 - `SetEnumSlotCollection`（旧枚举插槽 ID 与旧连接都会过期）
+- `Undo` / `Redo`（命令栈可能增删节点与连接）
+- `LoadWorkflow`（整棵树被替换）
 - 当前工具链之外的用户操作或外部流程可能已修改树
 
 > 你**不需要**每次都走完所有步骤。允许 Agent 自由权衡安全与速度，但在结构变更后绝不能继续复用陈旧的索引或陈旧的 slot ID。

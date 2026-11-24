@@ -27,7 +27,7 @@ Generated output renders types fully qualified — `System.Int32`, `System.Strin
 
 When nothing in the hierarchy already supplies the notification plumbing, the class also receives `INotifyPropertyChanging` / `INotifyPropertyChanged`, the `PropertyChanging` / `PropertyChanged` events, and `public virtual void OnPropertyChanging(string)` / `OnPropertyChanged(string)` (non-virtual when the class is sealed). A base that already supplies them is reused.
 
-⚙ **The callbacks take `(oldValue, newValue)` in one method.** That is the true signature; do not carry over CommunityToolkit's `OnNameChanging(value)`.
+⚙ **The callbacks take `(oldValue, newValue)` in one method.** Do not carry over CommunityToolkit's `OnNameChanging(value)`.
 
 ⚙ **Naming:** one leading `_` is dropped and the next character upper-cased; otherwise just the first character. `_index` → `Index`, `title` → `Title`, `intervalMilliseconds` → `IntervalMilliseconds`, `m_value` → `M_value`. There is no camel-case splitting: `user_name` → `User_name`, not `UserName`.
 
@@ -40,7 +40,7 @@ When nothing in the hierarchy already supplies the notification plumbing, the cl
 
 ⚙ The field form always emits a `public` property. The property form preserves the accessibility and accessor visibility you declared.
 
-⚙ The property form synthesises a field by lower-casing only the first character: `InputSlot` → `_inputSlot`, `URL` → `_uRL`. For a workflow slot property, generated code depends on that exact name (`InitializeWorkflowCore` references it), so a hand-written field of a different name breaks it silently. Elsewhere `MVVMWriter.ResolveBackingStorage` emits its own field when the conventional `_camelCase` field is absent: an accessible field of that name is reused; otherwise one is emitted as `private T _name = <default>;`.
+⚙ The property form synthesises a field by lower-casing only the first character: `InputSlot` → `_inputSlot`, `URL` → `_uRL`. For a workflow slot property, generated code depends on that exact name (`InitializeWorkflowCore` references it), so a hand-written field of a different name is silently ignored. Elsewhere `MVVMWriter.ResolveBackingStorage` emits its own field when the conventional `_camelCase` field is absent: an accessible field of that name is reused; otherwise one is emitted as `private T _name = <default>;`.
 
 ⚙ `GetDefaultValue` compares keyword spellings against the rendered `System.*` names, so `bool` / `int` / `string` come out as `default(System.Boolean)` / `default(System.Int32)` / `default(System.String)`, not `false` / `0` / `string.Empty`.
 
@@ -48,7 +48,7 @@ When nothing in the hierarchy already supplies the notification plumbing, the cl
 
 ⚙ **The equality guard short-circuits on `Object.Equals(field, value)`**, except for `float` / `double` (including their nullable forms), which compare bit patterns so `-0.0` and the various `NaN` values are not collapsed.
 
-⚙ **Setter order.** Capture old → slot uninstall → `OnPropertyChanging(name)` → `OnXChanging(old, value)` → collection unsubscribe (and `OnItemRemovedFromX`) → assign → slot install → collection subscribe (and `OnItemAddedToX`) → `OnXChanged(old, value)` → `OnPropertyChanged(name)`. A lifecycle step that fires at the wrong time is explained by that order.
+⚙ **Setter order.** Capture old → slot uninstall → `OnPropertyChanging(name)` → `OnXChanging(old, value)` → collection unsubscribe (and `OnItemRemovedFromX`) → assign → slot install → collection subscribe (and `OnItemAddedToX`) → `OnXChanged(old, value)` → `OnPropertyChanged(name)`.
 
 That is `SetterMode.Default`; on the `FrameworkSetProperty` path (CommunityToolkit/Prism) there is no `Object.Equals` guard — `SetProperty(ref field, value, nameof(X))` does the comparison and assignment — and the slot-install, collection-subscribe and `OnXChanged` steps run inside its `if`. See [interop-and-diagnostics.md](interop-and-diagnostics.md).
 

@@ -132,7 +132,7 @@ Management tools — ten, all registered on a normal scope: `ListMcpServers`, `L
 
 ⚙ **A configuration is not fixed when it is loaded.** `WithServers` re-registers by name at any time, and a server that is already connected follows the new configuration on its next call — connecting first and releasing the old connection only once the new one answers, so a configuration that cannot be reached leaves the working connection serving. `SetMcpServerArguments` does the same for one local server's launch arguments.
 
-⚙ **A server's tools keep their identity across that.** The model holds `McpToolProxy` instances owned by the scope, not the connection's own tools: a rebuild replaces the client underneath, the tool names and objects do not move, and the render is invalidated only when the set of names changes.
+⚙ **A server's tools keep their identity across that.** The model holds `McpToolProxy` instances owned by the scope, not the connection's own tools: a rebuild replaces the client underneath, and the tool names and objects do not move; the provider re-renders on the next turn when `McpScope.Version` advances.
 
 ⚙ **`ListMcpServers` reports how each server was launched** — run mode, package, version, launch arguments, endpoint. The host's connection `Options` are deliberately **not** projected: they carry authorization headers, an OAuth client secret and environment variables.
 
@@ -140,11 +140,11 @@ Management tools — ten, all registered on a normal scope: `ListMcpServers`, `L
 
 ## Prompting
 
-`ProvideProgressiveContextPrompt(language)` builds the system prompt. The shipped resources are `Resources/Workflow/{en,zh}/` — seven `Skills/`, five `References/` and six `Safety/` documents.
+`ProvideProgressiveContextPrompt(language)` builds the system prompt from the shipped resources under `Resources/Workflow/{en,zh}/`.
 
 ⚙ **Language selection maps `Chinese → "zh"` and everything else to `"en"`, with a per-file fallback to English.** A partially translated resource set degrades document by document.
 
-⚙ `GetComponentContext(fullTypeName, language)` maps a name containing `Chinese` to Chinese and every other value to English, even though `AgentLanguages` declares many more members than the two the resource set ships (`Chinese` is an alias of `ChineseSimplified`).
+⚙ `GetComponentContext(fullTypeName, language)` maps a name containing `Chinese` or `chinese` to Chinese and every other value to English, even though `AgentLanguages` declares many more members than the two the resource set ships (`Chinese` is an alias of `ChineseSimplified`).
 
 ⚙ The safety documents are prose injected into the prompt. They change what the model is *told*, not what the code lets it do.
 
