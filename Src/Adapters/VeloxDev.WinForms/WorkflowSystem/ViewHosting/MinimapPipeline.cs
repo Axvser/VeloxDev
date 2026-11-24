@@ -42,18 +42,21 @@ public sealed class MinimapRenderer : IMinimapRenderer<Graphics>
 }
 
 /// <summary>
-/// Reports the WinForms surface scroll state to the minimap pipeline and applies navigation scroll.
+/// Reports the WinForms surface camera state to the minimap pipeline and applies navigation targets.
 /// </summary>
 /// <remarks>
-/// The WinForms camera keeps a signed pan with no native ceiling, while the Core pipeline clamps its scroll to
-/// <c>[0, ScrollableWidth]</c>. Both offsets are shifted by a large constant so the pipeline's arithmetic stays in
-/// a non-negative range; subtracting the same content offset again in <see cref="ApplyScroll"/> hands the surface
-/// the original canvas-local position. The sentinel maxima keep the pipeline away from the tree's layout offsets, so
-/// navigation never grows the model's <see cref="CanvasLayout.NegativeOffset"/> / <see cref="CanvasLayout.PositiveOffset"/>.
+/// The surface pushes canvas-local (world) offsets because the camera already carries the world origin, so
+/// <see cref="ContentOffsetX"/> / <see cref="ContentOffsetY"/> stay zero and the viewport is reported in world units.
+/// The pan camera is signed and has no native ceiling, while the Core pipeline clamps its scroll to
+/// <c>[0, ScrollableWidth]</c> and grows <see cref="CanvasLayout.NegativeOffset"/> / <see cref="CanvasLayout.PositiveOffset"/>
+/// on overshoot. Both offsets are therefore lifted by the same constant, keeping the pipeline's arithmetic
+/// non-negative and its clamp inert; <see cref="ApplyScroll"/> subtracts the shifted content offset again and hands
+/// the surface the original signed world origin. The sentinel maximum keeps navigation from writing the tree's
+/// layout offsets.
 /// </remarks>
 public sealed class MinimapViewportHost : IMinimapViewportHost
 {
-    // 平移是有符号的；把管线用的滚动值整体抬到非负区间，避免 ClampScrollOffset 写布局偏移。
+    // 抬 1e9 而不是 MaxValue：双精度要留出世界坐标的小数位，否则加回去的目标会淹没在量级里。
     private const double ScrollOffsetShift = 1_000_000_000d;
 
     private readonly WorkflowMinimapOverlay owner;
@@ -79,7 +82,6 @@ public sealed class MinimapViewportHost : IMinimapViewportHost
     /// <inheritdoc />
     public double ViewportHeight => owner.ViewportHeight;
 
-    // WinForms 没有原生滚动上限：哨兵上限让导航能到任意位置，也不触发画布扩张。
     /// <inheritdoc />
     public double ScrollableWidth => double.MaxValue;
 

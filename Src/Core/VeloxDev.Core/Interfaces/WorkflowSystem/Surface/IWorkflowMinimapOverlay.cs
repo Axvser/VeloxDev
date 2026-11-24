@@ -14,10 +14,13 @@ namespace VeloxDev.WorkflowSystem;
 /// </summary>
 public interface IWorkflowMinimapOverlay : IWorkflowGridDecorator
 {
-    /// <summary>Viewport width in screen pixels, used to scale the viewport indicator and resolve drags.</summary>
+    /// <summary>
+    /// Viewport width in the surface's scroll space (the same space as the pushed scroll offsets), used to scale
+    /// the viewport indicator and resolve drags.
+    /// </summary>
     double ViewportWidth { get; set; }
 
-    /// <summary>Viewport height in screen pixels.</summary>
+    /// <summary>Viewport height in the surface's scroll space (the same space as the pushed scroll offsets).</summary>
     double ViewportHeight { get; set; }
 
     /// <summary>The workflow tree whose nodes/links the minimap renders.</summary>

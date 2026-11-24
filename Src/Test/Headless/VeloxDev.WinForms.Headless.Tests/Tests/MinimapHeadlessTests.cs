@@ -1,6 +1,7 @@
 using System.Drawing;
 using VeloxDev.AdapterTestKit;
 using VeloxDev.WinForms.Headless.Tests.Infrastructure;
+using VeloxDev.WorkflowSystem;
 using VeloxDev.WorkflowSystem.AttachedBehaviors;
 
 namespace VeloxDev.WinForms.Headless.Tests.Tests;
@@ -71,5 +72,47 @@ public sealed class MinimapHeadlessTests
             "the drag must move the surface viewport horizontally");
         Assert.AreEqual(after.Horizontal, graph.Tree.Helper.Viewport.Horizontal, 1e-3,
             "the pushed tree viewport follows the camera");
+    }
+
+    [TestMethod]
+    public void PushedScrollOffsetsRefreshTheCachedViewportMapping()
+    {
+        var graph = TestGraph.Create();
+        using var view = new TestWorkflowSurface();
+        var minimap = new CapturingMinimap { Name = "PART_Minimap" };
+        view.RootContainer.Add(minimap);
+        WorkflowSurfaceBehavior.SetMinimapOverlayName(view, "PART_Minimap");
+        WorkflowSurfaceBehavior.SetWorkflowTree(view, graph.Tree);
+        ViewPool.SetItemsSource(view.Canvas, graph.Tree.GetHelper().VisibleItems);
+        ViewPool.SetTemplateSelector(view.Canvas, new TestVisualTemplateSelector());
+        WorkflowSurfaceBehavior.SetIsEnabled(view, true);
+
+        Render(view);
+        var before = minimap.LastContext!.ViewportBounds.Left;
+
+        // 相机每帧推入偏移，但 MinimapMetrics 的相等比较看不出它变了；覆盖层必须显式标脏。
+        minimap.ScrollOffsetX += 400d;
+        Render(view);
+        var after = minimap.LastContext!.ViewportBounds.Left;
+
+        Assert.AreNotEqual(before, after, 1e-3, "pushing a scroll offset must refresh the cached mapping");
+    }
+
+    private static void Render(TestWorkflowSurface view)
+    {
+        view.RenderSurface();
+        view.RenderSurface();
+        System.Windows.Forms.Application.DoEvents();
+    }
+
+    private sealed class CapturingMinimap : WorkflowMinimapOverlay
+    {
+        public MinimapDrawContext? LastContext { get; private set; }
+
+        protected override void DrawMinimap(Graphics graphics, MinimapDrawContext context)
+        {
+            LastContext = context;
+            base.DrawMinimap(graphics, context);
+        }
     }
 }

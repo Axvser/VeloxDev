@@ -93,7 +93,7 @@
 |---|---|---|
 | 1 | **启用表面顺手改 Win32 窗口样式（七家里唯一）**：`Attach` 给 `VisualHost` 上 `WS_CLIPCHILDREN`、给顶层窗体上 `WS_EX_COMPOSITED` | `WorkflowSurfaceBehavior.Attach` 里 `EnsureClipChildren` / `EnsureComposited` |
 | 2 | **滚轮从 `VisualHost.OnMouseWheel` 进入视觉 `PointerWheel`**：先路由 Core 再按 Ctrl 缩放 / Shift 横滚 / 默认竖滚 | `VisualHost.OnMouseWheel` → `WorkflowSurfaceBehavior.HandleWheel` |
-| 3 | **小地图不订阅节点**：只收表面推来的偏移；`ComputeLayout` 在绘制时读 `WorkflowTree.Nodes`，表面 `ApplyCamera` 负责 `Invalidate` | `WorkflowMinimapOverlay.ComputeLayout`、`WorkflowSurfaceBehavior.ApplyCamera` |
+| 3 | **小地图的滚动空间是有符号世界坐标，靠平移塞进 Core 的非负区间**：`MinimapViewportHost` 把 scroll / content 同抬 `1e9`、两轴上限报 `MaxValue`，管线的 `[0,max]` 夹取因此不生效、也不写 `CanvasLayout` 偏移；`ApplyScroll` 再减回去得到世界原点 | `ViewHosting/MinimapPipeline.cs` 的 `MinimapViewportHost` 与 `ScrollOffsetShift` |
 | 4 | **Ctrl 判定是位测试**：`(modifiers & Keys.Control) != 0`，Ctrl+Shift+滚轮也缩放；单独 Shift 时横滚 | `HandleWheel` |
 | 5 | **视觉相机是实际缩放**：上滚 `zoom *= 1.1`，与用 `Scale` 坍缩的六家手指方向一致 | `HandleWheel` / `ZoomAt` |
 
@@ -115,17 +115,9 @@
 
 `EnsureTree` 把非 1 的 `layout.Scale` 复位到 1。外部再写 `Layout.Scale` 会被覆盖，缩放应从相机走。
 
-### 4.5 小地图脱离表面会冻住
-
-它不自带节点订阅；单独用这份控件时节点移动不重画。
-
-### 4.6 视图几何在 `VisualHost` 的 DPI 下
+### 4.5 视图几何在 `VisualHost` 的 DPI 下
 
 `VisualHost` 按 `DeviceDpi/96` 物理渲染；相机、模型、装饰偏移是逻辑 DIP。物理客户区/标尺/小地图/滚动条宽经 `DpiScale` 换算。`VisualHost.LogicalClientSize` 是除回后的逻辑尺寸。
-
-### 4.7 连线被卡片/浮层 HWND 盖住的那段不可悬停
-
-指针落在小地图/HUD 的真窗口上时视觉树收不到 `PointerMoved`；只有画在空白区域的那段可命中。
 
 ## 五、外部参照
 

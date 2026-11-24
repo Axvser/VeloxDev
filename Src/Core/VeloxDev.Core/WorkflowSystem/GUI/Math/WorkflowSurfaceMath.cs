@@ -89,7 +89,7 @@ public static class WorkflowSurfaceMath
     ///
     /// <paramref name="max"/> is supplied by the caller because each adapter computes the scroll extent
     /// differently (WPF/WinUI/Avalonia: <c>Extent − Viewport</c>; MAUI: <c>ActualSize − ScrollViewer</c>
-    /// with NaN guards; WinForms has no overscroll expansion at all and does not call this method).
+    /// with NaN guards; WinForms reports a sentinel maximum through its viewport host, so no expansion can trigger).
     ///
     /// <paramref name="threshold"/> is a dead-band on the overshoot magnitude: the canvas only expands when
     /// the overshoot exceeds it. WPF/Avalonia/WinUI pass <c>0</c> (always expand); the MAUI minimap passes
@@ -307,7 +307,7 @@ public static class WorkflowSurfaceMath
     /// <summary>
     /// Converts a canvas-local target into a scroll offset that centers it on the viewport:
     /// <c>scroll = local − viewportSize/2 + contentOffset</c>. The caller then clamps/expands via
-    /// <see cref="ClampScrollOffset"/>.
+    /// <see cref="ClampScrollOffset"/> against the range its viewport host reports.
     /// </summary>
     public static (double ScrollX, double ScrollY) MinimapToScroll(
         double localX, double localY, double viewportWidth, double viewportHeight,

@@ -33,7 +33,7 @@
 | `ViewPool` | 附着行为（薄壳，与工作流无关） | `PART_Canvas` 上设 `ItemsSource`/`TemplateSelector`；任一变化或 `Refresh` 重建 `ViewSourcePipeline` | 一个 item 一个视觉子元素；按首次挂载时的模板 `Panel.ZIndex` 插位（连线在节点前），回收交给 Core，`Changed` 每批一次 |
 | `ViewSourcePipeline` + `ViewHosting/` 九项 | Core `ViewSourcePipelineCore<Panel,VisualElement,IWorkflowComponent,NonPriority,…>` 的闭包 | 工厂走 `VisualTemplateSelector`；容器留在画布上隐藏复用；调度器有句柄用 `BeginInvoke`、无句柄同步跑 | `ViewFactory` / `ViewContainer` / `ViewScheduler` / `ViewArranger` / `ViewMeasureHost` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` |
 | `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` | `VisualElement` 附着行为 | 节点/插槽模板在指定元素上开 `IsEnabled` 并给 `CoordinateHostName` | 槽测量写 `slot.Anchor`、标题行拖动、按下-释放在接收口连接 |
-| `WorkflowMinimapOverlay` | `VisualElement, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource` | 模板派生，只给调色板；与 `PART_SurfaceBorder` 同级进 tree 根 `Grid` | 定位、拖拽映射、`ScrollOffsetX/Y` |
+| `WorkflowMinimapOverlay` | `VisualElement, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource` | 模板派生，只给调色板；与 `PART_SurfaceBorder` 同级进 tree 根 `Grid` | 调色板、绘制钩子、推入偏移（setter 标脏）、指针喂给输入层与捕获丢失收尾；映射/放置/拖拽算术在 Core `MinimapPipelineCore` |
 | `WorkflowInfoOverlay` | `VisualElement` | 模板直接实例化；绑定 `PART_GridDecorator` 的偏移 | 六行 HUD，视口取 `PART_SurfaceBorder.Bounds` |
 | `VisualTemplateSelector` | 抽象基类 | 派生类按 item 类型返回 `NodeView`/`SlotView`/`LinkView` | `SelectTemplate(object?)` → `VisualElement?` |
 | `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | Core 契约 | 网格装饰器/小地图是模板角色，适配器只留契约 | 表面每次刷新推偏移 |
@@ -76,7 +76,7 @@
 
 1. **`WorkflowSurfaceBehavior` 的非 `VisualHost` 分支没有可渲染内容**：`Attach` 里 `if (host is not VisualHost) return;`；把行为挂到普通控件上不会报错，只是界面空着。宿主必须是 `VisualHost`。
 2. **部件名找不到静默跳过**：`FindVisualNamed` 不抛不报，漏名时对应能力静默缺失。
-3. **`WorkflowMinimapOverlay` 不订阅节点**：节点移动的重画由表面补，脱离表面单独用时缩略图会冻住。
+3. **小地图的推入偏移必须自己标脏**：`WorkflowMinimapOverlay` 的 `ScrollOffsetX/Y`、`ContentOffsetX/Y`、`ViewportWidth/Height` 不在 `MinimapMetrics` 里，`Metrics` 的相等比较看不出变化；setter 漏掉 `pipeline.Invalidate()` 时相机在动、小地图视口块不动（`ApplyCamera` 的 `InvalidateVisual` 只重画、不重算映射）。
 4. **`ThemeValueConverters.cs` 的类名与 `System.Drawing` 撞名**：用 GDI+ 那个必须全限定（`System.Drawing.ColorConverter` / `FontConverter`）。
 5. **`NativeWindowStyleHelper` 里 `WS_CLIPCHILDREN` 与 `WS_EX_COMPOSITED` 同为 `0x02000000`**，却写向两个不同 index；不要按值合并。`CompositedMaxControlCount = 100` 是设计取舍。
 6. **视觉相机方向**：上滚 `zoom *= 1.1`，下滚 `/1.1`，夹在 `0.1..10`。

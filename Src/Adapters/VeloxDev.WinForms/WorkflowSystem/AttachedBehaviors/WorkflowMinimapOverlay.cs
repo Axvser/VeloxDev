@@ -47,6 +47,17 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
     private readonly MinimapInputHost _inputHost;
     private readonly MinimapPipeline _pipeline;
 
+    // 拖拽期间盯住宿主的原生捕获，丢失时替管线收尾。
+    private VisualHost? _captureHost;
+
+    // 相机每帧推入这六个值；它们不在 MinimapMetrics 里，Metrics 的相等比较看不出变化，必须显式标脏。
+    private double _scrollOffsetX;
+    private double _scrollOffsetY;
+    private double _contentOffsetX;
+    private double _contentOffsetY;
+    private double _viewportWidth = 1;
+    private double _viewportHeight = 1;
+
     /// <summary>Creates the overlay as a full-surface layer.</summary>
     public WorkflowMinimapOverlay()
     {
@@ -92,22 +103,38 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
     /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public double ScrollOffsetX { get; set; }
+    public double ScrollOffsetX
+    {
+        get => _scrollOffsetX;
+        set { if (_scrollOffsetX == value) return; _scrollOffsetX = value; _pipeline.Invalidate(); }
+    }
 
     /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public double ScrollOffsetY { get; set; }
+    public double ScrollOffsetY
+    {
+        get => _scrollOffsetY;
+        set { if (_scrollOffsetY == value) return; _scrollOffsetY = value; _pipeline.Invalidate(); }
+    }
 
     /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public double ContentOffsetX { get; set; }
+    public double ContentOffsetX
+    {
+        get => _contentOffsetX;
+        set { if (_contentOffsetX == value) return; _contentOffsetX = value; _pipeline.Invalidate(); }
+    }
 
     /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public double ContentOffsetY { get; set; }
+    public double ContentOffsetY
+    {
+        get => _contentOffsetY;
+        set { if (_contentOffsetY == value) return; _contentOffsetY = value; _pipeline.Invalidate(); }
+    }
 
     /// <summary>Always zero: the minimap reserves no ruler band of its own.</summary>
     public double RulerBand => 0;
@@ -115,12 +142,20 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
     /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public double ViewportWidth { get; set; } = 1;
+    public double ViewportWidth
+    {
+        get => _viewportWidth;
+        set { if (_viewportWidth == value) return; _viewportWidth = value; _pipeline.Invalidate(); }
+    }
 
     /// <inheritdoc />
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public double ViewportHeight { get; set; } = 1;
+    public double ViewportHeight
+    {
+        get => _viewportHeight;
+        set { if (_viewportHeight == value) return; _viewportHeight = value; _pipeline.Invalidate(); }
+    }
 
     /// <inheritdoc />
     [Browsable(false)]
@@ -291,6 +326,7 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
                 Margin = MinimapMargin,
             },
         };
+        _pipeline.IsVisible = IsMinimapVisible;
     }
 
     private void OnPipelineRenderRequested(object? sender, EventArgs e)
@@ -326,6 +362,7 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
         _inputHost.IsPressed = true;
         if (_pipeline.PointerPressed())
         {
+            TrackCaptureLoss();
             args.Handled = true;
         }
     }
@@ -350,11 +387,54 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
         _inputHost.IsPressed = false;
         if (!_pipeline.IsDragging)
         {
+            ReleaseCaptureTracking();
             return;
         }
 
         _pipeline.PointerReleased();
+        ReleaseCaptureTracking();
         args.Handled = true;
+    }
+
+    // 宿主丢失原生捕获（窗口失活、被别的控件抢走）时抬起不会再送到这里；
+    // 自己收尾一次，否则管线的 dragging 卡住，之后每次按下都会被它拦下。
+    private void TrackCaptureLoss()
+    {
+        var surface = Surface;
+        if (ReferenceEquals(_captureHost, surface))
+        {
+            return;
+        }
+
+        ReleaseCaptureTracking();
+        _captureHost = surface;
+        if (surface is not null)
+        {
+            surface.MouseCaptureChanged += OnSurfaceCaptureChanged;
+        }
+    }
+
+    private void ReleaseCaptureTracking()
+    {
+        if (_captureHost is null)
+        {
+            return;
+        }
+
+        _captureHost.MouseCaptureChanged -= OnSurfaceCaptureChanged;
+        _captureHost = null;
+    }
+
+    private void OnSurfaceCaptureChanged(object? sender, EventArgs e)
+    {
+        if (_captureHost is { Capture: true })
+        {
+            return;
+        }
+
+        ReleaseCaptureTracking();
+        _inputHost.IsPressed = false;
+        _pipeline.PointerCaptureLost();
     }
 
     /// <inheritdoc />
@@ -363,6 +443,7 @@ public class WorkflowMinimapOverlay : VisualElement, IWorkflowMinimapOverlay, IW
         if (disposing)
         {
             // 流水线持有树的属性订阅；覆盖层释放时要一并退订，否则被移除的树仍被这张视图钉住。
+            ReleaseCaptureTracking();
             _pipeline.RenderRequested -= OnPipelineRenderRequested;
             _pipeline.Dispose();
         }
