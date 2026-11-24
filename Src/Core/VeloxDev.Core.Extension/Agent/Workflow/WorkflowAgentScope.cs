@@ -251,14 +251,14 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
             ?? ((usage.InputTokenCount ?? 0) + (usage.OutputTokenCount ?? 0)));
     }
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ITreeComponent, SemaphoreSlim> TreeGates = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ITreeComponent, ToolGate> TreeGates = new();
 
     /// <summary>
-    /// One tool call at a time per tree, shared by every scope over that tree (and by every subsystem the scope
-    /// composes). Every category takes it: queries enumerate the same collections writes mutate, so they are
-    /// serialized with writes rather than exempted.
+    /// The tree's tool gate, shared by every scope over that tree (and by every subsystem the scope composes):
+    /// reads and interactions run shared, edits and executions exclusive. One instance per tree is what makes
+    /// "no read overlaps a write" a property of the tree rather than of a scope.
     /// </summary>
-    internal SemaphoreSlim MutationGate => TreeGates.GetValue(Tree, static _ => new SemaphoreSlim(1, 1));
+    internal ToolGate TreeGate => TreeGates.GetValue(Tree, static _ => new ToolGate());
 
     private Func<string, ITreeComponent>? _workflowLoader;
 

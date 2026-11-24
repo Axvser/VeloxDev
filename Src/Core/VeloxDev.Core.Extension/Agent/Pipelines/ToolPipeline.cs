@@ -61,10 +61,19 @@ public sealed class ToolPipeline(Func<AgentTranscript?>? transcript = null, Func
     public Func<int?>? MaxResultChars { get; set; }
 
     /// <summary>
-    /// The gate that serializes tool calls across every scope on one tree, resolved per call.
-    /// <c>null</c> leaves calls ungated. Every category takes it — reads and interactions included — because the
-    /// graph is read by queries too, and a query enumerating it while another scope writes is as unsafe as two
-    /// writers. The sub-agent wait tool is the only exemption.
+    /// The tree's readers-writer gate, resolved per call. Reads and interactions take it shared; edits and
+    /// executions take it exclusive. <c>null</c> leaves this path unused. The sub-agent wait tool stays ungated.
+    /// </summary>
+    /// <remarks>
+    /// Preferred over <see cref="MutationGate"/> when both are set. A host that supplies only the old semaphore
+    /// keeps full mutual exclusion for every call.
+    /// </remarks>
+    public Func<ToolGate?>? ToolGate { get; set; }
+
+    /// <summary>
+    /// The legacy whole-tree semaphore, resolved per call: every category that takes it runs alone.
+    /// <c>null</c> leaves calls ungated. Kept for hosts built against the first shape; new hosts should set
+    /// <see cref="ToolGate"/>, which lets reads overlap while preserving "no read overlaps a write".
     /// </summary>
     public Func<SemaphoreSlim?>? MutationGate { get; set; }
 

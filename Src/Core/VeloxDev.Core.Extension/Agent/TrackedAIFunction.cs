@@ -25,10 +25,11 @@ namespace VeloxDev.AI;
 /// waits on this wrapper's own task, which run on the caller's thread, not the UI's.
 /// </para>
 /// <para>
-/// The tree's gate is taken for <b>every</b> call, not only for mutations: the graph is read by queries too, and a
-/// query that enumerates it while another scope writes is as unsafe as two writers. The gate is keyed by the tree and
-/// shared by every scope over it, so sub-agents are serialized with their parent. The single exemption is the
-/// sub-agent wait tool, which must not hold the gate while the children it waits for need it.
+/// The tree's gate is taken for <b>every</b> call: reads and interactions shared, edits and executions exclusive.
+/// A read that enumerates the live graph while an edit removes a node is as unsafe as two concurrent edits, but two
+/// reads have nothing to serialize — sharing the gate is what keeps sub-agent fan-out from running one query at a
+/// time. The gate is keyed by the tree and shared by every scope over it. The single exemption is the sub-agent wait
+/// tool, which must not hold the gate while the children it waits for need it.
 /// </para>
 /// <para>
 /// A tool that is not an <see cref="AIFunction"/> cannot be wrapped and is passed through unchanged; see
@@ -112,12 +113,22 @@ internal sealed class TrackedAIFunction(
         if (_pipeline is not null)
             await _pipeline.PublishAsync(new AgentToolCallStarted(Name), cancellationToken);
 
-        // One call at a time per tree, whatever its category and whichever scope it came from. Writes stay
-        // exclusive; reads, interactions and executions are serialized with them because a read enumerating
-        // the live graph while a write mutates it is the same failure two concurrent writes would produce.
-        var treeGate = _gated ? _tools.MutationGate?.Invoke() : null;
-        if (treeGate is not null)
-            await treeGate.WaitAsync(cancellationToken);
+        // Per tree: readers overlap, a writer runs alone. The shared path keeps a sub-agent fan-out from
+        // serializing its own queries; the exclusive path keeps every read out of a mutation.
+        IDisposable? lease = null;
+        if (_gated)
+        {
+            if (_tools.ToolGate?.Invoke() is { } treeGate)
+            {
+                lease = await treeGate.EnterAsync(Access, cancellationToken);
+            }
+            else if (_tools.MutationGate?.Invoke() is { } legacyGate)
+            {
+                // The old shape: one semaphore, every call alone. Hosts built against it keep its guarantee.
+                await legacyGate.WaitAsync(cancellationToken);
+                lease = new SemaphoreLease(legacyGate);
+            }
+        }
 
         try
         {
@@ -138,8 +149,21 @@ internal sealed class TrackedAIFunction(
         }
         finally
         {
-            treeGate?.Release();
+            lease?.Dispose();
         }
+    }
+
+    // 读与交互只读图，可以并行；编辑与执行改图，必须独占。
+    private ToolAccess Access
+        => _category is AgentActionCategory.Edit or AgentActionCategory.Execute
+            ? ToolAccess.Exclusive
+            : ToolAccess.Shared;
+
+    private sealed class SemaphoreLease(SemaphoreSlim gate) : IDisposable
+    {
+        private SemaphoreSlim? gate = gate;
+
+        public void Dispose() => Interlocked.Exchange(ref gate, null)?.Release();
     }
 
     /// <summary>

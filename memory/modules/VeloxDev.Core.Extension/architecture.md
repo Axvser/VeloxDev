@@ -137,7 +137,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 **全局这一道看到的 `result` 往往是 `JsonElement`，不是 `string`**：`AIFunctionFactory` 把字符串返回值包成 `JsonElement`，`TrackedAIFunction.CapResult` 必须同时量两种形态的长度。只认 `string` 时这道闸对全部内置工具静默失效（实测：200 字符上限下 `ListNodes` 仍返回 10251 字符）。
 
-**一树一次工具调用**：`WorkflowAgentScope.MutationGate` 是 `ConditionalWeakTable<ITreeComponent, SemaphoreSlim>` 里的每树一把锁，`TrackedAIFunction` 对**所有类别**取它（`Read` / `Interact` 也取）—— 查询同样在枚举 `Nodes`/`Links`，与写并发是同一类故障。唯一豁免是 `SubAgentAgentToolkit` 的 `WaitSubAgents`（`TrackedAIFunction` 的 `gated: false`）：它要等孩子跑完，而孩子继续跑就要取同一把门。同一棵树上两个 scope 的工具调用因此串行，父子 scope 也一样。它防的是交错，不是 lost update（没有版本检查）。
+**一树一道读写门**：`WorkflowAgentScope.TreeGate` 是 `ConditionalWeakTable<ITreeComponent, ToolGate>` 里的每树一个 `ToolGate`（FIFO 异步读写门）。`TrackedAIFunction` 按类别取模式：`Read` / `Interact` 取 `ToolAccess.Shared`，`Edit` / `Execute` 取 `ToolAccess.Exclusive`；同一批读者可并发，写者与所有调用互斥。FIFO 保证连续读不饿死写者，取消的等待者不占槽。唯一豁免是 `SubAgentAgentToolkit` 的 `WaitSubAgents`（`TrackedAIFunction` 的 `gated: false`）：它要等孩子跑完，而孩子继续跑就要取同一把门。父 scope 与子 scope 共享同一把门；它防的是读写交错，不是 lost update（没有版本检查）。宿主若只给了旧的 `ToolPipeline.MutationGate`（`SemaphoreSlim`），退化为全互斥。
 
 **图的保存/恢复在工具面上**：`SerializeWorkflow` 默认 `mode=full` 返回 `Tree.Serialize()`；`skeleton` 只给节点位置/类型/槽数与链接，`summary` 只给计数/类型分布/槽位统计，两者都走 `CapText(maxChars)` 的截断信封。`LoadWorkflow` 走 `WorkflowAgentScope.WithWorkflowLoader`（默认 `TreeDefaultViewModel` 反序列化）**换掉 scope 的 `Tree`**，并触发 `TreeChanged` —— 宿主必须把画布重新绑到新树，否则界面还连着旧树。
 
@@ -155,7 +155,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 1. **工具只从 provider 出，不从 `ChatOptions.Tools` 出。** 理由见上（并集不去重）。
 2. **每个 scope 一个 `WorkflowAgentToolkit`、一个 `ToolPipeline`、一个 `WorkflowAgentContextProvider`。** 工具计数与状态都在 toolkit 实例上，但**计数不再是三个裸字段**：每个 toolkit 持一个 `ToolCallLedger`（`WorkflowAgentToolkit._ledger`），根 scope 的账本 `Outer == null`，被 spawn 出来的子 scope 经 `WorkflowAgentScope.ParentLedger` 接到父的账本上。换实例 = 换账本；**没有父子关系时账本的每个成员逐字退化成那三个计数器**，这是既有预算测试仍然有意义的前提。`WorkflowAgentScope.CreateToolkit()` 是 `_toolkit ??= new(this, ParentLedger)`，`CreateTools` 每次调用**新建工具列表**但复用同一个账本。这与 `ProvideTools()`（一次快照）的区别写在 `skills/veloxdev-drive-workflow-with-ai/SKILL.md` 的「`ProvideTools()` still exists, but it is a one-shot snapshot」那段。详见 `sub-agents.md` §二。
-   **每个工具调用还有树级的串行**：`MutationGate` 由树本身（`ConditionalWeakTable`）持有，跨 scope 共享，`TrackedAIFunction` 对**所有类别**取（只豁免 `WaitSubAgents`）。多 scope 同树的读写因此不会交错。
+   **每个工具调用还有树级的一道门**：`ToolGate` 由树本身（`ConditionalWeakTable`）持有，跨 scope 共享；`Read`/`Interact` 共享、`Edit`/`Execute` 独占（只豁免 `WaitSubAgents`）。多 scope 同树的读写因此不会交错，读与读可以并行。
 3. **提示词按三个时钟切成三份，各有各的载体。** 混起来就会得到一个每轮重建 870 KB、或者永远过期的提示词。
 
 | 内容 | 变化时钟 | 载体 | 缓存键 |
@@ -209,7 +209,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 | 工具清单 / 分类 / 某个工具的 JSON 形状 | `Agent/Workflow/Functions/WorkflowAgentToolkit.cs` |
 | 哪些工具算「只读」、脏标记怎么落 | `WorkflowAgentToolkit.BuildQueryToolNames` + `AccountAsync` / `AccountingStage`（`IsQueryTool` 只管预算分档；标脏见 §三 第 7 步） |
 | 结果规模（分页、截断信封、全局字符上限） | `WorkflowAgentToolkit` 各工具的 `max*` 参数 + `CappedJson`；全局那道在 `TrackedAIFunction.CapResult` / `ToolPipeline.MaxResultChars`（scope：`WithMaxToolResultChars`） |
-| 并发（多 scope 同树） | `WorkflowAgentScope.MutationGate` + `TrackedAIFunction` 的取锁分支 |
+| 并发（多 scope 同树） | `WorkflowAgentScope.TreeGate`（`ToolGate`）+ `TrackedAIFunction` 的取门分支（共享/独占） |
 | 图的保存/恢复 | `SerializeWorkflow` / `LoadWorkflow`、`WorkflowAgentScope.WithWorkflowLoader` / `TreeChanged` |
 | token 账 | `WorkflowAgentScope.WithMaxTokens` / `TokenUsageStage` / `ResetTokenUsage`；事件在 `Agent/Pipelines/AgentEvent.cs` |
 | 工具预算（三档、拒绝文案、重置流程） | `WorkflowAgentToolkit.CheckInvocation`、`AccountAsync`、`ResetToolCallLimit`、`BudgetRefusal` 的根/子分叉、`Agent/Workflow/Functions/ToolCallLedger.cs`（树共享的那口锅）。**上限本身**由 `WithMax{Tool,Read,Write}ToolCalls` 设，三个都 `BumpVersion()` —— 门（`CheckInvocation`）读的是实时属性，包络读的是缓存文本，不 bump 就会让模型读到一个不被执行的上限。**`Bypass` 是门的例外**：三道次数上限跳过、账也不记（`AccountAsync`），包络（`AppendBudgets`）相应改说「Bypass 模式下不生效」——文案与门必须同源，否则模型会围着一堵不存在的墙规划 |

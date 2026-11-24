@@ -86,7 +86,7 @@
 
 **`dropped` 必定回报**，而且理由文案按成因分叉，**每一条都指出是哪一堵墙**：超出父能力 / 父没开这个开关（`TrySpawn` 的 `dropped` 文案）/ 父的读或写档位不够（`ApplyCap`）/ 父不允许跑节点业务代码（`RequestableNodeExecution`）/ 父不在某个 `allowedGenericCommands` 的白名单里（`RequestableCommands`）/ 授予了零个技能因而连技能工具一起收走（授予零技能时收走技能工具那段）。**能给出的集合与报告出去的名字必须是同一个集合**：授权清单里出现一个孩子拿不到的名字，等于让模型围绕一个不存在的能力做计划 —— 这正是 MCP 那条缺陷（§3.1）的另一面。
 
-**没有「无 UI 上下文 ⇒ 变更类工具全被 drop」这道闸门**（`GetAvailableTools` 一带没有它）。**为什么不做这道闸**：父与子的工体之间**唯一的串行化来源**是 `TrackedAIFunction` 的编组，没有 UI 上下文就没有串行化，后台孩子改图是真的在和父竞态。**答案是**把宿主自己的 UI 上下文转交给孩子（`child.WithSynchronizationContext(parent.UIContext)`，`TrySpawn` 里的转交）**而不是收回权限** —— 于是孩子仍然串行化到同一个泵上，只是这个事实由继承表达，不再由拒绝表达。**代价**：一个没有 UI 上下文的无头宿主，其孩子也能改图，而它没有任何东西替它们串行化；`WithNoUIContext_TheSurfaceIsStillTheParentsOwn` 与 `TheUIContext_ChangesNothingAboutWhatIsGranted` 一起钉的就是「有没有上下文，授出面逐字相同」。
+**没有「无 UI 上下文 ⇒ 变更类工具全被 drop」这道闸门**（`GetAvailableTools` 一带没有它）。**为什么不做这道闸**：图访问由树门（`WorkflowAgentScope.TreeGate`，见 `architecture.md` §四 第 2 条）串行化，但工体要跑在组件绑定的那个线程上 —— 后者才是转交 UI 上下文要解决的问题。**答案是**把宿主自己的 UI 上下文转交给孩子（`child.WithSynchronizationContext(parent.UIContext)`，`TrySpawn` 里的转交）**而不是收回权限** —— 于是孩子仍然编组到同一个泵上，这个事实由继承表达。**代价**：一个没有 UI 上下文的无头宿主，其孩子也能改图，而改动发生在不属于组件的线程上；`WithNoUIContext_TheSurfaceIsStillTheParentsOwn` 与 `TheUIContext_ChangesNothingAboutWhatIsGranted` 一起钉的就是「有没有上下文，授出面逐字相同」。
 
 ### 3.2 技能与 MCP：名字表达不了，所以给的是**视图**
 
@@ -202,9 +202,9 @@
 
 **`CheckInvocation` 的顺序是有讲究的**：逃生舱（`ResetToolCallLimit` 无条件放行）→ 禁用 → 权限模式拒绝 → **根锅 → 本层额度 → 读/写分档（`Bypass` 下整段跳过）** → token 上限。根锅排在**本层之前**，因为它更硬、且是模型唯一绕不过去的墙；报错时必须指名对的那堵墙，否则模型会围绕错误的限制做推理。根 scope 上这条**跳过**（`CheckInvocation` 里跳过根锅的那段），不然同一个计数器会对同一个上限报两次。禁用判定排在最前，所以「被关掉的工具」永远赢 —— 这是宿主能对孩子单独关掉一把工具的唯一入口（`TrySpawn` 末尾那个循环），而**它不对任何一类工具做无条件关停**（没有 `NoChildMayHold`，§四）。
 
-**五个工具全部计入只读**（`BuildQueryToolNames` 把 `SubAgentAgentToolkit.ToolNames` 并进 `QueryToolNames`）：spawn/wait/cancel 既不改图，也只该花读预算。标脏已改为无条件，与这条分类无关。`ASpawnIsAQuery_AndSoIsNotChargedToTheMutationBudget` 连「读预算花光时 spawn 会被拒」一起钉住。
+**五个工具全部计入只读**（`BuildQueryToolNames` 把 `SubAgentAgentToolkit.ToolNames` 并进 `QueryToolNames`）：spawn/wait/cancel 既不改图，也只该花读预算。`ASpawnIsAQuery_AndSoIsNotChargedToTheMutationBudget` 连「读预算花光时 spawn 会被拒」一起钉住。
 
-**唯一不取树门的是 `WaitSubAgents`**（`SubAgentAgentToolkit.CreateTools(ToolPipeline, AgentPipeline)` 里 `gated: !IsWaitTool(...)` 传给 `TrackedAIFunction`）：它要等孩子跑完，而孩子继续跑就要取同一把门；持门等待只能等到超时。它不读写图，放行是安全的。同理，`SpawnSubAgent` 的 `autoMarkDirty` 参数已无意义（`Description` 写明「ignored」）—— 标脏由框架无条件负责。
+**唯一不取树门的是 `WaitSubAgents`**（`SubAgentAgentToolkit.CreateTools(ToolPipeline, AgentPipeline)` 里 `gated: !IsWaitTool(...)` 传给 `TrackedAIFunction`）：它要等孩子跑完，而孩子继续跑就要取同一道门（`ToolGate`）；持门等待只能等到超时。它不读写图，放行是安全的。同理，`SpawnSubAgent` 的 `autoMarkDirty` 参数不起作用（`Description` 写明「ignored」）。
 
 ---
 

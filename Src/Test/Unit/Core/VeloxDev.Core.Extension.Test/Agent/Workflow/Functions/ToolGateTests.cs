@@ -11,8 +11,8 @@ using VeloxDev.WorkflowSystem;
 namespace VeloxDev.Core.Extension.Test.Agent.Workflow.Functions;
 
 /// <summary>
-/// The two guarantees every tool call carries: it is serialized with every other call on the same tree
-/// (queries included), and it leaves the tree marked dirty so the host's frame driver recomputes the canvas.
+/// The two guarantees every tool call carries: it respects the tree's gate (a read waits for a write; reads do
+/// not wait for each other), and it leaves the tree marked dirty so the host's frame driver recomputes the canvas.
 /// </summary>
 [TestClass]
 public class ToolGateTests
@@ -43,26 +43,44 @@ public class ToolGateTests
             .AsTask().GetAwaiter().GetResult();
 
     [TestMethod]
-    public async Task EveryToolCall_WaitsForTheTreeGate()
+    public async Task Query_WaitsWhileAWriteHoldsTheGate()
     {
         var (scope, _) = NewScope();
-        var gate = scope.MutationGate;
+        var lease = await scope.TreeGate.EnterAsync(ToolAccess.Exclusive, CancellationToken.None);
 
-        await gate.WaitAsync();
         var call = Task.Run(() => WorkflowToolInvoker.Invoke(scope, "ListNodes"));
         try
         {
             await Task.Delay(150);
             Assert.IsFalse(
                 call.IsCompleted,
-                "a query enumerates the graph, so it must wait for the same gate a write holds");
+                "a query enumerates the graph, so it must wait while an edit holds the tree exclusively");
         }
         finally
         {
-            gate.Release();
+            lease.Dispose();
         }
 
-        Assert.IsTrue(call.Wait(TimeSpan.FromSeconds(10)));
+        Assert.IsTrue(call.Wait(TimeSpan.FromSeconds(15)));
+    }
+
+    [TestMethod]
+    public async Task Queries_DoNotWaitForEachOther()
+    {
+        var (scope, _) = NewScope();
+        var first = await scope.TreeGate.EnterAsync(ToolAccess.Shared, CancellationToken.None);
+
+        var call = Task.Run(() => WorkflowToolInvoker.Invoke(scope, "ListNodes"));
+        try
+        {
+            Assert.IsTrue(
+                call.Wait(TimeSpan.FromSeconds(15)),
+                "a second reader enters while the first is still inside the gate");
+        }
+        finally
+        {
+            first.Dispose();
+        }
     }
 
     [TestMethod]
@@ -92,14 +110,13 @@ public class ToolGateTests
     public async Task UngatedTool_IsTheOnlyCallThatRunsWhileTheGateIsHeld()
     {
         var (scope, _) = NewScope();
-        var gate = scope.MutationGate;
-        var tools = new ToolPipeline { MutationGate = () => gate };
+        var tools = new ToolPipeline { ToolGate = () => scope.TreeGate };
         Func<string> body = () => "ok";
         var probe = AIFunctionFactory.Create(body, "GateProbe");
         var gated = new TrackedAIFunction(probe, tools);
         var ungated = new TrackedAIFunction(probe, tools, gated: false);
 
-        await gate.WaitAsync();
+        var lease = await scope.TreeGate.EnterAsync(ToolAccess.Exclusive, CancellationToken.None);
         try
         {
             var blocked = Task.Run(() => Invoke(gated));
@@ -113,7 +130,28 @@ public class ToolGateTests
         }
         finally
         {
-            gate.Release();
+            lease.Dispose();
+        }
+    }
+
+    [TestMethod]
+    public async Task LegacyMutationGate_StillSerializesEverything()
+    {
+        using var legacy = new SemaphoreSlim(1, 1);
+        var tools = new ToolPipeline { MutationGate = () => legacy };
+        Func<string> body = () => "ok";
+        var gated = new TrackedAIFunction(AIFunctionFactory.Create(body, "LegacyProbe"), tools);
+
+        await legacy.WaitAsync();
+        try
+        {
+            var blocked = Task.Run(() => Invoke(gated));
+            await Task.Delay(150);
+            Assert.IsFalse(blocked.IsCompleted, "a host that only supplies the old semaphore keeps full exclusion");
+        }
+        finally
+        {
+            legacy.Release();
         }
     }
 }

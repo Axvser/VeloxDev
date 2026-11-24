@@ -276,7 +276,7 @@ public sealed class WorkflowAgentToolkit
         Refuse = CheckInvocation,
         Confirm = ConfirmMutationAsync,
         MaxResultChars = () => _scope.MaxToolResultChars,
-        MutationGate = () => _scope.MutationGate,
+        ToolGate = () => _scope.TreeGate,
     };
 
     /// <summary>
