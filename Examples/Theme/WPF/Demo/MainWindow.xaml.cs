@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Media = System.Windows.Media;
 using VeloxDev.DynamicTheme;
 using VeloxDev.TransitionSystem;
 
@@ -193,7 +194,7 @@ public partial class MainWindow
 
     // 覆盖本实例某个主题下的一个值，并可还原：覆盖胜过声明值，只有真正改动的属性会进活动缓存。
     private void OnEditThemeValue(object sender, RoutedEventArgs e)
-        => SetThemeValue<Light>(nameof(Background), new object?[] { "#fff4d6" });
+        => SetThemeValue<Light>(nameof(Background), new Media.SolidColorBrush(Media.Color.FromRgb(0xFF, 0xF4, 0xD6)));
 
     private void OnRestoreThemeValue(object sender, RoutedEventArgs e)
         => RestoreThemeValue<Light>(nameof(Background));

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using VeloxDev.DynamicTheme;
@@ -201,7 +202,7 @@ public partial class MainWindow
 
     // 覆盖本实例某个主题下的一个值，并可还原：覆盖胜过声明值，只有真正改动的属性会进活动缓存。
     private void OnEditThemeValue(object? sender, RoutedEventArgs e)
-        => SetThemeValue<Light>(nameof(Background), new object?[] { "#fff4d6" });
+        => SetThemeValue<Light>(nameof(Background), new SolidColorBrush(Color.Parse("#fff4d6")));
 
     private void OnRestoreThemeValue(object? sender, RoutedEventArgs e)
         => RestoreThemeValue<Light>(nameof(Background));

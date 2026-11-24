@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using System;
 using VeloxDev.DynamicTheme;
 using VeloxDev.TransitionSystem;
@@ -82,7 +83,7 @@ public partial class MainWindow
     private void ThemeValueEx()
     {
         // 动态编辑主题资源值
-        SetThemeValue<Light>(nameof(Background), new object?[] { "#ffffff" });
+        SetThemeValue<Light>(nameof(Background), new SolidColorBrush(Colors.White));
         // 可还原到初始状态
         RestoreThemeValue<Light>(nameof(Foreground));
 

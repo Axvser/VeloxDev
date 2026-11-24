@@ -80,7 +80,7 @@ namespace Demo
         private void ThemeValueEx()
         {
             // 动态编辑主题资源值
-            SetThemeValue<Light>(nameof(Background), new object?[] { "#ffffff" });
+            SetThemeValue<Light>(nameof(Background), new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White));
             // 可还原到初始状态
             RestoreThemeValue<Light>(nameof(Foreground));
 
