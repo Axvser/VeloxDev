@@ -1,6 +1,6 @@
 # 适配器公共管线
 
-Core 定义契约与泛型组合根，适配器只实现窄层 —— 与 [view-hosting.md](view-hosting.md) 的 ViewSource 同一形状。七家已迁移（Razor 与 WinForms 的表面滚动有明确例外）；公共 API 随 `12.2.0` 发布。
+Core 定义契约与泛型组合根，适配器只实现窄层 —— 与 [view-hosting.md](view-hosting.md) 的 ViewSource 同一形状。七家已迁移（Razor 与 WinForms 的表面滚动有明确例外）；公共 API 随 `12.3.0` 发布。
 
 ## 小地图
 
