@@ -1,13 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using VeloxDev.WorkflowSystem;
+using VeloxDev.WorkflowSystem.ViewHosting;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -16,6 +14,11 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// links, and the visible viewport in the top-right corner.
 /// Only the viewport indicator rectangle can be dragged to navigate.
 /// </summary>
+/// <remarks>
+/// Tree subscription, content/viewport mapping, placement and drag math live in the Core
+/// <see cref="MinimapPipeline"/>. This class keeps the dependency properties, the platform drawing,
+/// and the mouse handlers that feed the input layer.
+/// </remarks>
 public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 {
     // ── 依赖属性 ────────────────────────────────────────────────────────────
@@ -38,7 +41,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     public static readonly DependencyProperty WorkflowTreeProperty =
         DependencyProperty.Register(nameof(WorkflowTree), typeof(ITreeComponent), typeof(WorkflowMinimapOverlay),
-            new FrameworkPropertyMetadata(null, (d, e) => ((WorkflowMinimapOverlay)d).OnTreeChanged((ITreeComponent?)e.NewValue)));
+            new FrameworkPropertyMetadata(null, (d, e) => ((WorkflowMinimapOverlay)d).OnTreeValueChanged((ITreeComponent?)e.NewValue)));
 
     public static readonly DependencyProperty ViewportWidthProperty =
         DependencyProperty.Register(nameof(ViewportWidth), typeof(double), typeof(WorkflowMinimapOverlay),
@@ -178,19 +181,16 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
     // ── 状态 ────────────────────────────────────────────────────────────────
 
-    private WorkflowBounds _lastGlobalBounds;
-    private readonly List<(double X, double Y, double W, double H)> _lastNodeRects = [];
-    private WorkflowBounds _lastViewport;
-    private bool _pendingRefresh = true;
-    private bool _isDragging;
-    private readonly HashSet<INodeComponent> _subscribedNodes = [];
-    private readonly HashSet<ILinkComponent> _subscribedLinks = [];
-    private ITreeComponent? _subscribedTree;
-    private ScrollViewer? _scrollViewer;
-    private Rect _minimapRect = Rect.Empty;
+    private readonly MinimapPipeline pipeline;
+    private readonly MinimapInputHost inputHost;
+    private ScrollViewer? scrollViewer;
 
     public WorkflowMinimapOverlay()
     {
+        inputHost = new MinimapInputHost(this);
+        pipeline = new MinimapPipeline(new MinimapRenderer(this), new MinimapViewportHost(this), inputHost);
+        pipeline.RenderRequested += OnPipelineRenderRequested;
+
         // 全表面浮层：模板让它铺满表面，小地图自己画在 context 给出的“可用右上角”。
         IsHitTestVisible = true;
         Focusable = true;
@@ -198,38 +198,42 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         Unloaded += OnUnloaded;
     }
 
+    // 拖拽导航要把滚动写回宿主表面，宿主表面按名字解析。
+    internal ScrollViewer? MinimapScrollViewer => scrollViewer;
+
     protected override HitTestResult? HitTestCore(PointHitTestParameters hitTestParameters)
     {
+        RefreshPipelineSettings();
         var pt = hitTestParameters.HitPoint;
-        _minimapRect = ComputeMinimapRect();
-        return _minimapRect.Contains(pt) ? new PointHitTestResult(this, pt) : null;
-    }
-
-    // 可用区来自 surface：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
-    private Rect ComputeMinimapRect()
-    {
-        var width = Math.Max(0, RenderSize.Width);
-        var height = Math.Max(0, RenderSize.Height);
-        var right = AvailableRight > 0 ? AvailableRight : width;
-        var top = Math.Max(0, AvailableTop);
-        var bottom = AvailableBottom > top ? AvailableBottom : height;
-
-        var placement = new MinimapDrawContext
-        {
-            MinimapWidth = MinimapWidth,
-            MinimapHeight = MinimapHeight,
-            MinimapMargin = MinimapMargin,
-            AvailableRight = right,
-            AvailableTop = top,
-            AvailableBottom = bottom,
-        };
-        var bounds = placement.GetMinimapRect(MinimapMinSize);
-        return new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        var bounds = pipeline.MinimapRect;
+        var rect = new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        return rect.Contains(pt) ? new PointHitTestResult(this, pt) : null;
     }
 
     private void OnLoaded(object? s, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(ScrollViewerName)) return;
+        ResolveScrollViewer();
+
+        // 卸载时退过订；重新挂回可视树要把同一棵树重新订上。
+        pipeline.Tree = WorkflowTree;
+        RefreshPipelineSettings();
+    }
+
+    private void OnUnloaded(object? s, RoutedEventArgs e)
+    {
+        // 防内存泄漏：覆盖层从可视树移除时（如关闭标签页），退订所有树事件、清掉对 ViewModel 对象的强引用。
+        pipeline.Tree = null;
+        pipeline.PointerCaptureLost();
+        inputHost.IsPressed = false;
+        scrollViewer = null;
+    }
+
+    private void ResolveScrollViewer()
+    {
+        if (string.IsNullOrWhiteSpace(ScrollViewerName))
+        {
+            return;
+        }
 
         // 沿可视树上溯找 UserControl（名称作用域属主）。UserControl 的 FindName 能找到其 XAML 里所有命名元素，而 Window.FindName 看不进 UserControl 名称作用域。
         DependencyObject? el = this;
@@ -239,245 +243,125 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             {
                 var found = uc.FindName(ScrollViewerName);
                 if (found is ScrollViewer sv)
-                    _scrollViewer = sv;
+                {
+                    scrollViewer = sv;
+                }
+
                 break;
             }
+
             el = VisualTreeHelper.GetParent(el);
         }
     }
 
-    private void OnUnloaded(object? s, RoutedEventArgs e)
-    {
-        // 防内存泄漏：覆盖层从可视树移除时（如关闭标签页），退订所有树事件、清掉对 ViewModel 对象的强引用。
-        UnsubscribeFromTree();
-        _scrollViewer = null;
-    }
+    // ── 设置同步 ────────────────────────────────────────────────────────────
 
-    // ── 树变更/订阅 ────────────────────────────────────────────────────────
-
-    private void OnTreeChanged(ITreeComponent? newTree)
-    {
-        UnsubscribeFromTree();
-        _subscribedTree = newTree;
-        if (newTree is null) return;
-
-        if (newTree.Nodes is INotifyCollectionChanged nc)
-        {
-            nc.CollectionChanged += OnNodesChanged;
-            foreach (var n in newTree.Nodes) SubscribeNode(n);
-        }
-
-        if (newTree.Links is INotifyCollectionChanged lc)
-        {
-            lc.CollectionChanged += OnLinksChanged;
-            foreach (var l in newTree.Links) SubscribeLink(l);
-        }
-
-        _pendingRefresh = true;
-        InvalidateVisual();
-    }
-
-    private void UnsubscribeFromTree()
-    {
-        if (_subscribedTree is not null)
-        {
-            if (_subscribedTree.Nodes is INotifyCollectionChanged nc) nc.CollectionChanged -= OnNodesChanged;
-            if (_subscribedTree.Links is INotifyCollectionChanged lc) lc.CollectionChanged -= OnLinksChanged;
-        }
-        foreach (var n in _subscribedNodes) if (n is INotifyPropertyChanged npc) npc.PropertyChanged -= OnNodePropChanged;
-        _subscribedNodes.Clear();
-
-        foreach (var l in _subscribedLinks)
-        {
-            if (l.Sender is INotifyPropertyChanged s) s.PropertyChanged -= OnSlotPropChanged;
-            if (l.Receiver is INotifyPropertyChanged r) r.PropertyChanged -= OnSlotPropChanged;
-        }
-        _subscribedLinks.Clear();
-        _subscribedTree = null;
-    }
-
-    private void SubscribeNode(INodeComponent n)
-    {
-        if (_subscribedNodes.Add(n) && n is INotifyPropertyChanged npc)
-            npc.PropertyChanged += OnNodePropChanged;
-    }
-
-    private void SubscribeLink(ILinkComponent l)
-    {
-        if (!_subscribedLinks.Add(l)) return;
-        if (l.Sender is INotifyPropertyChanged s) s.PropertyChanged += OnSlotPropChanged;
-        if (l.Receiver is INotifyPropertyChanged r) r.PropertyChanged += OnSlotPropChanged;
-    }
-
-    private void OnNodesChanged(object? s, NotifyCollectionChangedEventArgs e)
-    {
-        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is INodeComponent n) SubscribeNode(n);
-        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is INodeComponent n && _subscribedNodes.Remove(n) && n is INotifyPropertyChanged npc) npc.PropertyChanged -= OnNodePropChanged;
-        MarkDirty();
-    }
-
-    private void OnLinksChanged(object? s, NotifyCollectionChangedEventArgs e)
-    {
-        if (e.NewItems is not null) foreach (var i in e.NewItems) if (i is ILinkComponent l) SubscribeLink(l);
-        if (e.OldItems is not null) foreach (var i in e.OldItems) if (i is ILinkComponent l && _subscribedLinks.Remove(l))
-            {
-                if (l.Sender is INotifyPropertyChanged sp) sp.PropertyChanged -= OnSlotPropChanged;
-                if (l.Receiver is INotifyPropertyChanged rp) rp.PropertyChanged -= OnSlotPropChanged;
-            }
-        MarkDirty();
-    }
-
-    private void OnNodePropChanged(object? s, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(INodeComponent.Anchor) or nameof(INodeComponent.Size))
-            MarkDirty();
-    }
-
-    private void OnSlotPropChanged(object? s, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(ISlotComponent.Anchor))
-            MarkDirty();
-    }
+    private void OnTreeValueChanged(ITreeComponent? tree) => pipeline.Tree = tree;
 
     private static void OnPropChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        => ((WorkflowMinimapOverlay)d).MarkDirty();
+        => ((WorkflowMinimapOverlay)d).OnSettingChanged();
+
+    private void OnSettingChanged()
+    {
+        RefreshPipelineSettings();
+        pipeline.Invalidate();
+    }
+
+    private void OnPipelineRenderRequested(object? s, EventArgs e) => MarkDirty();
 
     private void MarkDirty()
     {
-        _pendingRefresh = true;
-        if (!IsVisible) return;
+        if (!IsVisible)
+        {
+            return;
+        }
 
-        // OnNodePropChanged / OnSlotPropChanged 可能从 TickManager 循环线程触发（经 BroadcastVisibleItemLayout）；InvalidateVisual 必须在 UI 线程，需要时派发。
+        // OnNodePropertyChanged / OnSlotPropertyChanged 可能从 TickManager 循环线程触发（经 BroadcastVisibleItemLayout）；InvalidateVisual 必须在 UI 线程，需要时派发。
         if (Dispatcher.CheckAccess())
+        {
             InvalidateVisual();
+        }
         else
+        {
             Dispatcher.BeginInvoke(InvalidateVisual);
+        }
     }
 
-    // ── 数据刷新 ─────────────────────────────────────────────────────────────
-
-    private void RefreshMinimapData()
+    // 可用区来自 surface：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
+    private void RefreshPipelineSettings()
     {
-        _pendingRefresh = false;
-        var tree = WorkflowTree;
-        if (tree is null) { ClearCache(); return; }
+        var width = Math.Max(0, RenderSize.Width);
+        var height = Math.Max(0, RenderSize.Height);
+        var right = AvailableRight > 0 ? AvailableRight : width;
+        var top = Math.Max(0, AvailableTop);
+        var bottom = AvailableBottom > top ? AvailableBottom : height;
 
-        _lastNodeRects.Clear();
-
-        if (tree.Nodes is not null)
-            foreach (var node in tree.Nodes)
-            {
-                var (nx, ny, nw, nh) = (node.Anchor.Horizontal, node.Anchor.Vertical, node.Size.Width, node.Size.Height);
-                _lastNodeRects.Add((nx, ny, nw, nh));
-            }
-
-        _lastGlobalBounds = WorkflowBounds.FromNodes(_lastNodeRects);
-
-        var vw = Math.Max(1, ViewportWidth);
-        var vh = Math.Max(1, ViewportHeight);
-        _lastViewport = WorkflowBounds.FromNode(
-            WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetX, ContentOffsetX),
-            WorkflowSurfaceMath.ToCanvasLocal(ScrollOffsetY, ContentOffsetY),
-            vw, vh);
+        pipeline.Metrics = new MinimapMetrics
+        {
+            Width = MinimapWidth,
+            Height = MinimapHeight,
+            Margin = MinimapMargin,
+            MinSize = MinimapMinSize,
+            Padding = ContentPadding,
+            NodeCornerRadius = NodeCornerRadius,
+            MinimapCornerRadius = MinimapCornerRadius,
+            MinimumThumbSize = 2d,
+            AvailableRight = right,
+            AvailableTop = top,
+            AvailableBottom = bottom,
+        };
+        pipeline.IsVisible = IsMinimapVisible;
     }
 
-    private void ClearCache()
+    internal void ApplyScrollOffsets(double x, double y)
     {
-        _lastNodeRects.Clear();
-        _lastGlobalBounds = default;
-        _lastViewport = default;
+        scrollViewer?.ScrollToHorizontalOffset(x);
+        scrollViewer?.ScrollToVerticalOffset(y);
     }
 
     // ── 命中测试/拖拽 ──────────────────────────────────────────────────────
 
-    private Rect? GetViewportRectInMinimap()
-    {
-        var vp = _lastViewport;
-        var gb = _lastGlobalBounds;
-        if (vp.IsEmpty || gb.IsEmpty) return default;
-
-        var (ox, oy, mmW, mmH, sc) = ComputeTransform(gb);
-        if (sc <= 0) return null;
-
-        var (l, t, w, h) = WorkflowSurfaceMath.MinimapViewportRect(
-            ox, oy, sc, vp.Left, vp.Top, vp.Width, vp.Height, gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);
-        return new Rect(l, t, w, h);
-    }
-
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
-        if (_isDragging) return;
         var pt = e.GetPosition(this);
-        var rect = _minimapRect.IsEmpty ? ComputeMinimapRect() : _minimapRect;
-        if (!rect.Contains(pt)) return;
-
-        // 与 Jalium 家一致：点击点一律成为视口中心 —— 指示块上没有抓取锚点，按在哪里都重新居中。
-        NavigateToCanvasLocal(pt.X, pt.Y);
-        _isDragging = true;
-        CaptureMouse();
-        e.Handled = true;
+        inputHost.PointerPosition = (pt.X, pt.Y);
+        inputHost.IsPressed = true;
+        if (pipeline.PointerPressed())
+        {
+            e.Handled = true;
+        }
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        if (!_isDragging) return;
         var pt = e.GetPosition(this);
-        NavigateToCanvasLocal(pt.X, pt.Y);
+        inputHost.PointerPosition = (pt.X, pt.Y);
+        if (!pipeline.IsDragging)
+        {
+            return;
+        }
+
+        pipeline.PointerMoved();
         e.Handled = true;
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
-        if (!_isDragging) return;
-        _isDragging = false;
-        ReleaseMouseCapture();
+        inputHost.IsPressed = false;
+        if (!pipeline.IsDragging)
+        {
+            return;
+        }
+
+        pipeline.PointerReleased();
         e.Handled = true;
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
-        _isDragging = false;
+        inputHost.IsPressed = false;
+        pipeline.PointerCaptureLost();
         base.OnLostMouseCapture(e);
-    }
-
-    // ── 变换 ────────────────────────────────────────────────────────────────
-
-    private (double Ox, double Oy, double MmW, double MmH, double Sc) ComputeTransform(WorkflowBounds gb)
-    {
-        var rect = ComputeMinimapRect();
-        _minimapRect = rect;
-        var mmW = Math.Max(1, rect.Width);
-        var mmH = Math.Max(1, rect.Height);
-        var pad = Math.Max(0, ContentPadding);
-        var (ox, oy, sc) = WorkflowSurfaceMath.MinimapFit(gb.Width, gb.Height, mmW - pad * 2, mmH - pad * 2, pad);
-        return (ox, oy, mmW, mmH, sc);
-    }
-
-    private void NavigateToCanvasLocal(double adjX, double adjY)
-    {
-        var gb = _lastGlobalBounds;
-        if (gb.IsEmpty) return;
-        var rect = _minimapRect.IsEmpty ? ComputeMinimapRect() : _minimapRect;
-        adjX -= rect.Left;
-        adjY -= rect.Top;
-        var (ox, oy, _, _, sc) = ComputeTransform(gb);
-        if (sc <= 0) return;
-
-        var (wcx, wcy) = WorkflowSurfaceMath.MinimapToCanvasLocal(adjX, adjY, ox, oy, sc, gb.Left, gb.Top);
-        var (scrollX, scrollY) = WorkflowSurfaceMath.MinimapToScroll(
-            wcx, wcy, ViewportWidth, ViewportHeight, ContentOffsetX, ContentOffsetY);
-
-        if (_scrollViewer is not null && WorkflowTree?.Layout is { } layout)
-        {
-            var maxH = Math.Max(0, _scrollViewer.ScrollableWidth);
-            var maxV = Math.Max(0, _scrollViewer.ScrollableHeight);
-
-            scrollX = WorkflowSurfaceMath.ClampScrollOffset(scrollX, maxH, layout, horizontal: true);
-            scrollY = WorkflowSurfaceMath.ClampScrollOffset(scrollY, maxV, layout, horizontal: false);
-
-            _scrollViewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(scrollX, 0, maxH));
-            _scrollViewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(scrollY, 0, maxV));
-        }
     }
 
     // ── 渲染 ────────────────────────────────────────────────────────────────
@@ -499,16 +383,11 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
     {
         var sz = RenderSize;
         if (sz.Width <= 0 || sz.Height <= 0) return;
-        _minimapRect = ComputeMinimapRect();
-
-        if (!IsMinimapVisible) return;
-        if (_pendingRefresh) RefreshMinimapData();
-        if (WorkflowTree?.Nodes is null || WorkflowTree.Nodes.Count == 0) return;
-
-        var context = CreateDrawContext(sz.Width, sz.Height);
-        if (!context.HasContent) return;
-        DrawMinimap(dc, context);
+        RefreshPipelineSettings();
+        pipeline.Render(dc);
     }
+
+    internal void DrawMinimapSurface(DrawingContext dc, MinimapDrawContext context) => DrawMinimap(dc, context);
 
     /// <summary>
     /// Draws the minimap from <paramref name="context"/>. Override and call <c>base</c> to add to the default drawing.
@@ -559,71 +438,5 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         {
             dc.Pop();
         }
-    }
-
-    /// <summary>Builds the geometry for one draw pass from the cached content and viewport bounds.</summary>
-    private MinimapDrawContext CreateDrawContext(double availableWidth, double availableHeight)
-    {
-        var top = Math.Max(0, AvailableTop);
-        var placement = new MinimapDrawContext
-        {
-            MinimapWidth = MinimapWidth,
-            MinimapHeight = MinimapHeight,
-            MinimapMargin = MinimapMargin,
-            AvailableRight = AvailableRight > 0 ? AvailableRight : availableWidth,
-            AvailableTop = top,
-            AvailableBottom = AvailableBottom > top ? AvailableBottom : availableHeight,
-        };
-        var bounds = placement.GetMinimapRect(MinimapMinSize);
-        var mmW = Math.Max(1, bounds.Width);
-        var mmH = Math.Max(1, bounds.Height);
-        _minimapRect = new Rect(bounds.Left, bounds.Top, mmW, mmH);
-        var gb = _lastGlobalBounds;
-        var pad = Math.Max(0, ContentPadding);
-        var (ox, oy, sc) = WorkflowSurfaceMath.MinimapFit(
-            gb.Width, gb.Height, mmW - pad * 2, mmH - pad * 2, pad);
-
-        var nodes = new List<WorkflowBounds>(_lastNodeRects.Count);
-        var mapped = new List<WorkflowBounds>(_lastNodeRects.Count);
-        foreach (var (nx, ny, nw, nh) in _lastNodeRects)
-        {
-            nodes.Add(WorkflowBounds.FromNode(nx, ny, nw, nh));
-            var (l, t) = WorkflowSurfaceMath.MinimapLocal(nx, ny, gb.Left, gb.Top, ox, oy, sc);
-            mapped.Add(WorkflowBounds.FromNode(l, t,
-                WorkflowSurfaceMath.MinThumbSize(nw, sc, 2.0),
-                WorkflowSurfaceMath.MinThumbSize(nh, sc, 2.0)));
-        }
-
-        var viewport = _lastViewport;
-        var mappedViewport = default(WorkflowBounds);
-        if (!viewport.IsEmpty)
-        {
-            var (vx, vy, vw, vh) = WorkflowSurfaceMath.MinimapViewportRect(
-                ox, oy, sc, viewport.Left, viewport.Top, viewport.Width, viewport.Height,
-                gb.Left, gb.Top, mmW, mmH, minRectSize: 2.0);
-            mappedViewport = WorkflowBounds.FromNode(vx, vy, vw, vh);
-        }
-
-        return new MinimapDrawContext
-        {
-            Tree = WorkflowTree,
-            ContentBounds = gb,
-            ViewportBounds = viewport,
-            Nodes = nodes,
-            MappedNodes = mapped,
-            MappedViewport = mappedViewport,
-            MinimapWidth = mmW,
-            MinimapHeight = mmH,
-            Padding = pad,
-            OriginX = ox,
-            OriginY = oy,
-            Scale = sc,
-            NodeCornerRadius = Math.Max(0, NodeCornerRadius),
-            MinimapCornerRadius = Math.Max(0, MinimapCornerRadius),
-            AvailableRight = placement.AvailableRight,
-            AvailableTop = placement.AvailableTop,
-            AvailableBottom = placement.AvailableBottom,
-            MinimapMargin = placement.MinimapMargin,
-        };
     }
 }
