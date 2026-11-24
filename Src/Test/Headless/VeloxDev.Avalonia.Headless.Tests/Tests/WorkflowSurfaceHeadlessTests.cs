@@ -160,6 +160,60 @@ public sealed class WorkflowSurfaceHeadlessTests
         });
 
     [TestMethod]
+    public void ZoomRefresh_ForcesSlotReMeasurement_EvenWhenTheStampWouldSkipIt()
+        => Run(() =>
+        {
+            var graph = TestGraph.Create();
+            using var surface = new AvaloniaHeadlessSurface(graph);
+
+            var node = graph.Left;
+            var slot = graph.LeftOutput;
+            var slotBorder = new Border
+            {
+                Name = "PART_Slot",
+                Width = 16d,
+                Height = 16d,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                DataContext = slot,
+            };
+            var grid = new Grid();
+            grid.Children.Add(slotBorder);
+            var view = new UserControl
+            {
+                DataContext = node,
+                Width = 160d,
+                Height = 90d,
+                Content = grid,
+            };
+            Canvas.SetLeft(view, node.Anchor.Horizontal);
+            Canvas.SetTop(view, node.Anchor.Vertical);
+
+            var scope = new NameScope();
+            NameScope.SetNameScope(view, scope);
+            scope.Register("PART_Slot", slotBorder);
+            scope.Complete();
+
+            Behaviors.WorkflowSlotLayoutBehavior.SetSlotNames(view, "PART_Slot");
+            Behaviors.WorkflowSlotLayoutBehavior.SetCoordinateHostName(view, "PART_Canvas");
+            Behaviors.WorkflowSlotLayoutBehavior.SetIsEnabled(view, true);
+            surface.Canvas.Children.Add(view);
+            surface.Window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            // 哨兵锚点：布局指纹看不见这次写入（它只看节点几何/实测尺寸/部件数），
+            // 所以只有缩放后的强制重测能把它改回真实中心。
+            slot.Anchor = new Wf.Anchor(-1000d, -1000d, 0);
+
+            Behaviors.WorkflowSurfaceBehavior.RefreshSlotLayouts(surface.Host);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.AreNotEqual(-1000d, slot.Anchor.Horizontal, "the zoom refresh must force a re-measure");
+            Assert.AreEqual(node.Anchor.Horizontal + 8d, slot.Anchor.Horizontal, 1d);
+            Assert.AreEqual(node.Anchor.Vertical + 8d, slot.Anchor.Vertical, 1d);
+        });
+
+    [TestMethod]
     public void ViewPool_CreatesOneViewPerVisibleItem()
         => Run(() =>
         {

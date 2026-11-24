@@ -753,7 +753,29 @@ public sealed class WorkflowSurfaceBehavior : AvaloniaObject
                 fallbackViewer.UpdateLayout();
             }
         }
+
+        // 缩放只改 Scale：节点锚点/尺寸的通知能兜住大部分节点，但「外框与实测尺寸都没变」的节点指纹看不见
+        // transform-only 变化 —— 与 MAUI 同形，在最终布局提交后对画布里的节点视图各强制重测一次。
+        RefreshSlotLayouts(host);
         e.Handled = true;
+    }
+
+    // 一次缩放事件一次；范围是画布的直接子级（池里的节点视图），量级等于可见视图数，和缩放本身
+    // 已经要跑的整树布局同一数量级以下。未启用槽位布局的视图在 Refresh 里是 no-op。
+    internal static void RefreshSlotLayouts(UserControl host)
+    {
+        if (host.GetValue(StateProperty) is not SurfaceState { Canvas: { } canvas })
+        {
+            return;
+        }
+
+        foreach (var child in canvas.Children)
+        {
+            if (child is UserControl view && view.DataContext is INodeComponent)
+            {
+                WorkflowSlotLayoutBehavior.Refresh(view);
+            }
+        }
     }
 
     // 每一次按下都在这里路由一次，并把句柄留在 state 里。隧道相保证它比节点与插槽的处理器更早跑，

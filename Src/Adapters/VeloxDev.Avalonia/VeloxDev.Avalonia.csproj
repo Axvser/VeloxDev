@@ -31,4 +31,9 @@
 		<PackageReference Include="VeloxDev.Core" Version="12.3.0" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<!-- 缩放后的槽位强制重测是内部路径：headless 套件直接驱动它，不把它抬成公开 API。 -->
+		<InternalsVisibleTo Include="VeloxDev.Avalonia.Headless.Tests" />
+	</ItemGroup>
+
 </Project>
