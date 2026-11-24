@@ -464,7 +464,7 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
 
         dc.DrawRoundedRectangle(
             MinimapBackground,
-            MinimapBorderThickness > 0 ? new Pen(MinimapBorderBrush, MinimapBorderThickness) : null,
+            MinimapBorderThickness > 0 ? GetPen(ref _borderPen, MinimapBorderBrush, MinimapBorderThickness) : null,
             rect,
             radius, radius);
 
@@ -480,8 +480,22 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
             var vp = context.MappedViewport;
             dc.DrawRectangle(
                 ViewportFill,
-                ViewportStrokeThickness > 0 ? new Pen(ViewportStroke, ViewportStrokeThickness) : null,
+                ViewportStrokeThickness > 0 ? GetPen(ref _viewportPen, ViewportStroke, ViewportStrokeThickness) : null,
                 new Rect(offsetX + vp.Left, offsetY + vp.Top, vp.Width, vp.Height));
         }
+    }
+
+    // 描边画笔按画刷引用与线宽缓存：小地图每帧重画，但配色只在属性变化时换，不应每帧新建两支 Pen。
+    private Pen? _borderPen;
+    private Pen? _viewportPen;
+
+    private static Pen GetPen(ref Pen? cache, Brush brush, double thickness)
+    {
+        if (cache is null || !ReferenceEquals(cache.Brush, brush) || cache.Thickness != thickness)
+        {
+            cache = new Pen(brush, thickness);
+        }
+
+        return cache;
     }
 }
