@@ -1,6 +1,6 @@
 ## ⚠️ Command-First Rule
 
-**All mutations to the workflow MUST go through commands (IVeloxCommand).** Do NOT call Helper methods directly or set command-backed properties via reflection. Commands handle UI thread dispatching, undo/redo tracking, and view synchronization. Bypassing them causes invisible changes.
+**Every structural mutation goes through commands (IVeloxCommand).** Do NOT call Helper methods directly or set command-backed properties via reflection. Commands handle UI thread dispatching, undo/redo tracking, and view synchronization; bypassing them causes invisible changes. A custom property with no backing command is the one exception — `PatchNodeProperties` / `PatchComponentById` write it directly.
 
 | Operation | Tool | Command Used |
 |---|---|---|
@@ -19,8 +19,8 @@
 | Execute node | ExecuteNode | Node.ReceiveCommand (ITaskContext) |
 | Any other | ExecuteCommandOnNode / ExecuteCommandById | Resolved by name |
 | Patch custom props | PatchNodeProperties / PatchComponentById | Direct (non-command props only) |
-| Add slot to collection | AddSlotToCollection | Collection lifecycle (OnSlotComponentAdded) |
-| Remove slot from collection | RemoveSlotFromCollection | Collection lifecycle (OnSlotComponentRemoved) |
+| Add slot to collection | AddSlotToCollection | Node.CreateSlotCommand |
+| Remove slot from collection | RemoveSlotFromCollection | Slot.DeleteCommand |
 | Set enum on slot collection | SetEnumSlotCollection | Clears + rebuilds enum-driven collection |
 | Find nodes by filter | FindNodes | Introspection (no mutation) |
 | Resolve slot ID by property | ResolveSlotId | Introspection (no mutation) |

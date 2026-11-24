@@ -23,8 +23,8 @@ public enum AgentActionCategory
     Read = 0,
 
     /// <summary>
-    /// Changing the graph: creating, deleting, moving, connecting, patching. Undoable, because every one of
-    /// them goes through the command stack.
+    /// Changing the graph: creating, deleting, moving, connecting, patching, undo/redo. Undoable only where the
+    /// change goes through a command on the stack; direct position, size and property writes are not.
     /// </summary>
     Edit = 1,
 

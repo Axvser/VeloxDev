@@ -43,5 +43,3 @@ description: 遵守变更生命周期 CreateNode、PatchNodeProperties/SetEnumSl
 | 在 `Sender?.Parent?.Parent == null` 的连接上操作 | `DeleteCommand` → **静默无操作** |
 
 **始终**通过 `ListNodes` / `CreateNode` 获取有效的 `nodeIndex` 或 `runtimeId` 后再操作节点内部。除非你刚刚创建或查询了节点，否则不要假设节点存在。
-
-> 每个操作都必须作为独立命令逐步调用——依次执行 `CreateNode` → `PatchNodeProperties` →（如需）`SetEnumSlotCollection` → 插槽 → 连接 → 执行。不存在批量/复合工具。

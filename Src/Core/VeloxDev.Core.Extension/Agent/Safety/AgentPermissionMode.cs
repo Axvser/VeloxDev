@@ -12,9 +12,10 @@
 /// </para>
 /// <para>
 /// Modes separate along the axes the actions actually differ in — reading, editing the graph, running it, and
-/// changing what the session is allowed to reach — not along a single trust percentage. Editing the graph is
-/// undoable through the command stack; running node business code is not; installing a server changes the
-/// machine. <see cref="AutoEdit"/> exists at that first boundary.
+/// changing what the session is allowed to reach — not along a single trust percentage. Structural graph edits
+/// go through the command stack; direct placement, size and property writes do not; running node business code
+/// is not undoable; installing a server changes the machine. <see cref="AutoEdit"/> exists at that first
+/// boundary.
 /// </para>
 /// <para>
 /// A mode is the <i>coarse</i> layer. <see cref="AgentPermissionRule"/> entries sit beneath it and can be
@@ -38,15 +39,14 @@ public enum AgentPermissionMode
     Plan = 0,
 
     /// <summary>
-    /// Every action that is not a read is put to the user first. The default, and the safest mode that can
-    /// still get work done.
+    /// Every action that is not a read is put to the user first. The safest mode that can still get work done.
     /// </summary>
     Manual = 1,
 
     /// <summary>
     /// Graph edits run without asking; running node code, and anything that changes what the session may
-    /// reach, still ask. The boundary is that an edit is a command on the undo stack while running a node is
-    /// not.
+    /// reach, still ask. The boundary is that an edit changes the graph, while running a node executes its
+    /// business code and may have effects the graph does not record.
     /// </summary>
     AutoEdit = 2,
 

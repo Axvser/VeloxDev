@@ -1097,15 +1097,15 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         sb.AppendLine("## Failure Handling Protocol (apply on every error/rejection)");
         sb.AppendLine();
         sb.AppendLine("When a tool returns `error` or `rejected`:");
-        sb.AppendLine("1. Read `message`, `reasons`, `hint`, and `preferredAlternative` — they name the cause and the recommended next tool.");
+        sb.AppendLine("1. Read `message`, `reasons`, `hint`, and `preferredAlternative` — they name the cause, and a hint or preferred alternative may name the next tool.");
         sb.AppendLine("2. Do NOT blindly retry the same call with the same arguments.");
-        sb.AppendLine("3. Verify current state first (`ListNodes`, `GetNodeDetail`, `GetComponentContext`) before any retry — indices and IDs shift after structural changes.");
+        sb.AppendLine("3. Verify current state first (`ListNodes`, `GetNodeDetail`, `ListSlotProperties`) before any retry — indices and IDs shift after structural changes.");
         sb.AppendLine("4. If a `hint` or `preferredAlternative` names another tool, switch to it.");
-        sb.AppendLine("5. If you still cannot make progress after two attempts, stop and ask the user via `RequestConfirmation`, or report the blocker plainly in your reply. Do not loop silently.");
+        sb.AppendLine("5. If you still cannot make progress after two attempts, stop and ask the user via `RequestConfirmation` when that tool is offered, or report the blocker plainly in your reply. Do not loop silently.");
         sb.AppendLine();
         sb.AppendLine("### When a call limit is reached");
         sb.AppendLine();
-        sb.AppendLine("A refusal that names a **limit** is a hard stop, not a retryable error. Every tool call is accepted or refused; once the budget is spent, none of them work until it is reopened.");
+        sb.AppendLine("A refusal that names a **limit** is a hard stop, not a retryable error. Every tool call is accepted or refused; once the budget is spent, none of the others work until it is reopened.");
         sb.AppendLine();
         sb.AppendLine("1. **Do not retry the refused tool**, and do not switch to another tool hoping it is exempt — they all go through the same budget.");
         sb.AppendLine("2. **Do not tell the user you will continue.** You cannot widen your own budget, and saying otherwise is a promise you cannot keep.");
@@ -1255,7 +1255,7 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
 
         result.AppendLine("# Workflow Agent Context");
         result.AppendLine();
-        result.AppendLine("> Agent can learn about the structure of the Workflow Framework and how to Takeover a workflow system with Takeover Protocol.");
+        result.AppendLine("> Agent can learn about the structure of the Workflow Framework and the data types its components use.");
         result.AppendLine("> Agent can read source code from https://github.com/Axvser/VeloxDev");
         result.AppendLine();
 
@@ -1321,31 +1321,20 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         result.AppendLine("These constraints apply to ALL operations.");
         result.AppendLine();
         result.AppendLine("### 0. How the framework reports results — read this first");
-        result.AppendLine("Nearly every tool returns a JSON object with a `status` field: `ok`, `error`, or `rejected`.");
+        result.AppendLine("Most tools return a JSON object with a `status` field; `ok`, `error` and `rejected` are the common values.");
         result.AppendLine("- `ok` — the operation succeeded.");
         result.AppendLine("- `error` — the operation failed; read `message` for the cause.");
-        result.AppendLine("- `rejected` — a connection was refused; read `reasons`, `hint`, and `preferredAlternative`, which tell you exactly what to do next.");
+        result.AppendLine("- `rejected` — a connection was refused; read `reasons`, `hint`, and `preferredAlternative`, which name the cause and any suggested alternative.");
         result.AppendLine("Treat `error`/`rejected` as **actionable feedback**, never as a dead end.");
-        result.AppendLine("A few operations on **unmounted** components are silent no-ops (no error, no effect). If an operation seems to do nothing, first call `ListNodes` / `GetNodeDetail` to verify the component is mounted, then retry. See the Failure Handling Protocol below.");
         result.AppendLine();
         result.AppendLine("### 1. Mount-before-operate");
         result.AppendLine("Nodes MUST be added to the Tree (via `CreateNode`) before any operation on their internals.");
-        result.AppendLine("Operating on an unmounted node (`Parent == null`) results in " + (language == AgentLanguages.Chinese ? "**静默无操作**——框架不报错，操作不生效" : "**silent no-op** — the framework returns without error and the operation has no effect") + ".");
+        result.AppendLine("Most operations on an unmounted node (`Parent == null`) result in " + (language == AgentLanguages.Chinese ? "**静默无操作**——框架不报错，操作不生效" : "**silent no-op** — the framework returns without error and the operation has no effect") + ".");
         result.AppendLine("Always use a `nodeIndex` or `runtimeId` obtained from `ListNodes` / `CreateNode` to reference nodes.");
         result.AppendLine();
         result.AppendLine("### 2. Delete cascading (do NOT pre-clean)");
-        result.AppendLine("Deleting a node (`DeleteNode`) triggers `StandardDelete` which performs an **atomic 4-phase cascade** wrapped in a single undoable action:");
-        result.AppendLine("**Phase 1** — Collect all valid links (both endpoints in the same Tree) via `LinksMap` lookup. Deduplicates them.");
-        result.AppendLine("**Phase 2** — Remove every link: delete from `LinksMap`, `Links`, `Sender.Targets`, `Receiver.Sources`, set `IsVisible = false`.");
-        result.AppendLine("**Phase 3** — Null every slot's `Parent`, then remove node from `tree.Nodes` and null `node.Parent`.");
-        result.AppendLine("**Phase 4** — Batch-update affected slot states via `UpdateState()`.");
-        result.AppendLine("You do NOT need to call `DisconnectSlots` or `DeleteSlot` before `DeleteNode`. The cascade is complete and atomic.");
-        result.AppendLine();
-        result.AppendLine("Deleting a slot (`DeleteSlot`) triggers `StandardDelete` which:");
-        result.AppendLine("**1** — Collects all links touching this slot (both as sender and as receiver) via `LinksMap`.");
-        result.AppendLine("**2** — Delegates to each link's `link.GetHelper().Delete()` (which removes from all 6 collections and calls `UpdateState()` on both endpoints).");
-        result.AppendLine("**3** — Removes the slot from `parent.Slots` and nulls `slot.Parent`. (Undoable when the node is in a Tree; direct removal otherwise.)");
-        result.AppendLine("You do NOT need to manually disconnect slot connections before `DeleteSlot`.");
+        result.AppendLine("Deleting a node (`DeleteNode`) removes its slots and their links atomically in one undoable action; deleting a slot (`DeleteSlot`) removes the links touching it.");
+        result.AppendLine("You do NOT need to call `DisconnectSlots` or `DeleteSlot` before `DeleteNode`.");
         result.AppendLine();
         result.AppendLine("### 3. Connection auto-dedup");
         result.AppendLine("When connecting two nodes that already share a same-direction connection, the framework silently replaces the old connection.");
@@ -1377,7 +1366,7 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         result.AppendLine("- Add/remove slots → `AddSlotToCollection` / `RemoveSlotFromCollection` / `CreateSlotOnNode`");
         result.AppendLine("- Resize → `ResizeNode`");
         result.AppendLine("- Reposition → `SetNodePosition` / `MoveNode`");
-        result.AppendLine("- Reconnect → `DisconnectSlots` then `ConnectSlots` (or `ConnectByProperty`); reconnecting is a two-step command sequence, never one bundled call");
+        result.AppendLine("- Reconnect → `ConnectByProperty` (or `ConnectSlots`); a same-direction connection on the same node pair is replaced automatically. Call `DisconnectSlots` first only when you need the old link removed explicitly");
         result.AppendLine("Only use `DeleteNode` when the user explicitly asks to remove a node, or when in-place mutation is genuinely impossible (e.g. the node type itself must change). If a patch is rejected, first try the suggested alternative tool; if that also fails, delete+recreate is acceptable as a last resort.");
         result.AppendLine();
         result.AppendLine(BuildFailureHandlingProtocol());
@@ -1428,8 +1417,6 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         result.AppendLine("**MANDATE:** when a type's shape matters — you are about to set a property or invoke a command — and its full property/command table is not already in your context, call **GetComponentContext** with its full type name (e.g. `GetComponentContext(\"Demo.ViewModels.HttpNodeViewModel\")`) before writing. Never guess a type's shape from its name or from its one-line summary.");
         result.AppendLine();
         AppendPreloadedComponentSummaries(result);
-        result.AppendLine();
-        result.AppendLine("> Before writing a property or invoking a command whose contract is not already in your context: `GetComponentContext(\"<Full.Type.Name>\")` first.");
         result.AppendLine();
 
         // ── Custom Tools ──

@@ -5,7 +5,7 @@ description: 驱动工作流编译器——CompileWorkflow（Root 计划）与 C
 
 ## 🧭 技能：编译器与编译期路由
 
-WorkflowSystem 内置编译器：把一张子图分解为编译计划——线性段（`ChainSegment`，工具输出中记为 `Execute`）、分支点（`BranchSegment`，记为 `Branch`）、扇出组（`ParallelSegment`，记为 `Parallel`）——并给每个编译感知节点分配固定的**编译身份**。编译工具能给你编译器 UI 看到的同一视图。
+WorkflowSystem 内置编译器：把一张子图分解为编译计划——线性段（`ChainSegment`，工具输出中记为 `Execute`）、分支点（`BranchSegment`，记为 `Branch`）、扇出组（`ParallelSegment`，记为 `Parallel`）——并给每个被编译的节点分配固定的**编译身份**。编译工具能给你编译器 UI 看到的同一视图。
 
 每次编译调用都指定一个节点及其角色：
 - **Root** —— 节点作为启动/入口（如控制器）；沿下游编译它可达的子图。
@@ -15,7 +15,7 @@ WorkflowSystem 内置编译器：把一张子图分解为编译计划——线�
 
 | 入口 | 工具 | 驱动对象 | 语义 |
 |---|---|---|---|
-| **节点级** | `ExecuteNode` / `ExecuteNodes` | 单个节点（其自身 `ReceiveAsync`，经 `ReceiveCommand`） | `EXEC`/`RECV`；若节点 `AutoBroadcast` 开启，可能级联下游。 |
+| **节点级** | `ExecuteNode` / `ExecuteNodes` | 单个节点（其自身 `ReceiveAsync`，经 `ReceiveCommand`） | `EXEC`/`RECV`；由节点自身的接收逻辑决定是否向下游转发。 |
 | **链级（Root）** | `RunCompiledWorkflow(nodeIndex)` | 从启动/入口节点开始的整条编译链 | 注入 `IRuntimeContext` 会话、选分支、处理回退；下游派发由引擎接管（不自动广播）。 |
 | **结果级（Terminal）** | `GetNodeResult(nodeIndex)` | 目标节点的祖先锥（从其入口前沿开始） | 编译该锥并运行，使被查询节点自身的输出成为结果。router 的分支选择保持真实（见下）。 |
 
@@ -38,7 +38,6 @@ Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持�
 
 其他 Terminal 要点：
 - 若**同一个 router 有多条 route key 都通往被查询节点**，`CompileNodeResult` 会返回错误——单次正向运行只能走一条分支，该节点没有良定义的结果。
-- 编译驱动时，每个节点都会把 `IRuntimeContext` 会话（UID / 日志 / 共享变量 / 执行位置）作为 `ReceiveAsync` 参数拿到。`IRuntimeAware` 只是同一个对象的可选额外通知。
 
 ### 编译身份（ICompileContext）
 
@@ -61,8 +60,8 @@ Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持�
 
 ### 读取节点编译状态
 
-- `ICompileContext` —— 只读；节点的 `Order` / `ChainIndex` / `Offset`。
-- `IsCompileStopped` —— `Order == -1` 时为 `true`（被剪除的静态分支）。
+- `ICompileContext` —— 节点的 `Order` / `ChainIndex` / `Offset`，由编译器赋值。按只读对待：没有工具会写它们。
+- `GetCompileStatus` 对每个节点报告 `isStopped`——`Order == -1` 时为 `true`（被剪除的静态分支）。
 - `CompileMode` —— 路由节点的编译模式（`Static` / `Dynamic`），**可写**：通过 `PatchNodeProperties` 设置。
 
 ### 操作方式
@@ -70,9 +69,9 @@ Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持�
 1. **先编译** —— 从控制器/入口节点调用 `CompileWorkflow(nodeIndex)`。读取返回的 `entries`（Execute/Branch/Parallel，含 options、`isTerminal`）与 `nodeOrders` 以理解计划。想要单个节点的结果计划时用 `CompileNodeResult(nodeIndex)`。
 2. **切换路由模式** —— 用 `PatchNodeProperties` 设置路由节点的 `CompileMode`（如 `{"CompileMode":"Static"}`），再重新调用编译工具。Static 模式下应看到被剪除的分支（`Order = -1`）。
 3. **尊重停止节点** —— `Order = -1` 的节点已被编译出活跃路径，不要把它当作活跃链来驱动。
-4. **运行整条链** —— 调用 `RunCompiledWorkflow(nodeIndex)` 端到端执行编译链（即 Demo Run 按钮的路径）。读取返回的 `runStatus`（`Completed`/`Stopped`）、`logs`（执行轨迹）、`data`（最终载荷）与 `endedWithError`。
+4. **运行整条链** —— 调用 `RunCompiledWorkflow(nodeIndex)` 端到端执行编译链（即 Demo Run 按钮的路径）。读取返回的 `runStatus`（`Completed`/`Stopped`）、`outcome`（`Completed`/`Cancelled`/`Failed`——准确读数）、`logs`（执行轨迹）、`data`（最终载荷）与 `endedWithError`。
 5. **取单个节点结果** —— 调用 `GetNodeResult(nodeIndex)` 从其祖先锥算该节点。若返回错误说目标 `was NOT reached`，说明 router 选了别的分支（见上）——不要编造，按恢复步骤处理。
-6. **运行时会话** —— 编译驱动时引擎会给实现 `IRuntimeAware` 的节点注入 `IRuntimeContext` 会话（UID / 日志 / 共享变量 / 执行位置）。共享变量用 `Set(key, value)` 写入、`TryGet(key, ...)` 读取。
+6. **运行时会话** —— 编译驱动时每个节点都会收到 `IRuntimeContext` 会话（UID / 日志 / 共享变量 / 执行位置）作为 `ReceiveAsync` 参数；`IRuntimeAware` 只是同一个对象的可选额外通知。共享变量用 `Set(key, value)` 写入、`TryGet(key, ...)` 读取。
 
 ### 长运行、可暂停、可续跑的句柄式运行
 
@@ -84,6 +83,6 @@ Terminal 编译与**正向语义完全一致**：目标锥上的 router 保持�
 4. **从检查点续跑** —— `ContinueCompiledWorkflow(...)` 从已保存的检查点继续，而不是从入口节点重跑。
 5. **回收** —— `ClearFinishedRuns` 释放已结束的句柄；仍在运行的不会被碰。
 
-所有运行与节点执行工具都接受 `timeoutMs`。与其让一个卡住的节点拖住整轮对话，不如设了超时：超时的调用返回错误，图保持原样。
+会等待结果的入口——`RunCompiledWorkflow`、`GetNodeResult`、`ExecuteNode`、`ExecuteNodes`、`BroadcastNode`、`ReverseBroadcastNode`——接受 `timeoutMs`。与其让一个卡住的节点拖住整轮对话，不如设超时。超时的调用返回错误；已经执行的部分不会回滚，继续之前先查明跑了什么。
 
 > 只需当前编译身份时，优先用 `GetCompileStatus`（廉价、不重新编译），而不是重复编译工具。要执行时：整条链用 `RunCompiledWorkflow`、单个节点值用 `GetNodeResult`——除非确实只想单独触发某个节点，否则不要用 `ExecuteNode`。

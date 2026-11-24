@@ -16,7 +16,7 @@ description: 变更工作流前选择状态刷新策略——策略 A 安全优�
 - 常见顺序：
   1. **`GetWorkflowSummary`**
   2. **`ListNodes`** 或 **`FindNodes`**
-  3. **`GetNodeDetail(ById)`** / **`ListSlotProperties`**
+  3. **`GetNodeDetail`** / **`GetNodeDetailById`** / **`ListSlotProperties`**
   4. 再执行变更
 
 ### 策略 B — 速度优先
@@ -29,7 +29,7 @@ description: 变更工作流前选择状态刷新策略——策略 A 安全优�
 
 1. **`GetWorkflowSummary`** → 当前树的数量统计与类型概览。
 2. **`ListNodes`** → 含 ID 的紧凑列表；或 **`FindNodes`** → 按类型/属性过滤。
-3. **`GetNodeDetail(ById)`** → 特定节点的插槽详情（含 `prop` 字段，显示插槽对应的属性名）。
+3. **`GetNodeDetail`** / **`GetNodeDetailById`** → 特定节点的插槽详情（含 `prop` 字段，显示插槽对应的属性名）。
 4. **`ResolveSlotId`** → 通过属性名直接获取插槽 ID，无需调用完整的 `GetNodeDetail`。
 5. **`ListSlotProperties`** → 区分单个插槽属性与插槽集合属性。
 6. **`ListComponentCommands`** → 执行前先发现可用命令。

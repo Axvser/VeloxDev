@@ -914,7 +914,7 @@ public sealed class WorkflowAgentToolkit
         return Ok($"Slot [{nodeIndex}][{slotIndex}] deleted.");
     }
 
-    [Description("Prefer ConnectByProperty — slot indices shift on SlotEnumerator nodes. Use only after ListSlotProperties confirms a stable index. Returns the slot→property map so you can switch to property routing.")]
+    [Description("Connects slots by node and slot index. Indices shift on SlotEnumerator nodes — use only after ListSlotProperties confirms a stable index. Returns the sender/receiver property names so you can switch to property routing.")]
     private async Task<string> ConnectSlots(
         [Description("Sender node index.")] int senderNodeIndex,
         [Description("Sender slot index.")] int senderSlotIndex,
@@ -958,7 +958,7 @@ public sealed class WorkflowAgentToolkit
         return result.ToJson();
     }
 
-    [Description("Connects two slots by their runtime IDs. IDs are stable across UI redraws but NOT across SlotEnumerator reconfiguration. Prefer ConnectByProperty for SlotEnumerator and generated slot collections; use this only with IDs obtained after the latest collection configuration. The framework may silently reject: check 'connected' in the response.")]
+    [Description("Connects two slots by their runtime IDs. IDs are stable across UI redraws but NOT across SlotEnumerator reconfiguration — use only with IDs obtained after the latest collection configuration. The framework may silently reject: check `status` in the response; a rejected connection returns `rejected` with `reasons` and a hint.")]
     private async Task<string> ConnectSlotsById(
         [Description("Runtime ID of the sender slot.")] string senderSlotId,
         [Description("Runtime ID of the receiver slot.")] string receiverSlotId,
@@ -1258,7 +1258,7 @@ public sealed class WorkflowAgentToolkit
         return _tracker.GetChangesSinceLastSnapshot();
     }
 
-    [Description("Marks the workflow tree as dirty. Call once at the end of an Agent task after one or more mutations so the view can refresh consistently.")]
+    [Description("Marks the workflow tree as dirty so the view refreshes consistently. When the host has not enabled automatic dirty marking, call it exactly once at the end of a mutation task; when it has, the framework already does it.")]
     private string MarkDirty()
     {
         Tree.GetHelper().MarkDirty();
@@ -1464,7 +1464,7 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Slot Collection Functions ──────────────────────────
 
-    [Description("Lists slot properties on a node type: named single slots, slot collection properties, and SlotEnumerator properties. Shows property name, type, current count, and slot IDs.")]
+    [Description("Lists slot properties on a node: named single slots, slot collection properties, and SlotEnumerator properties. Shows property name, whether it is a single slot, collection or SlotEnumerator, the current count and slot IDs.")]
     private string ListSlotProperties(
         [Description("Node index.")] int nodeIndex)
     {
@@ -2369,7 +2369,7 @@ public sealed class WorkflowAgentToolkit
     /// NOT auto-broadcast (the engine owns downstream dispatch). This is the chain-level entry,
     /// distinct from <see cref="ExecuteNode"/> (node-level EXEC via ReceiveCommand).
     /// </summary>
-    [Description("Runs the compiled workflow (chain-level execution) from a start node, typically a controller. Compiles the reachable sub-graph, creates a runtime session (IRuntimeContext), and drives the whole chain via the execution engine — the same entry the demo's Run button uses. Nodes execute their ReceiveAsync with an IRuntimeContext (compiled-step semantics; no auto-broadcast — the engine drives the chain). Returns the session outcome: runStatus (Completed/Stopped), outcome (Completed/Cancelled/Failed — the precise reading, since runStatus has to share 'Stopped' between a failure and a cancellation), execution log, final data, attempts, whether it ended with an error, failures (the same failures as records: phase/level/message/attempt/order), and logFile (an absolute path, present only when the host sent the lines to a file — open it with your own file tool to read the whole log rather than the returned excerpt). DIFFERENT from ExecuteNode, which executes a single node via ReceiveCommand (node-level EXEC). Disabled by default: requires WithAllowNodeExecution(true).")]
+    [Description("Runs the compiled workflow (chain-level execution) from a start node, typically a controller. Compiles the reachable sub-graph, creates a runtime session (IRuntimeContext), and drives the whole chain via the execution engine — the same entry the demo's Run button uses. Nodes execute their ReceiveAsync with an IRuntimeContext (compiled-step semantics; no auto-broadcast — the engine drives the chain). Returns the session outcome: runStatus (Completed/Stopped), outcome (Completed/Cancelled/Failed — the precise reading, since runStatus has to share 'Stopped' between a failure and a cancellation), execution log, final data, attempts, whether it ended with an error, failures (the same failures as records: phase/level/message/attempt/order), and logFile (an absolute path, present only when the host sent the lines to a file — open it with your own file tool to read the whole log rather than the returned excerpt). Disabled by default: requires WithAllowNodeExecution(true).")]
     private Task<string> RunCompiledWorkflow(
         [Description("Node index of the compile entry point (usually a controller).")] int startNodeIndex,
         [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
@@ -2377,7 +2377,7 @@ public sealed class WorkflowAgentToolkit
         CancellationToken cancellationToken = default)
         => RunCompiledRoleAsync(startNodeIndex, CompileRole.Root, nameof(RunCompiledWorkflow), seed, timeoutMs, cancellationToken);
 
-    [Description("Computes a node's RESULT in isolation (Terminal role): discovers the node's ancestor cone — all upstream producers feeding it, traced backward from its input slots — and drives it with the execution engine from the cone's own entry frontier, so no controller/start node is needed. Routers inside the cone KEEP real branch selection: only the branch leading to this node is compiled, so the result exactly matches a normal run that took that branch. IMPORTANT error contract: if a router on the cone actually selects a SIBLING branch at runtime, the target is NOT reached — the tool returns status:error with message naming the target ('... was NOT reached ... No result was produced.') and no data; never treat another branch's final payload as this node's result. To succeed, first point the router at the branch that leads to this node (set CompileMode/Selection via PatchNodeProperties or SetEnumSlotCollection), then retry; or ask for a node that sits on the actually-selected branch. Returns targetReached:true when the node was driven. DIFFERENT from RunCompiledWorkflow (runs the whole chain from a Root/start node) and from ExecuteNode (single-node EXEC via ReceiveCommand). Disabled by default: requires WithAllowNodeExecution(true).")]
+    [Description("Computes a node's RESULT in isolation (Terminal role): discovers the node's ancestor cone — all upstream producers feeding it, traced backward from its input slots — and drives it with the execution engine from the cone's own entry frontier, so no controller/start node is needed. Routers inside the cone KEEP real branch selection: only the branch leading to this node is compiled, so the result exactly matches a normal run that took that branch. IMPORTANT error contract: if a router on the cone actually selects a SIBLING branch at runtime, the target is NOT reached — the tool returns status:error with message naming the target ('... was NOT reached ... No result was produced.') and no data; never treat another branch's final payload as this node's result. Returns targetReached:true when the node was driven. Disabled by default: requires WithAllowNodeExecution(true).")]
     private Task<string> GetNodeResult(
         [Description("Node index whose result to compute (its output becomes the run's final data).")] int nodeIndex,
         [Description("Optional seed payload injected into the runtime session (becomes the session's Data).")] string? seed = null,
@@ -2489,7 +2489,7 @@ public sealed class WorkflowAgentToolkit
         return Ok($"Cleared {removed} finished compiled run(s).");
     }
 
-    [Description("Reports on a run started by StartCompiledWorkflow / ContinueCompiledWorkflow: isRunning, runStatus, outcome (Completed / Cancelled / Failed — the precise reading, since runStatus shares 'Stopped' between a failure and a cancellation), isPaused, attempts, endedWithError, the final data, failures (the failures the run recorded, as records: phase / level / message / attempt / order), the last lines of the log, and logFile (an absolute path when the host sent the lines to a file — open it with your own file tool for the whole log). Also the way to learn a run has finished: a completed run's outcome stops being 'Unknown'. A payload over maxDataChars is replaced by a truncation envelope. Pure query.")]
+    [Description("Reports on a run started by StartCompiledWorkflow / ContinueCompiledWorkflow: isRunning, runStatus, outcome (Completed / Cancelled / Failed — the precise reading, since runStatus shares 'Stopped' between a failure and a cancellation), isPaused, attempts, endedWithError, the final data, failures (the failures the run recorded, as records: phase / level / message / attempt / order), the last lines of the log, and logFile (an absolute path when the host sent the lines to a file — open it with your own file tool for the whole log). Also the way to learn a run has finished: a completed run's outcome stops being 'Unknown'. A payload over maxDataChars is replaced by a truncation envelope. A finished run is retired once it has been reported, so a later call with the same handle returns an unknown-handle error.")]
     private string GetCompiledRunStatus(
         [Description("The handle returned when the run was started.")] string handle,
         [Description("Maximum characters of the final data payload. 0 = no cap.")] int maxDataChars = 16384)
@@ -3102,13 +3102,13 @@ public sealed class WorkflowAgentToolkit
 
     // ────────────────────────── Compiler Functions ──────────────────────────
 
-    [Description("Compiles the workflow sub-graph reachable from a start node (typically the controller/entry node) and returns the compiled plan: compiled segments (chain / branch / parallel), routing branches with their options/skipped/terminal flags, fan-out groups, and every compiled node's Order / ChainIndex / Offset. Order = -1 means the node is on a pruned static branch — absolute stop (do NOT drive it as part of the live chain). Compiling also notifies nodes implementing ICompileTimeAware (updates IsCompileStopped badges); the engine itself never needs that interface. Use GetCompileStatus afterwards to read the identity without recompiling.")]
+    [Description("Compiles the workflow sub-graph reachable from a start node (typically the controller/entry node) and returns the compiled plan: compiled segments (chain / branch / parallel), routing branches with their options/skipped/terminal flags, fan-out groups, and every compiled node's Order / ChainIndex / Offset. Order = -1 means the node is on a pruned static branch — absolute stop (do NOT drive it as part of the live chain). Compiling also notifies nodes implementing ICompileTimeAware (updates IsCompileStopped badges); the engine itself never needs that interface.")]
     private Task<string> CompileWorkflow(
         [Description("Node index of the compile entry point (usually the controller/entry node).")] int startNodeIndex,
         CancellationToken cancellationToken = default)
         => CompileRoleAsync(startNodeIndex, CompileRole.Root, cancellationToken);
 
-    [Description("Reverse-compiles a node's ancestor cone (Terminal role, read-only): the upstream producers feeding the node, traced backward from its input slots; returns the compiled plan that computes just that node's result — compiled segments plus every compiled node's Order / ChainIndex / Offset. No controller/start node is needed: the cone's entry frontier is derived automatically. Routers on the cone keep real BranchSegment semantics and only the branch leading to the node is compiled (sibling branches are absent, not Order=-1). If MORE THAN ONE route key of the same router reaches the node, compilation returns an error — a single forward run can only take one branch, so that node has no result; ask for a node on one of those branches instead. Same artifact shape as CompileWorkflow, scoped to the node instead of the whole reachable chain. Compiling notifies cone nodes implementing ICompileTimeAware. Use GetCompileStatus afterwards to read the identity without recompiling.")]
+    [Description("Reverse-compiles a node's ancestor cone (Terminal role, read-only): the upstream producers feeding the node, traced backward from its input slots; returns the compiled plan that computes just that node's result — compiled segments plus every compiled node's Order / ChainIndex / Offset. No controller/start node is needed: the cone's entry frontier is derived automatically. Routers on the cone keep real BranchSegment semantics and only the branch leading to the node is compiled (sibling branches are absent, not Order=-1). If MORE THAN ONE route key of the same router reaches the node, compilation returns an error — a single forward run can only take one branch, so that node has no result; ask for a node on one of those branches instead. Same artifact shape as CompileWorkflow, scoped to the node instead of the whole reachable chain. Compiling notifies cone nodes implementing ICompileTimeAware.")]
     private Task<string> CompileNodeResult(
         [Description("Node index whose ancestor cone to compile (its output is what a terminal run would compute).")] int nodeIndex,
         CancellationToken cancellationToken = default)

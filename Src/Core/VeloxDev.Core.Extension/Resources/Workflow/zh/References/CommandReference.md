@@ -1,6 +1,6 @@
 ## ⚠️ 命令优先原则
 
-**所有对工作流的变更必须通过命令（IVeloxCommand）执行。** 禁止直接调用 Helper 方法或通过反射设置命令驱动的属性。命令负责 UI 线程调度、撤销/重做追踪与视图同步，绕过命令会导致静默失效。
+**所有结构性变更必须通过命令（IVeloxCommand）执行。** 禁止直接调用 Helper 方法或通过反射设置命令驱动的属性。命令负责 UI 线程调度、撤销/重做追踪与视图同步，绕过命令会导致静默失效。没有对应命令的自定义属性是唯一例外——由 `PatchNodeProperties` / `PatchComponentById` 直接写入。
 
 | 操作 | 工具 | 对应命令 |
 |---|---|---|
@@ -19,8 +19,8 @@
 | 执行节点 | ExecuteNode | Node.ReceiveCommand（ITaskContext） |
 | 其他操作 | ExecuteCommandOnNode / ExecuteCommandById | 按名称解析 |
 | 修改自定义属性 | PatchNodeProperties / PatchComponentById | 直接设置（仅非命令属性） |
-| 向集合添加插槽 | AddSlotToCollection | 集合生命周期（OnSlotComponentAdded） |
-| 从集合移除插槽 | RemoveSlotFromCollection | 集合生命周期（OnSlotComponentRemoved） |
+| 向集合添加插槽 | AddSlotToCollection | Node.CreateSlotCommand |
+| 从集合移除插槽 | RemoveSlotFromCollection | Slot.DeleteCommand |
 | 设置枚举插槽集合 | SetEnumSlotCollection | 清除并重建枚举驱动集合 |
 | 按条件查找节点 | FindNodes | 仅只读查询 |
 | 通过属性解析插槽 ID | ResolveSlotId | 仅只读查询 |

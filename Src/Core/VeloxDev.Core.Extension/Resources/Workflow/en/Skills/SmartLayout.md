@@ -5,9 +5,7 @@ description: Tidy, arrange or quadrant-shift a graph — run the tree's register
 
 ## 🗺️ Skill: Smart Layout
 
-Use this skill whenever you need to arrange multiple nodes intelligently — whether creating them fresh, reorganizing an existing graph, or responding to user requests like "tidy up", "auto-arrange", or "fix the layout".
-
-> **Prefer the tree's own layout.** `GetLayoutInfo`, `PreviewLayout` and `ArrangeLayout` run the layout solver registered on the tree, in one undoable action. That is the correct route for "tidy up", "auto-arrange" and "fix the layout". Follow the manual procedure below only when the solver cannot express the request — a shape the user specified by hand, a quadrant shift, or a preview the user rejected.
+Use this skill to arrange multiple nodes — creating them fresh, reorganizing an existing graph, or responding to "tidy up", "auto-arrange" or "fix the layout".
 
 ---
 
@@ -73,11 +71,11 @@ Minimum recommended gaps:
 - `gapX` (between layers): **80 px**
 - `gapY` (between nodes within a layer): **40 px**
 
-**Wide layers must wrap — never stack a whole layer in one column.** A layer's height grows linearly with its node count, and every edge then fans across all of it; the result is a tall, sparse graph where a reader cannot tell which edge goes where. For a generated fan-out (one hub → N processors → one sink) this is the difference between a readable ribbon and a hangman's rope.
+**Wide layers must wrap — never stack a whole layer in one column.** A layer's height grows linearly with its node count, and every edge then fans across all of it, so a reader cannot tell which edge goes where.
 
 - Wrap a layer into **sub-columns** when it holds more than **8 nodes**, or when its accumulated height would exceed **~1600 px** — whichever comes first. Overflow continues in the next sub-column, `gapX` to the right, keeping the node order.
 - For *N* nodes sharing one layer between a hub and its sink, prefer a grid of `ceil(sqrt(N))` sub-columns and `ceil(N / sub-columns)` rows, **centered on the hub's Y**, so the fan spreads symmetrically instead of hanging below it.
-- Keep the finished bounding box near **3:2**. Much taller than wide means wrap harder; much wider than tall means the layering is too shallow to be worth the walk.
+- Keep the finished bounding box near **3:2**. Much taller than wide means wrap harder; much wider than tall means the layering is too shallow.
 
 After positioning, verify **no two nodes overlap** by checking bounding box intersections:
 - Node A rect: `(ax, ay, ax+aw, ay+ah)`, Node B rect: `(bx, by, bx+bw, by+bh)`
@@ -88,11 +86,10 @@ After positioning, verify **no two nodes overlap** by checking bounding box inte
 
 ### Step 5 — Apply Positions (manual fallback)
 
-This step is the fallback for a layout the registered solver could not express. Applying it node-by-node is **not** undoable as one action, so prefer `ArrangeLayout` whenever it fits:
+This step is the fallback for a layout the registered solver could not express. Applying it node-by-node is **not** undoable as one action, so prefer `ArrangeLayout` whenever it fits.
 
-- For each node, call **`SetNodePosition`** (or **`MoveNode`**) with that node's computed coordinates.
-
-After moving, call `ListNodes` once to confirm actual positions match expectations (the tool may have auto-offset some nodes to avoid overlap).
+- For each node, call **`SetNodePosition`** with that node's computed coordinates (use **`MoveNode`** for a relative nudge).
+- After moving, call `ListNodes` once to confirm the actual positions.
 
 ---
 
@@ -109,24 +106,13 @@ After moving, call `ListNodes` once to confirm actual positions match expectatio
 
 ### Responding to "Change Quadrant" Requests
 
-Quadrant identity is determined purely by the **sign of X and Y coordinates**:
-
-| Quadrant | X sign | Y sign | Canvas meaning |
-|---|---|---|---|
-| **Q4 (default)** | + | + | X > 0, Y > 0 — standard visible canvas space |
-| **Q1** | + | − | X > 0, Y < 0 — above the canvas origin (negative Y) |
-| **Q2** | − | − | X < 0, Y < 0 — upper-left of origin (both negative) |
-| **Q3** | − | + | X < 0, Y > 0 — left of canvas origin (negative X) |
-
-> The canvas Y-axis points **downward**, so "mathematically upward" means **negative Y** in canvas coordinates.
-
-When the user asks to move the layout to a different quadrant:
+Quadrant identity is the sign of X and Y; the table is in the Coordinate System reference.
 
 1. Compute the **bounding box** of all affected nodes: `(minX, minY, maxX, maxY)`. Let `w = maxX - minX`, `h = maxY - minY`.
 2. Choose a **target top-left anchor** that places the bounding box firmly in the requested quadrant:
-   - **Q4**: target = `(20, 20)` — both positive, no sign change needed
-   - **Q1**: target = `(20, -(h + 20))` — X positive, Y negative (box sits above origin)
-   - **Q3**: target = `(-(w + 20), 20)` — X negative, Y positive (box sits left of origin)
-   - **Q2**: target = `(-(w + 20), -(h + 20))` — both negative
+   - **Q4**: target = `(20, 20)`
+   - **Q1**: target = `(20, -(h + 20))`
+   - **Q3**: target = `(-(w + 20), 20)`
+   - **Q2**: target = `(-(w + 20), -(h + 20))`
 3. Compute `deltaX = targetX - minX`, `deltaY = targetY - minY`.
 4. Apply the delta to each affected node via `SetNodePosition` (or `MoveNode`) — one call per node.

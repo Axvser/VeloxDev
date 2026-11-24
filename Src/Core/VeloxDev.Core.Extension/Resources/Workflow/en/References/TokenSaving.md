@@ -1,8 +1,6 @@
 ## 💡 Token-Saving Tips
 
-> **Decision Rule**: There are **no composite or bundled tools** in this toolkit. Every mutation is a step-by-step single-command call that mirrors a single GUI→Command→ViewModel interaction. Before making a tool call, still ask: *"Am I about to make several sequential calls that share the same target node or the same set of nodes?"* If yes, reduce round-trips where safe — but only via **read-side** batching (e.g. `GetFullTopology` for the whole graph) and **stable-handle reuse** (e.g. reusing `RuntimeId`s). Mutations themselves always stay one command per call.
-
-> **State Reuse Rule**: Token saving is allowed. You may deliberately reuse cached topology instead of re-reading live state before every operation. This is safe only until a structure-changing operation invalidates the cache.
+> **Reads can be batched; mutations cannot.** There is no composite tool — every mutation is one command per call (see OperationOrdering). Savings come from **read-side** batching (e.g. `GetFullTopology` for the whole graph) and **stable-handle reuse** (`RuntimeId`s), never from bundling edits.
 
 Prefer read-side batching and stable handles over unnecessary re-reading:
 
@@ -36,21 +34,7 @@ Prefer read-side batching and stable handles over unnecessary re-reading:
 | Full graph (nodes + slots + connections, one call) | **GetFullTopology** |
 | One node's full detail | **GetNodeDetail** / **GetNodeDetailById** |
 | Connections only | **ListConnections** (GetFullTopology already includes them) |
-| Type shape + runtime defaults | **GetTypeSchema** |
+| Type shape + runtime-only values | **GetTypeSchema** |
 | Developer docs of a type | **GetComponentContext** |
 
-### Cache invalidation checklist
-
-Refresh before the next topology-sensitive step if you just called any of these:
-
-- `CreateNode`, `DeleteNode`, `DeleteSlot`
-- `CreateSlotOnNode`, `AddSlotToCollection`, `RemoveSlotFromCollection`
-- `SetEnumSlotCollection`
-
-After these operations:
-
-- old **node indices** may point to a different node
-- old **slot indices** may point to a different slot
-- old **enum-slot runtime IDs** may no longer exist
-
-If no invalidating operation occurred, speed-first reuse of cached IDs and topology is acceptable.
+If a structure-changing call happened since the cache was read, refresh first (the list is in the Discovery Flow skill). Otherwise reuse cached IDs and topology.

@@ -16,7 +16,7 @@ Choose a refresh strategy before making mutations:
 - Typical sequence:
   1. **`GetWorkflowSummary`**
   2. **`ListNodes`** or **`FindNodes`**
-  3. **`GetNodeDetail(ById)`** / **`ListSlotProperties`**
+  3. **`GetNodeDetail`** / **`GetNodeDetailById`** / **`ListSlotProperties`**
   4. mutate
 
 ### Strategy B — Speed-first
@@ -29,7 +29,7 @@ Choose a refresh strategy before making mutations:
 
 1. **`GetWorkflowSummary`** → node/link counts and distinct types in the current tree.
 2. **`ListNodes`** → compact list with IDs, positions, and sizes. Or use **`FindNodes`** to filter by type/property.
-3. **`GetNodeDetail(ById)`** → slot details for a specific node. Includes the `prop` field mapping slots to property names (e.g. `InputSlot`, `OutputSlots[2]`).
+3. **`GetNodeDetail`** / **`GetNodeDetailById`** → slot details for a specific node. Includes the `prop` field mapping slots to property names (e.g. `InputSlot`, `OutputSlots[2]`).
 4. **`ResolveSlotId`** → get a slot's runtime ID directly from its property name — avoids calling `GetNodeDetail` just to get IDs.
 5. **`ListSlotProperties`** → discover whether slots are single properties vs. collection properties on a node.
 6. **`ListComponentCommands`** → discover commands before executing.

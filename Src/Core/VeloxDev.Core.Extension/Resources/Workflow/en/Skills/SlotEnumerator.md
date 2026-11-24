@@ -5,37 +5,32 @@ description: Wire SlotEnumerator (IConditionalSlotProvider) — CreateNode then 
 
 ## Skill: SlotEnumerator
 
-Node types may declare **SlotEnumerator properties** — any property whose type implements `IConditionalSlotProvider<TSlot>` (e.g. `SlotEnumerator<SlotViewModel> OutputSlots`). When the property type is the raw `IConditionalSlotProvider<TSlot>` interface, the generator automatically uses `SlotEnumerator<TSlot>` as the concrete default. These properties auto-generate one output slot per value of the configured selector type (enum or bool).
+Node types may declare **SlotEnumerator properties** — any property whose type implements `IConditionalSlotProvider<TSlot>` (e.g. `SlotEnumerator<SlotViewModel> OutputSlots`). When the property type is the raw `IConditionalSlotProvider<TSlot>` interface, the generator uses `SlotEnumerator<TSlot>` as the concrete default. These properties auto-generate one output slot per value of the configured selector type (enum or bool).
 
 ### Creation
 
 Create the node first, then configure its selector:
 
 ```
-CreateNode(fullTypeName, ..., )
-SetEnumSlotCollection(nodeIndex, "OutputSlots", "Demo.ViewModels.MyEnum", ...)
+CreateNode(fullTypeName, left, top, width, height)
+SetEnumSlotCollection(nodeIndex, "OutputSlots", "Demo.ViewModels.MyEnum")
 ```
 
-Call **`CreateNode`** to create the node, then **`SetEnumSlotCollection`** to set the selector type on the `SlotEnumerator` property.
+A selector-driven node is created with **no ports**: its slots exist only once a selector is set. `ListSlotProperties` reporting `count: 0` on a SlotEnumerator property means exactly that, not that the property is missing.
 
-- The node's `[AgentContext]` description lists the `enumSlotProperty` name and the `allowedSelectorTypes`. **Read it before calling.**
-- Do NOT call `ListSlotProperties` as a prerequisite — allowed types are already in `[AgentContext]`.
+- The node's `[AgentContext]` description names the enumerator property and its `allowedSelectorTypes`. Read it before calling.
+- You do not need `ListSlotProperties` to set the selector; the allowed types are already in `[AgentContext]`.
 
 ### Changing Selector on an Existing Node
 
-Call `SetEnumSlotCollection(nodeIndex, propertyName, selectorTypeOrJson, nonEnumTypeName?)`.  Do **NOT** delete and recreate the node.
+Call `SetEnumSlotCollection` with the property name and selector. Do **not** delete and recreate the node.
 
-**Enum / bool selector** (most common):
+**Enum / bool selector** (most common): pass the fully-qualified type name, leave `nonEnumTypeName` empty.
 
-- Pass the fully-qualified type name in `selectorTypeOrJson` (e.g. `"Demo.ViewModels.MyEnum"`).
-- Leave `nonEnumTypeName` empty.
-
-**ISlotProvider (instance-driven) selector**:
-
-When `[SlotSelectors]` lists a non-enum type (one that implements `ISlotProvider`), follow this mandatory two-step protocol:
+**ISlotProvider (instance-driven) selector** — when `[SlotSelectors]` lists a non-enum type (one that implements `ISlotProvider`):
 
 1. **Inspect first** — call `GetTypeSchema(nonEnumTypeName)` to read the type's property structure, nested types, and developer instructions. Never assume the JSON shape.
-2. **Construct and apply** — build the correct JSON from the schema, then call `SetEnumSlotCollection` with that JSON in `selectorTypeOrJson` and the fully-qualified type name in `nonEnumTypeName`.
+2. **Construct and apply** — build the JSON from the schema, then call `SetEnumSlotCollection` with that JSON and the fully-qualified type name in `nonEnumTypeName`.
 
 ```
 // Step 1 — always inspect before constructing
@@ -47,32 +42,37 @@ SetEnumSlotCollection(nodeIndex, "OutputSlots",
     "Demo.ViewModels.CustomRouteSelector")
 ```
 
-> ⚠️ Switching the selector type rebuilds the branches. The framework auto re-wires new branches onto the previous branches' downstream (by position), and a previously-used type's connections are restored — do **NOT** manually rewire. If the new type has fewer members, the downstream of dropped positions is lost.
+> ⚠️ Switching the selector type rebuilds the branches. The framework auto re-wires new branches onto the previous branches' downstream (by position), and a previously-used type's connections are restored — do **not** manually rewire. If the new type has fewer members, the downstream of dropped positions is lost.
 
 ### Accessing Internal Slots by Condition Value
 
-SlotEnumerator slots can now be accessed directly by their **condition value** (enum name or `True`/`False`):
+A condition value is an enum member name, `True`/`False` for a bool selector, or the port name for an ISlotProvider-driven enumerator.
 
-- **`GetEnumSlotByValue(nodeIndex, propertyName, conditionValue)`** – Returns runtime ID and detail of a slot inside the enumerator.
-- **`SetEnumSlotChannel(nodeIndex, propertyName, conditionValue, channel)`** – Changes the `SlotChannel` of a specific slot.
-- **`ConnectEnumSlot(senderNodeIndex, senderProperty, senderCondition, receiverNodeIndex, receiverSlot)`** – Connects an enumerator slot (by value) to another slot. Auto-verifies success.
+- **`GetEnumSlotByValue`** — returns the slot's runtime ID (`slotId`) and channel.
+- **`SetEnumSlotChannel`** — changes the channel of one enumerator slot.
+- **`ConnectEnumSlot`** — connects an enumerator slot (by condition value) to another slot and verifies the result. The receiver may be a plain slot, a numeric slot index, or another enumerator slot (which then needs its own condition value).
 
-### Mandatory Connection Protocol (STRICT — no exceptions)
+### Mandatory Connection Protocol (STRICT)
 
-Before connecting **any** slot inside a `SlotEnumerator`, you **MUST** complete Phase 1 in full. Skipping Phase 1 causes one source slot to be wired to multiple unintended branches.
+Before connecting **any** slot inside a `SlotEnumerator`, complete Phase 1 in full. Skipping it can wire one source slot to multiple unintended branches.
 
-**Phase 1 — Enumerate all internal slots first**
+**Phase 1 — enumerate the condition values**
 
-Call `ListSlotProperties(nodeIndex)` on the node that owns the SlotEnumerator. Locate the entry whose `slotEnumerator` is `true` and read its `currentSelectorType` and every condition value listed there. Do **not** proceed to Phase 2 until you have a complete list of all condition values.
+- The reply to `SetEnumSlotCollection` lists every slot with its `label` and `value`; those values are the condition values.
+- If that reply is no longer in context, call `ListSlotProperties(nodeIndex)` to read `currentSelectorType`, then `GetTypeSchema(currentSelectorType)` and read its `values`.
+- For an ISlotProvider-driven enumerator, the port names are the condition values.
 
-**Phase 2 — Connect each slot individually**
+Do not proceed to Phase 2 until you have the complete list.
 
-For each condition value in the list, call `ConnectEnumSlot` exactly once with the correct `senderCondition`. Never call `ConnectEnumSlot` with a condition value that was not returned in Phase 1.
+**Phase 2 — connect each slot individually**
+
+Call `ConnectEnumSlot` exactly once per condition value, with the matching `senderCondition`. Never use a condition value that Phase 1 did not return.
 
 **Example (correct)**
 ```
 // Phase 1
-ListSlotProperties(2)  →  OutputSlots: ["GET", "POST", "DELETE"]
+ListSlotProperties(2)  → currentSelectorType: "Demo.NetworkRequestMethod", count: 3
+GetTypeSchema("Demo.NetworkRequestMethod") → values: GET, POST, DELETE
 
 // Phase 2 — one call per condition, no more
 ConnectEnumSlot(2, "OutputSlots", "GET",    5, "InputSlot")
@@ -89,8 +89,7 @@ ConnectEnumSlot(2, "OutputSlots", "GET", 6, "InputSlot")  // duplicate → one s
 
 ### Rules
 
-- **`enumTypeName` / `fullEnumTypeName`** always accepts a **fully-qualified type name string**. Passing a resolved `Type` object directly is also supported at the C# API level (`SetSelector(object? selector)` accepts both forms).
-- Do NOT add/remove slots manually on `SlotEnumerator` properties.
-- Do NOT use `PatchNodeProperties` to set the selector type — it is rejected.
-- **`[SlotSelectors]` is the authoritative whitelist for user-defined types.** Framework enums (`SlotChannel`, `SlotState`) are **always valid** regardless of the whitelist.
-- `ListSlotProperties` shows `slotEnumerator: true`, `currentSelectorType`, and `allowedSelectorTypes` — for discovery only, not as a prerequisite.
+- Do not add or remove slots manually on `SlotEnumerator` properties.
+- Do not use `PatchNodeProperties` to set the selector type — it is rejected.
+- **`[SlotSelectors]` is the authoritative whitelist for user-defined types.** Framework enums (`SlotChannel`, `SlotState`) are accepted regardless of the whitelist.
+- `ListSlotProperties` shows `slotEnumerator: true`, `currentSelectorType`, `allowedSelectorTypes`, and the current slot IDs — use it for discovery.

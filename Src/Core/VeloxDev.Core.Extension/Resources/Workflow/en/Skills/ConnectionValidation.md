@@ -1,29 +1,32 @@
 ---
 name: connection-validation
-description: Recover from a rejected ConnectSlots, ConnectByProperty or ConnectEnumSlot, not a retry — read the status rejected reasons array to tell apart channel incompatibility (SetSlotChannel), same-node endpoints, ValidateConnection rules, full capacity (DisconnectSlotsById) and same-direction dedup
+description: Recover from a rejected ConnectSlots, ConnectByProperty or ConnectEnumSlot, not a retry — read the status rejected reasons array to tell apart channel incompatibility (SetSlotChannel), same-node endpoints and developer ValidateConnection rules, and know that same-direction dedup replaces a connection rather than rejecting it
 ---
 
-## ⚠️ Connection Validation (CRITICAL — prevents infinite retry loops)
+## ⚠️ Connection Validation
 
-The framework may **silently reject** a connection attempt. All Connect tools verify and report rejection. When you receive `status: "rejected"`, **do NOT retry the same connection** — rejection is deterministic.
+The framework may reject a connection attempt. All Connect tools verify and report the outcome; on `status: "rejected"`, **do not retry the same connection** — rejection is deterministic.
 
 ### Rejection Reasons
 
-1. **Channel incompatibility**: The sender slot's channel does not support sending, or the receiver slot's channel does not support receiving. Check the `ch` field in `GetNodeDetail` / `ListSlotProperties`.
-2. **Same-node connection**: Sender and receiver belong to the same node — always rejected.
-3. **Developer `ValidateConnection` rule**: The tree's helper has custom validation logic. This is opaque. If rejected for this reason, inform the user.
-4. **Channel capacity limit**: One-target/one-source channels may already be at capacity. You may need to disconnect the existing connection first.
-5. **Same-direction connection dedup**: When connecting two nodes that already have an existing connection in the same direction, the framework **silently deletes the old connection first**. The result is a replacement, not a parallel connection. This happens automatically — you do NOT need to call `DisconnectSlots` before `ConnectSlots` for the same node pair.
+1. **Channel incompatibility** — the sender's channel cannot send, or the receiver's cannot receive. Check `ch` in `GetNodeDetail` / `ListSlotProperties`.
+2. **Same-node connection** — sender and receiver belong to the same node; always rejected.
+3. **Developer `ValidateConnection` rule** — the tree helper's custom validation refused it. Treat the rule as opaque: tell the user, do not retry.
+4. **The fallback reason** — when the reply only says `"developer ValidateConnection rule or channel capacity limit"`, it is the developer rule above. Channels that allow one connection per direction evict the previous connection automatically, so capacity cannot be the cause.
 
-### Recovery Strategy
+### Not a rejection: same-direction dedup
 
-1. Read the `reasons` array in the rejection response.
-2. If **channel issue** → check and possibly change channel with `SetSlotChannel`.
-3. If **capacity** → disconnect the existing connection first with `DisconnectSlotsById`.
-4. If **ValidateConnection** → inform the user; do not retry.
+Connecting two nodes that already share a same-direction connection silently removes the old connection first — the result is a replacement, not a parallel connection. No `DisconnectSlots` call is needed before `ConnectSlots` for the same node pair.
+
+### Recovery
+
+1. Read the `reasons` array.
+2. **Channel issue** → inspect `ch` and change it with `SetSlotChannel` when the channel is wrong for the intended role.
+3. **`ValidateConnection`** → tell the user; do not retry.
+4. After a successful `ConnectSlots`, its reply names `senderProperty` / `receiverProperty` — use `ConnectByProperty` next time.
 
 ### Refresh policy for connection tools
 
-- If the immediately previous steps did **not** change topology, you may reuse cached slot IDs.
-- If you recently changed slot collections, deleted components, cloned nodes, or called `SetEnumSlotCollection`, refresh slot identity first.
-- Do not loop on `Connect*` after a rejection unless you changed one of the preconditions: channel, endpoint, selector type, or existing capacity.
+- If the immediately previous steps did **not** change topology, cached slot IDs may be reused.
+- After changing slot collections, deleting components, cloning nodes, or calling `SetEnumSlotCollection`, refresh slot identity first.
+- Do not loop on `Connect*` after a rejection unless you changed a precondition: channel, endpoint, selector type, or the existing connection.

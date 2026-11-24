@@ -15,7 +15,7 @@ Every compile call names one node and a role for it:
 
 | Entry | Tool | What it drives | Semantics |
 |---|---|---|---|
-| **Node-level** | `ExecuteNode` / `ExecuteNodes` | One node (its own `ReceiveAsync` via `ReceiveCommand`) | `EXEC`/`RECV`; the node may auto-broadcast downstream if its `AutoBroadcast` flag is on. |
+| **Node-level** | `ExecuteNode` / `ExecuteNodes` | One node (its own `ReceiveAsync` via `ReceiveCommand`) | `EXEC`/`RECV`; the node's own receive logic decides whether anything goes downstream. |
 | **Chain-level (Root)** | `RunCompiledWorkflow(nodeIndex)` | The whole compiled chain from a start/entry node | Injects an `IRuntimeContext` session, selects branches, handles redirects; the engine owns downstream dispatch (no auto-broadcast). |
 | **Result-level (Terminal)** | `GetNodeResult(nodeIndex)` | Only the node's ancestor cone, from its entry frontier | Compiles the cone and runs it so the queried node's own output becomes the result. Router branch selection stays REAL (see below). |
 
@@ -38,7 +38,6 @@ To get a value for such a node:
 
 Other Terminal notes:
 - `CompileNodeResult` returns an error when **more than one route key of the same router** reaches the queried node — a single forward run can only take one branch, so that node has no well-defined result.
-- During a compiled run every node receives an `IRuntimeContext` session (UID / logs / shared variables / execution position) as its `ReceiveAsync` argument. `IRuntimeAware` is only an optional extra notification of the same object.
 
 ### Compile identity (ICompileContext)
 
@@ -61,8 +60,8 @@ Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset,
 
 ### Reading compile state on a node
 
-- `ICompileContext` — read-only; the node's `Order` / `ChainIndex` / `Offset`.
-- `IsCompileStopped` — `true` when `Order == -1` (pruned static branch).
+- `ICompileContext` — the node's `Order` / `ChainIndex` / `Offset`, assigned by the compiler. Treat them as read-only: no tool writes them.
+- `GetCompileStatus` reports `isStopped` per node — `true` when `Order == -1` (pruned static branch).
 - `CompileMode` — the router's compile mode (`Static` / `Dynamic`), **writable** via `PatchNodeProperties`.
 
 ### How to operate
@@ -70,7 +69,7 @@ Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset,
 1. **Compile first** — call `CompileWorkflow(nodeIndex)` from the controller/entry node. Read the returned `entries` (Execute/Branch/Parallel with options, `isTerminal`) and `nodeOrders` to understand the plan. For a single node's result plan use `CompileNodeResult(nodeIndex)`.
 2. **Switch routing mode** — set `CompileMode` on a router node via `PatchNodeProperties` (e.g. `{"CompileMode":"Static"}`), then re-run the compile tool. In Static mode expect pruned branches (`Order = -1`).
 3. **Respect stopped nodes** — a node with `Order = -1` is compiled out of the active path. Do NOT drive it as part of the live chain.
-4. **Run the whole chain** — call `RunCompiledWorkflow(nodeIndex)` to execute the compiled chain end-to-end (the demo's Run path). Read the returned `runStatus` (`Completed` / `Stopped`), `logs` (the execution trail), `data` (final payload) and `endedWithError`.
+4. **Run the whole chain** — call `RunCompiledWorkflow(nodeIndex)` to execute the compiled chain end-to-end (the demo's Run path). Read the returned `runStatus` (`Completed` / `Stopped`), `outcome` (`Completed` / `Cancelled` / `Failed` — the precise reading), `logs` (the execution trail), `data` (final payload) and `endedWithError`.
 5. **Get one node's result** — call `GetNodeResult(nodeIndex)` to compute just that node from its ancestor cone. If it returns an error saying the node was NOT reached, the router selected a different branch (see above) — do not fabricate, follow the recovery steps instead.
 6. **Runtime session** — during a compiled run every node receives an `IRuntimeContext` session (UID / logs / shared variables / execution position) as its `ReceiveAsync` argument. Shared variables are written with `Set(key, value)` and read with `TryGet(key, ...)`.
 
@@ -84,6 +83,6 @@ Query it with `GetCompileStatus` (returns `{i, id, t, order, chainIndex, offset,
 4. **Continue after a checkpoint** — `ContinueCompiledWorkflow(...)` restarts from a saved checkpoint rather than from the entry node.
 5. **Retire** — `ClearFinishedRuns` releases finished handles; running ones are left alone.
 
-Every run and node-execution tool accepts `timeoutMs`. Use it instead of letting a stuck node hold the turn: a timed-out call returns an error and leaves the graph as it was.
+The waiting entries — `RunCompiledWorkflow`, `GetNodeResult`, `ExecuteNode`, `ExecuteNodes`, `BroadcastNode`, `ReverseBroadcastNode` — accept `timeoutMs`. Use it instead of letting a stuck node hold the turn. A timed-out call returns an error; work already done is not rolled back, so check what ran before continuing.
 
 > Prefer `GetCompileStatus` (cheap, no recompile) over re-running the compile tools once you only need the current identity. To execute: use `RunCompiledWorkflow` for a whole chain, `GetNodeResult` for a single node's value — not `ExecuteNode` — unless you genuinely intend to poke a single node.

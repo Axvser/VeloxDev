@@ -1,15 +1,15 @@
 ---
 name: node-creation
-description: 按协议创建节点——宿主开启自动发现时从预加载清单选类型、否则调用 ListCreatableTypes，从 [AgentContext] 读默认值、需要完整属性/命令表时用 GetComponentContext，开发者说明优先于 GetTypeSchema 的 defaultJson 零值，留出 30px 间距，再 CreateNode 并确认 repositioned=true
+description: 按协议创建节点——宿主开启自动发现时从预加载清单选类型、否则调用 ListCreatableTypes，从 [AgentContext] 读默认值、需要完整属性/命令表时用 GetComponentContext，开发者说明优先于 GetTypeSchema 的仅运行期零值，留出 30px 间距，再 CreateNode 并确认 repositioned=true
 ---
 
-## Skill: 节点创建协议
+## 🔧 节点创建协议
 
 当用户要求创建节点时，按以下步骤**依序**执行：
 
 1. **选择最合适的节点类型**：若上方已预加载客户组件类型清单，就从清单中选取——宿主已开启自动发现，这份清单是完整的。若清单缺失或为空，调用 **`ListCreatableTypes`** 取可用类型；不要凭印象编造类型名。若只有一种类型，直接使用；若有多种，选择最符合用户意图的，或请用户澄清。
 2. **读取该类型的 `[AgentContext]` 描述**（清单预加载时通常也已在上方）。提取默认尺寸及其他默认值。需要一句话描述未涵盖的属性或命令时，对该类型调用一次 **`GetComponentContext`** 并按其完整表格操作；不要凭名称猜测类型形状。
-3. **应用 `[AgentContext]` 中的默认值**：若描述中写有"默认大小为 200×100"，则在 CreateNode 中使用 `width=200, height=100`。若用户明确指定了不同的值，以用户的值为准。
+3. **应用 `[AgentContext]` 中的默认值**：若描述中写有"默认大小为 200×100"，则在 CreateNode 中使用 `width=200, height=100`。"默认"值按下方顺序解析；用户明确指定的值优先。
 4. **选择无重叠的位置**：调用 CreateNode 前，检查现有节点位置（通过 ListNodes 或已缓存的知识），选取与已有节点不重叠的位置（至少 30px 间距）。工具会自动偏移重叠，但主动选择良好位置可获得更优布局。
    - **画布为空时**：将第一个节点放置在靠近原点的位置（如 `(20, 20)`），除非用户指定了特定区域。
    - **画布非空时**：默认将新节点放置在已有节点包围盒的右侧或下方。若用户要求特定象限或区域，参照**坐标系**参考文档转换其意图。
@@ -18,12 +18,10 @@ description: 按协议创建节点——宿主开启自动发现时从预加载�
 
 ### 📌 默认值解析（关键）
 
-当用户提及"默认"值（如"默认大小"、"重置为默认"）时，按以下**严格优先级顺序**解析：
-
 1. **`[AgentContext]` 开发者说明**（上方预加载或来自 GetComponentContext）。例如"默认大小为 200×100"意味着 width=200，height=100。**始终权威**。
-2. **GetComponentContext 完整属性表**——若预加载描述未涵盖具体属性，调用 GetComponentContext 获取含各属性默认值的完整表格。
-3. **禁止**将其他节点的运行时值、GetTypeSchema 的 `defaultJson` 或猜测作为"默认值"使用——这些是运行时状态，不是预期默认值。
+2. **GetComponentContext 完整属性表**——若预加载描述未涵盖具体属性。
+3. **禁止**将其他节点的运行时值、GetTypeSchema 的 `defaultJson_runtimeOnly` 或猜测作为"默认值"使用。
 
-> ⚠️ **GetTypeSchema 的 `defaultJson` 显示的是运行时零初始化值（如 Size={0,0}）**，不是预期默认值。`[AgentContext]` 描述中的开发者说明始终优先于 `defaultJson`。
+> ⚠️ `GetTypeSchema` 报告的是 `defaultJson_runtimeOnly`——运行时零初始化值（如 `Size={0,0}`），不是预期默认值。
 
-**关键原则**：`[AgentContext]` 默认值是基准。用户指令可覆盖它们。永远不要忽略已文档化的默认值，也不要向用户询问 `[AgentContext]` 已提供的信息。
+用户指令可覆盖这些默认值；不要向用户询问 `[AgentContext]` 已提供的信息。
