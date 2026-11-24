@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFrameworks>netframework4.6.1;net5.0-windows;netcoreapp3.0;net8.0-windows</TargetFrameworks>
@@ -35,7 +35,7 @@
 		<!-- Easel is a git submodule at the repository root. Debug builds it from source; Release resolves
 		     the published package so the adapter's nuspec carries the real Easel dependency. -->
 		<ProjectReference Include="..\..\..\Easel\Src\Easel\Easel.csproj" Condition="'$(Configuration)' == 'Debug'" />
-		<PackageReference Include="Easel" Version="1.0.0" Condition="'$(Configuration)' != 'Debug'" />
+		<PackageReference Include="WinForms.Easel" Version="1.1.0" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 
 	<ItemGroup>

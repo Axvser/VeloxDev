@@ -320,10 +320,25 @@ internal sealed class EaselDependencyTransitionProperty : ITransitionProperty
 }
 
 /// <summary>Registers the VeloxDev transition adapter as Easel's animation backend.</summary>
-internal static class EaselAnimationBootstrap
+/// <remarks>
+/// The module initializer covers any process that already executes code from this assembly, which is every app
+/// that uses the workflow surface. A host that only installs this package for the animation backend may never
+/// touch another type here, and a module initializer runs on the first execution in its module, not on reference:
+/// such a host calls <see cref="EnsureRegistered"/> once at startup.
+/// </remarks>
+public static class EaselAnimationBootstrap
 {
 #pragma warning disable CA2255 // 库通过模块初始化器把适配器注入 Easel；这是该规则描述的高级用法。
     [ModuleInitializer]
-    internal static void Initialize() => AnimationRuntime.Animator = new EaselVisualAnimator();
+    internal static void Initialize() => EnsureRegistered();
 #pragma warning restore CA2255
+
+    /// <summary>Assigns the VeloxDev animator unless the host already supplied a backend.</summary>
+    public static void EnsureRegistered()
+    {
+        if (!AnimationRuntime.HasAnimator)
+        {
+            AnimationRuntime.Animator = new EaselVisualAnimator();
+        }
+    }
 }
