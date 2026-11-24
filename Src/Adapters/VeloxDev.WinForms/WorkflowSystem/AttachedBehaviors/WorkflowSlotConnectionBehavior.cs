@@ -18,12 +18,23 @@ public sealed class WorkflowSlotConnectionBehavior
     /// <summary>Whether this slot view starts and completes a connection drag.</summary>
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
         "IsEnabled", typeof(bool), typeof(WorkflowSlotConnectionBehavior),
-        new PropertyMetadata(false));
+        // 视觉元素不是 Control：只有 VisualPropertyChangedCallback 会在这里触发，Ensure 因此能按属性变化安装。
+        new PropertyMetadata(false) { VisualPropertyChangedCallback = OnVisualPropertyChanged });
 
     private static readonly ConditionalWeakTable<VisualElement, ConnectionState> States = new();
 
     private WorkflowSlotConnectionBehavior()
     {
+    }
+
+    // 视觉元素的附着属性写值只走这一条回调；Ensure 本身幂等，重复调用不会重复接线。
+    private static void OnVisualPropertyChanged(IWinformsObject target, DependencyPropertyChangedEventArgs e)
+    {
+        _ = e;
+        if (target is VisualElement element)
+        {
+            Ensure(element);
+        }
     }
 
     /// <summary>Reads the connection switch.</summary>

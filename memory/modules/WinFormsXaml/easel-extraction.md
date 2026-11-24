@@ -14,6 +14,7 @@
 
 ## Easel 新增能力（VeloxDev 的 Xaml 副本尚未同步）
 
+- **视觉附着属性回调**：`PropertyMetadata.VisualPropertyChangedCallback`（目标 `IWinformsObject`）由 `WinformsObject.RaisePropertyChanged` 调用；`[XamlProperty]` / `[XamlAttachedProperty]` 新增 `ChangedCallback = nameof(...)`，指向声明类型上的静态 `(IWinformsObject, DependencyPropertyChangedEventArgs)` 方法，生成器发 `VisualPropertyChangedCallback = ...`，签名不对报 `EASEL_XAMLP006`。此前只有原生 `Control` 目标的 `PropertyChangedCallback` 会触发，视觉元素（`VisualElement` 派生自 `WinformsObject`，不是 `Control`）写附着属性完全无通知——WinForms 适配器因此只能用每 pass 的 `Ensure` 遍历安装行为。语义与 Control 路一致：有效值变化才通知，首写与 `ClearValue` 回落都通知。回归在 `DependencyPropertyTests` / `SourceGeneratorTests`。
 - **3D 变换**：`Transform3D` 家族（`Rotate3DTransform` / `Scale3DTransform` / `Translate3DTransform` / `MatrixTransform3D` / `Transform3DGroup`）挂在 `Visual.Transform3D` 与 `VisualElement.Transform3DProperty` 上；`Transform3D.cs` 自带 `Matrix4x4` 与单应性 `Projection3D`，不依赖 `System.Numerics`。渲染先合成子树，再用逆单应性逐像素双线性采样贴回（边缘 2×2 覆盖），不做 N×N 仿射近似；单轴 >4096px 或目标 >16M 像素时退回分格仿射。命中、`AbsoluteBounds` 与失效走同一逆映射。`Depth<=0` 视为正交。`CacheAsBitmap` 缓存投影前的层，只改角度/深度/透明度时不重绘子树；改 `Transform3DProperty` 时由父级重绘，旧投影区域才不会留残影。
 - **合成遮罩**：`Visual.OpacityMask` / `VisualElement.OpacityMaskProperty` 用 `Visuals/OpacityMaskCompositor.cs` 乘合成位图；`OpacityMaskMode.Alpha` 取笔刷 alpha，`OpacityMaskMode.Luminance` 取预乘遮罩的亮度×alpha。承载 `ContainerVisual` 的 `VisualPresenter` 或舞台要 `ClipToBounds`，旋转/变形才不会在包围盒外留下旧帧。
 - **渐变文字**：`Brush.CreateNativeBrush` 把 Solid/Linear/Radial 笔刷交给 `Graphics.DrawString`；`TextBlock` / `Button` / `TextBox` / `ComboBox` / `TextVisual` 都走这条路径，文本不再压成首色。多行 TextBox 每行单独铺渐变。
@@ -51,4 +52,5 @@
 ## 未完成
 
 - VeloxDev 自身的 XAML 运行时尚未切到 Easel；当前适配器只对同时引用 Easel 的宿主生效。
+- WinForms 适配器仍用 `WorkflowSurfaceBehavior.EnsureAttachedBehaviors` 的每 pass 遍历安装四个行为；换成附着属性的 `ChangedCallback`（`WorkflowSlotLayoutBehavior.IsEnabled` 等）需要适配器消费含该能力的 Easel 版本（候选 1.2.0），并把 Release 的 `WinForms.Easel` 引用一起抬高。
 - `VeloxDev.WinForms.csproj` 的 Release 从 NuGet 取 Easel 包（Debug 走子模块源码），所以发布顺序是 Easel 先于 VeloxDev.WinForms；父仓 `publish.yml` 在打包 WinForms 适配器前等待 `VeloxDev.WinForms.csproj` 里写的 Easel 版本在 NuGet 可下载。

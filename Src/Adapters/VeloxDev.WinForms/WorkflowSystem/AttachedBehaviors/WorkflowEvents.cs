@@ -32,21 +32,35 @@ public sealed class WorkflowEvents
 {
     /// <summary>The <see cref="INodeEventSink"/> for the node this element is showing.</summary>
     public static readonly DependencyProperty NodeProperty = DependencyProperty.RegisterAttached(
-        "Node", typeof(INodeEventSink), typeof(WorkflowEvents), new PropertyMetadata(null));
+        "Node", typeof(INodeEventSink), typeof(WorkflowEvents),
+        // 视觉元素不是 Control：只有 VisualPropertyChangedCallback 会在这里触发，Ensure 因此能按属性变化接线。
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualPropertyChanged });
 
     /// <summary>The <see cref="ISlotEventSink"/> for the slot this element is showing.</summary>
     public static readonly DependencyProperty SlotProperty = DependencyProperty.RegisterAttached(
-        "Slot", typeof(ISlotEventSink), typeof(WorkflowEvents), new PropertyMetadata(null));
+        "Slot", typeof(ISlotEventSink), typeof(WorkflowEvents),
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualPropertyChanged });
 
     /// <summary>The <see cref="ITreeEventSink"/> for the tree this element is showing.</summary>
     public static readonly DependencyProperty TreeProperty = DependencyProperty.RegisterAttached(
-        "Tree", typeof(ITreeEventSink), typeof(WorkflowEvents), new PropertyMetadata(null));
+        "Tree", typeof(ITreeEventSink), typeof(WorkflowEvents),
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualPropertyChanged });
 
     // 每个元素一份订阅：值变了、或它换了个 DataContext（池化视图就是这样），都要重新接。
     private static readonly ConditionalWeakTable<VisualElement, Attachment> Attachments = new();
 
     private WorkflowEvents()
     {
+    }
+
+    // 视觉元素的附着属性写值只走这一条回调；Ensure 本身幂等，重复调用不会重复接线。
+    private static void OnVisualPropertyChanged(IWinformsObject target, DependencyPropertyChangedEventArgs e)
+    {
+        _ = e;
+        if (target is VisualElement element)
+        {
+            Ensure(element);
+        }
     }
 
     /// <summary>Gets the <see cref="INodeEventSink"/> attached to <paramref name="element"/>.</summary>

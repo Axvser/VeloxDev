@@ -778,6 +778,8 @@ public sealed class WorkflowSurfaceBehavior
             : null;
     }
 
+    // 首装与修复扫描：附着属性的变更回调（Easel 的 VisualPropertyChangedCallback）已经能安装后续变化，
+    // 所以这一趟只负责「表面挂上来时，树上已经存在、但回调发生在它入树之前」的元素，以及池重建后的补装。
     private static void EnsureAttachedBehaviors(VisualElement? root)
     {
         if (root is null)

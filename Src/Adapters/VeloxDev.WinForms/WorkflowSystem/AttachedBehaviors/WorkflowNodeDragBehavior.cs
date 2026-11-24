@@ -21,17 +21,28 @@ public sealed class WorkflowNodeDragBehavior
     /// <summary>Whether the element (and its descendants) may start a node drag.</summary>
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
         "IsEnabled", typeof(bool), typeof(WorkflowNodeDragBehavior),
-        new PropertyMetadata(false));
+        // 视觉元素不是 Control：只有 VisualPropertyChangedCallback 会在这里触发，Ensure 因此能按属性变化安装。
+        new PropertyMetadata(false) { VisualPropertyChangedCallback = OnVisualPropertyChanged });
 
     /// <summary>Name of the element that supplies the coordinate space for the drag delta.</summary>
     public static readonly DependencyProperty CoordinateHostNameProperty = DependencyProperty.RegisterAttached(
         "CoordinateHostName", typeof(string), typeof(WorkflowNodeDragBehavior),
-        new PropertyMetadata(null));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualPropertyChanged });
 
     private static readonly ConditionalWeakTable<VisualElement, DragState> States = new();
 
     private WorkflowNodeDragBehavior()
     {
+    }
+
+    // 视觉元素的附着属性写值只走这一条回调；Ensure 本身幂等，重复调用不会重复接线。
+    private static void OnVisualPropertyChanged(IWinformsObject target, DependencyPropertyChangedEventArgs e)
+    {
+        _ = e;
+        if (target is VisualElement element)
+        {
+            Ensure(element);
+        }
     }
 
     /// <summary>Reads the drag switch.</summary>
