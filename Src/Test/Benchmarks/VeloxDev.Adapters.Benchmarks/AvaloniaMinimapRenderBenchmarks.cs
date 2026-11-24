@@ -4,7 +4,7 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using BenchmarkDotNet.Attributes;
-using VeloxDev.AdapterTestKit;
+using VeloxDev.Adapters.Benchmarks.Headed;
 using AvaMinimap = ava::VeloxDev.WorkflowSystem.AttachedBehaviors.WorkflowMinimapOverlay;
 
 namespace VeloxDev.Adapters.Benchmarks;
@@ -34,7 +34,7 @@ public class AvaloniaMinimapRenderBenchmarks
         {
             Width = 200d,
             Height = 140d,
-            WorkflowTree = TestGraph.Create().Tree,
+            WorkflowTree = SyntheticWorkflow.Create(new HeadedOptions()).Tree,
             ViewportWidth = 800d,
             ViewportHeight = 600d,
             IsMinimapVisible = true,
