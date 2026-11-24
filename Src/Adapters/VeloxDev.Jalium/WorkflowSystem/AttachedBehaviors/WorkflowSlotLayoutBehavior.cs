@@ -17,14 +17,21 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// <para>
 /// This is where a slot's <see cref="ISlotComponent.Anchor"/> comes from. The template names the controls
 /// that hold slots — one name per control in <see cref="SlotNamesProperty"/>, one per
-/// <see cref="ItemsControl"/> in <see cref="SlotEnumeratorNamesProperty"/> — and this behavior finds them, reads
+/// <see cref="ItemsControl"/> in <see cref="SlotEnumeratorNamesProperty"/> — and the behavior finds them, reads
 /// the slot each one is bound to from its <see cref="FrameworkElement.DataContext"/>, measures its centre and
 /// writes the result. Nothing enumerates <c>node.Slots</c>: which slots a card shows is the card's business.
 /// </para>
 /// <para>
+/// The behavior owns only the platform half — the visual-tree walk, the <c>TransformToVisual</c> transform, and the
+/// UI-thread hand-off; which parts to measure, their order, duplicate suppression and the re-measure schedule belong
+/// to <see cref="SlotLayoutPipelineCore"/>.
+/// </para>
+/// <para>
 /// Positions are measured against <see cref="CoordinateHostNameProperty"/> (usually the surface canvas), because
-/// the surface's own translation is part of where a slot lands on screen. Getting the host wrong is a silent,
-/// uniform offset bug — every port and every link endpoint shifts together.
+/// the surface's own translation is part of where a slot lands on screen. Jalium's transform reports scroll space,
+/// so the locator declares <see cref="SlotCoordinateSpace.ScrollSpace"/> and the pipeline subtracts
+/// <see cref="CanvasLayout.ActualOffset"/>. Getting the host wrong is a silent, uniform offset bug — every port and
+/// every link endpoint shifts together.
 /// </para>
 /// <para>
 /// A reuse-mode <see cref="ItemsControl"/> hands its containers out lazily, so the enumerator branch reads
@@ -37,15 +44,11 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 {
     private sealed class LayoutState
     {
-        public FrameworkElement? Owner { get; set; }
-
-        public bool Syncing { get; set; }
+        public SlotLayoutPipelineCore? Pipeline { get; set; }
 
         public INotifyPropertyChanged? PropertyChangedSource { get; set; }
 
         public PropertyChangedEventHandler? PropertyChangedHandler { get; set; }
-
-        public HashSet<string> SlotPropertyNames { get; } = new(StringComparer.Ordinal);
     }
 
     /// <summary>The attached property that turns slot measuring on for a node view.</summary>
@@ -120,14 +123,18 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
     public static void SetCoordinateHostType(DependencyObject element, Type? value) => element.SetValue(CoordinateHostTypeProperty, value);
 
     /// <summary>Re-measures the slots of a node view after the canvas transform or scale changed.</summary>
-    public static void Refresh(FrameworkElement control) => RequestSync(control);
+    /// <remarks>
+    /// A transform-only change leaves the stamp's model geometry and measured size untouched, so the layout trigger
+    /// cannot see it; a zoom path calls this to force the pass.
+    /// </remarks>
+    public static void Refresh(FrameworkElement control) => RequestMeasure(control, SlotLayoutTrigger.Viewport);
 
     /// <summary>Re-measures the slots immediately, for callers that already ran the layout pass.</summary>
     public static void SyncNow(FrameworkElement control)
     {
-        if (control.GetValue(StateProperty) is not null)
+        if (control.GetValue(StateProperty) is LayoutState { Pipeline: { } pipeline })
         {
-            Sync(control);
+            pipeline.Measure();
         }
     }
 
@@ -149,27 +156,33 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
     private static void OnConfigurationChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is FrameworkElement element && element.GetValue(StateProperty) is LayoutState)
+        if (d is not FrameworkElement element || element.GetValue(StateProperty) is not LayoutState)
         {
-            RequestSync(element);
+            return;
         }
+
+        // 配置换了就得换一条流水线：部件名集合在构造时固化成 WatchedPropertyNames。
+        RebuildPipeline(element);
+        RequestMeasure(element, SlotLayoutTrigger.Configuration);
     }
 
     private static void Attach(FrameworkElement control)
     {
         Detach(control);
 
-        control.SetValue(StateProperty, new LayoutState { Owner = control });
+        control.SetValue(StateProperty, new LayoutState());
         if (control.DataContext is INotifyPropertyChanged context)
         {
             s_owners.AddOrUpdate(context, control);
         }
+
         control.Loaded += OnLoaded;
         control.Unloaded += OnUnloaded;
         control.DataContextChanged += OnDataContextChanged;
         control.SizeChanged += OnSizeChanged;
         UpdatePropertyChangedSubscription(control);
-        RequestSync(control);
+        RebuildPipeline(control);
+        RequestMeasure(control, SlotLayoutTrigger.Attachment);
     }
 
     private static void Detach(FrameworkElement control)
@@ -179,13 +192,55 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         control.DataContextChanged -= OnDataContextChanged;
         control.SizeChanged -= OnSizeChanged;
 
-        if (control.GetValue(StateProperty) is LayoutState state && state.PropertyChangedSource is not null)
+        if (control.GetValue(StateProperty) is LayoutState state)
         {
-            state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
+            if (state.PropertyChangedSource is not null && state.PropertyChangedHandler is not null)
+            {
+                state.PropertyChangedSource.PropertyChanged -= state.PropertyChangedHandler;
+            }
+
+            state.Pipeline?.Stop();
+            state.Pipeline = null;
         }
 
-        CancelSync(control);
         control.ClearValue(StateProperty);
+    }
+
+    private static void RebuildPipeline(FrameworkElement control)
+    {
+        if (control.GetValue(StateProperty) is not LayoutState state)
+        {
+            return;
+        }
+
+        state.Pipeline?.Stop();
+        state.Pipeline = null;
+
+        if (control.DataContext is not INodeComponent node)
+        {
+            return;
+        }
+
+        var configuration = new SlotLayoutConfiguration(
+            GetSlotNames(control),
+            GetSlotEnumeratorNames(control),
+            GetCoordinateHostName(control),
+            GetCoordinateHostType(control));
+
+        state.Pipeline = new SlotLayoutPipelineCore(
+            node,
+            control,
+            new JaliumSlotPartLocator(control),
+            new JaliumSlotMeasurementHost(control),
+            configuration);
+    }
+
+    private static void RequestMeasure(FrameworkElement control, SlotLayoutTrigger trigger)
+    {
+        if (control.GetValue(StateProperty) is LayoutState { Pipeline: { } pipeline })
+        {
+            pipeline.RequestMeasure(trigger);
+        }
     }
 
     private static void OnLoaded(object? sender, RoutedEventArgs e)
@@ -193,15 +248,16 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         if (sender is FrameworkElement control)
         {
             UpdatePropertyChangedSubscription(control);
-            RequestSync(control);
+            RequestMeasure(control, SlotLayoutTrigger.Attachment);
         }
     }
 
     private static void OnUnloaded(object? sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement control)
+        if (sender is FrameworkElement control && control.GetValue(StateProperty) is LayoutState state)
         {
-            CancelSync(control);
+            // 卸载只丢排队工作，流水线留着：重载回来时同一份配置直接复用。
+            state.Pipeline?.CancelPending();
         }
     }
 
@@ -213,14 +269,16 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
 
         UpdatePropertyChangedSubscription(control);
-        RequestSync(control);
+        RebuildPipeline(control);
+        RequestMeasure(control, SlotLayoutTrigger.Attachment);
     }
 
     private static void OnSizeChanged(object? sender, SizeChangedEventArgs e)
     {
+        // 缩放折叠每格都改节点 Size；Layout 触发先用指纹挡掉输入没变的节点，再在共享批次里同步落笔。
         if (sender is FrameworkElement control)
         {
-            RequestSync(control);
+            RequestMeasure(control, SlotLayoutTrigger.Layout);
         }
     }
 
@@ -234,10 +292,11 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             return;
         }
 
-        // 只看与插槽位置有关的属性名：模型侧改别的（标题、颜色）不该重跑一遍测量。
-        if (e.PropertyName is null || state.SlotPropertyNames.Contains(e.PropertyName))
+        // 只看与插槽位置有关的属性名：标题、颜色这类变更不该重跑一遍测量。
+        if (state.Pipeline is { } pipeline
+            && (e.PropertyName is null || pipeline.WatchedPropertyNames.Contains(e.PropertyName)))
         {
-            RequestSync(control);
+            pipeline.RequestMeasure(SlotLayoutTrigger.Model);
         }
     }
 
@@ -288,206 +347,129 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
     }
 
-    // 排到布局之后同步：直接量会读到还没摆好的几何。同一棵树的请求并进共享批次，到 Render 优先级合并成一次 Flush。
-    private static void RequestSync(FrameworkElement control)
+    // ── 平台层：可视树遍历与坐标转换 ────────────────────────────────────────
+
+    private sealed class JaliumSlotPartLocator(FrameworkElement owner) : ISlotPartLocator
     {
-        if (control.GetValue(StateProperty) is null
-            || control.DataContext is not INodeComponent node)
+        // TransformToVisual 到画布得到的是「world + ActualOffset」，所以由流水线减掉布局偏移。
+        public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.ScrollSpace;
+
+        public ISlotPart? FindNamedSlot(string name)
+            => owner.FindName(name) is FrameworkElement element ? new JaliumSlotPart(owner, element) : null;
+
+        public IReadOnlyList<ISlotPart> FindEnumeratedSlots(string name)
         {
-            return;
-        }
-
-        var dispatcher = control.Dispatcher;
-        var batch = WorkflowLayoutBatch.For(OwnerOf(control, node), action =>
-        {
-            dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(action));
-            return true;
-        });
-
-        batch.Request(control, new Action(() => Sync(control)));
-        batch.Schedule();
-    }
-
-    private static void CancelSync(FrameworkElement control)
-    {
-        object owner = control.DataContext is INodeComponent { Parent: { } tree } ? tree : control;
-        WorkflowLayoutBatch.For(owner).Cancel(control);
-    }
-
-    private static object OwnerOf(FrameworkElement control, INodeComponent node)
-        => node.Parent ?? (object)control;
-
-    private static void Sync(FrameworkElement host)
-    {
-        if (host.GetValue(StateProperty) is not LayoutState state || state.Syncing)
-        {
-            return;
-        }
-
-        if (host.DataContext is not INodeComponent node)
-        {
-            return;
-        }
-
-        state.Syncing = true;
-        try
-        {
-            var coordinateHost = ResolveCoordinateHost(host);
-            var slotNames = EnumerateConfiguredNames(GetSlotNames(host));
-            var enumeratorNames = EnumerateConfiguredNames(GetSlotEnumeratorNames(host));
-
-            RebuildWatchedNames(state, slotNames, enumeratorNames);
-
-            foreach (var slotName in slotNames)
+            if (owner.FindName(name) is not ItemsControl itemsControl || itemsControl.Items.Count == 0)
             {
-                if (host.FindName(slotName) is FrameworkElement slotControl)
+                return Array.Empty<ISlotPart>();
+            }
+
+            var parts = new List<ISlotPart>(itemsControl.Items.Count);
+            for (var i = 0; i < itemsControl.Items.Count; i++)
+            {
+                if (itemsControl.ItemContainerGenerator?.ContainerFromIndex(i) is not DependencyObject container)
                 {
-                    SyncSlot(host, coordinateHost, slotControl, node);
+                    continue;
+                }
+
+                // 插槽自身不带控件名：它住在 item template 里，宿主名字作用域够不着，只能沿容器向下找。
+                if (FindDescendantWithSlotDataContext(container) is { } slotView)
+                {
+                    parts.Add(new JaliumSlotPart(owner, slotView));
                 }
             }
 
-            foreach (var enumeratorName in enumeratorNames)
-            {
-                SyncSlotEnumerator(host, coordinateHost, node, enumeratorName);
-            }
+            return parts;
         }
-        finally
+
+        public object? ResolveCoordinateHost(string? hostName, Type? hostType)
         {
-            state.Syncing = false;
+            if (!string.IsNullOrWhiteSpace(hostName) && ResolveNamedAncestor(owner, hostName!) is { } namedHost)
+            {
+                return namedHost;
+            }
+
+            var type = hostType ?? typeof(Canvas);
+            if (type.IsInstanceOfType(owner))
+            {
+                return owner;
+            }
+
+            foreach (var ancestor in EnumerateVisualAncestors(owner))
+            {
+                if (ancestor is FrameworkElement element && type.IsInstanceOfType(element))
+                {
+                    return element;
+                }
+            }
+
+            return null;
+        }
+
+        public int CountSlots(IReadOnlyList<string> slotNames, IReadOnlyList<string> enumeratorNames)
+        {
+            // 指纹里的插槽数：容器增删、模板重建必须重测，哪怕节点外框尺寸没变。
+            var count = 0;
+
+            foreach (var name in slotNames)
+            {
+                if (owner.FindName(name) is FrameworkElement)
+                {
+                    count++;
+                }
+            }
+
+            foreach (var name in enumeratorNames)
+            {
+                if (owner.FindName(name) is ItemsControl items)
+                {
+                    count += items.Items.Count;
+                }
+            }
+
+            return count;
         }
     }
 
-    // 重建「变化时该重跑同步」的属性名集合：控件名（PART_OutputSlots）与 view-model 属性名（OutputSlots）都收，
-    // 否则 OnPropertyChanged("OutputSlots") 匹配不上。
-    private static void RebuildWatchedNames(LayoutState state, IEnumerable<string> slotNames, IEnumerable<string> enumeratorNames)
+    private sealed class JaliumSlotPart(FrameworkElement nodeView, FrameworkElement element) : ISlotPart
     {
-        state.SlotPropertyNames.Clear();
-        state.SlotPropertyNames.Add(nameof(INodeComponent.Anchor));
-        state.SlotPropertyNames.Add(nameof(INodeComponent.Size));
+        public ISlotComponent? Slot => element.DataContext as ISlotComponent;
 
-        foreach (var name in slotNames)
+        public bool IsMeasured => element.ActualWidth > 0d && element.ActualHeight > 0d;
+
+        public SlotCenter? MeasureCenter(object? relativeTo)
         {
-            state.SlotPropertyNames.Add(name);
-            if (name.StartsWith("PART_", StringComparison.Ordinal))
-            {
-                state.SlotPropertyNames.Add(name[5..]);
-            }
-        }
+            var target = relativeTo as FrameworkElement ?? nodeView;
 
-        foreach (var name in enumeratorNames)
-        {
-            state.SlotPropertyNames.Add(name);
-            if (name.StartsWith("PART_", StringComparison.Ordinal))
-            {
-                state.SlotPropertyNames.Add(name[5..]);
-            }
-        }
-
-        state.SlotPropertyNames.Add("InputSlot");
-        state.SlotPropertyNames.Add("OutputSlot");
-        state.SlotPropertyNames.Add("OutputSlots");
-    }
-
-    private static void SyncSlotEnumerator(
-        FrameworkElement host,
-        FrameworkElement? coordinateHost,
-        INodeComponent node,
-        string enumeratorName)
-    {
-        if (host.FindName(enumeratorName) is not ItemsControl itemsControl || itemsControl.Items.Count == 0)
-        {
-            return;
-        }
-
-        for (var i = 0; i < itemsControl.Items.Count; i++)
-        {
-            if (itemsControl.ItemContainerGenerator?.ContainerFromIndex(i) is not DependencyObject container)
-            {
-                continue;
-            }
-
-            if (FindDescendantWithSlotDataContext(container) is { } slotView)
-            {
-                SyncSlot(host, coordinateHost, slotView, node);
-            }
-        }
-    }
-
-    private static void SyncSlot(
-        FrameworkElement host,
-        FrameworkElement? coordinateHost,
-        FrameworkElement control,
-        INodeComponent node)
-    {
-        if (control.DataContext is not ISlotComponent slot)
-        {
-            return;
-        }
-
-        if (control.ActualWidth <= 0d || control.ActualHeight <= 0d)
-        {
-            return;
-        }
-
-        var center = new Point(control.ActualWidth / 2d, control.ActualHeight / 2d);
-
-        if (coordinateHost is not null)
-        {
             // TransformToVisual composes the full chain (Viewbox scale + the node's CanvasTransform),
             // unlike TransformToAncestor, which returns only the element's origin. Transforming the
             // local CENTER is what keeps the anchor on the port when the card is scaled.
-            var toCanvas = control.TransformToVisual(coordinateHost);
-            if (toCanvas is not null)
+            var transform = element.TransformToVisual(target);
+            if (transform is null)
             {
-                var centerOnCanvas = toCanvas.Transform(center);
-                var layout = node.Parent?.Layout;
-                if (layout is not null)
-                {
-                    slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromVisualCenter(
-                        centerOnCanvas.X, centerOnCanvas.Y, slot.Anchor.Layer, layout);
-                    return;
-                }
+                return null;
             }
-        }
 
-        var toHost = control.TransformToVisual(host);
-        if (toHost is null)
-        {
-            return;
+            var center = transform.Transform(new Point(element.ActualWidth / 2d, element.ActualHeight / 2d));
+            return new SlotCenter(center.X, center.Y);
         }
-
-        var centerOnHost = toHost.Transform(center);
-        slot.Anchor = WorkflowSurfaceMath.SlotAnchorFromNode(
-            node.Anchor.Horizontal,
-            node.Anchor.Vertical,
-            centerOnHost.X,
-            centerOnHost.Y,
-            slot.Anchor.Layer);
     }
 
-    private static FrameworkElement? ResolveCoordinateHost(FrameworkElement control)
+    private sealed class JaliumSlotMeasurementHost(FrameworkElement owner) : ISlotMeasurementHost
     {
-        var hostName = GetCoordinateHostName(control);
-        if (!string.IsNullOrWhiteSpace(hostName) && ResolveNamedAncestor(control, hostName!) is { } namedHost)
-        {
-            return namedHost;
-        }
+        public (double Width, double Height) ReadNodeSize() => (owner.ActualWidth, owner.ActualHeight);
 
-        var hostType = GetCoordinateHostType(control) ?? typeof(Canvas);
-        if (hostType.IsInstanceOfType(control))
-        {
-            return control;
-        }
+        public Anchor ReadAnchor(ISlotComponent slot) => slot.Anchor;
 
-        foreach (var ancestor in EnumerateVisualAncestors(control))
-        {
-            if (ancestor is FrameworkElement element && hostType.IsInstanceOfType(element))
-            {
-                return element;
-            }
-        }
+        public void WriteAnchor(ISlotComponent slot, Anchor anchor) => slot.Anchor = anchor;
 
-        return null;
+        public void InvalidateMeasure() => owner.InvalidateMeasure();
+
+        public bool Post(Action flush)
+        {
+            owner.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(flush));
+            return true;
+        }
     }
 
     // 按名字找宿主：只沿视觉树比 Name。名字作用域在这里帮不上忙 —— 节点视图住在 DataTemplate 里，
@@ -508,23 +490,6 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
 
         return null;
-    }
-
-    private static IEnumerable<string> EnumerateConfiguredNames(string? names)
-    {
-        if (string.IsNullOrWhiteSpace(names))
-        {
-            yield break;
-        }
-
-        foreach (var name in names!.Split(','))
-        {
-            var trimmed = name.Trim();
-            if (trimmed.Length > 0)
-            {
-                yield return trimmed;
-            }
-        }
     }
 
     private static FrameworkElement? FindDescendantWithSlotDataContext(DependencyObject parent)
