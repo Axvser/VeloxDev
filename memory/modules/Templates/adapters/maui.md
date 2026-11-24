@@ -104,7 +104,7 @@ node-view 不传 `SlotState`。
 ### P3 · 池的重订靠 `BindingContext` 变化
 
 `ViewPool.ItemsSource` 绑的是 `{Binding BindingContext.Helper.VisibleItems, Source={x:Reference Root}}`
-（`workflow-tree-view/TemplateClass.xaml` 的 `PART_Canvas`），所以换树就得换 `BindingContext`。⇒ **直接改底层树的 `VisibleItems` 内容不会重建池订阅**，
+（`Src/Templates/VeloxDev.MAUI.Templates/working/content/workflow-tree-view/TemplateClass.xaml` 的 `PART_Canvas`），换树就得换 `BindingContext`。⇒ **直接改底层树的 `VisibleItems` 内容不会重建池订阅**，
 但若宿主换了树对象却没触发 `BindingContextChanged`，绑定不会重求值、池继续订阅旧的集合 —— 表面显示旧数据。
 
 ### P4 · grid-decorator 的两个 `GraphicsView` 都必须 `InputTransparent = true`
@@ -127,7 +127,7 @@ node-view 不传 `SlotState`。
 |---|---|
 | 原生 extent 是异步重测的、`await Task.Yield()` 两次、`PanGestureRecognizer` 平移、没有空白判定 | `memory/modules/WorkflowSystem/adapters/maui.md` |
 | 槽位锚点走 `GetCenterRelativeTo` + `SlotAnchorFromCanvasLocal` | 同上 |
-| `ViewScheduler` 用 16 ms 定时器代替 `DispatcherPriority.Background`（默认 `AdaptiveViewPoolPolicy` 初始 32/8ms） | 同上 |
+| `ViewScheduler` 连续投递批次，累计 32ms 后用 16ms 定时器让出一帧（默认 `AdaptiveViewPoolPolicy` 初始 32/8ms） | 同上 |
 | `WorkflowLinkOverlay` 换掉 `WorkflowCanvasTransformBehavior` 这层关系 | 同上 |
 | 滚轮方向与缩放提交顺序 | `memory/modules/WorkflowSystem/extension.md` §3.9 |
 | 人面向的"怎么用这套模板" | `skills/veloxdev-create-workflow/references/gui/maui.md` 的 `## Item templates` |

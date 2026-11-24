@@ -29,12 +29,13 @@
 
 ## 二、平台硬限制（别家不能照抄这里的哪些前提）
 
-### 1. MAUI 没有 `DispatcherPriority`，所以视图物化与槽位同步都靠 16ms 一次性定时器
+### 1. MAUI 没有 `DispatcherPriority`，视图物化靠调度器连续投递，槽位同步靠 16ms 一次性定时器
 
-- 视图池：Core 的 `ViewSourcePipeline` 以 `NonPriority` 闭合；`ViewScheduler` 每批起一个**非重复**的 16ms
-  `IDispatcherTimer`，`Schedule` 只 `Start()`、绝不同步执行批次。MAUI 的非重复定时器 fire 一次之后不能再
-  `Start()` 装填，所以每批都新建一个；池在一批跑完仍有待建项时自己再排下一批（`ViewPoolCore` 的
-  `ProcessNextBatch`），`ViewScheduler.OnTick` 只负责当前这一批。
+- 视图池：Core 的 `ViewSourcePipeline` 以 `NonPriority` 闭合；`ViewScheduler.Schedule` 用
+  `Dispatcher.Dispatch` 异步投递当前批，绝不同步执行。池在一批跑完仍有待建项时自己再排下一批
+  （`ViewPoolCore` 的 `ProcessNextBatch`）。连续批次累计运行满 32ms 后，下一批改由一个**非重复**的 16ms
+  `IDispatcherTimer` 启动，让渲染与输入拿到一帧；定时器 fire 后重新开始连续投递。非重复定时器 fire 一次
+  之后不能再 `Start()` 装填，每次走定时器都新建一个。
 - 默认池策略是 Core 的 `AdaptiveViewPoolPolicy`，初始 `32` 个视图 / `8ms` 预算，之后按实测吞吐与待建数
   在 8/12/16ms 之间收敛。
 - **选择器物化不了的类型按运行时类型缓存跳过**：`ViewFactory.CreateView` 问一次
@@ -48,11 +49,11 @@
 - 槽位同步：同样 16ms，但定时器是**每棵树的共享批次一个**（`WorkflowLayoutBatch` 的 `Schedule`，post 由
   `WorkflowSlotLayoutBehavior.RequestSync` 提供），合并范围是整棵树；布局 pass 那条（Windows 原生 `LayoutUpdated` /
   非 Windows `SizeChanged`）仍同步 `Flush`，见 [../scheduling.md](../scheduling.md)。
-- **这两个 `IsRepeating = false` 与 Transition 侧 pacer 的 `IsRepeating = true` 不矛盾**：pacer 的定时器每拍由
+- **这几个 `IsRepeating = false` 与 Transition 侧 pacer 的 `IsRepeating = true` 不矛盾**：pacer 的定时器每拍由
   `FramePacerCore.Fire()` 先 `Disarm()`，重复正是为了让下一拍还在；视图池是「建完这一批就停、有待建项再排下一批」。
   对位：`Src/Adapters/VeloxDev.MAUI/TransitionSystem/TransitionInterpreter.cs` 的 `IsRepeating` 设置。
-- 两个定时器的 `Tick` 都必须自带 try：`IDispatcherTimer.Tick` 抛出的异常 MAUI 不接，直接冒到 WinUI 的
-  `UnhandledException`（dotnet/maui #12245，`ViewScheduler.OnTick`、`WorkflowSlotLayoutBehavior.cs` 的 `PostToUiThread`）。
+- 定时器 `Tick` 与直接投递的回调都必须自带 try：异常 MAUI 不接，直接冒到 WinUI 的
+  `UnhandledException`（dotnet/maui #12245，`ViewScheduler.ScheduleOnFrameTimer`/`Run`、`WorkflowSlotLayoutBehavior.cs` 的 `PostToUiThread`）。
 
 ### 2. `GraphicsView` 的 `Draw` 回调没有异常保护
 

@@ -57,7 +57,7 @@
 |---|---|---|---|---|---|
 | WPF | `Panel` / `FrameworkElement` | `DispatcherPriority.Background` | 绑定，`ViewArranger` no-op | 逐条池化 | 模板选择器 + 资源回退 |
 | WinUI | `Panel` / `FrameworkElement` | `DispatcherQueuePriority.Low` | 命令式 Canvas，`ViewLayoutTracker` 订阅属性变化 | 逐条池化 | `TryEnqueue` 拒绝时返回 false |
-| MAUI | `Layout` / `View` | `NonPriority` + 16ms 一次性 timer | `AbsoluteLayout` + 节点 Anchor/Size 订阅 | `ViewLinkLayer.IsActive=true`，overlay 继续画 | 池不物化 link |
+| MAUI | `Layout` / `View` | `NonPriority`；`Dispatcher.Dispatch` 连续投递，累计 32ms 后用 16ms 一次性 timer 让出一帧 | `AbsoluteLayout` + 节点 Anchor/Size 订阅 | `ViewLinkLayer.IsActive=true`，overlay 继续画 | 池不物化 link |
 | Jalium | `Panel` / `FrameworkElement` | `DispatcherPriority.Background` | 绑定，`ViewArranger` no-op | 逐条池化；`WorkflowLinkBounds` 自盒化不动 | 模板选择器 + 资源回退 |
 | WinForms | `Panel` / `VisualElement` | `NonPriority`；无句柄时同步 | 绑定，no-op | 逐条池化 | 工厂直接调 `VisualTemplateSelector`；无句柄同步并以队列排空避免递归 |
 

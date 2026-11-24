@@ -97,7 +97,7 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 `ViewScheduler` 把每一批物化交给 `Dispatcher.BeginInvoke(DispatcherPriority.Background)`（`ViewHosting/ViewScheduler.cs`），批大小与时间预算由 Core 的 `AdaptiveViewPoolPolicy` 决定（初始 64 个 / 8ms，按吞吐与 pending 收敛到 8/12/16ms），**再排下一批**。`Background` 的语义是「只在更紧急的消息处理完之后跑」，所以创建被摊进消息泵的空隙里。
 
-这条**只在有 `DispatcherPriority` 的三家成立**（WPF / Avalonia / Jalium 都是 `DispatcherPriority.Background`）。MAUI 的等价物用的是 16ms 一次的一次性定时器（`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewScheduler.cs`，Tick 自带 try）；WinForms 把批次交给 `Control.BeginInvoke`（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/ViewHosting/ViewScheduler.cs`），两者都是 `NonPriority`。WinUI 用 `DispatcherQueuePriority.Low`。批大小六家都走 Core 的 `AdaptiveViewPoolPolicy`（WPF 初始 64/8ms）;
+这条**只在有 `DispatcherPriority` 的三家成立**（WPF / Avalonia / Jalium 都是 `DispatcherPriority.Background`）。MAUI 的等价物是把批次连续 `Dispatcher.Dispatch`，累计 32ms 后用一个 16ms 一次性定时器让出一帧（`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewScheduler.cs`，回调与 Tick 都自带 try）；WinForms 把批次交给 `Control.BeginInvoke`（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/ViewHosting/ViewScheduler.cs`），两者都是 `NonPriority`。WinUI 用 `DispatcherQueuePriority.Low`。批大小六家都走 Core 的 `AdaptiveViewPoolPolicy`（WPF 初始 64/8ms）;
 
 ### 2.9 自带手势的否决：按下在宿主隧道相路由一次，句柄存表面，节点/插槽只读
 
