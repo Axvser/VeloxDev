@@ -18,7 +18,7 @@ internal sealed class WpfHeadlessSurface : IDisposable
     private const double CanvasWidth = 8000d;
     private const double CanvasHeight = 6000d;
 
-    public WpfHeadlessSurface(TestGraph graph, bool enable = true)
+    public WpfHeadlessSurface(TestGraph graph, bool enable = true, bool withMinimap = false)
     {
         Graph = graph;
         Tree = graph.Tree;
@@ -64,7 +64,27 @@ internal sealed class WpfHeadlessSurface : IDisposable
         Scroll.Content = Canvas;
         Decorator.Children.Add(Scroll);
         Border.Child = Decorator;
-        Host.Content = Border;
+
+        if (withMinimap)
+        {
+            Minimap = new TestMinimapOverlay
+            {
+                Width = 200d,
+                Height = 140d,
+                MinimapMargin = 12d,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+            };
+
+            var root = new Grid();
+            root.Children.Add(Border);
+            root.Children.Add(Minimap);
+            Host.Content = root;
+        }
+        else
+        {
+            Host.Content = Border;
+        }
 
         // FindName is a namescope lookup; code-built trees have to register the names explicitly.
         var scope = new NameScope();
@@ -73,12 +93,20 @@ internal sealed class WpfHeadlessSurface : IDisposable
         scope.RegisterName("PART_Canvas", Canvas);
         scope.RegisterName("PART_GridDecorator", Decorator);
         scope.RegisterName("PART_SurfaceBorder", Border);
+        if (Minimap is not null)
+        {
+            scope.RegisterName("PART_MinimapOverlay", Minimap);
+        }
 
         Behaviors.WorkflowSurfaceBehavior.SetScrollViewerName(Host, "PART_ScrollViewer");
         Behaviors.WorkflowSurfaceBehavior.SetCanvasName(Host, "PART_Canvas");
         Behaviors.WorkflowSurfaceBehavior.SetGridDecoratorName(Host, "PART_GridDecorator");
         Behaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(Host, "PART_SurfaceBorder");
         Behaviors.WorkflowSurfaceBehavior.SetZoomEnabled(Host, true);
+        if (Minimap is not null)
+        {
+            Behaviors.WorkflowSurfaceBehavior.SetMinimapOverlayName(Host, "PART_MinimapOverlay");
+        }
 
         Layout();
         Behaviors.WorkflowSurfaceBehavior.SetIsEnabled(Host, enable);
@@ -99,6 +127,8 @@ internal sealed class WpfHeadlessSurface : IDisposable
     public Canvas Canvas { get; }
 
     public TestGridDecorator Decorator { get; }
+
+    public TestMinimapOverlay? Minimap { get; }
 
     /// <summary>Lays out the host at its fixed size; WPF does not lay out a window-less control on its own.</summary>
     public void Layout()
