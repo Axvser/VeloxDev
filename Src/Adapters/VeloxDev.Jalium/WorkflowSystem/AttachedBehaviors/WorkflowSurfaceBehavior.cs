@@ -133,16 +133,8 @@ public static class WorkflowSurfaceBehavior
 
         public EventHandler<ILinkComponent>? LinkRemovedHandler;
 
-        // 上一棵被挂上来的树（引用比较）。恢复只因「换了树」触发一次，之后的 Refresh 不再把用户滚回去。
-        public ITreeComponent? LastRestoreTree;
-
-        public bool HasPendingRestore;
-
-        public bool RestoreQueued;
-
-        public double PendingRestoreX;
-
-        public double PendingRestoreY;
+        // 视口恢复状态机：捕获、排队、只恢复一次都在 Core，本类只提供延迟与落点。
+        public SurfaceViewportRestoreCore? Restore;
     }
 
     /// <summary>The attached property that turns the surface on for a host.</summary>
@@ -284,36 +276,13 @@ public static class WorkflowSurfaceBehavior
     /// <remarks>Shared by the pan and the minimap's drag-to-pan.</remarks>
     public static void NavigateToCanvasLocal(FrameworkElement host, double localX, double localY)
     {
-        if (!States.TryGetValue(host, out var state) || state.ScrollViewer is not { } viewer || state.Tree is null)
+        if (!States.TryGetValue(host, out var state) || state.ScrollViewer is null || state.Tree is null)
         {
             return;
         }
 
-        var targetHorizontal = localX - viewer.ViewportWidth / 2d + ContentOriginX(state);
-        var targetVertical = localY - viewer.ViewportHeight / 2d + ContentOriginY(state);
-
-        if (targetHorizontal < 0d)
-        {
-            Grow(state, -targetHorizontal, 0d);
-            targetHorizontal = 0d;
-        }
-        else if (targetHorizontal > viewer.ScrollableWidth)
-        {
-            Grow(state, targetHorizontal - viewer.ScrollableWidth, 0d);
-        }
-
-        if (targetVertical < 0d)
-        {
-            Grow(state, 0d, -targetVertical);
-            targetVertical = 0d;
-        }
-        else if (targetVertical > viewer.ScrollableHeight)
-        {
-            Grow(state, 0d, targetVertical - viewer.ScrollableHeight);
-        }
-
-        viewer.ScrollToHorizontalOffset(targetHorizontal);
-        viewer.ScrollToVerticalOffset(targetVertical);
+        // 换算、夹取、越界撑大与居中都在 SurfaceScrollerCore，本类只提供读取与写入 ScrollViewer 的宿主。
+        new SurfaceScrollerCore(new JaliumSurfaceScrollHost(state)).CenterOn(localX, localY);
     }
 
     /// <summary>
@@ -420,7 +389,7 @@ public static class WorkflowSurfaceBehavior
     {
         Detach(host);
 
-        var state = new SurfaceState { Host = host };
+        var state = new SurfaceState { Host = host, Restore = new SurfaceViewportRestoreCore() };
         States.Add(host, state);
 
         // 表面必须能拿焦点：Delete 只有这一条到达本层的路。
@@ -848,10 +817,6 @@ public static class WorkflowSurfaceBehavior
 
     // ── 画布、视口、叠加层 ────────────────────────────────────────────────
 
-    private static double ContentOriginX(SurfaceState state) => state.Tree?.Layout.ActualOffset.Horizontal ?? 0d;
-
-    private static double ContentOriginY(SurfaceState state) => state.Tree?.Layout.ActualOffset.Vertical ?? 0d;
-
     private static double RulerBand(SurfaceState state) => state.GridDecorator?.RulerBand ?? 36d;
 
     private static void UpdateCanvasSize(SurfaceState state)
@@ -958,7 +923,6 @@ public static class WorkflowSurfaceBehavior
             return;
         }
 
-        var layout = tree.Layout;
         var viewportWidth = state.ScrollViewer?.ViewportWidth ?? 0d;
         var viewportHeight = state.ScrollViewer?.ViewportHeight ?? 0d;
 
@@ -970,6 +934,7 @@ public static class WorkflowSurfaceBehavior
             // 视口还没测量（树可能早于窗口布局绑上，而 Jalium 的视口在初次布局时可能不发 ScrollChanged）。
             // 退回整块画布，让第一次 Virtualize 立刻物化出初始的节点与连线，而不是在 0 尺寸视口上空转。
             // 这一支**不写回** ViewportOffset：此时读到的不是用户位置，写回会用一个假位置盖掉存档。
+            var layout = tree.Layout;
             tree.GetHelper().Viewport = new Viewport(
                 0d, 0d,
                 Math.Max(CanvasWidth, layout.ActualSize.Width),
@@ -977,12 +942,75 @@ public static class WorkflowSurfaceBehavior
             return;
         }
 
-        // 视口是画布局部坐标（世界 = 滚动 − ActualOffset），写回模型也走同一个换算 —— 唯一写者在这里。
-        var offset = WorkflowSurfaceMath.ViewportOffsetFromScroll(horizontalOffset, verticalOffset, layout);
-        tree.GetHelper().Viewport = new Viewport(offset.Horizontal, offset.Vertical, viewportWidth, viewportHeight);
+        // 视口是画布局部坐标（世界 = 滚动 − ActualOffset），换算与持久化都在 SurfaceMetricsPush.PushViewport。
+        SurfaceMetricsPush.PushViewport(ReadMetrics(state, horizontalOffset, verticalOffset), tree);
+    }
 
-        // 持久化视口位置（世界坐标），使其能熬过序列化往返；恢复见 CaptureViewportRestore。
-        layout.ViewportOffset = offset;
+    private static void UpdateOverlays(SurfaceState state)
+    {
+        if (state.Tree is not { } tree || state.ScrollViewer is null)
+        {
+            return;
+        }
+
+        var metrics = ReadMetrics(state);
+        if (state.GridDecorator is { } decorator)
+        {
+            SurfaceMetricsPush.PushGrid(metrics, decorator, tree);
+        }
+
+        if (state.MinimapOverlay is { } minimap)
+        {
+            SurfaceMetricsPush.PushMinimap(metrics, minimap, tree);
+        }
+    }
+
+    // 平台读数 → Core 的快照。可用边缘的减法、滚动/内容偏移的换算都在 Core，本类只报事实。
+    private static SurfaceMetrics ReadMetrics(SurfaceState state)
+        => ReadMetrics(
+            state,
+            state.ScrollViewer?.HorizontalOffset ?? 0d,
+            state.ScrollViewer?.VerticalOffset ?? 0d);
+
+    private static SurfaceMetrics ReadMetrics(SurfaceState state, double horizontalOffset, double verticalOffset)
+    {
+        var viewer = state.ScrollViewer;
+        var tree = state.Tree;
+        if (viewer is null || tree is null)
+        {
+            return default;
+        }
+
+        var overlayElement = state.MinimapOverlay as FrameworkElement;
+        var overlayWidth = overlayElement?.ActualWidth ?? 0d;
+        var overlayHeight = overlayElement?.ActualHeight ?? 0d;
+        if (overlayWidth <= 0d) overlayWidth = viewer.ActualWidth;
+        if (overlayHeight <= 0d) overlayHeight = viewer.ActualHeight;
+
+        // 本家没有 WPF 的 SystemParameters.VerticalScrollBarWidth：ViewportWidth 是内容区（不含滚动条），
+        // 与 ActualWidth 的差值就是滚动条占掉的那一条；只在 Computed 可见时减，避免把边框/内边距当成滚动条。
+        var verticalBar = viewer.ComputedVerticalScrollBarVisibility == Visibility.Visible
+            ? Math.Max(0d, viewer.ActualWidth - viewer.ViewportWidth)
+            : 0d;
+        var horizontalBar = viewer.ComputedHorizontalScrollBarVisibility == Visibility.Visible
+            ? Math.Max(0d, viewer.ActualHeight - viewer.ViewportHeight)
+            : 0d;
+        var rulerBand = state.GridDecorator?.RulerBand ?? 0d;
+        var margin = state.MinimapOverlay?.MinimapMargin ?? 0d;
+
+        return SurfaceMetrics.Create(
+            horizontalOffset,
+            verticalOffset,
+            tree.Layout.ActualOffset.Horizontal,
+            tree.Layout.ActualOffset.Vertical,
+            viewer.ViewportWidth,
+            viewer.ViewportHeight,
+            overlayWidth,
+            overlayHeight,
+            rulerBand,
+            verticalBar,
+            horizontalBar,
+            margin);
     }
 
     // 树刚挂上来且不是上一棵：把它存档里的视口位置排进待恢复（世界 → 滚动）。
@@ -990,113 +1018,18 @@ public static class WorkflowSurfaceBehavior
     private static void CaptureViewportRestore(FrameworkElement host, SurfaceState state)
     {
         if (host.DataContext is not ITreeComponent viewModel) return;
-        if (ReferenceEquals(viewModel, state.LastRestoreTree)) return;
-
-        state.LastRestoreTree = viewModel;
-
-        if (!WorkflowSurfaceMath.HasViewportRestore(viewModel.Layout)) return;
-
-        var scroll = WorkflowSurfaceMath.ViewportRestoreScroll(viewModel.Layout);
-        state.PendingRestoreX = scroll.Horizontal;
-        state.PendingRestoreY = scroll.Vertical;
-        state.HasPendingRestore = true;
+        state.Restore?.Capture(viewModel);
     }
 
     // 布局稳定后再滚：DataContext 变化这一刻控件往往还没排版，Extent 还是 0，直接滚会被夹没。
-    // 控件也还没解析出来时就不清标记 —— 下一次 Refresh 会再排一次，这就是重试。
+    // 控件也还没解析出来时就保留待恢复标记 —— 下一次 Refresh 会再排一次，这就是重试。
     private static void QueueViewportRestore(FrameworkElement host, SurfaceState state)
     {
-        if (!state.HasPendingRestore || state.RestoreQueued) return;
-
-        state.RestoreQueued = true;
-        host.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        state.Restore?.Schedule(new JaliumViewportRestoreHost(host, state), () =>
         {
-            state.RestoreQueued = false;
-
-            if (!state.HasPendingRestore || host.GetValue(IsEnabledProperty) is not true || state.ScrollViewer is not { } viewer)
-                return;
-
-            state.HasPendingRestore = false;
-
-            var maxH = viewer.ScrollableWidth;
-            var maxV = viewer.ScrollableHeight;
-            viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(state.PendingRestoreX, 0d, maxH));
-            viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(state.PendingRestoreY, 0d, maxV));
-
-            // 恢复后的位置立刻写回模型，免得控件与 Layout.ViewportOffset 各说各话。
             UpdateViewport(state);
             UpdateOverlays(state);
-        }));
-    }
-
-    private static void UpdateOverlays(SurfaceState state)
-    {
-        if (state.Tree is not { } tree)
-        {
-            return;
-        }
-
-        var horizontalScroll = state.ScrollViewer?.HorizontalOffset ?? 0d;
-        var verticalScroll = state.ScrollViewer?.VerticalOffset ?? 0d;
-        var horizontalContent = ContentOriginX(state);
-        var verticalContent = ContentOriginY(state);
-
-        if (state.GridDecorator is { } decorator)
-        {
-            decorator.ScrollOffsetX = horizontalScroll;
-            decorator.ScrollOffsetY = verticalScroll;
-            decorator.ContentOffsetX = horizontalContent;
-            decorator.ContentOffsetY = verticalContent;
-        }
-
-        if (state.MinimapOverlay is { } minimap)
-        {
-            minimap.ScrollOffsetX = horizontalScroll;
-            minimap.ScrollOffsetY = verticalScroll;
-            minimap.ContentOffsetX = horizontalContent;
-            minimap.ContentOffsetY = verticalContent;
-            minimap.ViewportWidth = state.ScrollViewer?.ViewportWidth ?? 0d;
-            minimap.ViewportHeight = state.ScrollViewer?.ViewportHeight ?? 0d;
-            minimap.WorkflowTree = tree;
-
-            // 小地图贴在「内容区右上角」：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
-            // 滚动条厚度由 ScrollViewer 自己的 ActualWidth − ViewportWidth 得出 —— 本家没有 WPF 的
-            // SystemParameters.VerticalScrollBarWidth，而 ViewportWidth 是内容区（不含滚动条），差值就是
-            // 滚动条占掉的那一条；只在 Computed 可见时减，避免把边框/内边距当成滚动条。
-            var overlayElement = state.MinimapOverlay as FrameworkElement;
-            var overlayWidth = overlayElement?.ActualWidth ?? 0d;
-            var overlayHeight = overlayElement?.ActualHeight ?? 0d;
-            if (overlayWidth <= 0d) overlayWidth = state.ScrollViewer?.ActualWidth ?? 0d;
-            if (overlayHeight <= 0d) overlayHeight = state.ScrollViewer?.ActualHeight ?? 0d;
-
-            var verticalBar = state.ScrollViewer is { ComputedVerticalScrollBarVisibility: Visibility.Visible } verticalViewer
-                ? Math.Max(0d, verticalViewer.ActualWidth - verticalViewer.ViewportWidth)
-                : 0d;
-            var horizontalBar = state.ScrollViewer is { ComputedHorizontalScrollBarVisibility: Visibility.Visible } horizontalViewer
-                ? Math.Max(0d, horizontalViewer.ActualHeight - horizontalViewer.ViewportHeight)
-                : 0d;
-
-            minimap.AvailableRight = Math.Max(0d, overlayWidth - verticalBar);
-            minimap.AvailableTop = state.GridDecorator?.RulerBand ?? 0d;
-            minimap.AvailableBottom = Math.Max(0d, overlayHeight - horizontalBar);
-        }
-    }
-
-    private static void Grow(SurfaceState state, double horizontal, double vertical)
-    {
-        if (state.Tree is not { } tree)
-        {
-            return;
-        }
-
-        var layout = tree.Layout;
-        if (horizontal > 0d) layout.PositiveOffset += new Offset(horizontal, 0d);
-        else if (horizontal < 0d) layout.NegativeOffset += new Offset(-horizontal, 0d);
-        if (vertical > 0d) layout.PositiveOffset += new Offset(0d, vertical);
-        else if (vertical < 0d) layout.NegativeOffset += new Offset(0d, -vertical);
-
-        UpdateCanvasSize(state);
-        ApplyLayout(state);
+        });
     }
 
     // ── 输入 ──────────────────────────────────────────────────────────────
@@ -1112,7 +1045,8 @@ public static class WorkflowSurfaceBehavior
         state.Input = input;
 
         // 画布滚动归适配器（见 OnMouseWheel）：订阅方被拦下之后从这里滚，不必知道这家用的是 ScrollViewer。
-        var scroller = new SurfaceScroller(state);
+        // 换算、夹取、越界撑大与居中都在 SurfaceScrollerCore，本类只把 ScrollViewer 的读数与写入包成宿主。
+        var scroller = new SurfaceScrollerCore(new JaliumSurfaceScrollHost(state));
         state.Scroller = scroller;
         input.Scroller = scroller;
         input.Navigator = scroller;
@@ -1441,72 +1375,79 @@ public static class WorkflowSurfaceBehavior
         return false;
     }
 
-    // 画布滚动的中立请求。收的是**滚轮增量**（正 = 远离用户），换算成这家自己的步长 ——
-    // Jalium 的 ScrollViewer 自己一格滚 48（实测：基线一格滚轮视口 Y 0 → 48），取同一个数，
-    // 接管之后手感才不变（与 WPF 那边 3 行 × 16 是同一个值）。
-    private sealed class SurfaceScroller : IWorkflowSurfaceScroller, IWorkflowSurfaceNavigator
+    // 画布滚动的宿主层：只报告 ScrollViewer 的读数、写偏移、让布局认下长大的范围。
+    // 换算/夹取/居中/越界撑大都在 SurfaceScrollerCore，本类不再保留一份。
+    private sealed class JaliumSurfaceScrollHost : ISurfaceScrollHost
     {
-        private const double PixelsPerNotch = 48d;
-
         private readonly SurfaceState state;
 
-        public SurfaceScroller(SurfaceState state) => this.state = state;
+        public JaliumSurfaceScrollHost(SurfaceState state) => this.state = state;
 
-        public void ScrollBy(double wheelDeltaX, double wheelDeltaY)
+        public CanvasLayout? Layout => state.Tree?.Layout;
+
+        public double ViewportWidth => state.ScrollViewer?.ViewportWidth ?? 0d;
+
+        public double ViewportHeight => state.ScrollViewer?.ViewportHeight ?? 0d;
+
+        public double HorizontalOffset => state.ScrollViewer?.HorizontalOffset ?? 0d;
+
+        public double VerticalOffset => state.ScrollViewer?.VerticalOffset ?? 0d;
+
+        public double HorizontalMaximum => state.ScrollViewer?.ScrollableWidth ?? 0d;
+
+        public double VerticalMaximum => state.ScrollViewer?.ScrollableHeight ?? 0d;
+
+        // 本类的滚轮事件已归一成一格 = 1（见 OnMouseWheel），一格滚 48 与 Jalium 原生一致。
+        public SurfaceWheelProfile WheelProfile => SurfaceWheelProfile.FromPixels(1d, 48d);
+
+        public void ApplyOffset(double? horizontalOffset, double? verticalOffset)
         {
-            if (state.ScrollViewer is not { } viewer)
-            {
-                return;
-            }
+            if (state.ScrollViewer is not { } viewer) return;
 
-            // 横轴正 = 向右，偏移同向取加；纵轴正 = 远离用户 = 视口上移，偏移取减 —— 两轴的「正」不是同一个物理方向。
-            var dx = wheelDeltaX * PixelsPerNotch;
-            var dy = -wheelDeltaY * PixelsPerNotch;
-
-            // 零增量不动那一轴（IWorkflowSurfaceScroller.ScrollBy 的 remarks）：只把非零那轴算进目标，另一轴原样沿用。
-            var desiredX = dx != 0d ? viewer.HorizontalOffset + dx : viewer.HorizontalOffset;
-            var desiredY = dy != 0d ? viewer.VerticalOffset + dy : viewer.VerticalOffset;
-
-            if (state.Tree is not { } tree)
-            {
-                // 拿不到布局时退回旧的「到边即停」，至少不越界。
-                if (dx != 0d) viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(desiredX, 0d, viewer.ScrollableWidth));
-                if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(desiredY, 0d, viewer.ScrollableHeight));
-                return;
-            }
-
-            // 与平移走同一条边界语义：越界经 ClampScrollOffset 撑大画布（extendRatio 用平移那个），而不是到边即停。
-            // 两处若各留一套语义，同一个画布「拖能撑出去、滚不能」。
-            var newX = dx != 0d
-                ? WorkflowSurfaceMath.ClampScrollOffset(
-                    desiredX, viewer.ScrollableWidth, tree.Layout, horizontal: true,
-                    extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
-                : desiredX;
-            var newY = dy != 0d
-                ? WorkflowSurfaceMath.ClampScrollOffset(
-                    desiredY, viewer.ScrollableHeight, tree.Layout, horizontal: false,
-                    extendRatio: WorkflowSurfaceMath.DefaultPanExtendRatio)
-                : desiredY;
-
-            if (newX != desiredX || newY != desiredY)
-            {
-                // 撑大过画布：extent 是懒的，先按新范围重算 + UpdateLayout 让 ScrollViewer 认下，再重读 max
-                //（与缩放那支同一套，见 OnZoomPreviewMouseWheel 与 memory/modules/WorkflowSystem/adapters/wpf.md §2.3）。
-                UpdateCanvasSize(state);
-                ApplyLayout(state);
-                state.Host.UpdateLayout();
-                viewer.UpdateLayout();
-                newX = Math.Min(newX, viewer.ScrollableWidth);
-                newY = Math.Min(newY, viewer.ScrollableHeight);
-            }
-
-            // 只写增量非零的那一轴：另一轴原样沿用当前偏移，免得把它夹回范围里（零增量不许动那一轴）。
-            if (dx != 0d) viewer.ScrollToHorizontalOffset(WorkflowSurfaceMath.ClampValue(newX, 0d, viewer.ScrollableWidth));
-            if (dy != 0d) viewer.ScrollToVerticalOffset(WorkflowSurfaceMath.ClampValue(newY, 0d, viewer.ScrollableHeight));
+            // 只写传进来的那几轴：零增量的另一轴不许被夹回范围。
+            if (horizontalOffset is { } x) viewer.ScrollToHorizontalOffset(x);
+            if (verticalOffset is { } y) viewer.ScrollToVerticalOffset(y);
         }
 
-        public void CenterOn(double localX, double localY)
-            => NavigateToCanvasLocal(state.Host, localX, localY);
+        public void ExpandCanvas()
+        {
+            // extent 是懒的：重算 + UpdateLayout 让 ScrollViewer 认下新范围，Core 随后重读上限。
+            UpdateCanvasSize(state);
+            ApplyLayout(state);
+            state.Canvas?.UpdateLayout();
+            state.ScrollViewer?.UpdateLayout();
+            state.Host.UpdateLayout();
+        }
+    }
+
+    // 视口恢复的宿主层：延迟到 Loaded 相、检查仍然挂着、把恢复结果写进 ScrollViewer。
+    private sealed class JaliumViewportRestoreHost : ISurfaceViewportRestoreHost
+    {
+        private readonly FrameworkElement host;
+        private readonly SurfaceState state;
+
+        public JaliumViewportRestoreHost(FrameworkElement host, SurfaceState state)
+        {
+            this.host = host;
+            this.state = state;
+        }
+
+        public bool IsRestoreEnabled => host.GetValue(IsEnabledProperty) is true && state.ScrollViewer is not null;
+
+        public double HorizontalMaximum => state.ScrollViewer?.ScrollableWidth ?? 0d;
+
+        public double VerticalMaximum => state.ScrollViewer?.ScrollableHeight ?? 0d;
+
+        public void ApplyOffset(double horizontalOffset, double verticalOffset)
+        {
+            if (state.ScrollViewer is not { } viewer) return;
+
+            viewer.ScrollToHorizontalOffset(horizontalOffset);
+            viewer.ScrollToVerticalOffset(verticalOffset);
+        }
+
+        public void DeferRestore(Action restore)
+            => host.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(restore));
     }
 
     private static void OnKeyDown(object? sender, PlatformInput.KeyEventArgs e)

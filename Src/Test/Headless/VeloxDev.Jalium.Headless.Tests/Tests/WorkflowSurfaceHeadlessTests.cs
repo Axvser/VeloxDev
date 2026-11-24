@@ -56,6 +56,20 @@ public sealed class WorkflowSurfaceHeadlessTests
     }
 
     [TestMethod]
+    public void Scroll_PushesTheMetricsIntoTheGridDecorator()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new JaliumHeadlessSurface(graph);
+
+        surface.ScrollTo(120d, 80d);
+
+        Assert.AreEqual(120d, surface.Decorator.ScrollOffsetX, 1d);
+        Assert.AreEqual(80d, surface.Decorator.ScrollOffsetY, 1d);
+        Assert.AreEqual(graph.Tree.Layout.ActualOffset.Horizontal, surface.Decorator.ContentOffsetX, 1e-9);
+        Assert.AreEqual(graph.Tree.Layout.ActualOffset.Vertical, surface.Decorator.ContentOffsetY, 1e-9);
+    }
+
+    [TestMethod]
     public void ViewportRestore_IsAppliedAfterAttach()
     {
         var graph = TestGraph.Create();
