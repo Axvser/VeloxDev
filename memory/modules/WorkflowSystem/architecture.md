@@ -2,7 +2,7 @@
 
 > 模块位置：`Src/Core/VeloxDev.Core/WorkflowSystem/`
 > 对外接口：`Src/Core/VeloxDev.Core/Interfaces/WorkflowSystem/`（按 `Common/Components/Connections/Commands/Providers/Spatial/Surface/Execution/Enums/Layout/` 分层；命名空间统一 `VeloxDev.WorkflowSystem`）
-> 平台差异见同目录 `adapters/<平台>.md`；扩展做法见 `extension.md`。
+> 平台差异见同目录 `adapters/<平台>.md`；扩展做法见 `extension.md`；适配器的公共管线见 [pipelines.md](pipelines.md)。
 
 ---
 
