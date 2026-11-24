@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using System;
+using System.Diagnostics;
 using Demo.Workflow;
 using VeloxDev.TransitionSystem;
 using VeloxDev.WorkflowSystem;
@@ -344,8 +345,43 @@ public partial class PolylineCurveView : Control
             return;
         }
 
+        // 端点没测量前发布的是 NaN 曲线，命中判定会落在垃圾几何上；清掉旧曲线而不是留在那里。
+        if (IsRenderBlocked(link))
+        {
+            link.PublishCurve(null);
+            return;
+        }
+
         link.PublishCurve(_curve, this);
     }
+
+    // 门只在第一次拦下同一链接时记日志；同一条链接恢复后再次被拦，算新的一次。
+    private bool IsRenderBlocked(ILinkComponent link)
+    {
+        if (link.IsRenderReady())
+        {
+            _blockedLink = null;
+            return false;
+        }
+
+        if (!ReferenceEquals(_blockedLink, link))
+        {
+            _blockedLink = link;
+            Debug.WriteLine(
+                $"[WorkflowLink] render blocked: {link.GetType().Name} " +
+                $"{Describe(link.Sender)} -> {Describe(link.Receiver)}; an endpoint anchor is unmeasured (NaN).");
+        }
+
+        return true;
+    }
+
+    private static string Describe(ISlotComponent? slot)
+        => slot is null
+            ? "<none>"
+            : $"({slot.Anchor.Horizontal:0.##},{slot.Anchor.Vertical:0.##})";
+
+    // 最近一次因未测量被拦下的链接：只用来把诊断日志压成一次。
+    private ILinkComponent? _blockedLink;
 
     // 取 [from, to] 这一段弧长上的折线几何。两端各自插值到精确位置，中间用现成采样点
     private StreamGeometry BuildSegment(double from, double to)
@@ -387,6 +423,9 @@ public partial class PolylineCurveView : Control
     {
         base.Render(context);
         if (!CanRender || _curve is not { Length: > 0 } || _body is null) return;
+
+        // 端点还没测量时锚点是 NaN：记一次诊断然后不画，别让绘制层把 NaN 几何静默丢掉。
+        if (DataContext is ILinkComponent link && IsRenderBlocked(link)) return;
 
         var color = IsHighlighted ? HighlightColor : LineColor;
         var thickness = IsHighlighted ? LineThickness + 1.5 : LineThickness;
