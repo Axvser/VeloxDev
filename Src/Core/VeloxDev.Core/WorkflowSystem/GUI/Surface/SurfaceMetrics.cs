@@ -50,17 +50,8 @@ public readonly struct SurfaceMetrics
     /// <summary>Height of the horizontal scrollbar when it is visible, otherwise zero.</summary>
     public double HorizontalScrollBarThickness { get; init; }
 
-    /// <summary>The surface's right edge usable by overlays, excluding the vertical scrollbar.</summary>
-    public double AvailableRight { get; init; }
-
-    /// <summary>The surface's top edge usable by overlays, below the ruler band.</summary>
-    public double AvailableTop { get; init; }
-
-    /// <summary>The surface's bottom edge usable by overlays, excluding the horizontal scrollbar.</summary>
-    public double AvailableBottom { get; init; }
-
-    /// <summary>The gap an overlay keeps from the available corner.</summary>
-    public double Margin { get; init; }
+    /// <summary>The free corner overlays may use, derived from the surface size, ruler and scrollbars.</summary>
+    public SurfaceAvailableArea Available { get; init; }
 
     /// <summary>
     /// Creates a metrics snapshot and derives the three available edges from the surface size, the ruler band
@@ -103,9 +94,12 @@ public readonly struct SurfaceMetrics
             RulerBand = rulerBand,
             VerticalScrollBarThickness = verticalScrollBarThickness,
             HorizontalScrollBarThickness = horizontalScrollBarThickness,
-            AvailableRight = Math.Max(0d, surfaceWidth - verticalScrollBarThickness),
-            AvailableTop = Math.Max(0d, rulerBand),
-            AvailableBottom = Math.Max(0d, surfaceHeight - horizontalScrollBarThickness),
-            Margin = margin,
+            Available = new SurfaceAvailableArea
+            {
+                Right = Math.Max(0d, surfaceWidth - verticalScrollBarThickness),
+                Top = Math.Max(0d, rulerBand),
+                Bottom = Math.Max(0d, surfaceHeight - horizontalScrollBarThickness),
+                Margin = margin,
+            },
         };
 }

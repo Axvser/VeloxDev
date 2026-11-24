@@ -76,15 +76,18 @@ public sealed class MinimapHeadlessTests
             {
                 Width = 200d,
                 Height = 140d,
-                Margin = 12d,
                 MinSize = 20d,
                 Padding = 2d,
                 NodeCornerRadius = 1d,
                 MinimapCornerRadius = 4d,
                 MinimumThumbSize = 2d,
-                AvailableRight = 800d,
-                AvailableTop = 0d,
-                AvailableBottom = 600d,
+                Available = new SurfaceAvailableArea
+                {
+                    Right = 800d,
+                    Top = 0d,
+                    Bottom = 600d,
+                    Margin = 12d,
+                },
             })
         {
             Tree = graph.Tree,

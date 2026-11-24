@@ -33,7 +33,10 @@ public class MinimapPipelineBenchmarks
             new NullRenderer(),
             new BenchmarkViewport(),
             _input,
-            MinimapMetrics.Default with { AvailableRight = 1920d, AvailableBottom = 1080d })
+            MinimapMetrics.Default with
+            {
+                Available = new SurfaceAvailableArea { Right = 1920d, Bottom = 1080d, Margin = 12d },
+            })
         {
             Tree = _tree,
         };

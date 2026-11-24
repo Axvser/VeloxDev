@@ -300,15 +300,18 @@ public class WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay
         {
             Width = MinimapWidth,
             Height = MinimapHeight,
-            Margin = MinimapMargin,
             MinSize = MinimapMinSize,
             Padding = ContentPadding,
             NodeCornerRadius = NodeCornerRadius,
             MinimapCornerRadius = MinimapCornerRadius,
             MinimumThumbSize = 2d,
-            AvailableRight = right,
-            AvailableTop = top,
-            AvailableBottom = bottom,
+            Available = new SurfaceAvailableArea
+            {
+                Right = right,
+                Top = top,
+                Bottom = bottom,
+                Margin = MinimapMargin,
+            },
         };
         pipeline.IsVisible = IsMinimapVisible;
     }

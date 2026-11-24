@@ -152,9 +152,13 @@ public sealed class MinimapPipelineTests
         {
             Width = 400d,
             Height = 400d,
-            AvailableRight = 300d,
-            AvailableTop = 20d,
-            AvailableBottom = 180d,
+            Available = new SurfaceAvailableArea
+            {
+                Right = 300d,
+                Top = 20d,
+                Bottom = 180d,
+                Margin = 12d,
+            },
         };
 
         var rect = scene.Pipeline.MinimapRect;
@@ -375,7 +379,10 @@ public sealed class MinimapPipelineTests
                 Renderer,
                 Viewport,
                 Input,
-                MinimapMetrics.Default with { AvailableRight = 800d, AvailableBottom = 600d })
+                MinimapMetrics.Default with
+                {
+                    Available = new SurfaceAvailableArea { Right = 800d, Bottom = 600d, Margin = 12d },
+                })
             {
                 Tree = tree,
             };

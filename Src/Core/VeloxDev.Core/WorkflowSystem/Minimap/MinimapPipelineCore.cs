@@ -156,19 +156,7 @@ public class MinimapPipelineCore<TSurface, TRenderer, TViewport, TInput>
     /// </summary>
     public WorkflowBounds MinimapRect
     {
-        get
-        {
-            var placement = new MinimapDrawContext
-            {
-                MinimapWidth = Metrics.Width,
-                MinimapHeight = Metrics.Height,
-                MinimapMargin = Metrics.Margin,
-                AvailableRight = Metrics.AvailableRight,
-                AvailableTop = Metrics.AvailableTop,
-                AvailableBottom = Metrics.AvailableBottom,
-            };
-            return placement.GetMinimapRect(Metrics.MinSize);
-        }
+        get => Metrics.Available.GetRect(Metrics.Width, Metrics.Height, Metrics.MinSize);
     }
 
     /// <summary>Marks the cached geometry stale and asks the adapter to schedule a render.</summary>
@@ -380,10 +368,10 @@ public class MinimapPipelineCore<TSurface, TRenderer, TViewport, TInput>
             Scale = sc,
             NodeCornerRadius = Math.Max(0, Metrics.NodeCornerRadius),
             MinimapCornerRadius = Math.Max(0, Metrics.MinimapCornerRadius),
-            AvailableRight = Metrics.AvailableRight,
-            AvailableTop = Metrics.AvailableTop,
-            AvailableBottom = Metrics.AvailableBottom,
-            MinimapMargin = Metrics.Margin,
+            AvailableRight = Metrics.Available.Right,
+            AvailableTop = Metrics.Available.Top,
+            AvailableBottom = Metrics.Available.Bottom,
+            MinimapMargin = Metrics.Available.Margin,
         };
     }
 

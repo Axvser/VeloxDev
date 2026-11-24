@@ -390,10 +390,10 @@ public class SurfacePipelineTests
             horizontalScrollBarThickness: 17d,
             margin: 12d);
 
-        Assert.AreEqual(983d, metrics.AvailableRight, 1e-9);
-        Assert.AreEqual(24d, metrics.AvailableTop, 1e-9);
-        Assert.AreEqual(683d, metrics.AvailableBottom, 1e-9);
-        Assert.AreEqual(12d, metrics.Margin, 1e-9);
+        Assert.AreEqual(983d, metrics.Available.Right, 1e-9);
+        Assert.AreEqual(24d, metrics.Available.Top, 1e-9);
+        Assert.AreEqual(683d, metrics.Available.Bottom, 1e-9);
+        Assert.AreEqual(12d, metrics.Available.Margin, 1e-9);
         Assert.AreEqual(120d, metrics.ScrollOffsetX, 1e-9);
         Assert.AreEqual(40d, metrics.ContentOffsetX, 1e-9);
         Assert.AreEqual(800d, metrics.ViewportWidth, 1e-9);
@@ -405,9 +405,9 @@ public class SurfacePipelineTests
         var metrics = SurfaceMetrics.Create(
             0d, 0d, 0d, 0d, 800d, 600d, 10d, 10d, -5d, 20d, 20d, 0d);
 
-        Assert.AreEqual(0d, metrics.AvailableRight, 1e-9);
-        Assert.AreEqual(0d, metrics.AvailableTop, 1e-9);
-        Assert.AreEqual(0d, metrics.AvailableBottom, 1e-9);
+        Assert.AreEqual(0d, metrics.Available.Right, 1e-9);
+        Assert.AreEqual(0d, metrics.Available.Top, 1e-9);
+        Assert.AreEqual(0d, metrics.Available.Bottom, 1e-9);
     }
 
     [TestMethod]

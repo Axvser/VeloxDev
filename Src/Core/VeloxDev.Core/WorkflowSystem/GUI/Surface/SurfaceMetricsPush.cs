@@ -53,10 +53,10 @@ public static class SurfaceMetricsPush
         minimap.ViewportWidth = metrics.ViewportWidth;
         minimap.ViewportHeight = metrics.ViewportHeight;
         minimap.WorkflowTree = tree;
-        minimap.AvailableRight = metrics.AvailableRight;
-        minimap.AvailableTop = metrics.AvailableTop;
-        minimap.AvailableBottom = metrics.AvailableBottom;
-        minimap.MinimapMargin = metrics.Margin;
+        minimap.AvailableRight = metrics.Available.Right;
+        minimap.AvailableTop = metrics.Available.Top;
+        minimap.AvailableBottom = metrics.Available.Bottom;
+        minimap.MinimapMargin = metrics.Available.Margin;
     }
 
     /// <summary>Pushes the visible viewport into the tree and persists its canvas-local position.</summary>

@@ -83,23 +83,13 @@ public sealed class MinimapDrawContext
     /// </summary>
     /// <param name="minimumSize">The smallest width or height the minimap may shrink to.</param>
     public WorkflowBounds GetMinimapRect(double minimumSize)
-    {
-        var min = Math.Max(1, minimumSize);
-        var margin = Math.Max(0, MinimapMargin);
-        var width = Math.Max(min, MinimapWidth);
-        var height = Math.Max(min, MinimapHeight);
-
-        if (AvailableRight <= 0 || AvailableBottom <= AvailableTop)
+        => new SurfaceAvailableArea
         {
-            return WorkflowBounds.FromNode(0, 0, width, height);
-        }
-
-        width = Math.Min(width, Math.Max(1, AvailableRight - margin * 2));
-        height = Math.Min(height, Math.Max(1, AvailableBottom - AvailableTop - margin * 2));
-        var left = Math.Max(margin, AvailableRight - margin - width);
-        var top = AvailableTop + margin;
-        return WorkflowBounds.FromNode(left, top, width, height);
-    }
+            Right = AvailableRight,
+            Top = AvailableTop,
+            Bottom = AvailableBottom,
+            Margin = MinimapMargin,
+        }.GetRect(MinimapWidth, MinimapHeight, minimumSize);
 
     /// <summary>Whether any node produced a non-empty content box.</summary>
     public bool HasContent => !ContentBounds.IsEmpty;
