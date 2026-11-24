@@ -687,6 +687,12 @@ public sealed class WorkflowSurfaceBehavior
             UnhookMenu(state);
         }
 
+        // 小地图的流水线按树订阅节点属性；离树时先断掉，避免这张表面视图把整棵树钉住。
+        if (state.Minimap is IWorkflowMinimapOverlay minimap)
+        {
+            minimap.WorkflowTree = null;
+        }
+
         state.Tree = null;
         if ((state.Surface ?? state.Root) is { } surface)
         {
@@ -829,48 +835,64 @@ public sealed class WorkflowSurfaceBehavior
                 -state.Pan.Y - state.Content.Y - state.ExternalOriginY);
         }
 
+        // 网格画在相机矩阵之外，偏移仍是表面像素：scroll = -pan、content = 布局内容偏移。
         if (state.GridDecorator is { } grid)
         {
-            grid.ScrollOffsetX = -state.Pan.X;
-            grid.ScrollOffsetY = -state.Pan.Y;
-            grid.ContentOffsetX = state.Content.X;
-            grid.ContentOffsetY = state.Content.Y;
+            var gridMetrics = new SurfaceMetrics
+            {
+                ScrollOffsetX = -state.Pan.X,
+                ScrollOffsetY = -state.Pan.Y,
+                ContentOffsetX = state.Content.X,
+                ContentOffsetY = state.Content.Y,
+                RulerBand = state.GridDecorator is IWorkflowGridDecorator gridDecorator ? gridDecorator.RulerBand : 0d,
+            };
+            SurfaceMetricsPush.PushGrid(gridMetrics, grid, state.Tree);
+
             if (state.Grid is { } gridVisual)
             {
                 gridVisual.InvalidateVisual();
             }
         }
 
-        if (state.Minimap is IWorkflowMinimapOverlay minimap)
+        // 小地图与树视口用世界坐标：可见世界左上角 = -(pan + content)/zoom。
+        var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
+        var viewport = SurfaceViewport(state);
+        var minimap = state.Minimap as IWorkflowMinimapOverlay;
+        double overlayWidth = viewport.Width;
+        double overlayHeight = viewport.Height;
+        if (state.Minimap is { } minimapVisual)
         {
-            var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
-            var viewport = SurfaceViewport(state);
-            minimap.ScrollOffsetX = -(state.Pan.X + state.Content.X) / zoom;
-            minimap.ScrollOffsetY = -(state.Pan.Y + state.Content.Y) / zoom;
-            minimap.ContentOffsetX = 0d;
-            minimap.ContentOffsetY = 0d;
-            minimap.ViewportWidth = viewport.Width / zoom;
-            minimap.ViewportHeight = viewport.Height / zoom;
-            minimap.WorkflowTree = state.Tree;
-
-            // 小地图贴在内容区右上角：右侧让开竖滚动条，顶部让开水平刻度，底部让开横滚动条。
-            var overlayWidth = state.Minimap.Bounds.Width;
-            var overlayHeight = state.Minimap.Bounds.Height;
-            if (overlayWidth <= 0.5f)
+            if (minimapVisual.Bounds.Width > 0.5f)
             {
-                overlayWidth = viewport.Width;
+                overlayWidth = minimapVisual.Bounds.Width;
             }
 
-            if (overlayHeight <= 0.5f)
+            if (minimapVisual.Bounds.Height > 0.5f)
             {
-                overlayHeight = viewport.Height;
+                overlayHeight = minimapVisual.Bounds.Height;
             }
+        }
 
-            var (verticalBar, horizontalBar) = MeasureScrollBars(state);
-            minimap.AvailableRight = Math.Max(0d, overlayWidth - verticalBar);
-            minimap.AvailableTop = state.GridDecorator is IWorkflowGridDecorator decorator ? decorator.RulerBand : 0d;
-            minimap.AvailableBottom = Math.Max(0d, overlayHeight - horizontalBar);
-            state.Minimap.InvalidateVisual();
+        var (verticalBar, horizontalBar) = MeasureScrollBars(state);
+        var band = state.GridDecorator is IWorkflowGridDecorator decorator ? decorator.RulerBand : 0d;
+        var worldMetrics = SurfaceMetrics.Create(
+            -(state.Pan.X + state.Content.X) / zoom,
+            -(state.Pan.Y + state.Content.Y) / zoom,
+            0d,
+            0d,
+            viewport.Width / zoom,
+            viewport.Height / zoom,
+            overlayWidth,
+            overlayHeight,
+            band,
+            verticalBar,
+            horizontalBar,
+            minimap?.MinimapMargin ?? 0d);
+
+        if (minimap is not null)
+        {
+            SurfaceMetricsPush.PushMinimap(worldMetrics, minimap, state.Tree);
+            state.Minimap!.InvalidateVisual();
         }
 
         if (state.Info is { } info)
@@ -885,15 +907,8 @@ public sealed class WorkflowSurfaceBehavior
 
         if (state.Tree is { } tree && state.VisualHost is not null)
         {
-            var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
-            var viewport = SurfaceViewport(state);
-            var band = state.GridDecorator?.RulerBand ?? 0d;
-            tree.SetVirtualizeInset(left: band, top: band);
-            tree.GetHelper().Viewport = new Wf.Viewport(
-                (-state.Pan.X - state.Content.X) / zoom,
-                (-state.Pan.Y - state.Content.Y) / zoom,
-                viewport.Width / zoom,
-                viewport.Height / zoom);
+            // 视口与持久化位置都在世界坐标里；写入后节点的虚拟化可见集在同一帧刷新。
+            SurfaceMetricsPush.PushViewport(worldMetrics, tree);
         }
     }
 

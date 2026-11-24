@@ -1,10 +1,10 @@
-﻿using System.Collections.Specialized;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Easel;
 using Easel.Visuals;
 using VisualCanvas = Easel.Visuals.Controls.Canvas;
 using VisualItemsControl = Easel.Visuals.Controls.ItemsControl;
+using DrawingPointF = System.Drawing.PointF;
 
 namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 
@@ -14,8 +14,10 @@ namespace VeloxDev.WorkflowSystem.AttachedBehaviors;
 /// </summary>
 /// <remarks>
 /// Attach it to the node view root and name the parts with <see cref="SlotNamesProperty"/> and
-/// <see cref="SlotEnumeratorNamesProperty"/> (comma-separated <c>x:Name</c>s). The behavior reads the live visual
-/// tree; it does not own a host element and does not create slot views.
+/// <see cref="SlotEnumeratorNamesProperty"/> (comma-separated <c>x:Name</c>s). The behavior owns only the platform
+/// half — the visual-tree walk, the <see cref="VisualElement.PointToSurface"/> / <see cref="VisualElement.PointFromSurface"/>
+/// transform, and the UI-thread hand-off; which parts to measure, their order, duplicate suppression and the
+/// re-measure schedule belong to <see cref="SlotLayoutPipelineCore"/>.
 /// </remarks>
 public sealed class WorkflowSlotLayoutBehavior
 {
@@ -106,6 +108,8 @@ public sealed class WorkflowSlotLayoutBehavior
         private readonly VisualElement owner;
         private readonly List<VisualItemsControl> enumerators = [];
         private VisualHost? surface;
+        private SlotLayoutPipelineCore? pipeline;
+        private bool subscribed;
 
         public SlotState(VisualElement owner)
         {
@@ -114,14 +118,25 @@ public sealed class WorkflowSlotLayoutBehavior
 
         public void Subscribe()
         {
-            owner.PropertyChanged -= OnOwnerPropertyChanged;
-            owner.PropertyChanged += OnOwnerPropertyChanged;
+            if (!subscribed)
+            {
+                owner.PropertyChanged += OnOwnerPropertyChanged;
+                subscribed = true;
+            }
+
             HookSurface();
+            EnsureEnumerators();
+            EnsurePipeline();
         }
 
         public void Unsubscribe()
         {
-            owner.PropertyChanged -= OnOwnerPropertyChanged;
+            if (subscribed)
+            {
+                owner.PropertyChanged -= OnOwnerPropertyChanged;
+                subscribed = false;
+            }
+
             foreach (var enumerator in enumerators)
             {
                 enumerator.ItemsRebuilt -= OnItemsRebuilt;
@@ -133,6 +148,8 @@ public sealed class WorkflowSlotLayoutBehavior
                 surface.LayoutUpdated -= OnLayoutUpdated;
                 surface = null;
             }
+
+            StopPipeline();
         }
 
         private void HookSurface()
@@ -155,110 +172,150 @@ public sealed class WorkflowSlotLayoutBehavior
             }
         }
 
+        private void EnsureEnumerators()
+        {
+            foreach (var name in ParseNames(GetSlotEnumeratorNames(owner)))
+            {
+                if (FindNamed(owner, name) is VisualItemsControl items && !enumerators.Contains(items))
+                {
+                    enumerators.Add(items);
+                    items.ItemsRebuilt += OnItemsRebuilt;
+                }
+            }
+        }
+
+        // 数据上下文或部件名换了就换一条流水线：配置在构造时固化成 WatchedPropertyNames。
+        private void EnsurePipeline()
+        {
+            if (owner.DataContext is not INodeComponent node)
+            {
+                StopPipeline();
+                return;
+            }
+
+            if (pipeline is null || !ReferenceEquals(pipeline.Node, node))
+            {
+                StopPipeline();
+                pipeline = new SlotLayoutPipelineCore(
+                    node,
+                    owner,
+                    new SlotPartLocator(owner),
+                    new SlotMeasurementHost(owner),
+                    new SlotLayoutConfiguration(
+                        GetSlotNames(owner),
+                        GetSlotEnumeratorNames(owner),
+                        GetCoordinateHostName(owner),
+                        null));
+            }
+        }
+
+        private void RebuildPipeline()
+        {
+            StopPipeline();
+            EnsurePipeline();
+        }
+
+        private void StopPipeline()
+        {
+            pipeline?.Stop();
+            pipeline = null;
+        }
+
+        private void Measure(SlotLayoutTrigger trigger)
+        {
+            EnsurePipeline();
+            pipeline?.RequestMeasure(trigger);
+        }
+
         private void OnLayoutUpdated(object? sender, EventArgs e)
         {
             HookSurface();
-            Sync();
+            EnsureEnumerators();
+
+            // 布局后同步回写：在渲染前读插槽中心，保证连线端点锚点与节点折叠同帧刷新。
+            // 流水线先用指纹挡掉「输入没变」的节点，再进共享批次同步执行。
+            Measure(SlotLayoutTrigger.Layout);
         }
 
         private void OnOwnerPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
         {
-            if (ReferenceEquals(e.Property, VisualElement.DataContextProperty)
-                || ReferenceEquals(e.Property, SlotNamesProperty)
+            if (ReferenceEquals(e.Property, VisualElement.DataContextProperty))
+            {
+                RebuildPipeline();
+                Measure(SlotLayoutTrigger.Configuration);
+                return;
+            }
+
+            if (ReferenceEquals(e.Property, SlotNamesProperty)
                 || ReferenceEquals(e.Property, SlotEnumeratorNamesProperty)
-                || ReferenceEquals(e.Property, CoordinateHostNameProperty)
-                || ReferenceEquals(e.Property, VisualElement.WidthProperty)
+                || ReferenceEquals(e.Property, CoordinateHostNameProperty))
+            {
+                RebuildPipeline();
+                Measure(SlotLayoutTrigger.Configuration);
+                return;
+            }
+
+            if (ReferenceEquals(e.Property, VisualElement.WidthProperty)
                 || ReferenceEquals(e.Property, VisualElement.HeightProperty))
             {
                 owner.InvalidateMeasure();
             }
         }
 
-        private void OnItemsRebuilt(object? sender, EventArgs e) => owner.InvalidateMeasure();
+        private void OnItemsRebuilt(object? sender, EventArgs e) => Measure(SlotLayoutTrigger.Configuration);
+    }
 
-        private void Sync()
+    // ── 平台层：可视树遍历与坐标转换 ────────────────────────────────────────
+
+    private sealed class SlotPartLocator(VisualElement owner) : ISlotPartLocator
+    {
+        // PointFromSurface 到画布会逆掉相机矩阵，所以量到的中心已是画布局部坐标。
+        public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.CanvasLocal;
+
+        public ISlotPart? FindNamedSlot(string name)
+            => FindNamed(owner, name) is { } element ? new SlotPart(owner, element) : null;
+
+        public IReadOnlyList<ISlotPart> FindEnumeratedSlots(string name)
         {
-            if (owner.DataContext is not IWorkflowComponent)
+            if (FindNamed(owner, name) is not VisualItemsControl items)
             {
-                return;
+                return Array.Empty<ISlotPart>();
             }
 
-            var coordinateHost = ResolveCoordinateHost();
-            if (coordinateHost is null)
+            var parts = new List<ISlotPart>();
+            foreach (var element in EnumerateVisuals(items))
             {
-                return;
-            }
-
-            foreach (var name in ParseNames(GetSlotNames(owner)))
-            {
-                var found = FindNamed(owner, name);
-                if (found is not null && found.DataContext is ISlotComponent)
+                if (element.DataContext is ISlotComponent)
                 {
-                    WriteAnchor(found, coordinateHost);
+                    parts.Add(new SlotPart(owner, element));
                 }
             }
 
-            foreach (var name in ParseNames(GetSlotEnumeratorNames(owner)))
-            {
-                if (FindNamed(owner, name) is not VisualItemsControl items)
-                {
-                    continue;
-                }
-
-                if (!enumerators.Contains(items))
-                {
-                    enumerators.Add(items);
-                    items.ItemsRebuilt += OnItemsRebuilt;
-                }
-
-                foreach (var element in EnumerateVisuals(items))
-                {
-                    if (element.DataContext is ISlotComponent)
-                    {
-                        WriteAnchor(element, coordinateHost);
-                    }
-                }
-            }
+            return parts;
         }
 
-        private void WriteAnchor(VisualElement element, VisualElement coordinateHost)
+        public object? ResolveCoordinateHost(string? hostName, Type? hostType)
         {
-            if (element.DataContext is not ISlotComponent slot || element.Bounds.Width <= 0f || element.Bounds.Height <= 0f)
-            {
-                return;
-            }
-
-            var surfacePoint = element.PointToSurface(new System.Drawing.PointF(
-                element.Bounds.Width / 2f, element.Bounds.Height / 2f));
-            var hostPoint = coordinateHost.PointFromSurface(surfacePoint);
-            var anchor = WorkflowSurfaceMath.SlotAnchorFromCanvasLocal(hostPoint.X, hostPoint.Y, slot.Anchor.Layer);
-            if (double.IsNaN(slot.Anchor.Horizontal)
-                || double.IsNaN(slot.Anchor.Vertical)
-                || Math.Abs(slot.Anchor.Horizontal - anchor.Horizontal) > 0.01d
-                || Math.Abs(slot.Anchor.Vertical - anchor.Vertical) > 0.01d
-                || slot.Anchor.Layer != anchor.Layer)
-            {
-                slot.Anchor = anchor;
-            }
-        }
-
-        private VisualElement? ResolveCoordinateHost()
-        {
-            var name = GetCoordinateHostName(owner);
-            if (!string.IsNullOrWhiteSpace(name))
+            if (!string.IsNullOrWhiteSpace(hostName))
             {
                 for (var current = owner.ParentElement; current is not null; current = current.ParentElement)
                 {
-                    if (string.Equals(current.Name, name, StringComparison.Ordinal))
+                    if (string.Equals(current.Name, hostName, StringComparison.Ordinal))
                     {
                         return current;
                     }
                 }
             }
 
+            var type = hostType ?? typeof(VisualCanvas);
+            if (type.IsAssignableFrom(owner.GetType()))
+            {
+                return owner;
+            }
+
             for (var current = owner.ParentElement; current is not null; current = current.ParentElement)
             {
-                if (current is VisualCanvas)
+                if (type.IsAssignableFrom(current.GetType()))
                 {
                     return current;
                 }
@@ -266,16 +323,82 @@ public sealed class WorkflowSlotLayoutBehavior
 
             return owner.Surface?.Root as VisualElement;
         }
+
+        public int CountSlots(IReadOnlyList<string> slotNames, IReadOnlyList<string> enumeratorNames)
+        {
+            // 指纹里的插槽数：容器增删、模板重建必须重测，哪怕节点外框尺寸没变。
+            var count = 0;
+            foreach (var name in slotNames)
+            {
+                if (FindNamed(owner, name) is not null)
+                {
+                    count++;
+                }
+            }
+
+            foreach (var name in enumeratorNames)
+            {
+                if (FindNamed(owner, name) is not VisualItemsControl items)
+                {
+                    continue;
+                }
+
+                foreach (var element in EnumerateVisuals(items))
+                {
+                    if (element.DataContext is ISlotComponent)
+                    {
+                        count++;
+                    }
+                }
+            }
+
+            return count;
+        }
     }
 
-    private static IEnumerable<VisualElement> EnumerateNamedSlots(VisualElement root, string? names)
+    private sealed class SlotPart(VisualElement nodeView, VisualElement element) : ISlotPart
     {
-        foreach (var name in ParseNames(names))
+        public ISlotComponent? Slot => element.DataContext as ISlotComponent;
+
+        public bool IsMeasured => element.Bounds.Width > 0f && element.Bounds.Height > 0f;
+
+        public SlotCenter? MeasureCenter(object? relativeTo)
         {
-            if (FindNamed(root, name) is { } element && element.DataContext is ISlotComponent)
+            var center = new DrawingPointF(element.Bounds.Width / 2f, element.Bounds.Height / 2f);
+            var surfacePoint = element.PointToSurface(center);
+            var host = relativeTo as VisualElement ?? nodeView;
+            var local = host.PointFromSurface(surfacePoint);
+            return new SlotCenter(local.X, local.Y);
+        }
+    }
+
+    private sealed class SlotMeasurementHost(VisualElement owner) : ISlotMeasurementHost
+    {
+        public (double Width, double Height) ReadNodeSize() => (owner.Bounds.Width, owner.Bounds.Height);
+
+        public Anchor ReadAnchor(ISlotComponent slot) => slot.Anchor;
+
+        public void WriteAnchor(ISlotComponent slot, Anchor anchor) => slot.Anchor = anchor;
+
+        public void InvalidateMeasure() => owner.InvalidateMeasure();
+
+        public bool Post(Action flush)
+        {
+            // 投递必须异步：平台若同步执行，批次在调用返回前就被清空，请求永远合并不了。
+            var surface = owner.Surface;
+            if (surface is { IsHandleCreated: true, IsDisposed: false })
             {
-                yield return element;
+                try
+                {
+                    surface.BeginInvoke(flush);
+                    return true;
+                }
+                catch (InvalidOperationException)
+                {
+                }
             }
+
+            return false;
         }
     }
 
