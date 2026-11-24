@@ -185,22 +185,24 @@ TreeHelper.MarkDirty() → 10fps Tickable tick（tick 线程只判脏）     Tem
                    → BroadcastVisibleItemLayout()（对每个可见节点重发 Anchor/Size）
 ```
 
-- **节点移动/缩放不标脏**：`Viewport` 没变时重算可见集只能靠 `MarkDirty()`，而拖动期间按 tick 重跑 `Virtualize` 的开销高于「`VisibleItems` 与 HUD 晚一拍」。七家一致：节点几何变化只摆卡片/重画，可见集等下一次滚动/缩放收敛；Jalium 的 `NodeEditorSurface.cs` 也如此。
-- **tick 线程不碰可见集**：装了虚拟化的 helper 在 `Install` 时记下 `SynchronizationContext.Current`（安装线程就是宿主 UI 线程），脏了就把 `Virtualize + BroadcastVisibleItemLayout` 整趟 post 回该上下文，并用 `uiPassQueued` 合并 —— UI 忙时只留一趟。**上下文跟着安装走**：每次 `Install` 都重新取并递增 `installVersion`，投递时把版本带走；`Uninstall` 清掉自动捕获的值并重置 `uiPassQueued`。所以换一个 UI 线程重装会自然改绑，上一次安装遗留的排队不会把新安装锁死，旧 UI 线程里迟到的回投也会因版本不符被丢掉（否则它会拿着新组件在旧线程上跑）。没有上下文的宿主（服务端、控制台、无头测试）保持原来的 tick 线程内联执行。宿主在非 UI 线程装 helper 时，必须 `new TreeHelper<T>(cellSize).WithSynchronizationContext(ctx)` 显式给（`Templates/Helpers/TreeHelper.cs` 的 `WithSynchronizationContext`），否则这一趟仍会落在 tick 线程；显式值（含显式 null）跨安装保留。**原因**：`VisibleItems` 绑在 UI 上，tick 线程直接改会和 Core 的 `ViewPool` 同步 Remove 分支并发 —— 下游实测症状是连线随机消失。回归测试 `TreeHelperTickTests.TheDirtyPassTouchesTheVisibleSetOnTheThreadThatInstalledTheHelper`（把 helper 显式设成 null 上下文即红）。
+- **标脏来自命令行，不是直接写属性**：`NodeHelper<T>` 的 `SetAnchor` / `SetSize` / `Move` 改完模型就调 `Component?.Parent?.GetHelper().MarkDirty()`（生成的 `MoveCommand` / `SetAnchorCommand` / `SetSizeCommand` 走的正是这三个）；直接写 `node.Anchor` 不标脏。拖动/缩放的每个命令都让可见集在下一个 10fps tick 重建一趟。
+- **tick 线程不碰可见集**：装了虚拟化的 helper 在 `Install` 时记下 `SynchronizationContext.Current`（安装线程就是宿主 UI 线程），脏了就把 `Virtualize + BroadcastVisibleItemLayout` 整趟 post 回该上下文，并用 `uiPassQueued` 合并 —— UI 忙时只留一趟。**上下文跟着安装走**：每次 `Install` 都重新取并递增 `installVersion`，投递时把版本带走；`Uninstall` 清掉自动捕获的值并重置 `uiPassQueued`。换一个 UI 线程重装会改绑到新线程；上一次安装遗留的排队不会锁死新安装；旧 UI 线程里迟到的回投因版本不符被丢掉。没有上下文的宿主（服务端、控制台、无头测试）在 tick 线程内联执行。宿主在非 UI 线程装 helper 时用 `new TreeHelper<T>(cellSize).WithSynchronizationContext(ctx)` 显式给（`Templates/Helpers/TreeHelper.cs` 的 `WithSynchronizationContext`）；不给则这一趟落在 tick 线程；显式值（含显式 null）跨安装保留。**依据**：`VisibleItems` 绑在 UI 上，tick 线程直接改会与 Core 的 `ViewPool` 同步 Remove 分支并发，实测症状是连线随机消失。回归测试 `TreeHelperTickTests.TheDirtyPassTouchesTheVisibleSetOnTheThreadThatInstalledTheHelper`（把 helper 显式设成 null 上下文即红）。
 
 - **只有 `TreeHelper(double cellSize)` 这个构造开虚拟化**，无参构造把 `useVirtualization = false`（`Templates/Helpers/TreeHelper.cs` 的 `TreeHelper()` 与 `TreeHelper(double cellSize)` 两个构造函数）。「图每次都全渲染」十有八九是用了无参构造。
 - 索引有两张：节点网格 `_nodeMap` 与节点对（连线）网格 `_nodePairMap`（`WorkflowSpatialManager.cs` 的同名两个字段）。连线在两端都还没被索引时进 `_pendingLinks` 暂存，节点插入后 `RetryPendingLinks()` 补挂（`_pendingLinks` / `RetryPendingLinks`）。
-- 查询是 `QueryAgentBounds(viewport, expansionDepth: 1)`（`WorkflowSpatialManager.QueryAgentBounds`），扩张一层是为了把「刚好在视口外但连线要穿过视口」的端点也捞出来。
-- **查询之前索引必须补齐。** `SpatialGridHashMap.Query` 先跑一次 `EnsureIndexed()`：① 把重入守卫延后的那次 `ResyncGrid` 补上（否则要等到下一次 bounds 变化才跑）；② 给**边界为空**的条目（视图还没测量 ⇒ 登记了但**不在任何格子里**）再读一次 `Bounds`，变成真的就补进网格。不补的后果是**永久性**的：那类条目任何查询都碰不到 ⇒ **视口怎么移都救不回来**（用户实测：Agent 对话进行中节点/连线概率消失，重入 Viewport 无效）。判别测试 `SpatialIndexFreshnessTests.AnItemMeasuredSilently_IsFoundByTheNextQuery`（把 `EnsureIndexed()` 注释掉即红）。同族的 `WorkflowSpatialManager.QueryAgentBounds` 也在查询前补一次 `RetryPendingLinks()` —— 若那条暂存只由 `NodeAdded` 触发，此后没有新节点就永远挂着。
+- 虚拟化每趟走 `CollectAgentBounds` / `CollectNodeProviders` / `TryGetLink`（`WorkflowSpatialManager`），结果填进 `WorkflowSpatialManager.Scratch`（`VirtualizationScratch`）的复用缓冲；`QueryNodes` 仍供 Agent 面的视口查询使用。扩张仍是 `expansionDepth: 1`，把「刚好在视口外但连线要穿过视口」的端点也捞出来。
+- **可见集顺序与缓冲复用无关**：`VirtualizationScratch` 的 `VisibleNodes` / `DesiredSet` 用引用比较器，`Clear` 后按同样插入序重填，`HashSet` 枚举序即插入序。`Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/SpatialVirtualizationVisibleSetTests.cs` 钉住同一视口往返后的内容与顺序，以及 inset 只放大查询矩形。
+- `SpatialGridHashMap.CollectInto` 是 `Query` 的非迭代器同序遍历；两者共用 `_queryScratch`，同一次调用内不要交叉再发起查询。
+- **查询之前索引必须补齐。** `SpatialGridHashMap.Query` 先跑一次 `EnsureIndexed()`：① 把重入守卫延后的那次 `ResyncGrid` 补上（延后的重算没有自触发循环，要等下一次 bounds 变化才轮到它）；② 给**边界为空**的条目（视图还没测量 ⇒ 登记了但**不在任何格子里**）再读一次 `Bounds`，变成真的就补进网格。不补的后果是**永久性**的：那类条目任何查询都碰不到 ⇒ **视口怎么移都救不回来**（用户实测：Agent 对话进行中节点/连线概率消失，重入 Viewport 无效）。判别测试 `SpatialIndexFreshnessTests.AnItemMeasuredSilently_IsFoundByTheNextQuery`（把 `EnsureIndexed()` 注释掉即红）。同族的 `WorkflowSpatialManager.CollectAgentBounds`（每趟虚拟化的入口）也在查询前补一次 `RetryPendingLinks()` —— 若那条暂存只由 `NodeAdded` 触发，此后没有新节点就永远挂着。
 - 重入守卫、bounds 空/脏态、resync：`GUI/Virtualization/SpatialGridHashMap.cs` 的 `_unindexed` / `_boundsDirty` / `OnItemPropertyChanged` / `EnsureIndexed` / `ResyncGrid`，以及 `WorkflowSpatialEx.cs` 的 `Virtualizing` / `Insets` 两张 `ConditionalWeakTable`/字典重入表。
 - 视口修正 `RulerBand` → `SetVirtualizeInset`（`WorkflowSpatialEx.cs` 的 `SetVirtualizeInset`）：只影响 `Virtualize` 内部的查询膨胀，**不动权威的 `Viewport`**。
-- **视图系统**：契约在 `Interfaces/WorkflowSystem/ViewHosting/`（工厂 / 容器 / 摆位 / 调度 / 诊断 + 池策略 / 层级策略 / 连线层 / 测量），通用流程在 `WorkflowSystem/ViewHosting/`（`ViewHostCore` / `ViewPoolCore` / `ViewSourcePipelineCore`）；WPF / Avalonia / WinUI / MAUI / Jalium 各自在 `WorkflowSystem/ViewHosting/` 逐层实现，由适配器的 `ViewSourcePipeline` 闭合，入口仍是 `ViewPool` 附着属性。Razor 是 renderer-native 例外（Blazor renderer 自己做实例化/diff）；WinForms 不接 Core 管线，用适配器里的通用视觉 `ViewPool` 附着属性按 `VisibleItems` 建视觉元素。契约、不变量与新增平台步骤见 [view-hosting.md](view-hosting.md)。
+- **视图系统**：契约在 `Interfaces/WorkflowSystem/ViewHosting/`（工厂 / 容器 / 摆位 / 调度 / 诊断 + 池策略 / 层级策略 / 连线层 / 测量），通用流程在 `WorkflowSystem/ViewHosting/`（`ViewHostCore` / `ViewPoolCore` / `ViewSourcePipelineCore`）；WPF / Avalonia / WinUI / MAUI / Jalium / WinForms 各自在 `WorkflowSystem/ViewHosting/` 逐层实现，由适配器的 `ViewSourcePipeline` 闭合，入口是 `ViewPool` 附着属性。Razor 是 renderer-native 例外（Blazor renderer 自己做实例化/diff）。契约、不变量与新增平台步骤见 [view-hosting.md](view-hosting.md)。
 
 ### 3.6 交互（命中测试）
 
 分两层，别把第二层当成第一层：
 
-**① 手势那层仍然没有 Core 代码** —— 命中谁、拖动还是连线，判断在适配器的 Behavior 里，判断完调组件的 `IVeloxCommand`：
+**① 手势那层没有 Core 代码** —— 命中谁、拖动还是连线，判断在适配器的 Behavior 里，判断完调组件的 `IVeloxCommand`：
 
 ```
 适配器 Behavior 的 pointer 事件 → 决定命中谁 → 调组件的 IVeloxCommand（如 node.MoveCommand / slot.SendConnectionCommand）

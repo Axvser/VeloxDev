@@ -128,6 +128,35 @@ public class SpatialGridHashMap<T>(double cellSize) : ISpatialMap<T>
         }
     }
 
+    // 与 Query 同序同结果，只是填进调用方复用的 List —— 虚拟化每趟都要查两遍，省掉两个 iterator 状态机。
+    // 循环体与 Query 重复是有意的：把 Query 改成调这里会引入 delegate，把这里改成 foreach Query 又会重新分配 iterator。
+    // 调用方负责先 Clear；与 Query 共用 _queryScratch，因此这次调用结束前不要再发起第二次查询。
+    internal void CollectInto(Viewport viewport, List<T> buffer)
+    {
+        if (viewport.IsEmpty) return;
+
+        EnsureIndexed();
+
+        _queryScratch.Clear();
+        foreach (var cell in GetCells(viewport))
+        {
+            if (_grid.TryGetValue(cell, out var set))
+            {
+                foreach (var item in set)
+                {
+                    if (!_queryScratch.Add(item)) continue;
+
+                    var itemBounds = item.Bounds;
+                    bool visible = itemBounds.IsEmpty
+                        ? viewport.Contains(itemBounds.Horizontal, itemBounds.Vertical)
+                        : viewport.IntersectsWith(itemBounds);
+                    if (visible)
+                        buffer.Add(item);
+                }
+            }
+        }
+    }
+
     /// <inheritdoc />
     public void Clear()
     {

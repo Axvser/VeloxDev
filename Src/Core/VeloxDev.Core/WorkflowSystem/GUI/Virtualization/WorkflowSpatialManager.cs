@@ -1,3 +1,5 @@
+using VeloxDev.WorkflowSystem.StandardEx;
+
 namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
@@ -22,6 +24,9 @@ public sealed class WorkflowSpatialManager : IDisposable
     private readonly HashSet<ILinkComponent> _pendingLinks = [];
     private readonly double _cellSize;
     private bool _disposed;
+
+    // 单趟虚拟化复用的缓冲（见 WorkflowSpatialEx.VirtualizeCore）。树上的重入守卫保证同一时刻只有一趟在用它。
+    internal VirtualizationScratch Scratch { get; } = new();
 
     /// <summary>Gets the minimal viewport that covers all indexed nodes and node pairs.</summary>
     public Viewport GlobalBounds => Viewport.Union(_nodeMap.Bounds, _nodePairMap.Bounds);
@@ -146,6 +151,83 @@ public sealed class WorkflowSpatialManager : IDisposable
             if (_pairToLink.TryGetValue(pair, out var link))
                 yield return link;
         }
+    }
+
+    // 与 QueryAgentBounds 同序同结果，结果填进复用的 List，省掉 iterator / ToArray / 每趟新建的集合。
+    // 返回的就是 Scratch 里的实例，调用方读完之前不要再触发另一趟虚拟化。
+    internal List<NodePairBoundsProvider> CollectAgentBounds(Viewport viewport, int expansionDepth = 1)
+    {
+        var scratch = Scratch;
+        var result = scratch.AgentBounds;
+        result.Clear();
+        if (viewport.IsEmpty) return result;
+
+        RetryPendingLinks();
+
+        scratch.DirectPairs.Clear();
+        _nodePairMap.CollectInto(viewport, scratch.DirectPairs);
+        scratch.SeenPairs.Clear();
+        scratch.SeenNodes.Clear();
+        scratch.Frontier.Clear();
+        scratch.NextFrontier.Clear();
+
+        // 1. 直接可见的节点对
+        foreach (var provider in scratch.DirectPairs)
+        {
+            if (!scratch.SeenPairs.Add(provider)) continue;
+            result.Add(provider);
+
+            if (scratch.SeenNodes.Add(provider.NodeA)) scratch.Frontier.Add(provider.NodeA);
+            if (scratch.SeenNodes.Add(provider.NodeB)) scratch.Frontier.Add(provider.NodeB);
+        }
+
+        // 2. 按深度沿反向索引扩张（两层 List 互换角色，避免每层再分配）
+        for (var depth = 0; depth < expansionDepth && scratch.Frontier.Count > 0; depth++)
+        {
+            var next = scratch.NextFrontier;
+            next.Clear();
+            foreach (var node in scratch.Frontier)
+            {
+                if (!_nodeToPairs.TryGetValue(node, out var connectedPairs)) continue;
+
+                foreach (var pair in connectedPairs)
+                {
+                    if (!scratch.SeenPairs.Add(pair)) continue;
+                    result.Add(pair);
+
+                    var other = ReferenceEquals(pair.NodeA, node) ? pair.NodeB : pair.NodeA;
+                    if (scratch.SeenNodes.Add(other)) next.Add(other);
+                }
+            }
+
+            (scratch.Frontier, scratch.NextFrontier) = (next, scratch.Frontier);
+        }
+
+        return result;
+    }
+
+    // 与 QueryNodes 同序，填进复用 List。
+    internal List<NodeBoundsProvider> CollectNodeProviders(Viewport viewport)
+    {
+        var result = Scratch.NodeProviders;
+        result.Clear();
+        if (viewport.IsEmpty) return result;
+
+        _nodeMap.CollectInto(viewport, result);
+        return result;
+    }
+
+    // 与 ResolveLinksFromPairs 的单次查表同义，省掉 iterator。
+    internal bool TryGetLink(NodePairBoundsProvider pair, out ILinkComponent link)
+    {
+        if (_pairToLink.TryGetValue(pair, out var resolved))
+        {
+            link = resolved;
+            return true;
+        }
+
+        link = null!;
+        return false;
     }
 
     private void InsertLink(ILinkComponent link)
@@ -307,4 +389,26 @@ public sealed class WorkflowSpatialManager : IDisposable
         _pendingLinks.Clear();
         _nodePairMap.Clear();
     }
+}
+
+// 单棵树的虚拟化缓冲。Clear 会清掉元素引用，所以两趟之间不会把上一趟的节点/连线留在内存里；
+// HashSet 经 Clear 后重新插入仍按插入序枚举，可见集顺序与每趟新建集合时逐位一致。
+internal sealed class VirtualizationScratch
+{
+    internal readonly List<NodeBoundsProvider> NodeProviders = [];
+    internal readonly List<NodePairBoundsProvider> AgentBounds = [];
+    internal readonly List<NodePairBoundsProvider> DirectPairs = [];
+    internal readonly HashSet<NodePairBoundsProvider> SeenPairs = [];
+    internal readonly HashSet<INodeComponent> SeenNodes = [];
+    // 与可见集/期望集原来的比较器保持一致：组件按引用身份去重。
+    internal readonly HashSet<INodeComponent> VisibleNodes =
+        new(WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
+    internal readonly List<IWorkflowComponent> DesiredItems = [];
+    internal readonly HashSet<IWorkflowComponent> DesiredSet =
+        new(WorkflowReferenceEqualityComparer<IWorkflowComponent>.Instance);
+    // 追加缺失项时对齐 ObservableCollection.Contains 的默认比较器。
+    internal readonly HashSet<IWorkflowComponent> ExistingItems = [];
+    // 扩张层的前沿：两层 List 每层互换角色。
+    internal List<INodeComponent> Frontier = [];
+    internal List<INodeComponent> NextFrontier = [];
 }

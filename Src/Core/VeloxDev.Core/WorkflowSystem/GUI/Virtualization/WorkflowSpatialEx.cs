@@ -142,15 +142,19 @@ public static class WorkflowSpatialEx
                 return;
         }
 
+        // 每趟都发生，缓冲按树复用：重建集合/迭代器的分配比可见集本身还贵。
+        var scratch = manager.Scratch;
+
         // 1. Query AgentBounds
         //    E.g. A visible → A↔B brought in → B↔C, B↔D, B↔E also included
         //    so that when B becomes fully visible, all its connections are ready
         //    without flicker.
-        var agentBounds = manager.QueryAgentBounds(query, expansionDepth: 1).ToArray();
+        var agentBounds = manager.CollectAgentBounds(query, expansionDepth: 1);
 
         // 2. Collect unique nodes from both ends of each AgentBounds
-        var visibleNodes = new HashSet<INodeComponent>(
-            WorkflowReferenceEqualityComparer<INodeComponent>.Instance);
+        //    （Clear 后按同样插入序重填，HashSet 的枚举顺序与每趟新建时一致）
+        var visibleNodes = scratch.VisibleNodes;
+        visibleNodes.Clear();
         foreach (var pair in agentBounds)
         {
             visibleNodes.Add(pair.NodeA);
@@ -158,33 +162,45 @@ public static class WorkflowSpatialEx
         }
 
         // 3. Also collect individually visible nodes (isolated nodes with no links)
-        foreach (var node in manager.QueryNodes(query))
-            visibleNodes.Add(node);
+        foreach (var provider in manager.CollectNodeProviders(query))
+            visibleNodes.Add(provider.Node);
 
         // 4. Build desired items: VirtualLink + all nodes + all links, in one pass
-        List<IWorkflowComponent> desiredItems = [tree.VirtualLink];
-        var desiredSet = new HashSet<IWorkflowComponent>(
-            WorkflowReferenceEqualityComparer<IWorkflowComponent>.Instance)
-        {
-            tree.VirtualLink
-        };
+        var desiredItems = scratch.DesiredItems;
+        var desiredSet = scratch.DesiredSet;
+        desiredItems.Clear();
+        desiredSet.Clear();
+        desiredItems.Add(tree.VirtualLink);
+        desiredSet.Add(tree.VirtualLink);
 
         foreach (var node in visibleNodes)
             AddDesiredItem(desiredItems, desiredSet, node);
 
-        foreach (var link in manager.ResolveLinksFromPairs(agentBounds))
-            AddDesiredItem(desiredItems, desiredSet, link);
-
-        // 5. Remove stale items from observable
-        foreach (var item in observable.OfType<IWorkflowComponent>().ToArray())
+        foreach (var pair in agentBounds)
         {
-            if (!desiredSet.Contains(item))
-                RemoveAll(observable, item);
+            if (manager.TryGetLink(pair, out var link))
+                AddDesiredItem(desiredItems, desiredSet, link);
+        }
+
+        // 5. Remove stale items from observable（倒序按下标删，避免 OfType().ToArray() 快照）
+        for (var index = observable.Count - 1; index >= 0; index--)
+        {
+            if (!desiredSet.Contains(observable[index]))
+                observable.RemoveAt(index);
         }
 
         // 6. Add desired items (nodes + links, no deferral)
+        //    existing 用默认比较器，与 ObservableCollection.Contains 的语义一致。
+        var existing = scratch.ExistingItems;
+        existing.Clear();
+        for (var index = 0; index < observable.Count; index++)
+            existing.Add(observable[index]);
+
         foreach (var item in desiredItems)
-            AddIfMissing(observable, item);
+        {
+            if (existing.Add(item))
+                observable.Add(item);
+        }
     }
 
     /// <summary>
@@ -352,27 +368,11 @@ public static class WorkflowSpatialEx
         return [.. tree.QueryNodes(new Viewport(left, top, width, height))];
     }
 
-    private static void AddIfMissing(Collection<IWorkflowComponent> observable, IWorkflowComponent item)
-    {
-        if (!observable.Contains(item))
-        {
-            observable.Add(item);
-        }
-    }
-
     private static void AddDesiredItem(List<IWorkflowComponent> desiredItems, HashSet<IWorkflowComponent> desiredSet, IWorkflowComponent item)
     {
         if (desiredSet.Add(item))
         {
             desiredItems.Add(item);
-        }
-    }
-
-    private static void RemoveAll(Collection<IWorkflowComponent> observable, IWorkflowComponent item)
-    {
-        while (observable.Contains(item))
-        {
-            observable.Remove(item);
         }
     }
 
