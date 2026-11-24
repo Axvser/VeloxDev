@@ -1,0 +1,37 @@
+<local:WorkbenchViewBase
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workbench"
+    x:Class="Demo.Views.Workbench.ExplorerView"
+    Background="{StaticResource WbSurface}">
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <WrapPanel Grid.Row="0" Orientation="Horizontal" Spacing="4" Margin="8,8,8,0">
+      <Button x:Name="SaveButton" Text="保存" Style="{StaticResource WbGhost}" Click="OnSave" />
+      <Button x:Name="LoadButton" Text="加载" Style="{StaticResource WbGhost}" Click="OnLoad" />
+      <Button x:Name="UndoButton" Text="撤销" Style="{StaticResource WbGhost}" Click="OnUndo" />
+      <Button x:Name="RedoButton" Text="重做" Style="{StaticResource WbGhost}" Click="OnRedo" />
+      <Button x:Name="ReloadButton" Text="重载" Style="{StaticResource WbGhost}" Click="OnReload" />
+    </WrapPanel>
+
+    <Grid Grid.Row="1" Margin="12,6,12,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Grid.Column="0" Text="小地图" Style="{StaticResource WbMeta}" VerticalAlignment="Center" />
+      <Button x:Name="MinimapToggle" Grid.Column="1" Text="开" Width="44" Height="22" Style="{StaticResource WbGhost}" Click="OnMinimapToggle" />
+    </Grid>
+
+    <TextBlock Grid.Row="2" Text="元素" Style="{StaticResource WbSection}" Margin="12,12,12,6" />
+
+    <local:ElementListView x:Name="Elements" Grid.Row="3" Margin="12,0,12,0" />
+  </Grid>
+</local:WorkbenchViewBase>

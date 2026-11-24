@@ -1,0 +1,30 @@
+<local:WorkbenchViewBase
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workbench"
+    x:Class="Demo.Views.Workbench.StatusBarView"
+    Background="{StaticResource WbStatusBar}">
+
+  <Grid>
+    <Border Height="1" VerticalAlignment="Top" Background="{StaticResource WbStatusBarBorder}" Padding="0" CornerRadius="0" />
+    <Grid Margin="8,0,8,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <TextBlock x:Name="RunDot" Text="●" FontSize="7.5" Foreground="{StaticResource WbSuccess}" />
+        <TextBlock x:Name="RunState" Text="空闲" FontSize="8.5" Foreground="{StaticResource WbStatusBarText}" />
+        <TextBlock x:Name="Compiled" Text="编译 0 段" FontSize="8.5" Foreground="{StaticResource WbStatusBarText}" />
+        <TextBlock x:Name="Elements" Text="元素 0" FontSize="8.5" Foreground="{StaticResource WbStatusBarText}" />
+      </StackPanel>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <TextBlock x:Name="VisibleCount" Text="可见 0" FontSize="8.5" Foreground="{StaticResource WbStatusBarText}" />
+        <TextBlock x:Name="Zoom" Text="100%" FontSize="8.5" Foreground="{StaticResource WbStatusBarText}" />
+        <TextBlock x:Name="Hint" Text="Ctrl+滚轮缩放" Style="{StaticResource WbCaption}" VerticalAlignment="Center" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</local:WorkbenchViewBase>

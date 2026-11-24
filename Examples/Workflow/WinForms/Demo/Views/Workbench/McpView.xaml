@@ -1,0 +1,20 @@
+<local:WorkbenchViewBase
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workbench"
+    x:Class="Demo.Views.Workbench.McpView"
+    Background="{StaticResource WbSurface}">
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <TextBlock Grid.Row="0" Text="服务器" Style="{StaticResource WbSection}" Margin="12,14,12,6" />
+
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <StackPanel x:Name="StatusPanel" Spacing="6" Padding="10,0,10,10" />
+    </ScrollViewer>
+  </Grid>
+</local:WorkbenchViewBase>

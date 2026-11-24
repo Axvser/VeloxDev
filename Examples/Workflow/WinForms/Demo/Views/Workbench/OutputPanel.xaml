@@ -1,0 +1,51 @@
+<local:WorkbenchViewBase
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workbench"
+    x:Class="Demo.Views.Workbench.OutputPanel"
+    Background="{StaticResource WbEditor}">
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="46" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <Border Grid.Row="0" Background="{StaticResource WbPanel}" Padding="0" CornerRadius="0">
+      <Grid Margin="12,0,12,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <TextBlock Text="执行输出" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource WbTextSecondary}" />
+          <TextBlock x:Name="RootLabel" Text="" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource WbAccentText}" />
+          <TextBlock x:Name="StateLabel" Text="" FontSize="8.5" Foreground="{StaticResource WbTextTertiary}" />
+          <TextBlock x:Name="ProgressLabel" Text="" FontSize="8" Foreground="{StaticResource WbTextTertiary}" />
+        </StackPanel>
+
+        <TextBlock x:Name="CountLabel" Grid.Column="1" Text="已记录 0 行" FontSize="8" Foreground="{StaticResource WbTextTertiary}" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" Margin="12,0,12,12">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+
+      <TextBlock Grid.Row="0" Text="实际执行顺序" FontSize="9" FontWeight="Bold" Foreground="{StaticResource WbAccentText}" Margin="0,8,0,6" />
+
+      <TextBlock x:Name="HintLabel"
+                 Grid.Row="1"
+                 Text="运行一次，或让 Agent 编译 / 运行工作流。节点开始、完成、重试、重定向和运行收尾都会按发生顺序落在这里。"
+                 Style="{StaticResource WbCaption}"
+                 Wrap="True"
+                 Margin="0,0,0,6" />
+
+      <ListBox x:Name="LogList" Grid.Row="2" Style="{StaticResource WbLog}" />
+    </Grid>
+  </Grid>
+</local:WorkbenchViewBase>

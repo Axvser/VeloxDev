@@ -1,0 +1,162 @@
+<local:WorkbenchViewBase
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workbench"
+    xmlns:workflow="clr-namespace:Demo.Views.Workflow"
+    x:Class="Demo.Views.Workbench.WorkbenchView"
+    Background="{StaticResource WbWindow}">
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="32" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="24" />
+    </Grid.RowDefinitions>
+
+    <!-- ── Title strip: brand, menu bar, command centre ─────────────────────── -->
+    <Border Grid.Row="0" Background="{StaticResource WbActivityBar}" Padding="12,0" CornerRadius="0">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <TextBlock Text="VeloxDev" Style="{StaticResource WbBrand}" VerticalAlignment="Center" />
+          <VisualMenu x:Name="MenuBar" Foreground="{StaticResource WbTextSecondary}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Button x:Name="CommandButton"
+                Grid.Column="1"
+                Text="搜索命令    Ctrl+Shift+P"
+                Width="330"
+                Height="24"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{StaticResource WbInput}"
+                Foreground="{StaticResource WbTextTertiary}"
+                BorderThickness="0"
+                CornerRadius="4"
+                FontSize="8.5"
+                Click="OnCommandCenter" />
+
+        <TextBlock Grid.Column="2" Text="工作台" Style="{StaticResource WbCaption}" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <!-- ── Body: activity bar | sidebar | canvas | inspector ────────────────── -->
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="48" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="4" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="4" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+
+      <Border Grid.Column="0" Background="{StaticResource WbActivityBar}" Padding="0" CornerRadius="0">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          <StackPanel x:Name="TopActivity" Grid.Row="0" Orientation="Vertical" Spacing="0" Margin="0,6,0,0" />
+          <StackPanel x:Name="BottomActivity" Grid.Row="2" Orientation="Vertical" Spacing="0" Margin="0,0,0,6" />
+        </Grid>
+      </Border>
+
+      <Border x:Name="SidebarPane" Grid.Column="1" Width="272" Background="{StaticResource WbPanel}" Padding="0" CornerRadius="0">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="34" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+          <TextBlock x:Name="SidebarHeader" Grid.Row="0" Text="资源管理器" Style="{StaticResource WbHeader}" />
+          <Border Grid.Row="0" Height="1" VerticalAlignment="Bottom" Background="{StaticResource WbBorderSubtle}" />
+          <Grid Grid.Row="1">
+            <local:ExplorerView x:Name="ExplorerPage" />
+            <local:RunManagerView x:Name="RunPage" Visibility="Collapsed" />
+            <local:McpView x:Name="McpPage" Visibility="Collapsed" />
+          </Grid>
+        </Grid>
+      </Border>
+
+      <GridSplitter x:Name="SidebarSplitter" Grid.Column="2" Orientation="Vertical" Width="4" Background="{StaticResource WbSplitter}" />
+
+      <Grid Grid.Column="3">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="32" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource WbPanel}" Padding="0" CornerRadius="0">
+          <Grid Margin="6,0,12,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+              <local:TabButton x:Name="CanvasTab" Text="流程图" Width="80" IsActive="True" Click="OnCanvasTab" />
+              <local:TabButton x:Name="OutputTab" Text="输出" Width="64" Click="OnOutputTab" />
+            </StackPanel>
+            <TextBlock x:Name="MainHint" Grid.Column="1" Text="Ctrl+滚轮缩放" Style="{StaticResource WbCaption}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+        <Border Grid.Row="0" Height="1" VerticalAlignment="Bottom" Background="{StaticResource WbBorderSubtle}" />
+
+        <Border Grid.Row="1" Background="{StaticResource WbEditor}" BorderBrush="{StaticResource WbBorderSubtle}" BorderThickness="0,1,0,0" Padding="0" CornerRadius="0">
+          <Grid>
+            <workflow:WorkflowSurfaceView x:Name="WorkflowSurface" />
+            <local:OutputPanel x:Name="OutputPage" Visibility="Collapsed" />
+          </Grid>
+        </Border>
+      </Grid>
+
+      <GridSplitter x:Name="InspectorSplitter" Grid.Column="4" Orientation="Vertical" Width="4" Background="{StaticResource WbSplitter}" />
+
+      <Border x:Name="InspectorPane" Grid.Column="5" Width="348" Background="{StaticResource WbPanel}" Padding="0" CornerRadius="0">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="34" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+          <Border Grid.Row="0" Background="{StaticResource WbPanel}" Padding="0" CornerRadius="0">
+            <StackPanel Orientation="Horizontal" Spacing="2" Padding="6,0,0,0">
+              <local:TabButton x:Name="PropertiesTab" Text="属性" Width="62" IsActive="True" Click="OnPropertiesTab" />
+              <local:TabButton x:Name="AgentTab" Text="AI 助手" Width="78" Click="OnAgentTab" />
+            </StackPanel>
+          </Border>
+          <Border Grid.Row="0" Height="1" VerticalAlignment="Bottom" Background="{StaticResource WbBorderSubtle}" />
+          <Grid Grid.Row="1">
+            <local:InspectorView x:Name="PropertiesPage" />
+            <local:AgentView x:Name="AgentPage" Visibility="Collapsed" />
+          </Grid>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <local:StatusBarView x:Name="StatusBar" Grid.Row="2" />
+
+    <!-- ── Modal overlay: the in-app replacement for the native dialogs ─────── -->
+    <Grid x:Name="DialogOverlay"
+          Grid.RowSpan="3"
+          Background="#B0000000"
+          Visibility="Collapsed">
+      <Border x:Name="DialogCard"
+              Background="{StaticResource WbDialogDeep}"
+              BorderBrush="{StaticResource WbBorder}"
+              BorderThickness="1"
+              Padding="0"
+              CornerRadius="8"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              MinWidth="460"
+              MaxWidth="560">
+        <ContentControl x:Name="DialogContent" />
+      </Border>
+    </Grid>
+  </Grid>
+</local:WorkbenchViewBase>

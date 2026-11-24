@@ -4,7 +4,7 @@
     xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WinForms"
     xmlns:local="clr-namespace:Demo.Views.Workflow"
     x:Class="Demo.Views.Workflow.WorkflowSurfaceView"
-    ClipToBounds="False">
+    ClipToBounds="True">
 
   <local:WorkflowSurfaceView.Resources>
     <DataTemplate x:Key="ControllerTemplate">

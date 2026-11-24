@@ -1,0 +1,46 @@
+<local:WorkbenchViewBase
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workbench"
+    x:Class="Demo.Views.Workbench.AgentView"
+    Background="{StaticResource WbPanel}">
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="42" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0" Margin="12,12,12,0">
+      <TextBlock Text="会话" Style="{StaticResource WbSection}" />
+      <Grid Margin="0,4,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Grid.Column="0" Text="权限模式：" Style="{StaticResource WbMeta}" VerticalAlignment="Center" Margin="0,0,8,0" />
+        <ComboBox x:Name="PermissionPicker" Grid.Column="1" Style="{StaticResource WbCombo}" SelectionChanged="OnPermissionChanged" />
+      </Grid>
+    </StackPanel>
+
+    <TextBlock Grid.Row="1" Text="Agent 对话" FontSize="9" FontWeight="Bold" Foreground="{StaticResource WbAccentText}" Margin="12,8,12,6" />
+
+    <Border Grid.Row="2" Margin="12,0,12,0" Background="{StaticResource WbSurface}" Padding="0" CornerRadius="0">
+      <ListBox x:Name="AgentLog" Style="{StaticResource WbChatLog}" />
+    </Border>
+
+    <Grid Grid.Row="3" Margin="12,6,12,6">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBox x:Name="AgentInput" Grid.Column="0" Style="{StaticResource WbInputBox}" Placeholder="输入消息..." KeyDown="OnInputKeyDown" />
+      <Button x:Name="SendButton" Grid.Column="1" Text="发送" Width="70" Height="30" Margin="6,0,0,0" Style="{StaticResource WbPrimary}" Click="OnSend" />
+    </Grid>
+
+    <local:SubAgentView x:Name="SubAgents" Grid.Row="4" Height="220" Margin="12,4,12,12" />
+  </Grid>
+</local:WorkbenchViewBase>

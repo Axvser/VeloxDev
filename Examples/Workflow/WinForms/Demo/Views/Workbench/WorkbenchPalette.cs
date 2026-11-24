@@ -46,4 +46,12 @@ internal static class WorkbenchPalette
     public static readonly Color StatusBar = CardTheme.FromHex("#181818");
     public static readonly Color StatusBarBorder = CardTheme.FromHex("#2B2B2B");
     public static readonly Color StatusBarText = CardTheme.FromHex("#B8B8B8");
+
+    // In-app dialogs (the Agent prompt and confirmation cards).
+    public static readonly Color DialogDeep = CardTheme.FromHex("#1A1A2E");
+    public static readonly Color DialogHead = CardTheme.FromHex("#16213E");
+    public static readonly Color DialogButton = CardTheme.FromHex("#0F3460");
+    public static readonly Color DialogCancel = CardTheme.FromHex("#2A2A3E");
+    public static readonly Color DialogGold = CardTheme.FromHex("#FFD166");
+    public static readonly Color DialogGoldDark = CardTheme.FromHex("#2A1F00");
 }

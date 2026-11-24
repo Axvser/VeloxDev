@@ -1,0 +1,39 @@
+<local:WorkbenchViewBase
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workbench"
+    x:Class="Demo.Views.Workbench.AgentConfirmationView"
+    Background="{StaticResource WbDialogDeep}"
+    Width="460">
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <Border Grid.Row="0" Background="{StaticResource WbDialogHead}" Padding="18,14" CornerRadius="0">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Agent · 操作确认" FontSize="11" FontWeight="Bold" Foreground="{StaticResource WbDialogGold}" />
+        <Border Background="{StaticResource WbDialogGoldDark}" BorderBrush="{StaticResource WbDialogGold}" BorderThickness="1" Padding="10,6" CornerRadius="0" HorizontalAlignment="Left">
+          <TextBlock x:Name="OperationKeyLabel" Text="" FontFamily="Consolas" FontSize="9.5" Foreground="{StaticResource WbDialogGold}" />
+        </Border>
+      </StackPanel>
+    </Border>
+
+    <TextBlock x:Name="DescriptionLabel"
+               Grid.Row="1"
+               Text=""
+               FontSize="10"
+               Foreground="{StaticResource WbTextPrimary}"
+               Wrap="True"
+               Margin="18,14,18,6" />
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6" Margin="18,10,18,16">
+      <Button x:Name="AlwaysButton" Text="本次会话始终同意" Height="34" Style="{StaticResource WbGhost}" Click="OnAlways" />
+      <Button x:Name="OnceButton" Text="仅同意一次" Height="34" Style="{StaticResource WbPrimary}" Click="OnOnce" />
+      <Button x:Name="DenyButton" Text="拒绝" Height="34" Style="{StaticResource WbGhost}" Click="OnDeny" />
+    </StackPanel>
+  </Grid>
+</local:WorkbenchViewBase>

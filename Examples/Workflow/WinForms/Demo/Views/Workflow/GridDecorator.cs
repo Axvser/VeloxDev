@@ -21,7 +21,7 @@ public sealed class GridDecorator : VisualElement, IWorkflowGridDecorator
 
     private readonly Layer _gridLayer;
     private readonly Layer _rulerLayer;
-    private readonly Font _labelFont = new("Segoe UI", 13f, GraphicsUnit.Pixel);
+    private readonly Font _labelFont = new("Segoe UI", 10f, GraphicsUnit.Pixel);
     private VisualElement? _content;
 
     /// <summary>Whether the decorator paints its own surface background (templates with a surface Border set this false).</summary>
@@ -345,7 +345,7 @@ public sealed class GridDecorator : VisualElement, IWorkflowGridDecorator
                 if (isMajor)
                 {
                     graphics.DrawString(
-                        FormatGridValue(value), owner._labelFont, labelBrush, x + 3f, 2f);
+                        FormatGridValue(value), owner._labelFont, labelBrush, x + 3f, (ruler - 10f) / 2f);
                 }
             }
 
@@ -364,8 +364,17 @@ public sealed class GridDecorator : VisualElement, IWorkflowGridDecorator
                 graphics.DrawLine(pen, ruler, y, ruler - tickLength, y);
                 if (isMajor)
                 {
-                    graphics.DrawString(
-                        FormatGridValue(value), owner._labelFont, labelBrush, 3f, y + 2f);
+                    // The 28px left band cannot hold a horizontal five-digit label at the base size; scale it down.
+                    var text = FormatGridValue(value);
+                    var available = Math.Max(1f, ruler - 6f);
+                    var textWidth = graphics.MeasureString(text, owner._labelFont).Width;
+                    var scale = Math.Min(1f, available / textWidth);
+                    var state = graphics.Save();
+                    graphics.SetClip(new RectangleF(0f, ruler, ruler, Math.Max(0f, height - ruler)));
+                    graphics.TranslateTransform(3f, y + 2f);
+                    graphics.ScaleTransform(scale, scale);
+                    graphics.DrawString(text, owner._labelFont, labelBrush, 0f, 0f);
+                    graphics.Restore(state);
                 }
             }
 

@@ -1,0 +1,41 @@
+<local:WorkbenchViewBase
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workbench"
+    x:Class="Demo.Views.Workbench.SubAgentView"
+    Background="{StaticResource WbSurface}">
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <Grid Grid.Row="0" Margin="0,0,0,6">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Grid.Column="0" Text="子代理" FontSize="9" FontWeight="Bold" Foreground="{StaticResource WbAccentText}" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+        <TextBlock x:Name="RunningCount" Text="运行中 0" FontSize="8" Foreground="{StaticResource WbSuccess}" />
+        <TextBlock x:Name="TotalCount" Text="0 个" FontSize="8" Foreground="{StaticResource WbTextTertiary}" />
+        <TextBlock x:Name="TokensCount" Text="· 0 tokens" FontSize="8" Foreground="#FFC99BFF" />
+        <TextBlock x:Name="FailedCount" Text="· 失败 0" FontSize="8" Foreground="{StaticResource WbDanger}" />
+      </StackPanel>
+    </Grid>
+
+    <TextBlock x:Name="EmptyHint"
+               Grid.Row="1"
+               Text="尚无子代理。让 Agent「派一个子代理去数一数节点」试试。"
+               Style="{StaticResource WbCaption}"
+               Wrap="True"
+               Margin="0,0,0,4" />
+
+    <TreeView x:Name="AgentTree"
+              Grid.Row="2"
+              Background="{StaticResource WbSurface}"
+              FontSize="8.5" />
+  </Grid>
+</local:WorkbenchViewBase>

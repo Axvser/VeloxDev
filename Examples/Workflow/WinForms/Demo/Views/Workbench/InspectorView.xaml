@@ -1,0 +1,64 @@
+<local:WorkbenchViewBase
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Demo.Views.Workbench"
+    x:Class="Demo.Views.Workbench.InspectorView"
+    Background="{StaticResource WbPanel}">
+
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <StackPanel Padding="0,0,0,12">
+
+      <TextBlock Text="选中元素" Style="{StaticResource WbSection}" Margin="12,14,12,6" />
+
+      <Border x:Name="SelectedCard" Style="{StaticResource WbCard}" Margin="12,0,12,0">
+        <StackPanel x:Name="SelectedContent" Spacing="6">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="NameLabel" Grid.Column="0" Text="" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource WbTextPrimary}" />
+            <TextBlock x:Name="KindLabel" Grid.Column="1" Text="" Style="{StaticResource WbCaption}" VerticalAlignment="Center" />
+          </Grid>
+
+          <Border Height="1" Background="{StaticResource WbBorderSubtle}" Margin="0,1,0,1" />
+
+          <TextBlock x:Name="DetailText" Text="" Style="{StaticResource WbMono}" Wrap="True" />
+
+          <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
+            <Button x:Name="LocateButton" Text="定位" Width="72" Height="24" Style="{StaticResource WbGhost}" Click="OnLocate" />
+            <Button x:Name="DeleteButton" Text="删除" Width="72" Height="24" Style="{StaticResource WbGhost}" Click="OnDelete" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <TextBlock x:Name="SelectedHint"
+                 Text="在左侧「元素」列表里选一行，这里显示它的类型、位置、编译顺序与连接。"
+                 Style="{StaticResource WbCaption}"
+                 Wrap="True"
+                 Margin="12,0,12,0" />
+
+      <TextBlock Text="编译结构" Style="{StaticResource WbSection}" Margin="12,14,12,6" />
+
+      <Border Style="{StaticResource WbCard}" Margin="12,0,12,12">
+        <StackPanel Spacing="6">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="分段" Style="{StaticResource WbCaption}" />
+            <TextBlock x:Name="CompiledCountLabel" Grid.Column="1" Text="0 段" Style="{StaticResource WbCaption}" />
+          </Grid>
+
+          <TextBlock x:Name="CompiledEmpty"
+                     Text="编译一次后这里列出实际执行段。"
+                     Style="{StaticResource WbCaption}"
+                     Wrap="True" />
+
+          <StackPanel x:Name="CompiledRows" Spacing="1" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</local:WorkbenchViewBase>

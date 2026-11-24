@@ -1,0 +1,178 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Class="Demo.Views.Workbench.WorkbenchTheme">
+
+  <!-- The workbench's own tokens: the Avalonia demo keeps the same set in Theme/Tokens.axaml. Node cards use
+       CardTheme; this dictionary covers the frame around them. -->
+
+  <SolidColorBrush x:Key="WbWindow" Color="#FF141414" />
+  <SolidColorBrush x:Key="WbPanel" Color="#FF1F1F1F" />
+  <SolidColorBrush x:Key="WbPanelRaised" Color="#FF252526" />
+  <SolidColorBrush x:Key="WbSurface" Color="#FF252526" />
+  <SolidColorBrush x:Key="WbSurfaceElevated" Color="#FF2D2D2D" />
+  <SolidColorBrush x:Key="WbActivityBar" Color="#FF181818" />
+  <SolidColorBrush x:Key="WbEditor" Color="#FF141414" />
+  <SolidColorBrush x:Key="WbInput" Color="#FF2A2A2A" />
+  <SolidColorBrush x:Key="WbHover" Color="#FF2A2D2E" />
+
+  <SolidColorBrush x:Key="WbBorderSubtle" Color="#FF262626" />
+  <SolidColorBrush x:Key="WbBorder" Color="#FF333333" />
+  <SolidColorBrush x:Key="WbSplitter" Color="#FF262626" />
+
+  <SolidColorBrush x:Key="WbTextPrimary" Color="#FFE7E7E7" />
+  <SolidColorBrush x:Key="WbTextSecondary" Color="#FFA0A0A0" />
+  <SolidColorBrush x:Key="WbTextTertiary" Color="#FF6E7681" />
+  <SolidColorBrush x:Key="WbTextDisabled" Color="#FF585858" />
+
+  <SolidColorBrush x:Key="WbAccent" Color="#FF0078D4" />
+  <SolidColorBrush x:Key="WbAccentText" Color="#FF4FC1FF" />
+  <SolidColorBrush x:Key="WbSuccess" Color="#FF3FB950" />
+  <SolidColorBrush x:Key="WbWarning" Color="#FFD29922" />
+  <SolidColorBrush x:Key="WbDanger" Color="#FFF85149" />
+
+  <SolidColorBrush x:Key="WbStatusBar" Color="#FF181818" />
+  <SolidColorBrush x:Key="WbStatusBarBorder" Color="#FF2B2B2B" />
+  <SolidColorBrush x:Key="WbStatusBarText" Color="#FFB8B8B8" />
+
+  <SolidColorBrush x:Key="WbDialogDeep" Color="#FF1A1A2E" />
+  <SolidColorBrush x:Key="WbDialogHead" Color="#FF16213E" />
+  <SolidColorBrush x:Key="WbDialogButton" Color="#FF0F3460" />
+  <SolidColorBrush x:Key="WbDialogCancel" Color="#FF2A2A3E" />
+  <SolidColorBrush x:Key="WbDialogGold" Color="#FFFFD166" />
+  <SolidColorBrush x:Key="WbDialogGoldDark" Color="#FF2A1F00" />
+
+  <x:String x:Key="WbUiFamily">Segoe UI</x:String>
+  <x:String x:Key="WbMonoFamily">Cascadia Mono</x:String>
+  <x:String x:Key="WbGlyphFamily">Segoe Fluent Icons</x:String>
+
+  <Style x:Key="WbBrand" TargetType="TextBlock">
+    <Style.Setters>
+      <Setter Property="FontFamily" Value="{StaticResource WbUiFamily}" />
+      <Setter Property="FontSize" Value="9.5" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextPrimary}" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbTitle" TargetType="TextBlock">
+    <Style.Setters>
+      <Setter Property="FontSize" Value="9.5" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextPrimary}" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbSection" TargetType="TextBlock">
+    <Style.Setters>
+      <Setter Property="FontSize" Value="8.5" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextSecondary}" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbCaption" TargetType="TextBlock">
+    <Style.Setters>
+      <Setter Property="FontSize" Value="8" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextTertiary}" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbMeta" TargetType="TextBlock">
+    <Style.Setters>
+      <Setter Property="FontSize" Value="8" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextSecondary}" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbMono" TargetType="TextBlock">
+    <Style.Setters>
+      <Setter Property="FontFamily" Value="{StaticResource WbMonoFamily}" />
+      <Setter Property="FontSize" Value="8" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextSecondary}" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbHeader" TargetType="TextBlock">
+    <Style.Setters>
+      <Setter Property="FontSize" Value="8.5" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextSecondary}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Padding" Value="12,0,12,0" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbCard" TargetType="Border">
+    <Style.Setters>
+      <Setter Property="Background" Value="{StaticResource WbSurface}" />
+      <Setter Property="BorderBrush" Value="{StaticResource WbBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="10" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbGhost" TargetType="Button">
+    <Style.Setters>
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextSecondary}" />
+      <Setter Property="FontSize" Value="8.5" />
+      <Setter Property="Padding" Value="8,3,8,3" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="MinHeight" Value="22" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbPrimary" TargetType="Button">
+    <Style.Setters>
+      <Setter Property="Background" Value="{StaticResource WbAccent}" />
+      <Setter Property="Foreground" Value="#FFFFFFFF" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontSize" Value="9" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Padding" Value="12,5,12,5" />
+      <Setter Property="CornerRadius" Value="4" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbInputBox" TargetType="TextBox">
+    <Style.Setters>
+      <Setter Property="Background" Value="{StaticResource WbInput}" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextPrimary}" />
+      <Setter Property="BorderBrush" Value="{StaticResource WbBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="6,4,6,4" />
+      <Setter Property="FontSize" Value="9" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbCombo" TargetType="ComboBox">
+    <Style.Setters>
+      <Setter Property="Background" Value="{StaticResource WbInput}" />
+      <Setter Property="Foreground" Value="{StaticResource WbTextPrimary}" />
+      <Setter Property="FontSize" Value="8.5" />
+      <Setter Property="Height" Value="24" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbLog" TargetType="ListBox">
+    <Style.Setters>
+      <Setter Property="Background" Value="{StaticResource WbEditor}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontFamily" Value="{StaticResource WbMonoFamily}" />
+      <Setter Property="FontSize" Value="9.5" />
+    </Style.Setters>
+  </Style>
+
+  <Style x:Key="WbChatLog" TargetType="ListBox">
+    <Style.Setters>
+      <Setter Property="Background" Value="{StaticResource WbSurface}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontFamily" Value="{StaticResource WbMonoFamily}" />
+      <Setter Property="FontSize" Value="9" />
+    </Style.Setters>
+  </Style>
+
+</ResourceDictionary>
