@@ -49,6 +49,13 @@ name: publish
 #   package's older X1.X2.<i> (i < X3), so only the highest patch of its own line stays listed.
 #   A major/minor change does not touch older lines, and a package that was not pushed this run
 #   is left alone. The NuGet policy must include the "Unlist or relist package versions" scope.
+#
+# Resilience:
+#   Every pack (each one restores from NuGet) and every push retries three times with a linear
+#   backoff; --skip-duplicate keeps a retried push idempotent. Before the dependent packs, the
+#   first missing project is restored once as a readiness probe, because flatcontainer can serve a
+#   package before restore's version discovery sees it. The .NET Framework pack and the MAUI
+#   workload installs retry too. Ingestion waits stay unbounded; the job timeout is the backstop.
 
 on:
   push:
@@ -253,14 +260,29 @@ jobs:
         run: |
           $pack = "${env:ProgramFiles(x86)}\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.6.1"
           if (-not (Test-Path $pack)) {
-            choco install netfx-4.6.1-devpack -y --no-progress
+            $installed = $false
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              choco install netfx-4.6.1-devpack -y --no-progress
+              if ($LASTEXITCODE -eq 0) { $installed = $true; break }
+              if ($attempt -lt 3) { Start-Sleep -Seconds (30 * $attempt) }
+            }
+            if (-not $installed) { throw "choco install netfx-4.6.1-devpack failed after 3 attempts" }
           }
 
       - name: Install the MAUI workload
         # The quoted id keeps VeloxDev.MAUI.Templates from matching.
         if: contains(needs.version.outputs.rest_missing, '"VeloxDev.MAUI"')
         shell: pwsh
-        run: dotnet workload install maui
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            dotnet workload install maui
+            if ($LASTEXITCODE -eq 0) { return }
+            if ($attempt -lt 3) {
+              Write-Host "dotnet workload install maui failed (attempt $attempt/3); retrying"
+              Start-Sleep -Seconds (60 * $attempt)
+            }
+          }
+          throw "dotnet workload install maui failed after 3 attempts"
 
       - name: Build and pack the generator
         if: needs.version.outputs.generator_missing == 'true'
@@ -268,16 +290,28 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.generator_version }}
         run: |
+          function Invoke-WithRetry([string]$what, [scriptblock]$action, [int]$attempts = 3) {
+            for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+              & $action
+              if ($LASTEXITCODE -eq 0) { return }
+              if ($attempt -eq $attempts) { throw "$what failed after $attempts attempts" }
+              Write-Host "$what failed (attempt $attempt/$attempts); retrying"
+              Start-Sleep -Seconds (30 * $attempt)
+            }
+          }
+
           New-Item -ItemType Directory -Force artifacts | Out-Null
           # Build first with pack-on-build disabled: the generator packs a bin/... DLL through a
           # custom None item, and a direct `dotnet pack` can evaluate it before that DLL exists.
-          dotnet build "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" `
-            -c Release `
-            -p:GeneratePackageOnBuild=false
-          if ($LASTEXITCODE -ne 0) { throw "build failed: generator" }
-          dotnet pack "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" `
-            -c Release -o artifacts --no-build
-          if ($LASTEXITCODE -ne 0) { throw "pack failed: generator" }
+          Invoke-WithRetry "build failed: generator" {
+            dotnet build "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" `
+              -c Release `
+              -p:GeneratePackageOnBuild=false
+          }
+          Invoke-WithRetry "pack failed: generator" {
+            dotnet pack "Src/Generators/VeloxDev.Core.Generator/VeloxDev.Core.Generator.csproj" `
+              -c Release -o artifacts --no-build
+          }
 
       - name: NuGet login (OIDC -> temporary key)
         id: login
@@ -299,9 +333,14 @@ jobs:
           function Push-One([string]$id, [string]$version) {
             $file = Join-Path "artifacts" "$id.$version.nupkg"
             if (-not (Test-Path $file)) { throw "missing $file" }
-            dotnet nuget push $file --api-key $env:NUGET_API_KEY `
-              --source https://api.nuget.org/v3/index.json --skip-duplicate
-            if ($LASTEXITCODE -ne 0) { throw "push failed: $id" }
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              dotnet nuget push $file --api-key $env:NUGET_API_KEY `
+                --source https://api.nuget.org/v3/index.json --skip-duplicate
+              if ($LASTEXITCODE -eq 0) { return }
+              if ($attempt -eq 3) { throw "push failed: $id after 3 attempts" }
+              Write-Host "push failed: $id (attempt $attempt/3); retrying"
+              Start-Sleep -Seconds (30 * $attempt)
+            }
           }
 
           $pending = @()
@@ -356,15 +395,27 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.core_version }}
         run: |
+          function Invoke-WithRetry([string]$what, [scriptblock]$action, [int]$attempts = 3) {
+            for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+              & $action
+              if ($LASTEXITCODE -eq 0) { return }
+              if ($attempt -eq $attempts) { throw "$what failed after $attempts attempts" }
+              Write-Host "$what failed (attempt $attempt/$attempts); retrying"
+              Start-Sleep -Seconds (30 * $attempt)
+            }
+          }
+
           # No VeloxDevLocalCore here: the generator must resolve from NuGet, and the pack must
           # carry that dependency in its nuspec. Build first, then pack the built output.
-          dotnet build "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" `
-            -c Release `
-            -p:GeneratePackageOnBuild=false
-          if ($LASTEXITCODE -ne 0) { throw "build failed: Core" }
-          dotnet pack "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" `
-            -c Release -o artifacts --no-build
-          if ($LASTEXITCODE -ne 0) { throw "pack failed: Core" }
+          Invoke-WithRetry "build failed: Core" {
+            dotnet build "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" `
+              -c Release `
+              -p:GeneratePackageOnBuild=false
+          }
+          Invoke-WithRetry "pack failed: Core" {
+            dotnet pack "Src/Core/VeloxDev.Core/VeloxDev.Core.csproj" `
+              -c Release -o artifacts --no-build
+          }
 
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $file = Join-Path "artifacts" "VeloxDev.Core.${env:VERSION}.nupkg"
@@ -388,9 +439,14 @@ jobs:
           function Push-One([string]$id) {
             $file = Join-Path "artifacts" "$id.${env:VERSION}.nupkg"
             if (-not (Test-Path $file)) { throw "missing $file" }
-            dotnet nuget push $file --api-key $env:NUGET_API_KEY `
-              --source https://api.nuget.org/v3/index.json --skip-duplicate
-            if ($LASTEXITCODE -ne 0) { throw "push failed: $id" }
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              dotnet nuget push $file --api-key $env:NUGET_API_KEY `
+                --source https://api.nuget.org/v3/index.json --skip-duplicate
+              if ($LASTEXITCODE -eq 0) { return }
+              if ($attempt -eq 3) { throw "push failed: $id after 3 attempts" }
+              Write-Host "push failed: $id (attempt $attempt/3); retrying"
+              Start-Sleep -Seconds (30 * $attempt)
+            }
           }
           function Wait-One([string]$id) {
             $lower = $id.ToLowerInvariant()
@@ -426,14 +482,24 @@ jobs:
           VERSION: ${{ needs.version.outputs.cli_version }}
           NUGET_API_KEY: ${{ steps.login2.outputs.NUGET_API_KEY }}
         run: |
-          dotnet pack "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj" `
-            -c Release -o artifacts -p:GeneratePackageOnBuild=false
-          if ($LASTEXITCODE -ne 0) { throw "pack failed: VeloxDev.Cli" }
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            dotnet pack "Src/Cli/VeloxDev.Cli/VeloxDev.Cli.csproj" `
+              -c Release -o artifacts -p:GeneratePackageOnBuild=false
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 3) { throw "pack failed: VeloxDev.Cli after 3 attempts" }
+            Write-Host "pack failed: VeloxDev.Cli (attempt $attempt/3); retrying"
+            Start-Sleep -Seconds (30 * $attempt)
+          }
           $file = Join-Path "artifacts" "VeloxDev.Cli.${env:VERSION}.nupkg"
           if (-not (Test-Path $file)) { throw "missing $file" }
-          dotnet nuget push $file --api-key $env:NUGET_API_KEY `
-            --source https://api.nuget.org/v3/index.json --skip-duplicate
-          if ($LASTEXITCODE -ne 0) { throw "push failed: VeloxDev.Cli" }
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            dotnet nuget push $file --api-key $env:NUGET_API_KEY `
+              --source https://api.nuget.org/v3/index.json --skip-duplicate
+            if ($LASTEXITCODE -eq 0) { return }
+            if ($attempt -eq 3) { throw "push failed: VeloxDev.Cli after 3 attempts" }
+            Write-Host "push failed: VeloxDev.Cli (attempt $attempt/3); retrying"
+            Start-Sleep -Seconds (30 * $attempt)
+          }
 
       - name: Wait for WinForms.Easel on NuGet before the adapter
         # The Release build of the adapter takes WinForms.Easel as a PackageReference, so its exact
@@ -489,6 +555,24 @@ jobs:
           }
 
           $missing = @("$env:MISSING" | ConvertFrom-Json)
+
+          # flatcontainer serving the nupkg does not mean restore's version discovery sees it yet.
+          # Restoring the first project that will pack turns that into a real readiness gate.
+          $first = $missing | Where-Object { $_.id -ne 'VeloxDev.Cli' -and $paths[$_.id] } | Select-Object -First 1
+          if ($null -ne $first) {
+            $probe = $paths[$first.id]
+            $ready = $false
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+              dotnet restore $probe -p:Configuration=Release
+              if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+              if ($attempt -lt 5) {
+                Write-Host "restore probe failed for $($first.id) (attempt $attempt/5); retrying"
+                Start-Sleep -Seconds (60 * $attempt)
+              }
+            }
+            if (-not $ready) { throw "NuGet is not serving the dependencies of $($first.id) after 5 attempts" }
+          }
+
           foreach ($entry in $missing) {
             # The CLI was packed and pushed before this loop; leaving it here would only repack it.
             if ($entry.id -eq 'VeloxDev.Cli') { continue }
@@ -498,8 +582,16 @@ jobs:
             # `dotnet pack` restores and then packs a DLL that was never built (NU5026). Turning it
             # off for this invocation lets pack build the project first.
             Write-Host "packing $($entry.id) $($entry.version)"
-            dotnet pack $project -c Release -o artifacts -p:GeneratePackageOnBuild=false
-            if ($LASTEXITCODE -ne 0) { throw "pack failed: $project" }
+            $packed = $false
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              dotnet pack $project -c Release -o artifacts -p:GeneratePackageOnBuild=false
+              if ($LASTEXITCODE -eq 0) { $packed = $true; break }
+              if ($attempt -lt 3) {
+                Write-Host "pack failed: $($entry.id) (attempt $attempt/3); retrying"
+                Start-Sleep -Seconds (30 * $attempt)
+              }
+            }
+            if (-not $packed) { throw "pack failed: $project after 3 attempts" }
           }
 
           # A representative adapter must declare Core, or the published package cannot restore.
@@ -540,13 +632,20 @@ jobs:
             "VeloxDev.Core.${env:CORE_VERSION}.nupkg",
             "VeloxDev.Cli.${env:CLI_VERSION}.nupkg"
           )
+          function Push-File([string]$file) {
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+              dotnet nuget push $file --api-key $env:NUGET_API_KEY `
+                --source https://api.nuget.org/v3/index.json --skip-duplicate
+              if ($LASTEXITCODE -eq 0) { return }
+              if ($attempt -eq 3) { throw "push failed: $(Split-Path -Leaf $file) after 3 attempts" }
+              Write-Host "push failed: $(Split-Path -Leaf $file) (attempt $attempt/3); retrying"
+              Start-Sleep -Seconds (30 * $attempt)
+            }
+          }
+
           Get-ChildItem artifacts -Filter "*.nupkg" |
             Where-Object { $skip -notcontains $_.Name } |
-            ForEach-Object {
-              dotnet nuget push $_.FullName --api-key $env:NUGET_API_KEY `
-                --source https://api.nuget.org/v3/index.json --skip-duplicate
-              if ($LASTEXITCODE -ne 0) { throw "push failed: $($_.Name)" }
-            }
+            ForEach-Object { Push-File $_.FullName }
 
       - name: Unlist older patches of each pushed package's own line
         shell: pwsh
