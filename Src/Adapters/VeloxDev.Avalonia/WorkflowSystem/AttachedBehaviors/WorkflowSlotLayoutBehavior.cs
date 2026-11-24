@@ -322,6 +322,8 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         public int CountSlots(IReadOnlyList<string> slotNames, IReadOnlyList<string> enumeratorNames)
         {
             // 指纹里的插槽数：容器增删、模板重建必须重测，哪怕节点外框尺寸没变。
+            // 枚举项只数**已实例化的容器**，与 FindEnumeratedSlots 同一口径：数逻辑项会得到一个「看着完整、
+            // 实际一个容器都没生成」的指纹，这一趟就会被当成测过而不再重试。
             var count = 0;
 
             foreach (var name in slotNames)
@@ -332,8 +334,14 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
 
             foreach (var name in enumeratorNames)
             {
-                if (FindNamed<ItemsControl>(owner, name) is { } items)
-                    count += items.ItemCount;
+                if (FindNamed<ItemsControl>(owner, name) is not { } items)
+                    continue;
+
+                for (var i = 0; i < items.ItemCount; i++)
+                {
+                    if (items.ContainerFromIndex(i) is not null)
+                        count++;
+                }
             }
 
             return count;

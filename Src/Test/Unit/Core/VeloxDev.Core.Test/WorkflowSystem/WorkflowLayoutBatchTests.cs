@@ -116,6 +116,49 @@ public class WorkflowLayoutBatchTests
     }
 
     [TestMethod]
+    public void CancelBetweenScheduleAndFlush_DoesNotWedgeThePostQueue()
+    {
+        var posted = new List<Action>();
+        var batch = WorkflowLayoutBatch.For(new object(), action => { posted.Add(action); return true; });
+        var key = new object();
+
+        batch.Request(key, () => { });
+        batch.Schedule();
+        Assert.HasCount(1, posted, "the first request posts one flush");
+
+        // 投递之后、执行之前把队列清空：这一趟 flush 空跑，但批次不能因此永远以为自己已经投递过。
+        batch.Cancel(key);
+        posted[0]();
+        posted.Clear();
+
+        batch.Request(key, () => { });
+        batch.Schedule();
+        Assert.HasCount(1, posted, "an empty flush must not leave the batch believing a flush is still in flight");
+    }
+
+    [TestMethod]
+    public void IncompleteWork_LeavesTheStampUncertified()
+    {
+        var batch = WorkflowLayoutBatch.For(new object());
+        var key = new object();
+        var node = Node(anchorX: 10d, size: 100d);
+        var stamp = WorkflowLayoutStamp.Capture(node, measuredWidth: 100d, measuredHeight: 50d, slotCount: 2);
+        var runs = 0;
+
+        Assert.IsTrue(batch.Request(key, stamp, () => { runs++; return false; }));
+        batch.Flush();
+
+        Assert.IsTrue(
+            batch.Request(key, stamp, () => { runs++; return true; }),
+            "a pass that reported it saw nothing must not certify the inputs");
+
+        Assert.IsTrue(batch.Flush());
+        Assert.IsFalse(batch.Request(key, stamp, () => runs++), "a complete pass records the stamp");
+
+        Assert.AreEqual(2, runs);
+    }
+
+    [TestMethod]
     public void OneFailingRequest_DoesNotStarveTheRest_AndTheFirstFailureSurfaces()
     {
         var batch = WorkflowLayoutBatch.For(new object());

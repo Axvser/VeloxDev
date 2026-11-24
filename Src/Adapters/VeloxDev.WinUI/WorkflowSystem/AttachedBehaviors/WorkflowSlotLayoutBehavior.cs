@@ -377,7 +377,8 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
         public int CountSlots(IReadOnlyList<string> slotNames, IReadOnlyList<string> enumeratorNames)
         {
-            // 指纹里的插槽数：容器增删、模板重建必须重测，哪怕节点外框尺寸没变。
+            // 指纹里只数 FindEnumeratedSlots 能看见的部件：数 items.Items.Count 会让「容器还没生成」那一趟
+            // 得到一个看似完整的指纹，那一趟被当成测过，锚点停在 NaN，整条连线不画。
             var count = 0;
 
             foreach (var name in slotNames)
@@ -390,9 +391,17 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
             foreach (var name in enumeratorNames)
             {
-                if (owner.FindName(name) is ItemsControl items)
+                if (owner.FindName(name) is not ItemsControl items)
                 {
-                    count += items.Items.Count;
+                    continue;
+                }
+
+                for (var i = 0; i < items.Items.Count; i++)
+                {
+                    if (items.ContainerFromIndex(i) is not null)
+                    {
+                        count++;
+                    }
                 }
             }
 

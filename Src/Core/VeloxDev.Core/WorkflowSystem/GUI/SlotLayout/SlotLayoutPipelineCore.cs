@@ -14,8 +14,10 @@ namespace VeloxDev.WorkflowSystem;
 /// <para>
 /// Re-measure requests go through the shared <see cref="WorkflowLayoutBatch"/> keyed by the node view: a
 /// <see cref="SlotLayoutTrigger.Layout"/> request compares a <see cref="WorkflowLayoutStamp"/> and flushes inside the
-/// layout pass, while every other trigger schedules one UI-thread hop. <see cref="Stop"/> makes any request already
-/// queued a no-op, so an adapter can dispose this pipeline from its detach path without racing the platform queue.
+/// layout pass, while every other trigger schedules one UI-thread hop. The stamp is certified only after a pass that
+/// found every part the configuration expects; a pass that found nothing (containers not realized yet) is retried by
+/// the next layout pass instead of being suppressed. <see cref="Stop"/> makes any request already queued a no-op, so
+/// an adapter can dispose this pipeline from its detach path without racing the platform queue.
 /// </para>
 /// </remarks>
 public sealed class SlotLayoutPipelineCore
@@ -75,7 +77,11 @@ public sealed class SlotLayoutPipelineCore
     /// <param name="trigger">The notification that raised the request.</param>
     /// <remarks>
     /// <see cref="SlotLayoutTrigger.Layout"/> captures the stamp and flushes synchronously when the request is
-    /// queued; every other trigger queues unconditionally and schedules one deferred flush.
+    /// queued; every other trigger queues unconditionally and schedules one deferred flush. A layout pass certifies
+    /// the stamp only when it <b>found</b> every part the configuration expects: a pass that ran before the platform
+    /// realized the containers leaves the stamp uncertified, so the next layout pass retries instead of the unchanged
+    /// stamp suppressing the retry and leaving the anchors at their <c>NaN</c> default. A part that is found but not
+    /// laid out (a hidden port) still certifies the pass — otherwise it would re-measure on every layout pass forever.
     /// </remarks>
     public void RequestMeasure(SlotLayoutTrigger trigger)
     {
@@ -89,9 +95,9 @@ public sealed class SlotLayoutPipelineCore
         if (trigger == SlotLayoutTrigger.Layout)
         {
             var (width, height) = _host.ReadNodeSize();
-            var stamp = WorkflowLayoutStamp.Capture(
-                Node, width, height, _locator.CountSlots(Configuration.SlotNames, Configuration.EnumeratorNames));
-            if (batch.Request(_view, stamp, _work))
+            var expected = _locator.CountSlots(Configuration.SlotNames, Configuration.EnumeratorNames);
+            var stamp = WorkflowLayoutStamp.Capture(Node, width, height, expected);
+            if (batch.Request(_view, stamp, () => MeasureParts(expected)))
             {
                 batch.Flush();
             }
@@ -114,11 +120,16 @@ public sealed class SlotLayoutPipelineCore
     /// write-back order is deterministic. A part whose anchor did not change is not written. Re-entrant calls (a
     /// layout pass raised from inside a write) return immediately.
     /// </remarks>
-    public void Measure()
+    public void Measure() => MeasureParts(int.MaxValue);
+
+    // 返回值是「这一趟是否看全了」：expected 是配置里该看见的部件数（locator 的数法），
+    // 容器还没实例化时 found 会小于它，这一趟就不能当作「输入没变」的证据。
+    // 只看 found、不看元素是否已排版：一个永远不显示的部件（隐藏的端口）不能变成每趟布局都重测的忙循环。
+    private bool MeasureParts(int expected)
     {
         if (!_active || _measuring)
         {
-            return;
+            return false;
         }
 
         _measuring = true;
@@ -127,10 +138,13 @@ public sealed class SlotLayoutPipelineCore
             var coordinateHost = _locator.ResolveCoordinateHost(
                 Configuration.CoordinateHostName, Configuration.CoordinateHostType);
 
+            var found = 0;
+
             foreach (var name in Configuration.SlotNames)
             {
                 if (_locator.FindNamedSlot(name) is { } part)
                 {
+                    found++;
                     MeasurePart(part, coordinateHost);
                 }
             }
@@ -140,9 +154,12 @@ public sealed class SlotLayoutPipelineCore
                 var parts = _locator.FindEnumeratedSlots(name);
                 for (var i = 0; i < parts.Count; i++)
                 {
+                    found++;
                     MeasurePart(parts[i], coordinateHost);
                 }
             }
+
+            return found >= expected;
         }
         finally
         {

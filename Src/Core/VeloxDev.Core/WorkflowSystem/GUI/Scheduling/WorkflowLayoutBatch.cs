@@ -32,6 +32,11 @@ namespace VeloxDev.WorkflowSystem;
 /// after-layout, before-render signal can flush synchronously and keep slot anchors on the frame the layout
 /// belongs to. <see cref="Schedule"/> is the deferred fallback for platforms or triggers that have no such signal.
 /// </para>
+/// <para>
+/// Work may report that it could not observe every input it depends on — a slot pass whose containers are not
+/// realized yet, for instance. Such a run leaves the stamp <b>uncertified</b>, so the next layout pass queues it
+/// again instead of the unchanged stamp suppressing the retry forever.
+/// </para>
 /// </remarks>
 public sealed class WorkflowLayoutBatch
 {
@@ -87,6 +92,22 @@ public sealed class WorkflowLayoutBatch
     /// <exception cref="ArgumentNullException"><paramref name="key"/> or <paramref name="work"/> is <see langword="null"/>.</exception>
     public void Request(object key, Action work)
     {
+        if (work is null) throw new ArgumentNullException(nameof(work));
+        Request(key, () => { work(); return true; });
+    }
+
+    /// <summary>
+    /// Queues <paramref name="work"/> for <paramref name="key"/> unconditionally; the work reports whether it
+    /// observed every input it depends on.
+    /// </summary>
+    /// <param name="key">The request's identity — the view whose layout needs syncing.</param>
+    /// <param name="work">The sync to run at the next flush; a <see langword="false"/> result means it must be retried.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> or <paramref name="work"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// A request queued without a stamp is never suppressed anyway, so its result only matters to the work itself.
+    /// </remarks>
+    public void Request(object key, Func<bool> work)
+    {
         if (key is null) throw new ArgumentNullException(nameof(key));
         if (work is null) throw new ArgumentNullException(nameof(work));
 
@@ -109,6 +130,27 @@ public sealed class WorkflowLayoutBatch
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="key"/> or <paramref name="work"/> is <see langword="null"/>.</exception>
     public bool Request(object key, WorkflowLayoutStamp stamp, Action work)
+    {
+        if (work is null) throw new ArgumentNullException(nameof(work));
+        return Request(key, stamp, () => { work(); return true; });
+    }
+
+    /// <summary>
+    /// Queues <paramref name="work"/> for <paramref name="key"/> only when <paramref name="stamp"/> differs from the
+    /// stamp of the last completed run for that key; the work reports whether it observed every input it depends on.
+    /// </summary>
+    /// <param name="key">The request's identity — the view whose layout needs syncing.</param>
+    /// <param name="stamp">The inputs the work depends on, captured cheaply before the work runs.</param>
+    /// <param name="work">
+    /// The sync to run at the next flush. A <see langword="false"/> result leaves the stamp uncertified, so the
+    /// next request with the same stamp is queued again rather than skipped.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the request was queued (or already was); <see langword="false"/> when the stamp
+    /// proved the work unnecessary.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> or <paramref name="work"/> is <see langword="null"/>.</exception>
+    public bool Request(object key, WorkflowLayoutStamp stamp, Func<bool> work)
     {
         if (key is null) throw new ArgumentNullException(nameof(key));
         if (work is null) throw new ArgumentNullException(nameof(work));
@@ -188,6 +230,10 @@ public sealed class WorkflowLayoutBatch
     /// and gets its own turn — it describes state the running sync cannot have seen.
     /// </para>
     /// <para>
+    /// The stamp of a request is certified only when its work reported a complete pass. A pass that could not see
+    /// every input leaves the stamp uncertified, so the next layout pass retries instead of being skipped.
+    /// </para>
+    /// <para>
     /// A failing request does not cancel the rest: each one is attempted, and the first exception is rethrown after
     /// the queue drains.
     /// </para>
@@ -198,6 +244,10 @@ public sealed class WorkflowLayoutBatch
 
         lock (gate)
         {
+            // 无论队列是否为空都要放掉 scheduled：投递之后被 Cancel 清空的 flush 在这里提前返回，
+            // 旗标若留着，这棵树的延迟重测就再也不会被 Schedule 投递（它看到 true 直接返回）。
+            scheduled = false;
+
             if (pending.Count == 0)
             {
                 return false;
@@ -211,7 +261,6 @@ public sealed class WorkflowLayoutBatch
             }
 
             pending.Clear();
-            scheduled = false;
         }
 
         ExceptionDispatchInfo? failure = null;
@@ -220,15 +269,15 @@ public sealed class WorkflowLayoutBatch
         {
             try
             {
-                pair.Value.Work();
+                var complete = pair.Value.Work();
 
-                if (pair.Value.HasStamp)
+                if (pair.Value.HasStamp && complete)
                 {
                     Record(pair.Key).Stamp = pair.Value.Stamp;
                 }
                 else
                 {
-                    // 强制请求没有指纹可记：忘掉旧的，下一次带指纹的请求必须再跑一遍才可能跳过。
+                    // 没测全 / 强制请求：忘掉旧指纹，下一次带指纹的请求必须再跑一遍才可能跳过。
                     applied.Remove(pair.Key);
                 }
             }
@@ -243,9 +292,9 @@ public sealed class WorkflowLayoutBatch
         return true;
     }
 
-    private readonly struct PendingEntry(Action work, bool hasStamp, WorkflowLayoutStamp stamp)
+    private readonly struct PendingEntry(Func<bool> work, bool hasStamp, WorkflowLayoutStamp stamp)
     {
-        public Action Work { get; } = work;
+        public Func<bool> Work { get; } = work;
 
         public bool HasStamp { get; } = hasStamp;
 

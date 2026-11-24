@@ -423,7 +423,8 @@ public sealed class WorkflowSlotLayoutBehavior
 
         public int CountSlots(IReadOnlyList<string> slotNames, IReadOnlyList<string> enumeratorNames)
         {
-            // 指纹里的插槽数：容器增删、模板重建必须重测，哪怕节点外框尺寸没变。
+            // 指纹里只数 FindEnumeratedSlots 能看见的部件（BindingContext 是 ISlotComponent 的后代）：
+            // 数 layout.Children.Count 会让「插槽视图还没生成」那一趟得到一个看似完整的指纹，锚点停在 NaN。
             var count = 0;
 
             foreach (var name in slotNames)
@@ -436,9 +437,17 @@ public sealed class WorkflowSlotLayoutBehavior
 
             foreach (var name in enumeratorNames)
             {
-                if (!string.IsNullOrWhiteSpace(name) && owner.FindByName<Layout>(name) is { } layout)
+                if (string.IsNullOrWhiteSpace(name) || owner.FindByName<Layout>(name) is not { } layout)
                 {
-                    count += layout.Children.Count;
+                    continue;
+                }
+
+                foreach (var slotView in FindDescendants<VisualElement>(layout))
+                {
+                    if (slotView.BindingContext is ISlotComponent)
+                    {
+                        count++;
+                    }
                 }
             }
 

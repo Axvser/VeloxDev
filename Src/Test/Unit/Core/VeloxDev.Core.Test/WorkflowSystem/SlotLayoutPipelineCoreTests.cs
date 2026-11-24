@@ -192,6 +192,54 @@ public class SlotLayoutPipelineCoreTests
     }
 
     [TestMethod]
+    public void LayoutTrigger_RetriesUntilEveryConfiguredPartIsMeasured()
+    {
+        var node = Node(40d, 40d);
+        var host = new FakeHost { RunPostedImmediately = true };
+        var locator = new FakeLocator();
+        var first = new SlotDefaultViewModel();
+        var second = new SlotDefaultViewModel();
+
+        // 枚举器报告有 2 项，但容器还没实例化：这一趟什么都没测到，不能把指纹记下。
+        locator.LogicalCounts["PART_Outputs"] = 2;
+        var pipeline = new SlotLayoutPipelineCore(
+            node, new object(), locator, host, new SlotLayoutConfiguration(null, "PART_Outputs", null, null));
+
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(1, locator.FindEnumeratedCalls);
+
+        // 容器实例化后，节点几何 / 实测尺寸 / 槽位数都没变 —— 指纹一样，但必须重测。
+        locator.Enumerated["PART_Outputs"] =
+        [
+            Part(first, nodeCenter: new SlotCenter(8d, 9d)),
+            Part(second, nodeCenter: new SlotCenter(18d, 19d)),
+        ];
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+
+        Assert.AreEqual(2, locator.FindEnumeratedCalls, "a pass that saw nothing must not certify the stamp");
+        AssertAnchor(48d, 49d, first.Anchor);
+        AssertAnchor(58d, 59d, second.Anchor);
+    }
+
+    [TestMethod]
+    public void LayoutTrigger_DoesNotSpinOnAPartThatIsFoundButNotLaidOut()
+    {
+        var node = Node(40d, 40d);
+        var slot = new SlotDefaultViewModel();
+        var host = new FakeHost { RunPostedImmediately = true };
+        var locator = new FakeLocator();
+        // 找不到 bounds 的部件是稳态（隐藏的端口），不是「容器还没生成」：它不能把每趟布局都变成一次重测。
+        locator.Named["PART_A"] = new FakePart { Slot = slot, IsMeasured = false, NodeCenter = new SlotCenter(1d, 1d) };
+        var pipeline = new SlotLayoutPipelineCore(
+            node, new object(), locator, host, new SlotLayoutConfiguration("PART_A", null, null, null));
+
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+
+        Assert.AreEqual(1, locator.FindNamedCalls, "a found part certifies the pass even when it has no bounds yet");
+    }
+
+    [TestMethod]
     public void ViewportTrigger_ForcesMeasure_EvenWhenTheStampIsUnchanged()
     {
         var node = Node(40d, 40d);
@@ -308,8 +356,11 @@ public class SlotLayoutPipelineCoreTests
         public object? CoordinateHost { get; set; }
         public Dictionary<string, ISlotPart> Named { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, List<ISlotPart>> Enumerated { get; } = new(StringComparer.Ordinal);
+        // 逻辑项数（模拟 ItemsControl.ItemCount）：容器没实例化时它仍大于 0，用来验证「没测全不记指纹」。
+        public Dictionary<string, int> LogicalCounts { get; } = new(StringComparer.Ordinal);
         public List<string> Calls { get; } = [];
         public int FindNamedCalls { get; private set; }
+        public int FindEnumeratedCalls { get; private set; }
 
         public ISlotPart? FindNamedSlot(string name)
         {
@@ -320,6 +371,7 @@ public class SlotLayoutPipelineCoreTests
 
         public IReadOnlyList<ISlotPart> FindEnumeratedSlots(string name)
         {
+            FindEnumeratedCalls++;
             Calls.Add(name);
             return Enumerated.TryGetValue(name, out var parts)
                 ? parts
@@ -338,7 +390,9 @@ public class SlotLayoutPipelineCoreTests
 
             foreach (var name in enumeratorNames)
             {
-                if (Enumerated.TryGetValue(name, out var parts)) count += parts.Count;
+                count += LogicalCounts.TryGetValue(name, out var logical)
+                    ? logical
+                    : Enumerated.TryGetValue(name, out var parts) ? parts.Count : 0;
             }
 
             return count;
