@@ -1,6 +1,6 @@
 [submodule "Easel"]
 	path = Easel
 	url = https://github.com/Axvser/Easel.git
-[submodule "Wiki/VeloxDev.Docs"]
-	path = Wiki/VeloxDev.Docs
+[submodule "Wiki"]
+	path = Wiki
 	url = https://github.com/Axvser/VeloxDev.Docs.git

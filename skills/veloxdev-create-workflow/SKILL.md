@@ -133,7 +133,7 @@ The behaviour that matters is visual and interactive, so check it in a running a
 
 ⚙ **Undo coverage is structural.** Node and slot create/delete, connect/disconnect, selector changes and their cascades are undoable. Position, size, direct property patches and slot-channel writes are runtime state, not history entries.
 
-⚙ **The repository Wiki (`Wiki/VeloxDev.Docs`) has a per-subsystem QuickStart and API walkthrough.** It is the long-form companion to these references.
+⚙ **The repository Wiki (`Wiki`) has a per-subsystem QuickStart and API walkthrough.** It is the long-form companion to these references.
 
 ## When something goes wrong
 
