@@ -284,4 +284,103 @@ public sealed class WorkflowSurfaceHeadlessTests
         Assert.AreEqual(surface.Scroll.ViewportWidth / 2d, rightX, 1d, "positive edge");
         Assert.IsTrue(graph.Tree.Layout.PositiveOffset.Horizontal > 0d, "the canvas grew past the content");
     }
+
+    [TestMethod]
+    public void Scroller_Wheel_UsesThePlatformStepAndOnlyTheVerticalAxis()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WpfHeadlessSurface(graph);
+        surface.Layout();
+
+        var scroller = Wf.WorkflowInput.For(graph.Tree).Scroller;
+        Assert.IsNotNull(scroller, "the attached surface registers a scroller");
+
+        var lines = SystemParameters.WheelScrollLines;
+        var step = lines > 0 ? lines * 16d : surface.Scroll.ViewportHeight;
+        var beforeX = surface.Scroll.HorizontalOffset;
+
+        // Scroll down (away from the top edge): a positive wheel delta moves towards the content above, so
+        // use a negative delta here — starting at offset 0 an upward turn is an overscroll, not a step.
+        scroller!.ScrollBy(0d, -120d);
+        WpfHeadlessSurface.Pump();
+
+        Assert.AreEqual(step, surface.Scroll.VerticalOffset, 1e-6,
+            "one notch must match the ScrollViewer's own line step");
+        Assert.AreEqual(beforeX, surface.Scroll.HorizontalOffset, 1e-9,
+            "a zero horizontal delta must not write the horizontal axis");
+    }
+
+    [TestMethod]
+    public void Scroller_HorizontalWheel_MovesOnlyTheHorizontalAxis()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WpfHeadlessSurface(graph);
+        surface.Layout();
+
+        var scroller = Wf.WorkflowInput.For(graph.Tree).Scroller;
+        Assert.IsNotNull(scroller);
+
+        var lines = SystemParameters.WheelScrollLines;
+        var step = lines > 0 ? lines * 16d : surface.Scroll.ViewportWidth;
+        var beforeY = surface.Scroll.VerticalOffset;
+
+        scroller!.ScrollBy(120d, 0d);
+        WpfHeadlessSurface.Pump();
+
+        Assert.AreEqual(step, surface.Scroll.HorizontalOffset, 1e-6);
+        Assert.AreEqual(beforeY, surface.Scroll.VerticalOffset, 1e-9);
+    }
+
+    [TestMethod]
+    public void Scroll_PushesOffsetsToTheGridDecorator()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WpfHeadlessSurface(graph);
+
+        surface.ScrollTo(120d, 80d);
+
+        Assert.AreEqual(120d, surface.Decorator.ScrollOffsetX, 1e-6);
+        Assert.AreEqual(80d, surface.Decorator.ScrollOffsetY, 1e-6);
+        Assert.AreEqual(
+            graph.Tree.Layout.ActualOffset.Horizontal,
+            surface.Decorator.ContentOffsetX,
+            1e-9);
+        Assert.AreEqual(
+            graph.Tree.Layout.ActualOffset.Vertical,
+            surface.Decorator.ContentOffsetY,
+            1e-9);
+    }
+
+    [TestMethod]
+    public void Minimap_ReceivesTheSurfaceMetrics()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WpfHeadlessSurface(graph, withMinimap: true);
+        surface.Layout();
+        WpfHeadlessSurface.Pump();
+
+        surface.ScrollTo(120d, 80d);
+
+        var minimap = surface.Minimap!;
+        Assert.AreEqual(120d, minimap.ScrollOffsetX, 1e-6);
+        Assert.AreEqual(80d, minimap.ScrollOffsetY, 1e-6);
+        Assert.AreEqual(graph.Tree.Layout.ActualOffset.Horizontal, minimap.ContentOffsetX, 1e-9);
+        Assert.AreEqual(graph.Tree.Layout.ActualOffset.Vertical, minimap.ContentOffsetY, 1e-9);
+        Assert.AreEqual(surface.Scroll.ViewportWidth, minimap.ViewportWidth, 1e-6);
+        Assert.AreEqual(surface.Scroll.ViewportHeight, minimap.ViewportHeight, 1e-6);
+        Assert.AreSame(graph.Tree, minimap.WorkflowTree);
+
+        var verticalBar = surface.Scroll.ComputedVerticalScrollBarVisibility == Visibility.Visible
+            ? SystemParameters.VerticalScrollBarWidth
+            : 0d;
+        var horizontalBar = surface.Scroll.ComputedHorizontalScrollBarVisibility == Visibility.Visible
+            ? SystemParameters.HorizontalScrollBarHeight
+            : 0d;
+
+        Assert.AreEqual(minimap.ActualWidth - verticalBar, minimap.AvailableRight, 1e-6);
+        Assert.AreEqual(0d, minimap.AvailableTop, 1e-9);
+        Assert.AreEqual(minimap.ActualHeight - horizontalBar, minimap.AvailableBottom, 1e-6);
+        Assert.AreEqual(12d, minimap.MinimapMargin, 1e-9,
+            "the surface must not overwrite the user's minimap margin");
+    }
 }
