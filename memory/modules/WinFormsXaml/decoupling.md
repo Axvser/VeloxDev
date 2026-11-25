@@ -7,7 +7,7 @@
 - `TemplatedControl.DefaultTemplate` 是代码兜底，生效顺序 `Template` > 样式模板 > `DefaultTemplate`。
 - `TemplatedControl.IsFocusVisible` 由 `VisualElement.OnFocusVisibleChanged` 同步，供模板触发器使用；指针态已有 `ButtonBase.IsPointerOver` / `IsPressed`，选中态有 `IsChecked`。
 - 部件：`GetTemplateChild<T>` + `PART_*`。模板内容带 `IsTemplateContent` 标记；部件设 `IsHitTestVisible=False` 后只跳过自己的内容命中，子元素仍可命中（内容区照常接收输入）。不设的装饰部件会把命中从控件手里抢走。
-- 默认样式按**确切类型**匹配（WPF 语义）；派生类型要自己的样式或 `BasedOn`。`Theme.DefaultStyles` 里目前有 `Button` 的默认模板；`RepeatButton`/`ToggleButton`/`CheckBox`/`RadioButton` 仍是自绘。
+- 默认样式按**确切类型**匹配（WPF 语义）；派生类型要自己的样式或 `BasedOn`。`Theme.DefaultStyles` 里目前有 `Button`、`TextBox`、`RichTextBox` 的默认模板；`RepeatButton`/`ToggleButton`/`CheckBox`/`RadioButton`、`ComboBox` 与其余控件仍自绘。
 - `TemplateBinding` 读 `Color` 型 CLR 属性时，未设置的 DP 会给出 `Color.Empty`；绑定层把 `Color.Empty` 当作无值并清回目标默认，缺它时文字会用透明色画（按钮文字消失）。
 
 ## 分类
