@@ -95,8 +95,20 @@ public sealed class SlotLayoutPipelineCore
         if (trigger == SlotLayoutTrigger.Layout)
         {
             var (width, height) = _host.ReadNodeSize();
-            var expected = _locator.CountSlots(Configuration.SlotNames, Configuration.EnumeratorNames);
-            var stamp = WorkflowLayoutStamp.Capture(Node, width, height, expected, ComputeSlotSignature());
+            int expected;
+            var controlIdentity = 0;
+            if (_locator is ISlotPartIdentityLocator identityLocator)
+            {
+                controlIdentity = identityLocator.ComputeSlotIdentity(
+                    Configuration.SlotNames, Configuration.EnumeratorNames, out expected);
+            }
+            else
+            {
+                expected = _locator.CountSlots(Configuration.SlotNames, Configuration.EnumeratorNames);
+            }
+
+            var slotSignature = unchecked(ComputeSlotSignature() * 397 ^ controlIdentity);
+            var stamp = WorkflowLayoutStamp.Capture(Node, width, height, expected, slotSignature);
             if (batch.Request(_view, stamp, () => MeasureParts(expected)))
             {
                 batch.Flush();
@@ -269,7 +281,8 @@ public sealed class SlotLayoutPipelineCore
     }
 
     // 槽位实例集的指纹：选择器切换会换一套槽位，数量可能不变；只看数量会让新槽位停在 NaN，
-    // 连线被隐藏到下一次几何变化（拖动）为止。按引用身份哈希，无分配。
+    // 连线被隐藏到下一次几何变化（拖动）为止。按引用身份哈希，无分配。平台容器身份由
+    // ISlotPartIdentityLocator 单独提供，覆盖「同一模型槽位、容器重建」的情况。
     private int ComputeSlotSignature()
     {
         var slots = Node.Slots;

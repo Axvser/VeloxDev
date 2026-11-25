@@ -536,4 +536,54 @@ public sealed class WorkflowSurfaceHeadlessTests
                 "a same-count container swap must re-measure the new slots instead of trusting the old stamp");
             Assert.IsFalse(double.IsNaN(fourth.Anchor.Horizontal), "the second new container must be measured too");
         });
+
+    [TestMethod]
+    public void SlotContainerRebuild_ForTheSameSlots_ReMeasuresTheSentinels()
+        => Run(() =>
+        {
+            var graph = TestGraph.Create(connect: false);
+            using var surface = new AvaloniaHeadlessSurface(graph);
+            var node = graph.Left;
+            var first = new Wf.SlotDefaultViewModel { Parent = node };
+            var second = new Wf.SlotDefaultViewModel { Parent = node };
+            node.Slots.Add(first);
+            node.Slots.Add(second);
+            var slots = new System.Collections.ObjectModel.ObservableCollection<Wf.SlotDefaultViewModel> { first, second };
+            var items = new ItemsControl { Name = "PART_OutputSlots", ItemsSource = slots };
+            items.ItemTemplate = new global::Avalonia.Controls.Templates.FuncDataTemplate<Wf.SlotDefaultViewModel>(
+                (slot, _) => new Border { Width = 8d, Height = 8d, DataContext = slot },
+                supportsRecycling: false);
+
+            var view = new UserControl
+            {
+                DataContext = node,
+                Width = 160d,
+                Height = 90d,
+                Content = items,
+            };
+            var scope = new NameScope();
+            NameScope.SetNameScope(view, scope);
+            scope.Register("PART_OutputSlots", items);
+            scope.Complete();
+
+            Behaviors.WorkflowSlotLayoutBehavior.SetSlotEnumeratorNames(view, "PART_OutputSlots");
+            Behaviors.WorkflowSlotLayoutBehavior.SetCoordinateHostName(view, "PART_Canvas");
+            Behaviors.WorkflowSlotLayoutBehavior.SetIsEnabled(view, true);
+            surface.Canvas.Children.Add(view);
+            surface.Window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            Assert.IsFalse(double.IsNaN(first.Anchor.Horizontal), "the initial containers must be measured");
+
+            // Same model slots, a rebuilt container set: the model hash and the count are unchanged, so only
+            // the realized-control identity can invalidate the stamp.
+            first.Anchor = new Wf.Anchor(-1000d, -1000d, 0);
+            second.Anchor = new Wf.Anchor(-2000d, -2000d, 0);
+            items.ItemsSource = null;
+            items.ItemsSource = slots;
+            surface.Window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.AreNotEqual(-1000d, first.Anchor.Horizontal, "a rebuilt container set must re-measure the same model slots");
+            Assert.AreNotEqual(-2000d, second.Anchor.Horizontal, "the second rebuilt container must be re-measured too");
+        });
 }

@@ -278,7 +278,7 @@ public sealed class WorkflowSlotLayoutBehavior
 
     // ── 平台层：可视树遍历与坐标转换 ────────────────────────────────────────
 
-    private sealed class SlotPartLocator(VisualElement owner) : ISlotPartLocator
+    private sealed class SlotPartLocator(VisualElement owner) : ISlotPartLocator, ISlotPartIdentityLocator
     {
         // PointFromSurface 到画布会逆掉相机矩阵，所以量到的中心已是画布局部坐标。
         public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.CanvasLocal;
@@ -364,6 +364,46 @@ public sealed class WorkflowSlotLayoutBehavior
             }
 
             return count;
+        }
+
+        // 与 CountSlots 同一趟遍历，额外哈希已实现的元素身份：同一模型槽位换一批容器时数量不变，
+        // 只有它能发现容器重建。无分配。
+        public int ComputeSlotIdentity(
+            IReadOnlyList<string> slotNames,
+            IReadOnlyList<string> enumeratorNames,
+            out int slotCount)
+        {
+            var count = 0;
+            var hash = 17;
+
+            foreach (var name in slotNames)
+            {
+                if (FindNamed(owner, name) is { } element)
+                {
+                    count++;
+                    hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(element));
+                }
+            }
+
+            foreach (var name in enumeratorNames)
+            {
+                if (FindNamed(owner, name) is not VisualItemsControl items)
+                {
+                    continue;
+                }
+
+                foreach (var element in EnumerateVisuals(items))
+                {
+                    if (element.DataContext is ISlotComponent)
+                    {
+                        count++;
+                        hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(element));
+                    }
+                }
+            }
+
+            slotCount = count;
+            return hash;
         }
     }
 

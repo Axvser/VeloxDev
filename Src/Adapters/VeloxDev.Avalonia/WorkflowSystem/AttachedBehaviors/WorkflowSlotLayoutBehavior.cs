@@ -274,7 +274,7 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
 
     // ── 平台层：可视树遍历与坐标转换 ────────────────────────────────────────
 
-    private sealed class AvaloniaSlotPartLocator(UserControl owner) : ISlotPartLocator
+    private sealed class AvaloniaSlotPartLocator(UserControl owner) : ISlotPartLocator, ISlotPartIdentityLocator
     {
         // TranslatePoint 到坐标宿主得到的是「world + ActualOffset」，所以由流水线减掉布局偏移。
         public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.ScrollSpace;
@@ -345,6 +345,46 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
             }
 
             return count;
+        }
+
+        // 与 CountSlots 同一趟遍历，额外哈希已实现的元素身份：同一模型槽位换一批容器时数量不变，
+        // 只有它能发现容器重建。无分配。
+        public int ComputeSlotIdentity(
+            IReadOnlyList<string> slotNames,
+            IReadOnlyList<string> enumeratorNames,
+            out int slotCount)
+        {
+            var count = 0;
+            var hash = 17;
+
+            foreach (var name in slotNames)
+            {
+                if (FindNamed<Control>(owner, name) is { } element)
+                {
+                    count++;
+                    hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(element));
+                }
+            }
+
+            foreach (var name in enumeratorNames)
+            {
+                if (FindNamed<ItemsControl>(owner, name) is not { } items)
+                {
+                    continue;
+                }
+
+                for (var i = 0; i < items.ItemCount; i++)
+                {
+                    if (items.ContainerFromIndex(i) is { } container)
+                    {
+                        count++;
+                        hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(container));
+                    }
+                }
+            }
+
+            slotCount = count;
+            return hash;
         }
     }
 

@@ -377,7 +377,7 @@ public sealed class WorkflowSlotLayoutBehavior
 
     // ── 平台层：可视树遍历、坐标测量与坐标宿解析 ─────────────────────────────
 
-    private sealed class MauiSlotPartLocator(ContentView owner) : ISlotPartLocator
+    private sealed class MauiSlotPartLocator(ContentView owner) : ISlotPartLocator, ISlotPartIdentityLocator
     {
         // 以画布（坐标宿）为基准累加布局位置得到的中心已排除画布 TranslationX/Y，所以是画布/世界坐标。
         public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.CanvasLocal;
@@ -452,6 +452,46 @@ public sealed class WorkflowSlotLayoutBehavior
             }
 
             return count;
+        }
+
+        // 与 CountSlots 同一趟遍历，额外哈希已实现的元素身份：同一模型槽位换一批容器时数量不变，
+        // 只有它能发现容器重建。无分配。
+        public int ComputeSlotIdentity(
+            IReadOnlyList<string> slotNames,
+            IReadOnlyList<string> enumeratorNames,
+            out int slotCount)
+        {
+            var count = 0;
+            var hash = 17;
+
+            foreach (var name in slotNames)
+            {
+                if (!string.IsNullOrWhiteSpace(name) && owner.FindByName<VisualElement>(name) is { } element)
+                {
+                    count++;
+                    hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(element));
+                }
+            }
+
+            foreach (var name in enumeratorNames)
+            {
+                if (string.IsNullOrWhiteSpace(name) || owner.FindByName<Layout>(name) is not { } layout)
+                {
+                    continue;
+                }
+
+                foreach (var slotView in FindDescendants<VisualElement>(layout))
+                {
+                    if (slotView.BindingContext is ISlotComponent)
+                    {
+                        count++;
+                        hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(slotView));
+                    }
+                }
+            }
+
+            slotCount = count;
+            return hash;
         }
     }
 

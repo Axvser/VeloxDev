@@ -192,6 +192,52 @@ public class SlotLayoutPipelineCoreTests
     }
 
     [TestMethod]
+    public void LayoutTrigger_RemembersTheRealizedControlIdentity_NotOnlyTheCount()
+    {
+        var node = Node(40d, 40d);
+        var slot = new SlotDefaultViewModel();
+        var host = new FakeHost { RunPostedImmediately = true };
+        var locator = new IdentityLocator { Identity = 1 };
+        locator.Named["PART_A"] = Part(slot, nodeCenter: new SlotCenter(16d, 16d));
+        var pipeline = new SlotLayoutPipelineCore(
+            node, new object(), locator, host, new SlotLayoutConfiguration("PART_A", null, null, null));
+
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(1, locator.FindNamedCalls);
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(1, locator.FindNamedCalls, "same geometry, size, count, model slots and control identity");
+
+        // Containers rebuilt for the same model slots: only the control identity changes.
+        locator.Identity = 2;
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(2, locator.FindNamedCalls, "a changed realized-control identity must re-measure");
+        Assert.AreEqual(0, locator.CountSlotsCalls, "the identity locator supplies the count in the same pass");
+    }
+
+    [TestMethod]
+    public void LayoutTrigger_RemembersTheModelSlotIdentity_ForASameCountSwap()
+    {
+        var node = Node(40d, 40d);
+        var first = new SlotDefaultViewModel();
+        var second = new SlotDefaultViewModel();
+        node.Slots.Add(first);
+        var host = new FakeHost { RunPostedImmediately = true };
+        var locator = new IdentityLocator { Identity = 7 };
+        locator.Named["PART_A"] = Part(first, nodeCenter: new SlotCenter(16d, 16d));
+        var pipeline = new SlotLayoutPipelineCore(
+            node, new object(), locator, host, new SlotLayoutConfiguration("PART_A", null, null, null));
+
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(1, locator.FindNamedCalls);
+
+        node.Slots.Clear();
+        node.Slots.Add(second);
+        locator.Named["PART_A"] = Part(second, nodeCenter: new SlotCenter(16d, 16d));
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(2, locator.FindNamedCalls, "a same-count model slot swap must re-measure");
+    }
+
+    [TestMethod]
     public void LayoutTrigger_RetriesUntilEveryConfiguredPartIsMeasured()
     {
         var node = Node(40d, 40d);
@@ -396,6 +442,41 @@ public class SlotLayoutPipelineCoreTests
             }
 
             return count;
+        }
+    }
+
+    private sealed class IdentityLocator : ISlotPartLocator, ISlotPartIdentityLocator
+    {
+        public Dictionary<string, ISlotPart> Named { get; } = new(StringComparer.Ordinal);
+        public int Identity { get; set; }
+        public int FindNamedCalls { get; private set; }
+        public int CountSlotsCalls { get; private set; }
+
+        public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.NodeLocal;
+
+        public ISlotPart? FindNamedSlot(string name)
+        {
+            FindNamedCalls++;
+            return Named.GetValueOrDefault(name);
+        }
+
+        public IReadOnlyList<ISlotPart> FindEnumeratedSlots(string name) => Array.Empty<ISlotPart>();
+
+        public object? ResolveCoordinateHost(string? hostName, Type? hostType) => null;
+
+        public int CountSlots(IReadOnlyList<string> slotNames, IReadOnlyList<string> enumeratorNames)
+        {
+            CountSlotsCalls++;
+            return Named.Count;
+        }
+
+        public int ComputeSlotIdentity(
+            IReadOnlyList<string> slotNames,
+            IReadOnlyList<string> enumeratorNames,
+            out int slotCount)
+        {
+            slotCount = Named.Count;
+            return Identity;
         }
     }
 

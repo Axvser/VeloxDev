@@ -2,7 +2,8 @@ namespace VeloxDev.WorkflowSystem;
 
 /// <summary>
 /// A cheap fingerprint of everything a slot-layout sync reads: the node's model geometry, the size its view was
-/// measured at, how many slot controls the template materialized, and which slot model instances they carry.
+/// measured at, how many slot controls the template materialized, which slot model instances they carry, and the
+/// identity of the realized controls.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -11,8 +12,9 @@ namespace VeloxDev.WorkflowSystem;
 /// runs — finding the slot controls and translating their centers into canvas coordinates.
 /// </para>
 /// <para>
-/// The stamp covers the geometry the component model owns, the size the view reports, and the identity of the slot
-/// model instances. A selector that swaps in a new slot set with the same count therefore still changes the stamp.
+/// The stamp covers the geometry the component model owns, the size the view reports, the identity of the slot model
+/// instances, and the identity of the realized controls. A selector that swaps in a new slot set with the same
+/// count, and a template that rebuilds its containers for the same model slots, therefore both change the stamp.
 /// It cannot see a reflow that moves slot controls without changing any of them (for example a fixed-size card whose
 /// inner text reflows). That case still needs a forced request, which is what the non-layout triggers issue.
 /// </para>
@@ -54,8 +56,9 @@ public readonly struct WorkflowLayoutStamp : IEquatable<WorkflowLayoutStamp>
     /// <param name="measuredHeight">The height the node's view currently reports.</param>
     /// <param name="slotCount">The number of slot controls the template currently exposes.</param>
     /// <param name="slotSignature">
-    /// A hash of the node's slot model instances. It changes when a selector swaps in a new slot set whose count is
-    /// the same, which the count alone cannot see.
+    /// A combined hash of the node's slot model instances and the realized controls. It changes when a selector
+    /// swaps in a new slot set whose count is the same, and when a template rebuilds its containers for the same
+    /// model slots — neither of which the count alone can see.
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="node"/> is <see langword="null"/>.</exception>
     public static WorkflowLayoutStamp Capture(

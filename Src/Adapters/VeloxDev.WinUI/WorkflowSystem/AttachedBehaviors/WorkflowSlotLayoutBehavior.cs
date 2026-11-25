@@ -322,7 +322,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
     // ── 平台层：可视树遍历与坐标转换 ────────────────────────────────────────
 
-    private sealed class WinUiSlotPartLocator(UserControl owner, LayoutState state) : ISlotPartLocator
+    private sealed class WinUiSlotPartLocator(UserControl owner, LayoutState state) : ISlotPartLocator, ISlotPartIdentityLocator
     {
         // TransformToVisual 到画布已经反转了画布平移，中心就是世界/画布局部坐标，不能再减 ActualOffset。
         public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.CanvasLocal;
@@ -406,6 +406,46 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             }
 
             return count;
+        }
+
+        // 与 CountSlots 同一趟遍历，额外哈希已实现的元素身份：同一模型槽位换一批容器时数量不变，
+        // 只有它能发现容器重建。无分配。
+        public int ComputeSlotIdentity(
+            IReadOnlyList<string> slotNames,
+            IReadOnlyList<string> enumeratorNames,
+            out int slotCount)
+        {
+            var count = 0;
+            var hash = 17;
+
+            foreach (var name in slotNames)
+            {
+                if (owner.FindName(name) is FrameworkElement element)
+                {
+                    count++;
+                    hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(element));
+                }
+            }
+
+            foreach (var name in enumeratorNames)
+            {
+                if (owner.FindName(name) is not ItemsControl items)
+                {
+                    continue;
+                }
+
+                for (var i = 0; i < items.Items.Count; i++)
+                {
+                    if (items.ContainerFromIndex(i) is { } container)
+                    {
+                        count++;
+                        hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(container));
+                    }
+                }
+            }
+
+            slotCount = count;
+            return hash;
         }
 
         // 容器尚未生成或尚未测量：布局完成后重试一次（低优先级），重试跳上重新请求一次无条件测量。

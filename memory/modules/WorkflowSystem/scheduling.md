@@ -50,6 +50,6 @@
 - **`Flush` 必须无条件先放掉 `scheduled`**：投递之后、执行之前被 `Cancel(key)` 清空队列的那一趟会在这里提前返回；旗标留着，这棵树的 `Schedule` 从此全是空操作，延迟重测整条路死掉（只剩布局指纹那条）。`WorkflowLayoutBatchTests.CancelBetweenScheduleAndFlush_DoesNotWedgeThePostQueue` 钉这一条。
 - **`Flush` 先清队再执行**：不要改成「执行完再清」。同步过程中写 `slot.Anchor` 会触发下游属性通知，执行完再清会把那一轮新请求一起吞掉。
 - **指纹里的插槽数必须和测量同一口径**：枚举项要数**已实例化的容器**（`ContainerFromIndex` 非空），不是 `ItemCount`。数逻辑项会得到一个「看着完整、实际一个容器都没生成」的指纹，那一趟被当成测过就再也不会重试，锚点停在 `NaN`，连线整条不画。七家现在同口径：WPF/Jalium/WinUI 数已实例化容器，Avalonia 同，MAUI 数 `BindingContext is ISlotComponent` 的后代，WinForms 数带 `ISlotComponent` DataContext 的视觉元素，Razor 数缓存部件；`found >= expected` 的认证规则是第二道保险。
-- **指纹里还要带槽位实例哈希**（`WorkflowLayoutStamp` 的 `slotSignature`，按 `Node.Slots` 的引用身份）：选择器换一套数量相同的槽位时，数量与几何都不变，只有它能发现容器换新；缺了它，新槽位停在 `NaN`，连线隐藏到下一次拖动（`WorkflowSurfaceHeadlessTests.SlotContainerSwap_WithTheSameCount_ReMeasuresTheNewSlots`）。
+- **指纹里还要带槽位签名**（`WorkflowLayoutStamp` 的 `slotSignature`，由两部分组成）：`Node.Slots` 的引用身份哈希，覆盖选择器换一套数量相同的槽位；以及 `ISlotPartIdentityLocator.ComputeSlotIdentity` 的已实现控件身份哈希，覆盖同一模型槽位换一批容器。缺前者，新槽位停在 `NaN`、连线隐藏到下一次拖动（`SlotContainerSwap_WithTheSameCount_ReMeasuresTheNewSlots`）；缺后者，旧锚点有限、连线画在旧位置（`SlotContainerRebuild_ForTheSameSlots_ReMeasuresTheSentinels`）。两者都按引用身份、无分配；未实现可选接口的适配器退回只数数量。
 - **`CountSlots` 的 named 分支只看「找没找到」**，不看 `IsMeasured`：隐藏端口是稳态。
 - **测试锚点**：`Src/Test/Unit/Core/VeloxDev.Core.Test/WorkflowSystem/WorkflowLayoutBatchTests.cs`（合并、指纹、认证、投递失败、执行中再请求、空趟不锁死）与 `SlotLayoutPipelineCoreTests.cs`（未实例化必须重试、稳态不空转）；七家无头套件的 `SlotLayout*` / `SurfaceContract*` 用例验证锚点仍能写回。

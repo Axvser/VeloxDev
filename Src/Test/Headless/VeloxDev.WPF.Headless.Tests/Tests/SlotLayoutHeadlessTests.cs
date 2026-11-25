@@ -154,4 +154,60 @@ public sealed class SlotLayoutHeadlessTests
         Assert.AreEqual(46d, slot.Anchor.Horizontal, 1d);
         Assert.AreEqual(36d, slot.Anchor.Vertical, 1d);
     }
+
+    [TestMethod]
+    public void EnumeratorContainers_RebuiltForTheSameSlots_ReMeasureTheSentinels()
+    {
+        var graph = TestGraph.Create(connect: false);
+        var node = graph.Left;
+        var first = new SlotDefaultViewModel { Parent = node };
+        var second = new SlotDefaultViewModel { Parent = node };
+        node.Slots.Add(first);
+        node.Slots.Add(second);
+
+        var slots = new System.Collections.ObjectModel.ObservableCollection<SlotDefaultViewModel> { first, second };
+#pragma warning disable CS0618 // WPF's runtime template factory is the only way to build this without XAML.
+        var factory = new FrameworkElementFactory(typeof(Border));
+        factory.SetValue(FrameworkElement.WidthProperty, 8d);
+        factory.SetValue(FrameworkElement.HeightProperty, 8d);
+        var template = new DataTemplate { VisualTree = factory };
+#pragma warning restore CS0618
+        var items = new ItemsControl { Name = "PART_OutputSlots", ItemsSource = slots, ItemTemplate = template };
+
+        var view = new UserControl { Width = 160d, Height = 90d, DataContext = node, Content = items };
+        var scope = new NameScope();
+        NameScope.SetNameScope(view, scope);
+        scope.RegisterName("PART_OutputSlots", items);
+
+        WorkflowSlotLayoutBehavior.SetSlotEnumeratorNames(view, "PART_OutputSlots");
+        WorkflowSlotLayoutBehavior.SetIsEnabled(view, true);
+
+        view.Measure(new System.Windows.Size(160d, 90d));
+        view.Arrange(new Rect(0d, 0d, 160d, 90d));
+        view.UpdateLayout();
+        WpfHeadlessSurface.Pump();
+        Assert.IsFalse(double.IsNaN(first.Anchor.Horizontal), "the initial containers must be measured");
+
+        // Same model slots, a rebuilt container set: the model hash and the count are unchanged, so only
+        // the realized-control identity can invalidate the stamp.
+        first.Anchor = new Anchor(-1000d, -1000d, 0);
+        second.Anchor = new Anchor(-2000d, -2000d, 0);
+        // A different source collection instance forces the generator to recreate its containers.
+        items.ItemsSource = new System.Collections.ObjectModel.ObservableCollection<SlotDefaultViewModel> { first, second };
+        view.Measure(new System.Windows.Size(160d, 90d));
+        view.Arrange(new Rect(0d, 0d, 160d, 90d));
+        view.UpdateLayout();
+
+        // The bare-STA WPF harness does not raise LayoutUpdated for a hand-measured view; invoke the
+        // behavior's layout entry directly so the stamp path under test does run.
+        var onLayoutUpdated = typeof(WorkflowSlotLayoutBehavior).GetMethod(
+            "OnLayoutUpdated",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.IsNotNull(onLayoutUpdated, "WorkflowSlotLayoutBehavior.OnLayoutUpdated exists");
+        onLayoutUpdated!.Invoke(null, new object?[] { view, EventArgs.Empty });
+        WpfHeadlessSurface.Pump();
+
+        Assert.AreNotEqual(-1000d, first.Anchor.Horizontal, "a rebuilt container set must re-measure the same model slots");
+        Assert.AreNotEqual(-2000d, second.Anchor.Horizontal, "the second rebuilt container must be re-measured too");
+    }
 }

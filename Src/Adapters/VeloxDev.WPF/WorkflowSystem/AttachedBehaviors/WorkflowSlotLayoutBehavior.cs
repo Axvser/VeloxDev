@@ -322,7 +322,7 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
 
     // ── 平台层：可视树遍历与坐标转换 ────────────────────────────────────────
 
-    private sealed class WpfSlotPartLocator(UserControl owner) : ISlotPartLocator
+    private sealed class WpfSlotPartLocator(UserControl owner) : ISlotPartLocator, ISlotPartIdentityLocator
     {
         // TranslatePoint 到画布得到的是「world + ActualOffset」，所以由流水线减掉布局偏移。
         public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.ScrollSpace;
@@ -408,6 +408,46 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
             }
 
             return count;
+        }
+
+        // 与 CountSlots 同一趟遍历，额外哈希已实现的元素身份：同一模型槽位换一批容器时数量不变，
+        // 只有它能发现容器重建。无分配。
+        public int ComputeSlotIdentity(
+            IReadOnlyList<string> slotNames,
+            IReadOnlyList<string> enumeratorNames,
+            out int slotCount)
+        {
+            var count = 0;
+            var hash = 17;
+
+            foreach (var name in slotNames)
+            {
+                if (owner.FindName(name) is FrameworkElement element)
+                {
+                    count++;
+                    hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(element));
+                }
+            }
+
+            foreach (var name in enumeratorNames)
+            {
+                if (owner.FindName(name) is not ItemsControl items)
+                {
+                    continue;
+                }
+
+                for (var i = 0; i < items.Items.Count; i++)
+                {
+                    if (items.ItemContainerGenerator.ContainerFromIndex(i) is { } container)
+                    {
+                        count++;
+                        hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(container));
+                    }
+                }
+            }
+
+            slotCount = count;
+            return hash;
         }
     }
 
