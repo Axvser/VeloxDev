@@ -16,7 +16,9 @@
 - Range 控件的值变化只重摆 `PART_Fill`/`PART_Thumb` 并 `InvalidateVisual`，不能再 `InvalidateArrange` 整页；回归 `LayoutRegressionTests`。
 - ComboBox 在 Arrange 时把弹层子元素的 `MaxWidth` 收口到自身宽度；ListBox/ItemsControl 默认外壳会想要整块可用宽度。
 - GridSplitter 尺寸没有实际变化时不触发布局。
-- 默认模板在一页 300 行 ListBox + 30 个 Button、1200×800 的 resize+render 基准约 1.28 ms/帧（行为依据，测于 2026-11-26，Dpi 100%）。
+- 主题切换原地修改共享画笔颜色，不清空/重建主题字典；`Theme.CreateResourceDictionary` 必须克隆画笔，缺它时第一个宿主改色会污染静态主题。`ResourceBinding` 只订阅元素/链根/表面/命中来源的字典，但父链的 `ParentChanged` 仍要逐个监听（模板部件随后才挂到弹层/列表）。
+- 基准 `Src/Test/Performance/Easel.Benchmarks`：1200×800、1× DPI、200 行 ListBox + 20 Button + 8 TextBox + 5 Slider/ProgressBar + ComboBox。模板化前 `886ab07` → 当前：slider 1.86→1.46ms、splitter 1.82→1.69ms、palette toggle 3.92→7.3ms、palette + 整页重建 14→145ms。交互已持平，整页重建仍受模板/绑定实例化支配；下一步是列表虚拟化或惰性模板实例化。
+- Gallery 的快速主题路径（不重建 shell）需要样式里的静态画笔与构造期主题值也能刷新；直接改画笔会让标题/分割器等保持旧色，因此仍走重建。
 
 ## 已接管的控件
 
