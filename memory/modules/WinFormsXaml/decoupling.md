@@ -23,6 +23,15 @@
 - build-page/theme-rebuild 的剩余差距是结构性的：当前 524 节点/377 模板节点 vs 基线 287/4。ListBox 保留 200 个 index-stable 容器，只 attach 视口窗口与 ~20 行模板；无列表同页 build ~10.4ms，是该设计的实测地板。再往下需要模板 clone/pool 契约或生成器工厂形状变更，而不是继续裁剪模板。
 - 快路径现状：全帧按 `Graphics.IsVisible` 剔除、恒等变换子树用托管偏移做脏区剔除、纯布局节点跳过 GDI+ 状态栈、主题画笔原地改色 + 直接整帧绘制、Range 默认模板单 chrome 一次绘制；行实例复用、BindingPath 缓存、DP 单层内联、Grid 轨道复用、模板单遍遍历、惰性行模板 + 视口窗口。
 
+### 真机交互链路（副屏 SendInput 探针）
+
+- **继承属性只能通知直接子级**：`NotifyDataContextDescendants` 里 `RaisePropertyChanged` 已让子级 `OnPropertyChanged` 继续下传；再显式递归会变成 2^n。`NotifyInheritedDescendants` 同样只遍历直接子级。回归 `InheritedPropertyPropagationTests`。
+- **固定宽、不换行的 TextBlock 改文本只重画**：`ShouldInvalidateMeasure` 对这类 Text 变更返回 false；缺它时 Slider 的 readout 绑定每帧触发整窗 measure。副屏滑块帧间隔中位 32→16ms。
+- **`IsLayoutBoundary`**：边界内部尺寸变化只重排边界子树；边界自身尺寸必须由父级固定。Gallery 的 `PreviewScroll` 已启用。
+- **`TreeView.Reveal` 只在展开状态/可视行变化时 Rebuild**；Gallery 选中期间抑制 `SelectedItem` 回传，避免每页构建两次。进入页面由 66–497ms 降到多数 1–20ms。
+- **Shell splitter**：`ScrollContentPresenter` 的无界探针 100000 会让 TreeView 模板根在无界/有界之间来回测；`Grid.ArrangeOverride` 在尺寸差时重测子项；`DockPanel` measure/arrange 用不同剩余空间。修完后每帧 layout 23→~1ms、MeasureOverride 26k→~40；副屏 sash 帧间隔 46→16ms（右）/31ms（左，探针 sleep 占 ~15.6ms）。布局期间 ScrollViewer 滚动条失效不排第二帧。
+- **Gallery 昂贵页面**：旧卡销毁延后一帧、inspector 行按 editor kind 复用、WPF 媒体栈预热、视频首帧后置开播；scenario.video 290→9ms、player 88→21ms、defaults.controls 5019→23ms；全部卡片 warm ≤19ms。
+
 ## 已接管的控件
 
 `Button`/`RepeatButton`/`ToggleButton`/`CheckBox`/`RadioButton`、`TextBox`/`RichTextBox`、`ComboBox`/`ComboBoxItem`、`Expander`/`GroupBox`/`TabControl`/`TabItem`、`Slider`/`ProgressBar`、`ItemsControl`/`ListBox`/`ListBoxItem`/`VirtualList`/`TreeView`/`TreeViewItem`、`DataGrid`/DataGrid 键控单元格、`Calendar`/`CalendarItem`/`DatePicker`、`VisualMenu`/`VisualContextMenu`/`VisualMenuItemContainer`、`ScrollBar`/`HeaderedContentControl`/`DropZone`。自绘路径保留为无模板兜底；特殊用法（`VisualTitleBar` caption、`VisualDialog` 按钮）用显式空样式退出默认。
