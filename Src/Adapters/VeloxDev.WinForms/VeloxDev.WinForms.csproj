@@ -18,7 +18,7 @@
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<PackageId>VeloxDev.WinForms</PackageId>
 		<Title>VeloxDev.WinForms</Title>
-		<Version>12.3.1</Version>
+		<Version>12.4.0</Version>
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + WinForms: the workflow surface and the VeloxDev transition engine adapter over the Easel visual runtime.</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
