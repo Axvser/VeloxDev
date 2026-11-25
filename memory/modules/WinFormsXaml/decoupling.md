@@ -2,24 +2,22 @@
 
 ## 已落地的机制
 
-- 默认外观：`Easel/Src/Easel/Themes/DefaultStyles.xaml` 里按类型放隐式 `Style`（生成器把无 key 的 Style 存成 `dictionary[typeof(T)]`）；`VisualElement.ResolveImplicitStyle` 在元素/祖先 `Styles` 与 `Surface.Styles` 之后回退到 `Theme.FindDefaultStyle`。
-- 模板取色：`VisualHost.RefreshThemeResources` 把 `Theme.CreateResourceDictionary(Theme.EffectiveMode)` 合并进宿主的 `Resources`，默认模板用 `DynamicResource` 取主题键；主题变化时重建这本字典。
-- `TemplatedControl.DefaultTemplate` 是代码兜底，生效顺序 `Template` > 样式模板 > `DefaultTemplate`。
-- `TemplatedControl.IsFocusVisible` 由 `VisualElement.OnFocusVisibleChanged` 同步，供模板触发器使用；指针态已有 `ButtonBase.IsPointerOver` / `IsPressed`，选中态有 `IsChecked`。
-- 部件：`GetTemplateChild<T>` + `PART_*`。模板内容带 `IsTemplateContent` 标记；部件设 `IsHitTestVisible=False` 后只跳过自己的内容命中，子元素仍可命中（内容区照常接收输入）。不设的装饰部件会把命中从控件手里抢走。
-- 默认样式按**确切类型**匹配（WPF 语义）；派生类型要自己的样式或 `BasedOn`。`Theme.DefaultStyles` 里目前有 `Button`、`TextBox`、`RichTextBox` 的默认模板；`RepeatButton`/`ToggleButton`/`CheckBox`/`RadioButton`、`ComboBox` 与其余控件仍自绘。
-- `TemplateBinding` 读 `Color` 型 CLR 属性时，未设置的 DP 会给出 `Color.Empty`；绑定层把 `Color.Empty` 当作无值并清回目标默认，缺它时文字会用透明色画（按钮文字消失）。
+- 默认外观：`Src/Easel/Themes/Defaults/<Family>Defaults.xaml` 按族提供隐式 `Style`，由 `DefaultStyles` 合并；`VisualElement.ResolveImplicitStyle` 在元素/祖先 `Styles` 与 `Surface.Styles` 之后回退到 `Theme.FindDefaultStyle`。默认样式按**确切类型**匹配，派生类型要自己的样式或 `BasedOn`。
+- 模板取色：`VisualHost.RefreshThemeResources` 把 `Theme.CreateResourceDictionary(Theme.EffectiveMode)` 合并进宿主 `Resources`，模板用 `DynamicResource` 取主题键；主题变化时重建。
+- `TemplatedControl.DefaultTemplate` 是代码兜底，顺序 `Template` > 样式模板 > `DefaultTemplate`；`TemplatedControl.IsFocusVisible` 由 `VisualElement.OnFocusVisibleChanged` 同步。
+- 部件：`GetTemplateChild<T>` + `PART_*`；装饰部件设 `IsHitTestVisible=False` 只跳过自己的内容命中，子元素仍可命中。
+- **模板触发器**：Setter 必须放在 `<Trigger.Setters>`（或 `<Setters>`）下；触发器写 `Template` 层，低于本地值，部件不能同时写会被触发器驱动的本地 `Opacity`/`Visibility`。成对 True/False 触发器或 `Style.Setters` 提供初始态。
+- `TemplateBinding` 读 `Color` 型 CLR 属性时，未设置的 DP 给出 `Color.Empty`；绑定层按无值清回目标默认。`DynamicResource` 不能用于 `VisualSetter.Value`（生成器拒绝），也不能写在 `TextBlock.Foreground` 这类 Color 访问器上；用 `TemplateBinding`、模板部件或 `Path.Fill`。
+- 数据列表的项外观在容器：`ListBox.Items`/`VirtualList.Items` 暴露 `ListBoxItem` 容器，选中/悬停由容器模板负责；取 ItemTemplate 根用 `((ListBoxItem)Items[i]).Content`。
 
-## 分类
+## 已由默认模板接管的控件
 
-- 已有强部件契约：`ComboBox`（`PART_Popup`/`PART_ItemsPresenter`/`PART_EditableTextBox`/`PART_ToggleButton`）、`TextBox`（`PART_ContentHost`）、`RichTextBox`（`PART_ContentHost`/`PART_ScrollViewer`）、`Calendar`（`PART_CalendarItem`）、`DatePicker`、`ScrollViewer`（内置 `DefaultChrome`）、`TreeViewItem`、`VisualTitleBar`、`VisualDialog`、`ScrollBar`（自有模板引擎）、`ContentControl`。
-- 需要外壳模板 + 部件：`DataGrid`（没有 `PART_*`，`DataGridColumnKind` 把 Badge/Check/Progress 写死）、`Expander`、`TabControl`/`TabItem`、`Slider`、`GroupBox`、`HeaderedContentControl`、`DropZone`、`CalendarItem`、`VisualMenu`/`VisualContextMenu`、`Button` 系。
-- 需要容器/项样式：`ItemsControl`/`ListBox`/`VirtualList`/`TreeView`、`DataGrid` 的行/单元格/表头、`ComboBoxItem`。
+`Button`/`RepeatButton`/`ToggleButton`/`CheckBox`/`RadioButton`、`TextBox`/`RichTextBox`、`ComboBox`、`Expander`/`GroupBox`/`TabControl`/`TabItem`、`Slider`/`ProgressBar`、`ItemsControl`/`ListBox`/`ListBoxItem`/`VirtualList`/`TreeView`/`TreeViewItem`、`DataGrid`。自绘路径保留为无模板兜底；特殊用法（`VisualTitleBar` caption、`VisualDialog` 按钮）用显式空样式退出默认。
+
+## 剩余的解耦缝
+
+- `DataGrid`：`DataGridColumnKind` 的 Badge/Check/Progress 仍是 `DrawCell` 分支；行/表头/单元格部件目前是几何区域，未成为自绘的 presenter。
+- `ComboBox`：可编辑时点击编辑器不会开关下拉；默认模板没有 `PART_ToggleButton`/`PART_Arrow`，箭头颜色没有跟随控件 `Foreground`。
+- 容器：`TabControl` 还没有项容器样式。
+- 未模板化：`Calendar`/`DatePicker`（`CalendarItem` 仍自绘月格）、`VisualMenu`/`VisualContextMenu`、`ScrollBar`（自有模板引擎）、`HeaderedContentControl`、`DropZone`、`ComboBoxItem`。
 - 原语无需模板：`Border`、`TextBlock`、`Image`、面板、`ContentPresenter`、Shapes。
-
-## 迁移顺序与约束
-
-1. `Button` 系（`Button`/`RepeatButton`/`ToggleButton`/`CheckBox`/`RadioButton`）：先给 `VisualTitleBar` 的 caption 按钮、`VisualDialog` 的 primary/secondary/cancel 等特殊用法显式样式或模板，再启用通用默认模板；装饰部件设 `IsHitTestVisible=False`。通用 Button 模板会同时作用于这些特例，标题栏按钮的透明背景与命中测试会被覆盖。
-2. `TextBox`/`RichTextBox`/`ComboBox` 默认模板（部件契约已存在）。
-3. `Expander`/`TabControl`/`GroupBox`/`Slider`/`ProgressBar`（先改为 `TemplatedControl` 或提供模板部件）。
-4. `ItemsControl`/`ListBox`/`VirtualList`/`TreeView` 的容器样式；`DataGrid` 最后：先公开行/单元格/表头样式与 presenter，再替换 `DataGridColumnKind`，最后才是整表模板。
