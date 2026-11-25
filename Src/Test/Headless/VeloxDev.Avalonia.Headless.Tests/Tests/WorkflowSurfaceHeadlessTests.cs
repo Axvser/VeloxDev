@@ -475,4 +475,65 @@ public sealed class WorkflowSurfaceHeadlessTests
             Assert.AreEqual(surface.Scroll.Viewport.Width / 2d, rightX, 1d, "positive edge");
             Assert.IsTrue(graph.Tree.Layout.PositiveOffset.Horizontal > 0d, "the canvas grew past the content");
         });
+
+    [TestMethod]
+    public void SlotContainerSwap_WithTheSameCount_ReMeasuresTheNewSlots()
+        => Run(() =>
+        {
+            var graph = TestGraph.Create(connect: false);
+            using var surface = new AvaloniaHeadlessSurface(graph);
+            var node = graph.Left;
+            var slots = new System.Collections.ObjectModel.ObservableCollection<Wf.SlotDefaultViewModel>();
+            var items = new ItemsControl { Name = "PART_OutputSlots", ItemsSource = slots };
+            items.ItemTemplate = new global::Avalonia.Controls.Templates.FuncDataTemplate<Wf.SlotDefaultViewModel>(
+                (slot, _) => new Border { Width = 8d, Height = 8d, DataContext = slot },
+                supportsRecycling: false);
+
+            var view = new UserControl
+            {
+                DataContext = node,
+                Width = 160d,
+                Height = 90d,
+                Content = items,
+            };
+            var scope = new NameScope();
+            NameScope.SetNameScope(view, scope);
+            scope.Register("PART_OutputSlots", items);
+            scope.Complete();
+
+            Behaviors.WorkflowSlotLayoutBehavior.SetSlotEnumeratorNames(view, "PART_OutputSlots");
+            Behaviors.WorkflowSlotLayoutBehavior.SetCoordinateHostName(view, "PART_Canvas");
+            Behaviors.WorkflowSlotLayoutBehavior.SetIsEnabled(view, true);
+            surface.Canvas.Children.Add(view);
+            surface.Window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            var first = new Wf.SlotDefaultViewModel { Parent = node };
+            var second = new Wf.SlotDefaultViewModel { Parent = node };
+            node.Slots.Add(first);
+            node.Slots.Add(second);
+            slots.Add(first);
+            slots.Add(second);
+            surface.Window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            Assert.IsFalse(double.IsNaN(first.Anchor.Horizontal), "the first pair of containers must be measured");
+
+            // The selector swap replaces the slot instances; the count stays the same, so only the
+            // slot-identity part of the stamp can notice the regeneration.
+            var third = new Wf.SlotDefaultViewModel { Parent = node };
+            var fourth = new Wf.SlotDefaultViewModel { Parent = node };
+            node.Slots.Clear();
+            node.Slots.Add(third);
+            node.Slots.Add(fourth);
+            slots.Clear();
+            slots.Add(third);
+            slots.Add(fourth);
+            surface.Window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.IsFalse(
+                double.IsNaN(third.Anchor.Horizontal),
+                "a same-count container swap must re-measure the new slots instead of trusting the old stamp");
+            Assert.IsFalse(double.IsNaN(fourth.Anchor.Horizontal), "the second new container must be measured too");
+        });
 }

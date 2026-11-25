@@ -96,7 +96,7 @@ public sealed class SlotLayoutPipelineCore
         {
             var (width, height) = _host.ReadNodeSize();
             var expected = _locator.CountSlots(Configuration.SlotNames, Configuration.EnumeratorNames);
-            var stamp = WorkflowLayoutStamp.Capture(Node, width, height, expected);
+            var stamp = WorkflowLayoutStamp.Capture(Node, width, height, expected, ComputeSlotSignature());
             if (batch.Request(_view, stamp, () => MeasureParts(expected)))
             {
                 batch.Flush();
@@ -266,6 +266,25 @@ public sealed class SlotLayoutPipelineCore
         {
             Measure();
         }
+    }
+
+    // 槽位实例集的指纹：选择器切换会换一套槽位，数量可能不变；只看数量会让新槽位停在 NaN，
+    // 连线被隐藏到下一次几何变化（拖动）为止。按引用身份哈希，无分配。
+    private int ComputeSlotSignature()
+    {
+        var slots = Node.Slots;
+        if (slots is null)
+        {
+            return 0;
+        }
+
+        var hash = 17;
+        for (var index = 0; index < slots.Count; index++)
+        {
+            hash = unchecked(hash * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(slots[index]));
+        }
+
+        return hash;
     }
 
     private static IReadOnlyCollection<string> BuildWatchedPropertyNames(SlotLayoutConfiguration configuration)
