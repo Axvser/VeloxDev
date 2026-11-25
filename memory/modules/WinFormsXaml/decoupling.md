@@ -1,23 +1,31 @@
 # 控件解耦
 
-## 已落地的机制
+## 机制
 
 - 默认外观：`Src/Easel/Themes/Defaults/<Family>Defaults.xaml` 按族提供隐式 `Style`，由 `DefaultStyles` 合并；`VisualElement.ResolveImplicitStyle` 在元素/祖先 `Styles` 与 `Surface.Styles` 之后回退到 `Theme.FindDefaultStyle`。默认样式按**确切类型**匹配，派生类型要自己的样式或 `BasedOn`。
 - 模板取色：`VisualHost.RefreshThemeResources` 把 `Theme.CreateResourceDictionary(Theme.EffectiveMode)` 合并进宿主 `Resources`，模板用 `DynamicResource` 取主题键；主题变化时重建。
 - `TemplatedControl.DefaultTemplate` 是代码兜底，顺序 `Template` > 样式模板 > `DefaultTemplate`；`TemplatedControl.IsFocusVisible` 由 `VisualElement.OnFocusVisibleChanged` 同步。
 - 部件：`GetTemplateChild<T>` + `PART_*`；装饰部件设 `IsHitTestVisible=False` 只跳过自己的内容命中，子元素仍可命中。
 - **模板触发器**：Setter 必须放在 `<Trigger.Setters>`（或 `<Setters>`）下；触发器写 `Template` 层，低于本地值，部件不能同时写会被触发器驱动的本地 `Opacity`/`Visibility`。成对 True/False 触发器或 `Style.Setters` 提供初始态。
-- `TemplateBinding` 读 `Color` 型 CLR 属性时，未设置的 DP 给出 `Color.Empty`；绑定层按无值清回目标默认。`DynamicResource` 不能用于 `VisualSetter.Value`（生成器拒绝），也不能写在 `TextBlock.Foreground` 这类 Color 访问器上；用 `TemplateBinding`、模板部件或 `Path.Fill`。
-- 数据列表的项外观在容器：`ListBox.Items`/`VirtualList.Items` 暴露 `ListBoxItem` 容器，选中/悬停由容器模板负责；取 ItemTemplate 根用 `((ListBoxItem)Items[i]).Content`。
+- **嵌套模板**：`SetTemplatedParentRecursive` 只在 `TemplatedParent` 为空或相同时赋值，但继续递归；内层控件的模板部件保持自己的源，嵌在部件内容区里的外层部件仍拿到外层控件。简单的“遇到不同父级就返回”会漏掉 ScrollViewer 内容区里的部件（RichTextBox 不画）。
+- `TemplateBinding` 读 `Color` 型 CLR 属性时，未设置的 DP 给出 `Color.Empty`；绑定层按无值清回目标默认。`DynamicResource` 不能用于 `VisualSetter.Value`，也不能写在 `TextBlock.Foreground` 这类 Color 访问器上；用 `TemplateBinding`、模板部件或 `Path.Fill`。
+- 数据列表的项外观在容器：`ListBox.Items`/`VirtualList.Items` 暴露 `ListBoxItem` 容器；取 ItemTemplate 根用 `((ListBoxItem)Items[i]).Content`。
 
-## 已由默认模板接管的控件
+## 性能边界
 
-`Button`/`RepeatButton`/`ToggleButton`/`CheckBox`/`RadioButton`、`TextBox`/`RichTextBox`、`ComboBox`、`Expander`/`GroupBox`/`TabControl`/`TabItem`、`Slider`/`ProgressBar`、`ItemsControl`/`ListBox`/`ListBoxItem`/`VirtualList`/`TreeView`/`TreeViewItem`、`DataGrid`。自绘路径保留为无模板兜底；特殊用法（`VisualTitleBar` caption、`VisualDialog` 按钮）用显式空样式退出默认。
+- Range 控件的值变化只重摆 `PART_Fill`/`PART_Thumb` 并 `InvalidateVisual`，不能再 `InvalidateArrange` 整页；回归 `LayoutRegressionTests`。
+- ComboBox 在 Arrange 时把弹层子元素的 `MaxWidth` 收口到自身宽度；ListBox/ItemsControl 默认外壳会想要整块可用宽度。
+- GridSplitter 尺寸没有实际变化时不触发布局。
+- 默认模板在一页 300 行 ListBox + 30 个 Button、1200×800 的 resize+render 基准约 1.28 ms/帧（行为依据，测于 2026-11-26，Dpi 100%）。
 
-## 剩余的解耦缝
+## 已接管的控件
 
-- `DataGrid`：`DataGridColumnKind` 的 Badge/Check/Progress 仍是 `DrawCell` 分支；行/表头/单元格部件目前是几何区域，未成为自绘的 presenter。
-- `ComboBox`：可编辑时点击编辑器不会开关下拉；默认模板没有 `PART_ToggleButton`/`PART_Arrow`，箭头颜色没有跟随控件 `Foreground`。
-- 容器：`TabControl` 还没有项容器样式。
-- 未模板化：`Calendar`/`DatePicker`（`CalendarItem` 仍自绘月格）、`VisualMenu`/`VisualContextMenu`、`ScrollBar`（自有模板引擎）、`HeaderedContentControl`、`DropZone`、`ComboBoxItem`。
-- 原语无需模板：`Border`、`TextBlock`、`Image`、面板、`ContentPresenter`、Shapes。
+`Button`/`RepeatButton`/`ToggleButton`/`CheckBox`/`RadioButton`、`TextBox`/`RichTextBox`、`ComboBox`/`ComboBoxItem`、`Expander`/`GroupBox`/`TabControl`/`TabItem`、`Slider`/`ProgressBar`、`ItemsControl`/`ListBox`/`ListBoxItem`/`VirtualList`/`TreeView`/`TreeViewItem`、`DataGrid`/DataGrid 键控单元格、`Calendar`/`CalendarItem`/`DatePicker`、`VisualMenu`/`VisualContextMenu`/`VisualMenuItemContainer`、`ScrollBar`/`HeaderedContentControl`/`DropZone`。自绘路径保留为无模板兜底；特殊用法（`VisualTitleBar` caption、`VisualDialog` 按钮）用显式空样式退出默认。
+
+## 剩余边界
+
+- `DataGrid`：行/表头仍由网格在几何部件内自绘；按键控单元格模板已接管 Badge/Check/Progress，文本列保留自绘。
+- `VisualContextMenu` 仍保留自己的模板引擎，尚未统一为 `TemplatedControl`。
+- `CalendarItem` 的 42 个日格是代码创建的 `CalendarDayCell`，不是逐格模板；导航箭头是装饰零件。`DatePicker.IsDropDownOpen` 仍是普通 CLR 属性，模板触发器读不到。
+- `ComboBox` 可编辑态仍把占位文字同步成编辑器文本；`ScrollBar` 默认样式故意不声明模板拇指/重复按钮（命中与保留角行为在引擎里）；`DropZoneChrome` 用代码画虚线。
+- `TabControl` 禁用态不下推给 TabItem；`DynamicResource` 仍不能写进 Setter。
