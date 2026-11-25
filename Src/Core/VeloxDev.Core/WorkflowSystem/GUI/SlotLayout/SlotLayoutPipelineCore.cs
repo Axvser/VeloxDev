@@ -78,10 +78,12 @@ public sealed class SlotLayoutPipelineCore
     /// <remarks>
     /// <see cref="SlotLayoutTrigger.Layout"/> captures the stamp and flushes synchronously when the request is
     /// queued; every other trigger queues unconditionally and schedules one deferred flush. A layout pass certifies
-    /// the stamp only when it <b>found</b> every part the configuration expects: a pass that ran before the platform
-    /// realized the containers leaves the stamp uncertified, so the next layout pass retries instead of the unchanged
-    /// stamp suppressing the retry and leaving the anchors at their <c>NaN</c> default. A part that is found but not
-    /// laid out (a hidden port) still certifies the pass — otherwise it would re-measure on every layout pass forever.
+    /// the stamp only when it <b>found</b> every part the configuration expects and no visible part was still waiting
+    /// for layout: such a pass leaves the stamp uncertified, so the next layout pass retries instead of the unchanged
+    /// stamp suppressing the retry and leaving the anchors at their <c>NaN</c> default. A <b>hidden</b> part
+    /// (<see cref="ISlotPartVisibility.IsVisible"/> is <see langword="false"/>) is a steady state and still certifies
+    /// the pass — otherwise it would re-measure on every layout pass forever. A part that does not implement
+    /// <see cref="ISlotPartVisibility"/> is treated as visible, so existing implementers keep compiling.
     /// </remarks>
     public void RequestMeasure(SlotLayoutTrigger trigger)
     {
@@ -151,12 +153,14 @@ public sealed class SlotLayoutPipelineCore
                 Configuration.CoordinateHostName, Configuration.CoordinateHostType);
 
             var found = 0;
+            var visibleUnmeasured = false;
 
             foreach (var name in Configuration.SlotNames)
             {
                 if (_locator.FindNamedSlot(name) is { } part)
                 {
                     found++;
+                    visibleUnmeasured |= IsVisibleButUnmeasured(part);
                     MeasurePart(part, coordinateHost);
                 }
             }
@@ -167,11 +171,12 @@ public sealed class SlotLayoutPipelineCore
                 for (var i = 0; i < parts.Count; i++)
                 {
                     found++;
+                    visibleUnmeasured |= IsVisibleButUnmeasured(parts[i]);
                     MeasurePart(parts[i], coordinateHost);
                 }
             }
 
-            return found >= expected;
+            return found >= expected && !visibleUnmeasured;
         }
         finally
         {
@@ -194,6 +199,14 @@ public sealed class SlotLayoutPipelineCore
         _active = false;
         _batch?.Cancel(_view);
     }
+
+    // 可见但尚未排版的部件是瞬态：这一趟不能认证指纹，否则锚点停在 NaN，连线被渲染门隐藏到下
+    // 一次几何变化。隐藏端口（可选接口报 IsVisible=false）是稳态，可以认证，否则每趟布局都会重测。
+    // 未实现可选接口的部件按可见处理，保持向后兼容（旧实现者不改代码也能编译，锚点会照常重试）。
+    private static bool IsVisibleButUnmeasured(ISlotPart part)
+        => part.Slot is not null
+           && !part.IsMeasured
+           && (part is not ISlotPartVisibility visibility || visibility.IsVisible);
 
     private void MeasurePart(ISlotPart part, object? coordinateHost)
     {

@@ -451,11 +451,13 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
     }
 
-    private sealed class WpfSlotPart(UserControl nodeView, FrameworkElement element) : ISlotPart
+    private sealed class WpfSlotPart(UserControl nodeView, FrameworkElement element) : ISlotPart, ISlotPartVisibility
     {
         public ISlotComponent? Slot => element.DataContext as ISlotComponent;
 
         public bool IsMeasured => element.ActualWidth > 0d && element.ActualHeight > 0d;
+
+        public bool IsVisible => element.IsVisible;
 
         public SlotCenter? MeasureCenter(object? relativeTo)
         {

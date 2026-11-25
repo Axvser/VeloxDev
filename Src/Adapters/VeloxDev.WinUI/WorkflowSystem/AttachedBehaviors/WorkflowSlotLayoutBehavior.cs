@@ -474,11 +474,15 @@ public sealed class WorkflowSlotLayoutBehavior : DependencyObject
         }
     }
 
-    private sealed class WinUiSlotPart(UserControl nodeView, FrameworkElement element) : ISlotPart
+    private sealed class WinUiSlotPart(UserControl nodeView, FrameworkElement element) : ISlotPart, ISlotPartVisibility
     {
         public ISlotComponent? Slot => element.DataContext as ISlotComponent;
 
         public bool IsMeasured => element.ActualWidth > 0d && element.ActualHeight > 0d;
+
+        // WinUI 没有有效可见性属性：自己与节点视图都 Visible 才算可见（池化回收会把节点视图 Collapsed）。
+        public bool IsVisible
+            => element.Visibility == Visibility.Visible && nodeView.Visibility == Visibility.Visible;
 
         public SlotCenter? MeasureCenter(object? relativeTo)
         {

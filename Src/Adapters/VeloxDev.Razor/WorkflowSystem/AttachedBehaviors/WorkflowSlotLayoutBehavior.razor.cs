@@ -213,7 +213,7 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
             => _parts.Count;
     }
 
-    private sealed class CachedSlotPart : ISlotPart
+    private sealed class CachedSlotPart : ISlotPart, ISlotPartVisibility
     {
         private readonly ISlotComponent slot;
         private readonly double x;
@@ -229,6 +229,9 @@ public partial class WorkflowSlotLayoutBehavior : ComponentBase, IAsyncDisposabl
         public ISlotComponent? Slot => slot;
 
         public bool IsMeasured => true;
+
+        // JS 只把已排版/已实现的部件送过来；缓存里的部件一定是可见的。
+        public bool IsVisible => true;
 
         public SlotCenter? MeasureCenter(object? relativeTo) => new(x, y);
     }

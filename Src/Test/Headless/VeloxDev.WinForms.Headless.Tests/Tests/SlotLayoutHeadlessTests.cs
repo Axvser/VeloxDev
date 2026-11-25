@@ -92,4 +92,85 @@ public sealed class SlotLayoutHeadlessTests
         Assert.AreSame(graph.LeftOutput, link.Sender);
         Assert.AreSame(graph.RightInput, link.Receiver);
     }
+
+    // Core-level fake, no Easel: the WinForms contract is the same optional visibility rule as every adapter.
+    [TestMethod]
+    public void SlotLayout_VisibleButUnmeasuredPart_IsRetriedAfterLayout()
+    {
+        var node = new NodeDefaultViewModel
+        {
+            Anchor = new Anchor(40d, 40d, 0),
+            Size = new VeloxDev.WorkflowSystem.Size(160d, 90d),
+        };
+        var slot = new SlotDefaultViewModel { Parent = node };
+        node.Slots.Add(slot);
+        var host = new PipelineFakeHost();
+        var locator = new PipelineFakeLocator();
+        var part = new PipelineFakePart
+        {
+            Slot = slot,
+            IsMeasured = false,
+            IsVisible = true,
+            NodeCenter = new SlotCenter(16d, 16d),
+        };
+        locator.Named["PART_A"] = part;
+        var pipeline = new SlotLayoutPipelineCore(
+            node,
+            new object(),
+            locator,
+            host,
+            new SlotLayoutConfiguration("PART_A", null, null, null));
+
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.IsTrue(double.IsNaN(slot.Anchor.Horizontal), "a visible part with no bounds must not write an anchor");
+
+        part.IsMeasured = true;
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.IsFalse(double.IsNaN(slot.Anchor.Horizontal), "the retry after layout must write the anchor");
+    }
+
+    private sealed class PipelineFakePart : ISlotPart, ISlotPartVisibility
+    {
+        public ISlotComponent? Slot { get; init; }
+        public bool IsMeasured { get; set; }
+        public bool IsVisible { get; init; }
+        public SlotCenter? NodeCenter { get; init; }
+
+        public SlotCenter? MeasureCenter(object? relativeTo) => NodeCenter;
+    }
+
+    private sealed class PipelineFakeLocator : ISlotPartLocator
+    {
+        public Dictionary<string, ISlotPart> Named { get; } = new(StringComparer.Ordinal);
+
+        public SlotCoordinateSpace CoordinateSpace => SlotCoordinateSpace.NodeLocal;
+
+        public ISlotPart? FindNamedSlot(string name) => Named.GetValueOrDefault(name);
+
+        public IReadOnlyList<ISlotPart> FindEnumeratedSlots(string name) => Array.Empty<ISlotPart>();
+
+        public object? ResolveCoordinateHost(string? hostName, Type? hostType) => null;
+
+        public int CountSlots(IReadOnlyList<string> slotNames, IReadOnlyList<string> enumeratorNames)
+            => slotNames.Count(Named.ContainsKey);
+    }
+
+    private sealed class PipelineFakeHost : ISlotMeasurementHost
+    {
+        public (double Width, double Height) ReadNodeSize() => (160d, 90d);
+
+        public Anchor ReadAnchor(ISlotComponent slot) => slot.Anchor;
+
+        public void WriteAnchor(ISlotComponent slot, Anchor anchor) => slot.Anchor = anchor;
+
+        public void InvalidateMeasure()
+        {
+        }
+
+        public bool Post(Action flush)
+        {
+            flush();
+            return true;
+        }
+    }
 }

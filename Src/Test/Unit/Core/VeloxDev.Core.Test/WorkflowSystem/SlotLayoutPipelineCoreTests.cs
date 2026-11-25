@@ -275,7 +275,7 @@ public class SlotLayoutPipelineCoreTests
         var host = new FakeHost { RunPostedImmediately = true };
         var locator = new FakeLocator();
         // 找不到 bounds 的部件是稳态（隐藏的端口），不是「容器还没生成」：它不能把每趟布局都变成一次重测。
-        locator.Named["PART_A"] = new FakePart { Slot = slot, IsMeasured = false, NodeCenter = new SlotCenter(1d, 1d) };
+        locator.Named["PART_A"] = new FakePart { Slot = slot, IsMeasured = false, IsVisible = false, NodeCenter = new SlotCenter(1d, 1d) };
         var pipeline = new SlotLayoutPipelineCore(
             node, new object(), locator, host, new SlotLayoutConfiguration("PART_A", null, null, null));
 
@@ -283,6 +283,49 @@ public class SlotLayoutPipelineCoreTests
         pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
 
         Assert.AreEqual(1, locator.FindNamedCalls, "a found part certifies the pass even when it has no bounds yet");
+    }
+
+    [TestMethod]
+    public void LayoutTrigger_TreatsAPartWithoutTheVisibilityInterfaceAsVisible()
+    {
+        var node = Node(40d, 40d);
+        var slot = new SlotDefaultViewModel();
+        var host = new FakeHost { RunPostedImmediately = true };
+        var locator = new FakeLocator();
+        var part = new PlainPart { Slot = slot, IsMeasured = false, NodeCenter = new SlotCenter(16d, 16d) };
+        locator.Named["PART_A"] = part;
+        var pipeline = new SlotLayoutPipelineCore(
+            node, new object(), locator, host, new SlotLayoutConfiguration("PART_A", null, null, null));
+
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(1, locator.FindNamedCalls);
+
+        part.IsMeasured = true;
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(2, locator.FindNamedCalls, "a part without ISlotPartVisibility is visible, so the pass must retry");
+        AssertAnchor(56d, 56d, slot.Anchor);
+    }
+
+    [TestMethod]
+    public void LayoutTrigger_DoesNotCertify_WhenAVisiblePartIsNotLaidOut()
+    {
+        var node = Node(40d, 40d);
+        var slot = new SlotDefaultViewModel();
+        var host = new FakeHost { RunPostedImmediately = true };
+        var locator = new FakeLocator();
+        var part = new FakePart { Slot = slot, IsMeasured = false, IsVisible = true, NodeCenter = new SlotCenter(16d, 16d) };
+        locator.Named["PART_A"] = part;
+        var pipeline = new SlotLayoutPipelineCore(
+            node, new object(), locator, host, new SlotLayoutConfiguration("PART_A", null, null, null));
+
+        // 视图刚物化、容器已找到但还没排版：这一趟不能认证，否则锚点停在 NaN。
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(1, locator.FindNamedCalls);
+
+        part.IsMeasured = true;
+        pipeline.RequestMeasure(SlotLayoutTrigger.Layout);
+        Assert.AreEqual(2, locator.FindNamedCalls, "a visible part that was not laid out must leave the stamp uncertified");
+        AssertAnchor(56d, 56d, slot.Anchor);
     }
 
     [TestMethod]
@@ -385,10 +428,11 @@ public class SlotLayoutPipelineCoreTests
         Assert.AreEqual(y, anchor.Vertical, 0.001d);
     }
 
-    private sealed class FakePart : ISlotPart
+    private sealed class FakePart : ISlotPart, ISlotPartVisibility
     {
         public ISlotComponent? Slot { get; init; }
-        public bool IsMeasured { get; init; } = true;
+        public bool IsMeasured { get; set; } = true;
+        public bool IsVisible { get; init; } = true;
         public SlotCenter? NodeCenter { get; init; }
         public SlotCenter? HostCenter { get; init; }
 
@@ -443,6 +487,16 @@ public class SlotLayoutPipelineCoreTests
 
             return count;
         }
+    }
+
+    // 不实现可选可见性接口的旧式部件：管线按可见处理。
+    private sealed class PlainPart : ISlotPart
+    {
+        public ISlotComponent? Slot { get; init; }
+        public bool IsMeasured { get; set; }
+        public SlotCenter? NodeCenter { get; init; }
+
+        public SlotCenter? MeasureCenter(object? relativeTo) => NodeCenter;
     }
 
     private sealed class IdentityLocator : ISlotPartLocator, ISlotPartIdentityLocator

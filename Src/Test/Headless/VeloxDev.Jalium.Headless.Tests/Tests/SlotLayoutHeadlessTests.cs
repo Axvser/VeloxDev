@@ -72,6 +72,47 @@ public sealed class SlotLayoutHeadlessTests
     }
 
     [TestMethod]
+    public void SlotLayout_RetriesAfterAVisiblePartIsLaidOut()
+    {
+        var graph = TestGraph.Create(connect: false);
+        var node = graph.Left;
+        var slot = new SlotDefaultViewModel { Parent = node };
+        node.Slots.Add(slot);
+
+        var slotBorder = new Border
+        {
+            Name = "PART_Slot",
+            Width = 16d,
+            Height = 16d,
+            DataContext = slot,
+            Margin = new Thickness(8d),
+        };
+        var view = new UserControl { Width = 160d, Height = 90d, DataContext = node, Content = slotBorder };
+        var scope = new NameScope();
+        NameScope.SetNameScope(view, scope);
+        view.RegisterName("PART_Slot", slotBorder);
+
+        WorkflowSlotLayoutBehavior.SetSlotNames(view, "PART_Slot");
+        WorkflowSlotLayoutBehavior.SetCoordinateHostName(view, "PART_Canvas");
+        JaliumHeadlessSurface.SetLoaded(view);
+        WorkflowSlotLayoutBehavior.SetIsEnabled(view, true);
+        Assert.IsTrue(double.IsNaN(slot.Anchor.Horizontal), "a visible part with no bounds must not write an anchor");
+
+        var requestMeasure = typeof(WorkflowSlotLayoutBehavior).GetMethod(
+            "RequestMeasure",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.IsNotNull(requestMeasure, "WorkflowSlotLayoutBehavior.RequestMeasure exists");
+
+        view.Measure(new global::Jalium.UI.Size(160d, 90d));
+        view.Arrange(new global::Jalium.UI.Rect(0d, 0d, 160d, 90d));
+        JaliumHeadlessSurface.Pump();
+        requestMeasure!.Invoke(null, new object?[] { view, SlotLayoutTrigger.Layout });
+        JaliumHeadlessSurface.Pump();
+
+        Assert.IsFalse(double.IsNaN(slot.Anchor.Horizontal), "the layout pass after the slot is laid out must measure it");
+    }
+
+    [TestMethod]
     public void EnumeratorContainers_RebuiltForTheSameSlots_ReMeasureTheSentinels()
     {
         var graph = TestGraph.Create(connect: false);

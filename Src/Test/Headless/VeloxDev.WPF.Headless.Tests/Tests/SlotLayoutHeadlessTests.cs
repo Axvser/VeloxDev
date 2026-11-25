@@ -156,6 +156,60 @@ public sealed class SlotLayoutHeadlessTests
     }
 
     [TestMethod]
+    public void SlotLayout_RetriesAfterAVisiblePartIsLaidOut()
+    {
+        var graph = TestGraph.Create(connect: false);
+        var node = graph.Left;
+        var slot = new SlotDefaultViewModel { Parent = node };
+        node.Slots.Add(slot);
+
+        var slotBorder = new Border
+        {
+            Name = "PART_Slot",
+            Width = 16d,
+            Height = 16d,
+            DataContext = slot,
+            Margin = new Thickness(8d),
+        };
+        var view = new UserControl { Width = 160d, Height = 90d, DataContext = node, Content = slotBorder };
+        var scope = new NameScope();
+        NameScope.SetNameScope(view, scope);
+        scope.RegisterName("PART_Slot", slotBorder);
+
+        WorkflowSlotLayoutBehavior.SetSlotNames(view, "PART_Slot");
+        WorkflowSlotLayoutBehavior.SetCoordinateHostName(view, "PART_Canvas");
+
+        // Added to a shown window first (effectively visible), then enabled while the part has no bounds.
+        var window = new Window
+        {
+            Width = 160d,
+            Height = 90d,
+            Content = new Canvas(),
+            ShowInTaskbar = false,
+            WindowStyle = WindowStyle.None,
+            Left = -10000d,
+            Top = -10000d,
+        };
+        window.Show();
+        ((Canvas)window.Content).Children.Add(view);
+        WorkflowSlotLayoutBehavior.SetIsEnabled(view, true);
+        Assert.IsTrue(double.IsNaN(slot.Anchor.Horizontal), "a visible part with no bounds must not write an anchor");
+
+        var onLayoutUpdated = typeof(WorkflowSlotLayoutBehavior).GetMethod(
+            "OnLayoutUpdated",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.IsNotNull(onLayoutUpdated, "WorkflowSlotLayoutBehavior.OnLayoutUpdated exists");
+
+        window.UpdateLayout();
+        WpfHeadlessSurface.Pump();
+        onLayoutUpdated!.Invoke(null, new object?[] { view, EventArgs.Empty });
+        WpfHeadlessSurface.Pump();
+
+        Assert.IsFalse(double.IsNaN(slot.Anchor.Horizontal), "the layout pass after the slot is laid out must measure it");
+        window.Close();
+    }
+
+    [TestMethod]
     public void EnumeratorContainers_RebuiltForTheSameSlots_ReMeasureTheSentinels()
     {
         var graph = TestGraph.Create(connect: false);

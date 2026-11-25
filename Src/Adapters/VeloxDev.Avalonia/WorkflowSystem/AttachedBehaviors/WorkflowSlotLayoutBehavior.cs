@@ -388,11 +388,13 @@ public sealed class WorkflowSlotLayoutBehavior : AvaloniaObject
         }
     }
 
-    private sealed class AvaloniaSlotPart(Visual nodeView, Control element) : ISlotPart
+    private sealed class AvaloniaSlotPart(Visual nodeView, Control element) : ISlotPart, ISlotPartVisibility
     {
         public ISlotComponent? Slot => element.DataContext as ISlotComponent;
 
         public bool IsMeasured => element.Bounds.Width > 0d && element.Bounds.Height > 0d;
+
+        public bool IsVisible => element.IsVisible;
 
         public SlotCenter? MeasureCenter(object? relativeTo)
         {

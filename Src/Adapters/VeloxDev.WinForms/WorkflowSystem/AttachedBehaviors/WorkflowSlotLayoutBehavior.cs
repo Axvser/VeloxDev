@@ -407,11 +407,15 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private sealed class SlotPart(VisualElement nodeView, VisualElement element) : ISlotPart
+    private sealed class SlotPart(VisualElement nodeView, VisualElement element) : ISlotPart, ISlotPartVisibility
     {
         public ISlotComponent? Slot => element.DataContext as ISlotComponent;
 
         public bool IsMeasured => element.Bounds.Width > 0f && element.Bounds.Height > 0f;
+
+        public bool IsVisible
+            => element.Visibility == Easel.Controls.Visibility.Visible
+               && nodeView.Visibility == Easel.Controls.Visibility.Visible;
 
         public SlotCenter? MeasureCenter(object? relativeTo)
         {

@@ -251,6 +251,56 @@ public sealed class WorkflowSurfaceHeadlessTests
         });
 
     [TestMethod]
+    public void SlotLayout_RetriesAfterAVisiblePartIsLaidOut()
+        => Run(() =>
+        {
+            var graph = TestGraph.Create(connect: false);
+            var node = graph.Left;
+            var slot = new Wf.SlotDefaultViewModel { Parent = node };
+            node.Slots.Add(slot);
+
+            var slotBorder = new Border
+            {
+                Name = "PART_Slot",
+                Width = 16d,
+                Height = 16d,
+                DataContext = slot,
+                Margin = new Thickness(8d),
+            };
+            var view = new UserControl { Width = 160d, Height = 90d, DataContext = node, Content = slotBorder };
+            var scope = new NameScope();
+            NameScope.SetNameScope(view, scope);
+            scope.Register("PART_Slot", slotBorder);
+            scope.Complete();
+
+            Behaviors.WorkflowSlotLayoutBehavior.SetSlotNames(view, "PART_Slot");
+            Behaviors.WorkflowSlotLayoutBehavior.SetCoordinateHostName(view, "PART_Canvas");
+
+            // The view is added first so the slot is effectively visible, then the behavior is enabled:
+            // the attachment pass sees a visible part with no bounds yet and must not certify the stamp.
+            var window = new Window { Width = 160d, Height = 90d };
+            var canvas = new Canvas();
+            window.Content = canvas;
+            window.Show();
+            canvas.Children.Add(view);
+            Behaviors.WorkflowSlotLayoutBehavior.SetIsEnabled(view, true);
+            Assert.IsTrue(double.IsNaN(slot.Anchor.Horizontal), "a visible part with no bounds must not write an anchor");
+
+            var onLayoutUpdated = typeof(Behaviors.WorkflowSlotLayoutBehavior).GetMethod(
+                "OnLayoutUpdated",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.IsNotNull(onLayoutUpdated, "WorkflowSlotLayoutBehavior.OnLayoutUpdated exists");
+
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+            onLayoutUpdated!.Invoke(null, new object?[] { view, EventArgs.Empty });
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.IsFalse(double.IsNaN(slot.Anchor.Horizontal), "the layout pass after the slot is laid out must measure it");
+            window.Close();
+        });
+
+    [TestMethod]
     public void SlotLayout_WritesAnchorsFromMeasuredCentres()
         => Run(() =>
         {

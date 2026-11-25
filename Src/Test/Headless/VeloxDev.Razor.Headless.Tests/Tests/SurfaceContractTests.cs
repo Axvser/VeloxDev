@@ -53,4 +53,20 @@ public sealed class SurfaceContractTests
         RequireProperty(typeof(ViewPool), "ItemsSource");
         RequireProperty(typeof(ViewPool), "ItemTemplate");
     }
+
+    [TestMethod]
+    public void SlotPartVisibilityContract_IsOptional_AndCachedPartsAreVisible()
+    {
+        var cached = typeof(WorkflowSlotLayoutBehavior).GetNestedType("CachedSlotPart", BindingFlags.NonPublic);
+        Assert.IsNotNull(cached, "CachedSlotPart exists");
+        Assert.IsTrue(
+            typeof(VeloxDev.WorkflowSystem.ISlotPartVisibility).IsAssignableFrom(cached),
+            "the cached part opts into the optional visibility contract");
+
+        var slot = new VeloxDev.WorkflowSystem.SlotDefaultViewModel();
+        var instance = Activator.CreateInstance(cached!, new object?[] { slot, 1d, 2d });
+        Assert.IsTrue(
+            ((VeloxDev.WorkflowSystem.ISlotPartVisibility)instance!).IsVisible,
+            "JavaScript only sends parts it measured, so a cached part is visible");
+    }
 }

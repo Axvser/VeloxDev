@@ -495,11 +495,13 @@ public sealed class WorkflowSlotLayoutBehavior
         }
     }
 
-    private sealed class MauiSlotPart(ContentView nodeView, VisualElement element) : ISlotPart
+    private sealed class MauiSlotPart(ContentView nodeView, VisualElement element) : ISlotPart, ISlotPartVisibility
     {
         public ISlotComponent? Slot => element.BindingContext as ISlotComponent;
 
         public bool IsMeasured => element.Width > 0d && element.Height > 0d;
+
+        public bool IsVisible => element.IsVisible && nodeView.IsVisible;
 
         public SlotCenter? MeasureCenter(object? relativeTo)
         {
