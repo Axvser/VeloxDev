@@ -134,11 +134,12 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 - 同进程控制台宿主：`Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks` 的 `headed` 模式（**不是 BenchmarkDotNet**），`--adapter avalonia|wpf|winforms|jalium`，入口 `Headed/HeadedBenchmarkRunner.cs`。
 - 独立宿主：`Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.WinUI`（unpackaged WinUI 3，`--adapter winui`）与 `.MAUI`（Windows 目标，`--adapter maui`）。WinUI 宿主运行时用 Windows App SDK **1.8.251003001**：适配器编译在 1.6 上，但 1.6 运行时无法启动 .NET 10 进程（`0xC000027B`），不要把宿主降回 1.6。
 - Razor 例外：`Src/Test/Benchmarks/VeloxDev.Adapters.Benchmarks.Razor` 是 **headless renderer benchmark**（`HtmlRenderer` 驱动真实 `ViewPool`），不是 `IHeadedBenchmarkHost`，不能与有头窗口数字直接横比。
+- **WinUI 宿主的 node 视图是发布模板**：基准 csproj 链接 Trimmed demo 的 `NodeView` / `SlotView` 源文件（模板包 `workflow-node-view` / `workflow-slot-view` 的镜像）编译进来，`SyntheticWorkflow` 的 `SyntheticNode` 提供 `Name` / `InputSlot` / `OutputSlots`，绑定会实例化标题、端口与输出槽行；连线仍 1×1 占位。
 - 每适配器接缝：`IHeadedBenchmarkHost`（`ResetScenarioAsync` / `MeasureInitialAsync` / `MeasureScrollAsync` / `MeasureFullAsync`）。
 - 指标：墙钟（包含 Pool 批次排空 + 一次真实布局/渲染回合，不是 GPU 帧时）、`GC.GetTotalAllocatedBytes`、Gen0/1/2、池的 `Active/Pending/Recycled/Created/Reused/Destroyed`、`VisibleItems`；`ViewPoolCore` 为此公开了 `CreatedViewCount` / `ReusedViewCount` / `DestroyedViewCount`。
 - 结果写 OS 临时目录 `%TEMP%/VeloxDev.Benchmarks/view-pipeline/*.md` 与 `*.json`；一轮先 warmup，再取中位数/P95，不是均值。运行命令与纪律见 `Src/Test/README.md`。
 - 一次只跑一家，别并行驱动多个 UI 进程；WinUI / MAUI 独立宿主直接运行产物，不经过 `dotnet run`。
-- Razor 的 2000 节点 / 3000 连线 / 20 步场景（`HtmlRenderer`，`InProcessEmitToolchain`，依赖图 `-p:Optimize=true`）：Initial 约 0.36 ms / 0.04 MB；每个视口步约 0.88 ms / 0.15 MB。`ViewPool` 的 `OnCollectionChanged` 只排队一次 `Task.Yield` 后的快照 + `StateHasChanged`，不为虚拟化发出的每个 Add/Remove 重渲染。它量的是 renderer 构造渲染树 + 静态 HTML，不含 Blazor 的 DOM patch/JS transport，也不是窗口布局；节点模板比 demo 轻，所以只能同 Razor 自身前后比。BDN optimizer validator 保持开启，依赖未优化时拒绝运行。`--probe` 验证 renderer 重渲染了真实 `ViewPool`。
+- Razor 的 2000 节点 / 3000 连线 / 20 步场景（`HtmlRenderer`，`InProcessEmitToolchain`，依赖图 `-p:Optimize=true`）：Initial 约 0.36 ms / 0.04 MB；每个视口步约 0.88 ms / 0.15 MB。`ViewPool` 的 `OnCollectionChanged` 只排队一次 `Task.Yield` 后的快照 + `StateHasChanged`，不为虚拟化发出的每个 Add/Remove 重渲染。它量的是 renderer 构造渲染树 + 静态 HTML，不含 Blazor 的 DOM patch/JS transport，也不是窗口布局；节点模板比 demo 轻；只能同 Razor 自身前后比。BDN optimizer validator 保持开启，依赖未优化时拒绝运行。`--probe` 验证 renderer 重渲染了真实 `ViewPool`。
 
 **Avalonia 的测量口径**（16 核 Windows、.NET 10.0.12、2000 节点 / 3000 条本地连线、视口 1200×800、20 步、5 轮、自适应策略；节点=Border+Text，连线=1×1 占位，因此是**管线下限**，不是完整 demo 视图的性能）：正常视口约 180–280 个可见项；全量是一次性物化 5001 个视图的最坏情况。
 
@@ -149,10 +150,10 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 | Avalonia | 12.28 | 11.98 | 232.52 | 61.8 |
 | WPF | 9.38 | 4.22 | 262.26 | 43.9 |
 | Jalium | 3.38 | 1.00 | 302.70 | 66.3 |
-| WinUI | 29.40 | 6.00 | 392.53 | 10.0 |
+| WinUI | 29379 | 107.2 | 226270 | 2453 |
 | MAUI | 286.46 | 37.54 | 5070.75 | 357.0 |
 
-MAUI 的 Active 只到 2000/5001，是 overlay 把连线挡在主池外；它的 Full 不能与另外四家按视图数直接横比。
+MAUI 的 Active 只到 2000/5001，是 overlay 把连线挡在主池外；它的 Full 不能与另外四家按视图数直接横比。WinUI 行量的是发布模板（demo NodeView / SlotView），Initial 含每轮 reset 后从 5001 视图回落的代价；其余四家仍是最小模板的管线下限，不可横比。
 
 当前管线的关键成本控制：pending 用 `Queue + HashSet`（增删查 O(1)，移除后留下 tombstone 由出队时跳过）；Avalonia `ViewContainer` 用引用比较 `HashSet<Control>` 做挂载去重，不再 `Children.Contains`；`LinkLayer.IsActive=false` 时完全跳过整集枚举；每批受 `BatchSize=1024` 与 16ms 双重限制。
 

@@ -35,4 +35,17 @@
   <ItemGroup>
     <Compile Include="..\BenchmarkArtifacts.cs" Link="BenchmarkArtifacts.cs" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- 基准量的是发布模板那套视图：链接 Trimmed demo 的 NodeView / SlotView 源文件（workflow-node-view 与
+         workflow-slot-view 的镜像）编译进基准，不在基准里维护私有副本，也不引用 demo 的 App（PRI 冲突）。 -->
+    <Page Include="..\..\..\..\Examples\Workflow\WinUI Trimmed\Demo\Views\Workflow\NodeView.xaml"
+          Link="LinkedViews\NodeView.xaml" />
+    <Compile Include="..\..\..\..\Examples\Workflow\WinUI Trimmed\Demo\Views\Workflow\NodeView.xaml.cs"
+             Link="LinkedViews\NodeView.xaml.cs" />
+    <Page Include="..\..\..\..\Examples\Workflow\WinUI Trimmed\Demo\Views\Workflow\SlotView.xaml"
+          Link="LinkedViews\SlotView.xaml" />
+    <Compile Include="..\..\..\..\Examples\Workflow\WinUI Trimmed\Demo\Views\Workflow\SlotView.xaml.cs"
+             Link="LinkedViews\SlotView.xaml.cs" />
+  </ItemGroup>
 </Project>
