@@ -18,8 +18,10 @@
 - GridSplitter 尺寸没有实际变化时不触发布局。
 - 主题切换原地修改共享画笔颜色，不清空/重建主题字典；`Theme.CreateResourceDictionary` 必须克隆画笔，缺它时第一个宿主改色会污染静态主题。`ResourceBinding` 只订阅元素/链根/表面/命中来源的字典，但父链的 `ParentChanged` 仍要逐个监听（模板部件随后才挂到弹层/列表）。
 - `ColorBrush` 链接源 `SolidColorBrush`：StaticResource 的 Foreground 被 DP 强转后仍跟随主题画笔变色；主题排版样式不要再把 `Text/Muted` 写进 setter，Caption 用透明度表达 muted。
-- Gallery 不重建 shell：每个视图克隆并跟踪主题字典，`GalleryTheme.RefreshPalette` 原地改色；inspector 的标签直接持有 shell 主题源画笔，不重建；只有构造期捕获 `Theme.Current` 的 `DynamicResourceCard`/`CompositionLabView` preview 重建；`GridSplitter` 按 `Theme.Current` 自绘底色。Dark→Light 实测 **0.8ms**（副屏，对比模板化前整壳重建 13.4ms），High contrast 也验证通过；自定义主题的圆角/控件高度等度量仍保留切换前值。
-- 基准 `Src/Test/Performance/Easel.Benchmarks`：1200×800、1× DPI、200 行 ListBox + 20 Button + 8 TextBox + 5 Slider/ProgressBar + ComboBox。模板化前 `886ab07` → 当前：slider 1.86→1.46ms、splitter 1.82→1.69ms、palette toggle 3.92→7.3ms、合成整页重建 14→145ms（Gallery 已不走这条路）。
+- Gallery 不重建 shell：每个视图克隆并跟踪主题字典，`GalleryTheme.RefreshPalette` 原地改色；inspector 的标签直接持有 shell 主题源画笔，不重建；只有构造期捕获 `Theme.Current` 的 `DynamicResourceCard`/`CompositionLabView` preview 重建；`GridSplitter` 按 `Theme.Current` 自绘底色。Dark→Light 实测 **0.8ms**（副屏，对比模板化前整壳重建 13.4ms），High contrast 也验证通过；圆角/控件高度等度量由 `SetThemeMetric` 跟随主题，无需重建。
+- 基准 `Src/Test/Performance/Easel.Benchmarks`（严格 runner，JSON/budget）：1200×800、1× DPI、200 行 ListBox + 20 Button + 8 TextBox + 5 Slider/ProgressBar + ComboBox。模板化前 `886ab07` → 当前：slider 1.476→1.486ms、splitter 4.155→2.553ms、full-frame 3.210→2.383ms、theme-toggle 3.253→2.498ms、build-page 7.246→19.699ms、theme-rebuild 7.094→20.054ms。交互与主题切换已达标/更优。
+- build-page 的剩余差距是结构性的：基线 200 个扁平行，当前保留 200 个 index-stable `ListBoxItem` 容器，只对 ~26 个可见行惰性展开行模板；去掉列表同一页 build ~17ms，是该设计的实测地板，再往下需要窗口虚拟化（分离屏外容器 + spacer + 行高账本）。
+- 全帧渲染用 `Graphics.IsVisible` 剔除屏外子树、纯布局节点不压 GDI+ 状态栈；主题切换原地改画笔 + 直接整帧绘制；行实例复用、BindingPath 描述符缓存、DP 单层内联存储、Grid 轨道复用与模板单次遍历把 build+dispose 分配压到 ~5MB/页。
 
 ## 已接管的控件
 
