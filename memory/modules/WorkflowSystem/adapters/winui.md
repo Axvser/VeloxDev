@@ -41,8 +41,10 @@
 ## 二、平台硬限制（决定了别家能照抄什么）
 
 **L1 · 没有 Preview / 隧道阶段，且指针事件在到达自定义处理器前已被框架标记 handled。**
-滚轮因此只能挂在**画布**上、走冒泡、注册 `handledEventsToo: true`
-（`WorkflowSurfaceBehavior.HookWheel`，理由自陈在它上方的注释）：缩放与普通滚轮共用 `OnSurfaceWheel` ——
+滚轮挂在 **`ScrollContentPresenter`**（覆盖整个视口，且在平台滚动那一层之前冒泡）、拿不到时退回**画布**，
+走冒泡、注册 `handledEventsToo: true`（`WorkflowSurfaceBehavior.HookWheel`）。首次挂接可能早于模板应用，
+模板/尺寸稳定后由 `RefreshWheelBinding` 重估，只在宿主引用变化时退订重挂
+（`SizeChanged` 的 Low 回调、`Refresh`、`OnZoomEnabledChanged`）。缩放与普通滚轮共用 `OnSurfaceWheel` ——
 `Ctrl` 且开着缩放走缩放，其余只路由、不置 `Handled`。代价：
 **一格 Ctrl+滚轮可能先被原生滚动吃掉一点**；普通滚轮的位置与目标都取自**滚动之后**。
 宿主上的 `control.PointerWheelChanged += …` 与
@@ -177,7 +179,7 @@ Razor 与 WinForms 则把它放进了适配器
 
 **「没有预览相」怎么接**：
 
-- **挂滚动容器本身会漏，挂滚动容器的内容就不漏。** 没有隧道相时，`handledEventsToo` 也救不回来：`Handled` 在 `ScrollContentPresenter` 已经滚完之后才跑（实测一格漏 **74 DIP**，且改前若照旧挂容器，接管后会是 148 = 原生 + 自己那份）。改挂 `state.Canvas`（画布）之后，它在冒泡路径上**早于 presenter**，`Handled` 真的挡得住 —— 实测一格 **74**、四格 **296**，与基线逐字相同，**泄漏 0**。
+- **挂滚动容器本身会漏，挂 `ScrollContentPresenter`（拿不到时退回画布）就不漏。** 没有隧道相时，`handledEventsToo` 也救不回来：`Handled` 在 `ScrollViewer` 上跑时 presenter 已经滚过一段（实测一格漏 **74 DIP**，且接管后会是 148 = 原生 + 自己那份）。presenter 在 `ScrollPresenter` 之内、平台滚动之前冒泡，`Handled` 挡得住；拿不到 presenter 时退回画布（同样早于 presenter），实测一格 **74**、四格 **296**，**泄漏 0**。
 - **步长** 这家自己的 `ScrollViewer` 一格 **74 DIP**（线性：1 格 74、4 格 296）。
 - **基线**：普通滚轮竖滚 74；**Shift+滚轮也竖滚**（这家原生忽略 Shift，与 WPF/Jalium/MAUI/WinForms 同；只有 Avalonia 与浏览器原生横滚）。
 - **`VirtualKey` 实测**（反射）：`LeftShift=160 / RightShift=161 / LeftControl=162 / RightControl=163 / LeftMenu=164 / RightMenu=165 / LeftWindows=91 / RightWindows=92`，而 A–Z `65–90`、Number0–9 `48–57`、F1–F12 `112–123` ⇒ 八个修饰键都在算术区间外。⚠ **这家把 Alt 拼作 `Menu`**，所以是 `LeftMenu → LeftAlt`。

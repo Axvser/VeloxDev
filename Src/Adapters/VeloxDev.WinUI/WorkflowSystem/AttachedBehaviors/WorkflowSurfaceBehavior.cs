@@ -192,6 +192,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         ApplyLayout(host, state);
         UpdateVisibleRegion(host, state);
         QueueViewportRestore(host, state);
+        // Loaded / 数据树切换时模板可能已经建好；没建好时这里是无操作，由 SizeChanged 的延迟重估兜底。
+        RefreshWheelBinding(state);
     }
 
     // 连线右键菜单：**条目由模板声明**（挂在 LinkMenuKey 上），**接线在这里** —— 订输入面、定位、弹出、
@@ -566,6 +568,25 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         HookWheel(state);
     }
 
+    // 首次 HookWheel 可能发生在 ScrollViewer 模板应用之前：此时找不到 ScrollContentPresenter，
+    // 会退回 Canvas。模板/布局稳定后要再估一次；只在宿主引用真的变了时才退订重挂，
+    // 避免每次 SizeChanged 都把处理器摘掉再挂上。
+    private static void RefreshWheelBinding(SurfaceState state)
+    {
+        var desired = (UIElement?)FindScrollContentPresenter(state.ScrollViewer) ?? state.Canvas;
+        if (state.WheelHandler is not null && ReferenceEquals(desired, state.WheelHost))
+        {
+            return;
+        }
+
+        if (state.WheelHandler is null && desired is null)
+        {
+            return;
+        }
+
+        RehookWheel(state);
+    }
+
     private static void OnZoomEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not UserControl control || control.GetValue(StateProperty) is not SurfaceState state)
@@ -576,7 +597,7 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
         // 滚轮的挂接与这个开关无关（汇报永远要发，缩放与否在处理器里判），这里只保证它还在：
         // 换滚动容器时解析路径会重新挂，而只改开关时补一次是幂等的。
         _ = e;
-        HookWheel(state);
+        RefreshWheelBinding(state);
     }
 
     // 挂在下代（画布）而不是 SCROLLVIEWER 自己：这家没有隧道相，`ScrollPresenter` 在**冒泡路径上比
@@ -1388,6 +1409,8 @@ public sealed class WorkflowSurfaceBehavior : DependencyObject
                 return;
             }
 
+            // 模板与内容呈现器在布局趟之后才稳定；此时再估一次宿主，只在引用变化时重挂。
+            RefreshWheelBinding(currentState);
             if (host.DataContext is ITreeComponent viewModel)
             {
                 UpdateMinimapOverlay(viewModel, currentState);
