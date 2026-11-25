@@ -45,8 +45,7 @@
 走冒泡、注册 `handledEventsToo: true`（`WorkflowSurfaceBehavior.HookWheel`）。首次挂接可能早于模板应用，
 模板/尺寸稳定后由 `RefreshWheelBinding` 重估，只在宿主引用变化时退订重挂
 （`SizeChanged` 的 Low 回调、`Refresh`、`OnZoomEnabledChanged`）。缩放与普通滚轮共用 `OnSurfaceWheel` ——
-`Ctrl` 且开着缩放走缩放，其余只路由、不置 `Handled`。代价：
-**一格 Ctrl+滚轮可能先被原生滚动吃掉一点**；普通滚轮的位置与目标都取自**滚动之后**。
+`Ctrl` 且开着缩放走缩放；其余在内层无可滚余量时置 `e.Handled` 拦下平台滚动再路由（普通滚轮的位置与目标取自**本笔滚动之前**）。代价：**Ctrl+滚轮那一支不置 `Handled`，平台滚动仍可能发生**。
 宿主上的 `control.PointerWheelChanged += …` 与
 `control.AddHandler(UIElement.PointerWheelChangedEvent, …, true)` **都是两格 0 行** —— 这家从不把滚轮交给宿主；
 并进滚动容器这一支（见 §三点五）。挂接不跟 `ZoomEnabled` 走（`HookWheel`/`state.WheelHandler`）：
@@ -90,12 +89,12 @@ WPF 的 `LayoutUpdated` 是整棵树一次 layout pass、天然 post-arrange（�
 |---|---|---|
 | 可见区域/虚拟化重算（`UpdateVisibleRegion`） | `Low`（`UpdateVisibleRegion` 的 `TryEnqueue`） | `ReferenceEquals(currentState, state)` |
 | 一批视图的物化（`ViewPoolCore.ScheduleNextBatch`） | `Normal` 连续泵送；累计 48ms 后下一批 `Low` 让一帧（`ViewScheduler`） | 入队返回值交给池复位 `scheduled`；批大小/预算由 `AdaptiveViewPoolPolicy` 决定 |
-| 槽位同步的非布局触发（`WorkflowLayoutBatch.Schedule`） | `Normal`（`WorkflowSlotLayoutBehavior.RequestSync` 传入的 post） | 入队返回值交给批次复位 `scheduled`；`Syncing` 守卫（`WorkflowSlotLayoutBehavior.Sync`） |
+| 槽位同步的非布局触发（`WorkflowLayoutBatch.Schedule`） | `Normal`（`WorkflowSlotLayoutBehavior` 的 `WinUiSlotMeasurementHost.Post` 传入的 post） | 入队返回值交给批次复位 `scheduled`；只有完整跑完的一趟才认指纹，没测全的不认（`WorkflowLayoutBatch.Flush`） |
 | 小地图在 `ScrollViewer` 尺寸变化后的重算 | `Low`（`WorkflowMinimapOverlay.OnScrollViewerResized`） | —— |
 
 在任何「异步重算 + 下一帧才生效」的宿主上，「排到低优先级」与「落地时确认自己还是当前那份状态」必须成对出现。
 
-**物化泵的边界**：`ViewScheduler.Pump` 迭代执行批尾续排的下一批、不递归；`Schedule` 自身只投递、从不调用 `batch`。
+**物化泵的边界**：`ViewScheduler` 把批次交给 Core 的 `ViewBatchPump`（迭代执行批尾续排、不递归）；`Schedule` 自身只投递、从不调用 `batch`；低优先级重投被拒（调度器关闭）时就地跑完剩余批。
 
 **这张表的代价**：`Low` 只在 Normal 队列空的时候才跑；持续每帧干活的动画会把表里仍排 `Low` 的那些饿住
 （TransitionSystem 对可见性一无所知，见 §四·P9；每个动画还各占一个自己重装填的
@@ -266,10 +265,8 @@ WHEEL handled=True delta=-120 | INNER off=(0,12) max=(0,12)   ← 仍然 True
 适用于「画布尺寸能覆盖内容」的模板。两条路都行，共同点是**不要按画布尺寸裁线**；skill `gui/winui.md` 的
 「Do not bind the link view's `Width`/`Height` to the canvas element.」仍成立。
 
-**P4 · `Sync` 的 `Syncing` 守卫是 try/finally。**
-`WorkflowSlotLayoutBehavior.Sync`，注释就在 `state.Syncing = true` 上方：`TransformToVisual` 抛异常时不能让守卫留在
-已置位状态，否则槽位同步**永久停止且不报错**。同族的 `SyncSlotEnumerator` 用 `ActualWidth <= 0`
-判断「还没测量」并排 Low 重试 —— 这两个守卫一起保证「测量失败 ≠ 停止同步」。
+**P4 · `MeasureParts` 的 `_measuring` 守卫是 try/finally。**
+`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/SlotLayout/SlotLayoutPipelineCore.cs` 的 `MeasureParts`：`_measuring` 在 `finally` 里复位；异常跳过复位会让它停在已置位状态、槽位同步**永久停止且不报错**。`WinUiSlotPart.MeasureCenter` 另吞掉 `TransformToVisual` 的 `ArgumentException` 并返回 null（流水线退回节点局部空间）；未测量的部件由 `ISlotPart.IsMeasured`（`ActualWidth/Height > 0`）判出，`ScheduleRetry` 排 Low 重试。
 
 **P5 · 名称解析失败是静默的。** `FindName` 找不到就返回 `null`，行为退化成「没有缩放 / 没有小地图」，
 不抛异常（`ResolveNamedControls`）。所以改模板布局后一定要调 `Refresh(UserControl)`（`Refresh`）。
@@ -281,10 +278,9 @@ WHEEL handled=True delta=-120 | INNER off=(0,12) max=(0,12)   ← 仍然 True
 视图池这一侧由 `ViewScheduler.Schedule` 返回 `TryEnqueue` 的真实结果，池在 `false` 时立刻复位 `scheduled`；
 `UpdateVisibleRegion` 同样在拒绝时复位并 `Debug.WriteLine`。若不复位，队列关闭时回调永远不跑 ⇒ 旗标永远立着
 ⇒ 之后每次调用都在第一行返回 ⇒ **画布一个视图都不会再加**。**症状很好认：小地图照旧画（它读的是模型，不是这批视图），画布上节点/连线却没了。**
-同族还有两处同样丢返回值、但没有旗标（
-`WorkflowSlotLayoutBehavior.SyncSlotEnumerator` 的重试入队、`WorkflowMinimapOverlay.OnScrollViewerResized`）：它们只丢一次更新，下一次事件会补上。槽位同步那条已并入 Core 的 `WorkflowLayoutBatch`：`post` 返回 `TryEnqueue` 的真实结果，`Schedule` 在 `false` 时复位 `scheduled`，不再是「丢一次」。
-**这条与本文件 P4 是同一个教训**（「已置位状态……永久停止且不报错」），该家自己的正确范形在 `SyncSlotEnumerator`：
-用可判定的条件（`ActualWidth <= 0`）判断「还没测量」并**排 Low 重试**。
+同族还有一处丢返回值、但没有旗标：`WorkflowMinimapOverlay.OnScrollViewerResized`（`TryEnqueue` 结果不查）—— 它只丢一次更新，下一次事件会补上。槽位同步那条走 Core 的 `WorkflowLayoutBatch`：`post` 返回 `TryEnqueue` 的真实结果，`Schedule` 在 `false` 时复位 `scheduled`；`WorkflowSlotLayoutBehavior.ScheduleRetry` 用 `state.RetryQueued` 旗标，拒绝时同样复位。
+**这条与本文件 P4 是同一个教训**（「已置位状态……永久停止且不报错」），该家自己的正确范形在 `ScheduleRetry`：
+用可判定的条件（`ISlotPart.IsMeasured`）判断「还没测量」并**排 Low 重试**。
 
 **这一症状的成因在 Core 的空间索引，不在本家**：**只要 Agent 对话进行中，节点/连线就可能概率消失**，
 可见元素数量也未必实时同步，且**重入 Viewport 也救不回来**。
