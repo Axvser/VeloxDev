@@ -46,7 +46,7 @@ WPF 把七个视图角色**一对一**落成一组实现（视图池的挂点是
 ### 2.2 XAML 名字作用域是 UserControl 级，且不跨 `DataTemplate`
 
 - 画布宿主的部件**全部靠字面名字找**：名字存在附着属性里，解析一律 `control.FindName(name)`（`WorkflowSurfaceBehavior.cs` 的 `ResolveNamedControls`）。⇒ `PART_ScrollViewer` 这些名字必须与宿主在**同一个 UserControl 的 XAML** 里。
-- `DataTemplate` 里的元素**不在**这个作用域。所以节点模板内部的部件只能靠 `ItemsControl.ItemContainerGenerator.ContainerFromIndex(i)` 拿容器再下钻视觉树（`WorkflowSlotLayoutBehavior.cs` 的 `SyncSlotEnumerator`，下钻在 `FindDescendantWithSlotDataContext`）—— **同一个 `FindName` 在这里永远返回 null**。
+- `DataTemplate` 里的元素**不在**这个作用域；节点模板内部的部件只能靠 `ItemsControl.ItemContainerGenerator.ContainerFromIndex(i)` 拿容器再下钻视觉树（`WorkflowSlotLayoutBehavior.cs` 的 `WpfSlotPartLocator.FindEnumeratedSlots`，下钻在 `FindDescendantWithSlotDataContext`）—— **同一个 `FindName` 在这里永远返回 null**。
 - 反过来：`Window.FindName` 看不进 `UserControl` 的作用域。小地图必须自己沿视觉树上溯找到 `UserControl` 再 `uc.FindName`（`WorkflowMinimapOverlay.cs` 的 `OnLoaded`，注释里明写这条限制）。
 
 ### 2.3 `ScrollViewer` 的 extent 是懒的：读之前必须强制 layout
@@ -97,7 +97,7 @@ else Dispatcher.BeginInvoke(InvalidateVisual);
 
 `ViewScheduler` 把每一批物化交给 `Dispatcher.BeginInvoke(DispatcherPriority.Background)`（`ViewHosting/ViewScheduler.cs`），批大小与时间预算由 Core 的 `AdaptiveViewPoolPolicy` 决定（初始 64 个 / 8ms，按吞吐与 pending 收敛到 8/12/16ms），**再排下一批**。`Background` 的语义是「只在更紧急的消息处理完之后跑」，所以创建被摊进消息泵的空隙里。
 
-这条**只在有 `DispatcherPriority` 的三家成立**（WPF / Avalonia / Jalium 都是 `DispatcherPriority.Background`）。MAUI 的等价物是把批次连续 `Dispatcher.Dispatch`，累计 32ms 后用一个 16ms 一次性定时器让出一帧（`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewScheduler.cs`，回调与 Tick 都自带 try）；WinForms 把批次交给 `Control.BeginInvoke`（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/ViewHosting/ViewScheduler.cs`），两者都是 `NonPriority`。WinUI 用 `DispatcherQueuePriority.Low`。批大小六家都走 Core 的 `AdaptiveViewPoolPolicy`（WPF 初始 64/8ms）;
+这条**只在有 `DispatcherPriority` 的三家成立**（WPF / Avalonia / Jalium 都是 `DispatcherPriority.Background`）。MAUI 的等价物是把批次连续 `Dispatcher.Dispatch`，累计 32ms 后用一个 16ms 一次性定时器让出一帧（`Src/Adapters/VeloxDev.MAUI/WorkflowSystem/ViewHosting/ViewScheduler.cs`，回调与 Tick 都自带 try）；WinForms 把批次交给 `Control.BeginInvoke`（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/ViewHosting/ViewScheduler.cs`），两者都是 `NonPriority`。WinUI 用 `DispatcherQueuePriority.Normal` 连续泵送，累计 48ms 后下一批回 `Low`（`Src/Core/VeloxDev.Core/WorkflowSystem/ViewHosting/ViewBatchPump.cs` 的 `Pump`）。批大小六家都走 Core 的 `AdaptiveViewPoolPolicy`（WPF 初始 64/8ms）;
 
 ### 2.9 自带手势的否决：按下在宿主隧道相路由一次，句柄存表面，节点/插槽只读
 

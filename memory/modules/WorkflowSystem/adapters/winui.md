@@ -87,13 +87,15 @@ WPF 的 `LayoutUpdated` 是整棵树一次 layout pass、天然 post-arrange（�
 | 延后的事 | 档位 | 重校验 |
 |---|---|---|
 | 可见区域/虚拟化重算（`UpdateVisibleRegion`） | `Low`（`UpdateVisibleRegion` 的 `TryEnqueue`） | `ReferenceEquals(currentState, state)` |
-| 一批视图的物化（`ViewPoolCore.ScheduleNextBatch`） | `Low`（`ViewScheduler.Schedule`） | 入队返回值交给池复位 `scheduled`；批大小/预算由 `AdaptiveViewPoolPolicy` 决定 |
+| 一批视图的物化（`ViewPoolCore.ScheduleNextBatch`） | `Normal` 连续泵送；累计 48ms 后下一批 `Low` 让一帧（`ViewScheduler`） | 入队返回值交给池复位 `scheduled`；批大小/预算由 `AdaptiveViewPoolPolicy` 决定 |
 | 槽位同步的非布局触发（`WorkflowLayoutBatch.Schedule`） | `Normal`（`WorkflowSlotLayoutBehavior.RequestSync` 传入的 post） | 入队返回值交给批次复位 `scheduled`；`Syncing` 守卫（`WorkflowSlotLayoutBehavior.Sync`） |
 | 小地图在 `ScrollViewer` 尺寸变化后的重算 | `Low`（`WorkflowMinimapOverlay.OnScrollViewerResized`） | —— |
 
 在任何「异步重算 + 下一帧才生效」的宿主上，「排到低优先级」与「落地时确认自己还是当前那份状态」必须成对出现。
 
-**这张表有一个代价**：`Low` 只在 Normal 队列空的时候才跑，所以**任何持续每帧干活的动画都会把上表全部饿住**
+**物化泵的边界**：`ViewScheduler.Pump` 迭代执行批尾续排的下一批、不递归；`Schedule` 自身只投递、从不调用 `batch`。
+
+**这张表的代价**：`Low` 只在 Normal 队列空的时候才跑；持续每帧干活的动画会把表里仍排 `Low` 的那些饿住
 （TransitionSystem 对可见性一无所知，见 §四·P9；每个动画还各占一个自己重装填的
 `DispatcherQueueTimer`，没有合并）。症状不是「画错了」，而是**延迟**：节点/连线物化慢一拍、
 可见区域重算落后、新连线不出现 —— **「迟迟不出现」和「一直看不到」是同一个开关**，只是排队时长不同。
