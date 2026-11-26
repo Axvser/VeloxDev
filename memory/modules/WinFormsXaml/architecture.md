@@ -1,6 +1,6 @@
 ﻿# VeloxDev.WinForms.Xaml — 架构
 
-> 包：`VeloxDev.WinForms`（适配器 + XAML 运行时）与 `VeloxDev.WinForms.Generator`（专属生成器），同为 **12.0.0**。
+> 包：`VeloxDev.WinForms`（适配器 + XAML 运行时）与 `VeloxDev.WinForms.Generator`（专属生成器），同为 **12.4.0**。
 > 代码：`Src/Adapters/VeloxDev.WinForms/Xaml/`（运行时）、`Xaml/Primitives/`（共享原语，命名空间仍是 `...Xaml.Controls`）、`Xaml/Visuals/`（视觉基类、绑定、样式、资源、宿主）与 `Xaml/Visuals/Controls/`（视觉控件）；生成器在 `Src/Generators/VeloxDev.WinForms.Generator/`；工作流表面在 `WorkflowSystem/AttachedBehaviors/`。
 > 定位：**一套视觉 XAML 后端**。控件是 `VisualElement`，`VisualHost` 是唯一 HWND；不是 WPF 兼容层。
 > 面向消费者的运行时手册在 `skills/veloxdev-create-workflow/references/practices/gui/winforms-xaml.md`；动画在 `skills/veloxdev-create-animation/references/practices/winforms-xaml.md`。
@@ -9,7 +9,7 @@
 ## 一、运行时
 
 | 文件 | 类型 | 职责 |
-|---|---|---|
+| --- | --- | --- |
 | `Primitives/Thickness.cs` / `LayoutPrimitives.cs` / `TextPrimitives.cs` | `Thickness` / `GridLength` / `RowDefinition` / `ColumnDefinition` / 布局枚举 | 布局值类型与枚举，全部在 `VeloxDev.WinForms.Xaml.Controls` |
 | `Primitives/XamlDrawing.cs` | `internal XamlDrawing` | 自绘 chrome 辅助（环外轮廓 -0.5） |
 | `Primitives/PathGeometry.cs` | `Shapes.SvgPathParser` | `<Path Data>` 的 SVG 子集解析 |
@@ -41,7 +41,7 @@
 - **输入**：`VisualHost` 命中测试最深元素，事件沿 `ParentElement` 冒泡；焦点是逻辑焦点，`FocusElement` 把原生焦点留在 Host 上，Tab 在焦点链里走。指针捕获、Enter/Leave、滚轮、文本输入都集中在 Host。
 - **`ContentControl`** 的 `ContentTemplate` 只作用于非 `VisualElement` 内容：模板创建视觉并设 `DataContext = Content`；`VisualElement` 内容直通。解析顺序：presenter 自己的 selector → 自己的 `ContentTemplate` → `TemplatedParent` 的 selector → `ContentTemplate` → 文本投影。`ContentTemplateSelector`（`DataTemplateSelector`）拿到原始 `Content`；`ContentStringFormat` 只在文本投影路径按当前文化 `string.Format`。`ContentControl.Template` 走 `VisualControlTemplate`，与内容模板是两条路。
 - **`ScrollViewer` 是 `ContentControl`**：默认模板（`DefaultTemplate`）是 `Grid`：星号主格放 `ScrollContentPresenter(PART_ScrollContentPresenter)`，右列/下行各是 `Auto` 轨道放 `ScrollBar(PART_HorizontalScrollBar`/`PART_VerticalScrollBar)`，两条占用视口而不是覆盖内容；调用方 `Template` 或样式模板优先于默认 chrome。`ScrollContentPresenter` 按视口宽、纵向不设限量内容，裁切并偏移，并实现 `IScrollInfo`；`ScrollBar` 负责拇指/轨道/键盘、可选模板部件（`PART_Track`/`PART_Thumb`/`PART_*RepeatButton`）与按住自动翻页。`CanContentScroll=true` 且内容是 `IScrollInfo` 时，extent/offset/滚轮/分页都交给内容自己的单位。外部相机模式（`IsExternalScroll` + `SetExternalOffset`）只让 presenter 报范围、不偏移内容，条的手势转成 `ScrollOffsetRequested`。
-- **`TextBox`** 自绘插入符/选区/剪贴板，聚焦时默认用 `NativeControlHost` + 原生 `System.Windows.Forms.TextBox` 岛处理 IME/无障碍；`UseNativeEditor=false` 时聚焦也走自绘（DP、模板、绑定、撤销全保留，只失去 IME 组合与原生无障碍 peer）。其余控件（`RichTextBox`、`ComboBox`、`Calendar` 等）都是纯视觉控件；唯一的另一条原生路径是显式 `NativeControlHost`。
+- **`TextBox`** 自绘插入符/选区/剪贴板，默认全程走视觉路径（DP、模板、绑定、撤销全保留）；`UseNativeEditor=true` 时才用 `NativeControlHost` + 原生 `System.Windows.Forms.TextBox` 岛兜底 IME/无障碍，代价是失去视觉路径的选区/插入符外观。选区高亮、选中文字颜色、插入符颜色/粗细/闪烁周期由 `SelectionBrush`/`SelectionForeground`/`CaretBrush`/`CaretThickness`/`CaretBlinkInterval` 五个 DP 定制，只作用于自绘路径；原生岛显示时选区和插入符由系统绘制。聚焦的空字段不画占位文字。其余控件（`RichTextBox`、`ComboBox`、`Calendar` 等）都是纯视觉控件；另一条原生路径是 `native:`（`NativeElement`）与显式 `NativeControlHost`。
 - **`DataContext`** 是 inherited 属性；没有本地层时从 `ParentElement` 解析，祖先切换向无本地值的后代补发 `Inherited` 变更；子树换父级时 `VisualElement.OnParentChanged` 也给自身与后代补这一跳。绑定只监听本元素的 DataContext 变化，少了这一跳，预构造的嵌套子树挂到有上下文的父级后会一直停在空源上（如 XAML 视图里的按钮 `Command` 绑定）。
 - **覆盖层**：`VisualHost` 在根树之后绘制、之前命中铺满客户区的覆盖层；`VisualPopup` 挂进去，不受祖先 `ScrollViewer.Clip` 裁切。弹层脱离根树，打开时把目标 `DataContext` 以 `Inherited` 层推给内容。
 - **`RichTextBox`** 用扁平字符缓冲，每字符带 `RichTextStyle`；绘制必须走 `VisualText.Draw`。
@@ -56,7 +56,7 @@
 - `[XamlProperty]`：partial 属性 → 静态 `DependencyProperty` + CLR 包装；`[XamlAttachedProperty]`：静态 partial `GetX`/`SetX` → `RegisterAttached`。
 - 没有 `DefaultValue` 时写 `default(T)`；非可空引用类型必须给 `DefaultValue` 或声明可空，否则报 `VELOX_XAMLP005`。
 - `*.xaml`（`AdditionalFiles`）→ `private void InitializeComponent()`（普通方法，不要求/不生成 partial 声明）。
-- **前缀解析**：不带前缀按视觉后端找 —— `Xaml.Visuals.Controls` → `.Visuals.Controls.Shapes` → `.Visuals` → 共享原语；`local:` 是调用方类型；历史 `v:` 是别名；`native:`/`System.Windows.Forms` 被拒。找不到报 `VELOX_XAML019`（Error）。
+- **前缀解析**：不带前缀按视觉后端找 —— `Xaml.Visuals.Controls` → `.Visuals.Controls.Shapes` → `.Visuals` → 共享原语；`local:` 是调用方类型；历史 `v:` 是别名；`native:` 是内置前缀（不用写 `xmlns:native`，生成器解析前补声明）并包成 `NativeElement<T>`：布局/附加属性写包装元素，CLR 属性与事件写原生控件；CLR 属性绑定经 `NativePropertyBinding.For` 的代理 DP，`Mode=TwoWay` 按 `INotifyPropertyChanged` → `XxxChanged` → `Application.Idle`/200ms 兜底回读；原生 `Enter`/`Leave` 触发包装元素的逻辑 `GotFocus`/`LostFocus`，`LostFocus` 触发器与视觉目标一致。原生子级在生成期包进隐式纵向 `StackPanel`。找不到报 `VELOX_XAML019`（Error）。
 - 视觉根必须派生自 `VisualElement`；单内容容器（`UserControl`/`ContentControl`/`ScrollViewer`）的子元素生成 `Content =`，其余 `Add`；有 `Items` 的父级写 `Items.Add`。
 - `x:Name` 生成字段并写 `VisualElement.Name`；模板里注册进 `VisualNameScope`。显式 `Name="..."` 后写覆盖。
 - 资源：标量、空元素对象（`<local:Selector x:Key="..." Template="{StaticResource ...}" />`）、`<Style>`、`<ControlTemplate>`、`<DataTemplate>`。keyed `DataTemplate` 编成工厂存进 `Resources`；`<DataTemplate>` 也可直接作 `ItemsControl.ItemTemplate`。`{DynamicResource}` 报诊断。
@@ -67,9 +67,11 @@
 
 ## 三、边界与不变量
 
-- 支持：视觉控件树、DP/附加属性、`DataContext` 继承、OneWay/TwoWay/OneTime 绑定、Converter/StringFormat/Fallback/TargetNull、资源、显式/隐式 `VisualStyle`、样式/模板触发器与 enter/exit 动作、`ControlTemplate` + `ContentPresenter`、`ContentTemplate`、`ItemsControl.ItemTemplate`、keyed `DataTemplate`、`ScrollViewer` 默认/自定义模板与 `ScrollBar` 模板部件、`VisualPopup`/`VisualMenu`、`NativeControlHost`、DPI、`Theme`。
-- 不支持：设计器/热重载、`ElementName`/校验规则、`DynamicResource`、可变行高虚拟化、每条关键帧独立 `Ease`、`CommandBinding`/`InputBindings`、`NativeControlHost` 被变换/裁剪/混色。
-- **一个视觉父级只接受 `VisualElement` 子元素**；`native:` 与 `System.Windows.Forms` 控件不进视觉树，只能经 `NativeControlHost` 作矩形轴对齐岛。
+- 支持：视觉控件树、DP/附加属性、`DataContext` 继承、OneWay/TwoWay/OneTime 绑定、Converter/StringFormat/Fallback/TargetNull、资源、显式/隐式 `VisualStyle`、样式/模板触发器与 enter/exit 动作、`ControlTemplate` + `ContentPresenter`、`ContentTemplate`、`ItemsControl.ItemTemplate`、keyed `DataTemplate`、`ScrollViewer` 默认/自定义模板与 `ScrollBar` 模板部件、`VisualPopup`/`VisualMenu`、`NativeElement`（`native:`，窗区域圆角/弹层挖洞、`IsSnapshot` 快照）、`NativeControlHost`、`VirtualizingPanel`（回收式可见窗）、`DataGridColumn.CellTemplate`/`CellFactory`、`SpatialGridHashMap`/`SpatialVirtualization`、DPI、`Theme`。
+- 不支持：设计器/热重载、`ElementName`/校验规则、`DynamicResource`、可变行高虚拟化、树虚拟化、每条关键帧独立 `Ease`、`CommandBinding`/`InputBindings`、原生岛被变换/裁剪/混色、原生 CLR 属性绑定、原生控件直接套原生控件。
+- **原生控件经 `NativeElement` 进视觉树**（`native:` 直接写）：它量 `GetPreferredSize`、按 `Bounds` 摆放、仍是矩形轴对齐 HWND 岛；`Content` 由挂在原生控件上的嵌套 `VisualHost` 画在 `DisplayRectangle` 内；多个原生子级由生成器包进隐式纵向 `StackPanel`。`CornerRadius` 用 `SetWindowRgn` 圆角化窗口；打开的弹层用 `RGN_DIFF` 从岛的区域里挖掉自己的矩形。没有 `INotifyPropertyChanged`/`XxxChanged` 的原生属性由控件显式调用 `NativePropertyBinding.NotifyChanged` 回报（不轮询）。`IsSnapshot=true` 时摘掉 HWND、把 `DrawToBitmap` 位图画进视觉管线，`Opacity`/`Transform`/`Clip` 这才生效；有 Form 时配一个 `Opacity=1/255` 的 owned 输入代理（0 会点击穿透）：透明度/平移精确，缩放按缩放后尺寸重排控件，旋转用多边形窗口区域保持整控件可点（内部命中与 IME 位置近似）。活体的 `CornerRadius` 只是二值窗区域裁切，原生边框在角上被切断；快照模式按圆角路径裁位图，`BorderBrush`/`BorderThickness` 只在快照模式画在内侧（盖住原生边框与角上的弧线）。
+- **对话框与窗口 chrome**：`VisualDialog` 在 overlay 里铺 40% 遮罩（高对比 60%）+ 居中卡片（Surface/1px 边框/12 圆角/阴影），打开时隐藏原生子 HWND、关闭按原位恢复；焦点锁在顶层对话框、Tab 循环、Enter 主按钮、Esc 取消，多对话框堆叠。`VisualTitleBar` + `WindowChrome` 把 Form 设为无边框：空白标题区返回 `HTCAPTION`（Windows 负责拖动/吸附/拖回还原），按钮与可聚焦元素返回 `HTCLIENT`，未最大化时 8 DIP 边缘返回 `HT*`，最大化按工作区，DWM 圆角尽力而为。
+- **虚拟化与空间索引**：`VirtualizingPanel`（`ItemExtent` 统一行高、可见窗、回收池、`IScrollInfo`）支撑 `VirtualList`（`ItemHeight` 是别名）；DataGrid 只有设 `CellTemplate`/`CellFactory` 的列把可见单元格实现成元素（行的 item 是 DataContext），其余单元格仍自绘。`Easel.Visuals.Spatial` 的 `SpatialGridHashMap<T>`/`SpatialVirtualization<T>` 用 `RectangleF` 做视口与深度查询；Easel 布局不发 bounds-changed 事件，`VisualSpatialBoundsProvider` 需显式 `Refresh()`。
 - `VisualTemplateSelector` 是 item → 元素的唯一接缝；`VisualStyle` 是描述不是活对象，改已应用样式的集合不会自动重应用。
 - `VisualElement.Resources` 与 `VisualHost.Resources` 是普通 `ResourceDictionary`；静态资源在构造期解析，键必须先声明。
 
@@ -88,17 +90,31 @@
 - **WPF 语义补齐**：`Binding` 支持 `FindAncestor`/`AncestorLevel`、`PropertyChanged`/`LostFocus`/`Explicit`、`OneWayToSource`/`Default`、`ValidatesOnExceptions`/`DataErrors`/`NotifyDataErrors` 与 `ConverterCulture`；资源改为按目标元素链解析并支持 `DynamicResource`；`DataTemplate`/`ItemTemplate`/`ItemsPanelTemplate` 有独立名字作用域；支持附加属性 property element、直接 `Style` setter/trigger、`ItemsPanel`/`ItemsPresenter`/`IsItemsHost`，不支持的触发器/模板显式报 `VELOX_XAML004`。
 - **渲染与输入属性是 DP**：`Opacity`/`Transform`/`Clip`/`ClipToBounds`/`Effect`/`CacheAsBitmap` 在 `VisualElement` 上有 DP 覆盖；`FontSize`/`FontFamily`/`FontWeight` 继承，`Foreground` 以 Brush 存储、保留 Color 访问器；`IsEnabled` 继承，`TabIndex`/`IsTabStop` 参与焦点顺序。
 - **控件模板**：`TemplatedControl`/`ButtonBase`/`ItemsControl`/TextBox/RichTextBox/ComboBox/Menu/Calendar/DatePicker/TreeView/VirtualList 都应用 `Template` 与模板触发器；TextBox 的 `PART_ContentHost` 原生编辑器只能覆盖定位（HWND 不随视觉变换/裁剪），RichTextBox/ComboBox 等缺必需部件显式抛 `InvalidOperationException`。剩余边界：VirtualList 无逐行容器、TreeView 无虚拟化、templated Menu 的下拉仍自绘。
+- **3D 投影滤波按局部足迹**：`Visual.DrawProjected` 走 `VisualProjectionFilter.Sample`——足迹 ≥1.1 各向异性面积（每轴 1..4）、≤0.9 Catmull-Rom、其余双线性，源矩形边缘仍 2×2 覆盖率；1x 源对 4x 内容仍差约 20 dB，源分辨率是上限。回归：`ProjectionFilterTests`。
 - **动画类型**：`Matrix`/`RectangleF?` 已注册采样器；`bool` 不是可动画类型，`ClipToBounds`/`CacheAsBitmap` 等 bool 过渡显式抛 `NotSupportedException`，无采样器的属性不会被接受后冻结。旧 native XAML profile 已删除。
 - **`CanContentScroll` 的单位由内容决定**：内容是 `IScrollInfo` 时，`ScrollViewer` 用它报告的 extent/viewport/offset 驱动两条条与滚轮/分页，presenter 只负责测量/裁切并把自身偏移归零；`VirtualList` 仍是像素滚动，尚未实现按项的逻辑单位。回归：`ScrollViewer_CanContentScrollUsesTheContentsScrollInfo`。
 - **原生 TextBox 不支持透明背景**：`TextBox.ApplyNativeProperties` 通过 `ResolveNativeBackground` 取自身或最近不透明祖先的颜色（兜底 `Theme.Current.ControlBackground`）。把视觉层的 `Transparent` 直接写进 `_editor.BackColor` 会抛 `ArgumentException: 控件不支持透明的背景色`。回归：`TextBox_TransparentBackgroundFallsBackToTheNearestOpaqueAncestor`。
 - **`PathGeometry.Parse` 的每个 `M` 必须 `StartFigure`**（再补零长度段把起点挪到 M 坐标）；当成 `L` 会在子路径间画连接线，白色描边就成了横穿字形的割线。回归：`Path_MultipleMoveCommands_StartSeparateFigures`。
 - **视觉子树的文字走 `VisualText.Draw`**：`TextRenderer` 直接写 HDC、不认 world transform，嵌套平移后文字会画到表面原点。
 - **`DockPanel` 顶部子项要显式高度**：没有 `RowDefinitions` 的 `Grid` 默认一行星号，会吃掉全部可用高度。
-- **`NativeControlHost` 是 airspace 岛**：子 HWND 永远浮在视觉树之上，不能变换/裁剪/混色，弹层也盖不住它。
-- **原生岛不会每趟布局都重走 `ArrangeOverride`**：`NativeControlHost.ArrangeOverride` 是 `VisualHost.PlaceNative` 的唯一登记点，但 `VisualElement.Arrange` 在尺寸不变且已安排过时跳过 `ArrangeOverride`；`EnsureLayout` 末尾的扫描曾因此把岛当成“这趟没安排到”摘掉（岛仍 `IsUsingNativeEditor`，却已脱离宿主、拿不到焦点）。扫描现在对仍满足 `host.Surface == this && host.IsVisible` 的宿主按 `AbsoluteBounds` 重新 `PlaceNative`，其余才 `RemoveNative`。回归：`TextBox_NativeEditorSurvivesTheNextLayoutPass`。
+- **`NativeElement`/`NativeControlHost` 是 airspace 岛**：子 HWND 永远浮在视觉树之上；活体 HWND 拒绝 `WS_EX_LAYERED` 与仿射变换，`Opacity`/`Transform` 只能走 `IsSnapshot`；弹层靠窗区域挖洞覆盖它。`Content` 的嵌套表面同样受岛边界约束。
+- **原生岛不会每趟布局都重走 `ArrangeOverride`**：`NativeElement.ArrangeOverride` 是 `VisualHost.PlaceNative` 的登记点，但 `VisualElement.Arrange` 在尺寸不变且已安排过时跳过 `ArrangeOverride`；`EnsureLayout` 末尾的扫描曾因此把岛当成“这趟没安排到”摘掉（岛仍 `IsUsingNativeEditor`，却已脱离宿主、拿不到焦点）。扫描现在对仍满足 `host.Surface == this && host.IsVisible` 的宿主按 `AbsoluteBounds` 重新 `PlaceNative`，其余才 `RemoveNative`。回归：`TextBox_NativeEditorSurvivesTheNextLayoutPass`。
 - **原生岛拿走原生焦点不算逻辑失焦**：`VisualHost.OnLostFocus` 只在 `!ContainsFocus` 时清 `_focused`，`FocusElement` 末尾也只在 `!ContainsFocus` 时重新聚焦宿主。否则宿主焦点会把岛顶掉，`TextBox.OnLostFocus` 再藏岛，焦点在宿主与岛之间反复来回。回归：点击文本框后原生编辑器应保持 `NativeEditor.Focused`，且下一次布局不摘岛。
-- **原生岛按祖先 Clip 裁剪**：`VisualHost.PlaceNative` 把子 HWND 的矩形裁到宿主客户区与祖先 `ClipToBounds`/`Clip` 的交集，交集小于 1px 就隐藏。HWND 不受视觉 `Clip` 约束，不裁的话滚动到视口边缘的 TextBox 编辑器或 `NativeControlHost` 会盖住滚动条和其它面板。回归：`TextBox_NativeEditorIsClippedToTheScrollViewport`。
+- **原生岛按祖先 Clip 裁剪，但不缩小窗口**：`VisualHost.PlaceNative` 把子 HWND 摆到完整排列矩形，再把宿主客户区与祖先 `ClipToBounds`/`Clip` 的交集交给 `NativeWindowRegion` 做窗口区域；交集小于 1px 就隐藏。按交集缩小窗口会让原生内容跟着重排——视频被缩放、编辑器重折行，拖动分割条时画面尺寸会跳变。回归：`TextBox_NativeEditorIsClippedToTheScrollViewport`、`PartiallyClippedNativeIslandKeepsItsArrangeSize`、`NativeRegionClipsToTheVisibleIntersection`。
+- **原生岛在贴屏前统一移动**：绘制期间的 `PlaceNative` 只排队，`OnPaint` 末尾 `FlushNativePlacements` 才改子 HWND 的位置与窗口区域；手势期间再 `DwmFlush` 等这一帧合成。父窗口不设 `WS_CLIPCHILDREN`，岛腾出的旧位置在同一帧补画。回归：`NativeIslandMovesWhenTheFrameIsPresented`。
+- **手势期间原生岛默认冻结**：`VisualHost.FreezeNativeIslandsDuringGestures`（默认 true）在指针按下时把每个活体岛截成位图并隐藏 HWND，由视觉管线跟着卡片画；松手后按当前排列矩形摆回。子 HWND 的位置和父窗口帧无法保证同一合成帧，快速拖动分割条时视频画面会拖影，冻结是消除它的唯一可靠手段；快照模式的元素本来就画位图，不参与冻结。回归：`AGestureFreezesNativeIslandsAndReleaseRestoresThem`。
 - **`Calendar` 不在“今天”上留标记**：只画选中日的 accent 填充。焦点环矩形或小圆点都会在换选日期后留在旧日期上，看起来像没清掉的选中框。回归：`Calendar_SelectingAnotherDayLeavesNoMarkerOnToday`。
+- **插入符按字形推进定位**：TextBox 的文字绘制与前缀测量使用 `VisualText.DrawTight`/`MeasureWidthTight`（GenericTypographic）；默认 `MeasureString` 首尾各留约 1/6 em padding，插入符会停在最后一个字之后的一段空白上。回归：`TextBox_CaretSitsAtTheEndOfTheLastCharacter`。
+- **插入符默认取主题的 `Caret`**：`ThemePalette.Caret`（缺省回退 `Focus`）；TextBox/RichTextBox 的 `CaretBrush` 未设置时用它，Dark+/Light+ 是聚焦色，Gallery 自定义高对比主题是黄色 `#FFD54A`。回归：`TextBox_UsesTheThemeCaretByDefault`。
+- **Ins 切换覆盖模式**：`IsOverwriteMode`（Insert 键切换）在视觉路径画方块插入符并覆盖后续字符，换行仍插入；方块按 `CaretBlockOpacity`（默认 0.35）半透明填充，并描 1px 实色边，字符仍可见。原生岛沿用系统的插入行为。回归：`TextBox_InsertKeyTogglesOverwriteMode`、`TextBox_OverwriteReplacesTheNextCharacter`、`TextBox_OverwriteModeDrawsABlockCaret`。
+- **Backspace 不能在 `Text` 变更后再自减**：`Text` 的变更回调会 `ClampSelection` 把行尾光标夹到新长度；先算 `removeAt` 再删、删除后用 `removeAt` 赋回光标。旧顺序在行尾删除会多退一格。回归：`TextBox_DeleteAndBackspaceKeepTheCaretAcrossModes`。
+- **单行文本在内容矩形里垂直居中**：`RenderEditorSurface` 用 `textTop` 偏移把单行文本、选区与插入符一起居中；多行（`AcceptsReturn`/`Wrap`）保持顶部对齐。回归：`TextBox_CentersSingleLineTextVertically`。
+- **第一次点原生文本框要同步光标并补焦点**：`OnPointerPressed`/`OnPointerMoved` 在 `_nativeActive` 时调用 `SyncEditorFromVisual()`；`ShowNativeEditor` 在布局之后投递一次 `FocusNativeEditorIfNeeded`，并用 40 ms × 25 次重试与宿主 `GotFocus` 兜底（激活与焦点归还可能跨消息），`ProcessPointerDown` 先让宿主取得 WinForms 焦点。缺它时第一次点击只打开编辑器、插入符要再点一次才出现。回归：`FirstClickPositionsTheNativeEditorCaret`、`FirstClickFocusesTheNativeEditor`。
+- **点不可聚焦区域要让焦点退出**：`ProcessPointerDown` 找不到可聚焦祖先时，若目标不在当前焦点子树且不在 `VisualPopup` 里就 `FocusElement(null)`；缺它时点卡片/面板不会退出输入框。回归：`ClickingANonFocusableAreaOutsideTheFieldClearsFocus`。
+- **`TextBox` 的选择索引可能落在文本之外**：原生编辑器同步、绑定回写与布局都会改文本；`SelectionStart`/`SelectionLength`/`CaretIndex` 现在夹到 `0..Text.Length`，文本修改入口先 `ClampSelection()`，替换后再按新文本长度夹一次。回归：`TypingSurvivesAnOutOfRangeSelection`。
+- **MTA 线程上的宿主不注册 OLE 拖放**：`VisualHost` 只在 STA 设置 `AllowDrop`；MTA 宿主仍能创建句柄与渲染，只是没有原生拖放。回归：`AnMtaThreadCanCreateTheSurfaceHandle`。
+- **`DataGrid` 表头先画、行后画**：滚动偏移不是行高整数倍时首行会越过 `_bodyTop`，行文字与选中色盖到表头上；`DrawRows`/`DrawDropIndicator` 必须裁到 `_bodyTop.._bodyBottom`。回归：`ScrollingAPartialRowKeepsItUnderTheHeader`。
+- **Z 序缓冲不能跨渲染重入复用**：`ContainerVisual` 的 `_zOrder` 是每帧复用的列表；子项绘制期间对同一容器做命中（或其它重入）会清空它，外层 `foreach` 随即抛 `Collection was modified`。`BeginZOrder`/`EndZOrder` 在重入层改用独立列表，正常情况下仍然零分配。回归：`AReentrantHitTestDuringAChildRenderDoesNotBreakTheWalk`。
 
 ## 五、验证
 

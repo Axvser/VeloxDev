@@ -82,7 +82,7 @@
 6. **视觉相机方向**：上滚 `zoom *= 1.1`，下滚 `/1.1`，夹在 `0.1..10`。
 7. **池化视图被移除后留在画布上**：`ViewContainer.Deactivate` 只清 `DataContext` 并设 `Collapsed`，`Detach` 不摘树 ⇒ `Canvas.Children.Count` 是「曾经物化过的视图数」，活动视图数看 `ViewPool.GetActiveViewCount`。管道销毁时 `ViewSourcePipeline.Dispose` 经 `ReleaseAll` 才真正移除并释放。
 8. **`Panel.ZIndex` 不是活动排序**：`ViewContainer.Attach` 只在首次挂载时按当前 `Panel.ZIndex` 插位（连线 -1 落在节点前），之后模板改 `Anchor.Layer` 不会重排；`SetZOrder` 是空实现，避免覆盖模板绑定。
-9. **`[ModuleInitializer]` 只在模块里有代码执行时才跑**：`EaselAnimationBootstrap` 靠它把适配器写进 `Easel.Animation.AnimationRuntime.Animator`，但引用程序集、甚至 `typeof` 取类型都不触发——只装适配器当动画后端、不碰 workflow 类型的宿主会拿到空后端，`VisualTransition` 抛 "no interpolator"。这类宿主启动时调一次 `EaselAnimationBootstrap.EnsureRegistered()`（幂等，且不覆盖宿主自带的后端）；gallery 的 `Program` 就是这条路径。
+9. **Easel 动画由 Easel 直接驱动**：Easel 自带引擎（`Easel.Animation` 的 internal scheduler/run/interpreter/property/sampler），`VisualTransition` 与触发器动作直接驱动。`VeloxDev.WinForms` 只提供 workflow/MVVM 能力；不存在 `XamlAnimation` 模块、`EaselAnimationBootstrap` 或 `AnimationRuntime.Animator` 注册。
 10. **`SurfaceName` 只选子树，不换宿主**：行为仍只认 `VisualHost`；输入/命中用宿主坐标，相机用表面内坐标，`SurfaceToWorld`/`WorldToSurface` 里的 `SurfaceOrigin` 负责两者之差。自己算坐标必须走这两个 API；名字写错时部件、输入、视口都按整棵根树解析（`WorkflowSurfaceBehavior.EnsureParts` / `SurfaceOrigin`）。
 11. **Easel `Border` 默认 `Padding=12`**：把它当布局容器（外壳侧栏、标题条、列表行）而不显式写 `Padding="0"`，子内容会被挤小或裁掉（`Easel/Src/Easel/Visuals/Controls/CoreControls.cs` 的 `Border()` 构造）。
 12. **`PointFromSurface` 必须从根往叶反解**：先减祖先 `Bounds` / 反祖先 `Transform`，最后才是元素自己。叶到根的顺序会在祖先有偏移时把偏移再缩放一次；嵌入在偏移工作台里的画布一缩放，槽锚点就漂移、连线错位。回归 `PointFromSurface_UndoesAncestorOffsetsBeforeTheChildTransform`（`Easel/Src/Test/Unit/Easel.Test/VisualBackendTests.cs`）。

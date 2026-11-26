@@ -1,76 +1,39 @@
 # VeloxDev animation on the WinForms XAML surface
 
-The Easel animation contract, markup trigger-action syntax, keyframes, composition timing and the
-no-backend behavior are documented by Easel:
+Easel's XAML surface animates itself: the engine ships inside Easel (`Easel.Animation`), and markup trigger actions,
+`KeyFrameAnimation`, `TriggerActionGroup`, `VisualTransition` and element `Transitions` need no adapter package or
+backend registration. The full guide — timing, markup actions, element transitions, animatable types and
+composition timing — is Easel's:
 [`Easel/skills/easel-build-winforms-xaml-ui/references/animation.md`](../../../../Easel/skills/easel-build-winforms-xaml-ui/references/animation.md).
-This page only covers what **VeloxDev.WinForms** adds: injecting its transition engine and using `Transition<T>`
-on Easel elements.
 
-## Injection
-
-**Install `VeloxDev.WinForms` 12.0.0 or later.** The package contains `EaselVisualAnimator`, an
-`IVisualAnimator` bridge to `VeloxDev.TransitionSystem`, and registers it through a module initializer. A
-module initializer runs before the first execution of code from the assembly — not on reference — so a host
-that installs the package only for the animation backend calls the public bootstrap once at startup:
+## Use Easel's API
 
 ```csharp
-EaselAnimationBootstrap.EnsureRegistered();   // VeloxDev.WinForms.XamlAnimation
-```
-
-No separate animation package or manual `AnimationRuntime.Animator` assignment is needed.
-
-Consequences:
-
-- Ensure a type from `VeloxDev.WinForms` has run, or call `EaselAnimationBootstrap.EnsureRegistered()`, before
-  using markup trigger actions or `VisualTransition`; otherwise Easel's null animator throws the explicit
-  "No IVisualAnimator is registered" exception.
-- A host may overwrite `AnimationRuntime.Animator` with its own implementation. The most recently assigned
-  animator wins.
-- `CanAnimate` reflects VeloxDev's sampler table and `ISampleable` value types: a DP with neither is rejected at
-  start, not silently held.
-- The bridge writes frames at `Easel.BindingPriority.Animation` and holds the reached value at local precedence
-  when the animation completes, is superseded or is stopped. It bridges `IEase` to VeloxDev's `IEaseCalculator`.
-
-Markup trigger actions, `KeyFrameAnimation`, `TriggerActionGroup` and `VisualTransition` are the same Easel
-API described in the Easel skill. There is no separate VeloxDev markup dialect.
-
-## `Transition<T>` on an Easel element
-
-Use VeloxDev's transition builder for code-behind animations:
-
-```csharp
-using VeloxDev.TransitionSystem;
-
-Transition<Easel.Visuals.VisualElement>.Create()
-    .Property(v => v.Margin, new Easel.Controls.Thickness(0, 8, 0, 0))
-    .Property(v => v.CornerRadius, 8f)
-    .Effect(new TransitionEffect
+Easel.Visuals.VisualTransition.Animate(
+    element,
+    Easel.Visuals.VisualElement.MarginProperty,
+    new Easel.Controls.Thickness(0, 8, 0, 0),
+    new Easel.Animation.AnimationSpec
     {
         Duration = TimeSpan.FromMilliseconds(180),
-        Ease = Eases.Cubic.Out,
-    })
-    .Execute(element);
+        Ease = Easel.Animation.Eases.Cubic.Out,
+    });
 ```
 
-- `T` is the object the transition writes. For an Easel element use `VisualElement` or the concrete control, and
-  name a DP-backed property: `Margin`, `Padding`, `Width`, `Height`, `CornerRadius`, `Background`, or a custom
-  `[XamlProperty]`.
-- A code-behind transition writes frames at `BindingPriority.Animation`, the same layer a markup action
-  writes, so either overrides a style/trigger value while it runs.
-- A DP-backed setter invalidates through `AffectsMeasure`/`AffectsArrange`/`AffectsRender`: `Margin`, `Padding`,
-  `Width` and `Height` are `AffectsMeasure`; `Opacity`, `Transform`, `Transform3D`, `Clip` and `Effect` are
-  `AffectsRender`. On a raw `Visual` (not a `VisualElement`), `Opacity`, `Transform`, `Clip` and `Effect` are
-  plain properties with no change notification; animate a DP that feeds them or call `InvalidateVisual` yourself.
-- A declaration is immutable and reusable. Cache a fixed-endpoint one in `static readonly`; build a computed
-  one at the call site. A new animation on the same element supersedes the previous one.
-- Start the first animation on the UI thread; the WinForms adapter posts frames through `Control.BeginInvoke`.
+- The engine writes frames at `Easel.BindingPriority.Animation` and holds the reached value at
+  `BindingPriority.LocalValue` when it completes or is stopped.
+- Supersede is per dependency property: a new animation on the same DP replaces the running one; a
+  `TriggerActionGroup` can animate several DPs at once.
+- Supported interpolated types: numeric (`double`, `float`, `int`, `long`, `short`, `byte`, `decimal`),
+  `Point`/`PointF`, `Size`/`SizeF`, `Rectangle`/`RectangleF`, `Padding`, `Thickness`, `Matrix`, `Matrix4x4`,
+  `Color`, `Brush` and `Transform3D` (plus nullable variants). Anything else is rejected at start with
+  `NotSupportedException`.
+- Start the first animation on the UI thread. Frames are paced by the engine and marshalled through the
+  element's `VisualHost`.
 
-## Sampled types
-
-VeloxDev's samplers cover `double`, `float`, `int`, `long`, `Color`, `Point`, `PointF`, `Size`, `SizeF`,
-`Rectangle`, `RectangleF` (and nullable `RectangleF`), `Vector2/3/4`, `Quaternion`, `Padding`, `Thickness`,
-`Brush` (`Easel.Brush`), `Transform3D` (`Easel.Transform3D`) and `Matrix` (`System.Drawing.Drawing2D.Matrix`). `decimal`, `bool`, `string` and enums have no sampler and are
-rejected/unsampled; register an `ISampler` for a custom type before animating it.
+VeloxDev.Core's `Transition<T>` builder is **not** wired to Easel elements: the old adapter that adapted
+Easel dependency properties into `ITransitionProperty` has been removed, and `VeloxDev.WinForms` carries no
+Easel animator or bootstrap. Use `VisualTransition` and the trigger actions above instead.
 
 ## Workflow-view specifics
 

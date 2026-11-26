@@ -30,7 +30,7 @@
 | 5 | 照 WPF 心智期待名字作用域 / 重名报错 | 视觉部件是递归子树顺序查找 + `Ordinal` 比较，取第一个命中，不抛不报 | 名字唯一，挂在视觉根子树里 | `WorkflowSurfaceBehavior.FindVisualNamed` |
 | 6 | 不写 `CoordinateHostName` 就以为锚点另有默认 | 默认只找最近的视觉 `Canvas`，找不到才退到树根；锚点写在该宿主的局部坐标里 | 节点/插槽显式给 `CoordinateHostName`（模板用 `PART_Canvas`） | `WorkflowSlotLayoutBehavior.ResolveCoordinateHost` |
 | 7 | 在视觉画布里用 `layout.Scale` 模拟缩放 | 视觉树要一条相机矩阵；树的 `Scale` 会被表面复位成 1 | 用 `WorkflowSurfaceBehavior` 的相机 | `ApplyCamera` |
-| 8 | 把弹层/原生控件塞进视觉子树 | 原生 HWND 浮在视觉树之上，不能被变换/裁剪 | 用 `VisualPopup`；原生内容只经 `NativeControlHost` | `VisualHost` / `NativeControlHost` |
+| 8 | 把弹层/原生控件塞进视觉子树 | 原生 HWND 浮在视觉树之上，不能被变换/裁剪 | 用 `VisualPopup`；原生控件写 `<native:…>`（`NativeElement`，`IsSnapshot` 可变换）或用 `NativeControlHost` | `VisualHost` / `NativeElement` |
 | 9 | 整个工作台都塞进 `Root`，却把行为挂到表面子控件上或漏设 `SurfaceName` | 行为只认 `VisualHost`；不设名字时部件/输入/视口按整棵根树解析，外壳里同名 `PART_Canvas` 会先命中 | 宿主仍是 `VisualHost`，表面根写 `x:Name` 并 `SetSurfaceName`；坐标换算走 `SurfaceToWorld`/`WorldToSurface` | `WorkflowSurfaceBehavior.EnsureParts` / `SurfaceOrigin` |
 
 ## 三、步骤清单

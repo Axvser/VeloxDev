@@ -60,7 +60,7 @@
 ### 2.5 Win32 样式与 HWND 岛
 
 - `WorkflowSurfaceBehavior.Attach` 对 `VisualHost` 调 `NativeWindowStyleHelper.EnsureClipChildren`/`EnsureComposited`。`WS_CLIPCHILDREN` 与 `WS_EX_COMPOSITED` 同值 `0x02000000`，写向不同 index；顶层子窗口超过 `CompositedMaxControlCount = 100` 就不合成。
-- `NativeControlHost` 是唯一原生岛；视觉 `TextBox` 聚焦时用私有岛做 IME/无障碍。子 HWND 永远浮在视觉树之上，不能变换/裁剪/混色。
+- `NativeElement`（`<native:…>`）与 `NativeControlHost` 是原生岛；视觉 `TextBox` 聚焦时用私有岛做 IME/无障碍。子 HWND 永远浮在视觉树之上；活体不能变换/混色，需要时用 `IsSnapshot`。
 - **小地图/HUD 是视觉树里的同级部件**；它们共享单个 `VisualHost` 和相机，表面推偏移。
 
 ### 2.6 连线：选择器给每条 link 一个 LinkView

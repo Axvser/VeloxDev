@@ -7,10 +7,12 @@
 - **运行时**：`Src/Easel` 是 VeloxDev `Src/Adapters/VeloxDev.WinForms/Xaml` 的完整副本；命名空间映射 `VeloxDev.WinForms.Xaml` → `Easel`、`...Xaml.Controls` → `Easel.Controls`、`...Xaml.Visuals` → `Easel.Visuals`、`...Visuals.Controls[.Shapes]` → `Easel.Visuals.Controls[.Shapes]`。Easel 运行时**不引用 VeloxDev.Core**；只有 net461 额外引 `System.ValueTuple`。
 - **生成器**：`Src/Generators/Easel.Generator` 是 `VeloxDev.WinForms.Generator` 的副本，诊断 ID 为 `EASEL_XAML*` / `EASEL_XAMLP*`，unprefixed 类型按 Easel 命名空间解析。
 - **测试/示例**：`Src/Test/Unit/Easel.Test`、`Examples/XamlGallery` 已复制并改名。Easel 示例去掉了 Workflow graph 与 VeloxDev MVVM 卡片及对应依赖；Easel 测试去掉了依赖过渡引擎的动画行为测试（那些留在 VeloxDev 适配器侧）。
-- **动画契约**：`Easel/Animation/` 定义 `IEase` / `Eases` / `AnimationSpec` / `IVisualAnimator` / `AnimationRuntime.Animator`。`Easel.Visuals.VisualTransition` 只是门面，不实现引擎；没有注入适配器时 `AnimationRuntime.Animator` 是 `NullVisualAnimator`：`CanAnimate` 返回 false，启动动画（`VisualTransition` / 触发器动作）抛出明确的 `InvalidOperationException`。`TransitionAction` / `KeyFrameAnimation` 仍留在 `Easel.Visuals`，调用门面。
-- **VeloxDev 适配器**：`Src/Adapters/VeloxDev.WinForms/XamlAnimation/EaselVisualAnimator.cs` 实现 `IVisualAnimator`，把 Easel DP 包成 `ITransitionProperty`，用 `Easel.BindingPriority.Animation` 写帧、收尾落 `LocalValue`，`EaseBridge` 把 `IEase` 接到 `IEaseCalculator`；模块初始化器在程序集加载时赋值 `AnimationRuntime.Animator`。
+- **对话框与窗口 chrome**：Gallery 顶部标题栏是 `VisualTitleBar`（无边框、图标/标题/最小化/最大化-还原/关闭；空白区拖动、吸附、拖回还原；`--preview-only` 时与旧标题区一起折叠），`overlay.dialog` 卡演示 `DialogService`。`Easel/Visuals/Dialogs/` 提供 `VisualDialog`/`DialogService`（消息/确认/输入，异步结果、遮罩、焦点锁、原生岛隐藏）；`VisualTitleBar`/`WindowChrome` 提供无边框标题栏（图标/标题/最小化/最大化-还原/关闭），空白区 `HTCAPTION` 保留系统拖动与 Aero Snap。
+- **项模板（1.4.0）**：`Src/Templates/Easel.Templates`（`WinForms.Easel.Templates`）提供 `e-usercontrol`、`e-resource`、`e-theme`、`e-style`、`e-controltemplate`、`e-datatemplate`，参数只有 `--namespace`；除 `e-usercontrol` 外都生成 `ResourceDictionary` + code-behind。`e-theme` 的调色板键按 `ThemePalette.FromResourceDictionary` 的约定写全。发布工作流把模板包列入版本检查、打包、推送与旧 patch 下架，并在推送前校验 nupkg 里六个短名的 `template.json`。
+- **动画**：Easel 自带引擎（`Easel/Animation/`）：`AnimationSpec`、`VisualTriggerActions` 门面，以及 internal 的 `AnimationScheduler`/`AnimationRun`/`AnimationInterpreter`/`AnimationProperty`/`ValueInterpolator`/`AnimationHost`。`VisualTransition`、`TransitionAction`、`KeyFrameAnimation` 直接驱动，不需要宿主注册后端；没有 `IVisualAnimator`/`AnimationRuntime`。支持数值、`Point`/`Size`/`Rectangle` 家族、`Thickness`/`Padding`、`Matrix`/`Matrix4x4`、`Color`/`Brush`/`Transform3D` 与 nullable；未支持类型启动时抛 `NotSupportedException`。写帧走 `BindingPriority.Animation`，收尾落 `LocalValue`；取代是按 DP 而不是按元素。
+- **VeloxDev 适配器只承担 workflow/MVVM**：`Src/Adapters/VeloxDev.WinForms/` 没有 `XamlAnimation/`；Easel 动画由它自己的引擎直接驱动。
 - **条件引用**：`VeloxDev.WinForms.csproj` 按配置分支 —— `Debug` 用子模块 `ProjectReference`（`..\..\..\Easel\Src\Easel\Easel.csproj`），其余配置用 `PackageReference Include="WinForms.Easel"`，好让 nuspec 带上真实的 Easel 依赖（`Easel` 这个 ID 在 nuget.org 上是保留的，推不上去）。
-- **验证**：Easel 解决方案（运行时/生成器/测试/示例）构建与测试通过；示例 `--smoke`/`--capture` 正常；独立探针加载 VeloxDev.WinForms 后 `AnimationRuntime.Animator` 为 `EaselVisualAnimator`，Easel `Border.Width` 10→100 动画完成。
+- **验证**：Easel 解决方案（运行时/生成器/测试/示例）构建与测试通过；`Easel.Test` 覆盖动画完成、同 DP 取代、停止持值与 keyframe 端点。
 
 ## Easel 新增能力（VeloxDev 的 Xaml 副本尚未同步）
 
@@ -32,7 +34,7 @@
 
 - `Easel/skills/easel-build-winforms-xaml-ui/` 是 Easel 自己的完整 WinForms-XAML 指南：`SKILL.md` + `references/{runtime,xaml,controls,layout-input,visuals,themes,mvvm,animation,recipes,pitfalls}.md`。公开 API、推荐写法、诊断、主题、3D/合成和动画注入都以这里为准。
 - VeloxDev 的 `veloxdev-create-workflow` / `veloxdev-create-animation` WinForms 页面只保留工作流专属内容（surface behavior、node/slot/link 模板、`ViewPool`、连接预览、VeloxDev 动画适配器），通用 UI 指南统一指向 Easel skill。
-- 动画：Easel 只有 `IVisualAnimator` 契约；应用接受 VeloxDev 时安装 **`VeloxDev.WinForms` 12.0.0+**，模块初始化器自动接上 `EaselVisualAnimator`，无需额外动画包或手动注册。
+- 动画：Easel 自带引擎，直接使用 `VisualTransition` 与触发器动作；不需要安装适配器或注册后端，`VeloxDev.Core` 的 `Transition<T>` 也不针对 Easel 元素。
 
 ## Gallery（`Easel/Examples/XamlGallery`）
 

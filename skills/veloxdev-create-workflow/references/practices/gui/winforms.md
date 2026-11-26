@@ -45,8 +45,9 @@ public sealed partial class TreeView : Easel.Visuals.Controls.UserControl
 ```
 
 Unprefixed XAML types resolve to Easel (`Easel.Visuals.Controls`, `.Controls.Shapes`, `.Visuals`, then the
-shared primitives); `local:` is your namespace. `native:`/`System.Windows.Forms` controls are rejected; native
-content is only an explicit `NativeControlHost` island.
+shared primitives); `local:` is your namespace. Native WinForms content is always an HWND island: declare it
+with `<native:Foo>` or `NativeControlHost.Child` and see the Easel skill's controls reference for layout,
+snapshot and `CornerRadius` behavior.
 
 ## Writing the surface
 
