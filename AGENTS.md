@@ -15,6 +15,14 @@
 
 ---
 
+## 子模块与并行改动
+
+本仓库有两个 submodule：`Easel/`（Easel XAML 运行时，<https://github.com/Axvser/Easel>）与 `Wiki/`（文档站，<https://github.com/Axvser/VeloxDev.Docs>）。**本文件与 `memory/` 的全部要求同样适用于子模块**：子模块的改动先在各自仓库提交，再更新父仓库指针。
+
+**代码修改一律走差分模式**：在仓库外的差分副本里改，主工作树只在合并时持 `main` 锁写入。多个会话/子代理用 `DevTools/repo_lock.py` 按模块加锁；开始任务、派发子代理、合并、运行 `dotnet new` 安装/卸载或 NuGet 发布之前，读[差分模式与跨会话锁](memory/specifications/parallel-workflow-specifications.md)。
+
+---
+
 ## 索引
 
 | 规范 | 手册 | 什么时候必须读 |
@@ -26,6 +34,7 @@
 | .NET Item Template | [memory/specifications/item-template-specifications.md](memory/specifications/item-template-specifications.md) | 改动 `Src/Templates/` 下任何文件之前；判断「这处改动该落在模板还是 demo」之前；新增 / 改名 / 删除一个模板项之前 |
 | 功能落层（Core / 适配器 / 模板 / demo） | [memory/specifications/layer-ownership-specifications.md](memory/specifications/layer-ownership-specifications.md) | 判断一段连线或视图的功能该落在 Core / 适配器 / item template / demo 哪一层之前；给连线做**外观**（高亮、选中、主题、流光）之前 |
 | 输入家族类型的别名 | [memory/specifications/input-alias-specifications.md](memory/specifications/input-alias-specifications.md) | 在 `Src/Adapters/`、`Src/Templates/`、`Examples/` 下写出输入家族那 15 个类型（`IInputEvents` / `InputRelay` / `InputKey` / `InputModifiers` / `MouseButton` / `Pointer*EventArgs` / `Key*EventArgs`，清单见手册 §二）中的**任何一个**之前 |
+| 差分模式与跨会话锁 | [memory/specifications/parallel-workflow-specifications.md](memory/specifications/parallel-workflow-specifications.md) | 修改 `Src/`、`Src/Templates/`、`Examples/` 或子模块代码之前；创建差分副本、合并回主树、提交子模块指针之前；派发子代理之前；运行 `dotnet new` 安装/卸载、NuGet 发布或其它机器级写操作之前 |
 | 版本管理 | [memory/specifications/version-management-specifications.md](memory/specifications/version-management-specifications.md) | **决定或提交一个新版本号时** —— 改任何包 csproj 的 `<Version>` 之前；判断这一轮改动该提 `x1` / `x2` / `x3` 哪一位之前；判断 Core / 生成器提升时哪些包必须同步、模板要不要动之前；**提交版本号变更之前**（必须独立成一笔、首行用 `[version][repo]`，body 列出包名 / 原版本 / 提升后的版本 / 修改简述）；**每次 `git push` 之前** —— 运行 `python DevTools/verify_version_commits.py`，发现版本改动未用 `[version]`、版本提交混入非 csproj 文件或不在待推送范围最后一笔时，先 `--fix` 或 rebase 修正再推送。破坏性提 `x1`、功能增量提 `x2`、优化修复提 `x3`（一轮命中多位时只取最高一档、低位归零）；7 个适配器与 CLI 独立：`x1` 跟 Core，`x2` 只看自身功能；适配器 `x3` 只算适配层自己的非破坏性变更（Core / Extension 依赖版本变化不算），CLI 的 `x3` 还包括 Core / Extension 依赖版本变更。**为适配更高 Core 而发版时，适配器与 CLI 的 `x1` / `x2` 对齐 Core** |
 
 ---
