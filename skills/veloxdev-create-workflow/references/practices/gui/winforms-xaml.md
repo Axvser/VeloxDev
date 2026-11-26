@@ -55,6 +55,9 @@ var host = new VisualHost { Dock = DockStyle.Fill, Root = treeView, DataContext 
 shell.Controls.Add(host);                             // host DataContext inherits into the tree root
 ```
 
+To declare the window itself in XAML, derive it from `Easel.Visuals.Window` and assign the same visual root to
+`Content`; the Easel skill's Bootstrap has the full `Window` root example.
+
 `DataContext` is the sole source of the tree: set it on the visual root or on the `VisualHost` (a local value
 on the root wins). There is no `WorkflowTree` property or setter; assign `element.DataContext = tree`.
 Changing `DataContext` after attach rebinds the surface,

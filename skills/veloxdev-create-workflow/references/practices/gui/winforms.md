@@ -23,15 +23,9 @@ The workflow-specific markup (behaviors, node/slot/link parts, `ViewPool`, conne
 
 ## Project shape
 
-The consuming project needs the Easel generator and its XAML files:
-
-```xml
-<ItemGroup>
-  <ProjectReference Include="…/Easel.Generator.csproj"
-                    OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-  <AdditionalFiles Include="**/*.xaml" />
-</ItemGroup>
-```
+The consuming project needs the Easel generator wired as an analyzer and its `.xaml` files registered as
+`AdditionalFiles`; the Easel skill's opening setup has both the NuGet (`WinForms.Easel.Generator`) and checkout
+forms. The workflow markup also needs this namespace:
 
 ```xml
 xmlns:local="clr-namespace:MyApp.Views"
@@ -74,6 +68,9 @@ var host = new VisualHost { Dock = DockStyle.Fill, Root = treeView, DataContext 
 shell.Controls.Add(host);                             // host DataContext inherits into the tree root
 ```
 
+To declare the window itself in XAML, derive it from `Easel.Visuals.Window` and assign the same visual root to
+`Content`; the Easel skill's Bootstrap has the full `Window` root example.
+
 `DataContext` is the sole source of the tree: set it on the visual root or the `VisualHost` (a local root
 value wins); changes after attach rebind, coalesced through `VisualHost.Post`. There are no host-level `Set*`
 calls.
@@ -98,8 +95,8 @@ The tree markup is the part layout:
 through the tree's `DataTemplate`s. Node is a visual `UserControl` with `Viewbox > Grid 260×180`, title,
 `PART_InputSlot` and `PART_OutputSlots` (`ItemsControl` + `DataTemplate` row); Slot is a visual `UserControl`
 with an `Ellipse`; Link is a visual `UserControl` with endpoint DPs and `OnRender`. The surface writes the
-camera matrix to `PART_Canvas.Transform`; the canvas is sized to the viewport and hit-tests unbounded, so its
-children may live at any world coordinate while the `ScrollViewer` supplies the clip.
+camera matrix to `PART_Canvas.Transform`; the canvas is sized to the world extent (at least the viewport) and
+hit-tests unbounded, so its children may live at any world coordinate while the `ScrollViewer` supplies the clip.
 
 ⚙ **`x:Name` is the visual name.** On a visual root the generator writes the code-behind field and
 `VisualElement.Name`; the behavior resolves the visual `Name`. Write `x:Name="PART_*"` once.
@@ -114,11 +111,11 @@ own curve. Node drag is visual: no per-frame `Refresh`/`SyncNow` pull is require
 ## Links — one LinkView per link
 
 ⚙ `LinkTemplate` builds one `LinkView` per link. The view sets `UnboundedHitTest = true` so Easel's `Bounds`-based damage cull does not drop it in the negative-world quadrants (the box is canvas-sized and starts at 0,0); hit-testing stays off. The template binds `StartLeft` / `StartTop` / `EndLeft` /
-`EndTop` to `Sender.Anchor.*` / `Receiver.Anchor.*` and `CanRender` to `IsVisible`, the surface writes
-`LineColor` / `LineThickness` / `IsVirtual`, and the view draws the cubic and calls `PublishCurve` in
-`OnRender`. Hover is the demo's: `Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/LinkView.xaml.cs`
-adds `HighlightColor` / `IsHighlighted` and drives them from `IInputEvents`. The generated template ships the
-passive view only.
+`EndTop` to `Sender.Anchor.*` / `Receiver.Anchor.*` and `CanRender` to `IsVisible`; the surface writes
+`LineColor` / `LineThickness` / `IsVirtual` and, on the view bound to `WorkflowInput.HoveredLink`,
+`HighlightColor` / `HighlightThickness` / `IsHighlighted` when that view declares them; the view draws the cubic and calls `PublishCurve`
+in `OnRender`. The Trimmed demo's `LinkView` (`Examples/Workflow/WinForms Trimmed/Demo/Views/Workflow/LinkView.xaml.cs`)
+declares those hover properties and paints them; the generated template ships the passive view only.
 
 ⚙ **Curves are world-space.** `Start/End` are world coordinates and the published curve is the same object Core
 hit-tests; the camera transform is applied only while painting. Do not publish screen coordinates.
@@ -168,9 +165,9 @@ same factor.
 ⚙ **The camera reports its world viewport to the tree**, so Core's visible set follows pan/zoom:
 `Viewport = (-(pan+content)/zoom, size/zoom)`.
 
-⚙ **Set the virtualize inset before writing `Viewport`.** `tree.SetVirtualizeInset(left: band, top: band)` takes
-its band from the decorator's `RulerBand`; a self-hosted surface with no decorator passes the reserve explicitly.
-Skipping it culls nodes still visible under the ruler.
+⚙ **The virtualize inset follows the ruler band.** The surface forwards the decorator's `RulerBand` to
+`tree.SetVirtualizeInset(left: band, top: band)`; a self-hosted surface that writes `Viewport` itself passes the
+reserve explicitly, or it culls nodes still visible under the ruler.
 
 ## The link context menu
 
