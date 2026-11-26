@@ -15,8 +15,8 @@
 
   <ItemGroup>
     <PackageReference Include="MSTest" Version="4.0.2" />
-    <PackageReference Include="Jalium.UI.Xaml" Version="26.11.1" />
-    <PackageReference Include="Jalium.UI.Desktop" Version="26.11.1" />
+    <PackageReference Include="Jalium.UI.Xaml" Version="26.10.8" />
+    <PackageReference Include="Jalium.UI.Desktop" Version="26.10.8" />
     <PackageReference Include="coverlet.collector" Version="6.0.4">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

@@ -33,7 +33,7 @@
          TextMeasurement surface the workflow adapter renders with. 26.10.8 is the lowest
          version that compiles with the current code: 26.10.7 lacks Dispatcher.MainDispatcher,
          26.10.0-26.10.6 lack DispatcherPriority. Consumers (and the in-repo demos) may raise it. -->
-    <PackageReference Include="Jalium.UI.Controls" Version="26.11.1" />
+    <PackageReference Include="Jalium.UI.Controls" Version="26.10.8" />
   </ItemGroup>
 
 </Project>
