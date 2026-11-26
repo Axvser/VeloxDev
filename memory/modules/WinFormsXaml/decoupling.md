@@ -42,6 +42,7 @@
 - Demo 的生成器 `ProjectReference` 只在 Debug 生效；Release 通过 Easel 传递的 `WinForms.Easel.Generator` 包解析，缺它 XAML 类会生成两份 `InitializeComponent`。
 - 非测试项目（Easel 四 TFM、Generator、Templates、Demo）Debug/Release 均以 `-warnaserror` 构建通过；`Directory.Build.props` 的 `NuGetAudit=false` 仅用于离线环境，不改变包解析。
 - **GC 分析**：`Src/Test/GcAnalysis` 独立控制台（不引用 Demo/单元测试/基准）；场景 `host-lifecycle`/`page-build`/`template-lifecycle`/`binding-lifecycle`/`theme-switch`/`list-window`。测量轮禁 tracker，泄漏轮用 WeakReference，强制全回收后存活即泄漏；输出 allocation median/min/max、Gen0/1/2、pause、retained 与 baseline 比较。命令与退出码见 README。
+- **ListBox 内容延迟**：每源项仍有一个 index-stable `ListBoxItem`，但 `Content` 由工厂延迟到行进入视口/应用模板/读取 Content；ComboBox 弹出列表关闭该延迟（闭合测量与提交依赖内容）。GC 分析 list-window 1.6→1.2MB、page-build 1.4→1.3MB。
 
 ## 已接管的控件
 
