@@ -50,7 +50,7 @@
 - **渲染缓存**：`Visual.CacheAsBitmap` 缓存本地子树；`VisualElement.InvalidateVisual` 标脏最近的缓存并上报矩形，`VisualHost` 只清/画脏矩形；有变换或 `Effect` 时整面重画。
 - **默认暗色对齐 Scribalix / VS Code workbench**：画布 `#141414`、面板 `#252526`、raised `#2D2D2D`、输入 `#2A2A2A`、边框 `#333333`、文本 `#E7E7E7`/`#A0A0A0`、accent/focus `#0078D4`、选中 `#094771`；light 为 Light+（`#FFFFFF`/`#F3F3F3`、选中 `#ADD6FF`）。4px 圆角、28px 控件高。
 - **`Theme` 内置三套调色板**：`ThemeMode.Dark` / `Light` / `HighContrast`。高对比是纯黑底、白字、琥珀 accent（`#FFB000`）、聚焦 `#FFD700`、`CornerRadius=2`、`ControlHeight=30`；`ThemeMode` 切换整套 `ThemePalette`，控件在下次构造/根重建时读取。
-- **DPI**：`VisualHost` 按 `DeviceDpi/96` 物理渲染；布局、相机、模型锚点与装饰偏移都是逻辑 DIP。
+- **DPI**：`VisualHost` 按 `DeviceDpi/96` 物理渲染；布局、相机、模型锚点与装饰偏移都是逻辑 DIP。WinForms 的 `DeviceDpi` 与 WM_DPICHANGED 只在**进程**为 PerMonitorV2 时生效（`ScaleHelper.IsThreadPerMonitorV2Aware` 先查 `GetProcessDpiAwareness`），窗口级线程上下文无效；默认由包内 `Easel/Src/Easel/build/WinForms.Easel.props` 设 `ApplicationHighDpiMode=PerMonitorV2`，其它启动方式用 `EaselApplication.Initialize()`。`VisualForm`/`Window` 自己设 `AutoScaleMode.None`。
 - **属性没有别名**（用户定）：一个概念只有一个 DP 名，`Background`/`Foreground` 而不是 `BackColor`/`ForeColor`。
 
 ## 二、源生成器
