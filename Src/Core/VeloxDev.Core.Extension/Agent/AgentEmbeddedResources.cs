@@ -9,8 +9,8 @@ namespace VeloxDev.AI;
 /// Provides access to Markdown files embedded inside the <c>VeloxDev.Core.Extension</c> assembly
 /// under the canonical directory hierarchy:
 /// <code>
-///   Resources/{System}/{LangCode}/Skills/{Name}.md
-///   Resources/{System}/{LangCode}/References/{Name}.md
+///   Resources/{System}/en/Skills/{Name}.md
+///   Resources/{System}/en/References/{Name}.md
 ///   Resources/{System}/Scripts/{Name}.*
 /// </code>
 ///
@@ -21,8 +21,14 @@ namespace VeloxDev.AI;
 /// </list>
 ///
 /// <para>
+/// <b>English only.</b> The assembly ships one prompt corpus, under <c>en/</c>; there is no Chinese
+/// variant to fall back from. Language parameters remain on the public methods for source compatibility
+/// and do not change which file is read.
+/// </para>
+///
+/// <para>
 /// <b>Adding new files</b>: drop a <c>.md</c> file into the corresponding folder inside
-/// <c>Resources/{System}/{LangCode}/</c> — the <c>.csproj</c> glob picks it up automatically.
+/// <c>Resources/{System}/en/</c> — the <c>.csproj</c> glob picks it up automatically.
 /// </para>
 /// </summary>
 public static class AgentEmbeddedResources
@@ -35,25 +41,20 @@ public static class AgentEmbeddedResources
 
     // ── Language helpers ─────────────────────────────────────────────────────
 
-    private static string ToLangCode(AgentLanguages language)
-        => language == AgentLanguages.Chinese ? "zh" : "en";
-
     /// <summary>
-    /// The folder code an <see cref="AgentLanguages"/> maps to inside <c>Resources/{System}/</c>:
-    /// <c>"zh"</c> or <c>"en"</c>. Only these two directories are embedded, so every other language
-    /// resolves to <c>"en"</c>.
+    /// The folder code embedded resources live under. The assembly ships English prompt text only, so
+    /// every language resolves to <c>"en"</c>.
     /// </summary>
-    public static string ToLanguageCode(AgentLanguages language) => ToLangCode(language);
+    public static string ToLanguageCode(AgentLanguages language) => "en";
 
     // ── Skills ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Reads the content of <c>Resources/{system}/{lang}/Skills/{name}.md</c>.
-    /// Falls back to the English variant when the requested language is not found.
-    /// Returns <c>null</c> if neither variant exists.
+    /// Reads the content of <c>Resources/{system}/en/Skills/{name}.md</c>.
+    /// Returns <c>null</c> when it does not exist.
     /// </summary>
     public static string? ReadSkill(string system, string name, AgentLanguages language = AgentLanguages.English)
-        => ReadWithFallback(system, "Skills", name, language);
+        => ReadCategoryFile(system, "Skills", name);
 
     /// <summary>
     /// Returns the base names of all skill files for the given system and language.
@@ -62,13 +63,12 @@ public static class AgentEmbeddedResources
         => ListCategory(system, "Skills", language);
 
     /// <summary>
-    /// Returns the base names of the skill files that exist in <b>exactly</b> the given language, with no
-    /// English fallback. Use this to attribute a skill to the language it is actually written in —
-    /// <see cref="ListSkills"/> merges the requested language with English, so it cannot tell a
-    /// translated file from a fallback one.
+    /// Returns the base names of the skill files that exist in the embedded corpus. The corpus has one
+    /// language, so this answers the same set as <see cref="ListSkills"/>; the method remains for callers
+    /// that attributed a skill to the language it was written in.
     /// </summary>
     public static IEnumerable<string> ListSkillsExact(string system, AgentLanguages language)
-        => ListCategoryExact(system, "Skills", language);
+        => ListCategory(system, "Skills", language);
 
     /// <summary>
     /// Concatenates all skill files for the given system and language, separated by blank lines.
@@ -87,87 +87,45 @@ public static class AgentEmbeddedResources
     // ── Safety ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Reads the content of <c>Resources/{system}/{lang}/Safety/{name}.md</c>.
-    /// Falls back to the English variant when the requested language is not found.
-    /// Returns <c>null</c> if neither variant exists.
+    /// Reads the content of <c>Resources/{system}/en/Safety/{name}.md</c>.
+    /// Returns <c>null</c> when it does not exist.
     /// </summary>
     public static string? ReadSafety(string system, string name, AgentLanguages language = AgentLanguages.English)
-        => ReadWithFallback(system, "Safety", name, language);
+        => ReadCategoryFile(system, "Safety", name);
 
     // ── Core helpers ─────────────────────────────────────────────────────────
 
-    // Resource path pattern: Resources.{system}.{lang}.{category}.{name}.md
-    private static string? ReadWithFallback(string system, string category, string name, AgentLanguages language)
-    {
-        var lang = ToLangCode(language);
-        return Read($"Resources.{system}.{lang}.{category}.{name}.md")
-            ?? (lang != "en" ? Read($"Resources.{system}.en.{category}.{name}.md") : null);
-    }
+    // Resource path pattern: Resources.{system}.en.{category}.{name}.md
+    private static string? ReadCategoryFile(string system, string category, string name)
+        => Read($"Resources.{system}.en.{category}.{name}.md");
 
-    /// <summary>
-    /// Concatenates all files in <paramref name="category"/> for the given system and language.
-    /// Falls back to English for any file that lacks a localized variant.
-    /// </summary>
+    /// <summary>Concatenates every embedded file in <paramref name="category"/>, separated by blank lines.</summary>
     private static string ReadAll(string system, string category, AgentLanguages language)
     {
         var sb = new System.Text.StringBuilder();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scanPrefix = $"{Prefix}Resources.{system}.en.{category}.";
 
-        // Scan both the requested language and the "en" fallback directory
-        var lang = ToLangCode(language);
-        foreach (var langCode in lang == "en" ? new[] { "en" } : new[] { lang, "en" })
+        foreach (var resourceName in _assembly.GetManifestResourceNames())
         {
-            var scanPrefix = $"{Prefix}Resources.{system}.{langCode}.{category}.";
-            foreach (var resourceName in _assembly.GetManifestResourceNames())
-            {
-                if (!resourceName.StartsWith(scanPrefix, StringComparison.Ordinal)) continue;
-                var relative = resourceName.Substring(scanPrefix.Length); // e.g. "SlotEnumerator.md"
-                if (!relative.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) continue;
-                var baseName = relative.Substring(0, relative.Length - 3); // strip .md
-                if (!seen.Add(baseName)) continue;
+            if (!resourceName.StartsWith(scanPrefix, StringComparison.Ordinal)) continue;
+            var relative = resourceName.Substring(scanPrefix.Length); // e.g. "SlotEnumerator.md"
+            if (!relative.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) continue;
 
-                var content = ReadWithFallback(system, category, baseName, language);
-                if (!string.IsNullOrWhiteSpace(content))
-                {
-                    sb.AppendLine(content);
-                    sb.AppendLine();
-                }
+            var content = Read(resourceName.Substring(Prefix.Length));
+            if (!string.IsNullOrWhiteSpace(content))
+            {
+                sb.AppendLine(content);
+                sb.AppendLine();
             }
         }
+
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Lists base names (without .md) for <c>Resources/{system}/{lang}/{category}/</c>.
-    /// Falls back to "en" entries when the requested language has no files of its own.
-    /// </summary>
-    private static IEnumerable<string> ListCategory(string system, string category, AgentLanguages language)    {
-        var lang = ToLangCode(language);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var langCode in lang == "en" ? new[] { "en" } : new[] { lang, "en" })
-        {
-            var scanPrefix = $"{Prefix}Resources.{system}.{langCode}.{category}.";
-            foreach (var name in _assembly.GetManifestResourceNames())
-            {
-                if (!name.StartsWith(scanPrefix, StringComparison.Ordinal)) continue;
-                var relative = name.Substring(scanPrefix.Length);
-                var baseName = relative.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
-                    ? relative.Substring(0, relative.Length - 3)
-                    : relative;
-                if (seen.Add(baseName))
-                    yield return baseName;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Lists base names (without .md) for <c>Resources/{system}/{lang}/{category}/</c> for one language
-    /// only, applying no fallback.
-    /// </summary>
-    private static IEnumerable<string> ListCategoryExact(string system, string category, AgentLanguages language)
+    /// <summary>Lists base names (without .md) of the embedded files in <paramref name="category"/>.</summary>
+    private static IEnumerable<string> ListCategory(string system, string category, AgentLanguages language)
     {
-        var langCode = ToLangCode(language);
-        var scanPrefix = $"{Prefix}Resources.{system}.{langCode}.{category}.";
+        var scanPrefix = $"{Prefix}Resources.{system}.en.{category}.";
         foreach (var name in _assembly.GetManifestResourceNames())
         {
             if (!name.StartsWith(scanPrefix, StringComparison.Ordinal)) continue;

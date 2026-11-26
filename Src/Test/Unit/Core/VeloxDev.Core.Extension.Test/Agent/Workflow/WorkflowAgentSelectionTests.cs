@@ -232,7 +232,7 @@ public class WorkflowAgentSelectionTests
     }
 
     [TestMethod]
-    public void ThePromptFollowsThePromptLanguage()
+    public void ThePromptIsEnglishWhateverThePromptLanguage()
     {
         var (tree, first, _) = TreeWithTwoNodes();
         var scope = new WorkflowAgentScope(tree).WithPromptLanguage(AgentLanguages.Chinese);
@@ -240,7 +240,7 @@ public class WorkflowAgentSelectionTests
         first.SelectForAgent();
 
         var text = scope.BuildDynamicInstructions()!;
-        StringAssert.Contains(text, "当前选中的节点");
+        StringAssert.Contains(text, "Current Node Selection");
         StringAssert.Contains(text, first.RuntimeId);
     }
 

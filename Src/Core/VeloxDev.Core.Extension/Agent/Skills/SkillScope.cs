@@ -263,6 +263,10 @@ public class SkillScope
     /// File skills never appear here: they are advertised rather than injected, so switching one off just
     /// removes it from the advertisement — there is no text to withdraw.
     /// </para>
+    /// <para>
+    /// The block is English regardless of <paramref name="language"/>; the parameter is retained for
+    /// source compatibility.
+    /// </para>
     /// </summary>
     public string BuildWithdrawnBlock(AgentLanguages language)
     {
@@ -276,15 +280,10 @@ public class SkillScope
 
         if (withdrawn.Length == 0) return string.Empty;
 
-        var chinese = language == AgentLanguages.Chinese;
         var sb = new StringBuilder();
-        sb.AppendLine(chinese
-            ? "## 本提示词生成之后的技能变更"
-            : "## Skill changes since this prompt was built");
+        sb.AppendLine("## Skill changes since this prompt was built");
         sb.AppendLine();
-        sb.AppendLine(chinese
-            ? "本提示词靠前部分的技能文档是会话开始时写入的。以下技能已停用 —— 请忽略它们的正文："
-            : "The skill documents earlier in this prompt were captured when the session started. These are no longer enabled — disregard their instructions:");
+        sb.AppendLine("The skill documents earlier in this prompt were captured when the session started. These are no longer enabled — disregard their instructions:");
         sb.AppendLine();
         foreach (var skill in withdrawn)
             sb.AppendLine($"- `{skill.Name}`");

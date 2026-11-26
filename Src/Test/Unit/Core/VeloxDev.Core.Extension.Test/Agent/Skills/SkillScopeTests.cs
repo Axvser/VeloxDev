@@ -42,14 +42,14 @@ public class SkillScopeTests
     // ── Embedded source ──────────────────────────────────────────────────────
 
     [TestMethod]
-    public void EmbeddedSource_DiscoversEveryShippedSkillInBothLanguages()
+    public void EmbeddedSource_DiscoversEveryShippedSkill()
     {
         var descriptors = new EmbeddedSkillSource(System).Discover();
 
-        // 7 skill documents per language, one descriptor each.
-        Assert.HasCount(14, descriptors, "expected 7 English + 7 Chinese skill descriptors");
+        // 7 skill documents, one descriptor each.
+        Assert.HasCount(7, descriptors, "expected 7 English skill descriptors");
         Assert.HasCount(7, descriptors.Select(d => d.Name).Distinct().ToArray(),
-            "both languages must collapse onto the same skill names");
+            "the corpus is one language, so the names are distinct");
         Assert.IsTrue(descriptors.All(d => d.Error is null), string.Join(" | ", descriptors.Select(d => d.Error)));
     }
 
@@ -150,15 +150,15 @@ public class SkillScopeTests
     }
 
     [TestMethod]
-    public void WithdrawnBlock_FollowsTheLanguage()
+    public void WithdrawnBlock_IsEnglishWhateverTheRequestedLanguage()
     {
-        // It lands in the same prompt as the corpus, so it has to read in the same language.
+        // The embedded corpus ships in English, so the block that withdraws part of it does too.
         var scope = new SkillScope().WithSource(new EmbeddedSkillSource(System));
         scope.Refresh();
         scope.Disable("smart-layout");
 
-        Assert.Contains("已停用", scope.BuildWithdrawnBlock(AgentLanguages.Chinese));
-        Assert.DoesNotContain("已停用", scope.BuildWithdrawnBlock(AgentLanguages.English));
+        Assert.Contains("no longer enabled", scope.BuildWithdrawnBlock(AgentLanguages.Chinese));
+        Assert.Contains("no longer enabled", scope.BuildWithdrawnBlock(AgentLanguages.English));
     }
 
     [TestMethod]

@@ -70,10 +70,10 @@ public class SubAgentDispatchTests
         SubAgentFixture.InvokeTool(
             SubAgentFixture.SubAgentToolOf(fx.ChildScope(outer), "SpawnSubAgent"), ("task", "the inner job"));
 
-        CollectionAssert.AreEqual(new[] { "子代理 1", "子代理 2" }, fx.Rows.Select(r => r.Name).ToArray());
+        CollectionAssert.AreEqual(new[] { "Sub-agent 1", "Sub-agent 2" }, fx.Rows.Select(r => r.Name).ToArray());
 
         var grand = fx.ChildSubAgents(outer).Snapshot.Single();
-        Assert.AreEqual("子代理 1", grand.Name, "a grandchild is the first child of its own parent, not the third of the tree");
+        Assert.AreEqual("Sub-agent 1", grand.Name, "a grandchild is the first child of its own parent, not the third of the tree");
     }
 
     [TestMethod]
@@ -280,12 +280,12 @@ public class SubAgentDispatchTests
 
         var before = provider.BuildContext().Instructions ?? string.Empty;
         StringAssert.Contains(before, "sub-agents", "the standing instructions are there from the start");
-        Assert.IsFalse(before.Contains("你的子代理"), "but the roster is not, because there is nothing in it");
+        Assert.IsFalse(before.Contains("Your sub-agents"), "but the roster is not, because there is nothing in it");
 
         fx.Spawn("a named job", ("name", "scout"));
 
         var after = provider.BuildContext().Instructions ?? string.Empty;
-        StringAssert.Contains(after, "你的子代理");
+        StringAssert.Contains(after, "Your sub-agents");
         StringAssert.Contains(after, "scout");
     }
 

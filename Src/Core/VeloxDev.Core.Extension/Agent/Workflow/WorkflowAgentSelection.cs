@@ -388,8 +388,8 @@ internal static class WorkflowAgentSelection
         return null;
     }
 
-    // 返回 Markdown 段；没有选中集时返回空串。标题与指令随提示词语言切换。
-    internal static string Render(ITreeComponent tree, AgentLanguages language)
+    // 返回 Markdown 段；没有选中集时返回空串。
+    internal static string Render(ITreeComponent tree)
     {
         if (!States.TryGetValue(tree, out var state))
             return string.Empty;
@@ -398,16 +398,13 @@ internal static class WorkflowAgentSelection
         if (snapshot.Entries.Length == 0)
             return string.Empty;
 
-        var chinese = language == AgentLanguages.Chinese;
         var total = snapshot.Entries.Length;
         var shown = Math.Min(total, MaxRenderedNodes);
         var sb = new StringBuilder(96 + shown * 48);
 
-        sb.AppendLine(chinese ? "## 当前选中的节点" : "## Current Node Selection");
+        sb.AppendLine("## Current Node Selection");
         sb.AppendLine();
-        sb.AppendLine(chinese
-            ? $"用户已在画布上选中 **{total}** 个节点。把这次选择当作本轮请求的工作集：优先操作这些节点；除非用户明确要求，不要改动其它节点。下面的清单只带身份 —— 当前下标、几何、槽位与属性请用 `GetNodeDetailById` / `ListNodes` 查询。"
-            : $"The user has selected **{total}** {(total == 1 ? "node" : "nodes")} on the canvas. Treat this selection as the working set for this turn: prefer operations on these nodes, and do not modify other nodes unless the user explicitly asks. The list below carries identity only — use `GetNodeDetailById` / `ListNodes` for the current index, geometry, slots and properties.");
+        sb.AppendLine($"The user has selected **{total}** {(total == 1 ? "node" : "nodes")} on the canvas. Treat this selection as the working set for this turn: prefer operations on these nodes, and do not modify other nodes unless the user explicitly asks. The list below carries identity only — use `GetNodeDetailById` / `ListNodes` for the current index, geometry, slots and properties.");
         sb.AppendLine();
 
         for (var i = 0; i < shown; i++)
@@ -419,9 +416,7 @@ internal static class WorkflowAgentSelection
         if (total > shown)
         {
             sb.AppendLine();
-            sb.AppendLine(chinese
-                ? $"> 只列出了前 {MaxRenderedNodes} 个；另有 {total - shown} 个节点也在选中集中。"
-                : $"> Only the first {MaxRenderedNodes} selected nodes are listed; {total - shown} more are in the selection.");
+            sb.AppendLine($"> Only the first {MaxRenderedNodes} selected nodes are listed; {total - shown} more are in the selection.");
         }
 
         sb.AppendLine();

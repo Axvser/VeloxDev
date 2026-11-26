@@ -522,7 +522,7 @@ public sealed class WorkflowAgentToolkit
         // prompt must deny, never silently allow.
         var allowed = await _scope.ResolveConfirmationAsync(
             ResetBudgetOperationKey,
-            $"Agent 已达到工具调用上限（{exhausted}）。是否允许重置额度让它继续？").ConfigureAwait(false);
+            $"The Agent has reached its tool-call limit ({exhausted}). Allow the budget to be reset so it can continue?").ConfigureAwait(false);
 
         if (!allowed)
             return new VeloxJsonObject
@@ -572,16 +572,16 @@ public sealed class WorkflowAgentToolkit
         if (_scope.PermissionPolicy.Mode != AgentPermissionMode.Bypass)
         {
             if (_scope.MaxToolCalls.HasValue && toolCalls >= _scope.MaxToolCalls.Value)
-                parts.Add($"{toolCalls}/{_scope.MaxToolCalls.Value} 次工具调用");
+                parts.Add($"{toolCalls}/{_scope.MaxToolCalls.Value} tool calls");
             if (_scope.MaxReadToolCalls.HasValue && readCalls >= _scope.MaxReadToolCalls.Value)
-                parts.Add($"{readCalls}/{_scope.MaxReadToolCalls.Value} 次查询");
+                parts.Add($"{readCalls}/{_scope.MaxReadToolCalls.Value} read calls");
             if (_scope.MaxWriteToolCalls.HasValue && writeCalls >= _scope.MaxWriteToolCalls.Value)
-                parts.Add($"{writeCalls}/{_scope.MaxWriteToolCalls.Value} 次变更");
+                parts.Add($"{writeCalls}/{_scope.MaxWriteToolCalls.Value} mutating calls");
         }
         if (_scope.MaxTokens.HasValue && _scope.TotalTokens >= _scope.MaxTokens.Value)
             parts.Add($"{_scope.TotalTokens}/{_scope.MaxTokens.Value} tokens");
 
-        return parts.Count == 0 ? null : string.Join("、", parts);
+        return parts.Count == 0 ? null : string.Join(", ", parts);
     }
 
     /// <summary>

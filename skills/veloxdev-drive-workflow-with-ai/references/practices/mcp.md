@@ -140,7 +140,7 @@ Management tools — ten, all registered on a normal scope: `ListMcpServers`, `L
 
 ## Prompting
 
-`ProvideProgressiveContextPrompt(language)` builds the system prompt from the shipped resources under `Resources/Workflow/{en,zh}/`.
+`ProvideProgressiveContextPrompt(language)` builds the system prompt from the shipped English resources under `Resources/Workflow/en/`.
 
 ⚙ **Language selection maps `Chinese → "zh"` and everything else to `"en"`, with a per-file fallback to English.** A partially translated resource set degrades document by document.
 

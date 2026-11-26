@@ -3,7 +3,7 @@
 > 代码：`Src/Core/VeloxDev.Core.Extension/`（`Agent/` 下按子目录分组：`MCP/`、`Safety/`、`Skills/`、`SubAgents/`、`Pipelines/`、`Dashboard/`、`Workflow/` 与 `Workflow/Functions/`，外加根目录 `AgentEx.cs`、`CheckpointEx.cs`、`CompiledGraphEx.cs` 与 `Compat/`）。
 > **依赖**：`Src/Core/VeloxDev.Core/AI/`（命名空间 `VeloxDev.AI`）。本模块**是它的调用方**，Core 对本科目零引用。
 > **外部包**：MAF 固定在 `Microsoft.Agents.AI` **1.22.0**（`Microsoft.Extensions.AI` 必须 ≥ 10.10.0，`ModelContextProtocol` 2.2.0）。MAF 有一批类型标着 `[Experimental]`（MAAI001），**整个 `Microsoft.Agents.AI.Compaction` 命名空间在内** —— 见 `native-capabilities.md`。
-> 嵌入资源：`Resources/Workflow/{en,zh}/{References,Safety,Skills}/`，若干 .md。
+> 嵌入资源：`Resources/Workflow/en/{References,Safety,Skills}/`，英文单语料。
 > 宿主样例：`Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs`。
 > 测试：`Src/Test/Unit/Core/VeloxDev.Core.Extension.Test/`（条数与耗时以 `dotnet test` 现跑为准）。
 
@@ -161,7 +161,7 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 | 内容 | 变化时钟 | 载体 | 缓存键 |
 |---|---|---|---|
 | 静态骨架（行为约束、参考文档、类型清单、安全策略） | 构造后从不 | 宿主 `ChatOptions.Instructions` | 构造期一次 |
-| **能力包络**（闸门 / 关掉的工具 / 预算 / 挡位漂移 / 类型差量） | 配置变更 + 预算用量档 | provider 的 `AIContext.Instructions`（框架**追加**在骨架之后，逐字 `"骨架\n"` 前缀稳定） | `ContextKey` = `Version` + 用量档 |
+| **能力包络**（闸门 / 关掉的工具 / 预算 / 选中集 / 挡位漂移 / 类型差量） | 配置变更 + 预算用量档 + 选中集变化 | provider 的 `AIContext.Instructions`（框架**追加**在骨架之后，逐字 `"骨架\n"` 前缀稳定） | `ContextKey` = `Version` + 选中集 revision + 用量档 |
 | 预算消耗 | 每轮 | 包络内，**分档**：仅 ≥ 上限 80% 时出现，20% 一档 | 靠分档自然稳定 —— 整个预算生命周期最多变 2 次 |
 
 **骨架收据**（`_skeletonReceipt`）是「不说两遍」的机制：骨架渲染时记下它写了什么快照，包络只补漂移的那几段，并用「取代上文」措辞。骨架从没被渲染过时，包络全量输出。**代价**：它假定「渲染出来的骨架就是交给模型的那份」—— 拿去当预览/日志渲染会让包络以为已经说过。
@@ -170,7 +170,9 @@ WorkflowAgentScope                      Agent/Workflow/WorkflowAgentScope.cs
 
 4. **一片提示文本只有一个主人，第二个到场的人让位。** 静态骨架与技能子系统都能渲染嵌入语料：`ProvideProgressiveContextPrompt()` 在 `Skills == null` 时把语料拼进骨架，而 `SkillAgentContextProvider` 本也读 `BuildEmbeddedBlock`。同一个 scope 两样都做 ⇒ 每篇技能文档进两次。解法是让**后接的一方**知情：`WorkflowAgentScope` 用 `_embeddedSkillsFrozenIntoPrompt`（sticky，一旦有骨架带着语料出门就置位）把事实传给 `SkillScope.CreateContextProvider(..., embeddedCorpusDelivered:)`，provider 于是改贡献 `SkillScope.BuildWithdrawnBlock`（**当前停用的嵌入技能名单**）而不是正文。骨架冻住的是当时的启用状态，`SetEnabled(name, false)` 若不发声就成了静默空操作。**正确的宿主顺序是先 `WithSkills` 再取骨架**（`AgentHelper.cs` 即是），语料归子系统，差量机制闲置。
 
-  这条是 §三 表格的必然推论：骨架住在宿主的 `ChatOptions.Instructions` 里，构造后**撤不回**。同一推理也适用于「技能/MCP 清单不进包络」（§三 表末段）—— 那两片各有 provider，第三个说话的人就是重复。
+  这条是 §四.3 表格的必然推论：骨架住在宿主的 `ChatOptions.Instructions` 里，构造后**撤不回**。同一推理也适用于「技能/MCP 清单不进包络」—— 那两片各有 provider，第三个说话的人就是重复。
+
+**随包的提示词只有英文一份。** 骨架、能力包络、选中段、安全语料、技能语料、子代理与技能广告都用英文；`WithPromptLanguage` 只影响客户类型说明的渲染语言与注册表键，不切换任何随包文本；说明文字的中文回退见 `memory/modules/AI/architecture.md` §二。
 
 ---
 
@@ -215,7 +217,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 | 工具预算（三档、拒绝文案、重置流程） | `WorkflowAgentToolkit.CheckInvocation`、`AccountAsync`、`ResetToolCallLimit`、`BudgetRefusal` 的根/子分叉、`Agent/Workflow/Functions/ToolCallLedger.cs`（树共享的那口锅）。**上限本身**由 `WithMax{Tool,Read,Write}ToolCalls` 设，三个都 `BumpVersion()` —— 门（`CheckInvocation`）读的是实时属性，包络读的是缓存文本，不 bump 就会让模型读到一个不被执行的上限。**`Bypass` 是门的例外**：三道次数上限跳过、账也不记（`AccountAsync`），包络（`AppendBudgets`）相应改说「Bypass 模式下不生效」——文案与门必须同源，否则模型会围着一堵不存在的墙规划 |
 | 子代理（派发 / 窄化 / 任意深度为什么终止） | `Agent/SubAgents/`（见 `sub-agents.md`） |
 | 提示词（行为约束、失败处理、渐进模式） | `Agent/Workflow/WorkflowAgentScope.cs` 的 `ProvideProgressiveContextPrompt`、`BuildFailureHandlingProtocol` |
-| 模式与规则注入什么 | `WorkflowAgentScope.BuildInteractionSafetyPrompt`（先 `Shared.md`、再 `{mode}.md`、最后宿主覆盖，自己再画真值表）+ `Resources/Workflow/{lang}/Safety/*.md` |
+| 模式与规则注入什么 | `WorkflowAgentScope.BuildInteractionSafetyPrompt`（先 `Shared.md`、再 `{mode}.md`、最后宿主覆盖，自己再画真值表）+ `Resources/Workflow/en/Safety/*.md` |
 | 每轮渲染的指令与工具 | `Agent/Workflow/WorkflowAgentContextProvider.cs` 的 `BuildContext`；指令是**能力包络**，不是 `null` —— 见 §四.3 |
 | 待办清单 / 运行模式 / 上下文压缩 | 三个都是**框架自带的 provider**，本模块只负责挂上去 —— 见 `native-capabilities.md` |
 | 每轮都用哪些 provider、按什么顺序 | `WorkflowAgentScope.CreateContextProviders()`；工具只从这里出，不走 `ChatOptions.Tools` |
@@ -242,7 +244,7 @@ MAUI 是 `AttachSession`，Jalium 是 `SubscribeTree`，WinForms 是 `LoadDemo`�
 | `AgentContextTreeRenderer.Class` | `Agent/Workflow/AgentContextTreeRenderer.cs` 的 `Class` | 提升出来的属性只列一次：目录给提升条目同时打了 `IsPromotedField` 与 `HasVeloxProperty`（生成器 `AIContextModel.cs` 的 `BuildPromotedProperty`），所以第二趟（带标注的属性）排除 `IsPromotedField`。反射那条本来就只列一次 —— 生成出来的属性不带 `[VeloxProperty]`。`[AgentContext] + [VeloxProperty]` 是每个 demo 节点写设置项的写法 |
 
 **语料按模式切，没有「挡位」这个概念**：
-`Resources/Workflow/{en,zh}/Safety/` 下是 `Shared.md` 加一组**同名于模式**的文件（`Plan`/`Manual`/`AutoEdit`/`Auto`/`Bypass`）。
+`Resources/Workflow/en/Safety/` 下是 `Shared.md` 加一组**同名于模式**的文件（`Plan`/`Manual`/`AutoEdit`/`Auto`/`Bypass`）。
 `BuildInteractionSafetyPrompt` 先读 `Shared.md`（跨模式不变的那一半：宿主边界、选择器约束），再读 `{mode}.md`，
 最后**追加**宿主用 `WithModePrompt(mode, text)` 加的规则（`WorkflowAgentScope.BuildInteractionSafetyPrompt`；它不替换随包的 Shared/mode 语料），然后**自己再画一张真值表**（模式 × 五个动作类别）与宿主规则清单。
 

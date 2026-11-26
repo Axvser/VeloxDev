@@ -10,7 +10,7 @@
 | **Compiler support** | `CompileWorkflow` / `GetCompileStatus` / `RunCompiledWorkflow` (chain-level execution) / `GetExecutionLog`; **holding and carrying on** a run (`StartCompiledWorkflow`, `PauseCompiledRun`, `ResumeCompiledRun`, `StopCompiledRun`, `GetCompiledRunStatus`, `ContinueCompiledWorkflow`) together with the checkpointing behind them (`CheckpointEx`, `FileCheckpointStore`) |
 | **MCP** | `McpScope` (stdio local + remote Streamable HTTP), `McpAgentToolkit` (Agent-managed servers), global bindable status VM (`McpStatusViewModel`) — **usable on its own** via `McpScope.CreateContextProvider()` |
 | **Skills** | `SkillScope` + `ISkillSource` (embedded documents, or Agent-Skills folders on disk), per-skill enable/disable, bindable `SkillsViewModel` — **usable on its own** via `SkillScope.CreateContextProvider()` |
-| **Bilingual skills/references** | `Resources/Workflow/{en,zh}/Skills|References|Safety`, embedded and merged into the Agent system prompt |
+| **Embedded prompt corpus** | `Resources/Workflow/en/{Skills,References,Safety}`, English-only, embedded and merged into the Agent system prompt |
 
 ## Quick start: Workflow Agent
 

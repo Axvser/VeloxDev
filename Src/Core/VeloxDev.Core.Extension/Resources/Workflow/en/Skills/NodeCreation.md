@@ -18,7 +18,7 @@ When the user asks to create a node, follow these steps **in order**:
 
 ### 📌 Default Value Resolution (CRITICAL)
 
-1. **`[AgentContext]` developer instructions** (pre-loaded or from `GetComponentContext`). Example: "默认大小为 200*100" means width=200, height=100. **Always authoritative.**
+1. **`[AgentContext]` developer instructions** (pre-loaded or from `GetComponentContext`). Example: "default size is 200*100" means width=200, height=100. **Always authoritative.**
 2. **`GetComponentContext` full property table** — when the pre-loaded description does not cover the specific property.
 3. **Never** use runtime values from other nodes, `GetTypeSchema` `defaultJson_runtimeOnly`, or guesswork as "defaults".
 

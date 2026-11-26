@@ -202,16 +202,12 @@ internal static class ReflectionContextOracle
             }
             else if (item.IsSingleSlot)
             {
-                description = language == AgentLanguages.Chinese
-                    ? $"单插槽属性（{item.Property.PropertyType.Name}）— 通过 ResolveSlotId 按属性名解析，或用 ConnectByProperty 直接连接"
-                    : $"Single slot property ({item.Property.PropertyType.Name}) — resolve via ResolveSlotId by property name, or connect directly with ConnectByProperty.";
+                description = $"Single slot property ({item.Property.PropertyType.Name}) — resolve via ResolveSlotId by property name, or connect directly with ConnectByProperty.";
             }
             else
             {
                 // Standard generic description for SlotEnumerator without [AgentContext]
-                description = language == AgentLanguages.Chinese
-                    ? "SlotEnumerator — 通过 SetEnumSlotCollection 工具配置选择器类型（枚举或 bool），禁止手动增删"
-                    : "SlotEnumerator — use SetEnumSlotCollection to configure the selector type (enum or bool). Do not add/remove slots manually.";
+                description = "SlotEnumerator — use SetEnumSlotCollection to configure the selector type (enum or bool). Do not add/remove slots manually.";
             }
 
             // If the property has [SlotSelectors], append allowed types to the description
@@ -227,9 +223,7 @@ internal static class ReflectionContextOracle
                     if (names.Count > 0)
                     {
                         var allowedList = string.Join(", ", names);
-                        description += language == AgentLanguages.Chinese
-                            ? $"; [允许的选择器类型 (allowedSelectorTypes): {allowedList}]"
-                            : $"; [allowedSelectorTypes: {allowedList}]";
+                        description += $"; [allowedSelectorTypes: {allowedList}]";
                     }
                 }
             }

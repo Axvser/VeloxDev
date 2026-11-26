@@ -134,18 +134,17 @@ public class SkillAgentContextProviderTests
     }
 
     [TestMethod]
-    public void BuildContext_ReRendersAfterALanguageChange()
+    public void BuildContext_UsesEnglishWhateverThePromptLanguage()
     {
-        // The prompt language is not part of the scope's Version, so it has to be part of the cache key —
-        // otherwise a host that switches language keeps the corpus it first rendered.
+        // The embedded corpus ships in English; the prompt language does not translate it.
         var scope = ScopeWithEmbeddedSkills();
         var provider = new SkillAgentContextProvider(scope);
 
         var english = provider.BuildContext().Instructions;
         scope.WithPromptLanguage(AgentLanguages.Chinese);
-        var chinese = provider.BuildContext().Instructions;
+        var chineseRequest = provider.BuildContext().Instructions;
 
-        Assert.AreNotEqual(english, chinese, "changing the prompt language must re-render the corpus");
+        Assert.AreEqual(english, chineseRequest, "the corpus is English whichever language is requested");
     }
 
     [TestMethod]
@@ -168,10 +167,9 @@ public class SkillAgentContextProviderTests
     }
 
     [TestMethod]
-    public void Tools_ReadSkillTextInTheScopesLanguage()
+    public void Tools_ReadSkillTextInEnglish()
     {
-        // The tools answer in the same language the prompt advertises, which is what makes the language
-        // part of the provider's cache key worth having.
+        // The embedded corpus ships in English, so the tools answer in English whatever the scope asks for.
         var scope = ScopeWithEmbeddedSkills().WithPromptLanguage(AgentLanguages.Chinese);
         var provider = new SkillAgentContextProvider(scope);
 
@@ -179,8 +177,8 @@ public class SkillAgentContextProviderTests
         var content = JObject.Parse(Invoke(load, ("skillName", "smart-layout")))["content"]?.Value<string>();
 
         Assert.IsFalse(string.IsNullOrWhiteSpace(content), "load_skill must return the skill's text");
-        Assert.IsTrue(content!.Any(c => c >= '一' && c <= '鿿'),
-            "the scope's language is Chinese, so the text read back must be too");
+        Assert.IsFalse(content!.Any(c => c >= '一' && c <= '鿿'),
+            "the corpus is English, so the text read back must be too");
     }
 
     [TestMethod]

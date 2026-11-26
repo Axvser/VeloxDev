@@ -7,7 +7,7 @@ description: Give an LLM control of a VeloxDev workflow graph — wire a Workflo
 
 Turn a workflow `Tree` into a **tool surface** an LLM can operate: list and inspect nodes, create and delete them, connect slots, patch properties, run a compiled chain or reverse-compute one node's result — through the *same* undoable commands the GUI uses.
 
-Package: **`VeloxDev.Core.Extension`** (`netstandard2.0;net8.0`). It also carries the compiled-graph and checkpoint helpers.
+Package: **`VeloxDev.Core.Extension`**. It also carries the compiled-graph and checkpoint helpers.
 
 ## The wiring
 
@@ -125,4 +125,4 @@ Read the symptom first, then the pitfall file.
 
 ⚙ `Examples/Workflow/Common/Lib/ViewModels/Workflow/Helper/AgentHelper.cs` is a complete working host — scope setup, an MCP panel, a sub-agent panel (`SubAgentScope.ForClient(chatClient).WithSubAgentDepth(3)`), per-conversation tool assembly and the permission-mode wiring.
 
-⚙ The prompts that ship to the model are under `Src/Core/VeloxDev.Core.Extension/Resources/Workflow/{en,zh}/` — seven `Skills/`, five `References/` and six `Safety/` documents, selected by `ProvideProgressiveContextPrompt(language)`. Read them to know what the model has already been told before you add to it.
+⚙ The prompts that ship to the model are the English documents under `Src/Core/VeloxDev.Core.Extension/Resources/Workflow/en/` — the `Skills/`, `References/` and `Safety/` folders, injected by `ProvideProgressiveContextPrompt`. Read them to know what the model has already been told before you add to it.

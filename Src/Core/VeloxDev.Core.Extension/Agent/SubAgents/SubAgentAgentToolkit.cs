@@ -89,7 +89,7 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         + "Afterwards use WaitSubAgents to collect its report.")]
     private Task<string> SpawnSubAgent(
         [Description("What the sub-agent must do. Write it as a complete, self-contained instruction — it cannot ask you anything, so whatever it needs must be in the task itself.")] string task,
-        [Description("A short title for this task, as the user should see it on the host's sub-agent panel. Not an identifier: name what the sub-agent is doing, in a few words, in the language the user is writing in — \"统计节点数\", not \"node-counter\" and not a sentence. Omitted, one is generated.")] string? name = null,
+        [Description("A short title for this task, as the user should see it on the host's sub-agent panel. Not an identifier: name what the sub-agent is doing, in a few words, in the language the user is writing in — \"count the nodes\", not \"node-counter\" and not a sentence. Omitted, one is generated.")] string? name = null,
         [Description("The exact tools the sub-agent may use. Omitted, it inherits every tool you currently have. An empty list grants no tools. Naming one you do not have, or one the host switched off, is refused and reported.")] string[]? allowedTools = null,
         [Description("The skills the sub-agent may read, by the names ListSkills reports. Omitted, it inherits the skills you have switched on. An empty list grants none, and its skill tools go with them — there would be nothing left for them to load.")] string[]? allowedSkills = null,
         [Description("The MCP servers the sub-agent may use, by the names ListMcpServers reports. Omitted, it inherits the servers you have connected and switched on. Each granted server arrives with only the tools you yourself have switched on, and the sub-agent can use it but cannot load, unload or add one.")] string[]? allowedMcpServers = null,
@@ -251,7 +251,7 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         if (offered.Count == 0) return string.Empty;
 
         var sb = new StringBuilder();
-        sb.AppendLine("## 子代理 / Sub-agents");
+        sb.AppendLine("## Sub-agents");
         sb.AppendLine();
 
         if (offered.Contains("SpawnSubAgent"))
@@ -314,14 +314,14 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
         if (rows.Count > 0)
         {
             if (sb.Length > 0) sb.AppendLine();
-            sb.AppendLine("### 你的子代理 / Your sub-agents");
+            sb.AppendLine("### Your sub-agents");
             foreach (var row in rows)
             {
                 var (task, _) = Truncate(row.Task, 100);
                 sb.Append("- ").Append(row.Name)
                   .Append(" [").Append(row.Id[..8]).Append("] ")
-                  .Append(row.StateText)
-                  .Append(" · ").Append(row.CallCount).Append(" 次调用")
+                  .Append(row.State)
+                  .Append(" · ").Append(row.CallCount).Append(" calls")
                   .Append(" · ").Append(task);
 
                 if (row.Result is { Length: > 0 } result)
@@ -345,7 +345,7 @@ public sealed class SubAgentAgentToolkit(SubAgentScope scope, WorkflowAgentScope
 
     private static void AppendBriefing(StringBuilder sb, ChildBriefing briefing, bool mayDispatch)
     {
-        sb.AppendLine("## 关于你自己 / About you");
+        sb.AppendLine("## About you");
         sb.AppendLine();
         sb.AppendLine($"You are a background sub-agent at depth {briefing.Depth}.");
         if (briefing.MaxToolCalls is { } budget)

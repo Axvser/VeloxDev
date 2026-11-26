@@ -139,14 +139,16 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         => _queryOnlyCustomToolNames.Contains(toolName);
 
     /// <summary>
-    /// Sets the global default language used when a per-call <c>language</c> argument is <c>null</c>.
+    /// Sets the global default language used when a per-call <c>language</c> argument is <c>null</c>, and
+    /// the language customer type descriptions are rendered in. The framework's own prompt text ships in
+    /// English only, so this does not change it.
     /// Call this once at the start of the fluent chain before any <c>With*</c> registration.
     /// </summary>
     public WorkflowAgentScope WithPromptLanguage(AgentLanguages language)
     {
         _defaultLanguage = language;
-        // Propagate to anything already attached: the skill subsystem renders in the prompt language, and
-        // the order of WithSkills and this call is the host's business.
+        // Propagate to anything already attached: the skill scope records the language for its providers,
+        // and the order of WithSkills and this call is the host's business.
         Skills?.WithPromptLanguage(language);
         BumpVersion();
         return this;
@@ -904,22 +906,12 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     /// model that can only say "the host must change a setting" leaves the user with nothing to press.
     /// </summary>
     /// <param name="invocation">The call that was denied.</param>
-    /// <returns>The message, in the session's language.</returns>
+    /// <returns>The message, in English.</returns>
     internal string DescribePermissionRefusal(ToolInvocation invocation)
     {
         var mode = _permission.Mode;
         var rule = _permission.Rules.FirstOrDefault(
             r => r.Decision == PermissionDecision.Deny && r.Matches(invocation));
-
-        if (_defaultLanguage == AgentLanguages.Chinese)
-        {
-            return rule is not null
-                ? $"'{invocation.Name}' 被宿主的 deny 规则（'{rule.Pattern}'）拒绝，它在每个模式下都生效。"
-                  + "这次调用没有执行。把是哪条规则挡住的告诉用户，宿主可以去掉它。"
-                : $"'{invocation.Name}' 被当前的权限模式 '{mode}' 拒绝：该模式不允许 {invocation.Category} 类动作。"
-                  + "这次调用没有执行。不要重试，也不要找另一个能做同样改动的工具 —— "
-                  + $"如果用户确实要做，请告诉他切到 Manual 或 AutoEdit（那两个模式允许 {invocation.Category} 类动作）。";
-        }
 
         return rule is not null
             ? $"'{invocation.Name}' was refused by a host deny rule ('{rule.Pattern}'), which holds in every mode. "
@@ -1015,24 +1007,23 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
 
     // ── Interaction safety prompt ───────────────────────────────────────────
 
-    private string BuildInteractionSafetyPrompt(AgentLanguages language)
+    private string BuildInteractionSafetyPrompt()
     {
         var mode = _permission.Mode;
-        var chinese = language == AgentLanguages.Chinese;
 
         var sb = new StringBuilder();
-        sb.AppendLine(chinese ? "## 权限模式与规则" : "## Permission Mode and Rules");
+        sb.AppendLine("## Permission Mode and Rules");
         sb.AppendLine();
 
         // ── 跨模式不变的那一半：宿主边界与选择器约束 ──
-        var shared = AgentEmbeddedResources.ReadSafety(SystemName, "Shared", language);
+        var shared = AgentEmbeddedResources.ReadSafety(SystemName, "Shared");
         if (!string.IsNullOrWhiteSpace(shared))
             sb.AppendLine(shared!.TrimEnd());
 
         sb.AppendLine();
 
         // ── 这一模式的规则 ──
-        var modeFile = AgentEmbeddedResources.ReadSafety(SystemName, mode.ToString(), language);
+        var modeFile = AgentEmbeddedResources.ReadSafety(SystemName, mode.ToString());
         if (!string.IsNullOrWhiteSpace(modeFile))
             sb.AppendLine(modeFile!.TrimEnd());
 
@@ -1040,15 +1031,13 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         if (_modePromptOverrides.TryGetValue(mode, out var custom) && !string.IsNullOrWhiteSpace(custom))
         {
             sb.AppendLine();
-            sb.AppendLine(chinese
-                ? "#### 宿主自定义附加规则（优先级高于上述所有默认规则）"
-                : "#### Host-Configured Additional Rules (take priority over all defaults above)");
+            sb.AppendLine("#### Host-Configured Additional Rules (take priority over all defaults above)");
             sb.AppendLine(custom.TrimEnd());
         }
 
         // ── 这一模式对每类动作的答案，以及宿主的确定性规则 ──
         sb.AppendLine();
-        sb.AppendLine(chinese ? "| 动作类别 | 本模式下 |" : "| Action category | In this mode |");
+        sb.AppendLine("| Action category | In this mode |");
         sb.AppendLine("| --- | --- |");
 #if NET5_0_OR_GREATER
         foreach (var category in Enum.GetValues<AgentActionCategory>())
@@ -1057,34 +1046,26 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
 #endif
         {
             var decision = AgentPermissionPolicy.ModeDefault(mode, category);
-            sb.AppendLine($"| {category} | {Word(decision, chinese)} |");
+            sb.AppendLine($"| {category} | {Word(decision)} |");
         }
 
         if (_permission.Rules.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine(chinese
-                ? "**宿主规则（优先级：deny > ask > allow > 上表）：**"
-                : "**Host rules (precedence: deny > ask > allow > the table above):**");
+            sb.AppendLine("**Host rules (precedence: deny > ask > allow > the table above):**");
             foreach (var rule in _permission.Rules)
                 sb.AppendLine($"- `{rule.Decision}` `{rule.Pattern}`");
         }
 
         sb.AppendLine();
-        if (chinese)
-            sb.AppendLine($"> 当前权限模式：**{mode}**（宿主用 `WithPermissionMode(AgentPermissionMode.{mode})` 设置）。被拒绝的调用会告诉你是哪个模式拦的 —— 不要重试，也不要找另一个能做同样改动的工具，把换模式这件事交给用户。");
-        else
-            sb.AppendLine($"> Active permission mode: **{mode}** (set by the host via `WithPermissionMode(AgentPermissionMode.{mode})`). A refused call names the mode that refused it — do not retry it and do not look for another tool that makes the same change; hand the mode switch to the user instead.");
+        sb.AppendLine($"> Active permission mode: **{mode}** (set by the host via `WithPermissionMode(AgentPermissionMode.{mode})`). A refused call names the mode that refused it — do not retry it and do not look for another tool that makes the same change; hand the mode switch to the user instead.");
         return sb.ToString();
     }
 
-    private static string Word(PermissionDecision decision, bool chinese) => (decision, chinese) switch
+    private static string Word(PermissionDecision decision) => decision switch
     {
-        (PermissionDecision.Allow, true) => "直接执行",
-        (PermissionDecision.Ask, true) => "先问用户",
-        (PermissionDecision.Deny, true) => "直接拒绝",
-        (PermissionDecision.Allow, false) => "runs",
-        (PermissionDecision.Ask, false) => "asks first",
+        PermissionDecision.Allow => "runs",
+        PermissionDecision.Ask => "asks first",
         _ => "refused",
     };
 
@@ -1289,12 +1270,12 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         AppendCustomToolsSection(result);
 
         // ── Interaction Safety Policy ──
-        result.AppendLine(BuildInteractionSafetyPrompt(language));
+        result.AppendLine(BuildInteractionSafetyPrompt());
 
         // ── Built-in Skills ──
-        AppendEmbeddedSkills(result, language);
+        AppendEmbeddedSkills(result);
         AppendOutputLanguageDirective(result);
-        CaptureSkeletonReceipt(language);
+        CaptureSkeletonReceipt();
         return result.ToString();
     }
 
@@ -1307,7 +1288,10 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     /// <summary>Provides a progressive context prompt using the global default language set by <see cref="WithPromptLanguage"/>.</summary>
     public string ProvideProgressiveContextPrompt() => ProvideProgressiveContextPrompt(_defaultLanguage);
 
-    /// <summary>Provides the progressive context prompt in <paramref name="language"/>.</summary>
+    /// <summary>
+    /// Provides the progressive context prompt. The prompt text is English; <paramref name="language"/>
+    /// is retained for source compatibility.
+    /// </summary>
     public string ProvideProgressiveContextPrompt(AgentLanguages language)
     {
         var result = new StringBuilder();
@@ -1331,7 +1315,7 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         result.AppendLine();
         result.AppendLine("### 1. Mount-before-operate");
         result.AppendLine("Nodes MUST be added to the Tree (via `CreateNode`) before any operation on their internals.");
-        result.AppendLine("Most operations on an unmounted node (`Parent == null`) result in " + (language == AgentLanguages.Chinese ? "**静默无操作**——框架不报错，操作不生效" : "**silent no-op** — the framework returns without error and the operation has no effect") + ".");
+        result.AppendLine("Most operations on an unmounted node (`Parent == null`) result in **silent no-op** — the framework returns without error and the operation has no effect.");
         result.AppendLine("Always use a `nodeIndex` or `runtimeId` obtained from `ListNodes` / `CreateNode` to reference nodes.");
         result.AppendLine();
         result.AppendLine("### 2. Delete cascading (do NOT pre-clean)");
@@ -1425,12 +1409,12 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         AppendCustomToolsSection(result);
 
         // ── Interaction Safety Policy ──
-        result.AppendLine(BuildInteractionSafetyPrompt(language));
+        result.AppendLine(BuildInteractionSafetyPrompt());
 
         // ── Built-in Skills ──
-        AppendEmbeddedSkills(result, language);
+        AppendEmbeddedSkills(result);
         AppendOutputLanguageDirective(result);
-        CaptureSkeletonReceipt(language);
+        CaptureSkeletonReceipt();
         return result.ToString();
     }
 
@@ -2033,9 +2017,6 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     /// </summary>
     private sealed class SkeletonReceipt
     {
-        /// <summary>The language the skeleton was written in — the envelope's prose follows it.</summary>
-        public AgentLanguages Language;
-
         /// <summary>The permission mode whose policy the skeleton spelled out.</summary>
         public AgentPermissionMode PermissionMode;
 
@@ -2072,11 +2053,10 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     /// or accept the envelope will consider its content stated.
     /// </para>
     /// </summary>
-    private void CaptureSkeletonReceipt(AgentLanguages language)
+    private void CaptureSkeletonReceipt()
     {
         _skeletonReceipt = new SkeletonReceipt
         {
-            Language = language,
             PermissionMode = _permission.Mode,
             PermissionRevision = PermissionRevision,
             SafetyOverrideLength = OverrideLengthFor(_permission.Mode),
@@ -2171,46 +2151,41 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         var sb = _envelopeScratch;
         sb.Clear();
 
-        var language = _skeletonReceipt?.Language ?? _defaultLanguage;
-        var chinese = language == AgentLanguages.Chinese;
-
-        sb.AppendLine(chinese ? "## 当前能力状态（每轮实时渲染）" : "## Current Capability State (rendered live, every turn)");
+        sb.AppendLine("## Current Capability State (rendered live, every turn)");
         sb.AppendLine();
-        sb.AppendLine(chinese
-            ? "> 上面那段提示词是启动时的快照。以下是**现在**的实际情况；若两者冲突，以这里为准。"
-            : "> The prompt above was a snapshot taken at startup. Below is how things stand **now**; where the two disagree, this section wins.");
+        sb.AppendLine("> The prompt above was a snapshot taken at startup. Below is how things stand **now**; where the two disagree, this section wins.");
         sb.AppendLine();
 
-        AppendAgentSelection(sb, language);
-        AppendGates(sb, language);
-        AppendToolSwitches(sb, language);
-        AppendBudgets(sb, chinese);
+        AppendAgentSelection(sb);
+        AppendGates(sb);
+        AppendToolSwitches(sb);
+        AppendBudgets(sb);
 
         var receipt = _skeletonReceipt;
         if (receipt is null)
         {
             // No skeleton was ever built, so nothing above has stated any of this and there is nothing to
             // supersede — every section is emitted plainly.
-            AppendInteractionSafetyPolicy(sb, language, supersedes: false);
-            AppendOutputLanguageDirective(sb, language, supersedes: false);
-            AppendCustomToolGuidance(sb, language, fromLength: 0);
-            AppendRegisteredTypeDelta(sb, language, new SkeletonReceipt());
+            AppendInteractionSafetyPolicy(sb, supersedes: false);
+            AppendOutputLanguageDirective(sb, supersedes: false);
+            AppendCustomToolGuidance(sb, fromLength: 0);
+            AppendRegisteredTypeDelta(sb, new SkeletonReceipt());
         }
         else
         {
             if (receipt.PermissionMode != _permission.Mode
                 || receipt.PermissionRevision != PermissionRevision
                 || receipt.SafetyOverrideLength != OverrideLengthFor(_permission.Mode))
-                AppendInteractionSafetyPolicy(sb, language, supersedes: true);
+                AppendInteractionSafetyPolicy(sb, supersedes: true);
 
             var outputLanguage = _outputLanguage.HasValue ? (int)_outputLanguage.Value : -1;
             if (receipt.OutputLanguage != outputLanguage)
-                AppendOutputLanguageDirective(sb, language, supersedes: receipt.OutputLanguage >= 0);
+                AppendOutputLanguageDirective(sb, supersedes: receipt.OutputLanguage >= 0);
 
             if (receipt.CustomToolPromptLength != _customToolPrompt.Length)
-                AppendCustomToolGuidance(sb, language, fromLength: receipt.CustomToolPromptLength);
+                AppendCustomToolGuidance(sb, fromLength: receipt.CustomToolPromptLength);
 
-            AppendRegisteredTypeDelta(sb, language, receipt);
+            AppendRegisteredTypeDelta(sb, receipt);
         }
 
         var text = sb.ToString();
@@ -2218,67 +2193,54 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         return text;
     }
 
-    private void AppendAgentSelection(StringBuilder sb, AgentLanguages language)
+    private void AppendAgentSelection(StringBuilder sb)
     {
-        var rendered = WorkflowAgentSelection.Render(Tree, language);
+        var rendered = WorkflowAgentSelection.Render(Tree);
         if (rendered.Length == 0) return;
 
         sb.Append(rendered);
     }
 
-    private void AppendGates(StringBuilder sb, AgentLanguages language)
+    private void AppendGates(StringBuilder sb)
     {
-        var chinese = language == AgentLanguages.Chinese;
-        sb.AppendLine(chinese ? "### 当前生效的闸门" : "### Gates in force");
+        sb.AppendLine("### Gates in force");
         sb.AppendLine();
-        sb.AppendLine(chinese
-            ? $"- 运行节点业务代码（`ExecuteNode` / `ExecuteNodes` / `BroadcastNode` / `ReverseBroadcastNode`）：**{(AllowNodeExecution ? "允许" : "禁止")}**"
-            : $"- Running node business code (`ExecuteNode` / `ExecuteNodes` / `BroadcastNode` / `ReverseBroadcastNode`): **{(AllowNodeExecution ? "ALLOWED" : "DENIED")}**");
+        sb.AppendLine($"- Running node business code (`ExecuteNode` / `ExecuteNodes` / `BroadcastNode` / `ReverseBroadcastNode`): **{(AllowNodeExecution ? "ALLOWED" : "DENIED")}**");
 
-        sb.AppendLine(chinese
-            ? "- 自动标脏：**开启（无条件）—— 每次工具调用后框架都会标脏，`MarkDirty` 可选、永远不必调用**"
-            : "- Automatic dirty marking: **ON (unconditional) — the framework marks the tree dirty after every tool call; `MarkDirty` is optional and never required**");
+        sb.AppendLine("- Automatic dirty marking: **ON (unconditional) — the framework marks the tree dirty after every tool call; `MarkDirty` is optional and never required**");
 
         var commands = AllowedGenericCommands;
-        var generic = chinese
-            ? "- 泛型命令（`ExecuteCommandOnNode` / `ExecuteCommandById`）："
-            : "- Generic commands (`ExecuteCommandOnNode` / `ExecuteCommandById`): ";
+        var generic = "- Generic commands (`ExecuteCommandOnNode` / `ExecuteCommandById`): ";
         sb.AppendLine(generic + (commands.Count > 0
-            ? (chinese ? $"仅限 {string.Join("、", commands.OrderBy(c => c, StringComparer.Ordinal))}"
-                       : $"restricted to {string.Join(", ", commands.OrderBy(c => c, StringComparer.Ordinal))}")
-            : (chinese ? "**完全禁用**（未加入任何白名单）" : "**disabled entirely** (nothing is allowlisted)")));
+            ? $"restricted to {string.Join(", ", commands.OrderBy(c => c, StringComparer.Ordinal))}"
+            : "**disabled entirely** (nothing is allowlisted)"));
         sb.AppendLine();
     }
 
-    private void AppendToolSwitches(StringBuilder sb, AgentLanguages language)
+    private void AppendToolSwitches(StringBuilder sb)
     {
-        var chinese = language == AgentLanguages.Chinese;
         var disabled = DisabledToolNames;
 
-        sb.AppendLine(chinese ? "### 被宿主关掉的工具" : "### Tools switched off by the host");
+        sb.AppendLine("### Tools switched off by the host");
         sb.AppendLine();
         if (disabled.Count == 0)
         {
-            sb.AppendLine(chinese
-                ? "全部可用 —— 没有任何工具被关闭。"
-                : "None — every registered tool is available.");
+            sb.AppendLine("None — every registered tool is available.");
         }
         else
         {
-            sb.AppendLine(chinese
-                ? "下列工具**不会被提供**给你。不要尝试调用它们，也不要假设它们失败是暂时的："
-                : "These are **not offered** to you. Do not attempt to call them, and do not treat their absence as temporary:");
+            sb.AppendLine("These are **not offered** to you. Do not attempt to call them, and do not treat their absence as temporary:");
             foreach (var name in disabled.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
                 sb.AppendLine($"- `{name}`");
         }
         sb.AppendLine();
     }
 
-    private void AppendBudgets(StringBuilder sb, bool chinese)
+    private void AppendBudgets(StringBuilder sb)
     {
         var (toolCalls, readCalls, writeCalls) = CreateToolkit().CallUsage;
 
-        sb.AppendLine(chinese ? "### 调用预算" : "### Call budgets");
+        sb.AppendLine("### Call budgets");
         sb.AppendLine();
 
         // Bypass does not enforce the three call-count caps (WorkflowAgentToolkit.CheckInvocation), so
@@ -2286,18 +2248,16 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
         // normal rendering: it is the one budget Bypass still applies.
         if (_permission.Mode == AgentPermissionMode.Bypass)
         {
-            sb.AppendLine(chinese
-                ? "- 工具调用 / 只读（查询）调用 / 变更调用：**Bypass 模式下不生效**"
-                : "- Tool calls / read-only (query) calls / mutating calls: **not enforced in Bypass mode**");
+            sb.AppendLine("- Tool calls / read-only (query) calls / mutating calls: **not enforced in Bypass mode**");
         }
         else
         {
-            AppendBudgetLine(sb, chinese, chinese ? "工具调用" : "Tool calls", toolCalls, MaxToolCalls);
-            AppendBudgetLine(sb, chinese, chinese ? "只读（查询）调用" : "Read-only (query) calls", readCalls, MaxReadToolCalls);
-            AppendBudgetLine(sb, chinese, chinese ? "变更调用" : "Mutating calls", writeCalls, MaxWriteToolCalls);
+            AppendBudgetLine(sb, "Tool calls", toolCalls, MaxToolCalls);
+            AppendBudgetLine(sb, "Read-only (query) calls", readCalls, MaxReadToolCalls);
+            AppendBudgetLine(sb, "Mutating calls", writeCalls, MaxWriteToolCalls);
         }
 
-        AppendBudgetLine(sb, chinese, chinese ? "Tokens" : "Tokens", TotalTokens, MaxTokens);
+        AppendBudgetLine(sb, "Tokens", TotalTokens, MaxTokens);
         sb.AppendLine();
     }
 
@@ -2305,74 +2265,60 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     /// One budget line. The usage figure appears only once the band is non-zero — below that the model has
     /// nothing to act on, and leaving it out is what keeps an idle turn from rendering different text.
     /// </summary>
-    private static void AppendBudgetLine(StringBuilder sb, bool chinese, string label, long used, int? cap)
+    private static void AppendBudgetLine(StringBuilder sb, string label, long used, int? cap)
     {
         if (!cap.HasValue)
         {
-            sb.AppendLine(chinese ? $"- {label}：无上限" : $"- {label}: no cap");
+            sb.AppendLine($"- {label}: no cap");
             return;
         }
 
         var percent = cap.Value > 0 ? (int)Math.Min(100L, used * 100 / cap.Value) : 0;
         if (percent < 80)
         {
-            sb.AppendLine(chinese ? $"- {label}：上限 {cap.Value}" : $"- {label}: cap {cap.Value}");
+            sb.AppendLine($"- {label}: cap {cap.Value}");
             return;
         }
 
         var state = percent >= 100
-            ? (chinese ? "**已用尽 —— 在重置前不会再接受任何调用**" : "**spent — no further calls are accepted until it is reset**")
-            : (chinese ? "**接近上限**" : "**near the limit**");
-        sb.AppendLine(chinese
-            ? $"- {label}：{used}/{cap.Value}，{state}"
-            : $"- {label}: {used}/{cap.Value}, {state}");
+            ? "**spent — no further calls are accepted until it is reset**"
+            : "**near the limit**";
+        sb.AppendLine($"- {label}: {used}/{cap.Value}, {state}");
     }
 
-    private void AppendInteractionSafetyPolicy(StringBuilder sb, AgentLanguages language, bool supersedes)
+    private void AppendInteractionSafetyPolicy(StringBuilder sb, bool supersedes)
     {
-        var chinese = language == AgentLanguages.Chinese;
-
         // There is no "no policy" state under modes: every mode has text, Plan included. So the only thing
         // the envelope has to say here is that a frozen policy has moved on.
         if (supersedes)
         {
-            sb.AppendLine(chinese
-                ? "### 权限模式或规则已变更（取代上文）"
-                : "### Permission mode or rules changed (replaces the section above)");
+            sb.AppendLine("### Permission mode or rules changed (replaces the section above)");
             sb.AppendLine();
-            sb.AppendLine(chinese
-                ? "> 上文那份策略已经失效，**以下取代它**。"
-                : "> The policy above no longer applies — **the following replaces it**.");
+            sb.AppendLine("> The policy above no longer applies — **the following replaces it**.");
             sb.AppendLine();
         }
 
-        sb.AppendLine(BuildInteractionSafetyPrompt(language));
+        sb.AppendLine(BuildInteractionSafetyPrompt());
     }
 
-    private void AppendOutputLanguageDirective(StringBuilder sb, AgentLanguages language, bool supersedes)
+    private void AppendOutputLanguageDirective(StringBuilder sb, bool supersedes)
     {
         if (_outputLanguage is null) return;
 
-        var chinese = language == AgentLanguages.Chinese;
         if (supersedes)
         {
-            sb.AppendLine(chinese
-                ? "### 输出语言已变更（取代上文的 Output Language 小节）"
-                : "### Output language changed (replaces the Output Language section above)");
+            sb.AppendLine("### Output language changed (replaces the Output Language section above)");
             sb.AppendLine();
         }
         AppendOutputLanguageDirective(sb);
         sb.AppendLine();
     }
 
-    private void AppendCustomToolGuidance(StringBuilder sb, AgentLanguages language, int fromLength)
+    private void AppendCustomToolGuidance(StringBuilder sb, int fromLength)
     {
         if (_customToolPrompt.Length <= fromLength) return;
 
-        var chinese = language == AgentLanguages.Chinese;
-        sb.AppendLine(chinese
-            ? "### 新注册工具的使用说明（上文 Custom Tools 小节之后新增的部分）"
-            : "### Guidance for tools registered since startup (the part after the Custom Tools section above)");
+        sb.AppendLine("### Guidance for tools registered since startup (the part after the Custom Tools section above)");
         sb.AppendLine();
         sb.AppendLine(_customToolPrompt.ToString(fromLength, _customToolPrompt.Length - fromLength).TrimEnd());
         sb.AppendLine();
@@ -2383,22 +2329,18 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     /// model may meet, and a type registered later would otherwise be invisible until the agent stumbles on
     /// it — <c>GetComponentContext</c> answers 404 for a type it was never told about.
     /// </summary>
-    private void AppendRegisteredTypeDelta(StringBuilder sb, AgentLanguages language, SkeletonReceipt receipt)
+    private void AppendRegisteredTypeDelta(StringBuilder sb, SkeletonReceipt receipt)
     {
         var added = new List<string>();
-        CollectAdded(added, CustomerEnums, receipt.Enums, language, "enum");
-        CollectAdded(added, CustomerInterfaces, receipt.Interfaces, language, "interface");
-        CollectAdded(added, CustomerComponents, receipt.Components, language, "component");
-        CollectAdded(added, CustomerData, receipt.Data, language, "data");
+        CollectAdded(added, CustomerEnums, receipt.Enums, "enum");
+        CollectAdded(added, CustomerInterfaces, receipt.Interfaces, "interface");
+        CollectAdded(added, CustomerComponents, receipt.Components, "component");
+        CollectAdded(added, CustomerData, receipt.Data, "data");
         if (added.Count == 0) return;
 
-        sb.AppendLine(language == AgentLanguages.Chinese
-            ? "### 启动后新注册的类型"
-            : "### Types registered since startup");
+        sb.AppendLine("### Types registered since startup");
         sb.AppendLine();
-        sb.AppendLine(language == AgentLanguages.Chinese
-            ? "> 上文清单是启动时的快照。以下类型在那之后加入，现在同样可用。"
-            : "> The catalogue above was a startup snapshot. These were added afterwards and are available now.");
+        sb.AppendLine("> The catalogue above was a startup snapshot. These were added afterwards and are available now.");
         sb.AppendLine();
         foreach (var line in added) sb.AppendLine(line);
         sb.AppendLine();
@@ -2406,15 +2348,14 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
 
     private static void CollectAdded(
         List<string> into, Dictionary<AgentLanguages, HashSet<Type>> source,
-        HashSet<string> alreadyListed, AgentLanguages language, string kind)
+        HashSet<string> alreadyListed, string kind)
     {
-        var label = language == AgentLanguages.Chinese ? "客户" : "customer";
         foreach (var set in source.Values)
             foreach (var t in set)
             {
                 var name = t.FullName ?? t.Name;
                 if (alreadyListed.Contains(name)) continue;
-                into.Add($"- `{name}` ({label} {kind})");
+                into.Add($"- `{name}` (customer {kind})");
             }
     }
 
@@ -2447,11 +2388,11 @@ public class WorkflowAgentScope(ITreeComponent tree) : IAgentToolCallNotifier, I
     /// <see cref="AttachSkillProvider"/>.
     /// </para>
     /// </summary>
-    private void AppendEmbeddedSkills(StringBuilder result, AgentLanguages language)
+    private void AppendEmbeddedSkills(StringBuilder result)
     {
         if (Skills is not null) return;
         _embeddedSkillsFrozenIntoPrompt = true;
-        result.AppendLine(AgentEmbeddedResources.ReadAllSkills(SystemName, language).TrimEnd());
+        result.AppendLine(AgentEmbeddedResources.ReadAllSkills(SystemName).TrimEnd());
         result.AppendLine();
     }
 

@@ -34,7 +34,7 @@
 | 把 `[AgentContext]` 写在基类上，指望派生类的属性/方法带下来 | 属性与方法**不继承**：目录按类型分别收录成员，派生类型读自己那份（基类的成员只能通过基类链被"发现"，不会把说明挪到派生类型的同名成员上） | `AIContextModelBuilder.ReadMembers`（只读 `symbol.GetMembers()`） |
 | 给**命令**补说明时写在具体类的属性上 | 对 `ICommand` 而言**接口上的才算数** —— 生成器按同名属性回查接口，接口上写了就用接口的 | 生成器 `AIContextModelBuilder.InterfaceCommandProperty` |
 | 给**普通属性/方法**补说明时写在接口上 | **不生效**：只有命令那条路会回查接口，属性/方法不扫接口 | 同上，`InterfaceCommandProperty` 只在 `isCommand` 时调用 |
-| 只写英文，就以为中文/日文界面下这个成员没有说明 | **有语言回退，但是整目标、全有或全无**：该目标一条目标语言都没有时整体退回英文；只要命中 ≥ 1 条目标语言，就不再夹带英文 | `AgentTextSelection.Select`（`AgentText.cs`）；测试 `.../AgentContextReaderTests.cs` 的 `..._FallsBackToEnglish` / `..._FallbackIsAllOrNothing` |
+| 只写英文，就以为中文/日文界面下这个成员没有说明 | **有语言回退，但是整目标、全有或全无**：该目标一条目标语言都没有时整体退回英文；只要命中 ≥ 1 条目标语言，就不会夹带英文 | `AgentTextSelection.Select`（`AgentText.cs`）；测试 `.../AgentContextReaderTests.cs` 的 `..._FallsBackToEnglish` / `..._FallbackIsAllOrNothing` |
 | 只写了中文，指望英文界面也能看到 | **英文无处可退**：`language == English` 时直接返回命中集（可能为空） | 同上；测试 `..._EnglishRequestNeverFallsBack` |
 | 写 `[AgentContext("说明")]` | **编译不过**：位置参数第一位是 `AgentLanguages` | `AgentContextAttribute.cs` 的构造签名 |
 
@@ -57,7 +57,7 @@
 | 捷径 | 为什么错 | 依据 |
 |---|---|---|
 | 用 `SetProperties` 的 `rejected` 做通配/前缀屏蔽 | 它是**精确名字**比对的 `ISet<string>`，没有模式匹配 | `AgentPropertyAccessor.SetProperties` |
-| 用 `CopyScalarProperties` 做「同名字段对拷」并期待类型自适应 | 名不副实：它转调访问器的 `CopyScalarFrom`，搬的是**两个类型共有的、可写的全部成员**（不再限标量），类型不同就在生成代码里硬转失败、被吞掉。**零生产调用者** —— 真正跑的是 `ComponentPatcher` 那份自带白名单的分叉 | `AgentPropertyAccessor.CopyScalarProperties`；`.../Functions/ComponentPatcher.cs` |
+| 用 `CopyScalarProperties` 做「同名字段对拷」并期待类型自适应 | 名不副实：它转调访问器的 `CopyScalarFrom`，搬的是**两个类型共有的、可写的全部成员**（不限标量），类型不同就在生成代码里硬转失败、被吞掉。**零生产调用者** —— 实际跑的是 `ComponentPatcher` 那份自带白名单的分叉 | `AgentPropertyAccessor.CopyScalarProperties`；`.../Functions/ComponentPatcher.cs` |
 | 靠 `SetPropertyValue` 报错来兜住非法值 | 它查目录拿 `CanWrite` 再写：枚举**能从字符串（`ignoreCase`）或数字进来**，其它不受支持的转换会抛、并被吞成 `SetResult.Error`（不会有异常逃出到调用方）。「不在目录里」与「只读」是两条不同的错误文案 | `AgentPropertyAccessor.SetPropertyValue`；`AIContextConvert` |
 | 以为写一个**不在目录里**的属性会悄悄失败 | 会失败，但原因是闭世界：**类型本身**不在目录里时，连属性列表都是空的 | `AIContextMembers.TypeNameOf`；`architecture.md` §七 |
 
@@ -182,7 +182,7 @@
 4. 不加工具、不 `BumpVersion`、不在渲染期读活模型、不为选中改工作流上下文 —— 见 §二·8。
 5. 自检：`scope.BuildDynamicInstructions()` 出现 `## Current Node Selection` 或 `## 当前选中的节点`；`BuildDynamicTools()` 前后同名同数；删除或重父后该 `RuntimeId` 自动消失、其余节点顺序不变。
 
-**Demo 侧接线（全量 demo）**：`Examples/Workflow/Common/Lib/.../AgentSelection.cs` 的 `Toggle` 调扩展并广播静态 `Changed` 事件；各家的 `VetoFrameworkGestures`、Jalium 的 `OnLinkPointerPressed` 在 Ctrl+左键时调用它。卡片视觉：WPF `CardBorderStyle` DataTrigger、Avalonia `.agent-selected Border.card`（⚠ 必须用类选择器，`UserControl.agent-selected` 不命中派生视图）、WinUI/MAUI 直接改卡 Border、Jalium `NodeViewBase` ring、WinForms `WorkflowNodeCard.OnPaintBackground`、Blazor `.wf-card.agent-selected`。不往节点模型写伪属性 —— 静态事件就够了。
+**Demo 侧接线**（共享桥 `Examples/Workflow/Common/Lib/.../AgentSelection.cs`、各家 Ctrl+左键入口与卡片视觉）见 `architecture.md` §八点五。
 
 ### G. 用资源文件写 Agent 说明
 
@@ -206,11 +206,11 @@
 | 2 | `AgentLanguagesExtensions.ToLanguageCode` 的 switch | 该语言调 `ToLanguageCode()` **抛** `ArgumentOutOfRangeException` |
 | 3 | `AgentLanguagesExtensions.GetDisplayName` 的 switch | 同上，提示词渲染时抛 |
 | 4 | `LanguageCodeMap` | `TryParseLanguageCode` 永远认不出该语言，**静默返回 false** |
-| 5 | 消费方的第二张码表 `Src/Core/VeloxDev.Core.Extension/Agent/AgentEmbeddedResources.cs`（私有 `ToLangCode` 与公开包装 `ToLanguageCode`） | 它的判断是 `language == AgentLanguages.Chinese ? "zh" : "en"`，而 `Chinese` 是 `ChineseSimplified` 的别名（`AgentLanguages.cs` 的 `Chinese = ChineseSimplified`）⇒ **只有简中进 `zh` 目录，繁体中文也走 `"en"`**；新语言同样静默走英文目录 |
+| 5 | 嵌入式资源的语言码 `Src/Core/VeloxDev.Core.Extension/Agent/AgentEmbeddedResources.cs` 的 `ToLanguageCode` | 恒返回 `"en"`；内置提示词只有英文一份，新增语言不改变嵌入资源 |
 | 6 | 每个作者的 `[AgentContext]` | 该语言下这个成员的说明**退回英文**（只有在连英文都没写时才是空数组） |
-| 7 | 嵌入式资源目录（`Src/Core/VeloxDev.Core.Extension/Resources/Workflow/en\|zh/`） | 该语言的技能/参考文件不存在 → 静默回退英文。目录约定见 `.../Agent/AgentEmbeddedResources.cs` 的类注释（`Resources/{System}/{LangCode}/...`），读法见 `.../Agent/Skills/EmbeddedSkillSource.cs` 的 `SkillDescriptor.Path` |
+| 7 | 嵌入式资源目录（`Src/Core/VeloxDev.Core.Extension/Resources/Workflow/en/`） | 只有英文一份；新增语言不产生该语言的技能/参考文件，`Read*` 方法上的 `language` 参数不改变读取的目录。目录约定见 `.../Agent/AgentEmbeddedResources.cs` 的类注释，读法见 `.../Agent/Skills/EmbeddedSkillSource.cs` 的 `SkillDescriptor.Path` |
 
-**两张同名不同义的 `ToLanguageCode` 都在 `VeloxDev.AI` 命名空间里**：`AgentLanguagesExtensions.ToLanguageCode`（扩展方法，BCP-47 风格）与 `AgentEmbeddedResources.ToLanguageCode`（普通静态，只有 `zh`/`en`）。因为前者是扩展方法，`lang.ToLanguageCode()` 永远解析到前者 —— 所以**没有编译期歧义，也没有任何提示**告诉你这里有两套码。
+**两张同名不同义的 `ToLanguageCode` 都在 `VeloxDev.AI` 命名空间里**：`AgentLanguagesExtensions.ToLanguageCode`（扩展方法，BCP-47 风格）与 `AgentEmbeddedResources.ToLanguageCode`（普通静态，恒 `en`）。前者是扩展方法，`lang.ToLanguageCode()` 永远解析到前者 —— **没有编译期歧义，也没有任何提示**告诉你这里有两套码。
 
 ### 4.2 加一个 `[AgentContext]` 的读取点（新助手 / 新发现器）
 

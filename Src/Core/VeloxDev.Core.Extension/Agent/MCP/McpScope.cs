@@ -439,7 +439,7 @@ public class McpScope : IAsyncDisposable
         {
             // A disabled server keeps its connection and its tool count, but offers the Agent nothing.
             // Reporting the real count here would contradict the tool set actually contributed this turn.
-            var state = server.IsEnabled ? server.StateText : $"{server.StateText} (disabled by host)";
+            var state = server.IsEnabled ? server.State.ToString() : $"{server.State} (disabled by host)";
             var offered = server.IsEnabled ? server.ToolCount : 0;
             sb.AppendLine($"| {server.Name} | {state} | {offered} |");
         }

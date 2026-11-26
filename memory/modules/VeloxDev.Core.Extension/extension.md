@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 一个工作流工具 | `WorkflowAgentToolkit` 里加 `private async Task<string> Xxx(...)` + `[Description]`，在 `CreateAllTools` 里 `Add(类别, T(Xxx, 名字))` | `Agent/Workflow/Functions/WorkflowAgentToolkit.cs`（`CreateAllTools`） | 是（闸门 / 预算自动生效） |
 | 一个工具类别 | `WorkflowToolCategory` 加 `[Flags]` 位 | `Agent/Workflow/Functions/WorkflowToolCategory.cs` | — |
-| 一个技能（内置语料） | 放 `Resources/Workflow/{en,zh}/Skills/<Name>.md` | 不需要改 C# | — |
+| 一个技能（内置语料） | 放 `Resources/Workflow/en/Skills/<Name>.md` | 不需要改 C# | — |
 | 一个技能来源（外部） | 实现 `ISkillSource` | `Agent/Skills/ISkillSource.cs` 的 `ISkillSource` | — |
 | 一个管线阶段 | 实现 `IAgentPipelineStage` / `Use(handler)` | `Agent/Pipelines/AgentPipeline.cs` 的 `IAgentPipelineStage`、`Use(handler)` | — |
 | 一个上下文提供者 | `WorkflowAgentScope.WithContextProvider(Func<scope, AIContextProvider>)` | `Agent/Workflow/WorkflowAgentScope.cs` 的 `WithContextProvider` | 顺序固定在自带的三片之后 |
@@ -84,7 +84,7 @@
 
 ### B. 加一个内置技能
 
-1. `Resources/Workflow/en/Skills/<Name>.md` **和** `Resources/Workflow/zh/Skills/<Name>.md`。
+1. `Resources/Workflow/en/Skills/<Name>.md`。
 2. 顶部 YAML frontmatter（`name` 必须是 kebab-case，≤ 64 字符；`description` ≤ 1024）。缺失时回退到从文件名/首个标题派生，但质量差。
 3. 不需要改 C#，也不需要改 csproj（`EmbeddedResource Include="Resources\**\*"` 是通配的）。
 4. 要加**带资源**的技能，用文件来源（`SKILL.md` + 同目录资源），因为嵌入来源的 `ReadResource` 恒为 `null`。
@@ -137,7 +137,7 @@
 | 新的 `With*` 开关（预算、结果上限、token 上限） | 要 `BumpVersion()`：闸门读实时值，包络读缓存文本，不 bump 模型会读到一个不被执行的上限 |
 | `WorkflowAgentScope.WithWorkflowLoader` / `TreeChanged` | `LoadWorkflow` 换树后宿主必须重绑画布；不订阅事件就还在画旧树 |
 | `WorkflowAgentScope` 的提示文本 | 模型不知道存在就不会用 |
-| `Resources/Workflow/{en,zh}/Safety/*.md` | 若新工具与安全挡位有关 |
+| `Resources/Workflow/en/Safety/*.md` | 若新工具与安全挡位有关 |
 | `skills/veloxdev-drive-workflow-with-ai/references/tools.md`、同目录 `mcp.md`、`SKILL.md` | 公开文档里的工具清单 |
 | `Src/Core/VeloxDev.Core.Extension/README.md` 与 csproj 的 `Description` | 里面有会过期的工具数量 |
 | `VeloxDev.Core.Extension.Test/Agent/**` | `ProvideTools()` 按名取工具；改名会让测试静默找不到（`Single` 会抛，`FirstOrDefault` 不会） |
@@ -152,7 +152,7 @@
 |---|---|---|
 | `WorkflowAgentScope.BuildDynamicInstructions()` | `BuildDynamicInstructions` | **活的钩子**：渲染**能力包络**。`WorkflowAgentContextProvider.BuildRender` 是唯一调用它。包络走 provider 通道，追加在骨架之后 |
 | `WorkflowAgentScope.ProvideAllContexts` | `ProvideAllContexts` 的两个重载 | **仓库内无外部调用者**；是「另一档提示模式」，宿主样例走的是渐进模式。两档都会写骨架收据 |
-| `WorkflowAgentScope.WithPromptLanguage` 的漂移 | `WithPromptLanguage` | **不修**：语言变了无法用「追加」纠正。文档把它定死为构造期首个调用；包络的措辞跟随**骨架渲染时的**语言 |
+| `WorkflowAgentScope.WithPromptLanguage` 的漂移 | `WithPromptLanguage` | **不修**：语言变了无法用「追加」纠正。文档把它定死为构造期首个调用；包络的措辞恒为英文 |
 | `McpScope.WithMcpRoot` | `WithMcpRoot` | 仓库内无调用者；`.evn/mcp` 是唯一用到的根 |
 | `AddMcpServer` 的完整路径 | `McpScope` | 只有测试在跑 |
 | `AgentDashboardViewModel` | `Agent/Dashboard/AgentDashboardViewModel.cs` | 有测试、**无 UI 消费者**；三个 demo 绑的是 `McpScope.Status` |

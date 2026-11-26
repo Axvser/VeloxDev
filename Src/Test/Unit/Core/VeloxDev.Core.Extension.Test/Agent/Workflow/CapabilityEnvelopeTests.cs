@@ -214,11 +214,11 @@ public class CapabilityEnvelopeTests
         StringAssert.Contains(boundaries, "Going around that route is forbidden",
             "while the thing it does forbid is the way round it");
 
-        var chinese = new WorkflowAgentScope(new TreeDefaultViewModel())
+        var chineseRequest = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithPromptLanguage(AgentLanguages.Chinese)
             .ProvideProgressiveContextPrompt();
-        StringAssert.Contains(chinese, "宿主边界",
-            "both corpora carry it, or half the hosts keep the policy that said nothing about this");
+        StringAssert.Contains(chineseRequest, "Host Boundaries",
+            "the framework prompt is English, whatever language the session asks for");
 
         var planning = new WorkflowAgentScope(new TreeDefaultViewModel())
             .WithPermissionMode(AgentPermissionMode.Plan)
@@ -328,12 +328,12 @@ public class CapabilityEnvelopeTests
     }
 
     [TestMethod]
-    public void TheEnvelope_FollowsTheSkeletonLanguage()
+    public void TheEnvelope_IsEnglishWhateverThePromptLanguage()
     {
         var scope = Scope().WithPromptLanguage(AgentLanguages.Chinese);
         scope.ProvideProgressiveContextPrompt();
 
-        StringAssert.Contains(Envelope(scope), "当前生效的闸门");
+        StringAssert.Contains(Envelope(scope), "Gates in force");
     }
 
     [TestMethod]

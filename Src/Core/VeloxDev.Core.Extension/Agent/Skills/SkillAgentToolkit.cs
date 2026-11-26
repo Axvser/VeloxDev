@@ -34,8 +34,8 @@ public sealed class SkillAgentToolkit(SkillScope scope)
     private readonly SkillScope _scope = scope ?? throw new ArgumentNullException(nameof(scope));
 
     /// <summary>
-    /// Prompt language skill text is read in. The host sets this alongside the scope's prompt language,
-    /// so a bilingual skill corpus and the tool output agree. Defaults to English.
+    /// Prompt language recorded alongside the scope's. The embedded corpus ships in English, so this no
+    /// longer changes which text a tool reads; it is retained for source compatibility. Defaults to English.
     /// </summary>
     public AgentLanguages Language { get; set; } = AgentLanguages.English;
 

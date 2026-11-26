@@ -295,14 +295,10 @@ internal static class AgentContextTreeRenderer
 
         if (node.Has(AIContextFlags.IsSingleSlot))
         {
-            return language == AgentLanguages.Chinese
-                ? $"单插槽属性（{typeName}）— 通过 ResolveSlotId 按属性名解析，或用 ConnectByProperty 直接连接"
-                : $"Single slot property ({typeName}) — resolve via ResolveSlotId by property name, or connect directly with ConnectByProperty.";
+            return $"Single slot property ({typeName}) — resolve via ResolveSlotId by property name, or connect directly with ConnectByProperty.";
         }
 
-        var baseText = language == AgentLanguages.Chinese
-            ? "SlotEnumerator — 通过 SetEnumSlotCollection 工具配置选择器类型（枚举或 bool），禁止手动增删"
-            : "SlotEnumerator — use SetEnumSlotCollection to configure the selector type (enum or bool). Do not add/remove slots manually.";
+        var baseText = "SlotEnumerator — use SetEnumSlotCollection to configure the selector type (enum or bool). Do not add/remove slots manually.";
 
         var selectors = string.Join(", ", node.References
             .Where(static r => r.Kind == AIContextRefKind.SlotSelectorType)
@@ -310,9 +306,7 @@ internal static class AgentContextTreeRenderer
 
         if (selectors.Length == 0) return baseText;
 
-        return baseText + (language == AgentLanguages.Chinese
-            ? $"; [允许的选择器类型 (allowedSelectorTypes): {selectors}]"
-            : $"; [allowedSelectorTypes: {selectors}]");
+        return baseText + $"; [allowedSelectorTypes: {selectors}]";
     }
 
     private static string CommandParameterType(AIContextNode node)

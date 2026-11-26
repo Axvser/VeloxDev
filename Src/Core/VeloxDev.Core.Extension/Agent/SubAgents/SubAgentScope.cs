@@ -584,8 +584,7 @@ public sealed class SubAgentScope : IAsyncDisposable
         if (grantedSkills.Count > 0 && parent.Skills is { } parentSkills)
         {
             // Before WithSkills, which re-applies the scope's default language to whatever it attaches.
-            // A skill's text is read back in the language it was rendered in, so setting this afterwards
-            // would leave a Chinese session's child reading English documents.
+            // The embedded corpus is English; the prompt language still travels with the scope.
             child.WithPromptLanguage(parent.PromptLanguage);
             child.WithSkills(parentSkills.CreateNarrowed(grantedSkills));
         }
@@ -670,7 +669,7 @@ public sealed class SubAgentScope : IAsyncDisposable
     /// </para>
     /// </summary>
     private static string Describe(SubAgentRequest request, int ordinal)
-        => string.IsNullOrWhiteSpace(request.Name) ? $"子代理 {ordinal}" : request.Name!;
+        => string.IsNullOrWhiteSpace(request.Name) ? $"Sub-agent {ordinal}" : request.Name!;
 
     /// <summary>
     /// The skills a spawn asks for: what it named, or every skill the parent has switched on.

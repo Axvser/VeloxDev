@@ -11,10 +11,9 @@ namespace VeloxDev.AI.Skills;
 /// <c>Resources/{System}/{lang}/Skills/{Name}.md</c> — the architectural prompt text a package ships
 /// for its own agent.
 /// <para>
-/// Unlike <see cref="FileSkillSource"/>, the same skill normally exists once per supported language, so
-/// <see cref="Discover"/> yields one descriptor per (name, language). Names are taken from YAML
-/// frontmatter when a file has it and derived from the file name otherwise, so documents that predate
-/// the skill convention keep working.
+/// The embedded corpus ships in English only, so <see cref="Discover"/> yields one descriptor per skill.
+/// Names are taken from YAML frontmatter when a file has it and derived from the file name otherwise, so
+/// documents that predate the skill convention keep working.
 /// </para>
 /// <para>
 /// Skills discovered here have no per-skill resources: the <c>References/</c> corpus is shared by all of
@@ -23,12 +22,8 @@ namespace VeloxDev.AI.Skills;
 /// </summary>
 public sealed class EmbeddedSkillSource : ISkillSource
 {
-    /// <summary>
-    /// The languages embedded resources are stored under. <see cref="AgentEmbeddedResources"/> maps every
-    /// language other than Chinese to the English directory, so only these two have distinct text.
-    /// </summary>
-    private static readonly AgentLanguages[] SupportedLanguages =
-        [AgentLanguages.English, AgentLanguages.Chinese];
+    /// <summary>The language embedded resources are stored under — the corpus ships in English only.</summary>
+    private static readonly AgentLanguages[] SupportedLanguages = [AgentLanguages.English];
 
     private readonly string _system;
     private readonly Dictionary<string, List<AgentLanguages>> _skillLanguages = new(StringComparer.OrdinalIgnoreCase);

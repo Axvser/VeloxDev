@@ -84,8 +84,8 @@ public sealed class SkillAgentContextProvider : AIContextProvider
         {
             if (_renderedFor != key)
             {
-                // Skill text is read in the same language the prompt is written in, so the toolkit has to
-                // follow the scope rather than the language it was constructed with.
+                // The embedded corpus is English; the toolkit still follows the scope's language for
+                // callers that read it.
                 _toolkit.Language = language;
 
                 _instructions = BuildInstructions(language);

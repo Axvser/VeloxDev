@@ -64,5 +64,5 @@
 布局引擎在 `Src/Core/VeloxDev.Core/WorkflowSystem/Layout/`：`HierarchyAlignmentStage` + `TileSeparationStage`，
 经 `IWorkflowLayoutSolver` 注入；数据流与扩展点见 `memory/modules/WorkflowSystem/layout.md`。
 
-`Resources/Workflow/{en,zh}/Skills/SmartLayout.md` 保留手工兜底（最长路径分层、barycenter、80/40 px 间隙等），
-但已要求先走 `PreviewLayout` / `ArrangeLayout`；两版必须逐条对称（`AgentEmbeddedResources` 按语言取）。
+`Resources/Workflow/en/Skills/SmartLayout.md` 保留手工兜底（最长路径分层、barycenter、80/40 px 间隙等），
+但要求先走 `PreviewLayout` / `ArrangeLayout`。

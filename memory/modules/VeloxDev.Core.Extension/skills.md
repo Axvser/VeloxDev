@@ -1,7 +1,7 @@
 # VeloxDev.Core.Extension — Skills 子系统
 
 > 代码：`Src/Core/VeloxDev.Core.Extension/Agent/Skills/`。
-> 内置技能语料：`Resources/Workflow/{en,zh}/Skills/*.md`（CompilerUsage / ConnectionValidation / DiscoveryFlow / NodeCreation / OperationOrdering / SlotEnumerator / SmartLayout 等）。
+> 内置技能语料：`Resources/Workflow/en/Skills/*.md`（CompilerUsage / ConnectionValidation / DiscoveryFlow / NodeCreation / OperationOrdering / SlotEnumerator / SmartLayout 等）。
 
 ---
 
@@ -31,11 +31,11 @@
 ## 二、缓存与版本
 
 - `SkillScope.Version` 在**发现集合**或**任一启用标志**变化时自增。
-- `PromptLanguage` 是**独立维度**：注释明说「语言不是别的地方可观察的」（`PromptLanguage` 的注释），虽然 `WithPromptLanguage` 也自增 `Version`（`WithPromptLanguage`），provider 仍然按 **`(Version, Language)` 元组**缓存。
+- `PromptLanguage` 是**独立维度**：`WithPromptLanguage` 也自增 `Version`，provider 仍按 **`(Version, Language)` 元组**缓存。内置语料只有英文，`PromptLanguage` 不改变技能正文。
 - `SkillAgentContextProvider` 的 `_stateKeys` 用 **`scope.InstanceId`**（每个 scope 一个 `Guid`，`SkillScope.InstanceId`）而不是像工作流那样用 `StateDiscriminator`。理由：一个 agent 上挂两个 scope 是正常布置，框架在**两个 provider 共用 state key** 时会抛。
 - `Refresh()` **是宿主动作，不是每轮动作** —— `SkillScope.Refresh` 的注释明说：它总是自增 `Version`，在 prompt provider 里每轮调它会直接废掉缓存。
 
-**provider 每次渲染会把 `_toolkit.Language` 重新赋成 `scope.PromptLanguage`**（`SkillAgentContextProvider.BuildContext` 里给 `_toolkit.Language` 赋值那一行）。技能正文按提示语言读，toolkit 必须跟着 scope 走而不是构造时的语言；漏掉这一行，工具返回的正文就和提示语言不一致。
+**provider 每次渲染会把 `_toolkit.Language` 重新赋成 `scope.PromptLanguage`**（`SkillAgentContextProvider.BuildContext` 里给 `_toolkit.Language` 赋值那一行）。内置语料是英文，该值只跟随 scope 记录，不改变工具返回的正文。
 
 ---
 
@@ -44,7 +44,7 @@
 `SkillScope.Refresh()` 的规则：
 
 1. 某个 source 的 `Discover()` 抛异常 ⇒ **不能拖垮其它 source**。它变成一个名字叫 `{Kind}-source` 的**错误描述符**（`Refresh` 里构造错误描述符那段）—— 它**没有 `Description`**，所以在 UI 上只会显示成一条错误行。
-2. **同名归属**：第一个声明某名字的 source 拥有它；**同一个 source 的多个同名描述符全部保留**（`Refresh` 里同名归属那段）—— 那是同一个技能的**分语言变体**。这条容易写反：不保留就会丢掉 `zh` 那一份。
+2. **同名归属**：第一个声明某名字的 source 拥有它；**同一个 source 的多个同名描述符全部保留**（`Refresh` 里同名归属那段）—— 那是同一个技能的多条描述符。
 3. `Apply(found, owners)` 重建状态，同时**按名字保留启用标志**。
 
 `SkillScope.SetEnabled` 三个非显然细节：
@@ -89,7 +89,7 @@
 
 **加一个内置技能**（最简单的一条路）
 
-1. 在 `Resources/Workflow/en/Skills/` 加 `<Name>.md`；**同一内容也要加到 `zh/Skills/`**（两语言目录是并列的，缺一边那份在那边就回退到 en，见 `AgentEmbeddedResources.cs` 的 fallback）。
+1. 在 `Resources/Workflow/en/Skills/` 加 `<Name>.md`。内置语料只有英文一份，没有第二份目录。
 2. 顶部写 YAML frontmatter（至少 `name`、`description`）。**不写也能用**（名字从文件名 kebab-case 派生），但描述会变成从标题猜的，质量差很多。
 3. 不需要改任何 C#。`EmbeddedSkillSource.Discover()` 扫目录。
 4. 想验证：`WorkflowAgentScope.WithSkills(...)` 之后，`SkillScope.BuildEmbeddedBlock(AgentLanguages.English)` 里应出现该名字。
@@ -99,7 +99,7 @@
 1. 实现 `ISkillSource`（`Agent/Skills/ISkillSource.cs`）：`Kind` / `Discover()` / `ReadBody()` / `ReadResource()`。
 2. `new SkillScope().WithSource(src)` 或 `WorkflowAgentScope.WithSkills(SkillScope)`（`WorkflowAgentScope`）。
 3. **`Discover()` 必须无副作用、且绝不能返回技能正文** —— 正文只在 `ReadBody` 里给（这样广告模式才可能只发名字）。
-4. 名字冲突时你会**输给先注册的 source**；分语言变体靠**同一个 source 返回多个同名 `SkillDescriptor`**（各带 `Language`，`SkillDescriptor.Language`）。
+4. 名字冲突时你会**输给先注册的 source**；同一 source 返回多个同名 `SkillDescriptor` 时全部保留（各带 `Language`）。
 
 **捷径（能编译，但是错的）**
 
@@ -111,7 +111,6 @@
 | 用 `ConfigureAwait(false)` / 线程池线程切开关 | `Find` 读的是 `ObservableCollection`；`SetEnabled` 的查找被刻意放在编组块里（`SetEnabled` 的 `RunOnUI` 块） |
 | 让 provider **无条件**贡献 `BuildEmbeddedBlock` | 骨架已经带过语料时（宿主先取骨架后 `WithSkills`）每篇技能文档进两遍。要按 `embeddedCorpusDelivered` 分叉到 `BuildWithdrawnBlock` —— 见 §一末 |
 | 改 `SkillAgentToolkit.ToolNames` 之外另起一套技能工具名 | 那些名字不会被 `BuildQueryToolNames` 收进去 ⇒ 计成写操作、还可能触发标脏 |
-| 只加 `en/Skills/X.md` | 中文会话下该技能回退到英文正文（`ReadWithFallback`），不是缺失，但语言不一致 |
 
 ---
 

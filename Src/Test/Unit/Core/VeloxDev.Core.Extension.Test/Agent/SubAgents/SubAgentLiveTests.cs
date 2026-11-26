@@ -209,7 +209,7 @@ public class SubAgentLiveTests
         if (row is null)
             Assert.Inconclusive("The model did not dispatch a child this time; ARealModel_DispatchesAChildAtAll is the test that reports on that.");
 
-        Assert.IsFalse(row.Name.StartsWith("子代理 ", StringComparison.Ordinal),
+        Assert.IsFalse(row.Name.StartsWith("Sub-agent ", StringComparison.Ordinal),
             "the model left `name` out, so the panel is showing a number where the title should be. The "
             + "argument is being skipped, not misused — which is why it is asked for in the standing text "
             + "and not only in the parameter description.");
