@@ -12,15 +12,9 @@ connection previews and the template pack.
 
 ## Required project shape
 
-The consuming project needs the generator and its XAML files:
-
-```xml
-<ItemGroup>
-  <ProjectReference Include="…/Easel.Generator.csproj"
-                    OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-  <AdditionalFiles Include="**/*.xaml" />
-</ItemGroup>
-```
+The consuming project needs the Easel generator wired as an analyzer and its `.xaml` files registered as
+`AdditionalFiles`; the Easel skill's opening setup has both the NuGet (`WinForms.Easel.Generator`) and checkout
+forms. The workflow markup also needs this namespace:
 
 ```xml
 xmlns:local="clr-namespace:MyApp.Views"
@@ -69,6 +63,10 @@ tree. Parts, input and the viewport are resolved inside that subtree. Camera cal
 root (`GetZoom(treeView)`, `SetPan(treeView, …)`, `SurfaceToWorld(treeView, …)`, `GetWorldViewport`,
 `SetWorldViewport`, `ZoomAt`, `ProcessWheel`, `Refresh`); they take the visual root.
 
+⚙ **Writing an attached behavior property installs it.** The `IsEnabled` and configuration setters call `Ensure`
+on the target `VisualElement`; the surface keeps one first-attach/repair scan for elements written before they
+enter the tree or recreated by a pool. Markup order therefore does not decide whether a behavior runs.
+
 `WorkflowSurfaceBehavior` owns the camera (one matrix on `PART_Canvas`), routes input into Core's
 `WorkflowInput`, materializes items through `ViewPool`, and resolves the template selector. `PART_*` are
 visual element names; `x:Name` writes `VisualElement.Name`.
@@ -89,8 +87,9 @@ The tree template is the WPF-shaped surface:
 </local:TreeView>
 ```
 
-The surface writes the camera matrix to `PART_Canvas.Transform`; the canvas is sized to the viewport and
-hit-tests unbounded, so children may live at any world coordinate while the `ScrollViewer` supplies the clip.
+The surface writes the camera matrix to `PART_Canvas.Transform`; the canvas is sized to the world extent (at
+least the viewport) and hit-tests unbounded, so children may live at any world coordinate while the
+`ScrollViewer` supplies the clip.
 
 ## Selector and resources
 
@@ -154,18 +153,19 @@ parts. A node that needs extra slots names them and registers them with the same
 - A slot connects only when its view root marks `WorkflowSlotConnectionBehavior.IsEnabled="True"`.
 - `WorkflowSlotLayoutBehavior` measures the named parts and writes their anchors. A slot whose anchor is still
   `NaN` is not measured yet; its link draws nothing.
-- `ItemsControl` takes Easel's default list shell. Since Easel 3.0.0 that shell is transparent (no input
-  background or border) and hosts no inner scroll viewer: it is just an `ItemsPresenter`, so it never clips
-  content at its own bounds. A host that needs scrolling wraps it in a `ScrollViewer`; the node template uses it
+- `ItemsControl`'s default shell is just an `ItemsPresenter`: it paints no surface and hosts no inner scroll
+  viewer, so it never clips content at its own bounds. Set `Background`/`BorderBrush`/`BorderThickness` on the
+  control to paint a surface; a host that needs scrolling wraps it in a `ScrollViewer`. The node template uses it
   directly.
 - The slot view's code-behind is only `InitializeComponent()`. Its glyph fill and outline are the template's
   slot colour symbols.
 
 The link view is one visual per link. The template binds `StartLeft` / `StartTop` / `EndLeft` / `EndTop` to
 `Sender.Anchor.*` / `Receiver.Anchor.*` and `CanRender` to `IsVisible`; the surface writes `LineColor` /
-`LineThickness` / `IsVirtual`; the view draws the cubic and calls `PublishCurve` in `OnRender`. Hover
-highlighting is demo-only (`Examples/Workflow/WinForms Trimmed/.../LinkView.xaml.cs`). Curves are
-world-space; the camera transforms only while painting. The hit radius is 6 world units, so the camera makes
+`LineThickness` / `IsVirtual` and, on the view bound to `WorkflowInput.HoveredLink`, `HighlightColor` /
+`HighlightThickness` / `IsHighlighted` when that view declares them; the view draws the cubic and calls
+`PublishCurve` in `OnRender`. Curves
+are world-space; the camera transforms only while painting. The hit radius is 6 world units, so the camera makes
 its on-screen reach scale with zoom;
 the link view sets `IsHitTestVisible = false` so it does not swallow canvas gestures.
 
@@ -197,9 +197,9 @@ Enter/leave are synthesized by Core from target changes; the root raises exit wh
   point under the pointer fixed. There is no per-card collapse.
 - The visual path lays out in logical DIPs and paints at `DeviceDpi/96`; the 260-unit card is 260 DIPs at any
   monitor scale. Grid/ruler/minimap metrics scale with the same DpiScale.
-- The camera reports its world viewport to the tree so Core's visible set follows pan/zoom. Set the
-  virtualize inset with `tree.SetVirtualizeInset(left: band, top: band)` before writing `Viewport`, or it culls
-  nodes still visible under the ruler.
+- The camera reports its world viewport to the tree so Core's visible set follows pan/zoom. With the named
+  `PART_GridDecorator`, the surface forwards its `RulerBand` to `SetVirtualizeInset`; a host that writes
+  `Viewport` itself passes that reserve, or it culls nodes still visible under the ruler.
 
 ## Link context menu
 

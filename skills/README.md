@@ -2,7 +2,6 @@
 
 Skills this repository ships. The eight developer skills are for developers using the
 library; `veloxdev-use-workflow-cli/` is an operator skill for the shipped headless CLI/MCP server.
-All of them are part of the repository, not of anyone's local configuration.
 
 ## What these skills are for
 
@@ -10,10 +9,10 @@ The developer skills answer one question: **how do I write my own project's code
 
 The operator skill answers a different one: **how do I drive a workflow that is already running, through the packaged CLI and its MCP tools, without writing C#.**
 
-That means two things, in every skill:
+In every skill:
 
 - **the API is used as it is meant to be used** — the rules that decide whether the code works at all, rather than an inventory of what exists;
-- **customization happens at the intended seam** — where each extension point is, and the shortcut to avoid, because almost every extension point in this library can also be reached the wrong way and still compile.
+- **customization happens at the intended seam** — where each extension point is, and the shortcut to avoid.
 
 They are written for a developer who has added a NuGet package or cloned the repository, not for someone maintaining the repository itself.
 
@@ -23,7 +22,7 @@ The `veloxdev-create-workflow` skill's default canvas is the **whole item-templa
 layout, resources/styles/templates, bindings, themes, visuals, 3D and the animation contract — lives at
 [`Easel/skills/easel-build-winforms-xaml-ui/SKILL.md`](../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md).
 The VeloxDev workflow/animation WinForms pages keep only the workflow-specific surface (attached behaviors,
-node/slot/link templates, `ViewPool`, connection previews, the VeloxDev transition adapter) and point there for
+node/slot/link templates, `ViewPool`, connection previews, Easel's own animation contract) and point there for
 everything generic.
 
 ## How a skill is organised
@@ -48,7 +47,7 @@ A skill has one `SKILL.md` and, when it needs depth, a `references/` directory w
 
 ⚙ **No line-number citations.** A skill is self-contained outside this repository: it names types, members, files and commands, and it carries the guiding code. Line numbers rot when the source moves.
 
-The eight developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`, and `veloxdev-create-adapter` links to `veloxdev-create-workflow`, `veloxdev-create-animation` and `veloxdev-switch-themes`. A skill still works alone — only those cross-links go dead — so keep all eight together when you can, and read a dead cross-link as "that skill is not at hand, or find the same rule in this one".
+The eight developer skills are written as a set, and a few link into a sibling: `veloxdev-write-viewmodels` links to `veloxdev-create-workflow`, `veloxdev-create-workflow` links to `veloxdev-create-animation` and `veloxdev-drive-workflow-with-ai`, and `veloxdev-create-adapter` links to `veloxdev-create-workflow`, `veloxdev-create-animation` and `veloxdev-switch-themes`. A skill still works alone; only those cross-links go dead.
 
 `veloxdev-use-workflow-cli` is a standalone operator skill: it covers obtaining, launching and operating the CLI, and drives the workflow through the tool surface. It does not require the developer skills; its cross-links to `veloxdev-drive-workflow-with-ai` and `veloxdev-create-workflow` are for the underlying tool semantics and API, and the CLI reference in the repository covers the same ground.
 
@@ -86,10 +85,8 @@ A skill may ship a `references/` directory beside its `SKILL.md`. Those files ar
 
 ## Keeping them accurate
 
-A skill that names a file, a type or a demo that no longer exists is worse than no skill: the agent will follow it and produce code that does not compile. Four habits keep this honest:
-
 - **A skill's code examples use real repository types.** If an example names a type, that type exists — otherwise a reader cannot go and look at it, and the example teaches a shape the library does not have.
 - **…and the reader can compile them.** A type that lives only inside `Examples/` as `internal` is a real repository type but not one a consuming project can name. Show the *shape* the demo demonstrates, never the demo's own scaffolding class.
-- **A convention claimed as the repository's is one the repository keeps.** "Every rule below is a convention this repository already follows" is a checkable claim — check it against `Examples/`.
+- **A convention claimed as the repository's is checked against `Examples/`.** "Every rule below is a convention this repository already follows" is a checkable claim.
 - **A skill's file references are checked against the tree.** Demos get moved, deleted and renamed. `Examples/` is the most volatile part of the repository, so those references are the ones that rot first.
 - **Code and commit history are the baseline, and the newer commit wins.** When a skill and the source disagree, the source as of the newest commit is the fact.

@@ -20,20 +20,13 @@ Easel.Visuals.VisualTransition.Animate(
     });
 ```
 
-- The engine writes frames at `Easel.BindingPriority.Animation` and holds the reached value at
-  `BindingPriority.LocalValue` when it completes or is stopped.
-- Supersede is per dependency property: a new animation on the same DP replaces the running one; a
-  `TriggerActionGroup` can animate several DPs at once.
-- Supported interpolated types: numeric (`double`, `float`, `int`, `long`, `short`, `byte`, `decimal`),
-  `Point`/`PointF`, `Size`/`SizeF`, `Rectangle`/`RectangleF`, `Padding`, `Thickness`, `Matrix`, `Matrix4x4`,
-  `Color`, `Brush` and `Transform3D` (plus nullable variants). Anything else is rejected at start with
-  `NotSupportedException`.
-- Start the first animation on the UI thread. Frames are paced by the engine and marshalled through the
-  element's `VisualHost`.
+`VisualTransition.Animate` and the trigger actions write frames at `Easel.BindingPriority.Animation` and hold the
+reached value at `Easel.BindingPriority.LocalValue` when they complete or are stopped. An element-level `Transitions`
+entry instead releases the animation layer when it ends, so the trigger/style value shows through; the first style
+application is suppressed. See [the Easel reference](../../../../Easel/skills/easel-build-winforms-xaml-ui/references/animation.md#element-transitions).
 
-VeloxDev.Core's `Transition<T>` builder is **not** wired to Easel elements: the old adapter that adapted
-Easel dependency properties into `ITransitionProperty` has been removed, and `VeloxDev.WinForms` carries no
-Easel animator or bootstrap. Use `VisualTransition` and the trigger actions above instead.
+VeloxDev.Core's `Transition<T>` builder does **not** target Easel dependency properties, and `VeloxDev.WinForms`
+carries no Easel animator or bootstrap. Use `VisualTransition` and the trigger actions above instead.
 
 ## Workflow-view specifics
 
@@ -42,7 +35,7 @@ Easel animator or bootstrap. Use `VisualTransition` and the trigger actions abov
   concurrently with a pan/zoom gesture. Animate a card, not the camera, unless you own the gesture lifecycle.
 - The parent `Viewbox`/camera scales a node's design grid; an animation inside the node template runs in design
   coordinates and is scaled with the card.
-- Native islands (the focused text editor's IME window, OS file dialogs) are not part of the visual animation;
+- Native islands (the focused text editor's IME window) and OS file dialogs are outside the visual animation;
   the workflow minimap, HUD and slot views are `VisualElement`s in the same tree.
 - Stop/dispose animations when a pooled view is recycled; a reused view must not keep an animation writing its
   old DataContext.
@@ -52,6 +45,3 @@ Easel animator or bootstrap. Use `VisualTransition` and the trigger actions abov
 - Easel has no storyboard/timeline object; chain one-property actions with `TriggerActionGroup` or a custom
   `VisualTriggerAction`.
 - Per-keyframe easing is not supported by `KeyFrameAnimation`; one ease applies to the chain.
-- A `Transform3D` animation re-warps the composed bitmap each frame; cache the pre-warp layer and keep the
-  projected area small.
-- The runtime's `VisualHost` remains the only HWND; animations never create child windows.
