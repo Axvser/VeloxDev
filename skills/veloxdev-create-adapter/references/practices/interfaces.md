@@ -42,6 +42,7 @@ Geometry the adapter reads and writes:
 | `SurfaceViewportRestoreCore` | `Capture(tree)`, `Schedule(host, afterRestore)`, `HasPendingRestore`. Keyed on the tree reference; one restore per tree. |
 | `SurfaceViewport` | Immutable snapshot used by Razor/MAUI-style overlay feeds: tree, scroll, viewport, content offsets. |
 | `SurfaceViewportFeed` | `Publish(SurfaceViewport)` + `Changed`; lets a lightweight overlay re-render without the content subtree. |
+| `SurfacePartRegistry` / `SurfacePartBinding<T>` | Five `WorkflowSurfacePart` roles (`ScrollViewer`, `Canvas`, `GridDecorator`, `MinimapOverlay`, `PointerPressSource`). `Set` compares by reference and reports `(old, new)` once; `Clear` releases each role once. A binding attaches one role, detaches the old before attaching the new, and releases the current part on `Dispose`. |
 | `WorkflowSurfaceMath` | The single arithmetic copy: `ToCanvasLocal`, `ToCanvasLocalAnchor`, `ToScroll`, `HasViewportRestore`, `ViewportRestoreScroll`, `ViewportOffsetFromScroll`, `ClampScrollOffset`, `ScrollMax`, `ClampValue`, the `Grid*` helpers, the three `SlotAnchorFrom*` forms, the minimap helpers, `CenterScroll`, `PivotCenterScroll`, `ScaleCollapse`, `ScaleVisualBounds`, `EnsureNegativeCover`. `DefaultPanExtendRatio` is 0.15. |
 
 ## Slot layout
@@ -53,12 +54,13 @@ Geometry the adapter reads and writes:
 | `SlotLayoutTrigger` | `Layout` (stamp-filtered, flushed inside the layout pass), `Model`, `Configuration`, `Viewport`, `Attachment` (unconditional, deferred). |
 | `SlotLayoutConfiguration` | Parses `SlotNames`, `EnumeratorNames` (comma-separated, de-duplicated, order preserved) and `CoordinateHostName` / `CoordinateHostType`. |
 | `ISlotPartLocator` | `CoordinateSpace`, `FindNamedSlot(name)`, `FindEnumeratedSlots(name)`, `ResolveCoordinateHost(name, type)`, `CountSlots(slotNames, enumeratorNames)`. |
+| `ISlotPartIdentityLocator` | Optional extension of the locator: `ComputeSlotIdentity(slotNames, enumeratorNames, out slotCount)` returns the realized-container identity and count in one pass. Without it the stamp falls back to `CountSlots`. |
 | `ISlotPart` | `Slot`, `IsMeasured`, `MeasureCenter(relativeTo)`. A live handle, valid only until the next layout pass. |
 | `ISlotMeasurementHost` | `ReadNodeSize()`, `ReadAnchor(slot)`, `WriteAnchor(slot, anchor)`, `InvalidateMeasure()`, `Post(Action flush)` returning whether the platform accepted the work. |
 | `SlotCoordinateSpace` | `NodeLocal`, `CanvasLocal`, `ScrollSpace` — selects the `WorkflowSurfaceMath.SlotAnchorFrom*` conversion. |
 | `SlotCenter` | A measured `(X, Y)` in the declared coordinate space. |
-| `WorkflowLayoutBatch` | Shared queue over one owner (normally the tree). `For(owner, post)`, `Request(key, work)`, `Request(key, stamp, work)`, `Cancel(key)`, `Schedule()`, `Flush()`. |
-| `WorkflowLayoutStamp` | Fingerprint of `Anchor`, `Size`, measured size and slot count; `Capture(node, measuredWidth, measuredHeight, slotCount)`. An unchanged stamp skips the expensive half. |
+| `WorkflowLayoutBatch` | Shared queue over one owner (normally the tree). `For(owner, post)`, `Request(key, work)`, `Request(key, stamp, work)`, `Request(key, stamp, Func<bool> work)` (records the stamp only when the work reports it saw everything), `Cancel(key)`, `Schedule()`, `Flush()`. |
+| `WorkflowLayoutStamp` | Fingerprint of `Anchor`, `Size`, measured size, realized-container identity and the `Node.Slots` reference hash; `Capture(node, measuredWidth, measuredHeight, slotCount, slotSignature)`. An incomplete pass is not recorded; an unchanged stamp skips the expensive half. |
 
 ## Link geometry and hit testing
 

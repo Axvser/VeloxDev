@@ -27,9 +27,11 @@ platform event
 ⚙ **The wheel default is the adapter's.** Keep the platform's scroll container from scrolling the canvas, route the notch, then:
 
 ```csharp
-var handle = RoutePointer(… PointerWheelEventArgs …);
-e.Handled = true;
-if (!handle.PreventDefault) input.Scroller?.ScrollBy(0d, e.Delta);
+var wheel = TranslateWheel(platformArgs);        // VeloxDev.WorkflowSystem.PointerWheelEventArgs
+input.Route(wheel);
+platformArgs.Handled = true;
+if (!wheel.Handle.PreventDefault)
+    input.Scroller?.ScrollBy(wheel.DeltaX, wheel.DeltaY);
 ```
 
 Register `Scroller = new SurfaceScrollerCore(host)` and `Navigator = scroller` when the surface attaches; on detach clear them only if they are still yours.
@@ -60,9 +62,9 @@ platform notification (layout / model / configuration / viewport / attachment)
 | a centre already in canvas-local space | `CanvasLocal` | `SlotAnchorFromCanvasLocal` |
 | a node-local centre, or no coordinate host | `NodeLocal` | `SlotAnchorFromNode` |
 
-⚙ **The layout pass is the cheap path.** `SlotLayoutTrigger.Layout` compares `WorkflowLayoutStamp`; unchanged geometry, size and slot count skip the tree walk. Every other trigger is unconditional and deferred. Call `RequestMeasure(SlotLayoutTrigger.Viewport)` when a zoom/scroll transform changed without a model change.
+⚙ **The layout pass is the cheap path.** `SlotLayoutTrigger.Layout` compares `WorkflowLayoutStamp`; unchanged geometry, size, slot references and realized-container identity skip the tree walk. A pass that did not find every slot does not certify the stamp. Every other trigger is unconditional and deferred. Call `RequestMeasure(SlotLayoutTrigger.Viewport)` when a zoom/scroll transform changed without a model change.
 
-⚙ **Parts are live handles.** Resolve them on every `Measure`; a template rebuild invalidates the old part. `CountSlots` is the stamp's evidence that the template rebuilt.
+⚙ **Parts are live handles.** Resolve them on every `Measure`; a template rebuild invalidates the old part. The stamp folds the realized-container identity and the `Node.Slots` reference hash, so a same-count rebuild or slot swap re-measures; an adapter without `ISlotPartIdentityLocator` falls back to the count.
 
 ⚙ **The batch is per tree.** `SlotLayoutPipelineCore` creates or reuses `WorkflowLayoutBatch.For(tree, host.Post)` and drops the queue when the node changes trees. `Stop()` on detach makes queued work a no-op; `CancelPending()` is the temporary-unload variant.
 
@@ -96,6 +98,8 @@ new tree attached
 ⚙ **Scroll arithmetic stays in Core.** `SurfaceScrollerCore.ScrollBy` converts the wheel profile, writes only the axis that moved, and on overscroll calls `WorkflowSurfaceMath.ClampScrollOffset` then `ISurfaceScrollHost.ExpandCanvas()` before re-reading the maximum. `CenterOn` uses `CenterScroll` and the same growth semantics. The adapter only reports offsets/limits and performs the write.
 
 ⚙ **`ApplyOffset` takes nullable axes.** A wheel turn that only moved vertically must pass `null` for horizontal, or the platform clamps the other axis back into range.
+
+⚙ **Surface parts go through `SurfacePartRegistry`.** Set each role as it resolves (`WorkflowSurfacePart`: `ScrollViewer`, `Canvas`, `GridDecorator`, `MinimapOverlay`, `PointerPressSource`); the registry compares by reference and reports `(old, new)` once. Bind subscriptions with `SurfacePartBinding<T>` — it detaches the old part before attaching the new one and releases the current one on `Dispose` — and on detach dispose the bindings and call `Clear()`.
 
 ## 4. Link publish → hit test
 
@@ -204,7 +208,7 @@ pointer on minimap
 | --- | --- | --- |
 | Input | translation, target resolution, default action, focus | route, bubbling, hover diff, handles, preview state |
 | Slot layout | `ISlotPartLocator`, `ISlotMeasurementHost` | measurement order, tolerance, triggers, batching, stamp |
-| Surface | `ISurfaceMetricsSource`, `ISurfaceScrollHost`, `ISurfaceViewportRestoreHost` | metrics snapshot, scroll/clamp/grow, restore state machine |
+| Surface | `ISurfaceMetricsSource`, `ISurfaceScrollHost`, `ISurfaceViewportRestoreHost` | metrics snapshot, scroll/clamp/grow, `SurfacePartRegistry` + bindings, restore state machine |
 | Links | view drawing + `PublishCurve` | curve sampling, hit test, node coverage, render-ready gate |
 | Minimap | `IMinimapRenderer`, `IMinimapViewportHost`, `IMinimapInputHost` | subscription, debounce, mapping, placement, drag math |
 | Transition | inspector, interpreter, pacer, samplers, `CreateScheduler` | sampling loop, endpoint normalization, scheduling, held values |

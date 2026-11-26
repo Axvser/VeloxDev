@@ -16,7 +16,7 @@ xmlns:behaviors="using:VeloxDev.WorkflowSystem.AttachedBehaviors"
 
 ⚙ **WinUI has no `clr-namespace:…;assembly=` form.** The `using:` form above is this dialect's equivalent, and it takes no `;assembly=` suffix. Copying the WPF spelling leaves the attached properties unresolved.
 
-⚙ **Attach the wheel handler to the Canvas with `handledEventsToo: true`.** WinUI has no preview/tunnel phase, so by the time the event reaches the canvas the inner `ScrollViewer` has already run; the handler asks whether that scroll consumed the gesture (it has no room left in that direction) rather than trying to pre-empt it.
+⚙ **Hook the wheel to the `ScrollContentPresenter` when it exists, otherwise the Canvas, and re-evaluate after the template settles.** WinUI has no preview/tunnel phase, so by the time the event reaches the host the inner `ScrollViewer` has already run; the handler asks whether that scroll consumed the gesture (it has no room left in that direction) rather than trying to pre-empt it. A canvas-only hook misses the presenter's blank area, so re-check the host on refresh, size and zoom-enabled changes.
 
 ⚙ **A plain wheel is routed and then applied by the adapter.** It marks the event handled, routes `PointerWheelChanged`, and scrolls through its registered `IWorkflowSurfaceScroller` (`WorkflowInput.Scroller`) only when the route did not set `PreventDefault`. Ctrl+wheel remains the zoom gesture.
 
@@ -63,7 +63,7 @@ The point is to keep the geometry non-negative and inside the element's own box,
 
 **Generates** `.xaml` + `.xaml.cs` for node, slot, link and tree, and a single `.cs` for selector, decorator and minimap.
 
-⚙ **The tree uses the offset frame**, subscribing to `CanvasLayout.ActualOffset` and `ActualSize`, positioning with `Canvas.SetLeft/Top(−offset)`, baking `+offset` into the geometry, and clearing `Clip` in all three places. That is the code to read when you need to change how links are drawn.
+⚙ **The link view uses the offset frame**, subscribing to `CanvasLayout.ActualOffset` and `ActualSize`, positioning with `Canvas.SetLeft/Top(−offset)`, baking `+offset` into the geometry, and clearing `Clip` in all three places. That is the code to read when you need to change how links are drawn.
 
 ⚙ **The link context menu is a `MenuFlyout` resource plus `LinkMenuKey`.** The generated tree declares `<MenuFlyout x:Key="LinkContextMenu">` and points `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` at it; the adapter positions it and reports open/close. `MenuFlyout` has no `DataContext`, so the adapter feeds each `MenuFlyoutItem.DataContext` the pressed link — `Command="{Binding DeleteCommand}"` works per item.
 
