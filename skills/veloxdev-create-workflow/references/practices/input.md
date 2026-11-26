@@ -152,7 +152,7 @@ private IInputEvents? _input;
 
 // Call whenever the surface is handed a tree: DataContextChanged on WPF/Avalonia/Jalium,
 // BindingContextChanged on MAUI, OnParametersSet on Blazor,
-// WorkflowSurfaceBehavior.SetWorkflowTree on WinForms.
+// treeView.DataContext = tree on WinForms.
 private void BindTree(ITreeComponent? tree)
 {
     if (_input is not null) _input.Input.KeyDown -= OnKeyDown;

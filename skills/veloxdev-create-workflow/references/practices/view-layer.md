@@ -10,7 +10,7 @@ Open your GUI's reference alongside this one — it carries that framework's att
 
 | Role | Class | Job |
 |---|---|---|
-| Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom, forwards link interaction and shows the link menu, and registers `WorkflowInput.Scroller`. On WinForms the host is a `VisualHost`; the surface owns the camera matrix on `PART_Canvas` and `ViewPool` materializes the items |
+| Surface host | `WorkflowSurfaceBehavior` | resolves the named child controls, feeds scroll and viewport, starts panning, hooks zoom, forwards link interaction and shows the link menu, and registers `WorkflowInput.Scroller`. On WinForms `WorkflowSurfaceBehavior` sits on the surface's visual root inside a `VisualHost`; the surface owns the camera matrix on `PART_Canvas` and `ViewPool` materializes the items |
 | Canvas transform | `WorkflowCanvasTransformBehavior` — **Jalium spells it `WorkflowSurfaceBehavior.CanvasTransform`**; MAUI has no carrier; **WinForms has no separate carrier — `WorkflowSurfaceBehavior`'s camera owns pan and zoom** | owns the pan offset your node and link views bind to |
 | View pool | `ViewPool` — **WinForms' visual backend uses a generic visual `ViewPool` attached to `PART_Canvas`; it is not the Core pool** | object-pooled views over the visible-items collection |
 | Node drag | `WorkflowNodeDragBehavior` | a drag on a node executes `MoveCommand` |
@@ -20,7 +20,7 @@ Open your GUI's reference alongside this one — it carries that framework's att
 
 ⚙ **The first six roles are supplied by the adapter. The decorator and minimap implement Core interfaces and are written or generated for the host.** `IWorkflowGridDecorator` and `IWorkflowMinimapOverlay` live in Core (namespace `VeloxDev.WorkflowSystem`); the surface pushes scroll and content offsets into them each pass, and the minimap's interface derives from the decorator's because it needs the same numbers. `RulerBand` is the one member that affects more than drawing: the surface forwards it to the virtualizer so nodes under the floating ruler are not culled.
 
-⚙ **On WinForms the node drag, slot connection and slot layout roles are three separate `VisualElement` attached behaviors** (`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSlotLayoutBehavior`), each called by the surface's `Ensure` walk. The grid decorator and minimap are still template roles; the surface is `WorkflowSurfaceBehavior` on a `VisualHost`.
+⚙ **On WinForms the node drag, slot connection and slot layout roles are three separate `VisualElement` attached behaviors** (`WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` / `WorkflowSlotLayoutBehavior`), each called by the surface's `Ensure` walk. The grid decorator and minimap are still template roles; the surface is `WorkflowSurfaceBehavior` on the surface's visual root inside a `VisualHost`.
 
 ⚙ **A grid decorator draws the floating ruler bands as part of the surface chrome.** Draw them in a hit-test-transparent top layer (the templates use `ZIndex="100"`), return the band thickness from `RulerBand`, and offset the world canvas by that band. The XAML adapters do it with `Canvas.RenderTransform`; the grid maths use the same band as their content offset.
 
@@ -53,7 +53,7 @@ The surface is the control that owns the scroll viewer and the canvas. It resolv
 
 ⚙ **The names are the contract.** Rename a `PART_` element and update the attached property in the same edit; the surface performs a name lookup and a missing name disables that part silently. The templates emit `PART_ScrollViewer`, `PART_Canvas`, `PART_SurfaceBorder`, `PART_GridDecorator` and `PART_MinimapOverlay`; keep them unless you have a reason not to.
 
-⚙ **Use the attached-property API the platform gives you.** WinForms attaches `WorkflowSurfaceBehavior` to a `VisualHost` and uses `SetIsEnabled(host, true)` and friends; Blazor uses component parameters. Your GUI's reference has the exact spelling.
+⚙ **Use the attached-property API the platform gives you.** WinForms attaches `WorkflowSurfaceBehavior` to the surface's visual root and uses `SetIsEnabled(treeView, true)` and friends (Easel injects the `VisualHost`); Blazor uses component parameters. Your GUI's reference has the exact spelling.
 
 ⚙ **On WinForms the item views do not bind a transform.** The camera matrix lives on `PART_Canvas` and is applied to the whole visual tree, so there is no per-item `RenderTransform` binding; the "binding rule" below is for the markup adapters.
 
@@ -195,19 +195,19 @@ if (DataContext is IConnectionPreviewLink link)
 
 ### The link context menu
 
-Right-pressing a link shows the menu the surface declares: the adapter resolves the link, and (unless a subscriber on the link itself set `Handle.PreventDefault`) pops the resource named by `WorkflowSurfaceBehavior.LinkMenuKey`. Adding an entry is one declaration in your markup — or one line in WinForms' `SetLinkMenuBuilder` delegate.
+Right-pressing a link shows the menu the surface declares: the adapter resolves the link, and (unless a subscriber on the link itself set `Handle.PreventDefault`) pops the resource named by `WorkflowSurfaceBehavior.LinkMenuKey`. Adding an entry is one declaration in your markup — or one line in WinForms' `SetLinkMenuBuilder` delegate when the menu is dynamic.
 
 | GUI | How the menu is declared |
 |---|---|
 | WPF / WinUI / MAUI | `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"` on the tree root, plus a menu resource with that key |
 | Avalonia | the same property with the key its template emits (`WorkflowTreeMenu`) |
 | Razor | a `<LinkMenu Context="link">…</LinkMenu>` fragment parameter on the surface component |
-| WinForms | an empty `VisualContextMenu` resource the surface opens by `LinkMenuKey`, or `WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, (menu, link) => …)` in code |
+| WinForms | `LinkMenuKey="LinkContextMenu"` on the tree root plus a `VisualContextMenu` resource whose entries are `VisualMenuItem`s (`CommandPath`); `SetLinkMenuBuilder` only for dynamic menus |
 | Jalium | the same `LinkMenuKey` + menu resource the markup platforms use |
 
-⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms adds or removes items in the `SetLinkMenuBuilder` delegate; Jalium declares them in the menu resource.
+⚙ **An entry binds the link it acts on.** On the markup platforms the pressed link is the menu's data context for that press (WinUI feeds each item individually, since `MenuFlyout` has none), so a new action is one declaration: `<MenuItem Header="Delete" Command="{Binding DeleteCommand}"/>` (WPF; Avalonia spells it `{ReflectionBinding DeleteCommand}` because the resource has no `x:DataType`), `<MenuFlyoutItem Text="Delete" Command="{Binding DeleteCommand}"/>` (WinUI/MAUI), or `<button @onclick="() => link.DeleteCommand.Execute(null)">Delete</button>` inside `<LinkMenu Context="link">` (Razor). WinForms declares them as `VisualMenuItem`s in the menu resource (`CommandPath`); Jalium declares them in the menu resource.
 
-⚙ **The generated menus are empty.** The packs declare the resource/fragment and wire the right-press; every entry is yours, including Delete. The library supplies the event and the timing; the host decides the actions.
+⚙ **The generated menus are empty on every platform, including WinForms; the demo adds Delete.** WinForms' Trimmed demo puts a `VisualMenuItem` in its own tree resource; the template resource stays empty. Either way every action is yours, including Delete; the library supplies the event and the timing, the host decides the actions.
 
 ⚙ **The surface owns the open/closed bookkeeping.** It sets `WorkflowInput.IsSuspended` while its menu is up, so the pointer travelling onto the menu cannot clear the link the menu acts on, and releases it on close. When the link an open menu was about leaves the tree (Delete, Undo, an agent edit) the tree reports it through `GetHelper().LinkRemoved` — close your popup when it names yours. The surface opens the menu off the routed right-press.
 
@@ -254,7 +254,7 @@ link.Locate();   // the midpoint of its two endpoint nodes' centers
 
 A settled link carries a **travelling highlight**, so its direction is read from motion rather than from a mark a few pixels wide. Every full demo does this; the Trimmed suites leave it out because it is decoration rather than part of the editor.
 
-⚙ **Animate a scalar phase on the flow owner, and derive the drawing from it.** The WPF/Avalonia/WinUI link views read `BandHead` / `BandIntensity` from the tree's shared `WorkflowFlowClock`; the Jalium surface owns `FlowPhase`; the Blazor link is drawn by `flow.js`; on WinForms each visual `LinkView` owns its own animatable scalar and repaints. Give the flow owner an animatable scalar that triggers a repaint, and compute geometry and colour from it in the draw pass. See [the animation skill's flow reference](../../../veloxdev-create-animation/references/practices/flow.md).
+⚙ **Animate a scalar phase on the flow owner, and derive the drawing from it.** The WPF/Avalonia/WinUI/WinForms link views read `BandHead` / `BandIntensity` from the tree's shared `WorkflowFlowClock`; the Jalium surface owns `FlowPhase`; the Blazor link is drawn by `flow.js`. Give the flow owner an animatable scalar that triggers a repaint, and compute geometry and colour from it in the draw pass. See [the animation skill's flow reference](../../../veloxdev-create-animation/references/practices/flow.md).
 
 ⚙ **The line rests dim and the band is the same colour at full strength.** Dim the resting line by alpha (about three fifths) and keep the hue; the contrast then sits where the eye finds it. Pushing the link's colour towards white changes one channel of three on a 2px line and is invisible.
 
@@ -284,7 +284,7 @@ The shipped adapters are all notification-driven. A custom surface can be pull-d
 | Node position | bound to the collapsed `Anchor`, or arranged from it in the visual tree | repositioned in code, every pass |
 | After a mutation | automatic | you must call `Refresh(host)` |
 
-⚙ **WinForms' visual backend is notification-driven.** `ViewPool` subscribes `VisibleItems`; each template binds model geometry under one camera matrix, and each `LinkView` republishes on render. `Refresh(host)` remains the entry to re-push viewport offsets and relayout after a wholesale change (new tree, host resize); there is no `SyncNow` and no per-card `Location` write.
+⚙ **WinForms' visual backend is notification-driven.** `ViewPool` subscribes `VisibleItems`; each template binds model geometry under one camera matrix, and each `LinkView` republishes on render. `Refresh(surfaceRoot)` remains the entry to re-push viewport offsets and relayout after a wholesale change (new tree, host resize); it takes the visual root, not the `VisualHost`. There is no `SyncNow` and no per-card `Location` write.
 
 ## Checking your views
 

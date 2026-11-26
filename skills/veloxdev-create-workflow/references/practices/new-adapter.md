@@ -10,7 +10,7 @@ The seven shipped adapters are your reference implementations. Read the one whos
 
 | Situation | Do this instead |
 |---|---|
-| The GUI is not one of the seven but is XAML-like | A full adapter. Its surface layer is about **nine** classes — see *Writing the adapter* below for the build order. |
+| The GUI is not one of the seven but is XAML-like | A full adapter. Its surface layer is a fixed set of classes — see *Writing the adapter* below for the build order. |
 | You only need the model and the engine, headless | Reference `VeloxDev.Core` alone — no adapter is involved at all. |
 | You want the canvas inside an existing control of your own | Still a full adapter. The surface is not separable from the coordinate host. |
 | You could switch to a GUI that already has an adapter | Do that. An adapter is a real cost and the seven cover most .NET GUIs. |
@@ -37,7 +37,7 @@ If it does not — a surface that places its own children, or a framework with n
 
 ⚙ Whichever you choose, `Viewport` is written **only by the adapter**, and always in canvas-local coordinates.
 
-⚙ **Two more members are the adapter's, and they come in a pair:** persist `Layout.ViewportOffset` whenever the scroll is measured (`WorkflowSurfaceMath.ViewportOffsetFromScroll`, world coordinates), and restore the host to it when a tree arrives (`HasViewportRestore` → `ViewportRestoreScroll` → clamp). Without the restore a saved graph opens at the origin; without the persist the file records nothing. Capture the offset **before** your own first refresh: the refresh writes `ViewportOffset` from the control's current position and would erase it. One restore per tree, keyed on the tree reference. Centering a graph with no saved position is the host's call.
+⚙ **Two more members are the adapter's, and they come in a pair:** persist `Layout.ViewportOffset` whenever the scroll is measured (`WorkflowSurfaceMath.ViewportOffsetFromScroll`, canvas-local coordinates), and restore the host to it when a tree arrives (`HasViewportRestore` → `ViewportRestoreScroll` → clamp). Without the restore a saved graph opens at the origin; without the persist the file records nothing. Capture the offset **before** your own first refresh: the refresh writes `ViewportOffset` from the control's current position and would erase it. One restore per tree, keyed on the tree reference. Centering a graph with no saved position is the host's call.
 
 ### 2. Scale container
 
@@ -115,7 +115,7 @@ Use the framework's dispatcher-priority type when it has one, and `NonPriority` 
 
 Push is better. If the framework has bindings, bind the node's position and size to the collapsed `Anchor`/`Size` and let the binding re-evaluate; the only thing you must remember is re-raising those two properties after a re-virtualization — which Core's `BroadcastVisibleItemLayout()` already does for you.
 
-Pull is survivable but costly: the caller must refresh after every mutation, and you need a synchronous escape hatch when a value must be correct in the same frame. WinForms chose a notification-driven visual tree instead: the generic visual `ViewPool` subscribes `VisibleItems`, each template binds model geometry, and `Refresh(host)` only re-pushes viewport offsets and relayout after a wholesale change. A new adapter should prefer bindings or subscriptions over a per-pass pull.
+Pull is survivable but costly: the caller must refresh after every mutation, and you need a synchronous escape hatch when a value must be correct in the same frame. WinForms chose a notification-driven visual tree instead: the generic visual `ViewPool` subscribes `VisibleItems`, each template binds model geometry, and `Refresh(surfaceRoot)` only re-pushes viewport offsets and relayout after a wholesale change. A new adapter should prefer bindings or subscriptions over a per-pass pull.
 
 ## Writing the adapter
 

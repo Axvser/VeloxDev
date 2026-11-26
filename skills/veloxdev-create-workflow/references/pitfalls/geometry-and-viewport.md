@@ -40,7 +40,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Cause:** the zoom commit chain grew the canvas near an edge instead of clamping the final scroll, or read `ActualOffset` / `ActualSize` before the scale commit.
 
-**Fix:** follow the five-step chain — `WorldAtViewportCenter` → pivot + scale → `EnsureNegativeCover` → relayout → `PivotCenterScroll` → clamp. Clamp the final scroll to the reachable range; growth near an edge is the drift.
+**Fix:** follow the commit chain — `WorldAtViewportCenter` → pivot + scale → `EnsureNegativeCover` → relayout → `PivotCenterScroll` → clamp. Clamp the final scroll to the reachable range; growth near an edge is the drift.
 
 ## The pointer does not stay under what was grabbed while zooming
 
@@ -96,7 +96,7 @@ Failures the repository has actually hit. Each entry names the symptom, the rule
 
 **Cause:** `ViewPool` creates a card view per item and the `DataTemplate` binds `Canvas.Left`/`Canvas.Top` to `node.Anchor` and `Width`/`Height` to `node.Size`; the surface applies one camera matrix on `PART_Canvas`. A card that is not a `VisualElement`, or a `PART_Canvas` named on the wrong element, is outside the camera subtree.
 
-**Fix:** the template must be a visual `UserControl` with `Viewbox > Grid` content, and `PART_Canvas` must be a visual `Canvas` under the tree root. The surface also resets `Layout.Scale` to 1; zoom is the camera matrix, so do not write `Layout.Scale` for zoom. Call `WorkflowSurfaceBehavior.Refresh(host)` after replacing the whole tree. See [winforms.md](../practices/gui/winforms.md#writing-the-surface).
+**Fix:** the template must be a visual `UserControl` with `Viewbox > Grid` content, and `PART_Canvas` must be a visual `Canvas` under the tree root. The surface also resets `Layout.Scale` to 1; zoom is the camera matrix, so do not write `Layout.Scale` for zoom. Call `WorkflowSurfaceBehavior.Refresh(treeView)` after replacing the whole tree. See [winforms.md](../practices/gui/winforms.md#writing-the-surface).
 
 ## A WinForms link draws to the wrong point or double-applies zoom
 

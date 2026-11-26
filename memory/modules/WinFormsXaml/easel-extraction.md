@@ -1,20 +1,21 @@
 # VeloxDev.WinForms.Xaml ↔ Easel 抽取
 
-> Easel 独立仓：`E:\VisualStudio\Projects\Easel`。抽取前备份为 `Easel-backup-20261124`。
+> Easel 独立仓：仓库子模块 `Easel/`（[Axvser/Easel](https://github.com/Axvser/Easel)）。
 
 ## 现状
 
-- **运行时**：`Src/Easel` 是 VeloxDev `Src/Adapters/VeloxDev.WinForms/Xaml` 的完整副本；命名空间映射 `VeloxDev.WinForms.Xaml` → `Easel`、`...Xaml.Controls` → `Easel.Controls`、`...Xaml.Visuals` → `Easel.Visuals`、`...Visuals.Controls[.Shapes]` → `Easel.Visuals.Controls[.Shapes]`。Easel 运行时**不引用 VeloxDev.Core**；只有 net461 额外引 `System.ValueTuple`。
+- **运行时**：`Src/Easel` 抽取自 VeloxDev `Src/Adapters/VeloxDev.WinForms/Xaml`（现已独立演进）；命名空间映射 `VeloxDev.WinForms.Xaml` → `Easel`、`...Xaml.Controls` → `Easel.Controls`、`...Xaml.Visuals` → `Easel.Visuals`、`...Visuals.Controls[.Shapes]` → `Easel.Visuals.Controls[.Shapes]`。Easel 运行时**不引用 VeloxDev.Core**；只有 net461 额外引 `System.ValueTuple`。
 - **生成器**：`Src/Generators/Easel.Generator` 是 `VeloxDev.WinForms.Generator` 的副本，诊断 ID 为 `EASEL_XAML*` / `EASEL_XAMLP*`，unprefixed 类型按 Easel 命名空间解析。
 - **测试/示例**：`Src/Test/Unit/Easel.Test`、`Examples/XamlGallery` 已复制并改名。Easel 示例去掉了 Workflow graph 与 VeloxDev MVVM 卡片及对应依赖；Easel 测试去掉了依赖过渡引擎的动画行为测试（那些留在 VeloxDev 适配器侧）。
 - **对话框与窗口 chrome**：Gallery 顶部标题栏是 `VisualTitleBar`（无边框、图标/标题/最小化/最大化-还原/关闭；空白区拖动、吸附、拖回还原；`--preview-only` 时与旧标题区一起折叠），`overlay.dialog` 卡演示 `DialogService`。`Easel/Visuals/Dialogs/` 提供 `VisualDialog`/`DialogService`（消息/确认/输入，异步结果、遮罩、焦点锁、原生岛隐藏）；`VisualTitleBar`/`WindowChrome` 提供无边框标题栏（图标/标题/最小化/最大化-还原/关闭），空白区 `HTCAPTION` 保留系统拖动与 Aero Snap。
 - **项模板（1.4.0）**：`Src/Templates/Easel.Templates`（`WinForms.Easel.Templates`）提供 `e-usercontrol`、`e-resource`、`e-theme`、`e-style`、`e-controltemplate`、`e-datatemplate`，参数只有 `--namespace`；除 `e-usercontrol` 外都生成 `ResourceDictionary` + code-behind。`e-theme` 的调色板键按 `ThemePalette.FromResourceDictionary` 的约定写全。发布工作流把模板包列入版本检查、打包、推送与旧 patch 下架，并在推送前校验 nupkg 里六个短名的 `template.json`。
 - **动画**：Easel 自带引擎（`Easel/Animation/`）：`AnimationSpec`、`VisualTriggerActions` 门面，以及 internal 的 `AnimationScheduler`/`AnimationRun`/`AnimationInterpreter`/`AnimationProperty`/`ValueInterpolator`/`AnimationHost`。`VisualTransition`、`TransitionAction`、`KeyFrameAnimation` 直接驱动，不需要宿主注册后端；没有 `IVisualAnimator`/`AnimationRuntime`。支持数值、`Point`/`Size`/`Rectangle` 家族、`Thickness`/`Padding`、`Matrix`/`Matrix4x4`、`Color`/`Brush`/`Transform3D` 与 nullable；未支持类型启动时抛 `NotSupportedException`。写帧走 `BindingPriority.Animation`，收尾落 `LocalValue`；取代是按 DP 而不是按元素。
 - **VeloxDev 适配器只承担 workflow/MVVM**：`Src/Adapters/VeloxDev.WinForms/` 没有 `XamlAnimation/`；Easel 动画由它自己的引擎直接驱动。
-- **条件引用**：`VeloxDev.WinForms.csproj` 按配置分支 —— `Debug` 用子模块 `ProjectReference`（`..\..\..\Easel\Src\Easel\Easel.csproj`），其余配置用 `PackageReference Include="WinForms.Easel"`，好让 nuspec 带上真实的 Easel 依赖（`Easel` 这个 ID 在 nuget.org 上是保留的，推不上去）。
+- **条件引用**：`VeloxDev.WinForms.csproj` 按配置分支 —— `Debug` 用子模块 `ProjectReference`（`..\..\..\Easel\Src\Easel\Easel.csproj`），其余配置用同版 `PackageReference Include="WinForms.Easel"`（当前 3.0.0），好让 nuspec 带上真实的 Easel 依赖（`Easel` 这个 ID 在 nuget.org 上是保留的，推不上去）。各个 XAML 宿主的 `WinForms.Easel.Generator` 同样是 3.0.0。
+- **宿主行为（3.0.0）**：`IVisualHostBehavior`（`Attach(VisualHost)` / `Detach()`）由 `VisualElement.AddHostBehavior` 注册；元素解析出 `Surface` 时 Attach，换宿主/释放时 Detach，重复注册只挂一次。`VisualHost.DataContext` 是 inherited 根：根元素无本地值时继承宿主上下文，子树照常逐级继承；`VisualHost.Post` 把同一帧内的重绑合并成一次消息泵回调（WPF 调度器优先级语义）。适配器的 `WorkflowSurfaceBehavior` 挂在视觉根上，用这个契约拿宿主；DataContext 是工作流树的唯一来源，没有宿主级 `SetX(Control)` 附着属性。
 - **验证**：Easel 解决方案（运行时/生成器/测试/示例）构建与测试通过；`Easel.Test` 覆盖动画完成、同 DP 取代、停止持值与 keyframe 端点。
 
-## Easel 新增能力（VeloxDev 的 Xaml 副本尚未同步）
+## Easel 在抽取后新增的能力（适配器直接消费）
 
 - **渲染帧分配与整帧缓存（1.2.1）**：`WinformsObject.GetValue` 走 `Dictionary` 优先级表 + 显式取最小键，读取零分配；`NativeBrushPool` 线程内按颜色缓存纯色画笔（上限 128）；`StringFormat` 按「换行 × 水平 × 垂直」缓存；`PaintChrome` 无闭包分配。`VisualHost.RenderTo` 在根为 `VisualElement`、目标 Graphics 为恒等变换时维护一张逻辑分辨率整帧缓存：静态帧直接贴回，`Canvas.Left/Top` 移动只重画旧/新包围盒，根纯平移按整像素位移后重画不相交的暴露条带；覆盖层有内容、非整像素、子树含 Effect/3D/遮罩/位图缓存/无界命中时回退整帧。平移快路径只在失效来自普通根自身时成立；根覆写 `RenderContent`/`OnRender` 自绘或失效来自子树时，整帧回退内容重画。`Visual.Render` 的包围盒换算改用 `[ThreadStatic]` 单点缓冲，避免每节点取 `Matrix.Elements`。逐视觉 `Graphics.Save/Restore` 每对约 80 B，保留以隔离绘制状态。同口径实测 1200×800 整帧：静态 15/50 视图 24/31 B、移动 11.31/14.11 KB、平移 2.08/4.90 KB；时间 0.95–2.25 ms。
 - **视觉附着属性回调**：`PropertyMetadata.VisualPropertyChangedCallback`（目标 `IWinformsObject`）由 `WinformsObject.RaisePropertyChanged` 调用；`[XamlProperty]` / `[XamlAttachedProperty]` 新增 `ChangedCallback = nameof(...)`，指向声明类型上的静态 `(IWinformsObject, DependencyPropertyChangedEventArgs)` 方法，生成器发 `VisualPropertyChangedCallback = ...`，签名不对报 `EASEL_XAMLP006`。视觉元素（`VisualElement` 派生自 `WinformsObject`，不是 `Control`）的附着属性写值走这条路；原生 `Control` 目标走 `PropertyChangedCallback`，同一属性两种目标都用时两个都挂。语义与 Control 路一致：有效值变化才通知，首写与 `ClearValue` 回落都通知。回归在 `DependencyPropertyTests` / `SourceGeneratorTests`。
@@ -55,6 +56,4 @@
 
 ## 未完成
 
-- VeloxDev 自身的 XAML 运行时尚未切到 Easel；当前适配器只对同时引用 Easel 的宿主生效。
-- WinForms 适配器仍用 `WorkflowSurfaceBehavior.EnsureAttachedBehaviors` 的每 pass 遍历安装四个行为；换成附着属性的 `ChangedCallback`（`WorkflowSlotLayoutBehavior.IsEnabled` 等）需要适配器消费含该能力的 Easel 版本（候选 1.2.0），并把 Release 的 `WinForms.Easel` 引用一起抬高。
 - `VeloxDev.WinForms.csproj` 的 Release 从 NuGet 取 Easel 包（Debug 走子模块源码），所以发布顺序是 Easel 先于 VeloxDev.WinForms；父仓 `publish.yml` 在打包 WinForms 适配器前等待 `VeloxDev.WinForms.csproj` 里写的 Easel 版本在 NuGet 可下载。

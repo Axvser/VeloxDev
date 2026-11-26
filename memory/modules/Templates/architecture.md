@@ -23,7 +23,7 @@
 
 生成的 `workflow-tree-view/TemplateClass.xaml` 的 `xmlns:behaviors` 声明写着
 `xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WPF"` ——
-这个程序集模板项目**自己从没引用过**，是**用户**必须自己装的那一个。所以模板里所有的
+这个程序集模板项目**自己从没引用过**，是**用户**必须自己装的那一个。模板里所有的
 `behaviors:` 前缀、`VeloxDev.WorkflowSystem` 命名空间引用，都只在**用户的项目里**才可能解析。
 
 **不解决什么**：
@@ -42,7 +42,6 @@
 | 事实 | 值 | 覆盖 |
 |---|---|---|
 | `TargetFramework` | `netstandard2.0` | 七家全部 |
-| `Version` | `12.0.0` | 七家全部 |
 | `PackageId` | `VeloxDev.<平台>.Templates` | 七家全部 |
 | `sourceName` | `TemplateClass` | 全部条目 |
 | `preferNameDirectory` | `false` | 全部条目 |
@@ -58,8 +57,6 @@
 | `Pack` 的 content glob | `content\**\*` |
 | logo 相对路径 | `..\..\..\..\Assets\veloxdev-logo.png` |
 | 元数据 | `PackageTags` / `PackageLicenseExpression` / `RepositoryUrl` / `PackageReadmeFile` 齐全 |
-
-⇒ 新增平台时照这个形状建，不要另起结构。
 
 ---
 
@@ -96,7 +93,7 @@
 | 七个条目**必须落进同一个命名空间**，机制是 tree-view 用 `xmlns:local` 与 `xmlns:workflowViews` **两个前缀指向同一个** `clr-namespace:TemplateNamespace` | `workflow-tree-view/TemplateClass.xaml` 的这两个 `xmlns`，随后 `NodeTemplate` / `LinkTemplate` / `TemplateSelector` / `GridDecorator` / `MinimapOverlay` 都用 `workflowViews:` 取兄弟 |
 | `sourceName: "TemplateClass"` 是**全局文本替换的锚**：`-n` 同时改文件名、类名、`x:Class` 和别处的引用 | 所有条目的 `template.json` 的 `sourceName` 都是这个值 |
 | `preferNameDirectory: false` ⇒ 产物不建子目录 | 所有条目 |
-| 替换是**纯文本**的，所以颜色占位符也会被替换进生成文件的**注释**里 | 见 `skills/veloxdev-create-workflow/references/templates.md` 的同一条 |
+| 替换是**纯文本**的：颜色占位符也会被替换进生成文件的**注释**里 | 见 `skills/veloxdev-create-workflow/references/practices/templates.md` 的同一条 |
 
 ---
 
@@ -127,10 +124,10 @@
   `IWorkflowMinimapScrollSource` 声明在适配器（`Src/Adapters/VeloxDev.WinForms/WorkflowSystem/Platform/IWorkflowMinimapScrollSource.cs`），
   由 `WorkflowSurfaceBehavior` 与 `WorkflowMinimapOverlay` 类声明引用，**模板侧零命中**。
 - 对照：**WinForms 的可见集也在标记里绑**（tree 的 `PART_Canvas` 设 `behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"`；适配器的 `EnsurePool` 只在未绑时补），与 WPF/WinUI/Avalonia/Razor 同形。MAUI 由适配器的 `ViewLinkLayer`（`IsActive=true`、`Handles` 判连线）在入队前挡在主池外，交给共享 overlay 画（见 `adapters/maui.md` §2.2 与 `WorkflowSystem/adapters/maui.md` §二·1）；
-  Jalium 现在也在标记里绑 `behaviors:ViewPool.ItemsSource`（`workflow-tree-view/TemplateClass.jalxaml`）—— 绑的是可见集，**不要**改成全量 `Nodes`。
+  Jalium 也在标记里绑 `behaviors:ViewPool.ItemsSource`（`workflow-tree-view/TemplateClass.jalxaml`）—— 绑的是可见集，**不要**改成全量 `Nodes`。
   Razor 的 `Items="Tree.GetHelper().VisibleItems"` 在 `workflow-tree-view/TemplateClass.razor` 的 `TemplateSelector` 上。
   ⚠ **`workflow-tree-view` 条目带「连线的右键菜单」**：**条目**声明在模板里（WPF/Avalonia/WinUI/MAUI/Jalium
-  是资源里的 `ContextMenu`，Razor 是 `.razor` 里的按钮，WinForms 是 tree 资源里的 `VisualContextMenu x:Key="LinkContextMenu"`，宿主只设 `SetLinkMenuKey`），
+  是资源里的 `ContextMenu`，Razor 是 `.razor` 里的按钮，WinForms 是 tree 根上的 `LinkMenuKey="LinkContextMenu"` + 资源里的 `VisualContextMenu`（模板保持为空，Demo 加条目）），
   而**接线在适配层**：WPF/Avalonia/WinUI/MAUI/Jalium 五家只多一行附着属性
   `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="<资源键>"`，适配器按这个键取菜单、包办订阅 / 定位 / 弹出 /
   开合上报，**模板 code-behind 因此只剩 `InitializeComponent()`**（WPF/Avalonia/WinUI/MAUI 四家 tree-view code-behind 都只剩薄薄一层；Jalium 的 code-behind 另有那个 `CanvasTransform` 镜像属性，见 `WorkflowSystem/adapters/jalium.md` §2.4）。
@@ -138,9 +135,9 @@
   传键不传菜单本身：`{StaticResource}` 会在定义它的资源字典之前求值（见 [item-template-specifications.md](../../specifications/item-template-specifications.md) §五）。
   菜单落在 tree-view 而不是 link-view（连线视图不吃指针，弹出需要屏幕坐标）。
   ⚠ **条目是「声明 + 绑定」，不是「声明 + 处理器」**：弹出前把**菜单自己的上下文设成那条连线**
-  （WPF/Avalonia 是 `DataContext`；MAUI 是 `BindingContext`；WinUI 是逐条给 `MenuFlyoutItem.DataContext`，
-  因为 `MenuFlyout : FlyoutBase : DependencyObject` **没有 `DataContext`**），条目写 `Command="{Binding DeleteCommand}"`
-  即成一个新动作。Avalonia 因为资源里没有 `x:DataType`、而 demo 开了编译绑定，必须写 `{ReflectionBinding …}`，不能退回 `Click`。
+  （WPF/Avalonia 是 `DataContext`；MAUI 是 `BindingContext`；WinUI 是逐条给 `MenuFlyoutItem.DataContext` ——
+  `MenuFlyout : FlyoutBase : DependencyObject` **没有 `DataContext`**），条目写 `Command="{Binding DeleteCommand}"`
+  即成一个新动作。Avalonia 的资源里没有 `x:DataType`、而 demo 开了编译绑定，必须写 `{ReflectionBinding …}`，不能退回 `Click`。
   Razor 没有绑定那一套，保留内联 `@onclick`；WinForms 的条目在 tree 资源的 `VisualContextMenu` 上增删，Jalium 的条目在资源里的 `ContextMenu` 上增删。
   ⚠ **MAUI 的一份菜单有两副面孔**：Windows 上把声明的 `MenuFlyout` 翻成原生 flyout；非 Windows **没有任意点弹出**，
   翻成一层**由适配器搭的浮层**（`WorkflowSurfaceBehavior.EnsureLinkMenuLayer`；不翻转、不出窗口、
@@ -152,11 +149,10 @@
   只标扩展点、一行说清，函数体注释也算在内。
   ⚠ **MAUI 的 Trimmed demo 与模板故意分叉**：demo 是**每线一视图**
   （`Demo/Controls/Workflow/LinkView.xaml(.cs)`，节点与连线共用一个池、选择器给 `LinkTemplate`），
-  而 `workflow-link-view` / `workflow-tree-view` 两个模板**还是旧的 overlay 形态**。
-  做模板镜像时，同步改这条注、§六 轴 1 的绑定说明、§八 里「MAUI 模板没有本地连线视图」那句。
+  而 `workflow-link-view` / `workflow-tree-view` 两个模板用 overlay 形态。
 - **Jalium 的 tree-view 在标记里引用五个兄弟条目**：`NodeView` / `LinkView` / `TemplateSelector` /
-  `GridDecorator` / `MinimapOverlay`（`workflow-tree-view/TemplateClass.jalxaml` 的资源与正文），所以
-  "少生成一条兄弟就编译不过"在这家覆盖这五条。见 `adapters/jalium.md`。
+  `GridDecorator` / `MinimapOverlay`（`workflow-tree-view/TemplateClass.jalxaml` 的资源与正文）；
+  ⇒ 少生成这五条中的任一条就编译不过。见 `adapters/jalium.md`。
 
 ---
 
@@ -189,7 +185,7 @@
 | **立即模式**：继承一个能覆写绘制入口的元素，XAML 只是空壳 | WPF、Avalonia、Jalium、WinForms | WPF `workflow-link-view/TemplateClass.xaml` 全文是一个空 `<UserControl>`，几何全在 `.xaml.cs` 的 `OnRender`；Avalonia 同理（`TemplateClass.axaml` 是空 `<Control>`，`Render` 在 code-behind）；Jalium 的模板也是空 `<UserControl>`，几何在 `.jalxaml.cs` 里算、自盒化（`WorkflowLinkBounds.Apply`）并 `PublishCurve`；WinForms 的 link-view 是视觉 `UserControl` + `.xaml.cs`，`OnRender` 画 cubic 并 `PublishCurve`，`LinkTemplate` 为每条 link 建一个 |
 | **保留式几何在代码里构造**：XAML 是空壳，`Path` + `PathGeometry` 在构造函数里 new 出来 | WinUI | `workflow-link-view/TemplateClass.xaml` 几乎为空（`Clip="{x:Null}"` 是全部内容）；`TemplateClass.xaml.cs` 的 `_path` / `_pathGeometry` / `_pathFigure` 是 `Path` / `PathGeometry` / `PathFigure` 字段，构造函数里 new 并 `Children.Add`。原因是这一家**没有公共 `OnRender`**，理由见 `memory/modules/WorkflowSystem/adapters/winui.md` §二·L2，此处不抄 |
 | **标记语言里的元素 + 代码给几何字符串** | Razor | `workflow-link-view/TemplateClass.razor` 的 `<path d=…>`（虚线的 `stroke-dasharray="@dash"`，`dash` 在 code-behind 里按 `IsVirtual` 取 `"6 4"`）；`data-veloxdev-link-curve="1"` 是给适配器缩放 JS 认的标记，不是样式 —— 见 `adapters/razor.md` §2 |
-| **复用适配器的视口级图层** | MAUI | `workflow-link-view/TemplateClass.xaml` 直接放 `behaviors:WorkflowLinkOverlay`；文件头的注释写明取舍：**每条线一个 `GraphicsView` 会在深缩放下超出 Win2D 纹理上限并静默消失**，所以一个表面只放**一个** link 层 |
+| **复用适配器的视口级图层** | MAUI | `Src/Templates/VeloxDev.MAUI.Templates/working/content/workflow-link-view/TemplateClass.xaml` 直接放 `behaviors:WorkflowLinkOverlay`；文件头的注释写明取舍：**每条线一个 `GraphicsView` 会在深缩放下超出 Win2D 纹理上限并静默消失**，一个表面只放**一个** link 层 |
 
 **连线的绑定属性七家统一**：`StartLeft` / `StartTop` / `EndLeft` / `EndTop` / `CanRender` / `IsVirtual` /
 `LineColor` / `LineThickness`。MAUI 是显式例外（单 overlay，改用 overlay 级属性，见
@@ -215,9 +211,9 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 | Razor | 适配器组件的 `DrawMinimap` render fragment（组件不能覆写渲染树） |
 
 `MinimapDrawContext`（Core `Interfaces/WorkflowSystem/Surface/MinimapDrawContext.cs`）带树、内容/视口包围盒、
-节点世界矩形、预映射的节点/视口矩形、拟合原点与比例、圆角 —— 覆写方不再自己推这些。
+节点世界矩形、预映射的节点/视口矩形、拟合原点与比例、圆角 —— 覆写方不需要自己推这些。
 
-小地图元素现在**铺满表面**；`AvailableRight/Top/Bottom`（内容区右上角：让开竖滚动条与水平刻度、底部让开横滚动条）
+小地图元素**铺满表面**；`AvailableRight/Top/Bottom`（内容区右上角：让开竖滚动条与水平刻度、底部让开横滚动条）
 与 `MinimapMargin` 一起进 context，默认绘制用 `GetMinimapRect(min)` 把小地图放在该角，命中/拖拽也只认这个矩形。
 
 **WinForms 的七项不是「基类 + 派生」**：tree 是视觉 `UserControl` + `WorkflowSurfaceBehavior`；node / slot / link 都是视觉 `UserControl`，由 `ViewPool` 物化、`DataTemplate` 定位，`WorkflowSlotLayoutBehavior` 写锚点，`LinkView` 自己发布曲线；grid / minimap / selector 是纯 `.cs`。调度与平台机制在适配器，调色板、卡片样子与选择器策略在模板。颜色解析统一走 `XamlRuntime.ParseColor`。
@@ -250,7 +246,7 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 「Style parameters」一节）：七家接受**同一套参数名、同一套默认值**，命令行因此能在 GUI 之间原样搬。
 删参数会让 `dotnet new` 报未知参数；补的是**说明**，不是删参数，也不是硬造一个样式点。
 
-`slotColor` / `slotBorderColor` 七家都有 `replaces`；`slotPath` 七家都没有，模板不再解析 SVG 路径。
+`slotColor` / `slotBorderColor` 七家都有 `replaces`；`slotPath` 七家都没有，模板不解析 SVG 路径。
 
 ⚠ **人面向文档只举了子集**（Razor 的树边框/圆角）；上表是跨平台的完整枚举。
 
@@ -263,7 +259,7 @@ WinUI 的 tree-view **故意不绑**并在注释里写明理由（`workflow-tree
 WPF 在 `VeloxDev.WPF.Templates/working/VeloxDev.WPF.Templates.csproj` 的那条 `None Include`，
 Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多家都命中同一条 `None`）。
 
-⇒ **这条路径本身是错的**：从 `working/` 上两级落在 `Src/Templates/`，所以它指的是
+⇒ **这条路径本身是错的**：从 `working/` 上两级落在 `Src/Templates/`，指向
 `Src/Templates/skills/veloxdev-workflow-item-templates/references/**\*` —— 而 `Src/Templates/skills`
 **整个目录都不存在**。要够到仓库根的 `skills/` 得写**四级**（`..\..\..\..\skills\…`）。
 ⇒ **它匹配 0 个文件**：仓库根 `skills/` 下没有 `veloxdev-workflow-item-templates/` 这个子目录。
@@ -283,7 +279,7 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 槽模板是一个 `Ellipse`（Razor 是 `<circle>`），`Fill` / `Stroke` 直接用 `slotColor` / `slotBorderColor`，不读 `State`。`ISlotComponent.State` 是普通可观察属性；要按状态改外观的
 宿主自己订 `PropertyChanged`，框架不提供配色转换器、palette，也没有 `StateChanged` 事件。
 
-⇒ 六家 slot-view code-behind 只有 `InitializeComponent()`；Razor 只剩参数，不再订 `PropertyChanged`。
+⇒ 六家 slot-view code-behind 只有 `InitializeComponent()`；Razor 只剩参数，不订 `PropertyChanged`。
 
 ### 7.5 渲染就绪门：WPF / Jalium / Razor / WinForms 四家写了
 
@@ -337,9 +333,9 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 **改配色的落点**：网格与标尺集中在各家的 `WorkflowGridDecorator`（WinForms 在模板的 `workflow-grid-decorator/TemplateClass.cs`，标尺由它的视口固定层画；Razor 在适配器 `WorkflowGridDecorator.razor.cs` 加 surface）。连线的默认色一般在各家自己的连线视图里；**MAUI 是例外：模板没有本地连线视图，用的是适配器**（`WorkflowLinkOverlay.cs`）。WinForms 的默认色在 `workflow-link-view` 的视觉视图与 tree 的 `LinkTemplate`/`WorkflowSurfaceBehavior.SetVisualLinkColor` 里。
 
 **连线：七家都没有箭头。** 那套箭头（长 12、宽 8，`!IsVirtual` 时画）七家都不画。
-模板与各家 Trimmed demo 现在都是**一条平线 + 悬停高亮**：高亮时绕线画一圈白色 halo
+模板与各家 Trimmed demo 都是**一条平线 + 悬停高亮**：高亮时绕线画一圈白色 halo
 （如 Avalonia Trimmed `Demo/Demo/Views/Workflow/LinkView.axaml.cs` 里 `OnPointerEntered`/`OnPointerExited` 画的那圈 halo：`(color, 0.25)`、`thickness + 6`）。
-**动的光带（旧称「流光」）只在部分非 Trimmed demo 里**，例如 Avalonia 的
+**动的光带只在部分非 Trimmed demo 里**，例如 Avalonia 的
 `Examples/Workflow/Avalonia/Demo/Views/Workflow/PolylineCurveView.axaml.cs`（沿曲线裁剪几何做「彗星拖尾」，
 中文注释在 `TailFraction` 声明处）—— 它**不在模板、也不在 Trimmed demo 里**。
 
@@ -351,11 +347,11 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 
 这三个坑都不报错：编译通过、端口照样画出来，只是**半边不见了**、**再也拖不动**、或**状态永远不变**。
 
-### 9.1 端口有一半骑在卡外，所以它上方不能有裁剪面
+### 9.1 端口有一半骑在卡外，上方不能有裁剪面
 
 端口宽 32 设计单位（枚举列表里 24）、外溢一半骑在卡边上。任何一个 `ClipToBounds="True"` 的祖先都会把它切掉外侧那一半。
 
-已经踩到的两处，**成因不同、修法也不同**：
+踩到的两处，**成因不同、修法也不同**：
 
 | 卡 | 成因 | 修法 |
 |---|---|---|
@@ -373,13 +369,13 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 - `behaviors:WorkflowSlotConnectionBehavior.IsEnabled="True"` —— 它给控件挂 `PointerPressed` / `PointerReleased`（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/AttachedBehaviors/WorkflowSlotConnectionBehavior.cs` 的 `OnIsEnabledChanged`）。没有它，**端口拖不出连线**。
 - `Background="#01000000"` —— 那是端口的**命中测试面**。全部改自绘、删掉 axaml 之后它一起没了，指针事件到不了控件。
 
-两样都不报错：端口照样画得好好的，只是静默失去交互。两者现在都写在 `SlotView` 的**构造函数**里（外加一个近透明的子 `Border` 作命中面），卡片忘了也不会再丢。
+两样都不报错：端口照样画得好好的，只是静默失去交互。两者都写在 `SlotView` 的**构造函数**里（外加一个近透明的子 `Border` 作命中面）；卡片忘了也不会丢。
 
-⇒ **把标记语言控件改成自绘之前，先列出被删掉的那个根元素上都挂了什么。** 附着属性、`Background`、`x:Name`（会被别处按名字找）都算。
+⇒ 标记语言控件改成自绘会连带丢掉根元素上挂的附着属性、`Background` 与 `x:Name`（`x:Name` 会被别处按名字找）。
 
 ### 9.3 输出槽的 `State` 只能从槽自己的 DataContext 读
 
-输出槽在 `DataTemplate` 里（`ItemsSource="{Binding OutputSlots.Items}"`），那个 `DataTemplate` 的 DataContext 是**包装项**（成员是 `Slot` 与 `Name`）。槽视图元素上写 `DataContext="{Binding Slot}"` / `BindingContext="{Binding Slot}"`，此后它的上下文就是槽自己 —— 所以槽内部统一写 `{Binding State}`。
+输出槽在 `DataTemplate` 里（`ItemsSource="{Binding OutputSlots.Items}"`），那个 `DataTemplate` 的 DataContext 是**包装项**（成员是 `Slot` 与 `Name`）。槽视图元素上写 `DataContext="{Binding Slot}"` / `BindingContext="{Binding Slot}"`，此后它的上下文就是槽自己 —— 槽内部统一写 `{Binding State}`。
 
 不要在同一元素上再写 `SlotState="{Binding Slot.State}"`：DataContext 已被改成槽 VM，这一行改在槽 VM 里求值，而 `ISlotComponent` 没有 `Slot` 成员 ⇒ 绑定失败、槽永远拿不到状态，且不报错。七家模板的 node-view 都不传 `SlotState`；槽视图用的是模板固定色（§7.4）。
 
@@ -392,6 +388,6 @@ Avalonia / WinUI / MAUI / Razor / WinForms 同位置同内容（`git grep` 多�
 | 某平台某个部件生成后长什么样 | 那一条目目录下的 `TemplateClass.*` |
 | 外壳结构（`PART_*` 嵌套、绑定关系） | 该平台的 `workflow-tree-view/TemplateClass.*` |
 | 标尺厚度 | 该平台 `workflow-grid-decorator` 的 `RulerThickness`（WinForms 与 Jalium 都在模板里：WinForms 为 `DefaultRulerThickness = 28`，Jalium 为 36）。**加** Razor `workflow-tree-view/TemplateClass.razor` 的 `RulerThickness="28"` |
-| 条目对外的 CLI 参数 | 该条目 `.template.config/template.json` 的 `symbols`（**记得 `replaces`**，否则就是 §7.1）+ `dotnetcli.host.json` 的 `symbolInfo` |
+| 条目对外的 CLI 参数 | 该条目 `Src/Templates/*/working/content/*/.template.config/template.json` 的 `symbols`（没有 `replaces` 就是 §7.1）+ `dotnetcli.host.json` 的 `symbolInfo` |
 | 条目名 / 命令名 / 默认类名 | `.template.config/template.json` 的 `identity` / `shortName` / `defaultName`，**并回头查 tree-view 里对它的引用**（§五） |
 | 新增一个平台 | `extension.md` §三 |

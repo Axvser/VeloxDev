@@ -248,8 +248,8 @@ Ctrl+滚轮缩放仍挂 `ScrollViewer.PreviewMouseWheel`（`HookZoom`，只在 `
 - `WorkflowMinimapOverlay : FrameworkElement, IWorkflowMinimapOverlay`（`WorkflowMinimapOverlay.cs` 的类声明），`RulerBand => 0`（同类的 `RulerBand`）—— 它不是标尺，所以虚拟化 inset 为 0。
 - `WorkflowMinimapOverlay.cs` 的 `OnMiniMouseDown` 先置 `_dragging` 再调 `PanToMini(...)` ⇒ **单击即居中**（不是"拖才动"）。这是小地图的既定语义，与 WPF 那份同款，**不是背离**。
 - `WorkflowMinimapOverlay.ScrollViewer` 仍是普通属性，但**适配器里有赋值者**了：`ScrollViewerName` DP + `ResolveScrollViewer()`（`FindName(name) is ScrollViewer viewer`，`Loaded` 时再兜一次）⇒ 模板只要写 `ScrollViewerName="PART_ScrollViewer"`（`workflow-tree-view/TemplateClass.jalxaml` 的 `MinimapOverlay` 元素）就接上了，宿主**不必**自己赋。（非 Trimmed demo `Examples/Workflow/Jalium/` 仍走 `Minimap(viewer)` 构造器那条路，那是它自己的选择。）
-- **小地图的内容（节点缩略框 + 包围盒）是带脏标记的缓存**（`WorkflowMinimapOverlay.cs` 的 `_nodeRects` / `_contentBounds` / `_pendingRefresh`，入口 `EnsureContent` / `MarkContentDirty`）：只有节点动过才重算（树的集合变化、节点 `Anchor`/`Size` 变更、换树）；视口、配色、尺寸的变化只 `InvalidateVisual`，不置脏 —— 它们只改那一趟 O(1) 的变换。这家的小地图在平移/缩放里每帧都被推着重画（宿主的 DP 变更 → `OnVisualChanged`），缓存因此是必需的：没有它每帧要把节点表走两遍（包围盒一趟、绘制一趟）。与 WPF / Avalonia / WinUI / MAUI 的同名 `_pendingRefresh` 是同一条规矩。
-- ⚠ **但只有脏标记会漏掉缩放**：节点的 `Anchor`/`Size` 是「原值 ÷ `Layout.Scale`」的折叠值（`NodeDefaultViewModel.cs` 的 `Anchor` / `Size` getter），**缩放变化不让任何节点发 `PropertyChanged`**。所以 `EnsureContent` 除了脏标记还比一次 `Layout.Scale` 的两个分量。四家同名实现是靠「任何 DP 变化都置脏」把这件事顺带盖住的，这家把视口变化从脏标记里摘出去了（平移因此不必重算），所以 `EnsureContent` 自己补了这一句。
+- **小地图的内容（节点缩略框 + 包围盒）由 Core 的 `MinimapPipelineCore` 缓存**（`Src/Core/VeloxDev.Core/WorkflowSystem/Minimap/MinimapPipelineCore.cs` 的 `DrawContext` / `ContentBounds` / `ViewportBounds`、`IsDirty` / `Refresh` / `Invalidate`）：`Refresh` 只在 dirty 时重跑 `BuildDrawContext`（遍历 `tree.Nodes` 读 `node.Anchor`/`Size`，并订每个节点的 `Anchor`/`Size` 与每条 link 两端槽的 `Anchor`）。dirty 由树/集合变化、节点的 `Anchor`/`Size`、槽的 `Anchor`、`Metrics` 变化与显式 `Invalidate` 置位。Jalium 侧 `WorkflowMinimapOverlay.MarkDirty` 只把 `InvalidateVisual` 排到 UI 线程；`OnVisualChanged` 对每个视觉 DP 调 `pipeline.Invalidate()`，surface 经 `SurfaceMetricsPush.PushMinimap` 推来的 `ScrollOffset` / `ContentOffset` / `ViewportWidth` 也在其中。
+- 节点的 `Anchor`/`Size` 是「原值 ÷ `Layout.Scale`」的折叠值（`Src/Core/VeloxDev.Core/WorkflowSystem/Templates/ViewModels/NodeDefaultViewModel.cs` 的 `Anchor` / `Size` getter）；缩放变化由 `WorkflowNodeScaleTracker` 转成这两个属性的 `PropertyChanged`（同文件的 `_scaleTracker` / `OnScaleDirty`）；`MinimapPipelineCore` 订这两个属性并置脏重算。
 
 ---
 
@@ -306,6 +306,19 @@ demo 往里放了一条 `<MenuItem Header="Delete" Command="{Binding DeleteComma
 所以 `{Binding DeleteCommand}` 解析得到。挂起的承担方仍是 Core —— `WorkflowInput.Route(PointerEventArgs)` 之后的
 `ApplyDefault` 在 `IsSuspended` 时直接返回（`Src/Core/VeloxDev.Core/WorkflowSystem/GUI/Events/WorkflowInput.cs` 的 `ApplyDefault`）。完整 demo 的 `MouseLeave` 也只清端口悬停 + 转发，
 收菜单走它自己那套 `menu.Close(); DeleteLink(link);`（`NodeEditorSurface.cs`），与适配器无关。
+
+### 4.y `Jalium.UI.*` 26.11.1 的 headed 全量物化比 26.10.x 慢约 5 倍，并带两条渲染回归
+
+同一份适配器源码只换包引用，跑 `headed --adapter jalium --policy adaptive --nodes 2000 --links 3000 --iterations 5 --steps 20`（Debug+Optimize，5 轮中位，本机 2026-11-26，跨机不可横比）：Full visibility 416–477 ms / 69–71 MB → 2294–2621 ms / 125–131 MB；Initial 4.1–4.7 → 8.7–10.4 ms；Scroll step 0.9–1.3 → 1.4–2.6 ms。管线迁移（`ViewSourcePipeline`）在两组包上都更快（Full −8%~−12%，Scroll step −22%~−47%）。`JALIUM_RENDER_BACKEND=software` 时 Full 只差 19%，退化集中在 D3D12 后端；热点在 Jalium 布局层（`FrameworkElement.UpdateCssTextInkBounds` 每次 `ArrangeCore` 遍历全部视觉子元素、`Panel.EnsureZOrderMap` 逐项算 CSS z-order），不在适配器。
+
+26.11.1 的两条渲染回归：
+
+- 画布向负方向扩展（`Layout.ActualOffset > 0`）后，节点 `Canvas.Left/Top` 落在视口外、仅靠模板 `RenderTransform`（`CanvasTransform`）移进视口的那部分不上屏 —— HUD 仍报可见、模型仍可拖动。Windows 默认开启的整帧捕获（`Window.ResolveRenderThreadEnabled` 的 `PlatformFactory.IsWindows`）在滚动后只把卡片描边录进帧（`OnPostRender`），填充命令没进帧。
+- 圆形输出槽画到卡片外（新增的 Vello 椭圆快路径 `TryEncodeEllipseIntoPendingVello` 处理圆形 `Ellipse`，圆角矩形走正确的 SDF 路径）；按画出的槽命中 `Canvas`/`ContentPresenter`，拖不了连线；关掉整帧捕获仍复现。
+
+适配器侧在 26.11.1 下另有一处坐标偏差：`WorkflowSurfaceBehavior.WorldPoint` 用 `GetPosition(Canvas) − ActualOffset`，而滚动在 Canvas 之下应用，world 点错；用装饰器 `ScrollOffset/ContentOffset` 换算才对。
+
+VeloxDev 的 Jalium 包引用低于 26.11.1，以上慢化与回归在当前树上不生效。
 
 ## 五、非 Trimmed demo 的落点
 

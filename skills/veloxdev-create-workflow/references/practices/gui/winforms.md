@@ -6,8 +6,8 @@
 and link views are markup; the tree is a whole visual tree hosted in a `VisualHost`, and one camera matrix
 scales the graph. `GridDecorator`, `MinimapOverlay` and `CustomTemplateSelector` are code-only. The Full demo at
 `Examples/Workflow/WinForms/Demo/` keeps the same surface subtree inside a visual workbench shell: one
-`VisualHost`, `SurfaceName="WorkflowSurface"`, and the title strip, sidebar, inspector, dialogs and status bar are
-all Easel XAML too.
+`VisualHost`, the surface view sets its own `DataContext` to the tree, and the title strip, sidebar, inspector,
+dialogs and status bar are all Easel XAML too.
 
 ⚙ **"Trimmed" means *minimal demo*, not a publish setting:** [the rule in SKILL.md](../../../SKILL.md#checking-your-work).
 
@@ -52,22 +52,33 @@ snapshot and `CornerRadius` behavior.
 ## Writing the surface
 
 The whole workflow tree is visual. The tree template is a visual `UserControl` (`GridDecorator` /
-`ScrollViewer` / `Canvas`, never a workflow base class); the demo hosts it in a generic `VisualHost` and attaches
-`WorkflowSurfaceBehavior` to that host. `PART_*` are visual element names.
+`ScrollViewer` / `Canvas`, never a workflow base class); `WorkflowSurfaceBehavior` is declared on the generated
+tree's visual root and Easel injects the hosting `VisualHost` through `IVisualHostBehavior`. `PART_*` are visual
+element names.
+
+```xml
+<local:TreeView x:Class="MyApp.Views.TreeView"
+                behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+                behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+                behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+                behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+                behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
+                behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+                behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
+                behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu" />
+```
 
 ```csharp
 var treeView = new TreeView();                       // visual UserControl (the generated tree item)
-var host = new VisualHost { Dock = DockStyle.Fill, Root = treeView };
-shell.Controls.Add(host);                             // HUD/minimap can be siblings here
-
-WorkflowSurfaceBehavior.SetCanvasName(host, "PART_Canvas");
-WorkflowSurfaceBehavior.SetScrollViewerName(host, "PART_ScrollViewer");
-WorkflowSurfaceBehavior.SetGridDecoratorName(host, "PART_GridDecorator");
-// The tree declares CustomTemplateSelector x:Key="WorkflowTemplateSelector"; the surface resolves it by default.
-WorkflowSurfaceBehavior.SetZoomEnabled(host, true);
-WorkflowSurfaceBehavior.SetIsEnabled(host, true);
-WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);
+var host = new VisualHost { Dock = DockStyle.Fill, Root = treeView, DataContext = tree };
+shell.Controls.Add(host);                             // host DataContext inherits into the tree root
 ```
+
+`DataContext` is the sole source of the tree: set it on the visual root or the `VisualHost` (a local root
+value wins); changes after attach rebind, coalesced through `VisualHost.Post`. There are no host-level `Set*`
+calls.
+
+The tree declares `CustomTemplateSelector x:Key="WorkflowTemplateSelector"`; the surface resolves it by default.
 
 The tree markup is the part layout:
 
@@ -93,10 +104,12 @@ children may live at any world coordinate while the `ScrollViewer` supplies the 
 ⚙ **`x:Name` is the visual name.** On a visual root the generator writes the code-behind field and
 `VisualElement.Name`; the behavior resolves the visual `Name`. Write `x:Name="PART_*"` once.
 
-⚙ **The tree arrives through `SetWorkflowTree`.** `ViewPool` gives each visible item a view and its
-`DataContext`; the `DataTemplate` binds position/size (and link endpoints); `WorkflowSlotLayoutBehavior`
-measures the named slot parts and writes anchors; each `LinkView` publishes its own curve. Node drag is visual:
-no per-frame `Refresh`/`SyncNow` pull is required.
+⚙ **The tree arrives through `DataContext`.** Set it on the visual root or the `VisualHost`; a local
+visual-root value wins and the host context inherits into the tree. There is no separate `WorkflowTree`
+property or setter; assign `element.DataContext = tree`. `ViewPool` gives
+each visible item a view and its `DataContext`; the `DataTemplate` binds position/size (and link endpoints);
+`WorkflowSlotLayoutBehavior` measures the named slot parts and writes anchors; each `LinkView` publishes its
+own curve. Node drag is visual: no per-frame `Refresh`/`SyncNow` pull is required.
 
 ## Links — one LinkView per link
 
@@ -148,6 +161,10 @@ the world point under the pointer stays fixed. At 68% the entire graph — cards
 260-unit card is 260 DIPs (390 physical at 150%) like WPF. Grid/ruler/minimap/scroll-bar metrics scale by the
 same factor.
 
+⚙ **Camera calls take the surface's visual root.** `GetZoom(treeView)`, `SetPan(treeView, …)`,
+`SurfaceToWorld` / `WorldToSurface(treeView, …)`, `GetWorldViewport` / `SetWorldViewport`, `ZoomAt`,
+`ProcessWheel` and `Refresh` all take a `VisualElement` root; there are no `VisualHost` overloads.
+
 ⚙ **The camera reports its world viewport to the tree**, so Core's visible set follows pan/zoom:
 `Viewport = (-(pan+content)/zoom, size/zoom)`.
 
@@ -157,17 +174,26 @@ Skipping it culls nodes still visible under the ruler.
 
 ## The link context menu
 
-⚙ **The trimmed demo fills the menu in code.** In the form that wires the surface:
+⚙ **The standard template declares the menu in XAML.** `workflow-tree-view` puts
+`LinkMenuKey="LinkContextMenu"` on its root and keeps the `VisualContextMenu x:Key="LinkContextMenu"` resource
+empty; the demo adds the Delete entry as a `VisualMenuItem` whose `CommandPath="DeleteCommand"` resolves against
+the menu's DataContext (the pressed link):
+
+```xml
+<VisualContextMenu x:Key="LinkContextMenu">
+  <VisualMenuItem Header="Delete" CommandPath="DeleteCommand" />
+</VisualContextMenu>
+```
+
+⚙ **`SetLinkMenuBuilder` is only for dynamic or code-only menus.** In the form that wires the surface:
 
 ```csharp
-WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, static (menu, link) =>
+WorkflowSurfaceBehavior.SetLinkMenuBuilder(treeView, static (menu, link) =>
     menu.Items.Add("Delete", null, (_, _) => link.DeleteCommand.Execute(null)));
 ```
 
-The generated tree also declares an empty `VisualContextMenu` resource keyed `LinkContextMenu`; point the
-surface at it with `SetLinkMenuKey` when you want the menu in markup. The surface opens the strip on a
-right-press on a link, positions it, and suspends input routing while it is open. **The generated template adds
-no entries** — including Delete.
+The surface opens the strip on a right-press on a link and positions it; the visual menu handles its own input
+while it is open. Edit the template's `VisualMenuItem`s to add or remove entries.
 
 ## Item templates — `VeloxDev.WinForms.Templates`
 
@@ -176,7 +202,7 @@ minimap.
 
 | Item | Shape | You supply |
 | --- | --- | --- |
-| tree | visual `UserControl` with visual `GridDecorator > ScrollViewer > Canvas`; hosted in a generic `VisualHost` | the palette, the visual selector resource, the link colours/width |
+| tree | visual `UserControl` with visual `GridDecorator > ScrollViewer > Canvas`; hosted in a generic `VisualHost` | the palette, the visual selector resource, the link colours/width, and the link menu's `VisualMenuItem`s |
 | node | visual `UserControl` root: `Viewbox > Grid 260×180`, chrome `Border`, title, `PART_InputSlot`, `PART_OutputSlots` ItemsControl | the card shell, title and port-row template |
 | slot | visual `UserControl` with an `Ellipse`; its fill and stroke use the slot colour symbols | glyph and colours |
 | link | visual `UserControl` with endpoint DPs and `OnRender`; publishes its curve | curve drawing and colors |

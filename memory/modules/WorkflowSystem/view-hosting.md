@@ -31,7 +31,7 @@
 | `ViewHostCore.cs` | `ViewHostCore<THost,TView,TItem,TPriorityCore>`（abstract） | 只组合全部契约、提供默认策略（3/批、不限回收、z=0、无测量、主池管连线、无诊断）；平台差异全在层里 |
 | `ViewPool.cs` | `ViewPoolCore<...>`（abstract）+ `ViewPool<...>`（sealed） | 池、active、pending、批循环、Reset/Replace、unsupported 类型缓存、失败隔离 |
 | `ViewSourcePipelineCore.cs` | `ViewSourcePipelineCore<THost,TView,TItem,TPriorityCore,TFactory,TContainer,TArranger,TScheduler,TDiagnostics>` | **泛型组合根**：闭合全部层与策略实例，创建 pool；适配器继承它给出自己的 `ViewSourcePipeline` |
-| `AdaptiveViewPoolPolicy.cs` | `AdaptiveViewPoolPolicy`（实现 `IViewPoolPolicy` + `IViewBatchFeedback`） | 用平滑吞吐估算每批能物化多少；pending>1024/256 时目标预算 16/12ms，否则 8ms；批大小有 1.25× / 0.8× 迟滞；参数来自 `Options`，`FromOptions` 可替换整套策略 |
+| `AdaptiveViewPoolPolicy.cs` | `AdaptiveViewPoolPolicy`（实现 `IViewPoolPolicy` + `IViewBatchFeedback`） | 用平滑吞吐估算每批能物化多少；pending 按 256 / 1024 两档取 8 / 12 / 16ms 预算；批大小有 1.25× / 0.8× 迟滞；参数来自 `Options`，`FromOptions` 可替换整套策略 |
 | `ViewPoolOptions.cs` | `ViewPoolOptions`（`[Serializable]`） | 描述/存储/替换自适应策略：初始批大小与预算、上下限、吞吐初值、pending 两档阈值与三档预算、平滑权重、增长/收缩迟滞、回收上限；`Normalize()` 夹取非法值 |
 
 ### Avalonia 适配（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/ViewHosting/`）
@@ -43,13 +43,13 @@
 | `ViewArranger.cs` | `ViewArranger` | no-op：几何由模板绑定 |
 | `ViewScheduler.cs` | `ViewScheduler` | `DispatcherPriority.Background` + `Dispatcher.UIThread.Post` |
 | `ViewDiagnostics.cs` | `ViewDiagnostics` | `Debug.WriteLine` |
-| `ViewPoolPolicy.cs` | `ViewPoolPolicy` | 固定策略的适配器示例（`BatchSize=1024`、每批 16ms，回收不限量）；`ViewPool` 默认用 Core 的 `AdaptiveViewPoolPolicy` |
+| `ViewPoolPolicy.cs` | `ViewPoolPolicy` | 固定策略的适配器示例（`BatchSize=1024`、每批 16ms，回收不限量）；各家 `ViewSourcePipeline` 默认传入 Core 的 `AdaptiveViewPoolPolicy` |
 | `ViewLayerPolicy.cs` | `ViewLayerPolicy` | `GetZOrder` 恒 0（模板绑 z） |
-| `ViewLinkLayer.cs` | `ViewLinkLayer` | `IsActive=false`，连线仍由主池物化 |
+| `ViewLinkLayer.cs` | `ViewLinkLayer` | `IsActive=false`，连线由主池物化 |
 | `ViewMeasureHost.cs` | `ViewMeasureHost` | no-op（布局 pass 自己量） |
 | `ViewSourcePipeline.cs` | `ViewSourcePipeline` | 继承 `ViewSourcePipelineCore<Panel,Control,IWorkflowComponent,DispatcherPriority,...>`，组合全部层 |
 
-入口仍是 `WorkflowSystem/AttachedBehaviors/ViewPool.cs` 的附着属性 `ViewPool.ItemsSource` / `ViewPool.TemplateSelector`；它只创建/销毁 `ViewSourcePipeline`。
+入口是 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/ViewPool.cs` 的附着属性 `ViewPool.ItemsSource` / `ViewPool.TemplateSelector`；它只创建/销毁 `ViewSourcePipeline`。
 
 **其余五家**（WPF / WinUI / MAUI / Jalium / WinForms；路径均为 `Src/Adapters/VeloxDev.<GUI>/WorkflowSystem/ViewHosting/`，同样是那组层与 `ViewSourcePipeline`，默认 `AdaptiveViewPoolPolicy`）：
 
@@ -95,8 +95,8 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 
 ## 三、不变量
 
-1. **`IViewScheduler.Schedule` 必须异步**。实现只能 post（Dispatcher / DispatcherQueue / MainThread / 定时器 / renderer），不能同步调用 `batch`；否则批尾重排会递归。**不要直接拿 `IThreadDispatcher.Post` 当 `Schedule`**：后者在已在目标线程时会 inline。**唯一例外是无句柄/无头宿主**（WinForms）：此时同步执行，但实现必须把重入的下一批入队排空而不是递归调用。
-2. **`Attach` 必须幂等**。回收的视图可能仍在视觉树里，复用时池仍会调 `Attach`；实现自己 `Children.Contains` 去重。
+1. **`IViewScheduler.Schedule` 必须异步**。实现只能 post（Dispatcher / DispatcherQueue / MainThread / 定时器 / renderer）；同步调用 `batch` 会让批尾重排在回调栈里递归。**不要直接拿 `IThreadDispatcher.Post` 当 `Schedule`**：后者在已在目标线程时会 inline。无句柄/无头宿主（WinForms）例外：同步执行，但重入的下一批入队排空而不是递归调用。
+2. **`Attach` 必须幂等**。回收的视图可能仍在视觉树里，复用时池仍会调 `Attach`；实现自己按引用去重（Avalonia / WinForms 用 `HashSet` 记录已挂载视图）。
 3. **`Deactivate` 是回收的解绑口**；`Detach` 只负责隐藏/摘除，不负责清 `DataContext`。
 4. **`Factory.CreateView` 返回 `null` = 该类型不支持，按运行时类型永久缓存**（直到 system 被销毁）。换模板必须重建 system —— `ViewPool` 的两个附着属性任一变化都会 `Cleanup` + 重建。
 5. **`Factory.WantsItem=false` 不缓存**；每次入队都会再问。MAUI 的连线 overlay 应优先用 `LinkLayer.Handles`，它比 `WantsItem` 多一个“由谁画”的明确归属。
@@ -104,14 +104,14 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 7. **`TItem` 必须是引用类型**。active 表按引用身份比较（`ViewReferenceComparer<object>`），不按 `Equals`。
 8. **`ViewSourcePipeline` 是组合根，不是第二个引擎**。它只把全部层与策略实例交给 `ViewHostCore`，再创建 `ViewPool`；不要在这里加平台分支。
 9. **被 `LinkLayer.Handles` 接管的条目永不进主池**。只有 `LinkLayer.IsActive=true` 时才会在每次可见集变化调用 `Render`（包括空集合）；实现不得修改可见集。`IsActive=false` 的平台完全不进这条路径。
-10. **`PoolPolicy.BatchSize` 小于 1 当 1；`FrameBudgetMilliseconds` 小于等于 0 表示不限时；`MaxRecycledViewsPerType` 小于等于 0 表示不限**。一批在“数量到顶”或“16ms 到期”时停下，剩余项排下一批。超过回收上限的视图走 `Container.Destroy` 移除（Avalonia 是 `Children.Remove`），不能只丢引用 —— 隐藏的子元素仍被宿主根住。
+10. **`PoolPolicy.BatchSize` 小于 1 当 1；`FrameBudgetMilliseconds` 小于等于 0 表示不限时；`MaxRecycledViewsPerType` 小于等于 0 表示不限**。一批在“数量到顶”或策略的时间预算到期时停下，剩余项排下一批。超过回收上限的视图走 `Container.Destroy` 移除（Avalonia 是 `Children.Remove`），不能只丢引用 —— 隐藏的子元素仍被宿主根住。
 11. **`LayerPolicy` 与 `MeasureHost` 都是可选钩子**。绑定驱动的平台让 `Container.SetZOrder` 与 `Measure` 空实现即可；需要时再在适配器里补。
 
 ---
 
 ## 四、Avalonia 平台面的现状
 
-- 默认策略是 Core 的 `AdaptiveViewPoolPolicy`（初始 64/8ms，按平滑吞吐与 pending 大小收敛到 8/12/16ms 预算；回收不限量）；`BatchPriority = DispatcherPriority.Background`。
+- 默认策略是 Core 的 `AdaptiveViewPoolPolicy`（参数见 §一）；`BatchPriority = DispatcherPriority.Background`。
 - 容器回收不摘树：`Deactivate` 清 `DataContext` 并 `IsVisible=false`；`Detach` 为空。
 - 引擎处理 `Replace`。
 - `ViewPool` 在 `DetachedFromVisualTree` 时 `Dispose` system；换源/换模板时先摘旧处理器再重建。
@@ -120,8 +120,8 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 
 ## 五、接一家新平台
 
-1. 在 `Interfaces/WorkflowSystem/ViewHosting/` 的各层/策略里，按平台能力实现窄层（不是重新实现池）；需要闭环调参时让策略额外实现可选的 `IViewBatchFeedback`。
-2. 在 `Src/Adapters/VeloxDev.<平台>/WorkflowSystem/ViewHosting/` 建对应内部类；模板/几何/线程/优先级/z 序/连线绘制/测量只在各自层里。
+1. 按 `Interfaces/WorkflowSystem/ViewHosting/` 定义的各层/策略实现窄层（不是重新实现池）；需要闭环调参时让策略额外实现可选的 `IViewBatchFeedback`。
+2. 在 `Src/Adapters/VeloxDev.<平台>/WorkflowSystem/ViewHosting/` 建对应的 `public sealed` 层类；模板/几何/线程/优先级/z 序/连线绘制/测量只在各自层里。
 3. 写一个 `ViewSourcePipeline : ViewSourcePipelineCore<THost,TView,TItem,TPriorityCore,ViewFactory,ViewContainer,ViewArranger,ViewScheduler,ViewDiagnostics>` 闭合系统；池策略、层级策略、连线层、测量层从构造参数传入。
 4. 附着属性（或静态挂点）只负责在源/模板变化时重建、卸载时 `Dispose`。
 5. 用无头测试钉：可见项变成子视图；移除后视图仍保留但隐藏/可复用；无选择器走模板 fallback；换模板不重复挂 Detach 处理器。
@@ -153,9 +153,9 @@ Scheduler.Schedule(batch, BatchPriority)     ← 必须排队，不能 inline
 | WinUI | 29379 | 107.2 | 226270 | 2453 |
 | MAUI | 286.46 | 37.54 | 5070.75 | 357.0 |
 
-MAUI 的 Active 只到 2000/5001，是 overlay 把连线挡在主池外；它的 Full 不能与另外四家按视图数直接横比。WinUI 行量的是发布模板（demo NodeView / SlotView），Initial 含每轮 reset 后从 5001 视图回落的代价；其余四家仍是最小模板的管线下限，不可横比。
+MAUI 的 Active 只到 2000/5001，是 overlay 把连线挡在主池外；它的 Full 不能与另外四家按视图数直接横比。WinUI 行量的是发布模板（demo NodeView / SlotView），Initial 含每轮 reset 后从 5001 视图回落的代价；其余四家仍是最小模板的管线下限，不可横比。Jalium 行是 26.10.x + 迁移前适配器的数字；26.11.1 的 Full 退化见 [adapters/jalium.md](adapters/jalium.md) §4.y。
 
-当前管线的关键成本控制：pending 用 `Queue + HashSet`（增删查 O(1)，移除后留下 tombstone 由出队时跳过）；Avalonia `ViewContainer` 用引用比较 `HashSet<Control>` 做挂载去重，不再 `Children.Contains`；`LinkLayer.IsActive=false` 时完全跳过整集枚举；每批受 `BatchSize=1024` 与 16ms 双重限制。
+当前管线的关键成本控制：pending 用 `Queue + HashSet`（增删查 O(1)，移除后留下 tombstone 由出队时跳过）；Avalonia `ViewContainer` 用引用比较 `HashSet<Control>`（`_attached`）做挂载去重；`LinkLayer.IsActive=false` 时完全跳过整集枚举；每批受池策略的批上限与时间预算双重限制。
 
 ## 七、Razor/Blazor：renderer-native 例外
 

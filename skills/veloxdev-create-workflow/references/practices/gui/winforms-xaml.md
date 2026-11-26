@@ -33,32 +33,38 @@ the model.
 
 ## Surface
 
-The whole workflow tree is visual. The demo hosts a generated visual `UserControl` in a generic `VisualHost`
-and attaches `WorkflowSurfaceBehavior` to the host:
+The whole workflow tree is visual. `WorkflowSurfaceBehavior` is declared on the generated tree's **visual
+root**, exactly like the other GUI adapters; Easel injects the hosting `VisualHost` through
+`IVisualHostBehavior`, so no host-side wiring is needed:
+
+```xml
+<local:TreeView x:Class="MyApp.Views.TreeView"
+                behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+                behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+                behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+                behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+                behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
+                behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+                behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
+                behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu" />
+```
 
 ```csharp
 var treeView = new TreeView();                       // visual UserControl (generated tree item)
-var host = new VisualHost { Dock = DockStyle.Fill, Root = treeView };
-shell.Controls.Add(host);                             // HUD/minimap are visual siblings inside the tree
-
-WorkflowSurfaceBehavior.SetCanvasName(host, "PART_Canvas");
-WorkflowSurfaceBehavior.SetScrollViewerName(host, "PART_ScrollViewer");
-WorkflowSurfaceBehavior.SetGridDecoratorName(host, "PART_GridDecorator");
-WorkflowSurfaceBehavior.SetZoomEnabled(host, true);
-WorkflowSurfaceBehavior.SetIsEnabled(host, true);
-WorkflowSurfaceBehavior.SetWorkflowTree(host, tree);
+var host = new VisualHost { Dock = DockStyle.Fill, Root = treeView, DataContext = tree };
+shell.Controls.Add(host);                             // host DataContext inherits into the tree root
 ```
 
-When the root also carries a visual workbench shell, keep one `VisualHost` and name the surface subtree:
+`DataContext` is the sole source of the tree: set it on the visual root or on the `VisualHost` (a local value
+on the root wins). There is no `WorkflowTree` property or setter; assign `element.DataContext = tree`.
+Changing `DataContext` after attach rebinds the surface,
+coalesced through `VisualHost.Post`. There are no host-level `Set*` calls.
 
-```csharp
-var host = new VisualHost { Dock = DockStyle.Fill, Root = new WorkbenchView() };
-WorkflowSurfaceBehavior.SetSurfaceName(host, "WorkflowSurface");   // x:Name on the surface UserControl
-WorkflowSurfaceBehavior.SetIsEnabled(host, true);
-```
-
-Parts, input and the viewport are then resolved inside that subtree; the public camera API still speaks host
-coordinates, so `SurfaceToWorld` / `WorldToSurface` remain the conversion points.
+When the root also carries a visual workbench shell, attach the behavior to the surface subtree itself; the
+connected controller derives the part scope from that element, and that view sets its own `DataContext` to the
+tree. Parts, input and the viewport are resolved inside that subtree. Camera calls take the surface's visual
+root (`GetZoom(treeView)`, `SetPan(treeView, …)`, `SurfaceToWorld(treeView, …)`, `GetWorldViewport`,
+`SetWorldViewport`, `ZoomAt`, `ProcessWheel`, `Refresh`); they take the visual root.
 
 `WorkflowSurfaceBehavior` owns the camera (one matrix on `PART_Canvas`), routes input into Core's
 `WorkflowInput`, materializes items through `ViewPool`, and resolves the template selector. `PART_*` are
@@ -145,6 +151,10 @@ parts. A node that needs extra slots names them and registers them with the same
 - A slot connects only when its view root marks `WorkflowSlotConnectionBehavior.IsEnabled="True"`.
 - `WorkflowSlotLayoutBehavior` measures the named parts and writes their anchors. A slot whose anchor is still
   `NaN` is not measured yet; its link draws nothing.
+- `ItemsControl` takes Easel's default list shell. Since Easel 3.0.0 that shell is transparent (no input
+  background or border) and hosts no inner scroll viewer: it is just an `ItemsPresenter`, so it never clips
+  content at its own bounds. A host that needs scrolling wraps it in a `ScrollViewer`; the node template uses it
+  directly.
 - The slot view's code-behind is only `InitializeComponent()`. Its glyph fill and outline are the template's
   slot colour symbols.
 
@@ -190,16 +200,24 @@ Enter/leave are synthesized by Core from target changes; the root raises exit wh
 
 ## Link context menu
 
-The demo fills the menu in code:
+The standard `workflow-tree-view` template declares `LinkMenuKey="LinkContextMenu"` on its root and keeps the
+`VisualContextMenu` resource **empty**, like the other platform templates. The demo adds the Delete entry as a
+`VisualMenuItem` whose `CommandPath` resolves against the menu's `DataContext` (the pressed link):
+
+```xml
+<VisualContextMenu x:Key="LinkContextMenu">
+  <VisualMenuItem Header="Delete" CommandPath="DeleteCommand" />
+</VisualContextMenu>
+```
+
+`SetLinkMenuBuilder` is only for dynamic or code-only menus:
 
 ```csharp
-WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, static (menu, link) =>
+WorkflowSurfaceBehavior.SetLinkMenuBuilder(treeView, static (menu, link) =>
     menu.Items.Add("Delete", null, (_, _) => link.DeleteCommand.Execute(null)));
 ```
 
-The generated tree also declares an empty `VisualContextMenu` resource keyed `LinkContextMenu`; point the
-surface at it with `SetLinkMenuKey`. The surface opens the strip on a right-press on a link and suspends input
-while it is open. The generated template adds no entries, including Delete.
+The surface opens the strip on a right-press on a link; the visual menu handles its own input while it is open.
 
 ## Verification
 

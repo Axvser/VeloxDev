@@ -1,7 +1,8 @@
 ﻿# VeloxDev.WinForms.Xaml — 架构
 
-> 包：`VeloxDev.WinForms`（适配器 + XAML 运行时）与 `VeloxDev.WinForms.Generator`（专属生成器），同为 **12.4.0**。
-> 代码：`Src/Adapters/VeloxDev.WinForms/Xaml/`（运行时）、`Xaml/Primitives/`（共享原语，命名空间仍是 `...Xaml.Controls`）、`Xaml/Visuals/`（视觉基类、绑定、样式、资源、宿主）与 `Xaml/Visuals/Controls/`（视觉控件）；生成器在 `Src/Generators/VeloxDev.WinForms.Generator/`；工作流表面在 `WorkflowSystem/AttachedBehaviors/`。
+> 包：`VeloxDev.WinForms`（适配器 + 工作流表面）；视觉运行时与生成器是独立仓 `Easel` 的 `WinForms.Easel` / `WinForms.Easel.Generator`（子模块 `Easel/`）。
+> 宿主行为：Easel 的 `IVisualHostBehavior` + `VisualElement.AddHostBehavior/RemoveHostBehavior` 在视觉根挂上/摘下宿主时回调 `Attach(VisualHost)` / `Detach()`；`WorkflowSurfaceBehavior` 的附着属性因此挂在视觉根上，由 Easel 注入宿主，不自己遍历树找 `VisualHost`。适配器内部仍用宿主键的引擎，控制器只把视觉根配置搬成 `SurfaceConfig` 快照。`VisualHost.DataContext` 向视觉根与后代继承（根元素本地值优先），`VisualHost.Post` 把一帧内的重绑合并成一次消息泵回调（WPF 调度器优先级语义）。
+> 代码：运行时 `Easel/Src/Easel/`（`Primitives/`、`Visuals/`、`Visuals/Controls/`、`Theme.cs`）；生成器 `Easel/Src/Generators/Easel.Generator/`；工作流表面与适配器侧行为在 `Src/Adapters/VeloxDev.WinForms/WorkflowSystem/AttachedBehaviors/`。命名空间是 `Easel*`（控件为 `Easel.Visuals.Controls*`）。
 > 定位：**一套视觉 XAML 后端**。控件是 `VisualElement`，`VisualHost` 是唯一 HWND；不是 WPF 兼容层。
 > 面向消费者的运行时手册在 `skills/veloxdev-create-workflow/references/practices/gui/winforms-xaml.md`；动画在 `skills/veloxdev-create-animation/references/practices/winforms-xaml.md`。
 > 独立 Easel 仓的抽取与动画注入契约见 [easel-extraction.md](easel-extraction.md)。
@@ -42,7 +43,7 @@
 - **`ContentControl`** 的 `ContentTemplate` 只作用于非 `VisualElement` 内容：模板创建视觉并设 `DataContext = Content`；`VisualElement` 内容直通。解析顺序：presenter 自己的 selector → 自己的 `ContentTemplate` → `TemplatedParent` 的 selector → `ContentTemplate` → 文本投影。`ContentTemplateSelector`（`DataTemplateSelector`）拿到原始 `Content`；`ContentStringFormat` 只在文本投影路径按当前文化 `string.Format`。`ContentControl.Template` 走 `VisualControlTemplate`，与内容模板是两条路。
 - **`ScrollViewer` 是 `ContentControl`**：默认模板（`DefaultTemplate`）是 `Grid`：星号主格放 `ScrollContentPresenter(PART_ScrollContentPresenter)`，右列/下行各是 `Auto` 轨道放 `ScrollBar(PART_HorizontalScrollBar`/`PART_VerticalScrollBar)`，两条占用视口而不是覆盖内容；调用方 `Template` 或样式模板优先于默认 chrome。`ScrollContentPresenter` 按视口宽、纵向不设限量内容，裁切并偏移，并实现 `IScrollInfo`；`ScrollBar` 负责拇指/轨道/键盘、可选模板部件（`PART_Track`/`PART_Thumb`/`PART_*RepeatButton`）与按住自动翻页。`CanContentScroll=true` 且内容是 `IScrollInfo` 时，extent/offset/滚轮/分页都交给内容自己的单位。外部相机模式（`IsExternalScroll` + `SetExternalOffset`）只让 presenter 报范围、不偏移内容，条的手势转成 `ScrollOffsetRequested`。
 - **`TextBox`** 自绘插入符/选区/剪贴板，默认全程走视觉路径（DP、模板、绑定、撤销全保留）；`UseNativeEditor=true` 时才用 `NativeControlHost` + 原生 `System.Windows.Forms.TextBox` 岛兜底 IME/无障碍，代价是失去视觉路径的选区/插入符外观。选区高亮、选中文字颜色、插入符颜色/粗细/闪烁周期由 `SelectionBrush`/`SelectionForeground`/`CaretBrush`/`CaretThickness`/`CaretBlinkInterval` 五个 DP 定制，只作用于自绘路径；原生岛显示时选区和插入符由系统绘制。聚焦的空字段不画占位文字。其余控件（`RichTextBox`、`ComboBox`、`Calendar` 等）都是纯视觉控件；另一条原生路径是 `native:`（`NativeElement`）与显式 `NativeControlHost`。
-- **`DataContext`** 是 inherited 属性；没有本地层时从 `ParentElement` 解析，祖先切换向无本地值的后代补发 `Inherited` 变更；子树换父级时 `VisualElement.OnParentChanged` 也给自身与后代补这一跳。绑定只监听本元素的 DataContext 变化，少了这一跳，预构造的嵌套子树挂到有上下文的父级后会一直停在空源上（如 XAML 视图里的按钮 `Command` 绑定）。
+- **`DataContext`** 是 inherited 属性；没有本地层时从 `ParentElement` 解析，视觉根没有本地值时继承 `VisualHost.DataContext`；祖先切换向无本地值的后代补发 `Inherited` 变更，子树换父级时 `VisualElement.OnParentChanged` 也给自身与后代补这一跳。绑定只监听本元素的 DataContext 变化，少了这一跳，预构造的嵌套子树挂到有上下文的父级后会一直停在空源上（如 XAML 视图里的按钮 `Command` 绑定）。工作流表面把 tree 设在视觉根或宿主上即可 —— DataContext 是树的唯一来源。
 - **覆盖层**：`VisualHost` 在根树之后绘制、之前命中铺满客户区的覆盖层；`VisualPopup` 挂进去，不受祖先 `ScrollViewer.Clip` 裁切。弹层脱离根树，打开时把目标 `DataContext` 以 `Inherited` 层推给内容。
 - **`RichTextBox`** 用扁平字符缓冲，每字符带 `RichTextStyle`；绘制必须走 `VisualText.Draw`。
 - **渲染缓存**：`Visual.CacheAsBitmap` 缓存本地子树；`VisualElement.InvalidateVisual` 标脏最近的缓存并上报矩形，`VisualHost` 只清/画脏矩形；有变换或 `Effect` 时整面重画。

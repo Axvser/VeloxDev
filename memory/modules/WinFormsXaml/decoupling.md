@@ -3,7 +3,11 @@
 ## 机制
 
 - 默认外观：`Src/Easel/Themes/Defaults/<Family>Defaults.xaml` 按族提供隐式 `Style`，由 `DefaultStyles` 合并；`VisualElement.ResolveImplicitStyle` 在元素/祖先 `Styles` 与 `Surface.Styles` 之后回退到 `Theme.FindDefaultStyle`。默认样式按**确切类型**匹配，派生类型要自己的样式或 `BasedOn`。
-- 模板取色：`VisualHost.RefreshThemeResources` 把 `Theme.CreateResourceDictionary(Theme.EffectiveMode)` 合并进宿主 `Resources`，模板用 `DynamicResource` 取主题键；主题变化时重建。
+- 默认承载面：`ListBox`/`TreeView`/`DataGrid`/`Calendar` 与 `VisualMenu` 工具条的兜底样式不画承载背景/边框，宿主自备表面；状态行、焦点环、表头、单元格、菜单行与内容绘制保留，`ItemsControl` 与纯容器本就透明。`DataGrid` 是混合体（仅分区模板，外层无本地表面），`Calendar` 模板优先、自绘兜底且两条路径都透明；`ListBox`/`TreeView` 表面归模板。`VisualContextMenu` 弹层保留 `SurfaceAlt`/`Border`：浮层没有宿主可依托，子菜单是内部实例、只共享模板，不能靠父级 `Background` 透传。`SurfaceAlt` 仍是调色板角色。矩阵见 `Easel/skills/easel-build-winforms-xaml-ui/references/default-style-audit.md`。
+- 模板取色：`VisualHost.RefreshThemeResources` 把 `Theme.CreateResourceDictionary(Theme.EffectiveMode)` 合并进宿主 `Resources`，装饰部件用 `DynamicResource` 取主题键；主题变化时重建。模板 chrome 例外，绑控件上的 `Chrome*`。
+- **模板 chrome 从控件取**：`VisualElement.ChromeBackground`/`ChromeBorderBrush`/`ChromeBorderThickness`/`ChromeBorderWidth` 是有效属性，默认模板以 `TemplateBinding Chrome*` 绘制；`SetChromeTheme` 给调色板回退。`TemplatedControl.RenderContent` 有模板时不画基类 chrome，`ContentControl` 仍画，`DataGrid` 只按分区画。锚点 `Easel/Src/Easel/Visuals/VisualElement.cs`（`SetChromeTheme`）与 `Easel/Src/Easel/Visuals/Controls/ButtonBase.cs`（`TemplatedControl.RenderContent`）。
+- **部件角色色在控件上**：Range/ScrollBar/TabItem/Headered 的轨道、填充、拇指、聚焦环与表头前景由控件 DP 供给（如 `TrackBrush`/`FillBrush`/`ThumbBrush`/`FocusRingBrush`/`HeaderForeground`/`SelectionLineBrush`），模板只对它们 `TemplateBinding`，不写调色板字面量。
+- **元素级过渡**：`VisualElement.Transitions` 列出的 DP 在变更时从旧值插到新值，写到 `Animation` 层；收尾只摘层、不落 `Local`，触发/样式层的终值随后显出。动画层在跑时，底层写入由 `WinformsObject.OnLayerValueChanged` 从当前帧改道；`TryStartImplicitTransition` 在 `AnimationScheduler.IsActive` 为真时跳过。锚点 `Easel/Src/Easel/Visuals/VisualElement.cs`（`Transitions`/`OnLayerValueChanged`）与 `Easel/Src/Easel/Visuals/VisualTriggerActions.cs`（`AnimateFrom`）。
 - `TemplatedControl.DefaultTemplate` 是代码兜底，顺序 `Template` > 样式模板 > `DefaultTemplate`；`TemplatedControl.IsFocusVisible` 由 `VisualElement.OnFocusVisibleChanged` 同步。
 - 部件：`GetTemplateChild<T>` + `PART_*`；装饰部件设 `IsHitTestVisible=False` 只跳过自己的内容命中，子元素仍可命中。
 - **模板触发器**：Setter 必须放在 `<Trigger.Setters>`（或 `<Setters>`）下；触发器写 `Template` 层，低于本地值，部件不能同时写会被触发器驱动的本地 `Opacity`/`Visibility`。成对 True/False 触发器或 `Style.Setters` 提供初始态。

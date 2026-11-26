@@ -1,8 +1,8 @@
 ﻿# VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`WorkflowEvents`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32/DPI 辅助）、视觉 XAML 运行时已移到 Easel 子模块（`Easel/Src/Easel/`）。
-> 包版本见 csproj；生成器独立在 `Src/Generators/Easel.Generator/`。
-> **单一 XAML 后端**：控件是 `Xaml.Visuals.Controls` 下的 `VisualElement`，`VisualHost` 是唯一 HWND；工作流表面是 `VisualHost` 上的附着行为。每个可见 item 由 `ViewPool` 经 Core 池物化为一个视觉元素，没有第二个 HWND。`Xaml.Controls` 只留共享原语。
+> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`WorkflowEvents`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32 样式 + 小地图滚动契约）、视觉 XAML 运行时在 Easel 子模块（`Easel/Src/Easel/`）。
+> 包版本见 csproj；生成器独立在 `Easel/Src/Generators/Easel.Generator/`。
+> **单一 XAML 后端**：控件是 `Easel.Visuals.Controls` 下的 `VisualElement`，`VisualHost` 是唯一 HWND；工作流表面是 `VisualHost` 上的附着行为。每个可见 item 由 `ViewPool` 经 Core 池物化为一个视觉元素，没有第二个 HWND。`Easel.Controls` 只留共享原语。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台。它在三条轴上的平台差异分别落在
 > `memory/modules/WorkflowSystem/adapters/winforms.md`、`memory/modules/TransitionSystem/adapters/winforms.md`、`memory/modules/Templates/adapters/winforms.md`，本文**指路不抄**。
@@ -25,19 +25,19 @@
 
 ## 二、表面给什么
 
-表面是 `WorkflowSurfaceBehavior`。宿主是 `VisualHost`，`Root` 是视觉树；行为按 `VisualElement.Name` 解析 `PART_Canvas` / `PART_ScrollViewer` / `PART_GridDecorator` / `PART_MinimapOverlay` 等部件，接管 pan/zoom、输入、布局、视口持久化与 teardown。相机矩阵写在 `PART_Canvas.Transform`；`ViewPool` 在 `PART_Canvas` 上按 `Helper.VisibleItems` 建节点/插槽/连线的视觉元素，模板自己绑定模型几何与绘制。
+表面是 `WorkflowSurfaceBehavior`，附着属性挂在视觉根（`VisualElement`）上，Easel 经 `IVisualHostBehavior` 注入 `VisualHost`；宿主是 `VisualHost`，`Root` 是视觉树。行为按 `VisualElement.Name` 解析 `PART_Canvas` / `PART_ScrollViewer` / `PART_GridDecorator` / `PART_MinimapOverlay` 等部件，接管 pan/zoom、输入、布局、视口持久化与 teardown；DataContext 是树的唯一来源。相机矩阵写在 `PART_Canvas.Transform`；`ViewPool` 在 `PART_Canvas` 上按 `Helper.VisibleItems` 建节点/插槽/连线的视觉元素，模板自己绑定模型几何与绘制。
 
 | 类型 | 形态 | 宿主/模板做什么 | 关键成员 |
 |---|---|---|---|
-| `WorkflowSurfaceBehavior` | 附着行为（`RegisterAttached`） | `VisualHost` 上设 `IsEnabled`/`ZoomEnabled`/`VisualTemplateSelector`/`VisualTemplateSelectorKey` 与部件 `*Name` | `EnsureParts` / `EnsurePool` / `ApplyCamera` / `WorkflowTree` / `LinkMenuKey`（`LinkMenuBuilder` 为旧回落） / `Refresh` / 相机 API |
+| `WorkflowSurfaceBehavior` | 视觉根附着行为（`RegisterAttached`，目标 `VisualElement`）+ `IVisualHostBehavior` 控制器 | 在 tree 根上设 `IsEnabled`/`ZoomEnabled`/`VisualTemplateSelector`/`VisualTemplateSelectorKey`、部件 `*Name` 与 `LinkMenuKey`；Easel 注入 `VisualHost`，控制器把根配置搬成宿主键引擎的 `SurfaceConfig`；**DataContext 是树唯一来源**（视觉根或 `VisualHost` 上设，宿主上下文向根/后代继承、本地值优先），Attach 后变化经 `VisualHost.Post` 合并重绑 | `EnsureParts` / `EnsurePool` / `ApplyCamera` / `LinkMenuKey`（`LinkMenuBuilder` 为动态菜单回落） / 相机视觉根 API `GetZoom`/`GetPan`/`SetPan`/`SurfaceToWorld`/`WorldToSurface`/`GetWorldViewport`/`SetWorldViewport`/`ZoomAt`/`ProcessWheel`/`Refresh`（只收 `VisualElement`） |
 | `ViewPool` | 附着行为（薄壳，与工作流无关） | `PART_Canvas` 上设 `ItemsSource`/`TemplateSelector`；任一变化或 `Refresh` 重建 `ViewSourcePipeline` | 一个 item 一个视觉子元素；按首次挂载时的模板 `Panel.ZIndex` 插位（连线在节点前），回收交给 Core，`Changed` 每批一次 |
-| `ViewSourcePipeline` + `ViewHosting/` 九项 | Core `ViewSourcePipelineCore<Panel,VisualElement,IWorkflowComponent,NonPriority,…>` 的闭包 | 工厂走 `VisualTemplateSelector`；容器留在画布上隐藏复用；调度器有句柄用 `BeginInvoke`、无句柄同步跑 | `ViewFactory` / `ViewContainer` / `ViewScheduler` / `ViewArranger` / `ViewMeasureHost` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` |
+| `ViewSourcePipeline` + `ViewHosting/` 分层 | Core `ViewSourcePipelineCore<Panel,VisualElement,IWorkflowComponent,NonPriority,…>` 的闭包 | 工厂走 `VisualTemplateSelector`；容器留在画布上隐藏复用；调度器有句柄用 `BeginInvoke`、无句柄同步跑 | `ViewFactory` / `ViewContainer` / `ViewScheduler` / `ViewArranger` / `ViewMeasureHost` / `ViewDiagnostics` / `ViewLayerPolicy` / `ViewLinkLayer` |
 | `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` | `VisualElement` 附着行为 | 节点/插槽模板在指定元素上开 `IsEnabled` 并给 `CoordinateHostName` | 槽测量写 `slot.Anchor`、标题行拖动、按下-释放在接收口连接 |
 | `WorkflowMinimapOverlay` | `VisualElement, IWorkflowMinimapOverlay, IWorkflowMinimapScrollSource` | 模板派生，只给调色板；与 `PART_SurfaceBorder` 同级进 tree 根 `Grid` | 调色板、绘制钩子、推入偏移（setter 标脏）、指针喂给输入层与捕获丢失收尾；映射/放置/拖拽算术在 Core `MinimapPipelineCore` |
 | `WorkflowInfoOverlay` | `VisualElement` | 模板直接实例化；绑定 `PART_GridDecorator` 的偏移 | 六行 HUD，视口取 `PART_SurfaceBorder.Bounds` |
 | `VisualTemplateSelector` | 抽象基类 | 派生类按 item 类型返回 `NodeView`/`SlotView`/`LinkView` | `SelectTemplate(object?)` → `VisualElement?` |
 | `IWorkflowGridDecorator` / `IWorkflowMinimapOverlay` | Core 契约 | 网格装饰器/小地图是模板角色，适配器只留契约 | 表面每次刷新推偏移 |
-| `NativeWindowStyleHelper` / `WorkflowDpi` | 平台辅助 | `WS_CLIPCHILDREN`/`WS_EX_COMPOSITED`、`BeginRedraw`/`EndRedraw`、DPI 换算 | 见 `WorkflowSystem/adapters/winforms.md` |
+| `NativeWindowStyleHelper` | 平台辅助 | `WS_CLIPCHILDREN`/`WS_EX_COMPOSITED`、`BeginRedraw`/`EndRedraw`；DPI 由 `VisualHost.DpiScale` 提供 | 见 `WorkflowSystem/adapters/winforms.md` |
 
 **支撑件**：item 物化归通用视觉 `ViewPool` + `WorkflowSystem/ViewHosting/`（Core 池），定位归模板绑定（`Anchor`/`Size`/`Panel.ZIndex`），缩放归相机；没有 `IWorkflowSurfaceNodeView` 或 `ModelChangeRelay`。
 
@@ -45,8 +45,8 @@
 
 - **XAML 侧有 DP/附加属性；适配器内部状态仍存在 `ConditionalWeakTable<Control, SurfaceState>`。** XAML 运行时由 `Xaml/DependencyProperty` 提供 DP，`WorkflowSurfaceBehavior` 用 `RegisterAttached` 暴露接线面。
 - **名字仍是接线语言。** 部件解析 `FindVisualNamed` 递归遍历视觉子树、`Ordinal` 比较 `VisualElement.Name`，取第一个命中；找不到静默跳过。`x:Name` 同时写字段与 `VisualElement.Name`，模板写一次即可。
-- **`Refresh(Control)` 是整树/部件变化后的重推入口**（不检查 `IsEnabled`）：重新解析部件、装池、`ApplyCamera` 把视口推给树与装饰器。
-- **平移在 `WorkflowSurfaceBehavior.SetPan` 与指针处理里**；`ApplyCamera` 把 `zoom`/`pan`/`content` 写进 `PART_Canvas.Transform`，并把同一组偏移推给网格/小地图。
+- **`Refresh(VisualElement)` 是整树/部件变化后的重推入口**（不检查 `IsEnabled`）：重新解析部件、装池、`ApplyCamera` 把视口推给树与装饰器。
+- **平移在 `WorkflowSurfaceBehavior.SetPan`（视觉根重载）与指针处理里**；`ApplyCamera` 把 `zoom`/`pan`/`content` 写进 `PART_Canvas.Transform`，并把同一组偏移推给网格/小地图。
 - **视图物化由 `ViewPool` + `WorkflowSystem/ViewHosting/` 做**：`EnsurePool` 把 `VisibleItems` 与 tree 选择器装到 `PART_Canvas`，`ViewSourcePipeline` 组合 Core 的池与九项层；工厂直接调 `VisualTemplateSelector`，回收桶、批大小、`Replace` 都归 Core（默认 `AdaptiveViewPoolPolicy`）。重建池期间 `state.RefreshingPool` 压住 `Changed`，`Refresh` 返回后统一扫一遍行为与连线样式。
 - **小地图/HUD 在视觉树里**：表面把偏移推给 `WorkflowMinimapOverlay`/`WorkflowInfoOverlay`；拖小地图经 `IWorkflowMinimapScrollSource.ViewportScrollRequested` 反推视口。
 
@@ -74,16 +74,16 @@
 
 ## 五、陷阱（带依据）
 
-1. **`WorkflowSurfaceBehavior` 的非 `VisualHost` 分支没有可渲染内容**：`Attach` 里 `if (host is not VisualHost) return;`；把行为挂到普通控件上不会报错，只是界面空着。宿主必须是 `VisualHost`。
+1. **行为要求视觉根解析得到 `VisualHost`**：附着属性挂在视觉根上，元素在树里解析不出 `VisualHost` 就不会回调 `Attach`；挂到没有宿主的视觉子树上不报错，只是界面空着。
 2. **部件名找不到静默跳过**：`FindVisualNamed` 不抛不报，漏名时对应能力静默缺失。
 3. **小地图的推入偏移必须自己标脏**：`WorkflowMinimapOverlay` 的 `ScrollOffsetX/Y`、`ContentOffsetX/Y`、`ViewportWidth/Height` 不在 `MinimapMetrics` 里，`Metrics` 的相等比较看不出变化；setter 漏掉 `pipeline.Invalidate()` 时相机在动、小地图视口块不动（`ApplyCamera` 的 `InvalidateVisual` 只重画、不重算映射）。
 4. **`ThemeValueConverters.cs` 的类名与 `System.Drawing` 撞名**：用 GDI+ 那个必须全限定（`System.Drawing.ColorConverter` / `FontConverter`）。
 5. **`NativeWindowStyleHelper` 里 `WS_CLIPCHILDREN` 与 `WS_EX_COMPOSITED` 同为 `0x02000000`**，却写向两个不同 index；不要按值合并。`CompositedMaxControlCount = 100` 是设计取舍。
 6. **视觉相机方向**：上滚 `zoom *= 1.1`，下滚 `/1.1`，夹在 `0.1..10`。
-7. **池化视图被移除后留在画布上**：`ViewContainer.Deactivate` 只清 `DataContext` 并设 `Collapsed`，`Detach` 不摘树 ⇒ `Canvas.Children.Count` 是「曾经物化过的视图数」，活动视图数看 `ViewPool.GetActiveViewCount`。管道销毁时 `ViewSourcePipeline.Dispose` 经 `ReleaseAll` 才真正移除并释放。
+7. **池化视图被移除后留在画布上**：`ViewContainer.Deactivate` 只清 `DataContext` 并设 `Collapsed`，`Detach` 不摘树 ⇒ `Canvas.Children.Count` 是「物化过的视图数」，活动视图数看 `ViewPool.GetActiveViewCount`。管道销毁时 `ViewSourcePipeline.Dispose` 经 `ReleaseAll` 才移除并释放。
 8. **`Panel.ZIndex` 不是活动排序**：`ViewContainer.Attach` 只在首次挂载时按当前 `Panel.ZIndex` 插位（连线 -1 落在节点前），之后模板改 `Anchor.Layer` 不会重排；`SetZOrder` 是空实现，避免覆盖模板绑定。
 9. **Easel 动画由 Easel 直接驱动**：Easel 自带引擎（`Easel.Animation` 的 internal scheduler/run/interpreter/property/sampler），`VisualTransition` 与触发器动作直接驱动。`VeloxDev.WinForms` 只提供 workflow/MVVM 能力；不存在 `XamlAnimation` 模块、`EaselAnimationBootstrap` 或 `AnimationRuntime.Animator` 注册。
-10. **`SurfaceName` 只选子树，不换宿主**：行为仍只认 `VisualHost`；输入/命中用宿主坐标，相机用表面内坐标，`SurfaceToWorld`/`WorldToSurface` 里的 `SurfaceOrigin` 负责两者之差。自己算坐标必须走这两个 API；名字写错时部件、输入、视口都按整棵根树解析（`WorkflowSurfaceBehavior.EnsureParts` / `SurfaceOrigin`）。
+10. **`SurfaceName` 只选子树，不换宿主**：行为要求视觉根解析得到 `VisualHost`；输入/命中用宿主坐标，相机用表面内坐标，`SurfaceToWorld`/`WorldToSurface` 里的 `SurfaceOrigin` 负责两者之差。自己算坐标必须走这两个 API；名字写错时部件、输入、视口都按整棵根树解析（`WorkflowSurfaceBehavior.EnsureParts` / `SurfaceOrigin`）。
 11. **Easel `Border` 默认 `Padding=12`**：把它当布局容器（外壳侧栏、标题条、列表行）而不显式写 `Padding="0"`，子内容会被挤小或裁掉（`Easel/Src/Easel/Visuals/Controls/CoreControls.cs` 的 `Border()` 构造）。
 12. **`PointFromSurface` 必须从根往叶反解**：先减祖先 `Bounds` / 反祖先 `Transform`，最后才是元素自己。叶到根的顺序会在祖先有偏移时把偏移再缩放一次；嵌入在偏移工作台里的画布一缩放，槽锚点就漂移、连线错位。回归 `PointFromSurface_UndoesAncestorOffsetsBeforeTheChildTransform`（`Easel/Src/Test/Unit/Easel.Test/VisualBackendTests.cs`）。
 
@@ -99,8 +99,8 @@
 | 网格/标尺调色板与间距 | 模板条目 `workflow-grid-decorator/TemplateClass.cs` |
 | item → 视图的选择器 | `Easel.Visuals.VisualTemplateSelector` + 模板派生类 |
 | Win32 样式、100 控件阈值 | `WorkflowSystem/Platform/NativeWindowStyleHelper.cs` |
-| DPI 换算 | `WorkflowSystem/Platform/WorkflowDpi.cs` |
-| 视觉运行时、DP、绑定、样式、模板 | `Xaml/Visuals/` |
+| DPI 换算 | `VisualHost.DpiScale`（`Easel/Src/Easel/Visuals/VisualHost.cs`） |
+| 视觉运行时、DP、绑定、样式、模板 | `Easel/Src/Easel/`（`Easel.Visuals`） |
 | 包结构、TFM、双轨引用 | `VeloxDev.WinForms.csproj` |
 
 ## 七、这份文件没写的东西
@@ -113,7 +113,7 @@
 
 ## Demo 工作台外壳（示例侧）
 
-`Examples/Workflow/WinForms/Demo` 是全视觉工作台：`Program` 建一个 `Form` + 一个 `VisualHost`，根是 `Views/Workbench/WorkbenchView.xaml`（标题条 / `VisualMenu`、活动栏、侧栏、编辑器标签、检查器、状态栏、`DialogOverlay`）。工作流表面是同一棵树里的 `Views/Workflow/WorkflowSurfaceView.xaml`，用 `WorkflowSurfaceBehavior.SetSurfaceName(host, "WorkflowSurface")` 指定；部件、输入和视口按该子树解析，相机坐标仍是宿主坐标（`SurfaceOrigin` 补原点差）。窗口只能是 WinForms `Form`（Easel 没有 Window），保存/打开仍是系统文件对话框；其余 UI 都是视觉元素。
+`Examples/Workflow/WinForms/Demo` 是全视觉工作台：`App` 的 `Application.Run(new MainForm())` 起一个 `MainForm : Easel.Visuals.Window`（`VisualForm` 自带一个 dock-filled `VisualHost`），根是 `Views/Workbench/WorkbenchView.xaml`（标题条 / `VisualMenu`、活动栏、侧栏、编辑器标签、检查器、状态栏、`DialogOverlay`）。工作流表面是同一棵树里的 `Views/Workflow/WorkflowSurfaceView.xaml`，表面行为直接声明在该视图根上（控制器按根的 `Name` 从宿主根定位表面）；`WorkbenchView` 里设 `WorkflowSurface.DataContext = tree` 再 `WorkflowSurfaceBehavior.Refresh(WorkflowSurface)`，表面靠根的 `x:Name` 自动定位（`SurfaceName` 留空即取 `root.Name`）；部件、输入和视口按该子树解析，相机坐标仍是宿主坐标（`SurfaceOrigin` 补原点差）。窗口是 `Easel.Visuals.Window`（`Window : VisualForm : Form`），保存/打开仍是系统文件对话框；其余 UI 都是视觉元素。
 
 - 节点卡与端口经 `DataTemplate` + `CustomTemplateSelector` 物化（`ControllerView` / `TimerNodeView` / `PythonNodeView` / `EnumSelectorNodeView` / `WorkflowNodeCard`、`FullSlotView`、`LinkView`），网格/小地图在 `GridDecorator.cs` / `MinimapOverlay.cs`。节点右键自动布局/布局容差在 `WorkbenchView.OnSurfacePointerPressed` / `EnsureNodeMenu`；元素表是 `ElementListView`（Easel 行）。
 - 连线流光在 `LinkView.xaml.cs`：静态构造函数向 `WorkflowFlowClock.RegisterDriver` 注册按树共享的 30fps **线程池 `Timer` + UI 投递**驱动（不是 `Transition`，避免其 async 续体投回 WinForms 同步上下文），时钟按真实时间采样，绘制路径也采样。

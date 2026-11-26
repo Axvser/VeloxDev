@@ -55,10 +55,10 @@
 | 要定制 | 入口（七家同一套） |
 |---|---|
 | 一次指针/键盘动作（悬停、按下、松开、滚轮、按键） | **订阅**：`((IInputEvents)vm.GetHelper()).Input.<事件> += …`。视图自己吃指针的平台（Razor / MAUI overlay / 逐线视图）与表面转发指针的平台（WPF / WinUI / Avalonia / WinForms / Jalium）都是这一句 |
-| 这一笔的效果怎么画 | **画在你自己的视图里**（连线 / 节点卡 / 端口都一样）：WPF / WinUI / Avalonia / Razor / **Jalium**（2026-10-05 起走标记）是你本来就拥有的那个视图类（`OnRender` / 标记）；WinForms 也是你的控件，调 `WorkflowLinkAttachment` / `WorkflowNodeAttachment` / `WorkflowSlotAttachment` 的 `Attach(this)` 挂上其余机制后自己画。**MAUI 的连线是唯一的例外**（见下） |
+| 这一笔的效果怎么画 | **画在你自己的视图里**（连线 / 节点卡 / 端口都一样）：WPF / WinUI / Avalonia / Razor / **Jalium**（2026-10-05 起走标记）是你本来就拥有的那个视图类（`OnRender` / 标记）；WinForms 也是你的视觉控件：连线视图自己画并发布曲线；槽/节点/拖动由 `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` 的附着属性挂上。**MAUI 的连线是唯一的例外**（见下） |
 | 这一次要不要走框架那一手 | args 上的 `Handle.PreventDefault`；要不要继续往上冒 = `StopPropagation` |
 | 整块表面级的策略 | `WorkflowInput.For(tree)` 的开关与只读口 |
-| 声明式的东西（右键菜单条目、模板选择器） | 标记平台：附着属性 / 组件参数；**WinForms**：XAML 资源 + `WorkflowSurfaceBehavior` 的附着属性，菜单用 `SetLinkMenuBuilder` |
+| 声明式的东西（右键菜单条目、模板选择器） | 标记平台：附着属性 / 组件参数；**WinForms**：XAML 资源 + tree 根上的 `WorkflowSurfaceBehavior` 附着属性；菜单用 `LinkMenuKey` + `VisualMenuItem`（模板空，Demo 加条目），`SetLinkMenuBuilder` 只用于动态菜单 |
 
 **WinForms 的连线也走单层**（用户定）：WinForms 没有轻量视觉，每条线一个 HWND 是数量级成本，所以 `ViewLinkLayer` 把连线挡在主池外，适配器的 `WorkflowLinkLayer` 在 `PART_Canvas` 的 `Paint` 里一趟画完所有可见线并发布曲线。`workflow-link-view` 条目保留为显式 per-link opt-in，默认 tree 不实例化它。
 
@@ -101,6 +101,6 @@
 | 连线的指针/键盘输入 | 一套**标准输入**（抄 Avalonia 的指针/键盘 API；位置转 `Anchor` 并带上来源视图的图层、按 target 冒泡、句柄管「走不走框架那一手 / 还传不传」）。**不要按组件定制事件** |
 | 右键菜单 | **适配器**从自己的 `PointerPressed(Right, link)` 里弹，`LinkRemoved` 收尾 |
 | 画布滚动（滚轮） | **适配器执行、宿主决定去向**（2026-10-11 用户定）：平台滚动容器**一次都不许滚画布**，适配器整笔拦下、路由，没人接管就执行默认竖滚；订阅方置 `PreventDefault` 后经 `WorkflowInput.Scroller`（`IWorkflowSurfaceScroller`）决定往哪滚。**平台原生的 Shift+滚轮横滚被有意取代**，别当回归去「修」 |
-| 平台接线方式 | 七家都通过各自的表面行为接线：标记平台用附着属性 / 组件参数；WinForms 用 tree XAML 根上的 `WorkflowSurfaceBehavior` 附着属性，node / slot 视图用 `Attach(this)` 挂助手，连线由 `WorkflowLinkLayer` 在画布上单层绘制（per-link `workflow-link-view` 是 opt-in）。`slot.Anchor` 由标记里声明的槽控件**实测**写回，不是模型几何算出来的 |
+| 平台接线方式 | 七家都通过各自的表面行为接线：标记平台用附着属性 / 组件参数；WinForms 用 tree XAML 根上的 `WorkflowSurfaceBehavior` 附着属性（视觉根，宿主由 `IVisualHostBehavior` 注入）；node / slot 视图用 `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior` 的附着属性；连线由 `ViewPool` 按 `LinkTemplate` 池化。`slot.Anchor` 由标记里声明的槽控件**实测**写回，不是模型几何算出来的 |
 
 ⇒ 这一层来回翻过不止一次。**再要动它，先问用户**，不要按「上一次是怎么做的」推断。

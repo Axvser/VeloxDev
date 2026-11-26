@@ -28,7 +28,7 @@
 ## 三、自定义模板选择器：家家都要支持，且优先级最高
 
 - 七家都必须支持**用户自己的模板选择器** —— 是 VeloxDev 自己的那套 API（`ViewPool.TemplateSelector` / `ViewSourcePipeline` 的构造参数），不是平台自带的 `DataTemplates` / `DataTemplateSelector` 机制。平台自带的那套继续兜底。
-- 模板的 tree-view 里要把它**接上**：XAML 平台写 `behaviors:ViewPool.TemplateSelector="{StaticResource …}"`；WinForms 在 tree 的资源里声明 `<local:TemplateSelector x:Key="…" />`，根上写 `behaviors:WorkflowSurfaceBehavior.TemplateSelector="{StaticResource …}"`；Razor 写组件 `<TemplateSelector … />`。
+- 模板的 tree-view 里要把它**接上**：XAML 平台写 `behaviors:ViewPool.TemplateSelector="{StaticResource …}"`；WinForms 在 tree 的资源里声明 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" … />`，`PART_Canvas` 挂 `behaviors:ViewPool.TemplateSelector="{StaticResource WorkflowTemplateSelector}"`（表面行为的 `VisualTemplateSelectorKey` 默认解析这个键）；Razor 写组件 `<TemplateSelector … />`。
 - **选择器的优先级最高**：解析一个 VM 的视图时先问它，它匹配就用它；平台自带的模板查找只在它之后兜底。
 
 理由两条：它是七家**公共 API 面**的一部分（用户换一家平台不该换一套写法），而客制化时用户最先要动的正是「哪个 VM 用哪个视图」。
@@ -49,8 +49,8 @@
 
 - **Avalonia 的建视图路径是 `template.Build(item)`**（`Src/Adapters/VeloxDev.Avalonia/WorkflowSystem/ViewHosting/ViewFactory.cs` 的 `CreateView`），而 Avalonia 的 `IDataTemplate` 是「既选又建」—— `Match` 挑出的是选择器自己，轮到 `Build` 时它才去挑内层模板；传 `null` 就无从下手（选择器的 `SelectTemplate(null)` 抛异常）⇒ **视图一个都不建，且不报错**（画布空白）。传 VM，选择器因此可用。
 - **判定顺序**（四家 `FindDataTemplate` 同形）：按 VM **类型**的缓存 → 选择器 → 平台自带的查找（Avalonia：`ViewFactory.FindTemplate` 的缓存 → 选择器 → 面板 / 祖先 / `Application`）⇒ 「选择器命中就跳过平台机制、没命中就退化到平台机制」成立；但选择器若**按实例**判定，第一个实例的判定会被整个类型沿用。
-- **WinForms 的池没有平台兜底**：选择器是唯一的创建路径（`Src/Adapters/VeloxDev.WinForms/Xaml/TemplateSelector.cs` 的 `SelectTemplate(item)` → `DataTemplate`），所以「退化到平台机制」在那家不存在。
-- **WinForms 的连线默认不池化**：`ViewLinkLayer.IsActive=true`，`workflow-tree-view` 在 `PART_Canvas` 上挂 `behaviors:WorkflowLinkLayer.*`，由它一趟画完所有可见线；`workflow-link-view` 条目仍存在，但只是显式 per-link opt-in，默认 tree 不实例化它。其余平台仍按角色池化连线（MAUI 是单 overlay 的例外）。
+- **WinForms 的池没有平台兜底**：选择器是唯一的创建路径（`Easel.Visuals.VisualTemplateSelector.SelectTemplate(item)` → `DataTemplate`，`WorkflowSystem/ViewHosting/ViewFactory` 直接调它），所以「退化到平台机制」在那家不存在。
+- **WinForms 的连线按角色池化**：`ViewLinkLayer.IsActive=false`，`ViewPool` 按 `LinkTemplate` 为每条可见连线建一个 `LinkView`；没有 `WorkflowLinkLayer` 单层绘制。其余平台同样按角色池化连线（MAUI 是单 overlay 的例外）。
 - **连线的命中与删除是库能力；高亮等外观是 demo 专属**（2026-10-04 用户改定。分层的完整规则见 [layer-ownership-specifications.md](layer-ownership-specifications.md)）：连线视图只负责**画出自己那条曲线并把它发布出去**，其余由 Core、适配器、demo 三方分担 ——
   - 命中判定归 Core（`LinkHitTestEx` 对着已发布的曲线判距，半径 `LinkHitTestEx.DefaultHitRadius`）；
   - **输入路由只有一个位置**：`WorkflowInput.For(tree)`（一棵树一个实例），适配器把原生指针/按键翻译成标准输入后只往它里面转发；宿主与连线视图都在**组件的 Helper**上订（`IInputEvents`）；
@@ -64,16 +64,16 @@
   - **接线必须在适配层，模板只声明**（2026-10-03 用户改定）：**条目**归用户（声明在 `workflow-tree-view` 的资源里），
     而**订阅 / 定位 / 弹出 / 开合上报一行都不许留在模板**。能声明附着属性的平台用
     `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="<资源键>"`，与 `ViewPool.TemplateSelector` 同一条线；
-    WinForms 没有可声明委托的标记形态，宿主在 code-behind 调
-    `WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, …)` 提供条目；适配器负责订阅、定位、弹出与开合上报。
+    WinForms 在 tree 根上写 `behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"`；
+    模板的资源里保持**空** `VisualContextMenu`，条目由 Demo 在资源里用 `VisualMenuItem`（`CommandPath` 解析菜单 DataContext）声明；
+    `SetLinkMenuBuilder` 只用于动态/纯代码菜单。适配器负责订阅、定位、弹出与开合上报。
     ⇒ **模板产物的 code-behind 因此只剩 `InitializeComponent()`。**
     **为什么传资源键、不传菜单本身**：这个属性挂在表面**自己的根元素**上，`{StaticResource}` 在那里会在
     定义它的那个资源字典之前求值；键交给适配器在挂载之后解析，绕开这个顺序。
   - 触发点是**这条连线上的右键按下**（**可取消**：宿主在链上更靠前的一级 —— 连线自己 —— 订同一个事件并
     `PreventDefault` 就是「这里不给菜单」，顺序由「目标先于祖先」保证），
     挂起用 `WorkflowInput.IsSuspended` 表达 —— 菜单开着时指针跟踪不动。
-  - **WinForms**：条目由宿主在 code-behind 交给 `WorkflowSurfaceBehavior.SetLinkMenuBuilder(this, …)`；
-    适配器负责订阅、定位、弹出与开合上报，模板只保留 `InitializeComponent()`。
+  - **WinForms**：tree 根写 `LinkMenuKey="LinkContextMenu"`，模板的 `VisualContextMenu` 保持为空；Demo 在 tree 资源里加 `VisualMenuItem`（`CommandPath`）条目，code-behind 仍只有 `InitializeComponent()`；`SetLinkMenuBuilder` 只用于动态/纯代码菜单。
   ⇒ 反过来，**不要**为了「能点到连线」把连线视图改成吃掉整块画布的命中面（那会吞掉画布手势）；命中面必须仍然只是画出来的那道描边。
 
 ---

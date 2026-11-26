@@ -109,7 +109,7 @@ The generated files are defaults, not fixtures. The node view's `InputSlot` / `O
 
 ⚙ **The wiring is yours.** Add the `VeloxDev.<GUI>` package, set the tree's `DataContext` (or `Tree` parameter) to your `ITreeComponent`, and make sure your node view's `DataContext` is your node ViewModel.
 
-⚙ **The link menu is declared and empty.** The tree item declares the menu and wires the right-press to it — `LinkMenuKey` plus a resource on the markup platforms (WPF/Avalonia/WinUI/MAUI/Jalium), a `<LinkMenu>` fragment on Razor, an empty `VisualContextMenu` resource (opened through `LinkMenuKey`) or a `SetLinkMenuBuilder` delegate on WinForms — and every entry is yours. Add the entries there rather than writing right-press code; each entry is bound to the pressed link, so `Command="{Binding DeleteCommand}"` (or the GUI's equivalent) is the whole entry. See [view-layer.md](view-layer.md#the-link-context-menu).
+⚙ **The link menu is declared and empty.** The tree item declares the menu and wires the right-press to it — `LinkMenuKey` plus an **empty** resource on the markup platforms (WPF/Avalonia/WinUI/MAUI/Jalium/WinForms), a `<LinkMenu>` fragment on Razor — and every entry is yours. Add the entries there rather than writing right-press code; each entry is bound to the pressed link, so `Command="{Binding DeleteCommand}"` (or the GUI's equivalent) is the whole entry. WinForms entries are `VisualMenuItem CommandPath="DeleteCommand"`; `SetLinkMenuBuilder` is only for dynamic/code-only menus. See [view-layer.md](view-layer.md#the-link-context-menu).
 
 ⚙ **The debug HUD is not part of the packs.** The demos carry an `InfoOverlay` read-only diagnostics panel; it is a debugging aid supplied by the host.
 

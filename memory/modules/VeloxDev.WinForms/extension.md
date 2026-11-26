@@ -31,17 +31,17 @@
 | 6 | 不写 `CoordinateHostName` 就以为锚点另有默认 | 默认只找最近的视觉 `Canvas`，找不到才退到树根；锚点写在该宿主的局部坐标里 | 节点/插槽显式给 `CoordinateHostName`（模板用 `PART_Canvas`） | `WorkflowSlotLayoutBehavior.ResolveCoordinateHost` |
 | 7 | 在视觉画布里用 `layout.Scale` 模拟缩放 | 视觉树要一条相机矩阵；树的 `Scale` 会被表面复位成 1 | 用 `WorkflowSurfaceBehavior` 的相机 | `ApplyCamera` |
 | 8 | 把弹层/原生控件塞进视觉子树 | 原生 HWND 浮在视觉树之上，不能被变换/裁剪 | 用 `VisualPopup`；原生控件写 `<native:…>`（`NativeElement`，`IsSnapshot` 可变换）或用 `NativeControlHost` | `VisualHost` / `NativeElement` |
-| 9 | 整个工作台都塞进 `Root`，却把行为挂到表面子控件上或漏设 `SurfaceName` | 行为只认 `VisualHost`；不设名字时部件/输入/视口按整棵根树解析，外壳里同名 `PART_Canvas` 会先命中 | 宿主仍是 `VisualHost`，表面根写 `x:Name` 并 `SetSurfaceName`；坐标换算走 `SurfaceToWorld`/`WorldToSurface` | `WorkflowSurfaceBehavior.EnsureParts` / `SurfaceOrigin` |
+| 9 | 整个工作台都塞进 `Root`，却漏给表面根命名，或把行为挂到表面内部的部件上 | 行为挂在视觉根上，控制器以该根 `Name` 从宿主根定位表面；名字缺失时部件/输入/视口按整棵根树解析，外壳里同名 `PART_Canvas` 会先命中 | 行为挂在表面根上并给它 `x:Name`（`SurfaceName` 留空即取 `root.Name`，也可显式 `SetSurfaceName`）；坐标换算走 `SurfaceToWorld`/`WorldToSurface` | `WorkflowSurfaceBehavior.EnsureParts` / `SurfaceOrigin` |
 
 ## 三、步骤清单
 
 ### 3.1 搭一张工作流表面
 
 1. 根控件（或 XAML 根）派生 `VisualElement`；写 `PART_Canvas` / `PART_ScrollViewer` / `PART_GridDecorator` 的 `x:Name`。
-2. `new VisualHost { Root = treeRoot }`，在宿主上设 `IsEnabled`、`ZoomEnabled`、`VisualTemplateSelector`（或让 tree 资源里的 `VisualTemplateSelectorKey` 解析）与 `*Name`。工作台外壳与表面同一棵树时，`Root` 换成外壳根，表面根命名后设 `SurfaceName`。
+2. `new VisualHost { Root = treeRoot }`；在**视觉根**上设 `IsEnabled`、`ZoomEnabled`、`VisualTemplateSelector`（或让 tree 资源里的 `VisualTemplateSelectorKey` 解析）与部件 `*Name`（XAML 附加属性或 `WorkflowSurfaceBehavior.SetIsEnabled(root, …)`）。工作台外壳与表面同一棵树时，行为挂在表面根上并给它 `x:Name` —— 控制器以根 `Name` 从宿主根定位表面（`SurfaceName` 留空即取 `root.Name`）。
 3. 节点/插槽/连线是视觉 `UserControl`；tree 用 `DataTemplate` 包住它们，`PART_Canvas` 挂 `behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"` 与 `behaviors:ViewPool.TemplateSelector`。
 4. 节点/插槽模板在根上挂对应的 `WorkflowSlotLayoutBehavior` / `WorkflowNodeDragBehavior` / `WorkflowSlotConnectionBehavior`；网格/小地图：模板条目实现 `IWorkflowGridDecorator`、派生 `WorkflowMinimapOverlay`，按名字接上。
-5. `SetWorkflowTree(host, tree)`；模型变更后 `Refresh(host)`。
+5. `treeView.DataContext = tree`（或 `host.DataContext = tree`）；模型变更后 `Refresh(treeView)`。
 
 ### 3.2 加一个采样器
 
@@ -102,6 +102,5 @@
 ## 五、几个「以为能改、其实不该改」的地方
 
 1. **`WorkflowSurfaceBehavior` 的 Win32 样式调用不要摘**：`EnsureClipChildren`/`EnsureComposited` 是自绘画布不闪的前提。
-2. **消息过滤器的两个条件不要简化**：`ResolveSurfaceHost` 同时认 `_filterHost` 与父链；`ModifierKeys != Keys.Control` 是精确比较，改 `HasFlag` 会让 Ctrl+Shift+滚轮被吞。
+2. **`SurfaceState.PreFilterMessage` 的闸门不要简化**：只接 `WM_MOUSEWHEEL`/`WM_MOUSEHWHEEL`，且要求已附着、宿主未销毁且可见、光标落在宿主矩形内并命中表面；任一放宽都会把别处的滚轮抢来缩放或平移。缩放判定用 `(modifiers & Keys.Control) != 0` 的位测试，别改成只认 `Keys.Control` 的相等比较。
 3. **`WS_CLIPCHILDREN` 与 `WS_EX_COMPOSITED` 两个同值常量不要合并**。
-4. **视觉相机与 HWND 坍缩的缩放方向相反**：视觉上滚 `zoom *= 1.1`，旧路径 `Scale *= 1/1.1`。
