@@ -31,6 +31,8 @@
 - **`TreeView.Reveal` 只在展开状态/可视行变化时 Rebuild**；Gallery 选中期间抑制 `SelectedItem` 回传，避免每页构建两次。进入页面由 66–497ms 降到多数 1–20ms。
 - **Shell splitter**：`ScrollContentPresenter` 的无界探针 100000 会让 TreeView 模板根在无界/有界之间来回测；`Grid.ArrangeOverride` 在尺寸差时重测子项；`DockPanel` measure/arrange 用不同剩余空间。修完后每帧 layout 23→~1ms、MeasureOverride 26k→~40；副屏 sash 帧间隔 46→16ms（右）/31ms（左，探针 sleep 占 ~15.6ms）。布局期间 ScrollViewer 滚动条失效不排第二帧。
 - **Gallery 昂贵页面**：旧卡销毁延后一帧、inspector 行按 editor kind 复用、WPF 媒体栈预热、视频首帧后置开播；scenario.video 290→9ms、player 88→21ms、defaults.controls 5019→23ms；全部卡片 warm ≤19ms。
+- **密码插入符**：掩码 `●` 的 advance 含右侧 bearing；`VisualText.MeasureInkRight` 用字形路径墨水边界只给密码 caret 定位，普通文本仍用 advance。
+- **播放器封面**：平放 `Border` + `LinearGradientBrush`，33ms tick 直接改 `GradientStops[i].Offset` 与起止点再 `InvalidateVisual`；不用 `Rotate3DTransform`。
 
 ## 已接管的控件
 
