@@ -29,6 +29,7 @@
 - **XAML**：`RectangleF` / `Rectangle` 字面量（`XamlRuntime.ParseRectangleF/ParseRectangle`，生成器 `IsRuntimeConvertedType`）；资源字典支持 `x:FontWeight`、`x:Thickness`、`x:PointF`；对 `Foreground` 这类 `Color` 访问器背后的 Brush DP，`StaticResource` 改用 `SetValue`，渐变笔刷能落到文本前景。
 - **编译绑定（1.3.0）**：`x:DataType` 与 `x:CompileBindings` 按最近的 XAML 祖先继承，`DataTemplate` 用它声明条目类型；生成器为每个 DataContext 路径发一个私有 `CompiledBindingReader`，用 `var` 直取属性并调 `CompiledBinding.TryGetIndex/CreateWriter`，其他源生成器追加的成员也能编译，由 C# 在最终编译里校验。`Source`/`ElementName`/`RelativeSource`/`TemplateBinding` 与 `DataContext` 目标仍是运行时绑定；诊断 `EASEL_XAML020–024`。Gallery 的 `SettingsView` 已开启。
 - **兜底主题覆盖**：`ThemePalette` 现在包含字体（Family/Size/Weight）、`ScrollBarThumb`/`Hover`/`Radius`、`ShapeStroke`/`ShapeStrokeThickness`、阴影 `ShadowColor/Offset/Blur/Opacity`、`TextVisual*`、`ControlBorderThickness`、`FocusThickness*` 等角色；所有原生控件的默认颜色、字体、边框/焦点宽度与滚动条拇指都从当前调色板读取，`VisualElement.DefaultFont` 也跟随 `Theme.Current.DefaultFont`。只剩布局 padding、箭头/刻度尺寸等算法常量保持字面量。Dark+/Light+ 的既有像素不变（对比截图无差异）。
+- **XAML 窗口**：`Easel.Visuals.Window : VisualForm` 可作 `x:Class` 根；生成器 `EmitWindowRoot` 把根属性写给窗口、单个视觉子元素写 `Content`，`Window.Resources` 落到 `VisualHost.Resources`。`Application.Run(new MainWindow())` 与普通 `Form` 相同。
 - Easel 测试覆盖 3D 旋转/命中/失效、遮罩与渐变 XAML、主题角色往返与自定义调色板传播；VeloxDev 侧 `Src/Adapters/VeloxDev.WinForms/Xaml` 没有这些代码。
 
 ## Easel skill
