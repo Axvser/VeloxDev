@@ -48,7 +48,7 @@
 - **覆盖层**：`VisualHost` 在根树之后绘制、之前命中铺满客户区的覆盖层；`VisualPopup` 挂进去，不受祖先 `ScrollViewer.Clip` 裁切。弹层脱离根树，打开时把目标 `DataContext` 以 `Inherited` 层推给内容。
 - **`RichTextBox`** 用扁平字符缓冲，每字符带 `RichTextStyle`；绘制必须走 `VisualText.Draw`。
 - **渲染缓存**：`Visual.CacheAsBitmap` 缓存本地子树；`VisualElement.InvalidateVisual` 标脏最近的缓存并上报矩形，`VisualHost` 只清/画脏矩形；有变换或 `Effect` 时整面重画。
-- **默认暗色对齐 Scribalix / VS Code workbench**：画布 `#141414`、面板 `#252526`、raised `#2D2D2D`、输入 `#2A2A2A`、边框 `#333333`、文本 `#E7E7E7`/`#A0A0A0`、accent/focus `#0078D4`、选中 `#094771`；light 为 Light+（`#FFFFFF`/`#F3F3F3`、选中 `#ADD6FF`）。4px 圆角、28px 控件高。
+- **默认暗色对齐 Scribalix / VS Code workbench**：画布 `#141414`、面板 `#252526`、raised `#2D2D2D`、输入 `#2A2A2A`、边框 `#333333`、文本 `#E7E7E7`/`#A0A0A0`、accent/focus `#0078D4`、选中 `#094771`；light 为 Light+（`#FFFFFF`/`#F3F3F3`、选中 `#ADD6FF`）。普通圆角 4px、输入圆角 `InputCornerRadius` 6px（高对比 2px）、28px 控件高；输入悬停边框 `BorderHover`（light `#FFB7BDC6`、dark `#FF4A4F55`、高对比白）。
 - **`Theme` 内置三套调色板**：`ThemeMode.Dark` / `Light` / `HighContrast`。高对比是纯黑底、白字、琥珀 accent（`#FFB000`）、聚焦 `#FFD700`、`CornerRadius=2`、`ControlHeight=30`；`ThemeMode` 切换整套 `ThemePalette`，控件在下次构造/根重建时读取。
 - **DPI**：`VisualHost` 按 `DeviceDpi/96` 物理渲染；布局、相机、模型锚点与装饰偏移都是逻辑 DIP。WinForms 的 `DeviceDpi` 与 WM_DPICHANGED 只在**进程**为 PerMonitorV2 时生效（`ScaleHelper.IsThreadPerMonitorV2Aware` 先查 `GetProcessDpiAwareness`），窗口级线程上下文无效；默认由包内 `Easel/Src/Easel/build/WinForms.Easel.props` 设 `ApplicationHighDpiMode=PerMonitorV2`，其它启动方式用 `EaselApplication.Initialize()`。`VisualForm`/`Window` 自己设 `AutoScaleMode.None`。
 - **属性没有别名**（用户定）：一个概念只有一个 DP 名，`Background`/`Foreground` 而不是 `BackColor`/`ForeColor`。
