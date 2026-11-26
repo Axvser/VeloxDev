@@ -41,6 +41,7 @@
 - Gallery 的 MVVM 在 `Easel/Examples/XamlGallery/Demo/Mvvm/DemoMvvm.cs`，不引用 `VeloxDev.Core`/`VeloxDev.Core.Generator` 或任何 VeloxDev 包；Demo 只保留对 Easel 源码与生成器项目的内部引用。
 - Demo 的生成器 `ProjectReference` 只在 Debug 生效；Release 通过 Easel 传递的 `WinForms.Easel.Generator` 包解析，缺它 XAML 类会生成两份 `InitializeComponent`。
 - 非测试项目（Easel 四 TFM、Generator、Templates、Demo）Debug/Release 均以 `-warnaserror` 构建通过；`Directory.Build.props` 的 `NuGetAudit=false` 仅用于离线环境，不改变包解析。
+- **GC 分析**：`Src/Test/GcAnalysis` 独立控制台（不引用 Demo/单元测试/基准）；场景 `host-lifecycle`/`page-build`/`template-lifecycle`/`binding-lifecycle`/`theme-switch`/`list-window`。测量轮禁 tracker，泄漏轮用 WeakReference，强制全回收后存活即泄漏；输出 allocation median/min/max、Gen0/1/2、pause、retained 与 baseline 比较。命令与退出码见 README。
 
 ## 已接管的控件
 
