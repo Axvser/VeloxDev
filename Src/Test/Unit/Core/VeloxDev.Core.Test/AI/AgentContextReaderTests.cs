@@ -133,4 +133,22 @@ public class AgentContextReaderTests
             AgentContextReader.GetContexts(member, AgentLanguages.Chinese),
             "资源文件描述的属性");
     }
+
+    [TestMethod]
+    public void AResourceTextWithoutLanguage_IsEnglish()
+    {
+        // 英文条目默认不写 language；省略即 English，中文请求仍在自己的条目上精确命中。
+        CollectionAssert.Contains(
+            AgentContextReader.GetContexts(typeof(ResourceDescribedModel), AgentLanguages.English),
+            "Resource-described type (English default)");
+
+        var member = typeof(ResourceDescribedModel).GetProperty(nameof(ResourceDescribedModel.Value))!;
+        CollectionAssert.Contains(
+            AgentContextReader.GetContexts(member, AgentLanguages.English),
+            "Resource-described property (English default)");
+
+        CollectionAssert.DoesNotContain(
+            AgentContextReader.GetContexts(typeof(ResourceDescribedModel), AgentLanguages.Chinese),
+            "Resource-described type (English default)");
+    }
 }

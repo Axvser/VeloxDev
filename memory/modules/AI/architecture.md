@@ -20,7 +20,7 @@
 | 工具怎么变成 `AITool`、工具名/描述/JSON 参数长什么样 | `Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs`（`CreateTools`）、`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/WorkflowAgentToolkit.cs` |
 | 调用上限、拒绝、埋点、事件流水线 | `Src/Core/VeloxDev.Core.Extension/Agent/Pipelines/`（`AgentPipeline`/`ToolPipeline`）。Core 的 `AgentToolCallEventArgs` 是**事后**通知，且不含结果成败字段 |
 | 弹窗、用户点「同意/拒绝」的 UI | 各 demo，例如 `Examples/Workflow/WPF/Demo/Views/Workflow/WorkflowView.xaml.cs`（`ShowConfirmationDialogAsync`）。Core 只给 `AgentConfirmationEventArgs`/`AgentSelectionEventArgs` 两个 DTO |
-| 「等用户点完」的异步握手 | **不在 Core**。`EventHandler` 是同步的，所以 `IAgentConfirmationNotifier` / `IAgentSelectionNotifier` 从未被实现，现在也标了 `[Obsolete]`；真正做这件事的是消费方的 `Func<..., Task>` 形状（`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs` 的 `WithSelectionHandler` / `WithConfirmationHandler`） |
+| 「等用户点完」的异步握手 | **不在 Core**。`EventHandler` 是同步的；`IAgentConfirmationNotifier` / `IAgentSelectionNotifier` 未实现，并已标 `[Obsolete]`；实际做这件事的是消费方的 `Func<..., Task>` 形状（`Src/Core/VeloxDev.Core.Extension/Agent/Workflow/WorkflowAgentScope.cs` 的 `WithSelectionHandler` / `WithConfirmationHandler`） |
 | 线程编组 | **不在 Core**。目录读写与访问器调用都在**调用方线程**上跑；`AgentObjectToolkit` 明说它刻意不注册编组（`Src/Core/VeloxDev.Core.Extension/Agent/AgentObjectToolkit.cs` 的 `Tools` 注释「It registers no thread marshalling on purpose」） |
 | 语言包 / 翻译 | 只有 `AgentLanguages` 枚举与码表，**没有一条文案**。文案由作者写在 `[AgentContext]` 或 `*.agentcontext.xml` 上（§七·十四） |
 | 类型 schema（属性列表、枚举值、默认实例） | `Src/Core/VeloxDev.Core.Extension/Agent/Workflow/Functions/TypeIntrospector.cs`（`GetTypeSchema`）；Core 的 `AgentTypeResolver` 只做「字符串 → `Type`」 |
@@ -104,7 +104,7 @@ SetProperty(obj, "Name", v)     → 节点（CanWrite 标志）→ 访问器 Set
 1. **重载解析仍按实参个数，不按类型。** 生成期把同一名字的方法排成 `switch (args.Length)`：精确元数优先，其余元数由「必填数 ≤ 个数 < 总数」的那个重载接手（尾部缺的参数由生成代码**省略实参**，编译器补它自己的默认值 —— 所以目录里不需要存默认值，只需要 `Optional` 标志）。**同元数的重载谁赢取决于声明顺序**，`Add(int)` 与 `Add(string)` 仍然无法区分。
 2. **枚举参数能进去。** 生成的转换走 `AIContextConvert.ToEnum<TEnum>`（字符串按名字、数字按底层值，`AIContextConvert.cs` 的 `ToEnum`）。数字形态也能落到枚举上（`ToEnum<TEnum>` 对非字符串走 `Enum.ToObject`）。
 3. **`GetPropertyValue` 对「不可读」与「不在目录里」都回 `null`，不抛。** `CanRead` 是「有**公开** getter」，所以 `{ private get; set; }` 走「不可读」这条路。
-4. **`CopyScalarProperties` 转调访问器的 `CopyScalarFrom`**，搬的是**两个类型共有的、可写的全部成员**（生成代码里 `(T)value!`）。**它零生产调用者** —— 真正跑的是 `ComponentPatcher.CopyScalarProperties` 那份自带白名单的分叉（`extension.md` §二·7），改 Core 这份不影响实际路径。
+4. **`CopyScalarProperties` 转调访问器的 `CopyScalarFrom`**，搬的是**两个类型共有的、可写的全部成员**（生成代码里 `(T)value!`）。**它零生产调用者** —— 实际跑的是 `ComponentPatcher.CopyScalarProperties` 那份自带白名单的分叉（`extension.md` §二·7），改 Core 这份不影响实际路径。
 5. **`SetProperties` 的 `rejected` 是按名字精确比对的 `ISet<string>`** —— 没有通配、没有前缀规则。这条没变。
 6. **`AgentMethodInvoker` 没有静态面**：没有 `InvokeStatic` 与 `DiscoverMethods(includeStatic:)`（目录不录静态方法，访问器只对实例做事），也没有 `MethodDescriptor.IsStatic` 与 `ParameterDescriptor.DefaultValue`（全仓零读取者）。
 7. **参数类型只来自 `[AgentCommandParameter]`**，接口上写了就以接口为准（见 §七）；目录里没有按方法名猜参数类型的启发式。
@@ -140,7 +140,7 @@ SetProperty(obj, "Name", v)     → 节点（CanWrite 标志）→ 访问器 Set
 | | 装什么 | 为什么 |
 |---|---|---|
 | `AIContextTree`（目录） | 字符串、枚举、整数、数组。**没有** `Type` / `MemberInfo` / 委托 | 模型被**告知**什么。它里面任何东西都不 root 元数据，所以可裁剪 |
-| `IAIContextAccessor`（访问器） | 每个类型一个生成的类，含 `Type TargetType => typeof(T)` 与成员操作 | 对对象**做**什么。`typeof` 字面量裁剪安全，且恰好 root 访问器真正碰到的成员 |
+| `IAIContextAccessor`（访问器） | 每个类型一个生成的类，含 `Type TargetType => typeof(T)` 与成员操作 | 对对象**做**什么。`typeof` 字面量裁剪安全，且恰好 root 访问器实际碰到的成员 |
 
 目录之所以能只装数据，是因为**类型身份全由访问器承担**。一个只以字符串出现在目录里的类型（如 `[SlotSelectors("Some.Type")]`），不由目录 root，而由它自己那个访问器 root。
 
@@ -237,7 +237,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 - **`TreeDefaultViewModel` 上没有 `Anchor`** —— 它是节点/插槽的属性。测「命令后备」那条要先把节点挂到树上（`tree.GetHelper().CreateNode(node)`），否则 `ResolveTree` 直接以「未挂载」拒绝。
 - **`FriendlyTypeName` 只把「特殊类型」写短**：`ObservableCollection<VeloxDev.WorkflowSystem.INodeComponent>` 里的类型实参仍是全名。
 - **`TreeProperty.Get` 要吞异常**：生成的 `TryGet` 是裸读（`value = t.X`），一个会抛的 getter 会逃出去。
-- **`GetType().Name` 不是反射警告源**：`Object.GetType` 与 `Type.Name`/`FullName` 都没有裁剪注解，所以那些「类型名标签」一行都不用改 —— 真正的警告来自 `GetProperties`/`GetProperty`/`GetMethod`/`GetInterfaces`/`GetCustomAttribute`/`Activator.CreateInstance` 这些**索取成员**的调用。
+- **`GetType().Name` 不是反射警告源**：`Object.GetType` 与 `Type.Name`/`FullName` 都没有裁剪注解，那些「类型名标签」一行都不用改 —— 裁剪警告来自 `GetProperties`/`GetProperty`/`GetMethod`/`GetInterfaces`/`GetCustomAttribute`/`Activator.CreateInstance` 这些**索取成员**的调用。
 
 ### 两条契约代价
 
@@ -342,7 +342,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 > 返回值要简单，工具描述可以详细。
 
-**返回值每次调用都进模型的上下文**（而且是累积的），说明是**静态的**、每条请求发一次。所以「模型需要知道的东西」搬进说明，返回值只放这一次调用真正产出的东西。
+**返回值每次调用都进模型的上下文**（而且是累积的），说明是**静态的**、每条请求发一次。「模型需要知道的东西」搬进说明，返回值只放这一次调用产出的东西。
 
 `WorkflowAgentToolkit` 的类注释写着 "All JSON output uses `VeloxJsonFormat.Compact` to minimize token consumption"。拒绝写「选择器驱动的节点建出来没有端口」，不是在 `CreateNode` 的返回值里加提醒，而是在它的 `[Description]` 里写；`ConnectEnumSlot` 的两种接收口形态、`receiverCondition` 收什么值，也都在说明与参数说明里。
 
@@ -392,15 +392,15 @@ Customer/                           ← 每个消费者程序集一个分片（�
 ```xml
 <AgentContext>
   <Type name="A.B">
-    <Text language="Chinese">类型说明</Text>
+    <Text>Type description</Text>
     <Member name="Save">
-      <Text language="English">Member description</Text>
+      <Text>Member description</Text>
     </Member>
   </Type>
 </AgentContext>
 ```
 
-- `language` 是 `AgentLanguages` 的成员名（大小写不敏感），省略为 `English`；不是枚举名报 `VELOX_AI_TREE005`。
+- `language` 是 `AgentLanguages` 的成员名（大小写不敏感）；**省略即 `English`，英文条目默认不写**，只有非英文条目才写 `language`。不是枚举名报 `VELOX_AI_TREE005`。
 - 类型名两种写法都认：元数据形状 `A.B+C` 与源码形状 `A.B.C`；都查不到报 `VELOX_AI_TREE003`。
 - 成员名同时比对目录里的名字与源码符号名：`SaveCommand` / `Save`、`Payload` / `_payload` 都行；都对不上报 `VELOX_AI_TREE004`。成员条目归**声明它的类型** —— 继承来的成员写在基类的 `<Type>` 下，写在派生类上会报 `TREE004`。
 - 文字是**追加**的：特性在前、资源在后；同一语言可写多条，顺序保留。
@@ -409,7 +409,7 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 资源是**每个程序集各自**的：生成器只遍历当前编译，别家的类型解析不到。`VeloxDev.Core.Generator.targets`、`Src/Directory.Build.targets`、`Examples/Directory.Build.targets` 按 `**/*.agentcontext.xml` 收成 `AdditionalFiles`；同一路径被加两次时 `AIContextXml.Parse` 去重。框架自己的说明在 `Assets/VeloxDev.Core.agentcontext.xml`，由 `VeloxDev.Core.csproj` 显式收 —— `Assets` 在项目目录外，约定 glob 覆盖不到。
 
-该文件只写 `English`：框架说明不分语言，中文请求由 `AgentTextSelection.Select` 整体回退到英文。资源不重写继承关系已经表达过的说明 —— 类的继承成员由 `AIContextDirectory.MembersAcross` 沿基类链合并，接口的基契约由每个渲染块里的 `Base Interfaces` 列出；四个 `*DefaultViewModel` 在资源里没有条目，`TaskContext` 只留类型说明、不重写 `Data`/`Sender`/`Receiver`。
+该文件的英文条目都不写 `language`（默认 English）：框架说明只有英文，中文请求由 `AgentTextSelection.Select` 整体回退到英文。资源不重写继承关系已经表达过的说明 —— 类的继承成员由 `AIContextDirectory.MembersAcross` 沿基类链合并，接口的基契约由每个渲染块里的 `Base Interfaces` 列出；四个 `*DefaultViewModel` 在资源里没有条目，`TaskContext` 只留类型说明、不重写 `Data`/`Sender`/`Receiver`。
 
 ## 八、Agent 节点选中：动态提示词，不是新工具
 

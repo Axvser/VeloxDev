@@ -1,302 +1,302 @@
 <AgentContext>
   <Type name="VeloxDev.WorkflowSystem.IRuntimeIdentifiable">
-    <Text language="English">Workflow component runtime identity interface, provides a unique ID throughout the program lifetime</Text>
+    <Text>Workflow component runtime identity interface, provides a unique ID throughout the program lifetime</Text>
     <Member name="RuntimeId">
-      <Text language="English">Runtime unique ID assigned at creation, stable across collection mutations</Text>
+      <Text>Runtime unique ID assigned at creation, stable across collection mutations</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.IWorkflowComponent">
-    <Text language="English">Workflow component base interface</Text>
+    <Text>Workflow component base interface</Text>
     <Member name="InitializeWorkflow">
-      <Text language="English">Initializes the workflow component, no parameters</Text>
+      <Text>Initializes the workflow component, no parameters</Text>
     </Member>
     <Member name="OnPropertyChanging">
-      <Text language="English">Triggered when a property is about to change, parameter is the property name</Text>
+      <Text>Triggered when a property is about to change, parameter is the property name</Text>
     </Member>
     <Member name="OnPropertyChanged">
-      <Text language="English">Triggered when a property has changed, parameter is the property name</Text>
+      <Text>Triggered when a property has changed, parameter is the property name</Text>
     </Member>
     <Member name="CloseCommand">
-      <Text language="English">Terminates all ongoing tasks, parameter is Null</Text>
+      <Text>Terminates all ongoing tasks, parameter is Null</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.ILinkComponent">
-    <Text language="English">Workflow Link component interface, maintaining connections between Slots</Text>
+    <Text>Workflow Link component interface, maintaining connections between Slots</Text>
     <Member name="Sender">
-      <Text language="English">The sender of the connection</Text>
+      <Text>The sender of the connection</Text>
     </Member>
     <Member name="Receiver">
-      <Text language="English">The receiver of the connection</Text>
+      <Text>The receiver of the connection</Text>
     </Member>
     <Member name="IsVisible">
-      <Text language="English">Whether the connection is visible</Text>
+      <Text>Whether the connection is visible</Text>
     </Member>
     <Member name="DeleteCommand">
-      <Text language="English">Delete the current connection, parameter is Null</Text>
+      <Text>Delete the current connection, parameter is Null</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.INodeComponent">
-    <Text language="English">Workflow Node component interface, maintaining node geometry, slot collection, and broadcast behaviors</Text>
+    <Text>Workflow Node component interface, maintaining node geometry, slot collection, and broadcast behaviors</Text>
     <Member name="Parent">
-      <Text language="English">The parent Tree component</Text>
+      <Text>The parent Tree component</Text>
     </Member>
     <Member name="Anchor">
-      <Text language="English">The anchor position of the current node on the canvas</Text>
+      <Text>The anchor position of the current node on the canvas</Text>
     </Member>
     <Member name="Size">
-      <Text language="English">The size of the current node</Text>
+      <Text>The size of the current node</Text>
     </Member>
     <Member name="Slots">
-      <Text language="English">All Slot components owned by the current node</Text>
+      <Text>All Slot components owned by the current node</Text>
     </Member>
     <Member name="MoveCommand">
-      <Text language="English">Move node command, parameter is Offset</Text>
+      <Text>Move node command, parameter is Offset</Text>
     </Member>
     <Member name="SetAnchorCommand">
-      <Text language="English">Set anchor command, parameter is Anchor</Text>
+      <Text>Set anchor command, parameter is Anchor</Text>
     </Member>
     <Member name="SetSizeCommand">
-      <Text language="English">Set size command, parameter is Size</Text>
+      <Text>Set size command, parameter is Size</Text>
     </Member>
     <Member name="CreateSlotCommand">
-      <Text language="English">Create slot command, parameter is ISlotComponent</Text>
+      <Text>Create slot command, parameter is ISlotComponent</Text>
     </Member>
     <Member name="DeleteCommand">
-      <Text language="English">Delete the current node, parameter is Null, related Slots and Links will be deleted</Text>
+      <Text>Delete the current node, parameter is Null, related Slots and Links will be deleted</Text>
     </Member>
     <Member name="ReceiveCommand">
-      <Text language="English">Receive data and execute the node; parameter is a nullable ITaskContext (data/sender/receiver)</Text>
+      <Text>Receive data and execute the node; parameter is a nullable ITaskContext (data/sender/receiver)</Text>
     </Member>
     <Member name="BroadcastCommand">
-      <Text language="English">Broadcast data forward, parameter is Nullable</Text>
+      <Text>Broadcast data forward, parameter is Nullable</Text>
     </Member>
     <Member name="ReverseBroadcastCommand">
-      <Text language="English">Broadcast data in reverse direction, parameter is Nullable</Text>
+      <Text>Broadcast data in reverse direction, parameter is Nullable</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.ISlotComponent">
-    <Text language="English">Workflow Slot component interface, maintaining connections between Nodes</Text>
+    <Text>Workflow Slot component interface, maintaining connections between Nodes</Text>
     <Member name="Targets">
-      <Text language="English">Collection of target slots connected from the current slot</Text>
+      <Text>Collection of target slots connected from the current slot</Text>
     </Member>
     <Member name="Sources">
-      <Text language="English">Collection of source slots connected to the current slot</Text>
+      <Text>Collection of source slots connected to the current slot</Text>
     </Member>
     <Member name="Parent">
-      <Text language="English">The parent Node component</Text>
+      <Text>The parent Node component</Text>
     </Member>
     <Member name="Channel">
-      <Text language="English">The channel type of the current slot</Text>
+      <Text>The channel type of the current slot</Text>
     </Member>
     <Member name="State">
-      <Text language="English">The connection state of the current slot</Text>
+      <Text>The connection state of the current slot</Text>
     </Member>
     <Member name="Anchor">
-      <Text language="English">The anchor position of the current slot on the canvas</Text>
+      <Text>The anchor position of the current slot on the canvas</Text>
     </Member>
     <Member name="SetChannelCommand">
-      <Text language="English">Set channel command, parameter is SlotChannel</Text>
+      <Text>Set channel command, parameter is SlotChannel</Text>
     </Member>
     <Member name="SendConnectionCommand">
-      <Text language="English">Start connection construction as the sender, parameter is Null</Text>
+      <Text>Start connection construction as the sender, parameter is Null</Text>
     </Member>
     <Member name="ReceiveConnectionCommand">
-      <Text language="English">Accept connection construction as the receiver, parameter is Null</Text>
+      <Text>Accept connection construction as the receiver, parameter is Null</Text>
     </Member>
     <Member name="DeleteCommand">
-      <Text language="English">Delete the current slot, parameter is Null, related Links will be deleted</Text>
+      <Text>Delete the current slot, parameter is Null, related Links will be deleted</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.ITreeComponent">
-    <Text language="English">Workflow Tree component interface, maintaining all Node, Slot, and Link components within a workspace</Text>
+    <Text>Workflow Tree component interface, maintaining all Node, Slot, and Link components within a workspace</Text>
     <Member name="Layout">
-      <Text language="English">Canvas layout context, recording canvas size and offset information</Text>
+      <Text>Canvas layout context, recording canvas size and offset information</Text>
     </Member>
     <Member name="VirtualLink">
-      <Text language="English">Only visible during the connection establishment process</Text>
+      <Text>Only visible during the connection establishment process</Text>
     </Member>
     <Member name="Nodes">
-      <Text language="English">All Node components</Text>
+      <Text>All Node components</Text>
     </Member>
     <Member name="Links">
-      <Text language="English">All Link components</Text>
+      <Text>All Link components</Text>
     </Member>
     <Member name="LinksMap">
-      <Text language="English">Mapping of connections between Slot components</Text>
+      <Text>Mapping of connections between Slot components</Text>
     </Member>
     <Member name="CreateNodeCommand">
-      <Text language="English">Create node command, parameter is INodeComponent</Text>
+      <Text>Create node command, parameter is INodeComponent</Text>
     </Member>
     <Member name="SetPointerCommand">
-      <Text language="English">Update pointer position, parameter is Anchor</Text>
+      <Text>Update pointer position, parameter is Anchor</Text>
     </Member>
     <Member name="ResetVirtualLinkCommand">
-      <Text language="English">Reset virtual link, parameter is Null</Text>
+      <Text>Reset virtual link, parameter is Null</Text>
     </Member>
     <Member name="SendConnectionCommand">
-      <Text language="English">Initiate connection construction, parameter is ISlotComponent</Text>
+      <Text>Initiate connection construction, parameter is ISlotComponent</Text>
     </Member>
     <Member name="ReceiveConnectionCommand">
-      <Text language="English">Receive connection construction, parameter is ISlotComponent</Text>
+      <Text>Receive connection construction, parameter is ISlotComponent</Text>
     </Member>
     <Member name="SubmitCommand">
-      <Text language="English">Submit action, parameter is IActionPair</Text>
+      <Text>Submit action, parameter is IActionPair</Text>
     </Member>
     <Member name="RedoCommand">
-      <Text language="English">Redo action, parameter is Null</Text>
+      <Text>Redo action, parameter is Null</Text>
     </Member>
     <Member name="UndoCommand">
-      <Text language="English">Undo action, parameter is Null</Text>
+      <Text>Undo action, parameter is Null</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.SlotChannel">
-    <Text language="English">Flags enum: each direction is evaluated independently, and per direction the priority is Multiple &gt; One &gt; None, the higher one overriding the lower. When a node's [SlotSelectors] includes SlotChannel, it is also valid as a SlotEnumerator selector type for routing signals by channel type.</Text>
+    <Text>Flags enum: each direction is evaluated independently, and per direction the priority is Multiple &gt; One &gt; None, the higher one overriding the lower. When a node's [SlotSelectors] includes SlotChannel, it is also valid as a SlotEnumerator selector type for routing signals by channel type.</Text>
     <Member name="None">
-      <Text language="English">None: Default value indicating no connections are allowed.</Text>
+      <Text>None: Default value indicating no connections are allowed.</Text>
     </Member>
     <Member name="OneTarget">
-      <Text language="English">One Target: This slot may actively connect to at most 1 target, i.e. at most 1 outgoing connection.</Text>
+      <Text>One Target: This slot may actively connect to at most 1 target, i.e. at most 1 outgoing connection.</Text>
     </Member>
     <Member name="OneSource">
-      <Text language="English">One Source: This slot may be connected by at most 1 source, i.e. at most 1 incoming connection.</Text>
+      <Text>One Source: This slot may be connected by at most 1 source, i.e. at most 1 incoming connection.</Text>
     </Member>
     <Member name="OneBoth">
-      <Text language="English">One Both: Equivalent to OneTarget | OneSource. It means at most 1 outgoing connection and at most 1 incoming connection, counted independently. It does not mean a strict one-to-one pairing with the same peer.</Text>
+      <Text>One Both: Equivalent to OneTarget | OneSource. It means at most 1 outgoing connection and at most 1 incoming connection, counted independently. It does not mean a strict one-to-one pairing with the same peer.</Text>
     </Member>
     <Member name="MultipleTargets">
-      <Text language="English">Multiple Targets: This slot may actively connect to multiple targets, i.e. multiple outgoing connections are allowed.</Text>
+      <Text>Multiple Targets: This slot may actively connect to multiple targets, i.e. multiple outgoing connections are allowed.</Text>
     </Member>
     <Member name="MultipleSources">
-      <Text language="English">Multiple Sources: This slot may be connected by multiple sources, i.e. multiple incoming connections are allowed.</Text>
+      <Text>Multiple Sources: This slot may be connected by multiple sources, i.e. multiple incoming connections are allowed.</Text>
     </Member>
     <Member name="MultipleBoth">
-      <Text language="English">Multiple Both: Equivalent to MultipleTargets | MultipleSources. It means both outgoing and incoming directions allow multiple connections, counted independently.</Text>
+      <Text>Multiple Both: Equivalent to MultipleTargets | MultipleSources. It means both outgoing and incoming directions allow multiple connections, counted independently.</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.SlotState">
-    <Text language="English">Describes the current runtime state of a workflow slot. Supports combined states, e.g., simultaneously previewing as sender and receiver.</Text>
+    <Text>Describes the current runtime state of a workflow slot. Supports combined states, e.g., simultaneously previewing as sender and receiver.</Text>
     <Member name="StandBy">
-      <Text language="English">StandBy: The slot is idle with no active connections or operations.</Text>
+      <Text>StandBy: The slot is idle with no active connections or operations.</Text>
     </Member>
     <Member name="PreviewSender">
-      <Text language="English">Preview Sender: Attempting to establish a connection, acting as the sender (dragging output).</Text>
+      <Text>Preview Sender: Attempting to establish a connection, acting as the sender (dragging output).</Text>
     </Member>
     <Member name="PreviewReceiver">
-      <Text language="English">Preview Receiver: Attempting to establish a connection, acting as the receiver (dragging input).</Text>
+      <Text>Preview Receiver: Attempting to establish a connection, acting as the receiver (dragging input).</Text>
     </Member>
     <Member name="Sender">
-      <Text language="English">Sender: Connection established, actively acting as a data sender.</Text>
+      <Text>Sender: Connection established, actively acting as a data sender.</Text>
     </Member>
     <Member name="Receiver">
-      <Text language="English">Receiver: Connection established, actively acting as a data receiver/processor.</Text>
+      <Text>Receiver: Connection established, actively acting as a data receiver/processor.</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.IAccessContext">
-    <Text language="English">Dataflow access context: the dedicated parameter contract of AccessAsync, describing one access from Sender to Receiver. The compile phase performs static detection without data; the runtime phase performs real-time detection with the payload.</Text>
+    <Text>Dataflow access context: the dedicated parameter contract of AccessAsync, describing one access from Sender to Receiver. The compile phase performs static detection without data; the runtime phase performs real-time detection with the payload.</Text>
     <Member name="IsCompilePhase">
-      <Text language="English">Validation phase: true = compile time (no data), false = runtime (with data)</Text>
+      <Text>Validation phase: true = compile time (no data), false = runtime (with data)</Text>
     </Member>
     <Member name="Sender">
-      <Text language="English">Sender output slot (upstream), nullable</Text>
+      <Text>Sender output slot (upstream), nullable</Text>
     </Member>
     <Member name="Receiver">
-      <Text language="English">Receiver input slot (downstream), nullable</Text>
+      <Text>Receiver input slot (downstream), nullable</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.IContext">
-    <Text language="English">Root contract of the workflow context hierarchy, carrying a universal payload Data (nullable).</Text>
+    <Text>Root contract of the workflow context hierarchy, carrying a universal payload Data (nullable).</Text>
     <Member name="Data">
-      <Text language="English">Payload data (nullable): real data at runtime, always null at compile time</Text>
+      <Text>Payload data (nullable): real data at runtime, always null at compile time</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.ITaskContext">
-    <Text language="English">Dataflow task context; the input contract of ReceiveCommand → Helper.ReceiveAsync.</Text>
+    <Text>Dataflow task context; the input contract of ReceiveCommand → Helper.ReceiveAsync.</Text>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.IWorkflowGridDecorator">
-    <Text language="English">Workflow grid-decorator data-exchange contract: receives scroll and content offsets for grid + ruler painting</Text>
+    <Text>Workflow grid-decorator data-exchange contract: receives scroll and content offsets for grid + ruler painting</Text>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.IWorkflowMinimapOverlay">
-    <Text language="English">Workflow minimap-overlay data-exchange contract: receives viewport size + tree for thumbnail rendering and drag navigation</Text>
+    <Text>Workflow minimap-overlay data-exchange contract: receives viewport size + tree for thumbnail rendering and drag navigation</Text>
   </Type>
   <Type name="VeloxDev.Core.WorkflowSystem.CompilerEx.ICompileContext">
-    <Text language="English">Compile-time identity context: fixed Order / in-chain index ChainIndex / sub-graph Offset</Text>
+    <Text>Compile-time identity context: fixed Order / in-chain index ChainIndex / sub-graph Offset</Text>
     <Member name="InputNodes">
-      <Text language="English">Join-point input source nodes: when Count &gt; 1 the runtime aggregates each upstream output into a read-only GroupData dictionary injected as Data; null on chained/single-input nodes</Text>
+      <Text>Join-point input source nodes: when Count &gt; 1 the runtime aggregates each upstream output into a read-only GroupData dictionary injected as Data; null on chained/single-input nodes</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.Core.WorkflowSystem.CompilerEx.RouterCompileMode">
-    <Text language="English">The router's compile mode: Static returns only the currently selected branch at compile time, so the compiled graph holds that single path with its order fixed; Dynamic returns every branch at compile time, so the compiled graph keeps the whole branch structure and the key is resolved at run time.</Text>
+    <Text>The router's compile mode: Static returns only the currently selected branch at compile time, so the compiled graph holds that single path with its order fixed; Dynamic returns every branch at compile time, so the compiled graph keeps the whole branch structure and the key is resolved at run time.</Text>
   </Type>
   <Type name="VeloxDev.Core.WorkflowSystem.CompilerEx.IRuntimeContext">
-    <Text language="English">Compiler runtime session context: UID/logs/shared variables/execution position, passed to nodes as the task context during compiled runs</Text>
+    <Text>Compiler runtime session context: UID/logs/shared variables/execution position, passed to nodes as the task context during compiled runs</Text>
     <Member name="ActiveRedirectTarget">
-      <Text language="English">Active redirect target Order set by the engine at the start of each pass (null on the first pass); the output collector uses it to distinguish contract-preserved prefix from stale branches</Text>
+      <Text>Active redirect target Order set by the engine at the start of each pass (null on the first pass); the output collector uses it to distinguish contract-preserved prefix from stale branches</Text>
     </Member>
     <Member name="RegisterOutput">
-      <Text language="English">Register a node's output for this run stamped with the current attempt: the engine writes it after driving each node, and multi-input joins aggregate per input group</Text>
+      <Text>Register a node's output for this run stamped with the current attempt: the engine writes it after driving each node, and multi-input joins aggregate per input group</Text>
     </Member>
     <Member name="ResetOutputs">
-      <Text language="English">Clear the product registry once at the start of each RunAsync (not cleared on redirect re-runs; stale outputs are filtered by pass stamp)</Text>
+      <Text>Clear the product registry once at the start of each RunAsync (not cleared on redirect re-runs; stale outputs are filtered by pass stamp)</Text>
     </Member>
     <Member name="CollectGroupedInputs">
-      <Text language="English">Collect outputs for a group of input nodes as IGroupData: only this pass's outputs plus the contract-preserved prefix before the redirect target; unregistered sources are absent</Text>
+      <Text>Collect outputs for a group of input nodes as IGroupData: only this pass's outputs plus the contract-preserved prefix before the redirect target; unregistered sources are absent</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.Core.WorkflowSystem.CompilerEx.IGroupData">
-    <Text language="English">Group data: multi-input join reads each upstream node's output as a read-only dictionary (Key=source node reference, Value=its output this run)</Text>
+    <Text>Group data: multi-input join reads each upstream node's output as a read-only dictionary (Key=source node reference, Value=its output this run)</Text>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.Anchor">
-    <Text language="English">Used to describe the spatial position of components in the workflow system</Text>
+    <Text>Used to describe the spatial position of components in the workflow system</Text>
     <Member name="_horizontal">
-      <Text language="English">Horizontal coordinate, in pixels</Text>
+      <Text>Horizontal coordinate, in pixels</Text>
     </Member>
     <Member name="_vertical">
-      <Text language="English">Vertical coordinate, in pixels</Text>
+      <Text>Vertical coordinate, in pixels</Text>
     </Member>
     <Member name="_layer">
-      <Text language="English">Layer, behavior depends on the GUI</Text>
+      <Text>Layer, behavior depends on the GUI</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.Offset">
-    <Text language="English">Represents a two-dimensional coordinate offset</Text>
+    <Text>Represents a two-dimensional coordinate offset</Text>
     <Member name="_horizontal">
-      <Text language="English">Horizontal offset in pixels</Text>
+      <Text>Horizontal offset in pixels</Text>
     </Member>
     <Member name="_vertical">
-      <Text language="English">Vertical offset in pixels</Text>
+      <Text>Vertical offset in pixels</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.Scale">
-    <Text language="English">Represents a two-dimensional scale factor; 1.0 means no scaling</Text>
+    <Text>Represents a two-dimensional scale factor; 1.0 means no scaling</Text>
     <Member name="_horizontal">
-      <Text language="English">Horizontal scale factor, 1.0 means no scaling</Text>
+      <Text>Horizontal scale factor, 1.0 means no scaling</Text>
     </Member>
     <Member name="_vertical">
-      <Text language="English">Vertical scale factor, 1.0 means no scaling</Text>
+      <Text>Vertical scale factor, 1.0 means no scaling</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.Size">
-    <Text language="English">Represents a two-dimensional size</Text>
+    <Text>Represents a two-dimensional size</Text>
     <Member name="_width">
-      <Text language="English">Width in pixels</Text>
+      <Text>Width in pixels</Text>
     </Member>
     <Member name="_height">
-      <Text language="English">Height in pixels</Text>
+      <Text>Height in pixels</Text>
     </Member>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.ILinkHitTestable">
-    <Text language="English">Optional link hit-test capability: the view publishes the curve it drew and the control that drew it; the surface queries it</Text>
+    <Text>Optional link hit-test capability: the view publishes the curve it drew and the control that drew it; the surface queries it</Text>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.LinkCurve">
-    <Text language="English">A link's flattened geometry: the view supplies the points, Core owns bounds, arc length and containment</Text>
+    <Text>A link's flattened geometry: the view supplies the points, Core owns bounds, arc length and containment</Text>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.SurfaceViewport">
-    <Text language="English">Immutable snapshot of the workflow surface state: scroll offsets + viewport size + content offsets</Text>
+    <Text>Immutable snapshot of the workflow surface state: scroll offsets + viewport size + content offsets</Text>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.SurfaceCanvas">
-    <Text language="English">Computed canvas size snapshot of a workflow surface</Text>
+    <Text>Computed canvas size snapshot of a workflow surface</Text>
   </Type>
   <Type name="VeloxDev.WorkflowSystem.TaskContext">
-    <Text language="English">Readonly struct carrier of ITaskContext with nullable data/sender/receiver</Text>
+    <Text>Readonly struct carrier of ITaskContext with nullable data/sender/receiver</Text>
   </Type>
 </AgentContext>
