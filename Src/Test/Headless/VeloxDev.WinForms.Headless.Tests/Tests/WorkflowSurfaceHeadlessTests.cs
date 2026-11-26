@@ -20,7 +20,7 @@ public sealed class WorkflowSurfaceHeadlessTests
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
 
-        Assert.AreEqual(1d, WorkflowSurfaceBehavior.GetZoom(surface.View), 1e-9);
+        Assert.AreEqual(1d, WorkflowSurfaceBehavior.GetZoom(surface.View.SurfaceView), 1e-9);
         Assert.AreEqual(
             graph.Tree.Layout.ActualOffset.Horizontal,
             surface.View.GridDecorator.ContentOffsetX,
@@ -39,11 +39,11 @@ public sealed class WorkflowSurfaceHeadlessTests
         using var surface = new WinFormsHeadlessSurface(graph);
         var point = new PointF(320f, 240f);
 
-        var before = WorkflowSurfaceBehavior.SurfaceToWorld(surface.View, point);
-        WorkflowSurfaceBehavior.ZoomAt(surface.View, point, 2d);
-        var after = WorkflowSurfaceBehavior.SurfaceToWorld(surface.View, point);
+        var before = WorkflowSurfaceBehavior.SurfaceToWorld(surface.View.SurfaceView, point);
+        WorkflowSurfaceBehavior.ZoomAt(surface.View.SurfaceView, point, 2d);
+        var after = WorkflowSurfaceBehavior.SurfaceToWorld(surface.View.SurfaceView, point);
 
-        Assert.AreEqual(2d, WorkflowSurfaceBehavior.GetZoom(surface.View), 1e-6);
+        Assert.AreEqual(2d, WorkflowSurfaceBehavior.GetZoom(surface.View.SurfaceView), 1e-6);
         Assert.AreEqual(before.X, after.X, 1e-3, "the point under the cursor must stay fixed");
         Assert.AreEqual(before.Y, after.Y, 1e-3);
     }
@@ -55,8 +55,8 @@ public sealed class WorkflowSurfaceHeadlessTests
         using var surface = new WinFormsHeadlessSurface(graph);
 
         var world = new PointF(123.5f, 67.25f);
-        var surfacePoint = WorkflowSurfaceBehavior.WorldToSurface(surface.View, world);
-        var back = WorkflowSurfaceBehavior.SurfaceToWorld(surface.View, surfacePoint);
+        var surfacePoint = WorkflowSurfaceBehavior.WorldToSurface(surface.View.SurfaceView, world);
+        var back = WorkflowSurfaceBehavior.SurfaceToWorld(surface.View.SurfaceView, surfacePoint);
 
         Assert.AreEqual(world.X, back.X, 1e-3);
         Assert.AreEqual(world.Y, back.Y, 1e-3);
@@ -68,9 +68,9 @@ public sealed class WorkflowSurfaceHeadlessTests
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
 
-        WorkflowSurfaceBehavior.SetWorldViewport(surface.View, new Offset(150d, 90d));
+        WorkflowSurfaceBehavior.SetWorldViewport(surface.View.SurfaceView, new Offset(150d, 90d));
 
-        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View.SurfaceView);
         Assert.AreEqual(150d, world.Horizontal, 1e-3);
         Assert.AreEqual(90d, world.Vertical, 1e-3);
         Assert.AreEqual(150d, graph.Tree.Helper.Viewport.Horizontal, 1e-3);
@@ -100,12 +100,12 @@ public sealed class WorkflowSurfaceHeadlessTests
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
 
-        WorkflowSurfaceBehavior.SetPan(surface.View, new PointF(24f, -36f));
+        WorkflowSurfaceBehavior.SetPan(surface.View.SurfaceView, new PointF(24f, -36f));
 
-        var pan = WorkflowSurfaceBehavior.GetPan(surface.View);
+        var pan = WorkflowSurfaceBehavior.GetPan(surface.View.SurfaceView);
         Assert.AreEqual(24f, pan.X, 1e-3);
         Assert.AreEqual(-36f, pan.Y, 1e-3);
-        Assert.AreEqual(-24d, WorkflowSurfaceBehavior.GetWorldViewport(surface.View).Horizontal, 1e-3);
+        Assert.AreEqual(-24d, WorkflowSurfaceBehavior.GetWorldViewport(surface.View.SurfaceView).Horizontal, 1e-3);
     }
 
     [TestMethod]
@@ -114,11 +114,11 @@ public sealed class WorkflowSurfaceHeadlessTests
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
 
-        WorkflowSurfaceBehavior.Refresh(surface.View);
+        WorkflowSurfaceBehavior.Refresh(surface.View.SurfaceView);
 
         Assert.IsTrue(graph.Tree.Helper.Viewport.Width > 0d);
         Assert.IsTrue(graph.Tree.Helper.Viewport.Height > 0d);
-        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View.SurfaceView);
         Assert.AreEqual(world.Horizontal, graph.Tree.Helper.Viewport.Horizontal, 1e-9);
         Assert.AreEqual(world.Vertical, graph.Tree.Helper.Viewport.Vertical, 1e-9);
     }
@@ -145,7 +145,7 @@ public sealed class WorkflowSurfaceHeadlessTests
 
         Assert.IsNotNull(WorkflowInput.For(graph.Tree).Scroller);
 
-        WorkflowSurfaceBehavior.SetIsEnabled(surface.View, false);
+        WorkflowSurfaceBehavior.SetIsEnabled(surface.View.SurfaceView, false);
 
         Assert.IsNull(WorkflowInput.For(graph.Tree).Scroller);
     }
@@ -156,8 +156,8 @@ public sealed class WorkflowSurfaceHeadlessTests
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
 
-        WorkflowSurfaceBehavior.SetWorldViewport(surface.View, new Offset(120d, 80d));
-        WorkflowSurfaceBehavior.SetIsEnabled(surface.View, false);
+        WorkflowSurfaceBehavior.SetWorldViewport(surface.View.SurfaceView, new Offset(120d, 80d));
+        WorkflowSurfaceBehavior.SetIsEnabled(surface.View.SurfaceView, false);
 
         Assert.AreEqual(120d, graph.Tree.Layout.ViewportOffset.Horizontal, 1e-3);
         Assert.AreEqual(80d, graph.Tree.Layout.ViewportOffset.Vertical, 1e-3);
@@ -172,11 +172,63 @@ public sealed class WorkflowSurfaceHeadlessTests
         using var surface = new WinFormsHeadlessSurface(graph);
         surface.Render();
 
-        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View.SurfaceView);
         Assert.AreEqual(150d, world.Horizontal, 1d);
         Assert.AreEqual(90d, world.Vertical, 1d);
         Assert.AreEqual(150d, graph.Tree.Helper.Viewport.Horizontal, 1d);
         Assert.AreEqual(90d, graph.Tree.Helper.Viewport.Vertical, 1d);
+    }
+
+    [TestMethod]
+    public void DataContextSwap_RebindsTheTreeAfterAttach()
+    {
+        var first = TestGraph.Create();
+        var second = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(first);
+
+        // The host's data context is the tree's only source; swapping it must rebind the pooled views after the
+        // queued flush.
+        surface.View.DataContext = second.Tree;
+        Application.DoEvents();
+        surface.Render();
+        surface.Render();
+
+        Assert.IsNotNull(surface.View.ViewFor(second.Left), "the new tree's nodes must be pooled");
+        Assert.IsNull(surface.View.ViewFor(first.Left), "the old tree's views must leave the canvas");
+    }
+
+    [TestMethod]
+    public void DataContextNull_DetachesTheTree()
+    {
+        var graph = TestGraph.Create();
+        using var surface = new WinFormsHeadlessSurface(graph);
+
+        surface.View.DataContext = null;
+        Application.DoEvents();
+        surface.Render();
+
+        Assert.IsNull(surface.View.ViewFor(graph.Left), "clearing the data context must detach the tree");
+    }
+
+    [TestMethod]
+    public void Refresh_KeepsTheDataContextAndTheViewport()
+    {
+        var graph = TestGraph.Create();
+        graph.Tree.Layout.ViewportOffset = new Offset(150d, 90d);
+
+        using var surface = new WinFormsHeadlessSurface(graph);
+        surface.Render();
+        WorkflowSurfaceBehavior.Refresh(surface.View.SurfaceView);
+        Application.DoEvents();
+        surface.Render();
+
+        Assert.AreSame(
+            graph.Tree,
+            surface.View.DataContext,
+            "the engine must not clear or rewrite the host's data context");
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View.SurfaceView);
+        Assert.AreEqual(150d, world.Horizontal, 1d);
+        Assert.AreEqual(90d, world.Vertical, 1d);
     }
 
     [TestMethod]
@@ -191,7 +243,7 @@ public sealed class WorkflowSurfaceHeadlessTests
             graph.Tree.Helper.VisibleItems.Contains(graph.Far),
             "the far node is outside the 800x600 viewport and must not be visible");
 
-        WorkflowSurfaceBehavior.SetWorldViewport(surface.View, new Offset(6000d, 4000d));
+        WorkflowSurfaceBehavior.SetWorldViewport(surface.View.SurfaceView, new Offset(6000d, 4000d));
         surface.Render();
 
         Assert.IsTrue(
@@ -299,17 +351,17 @@ public sealed class WorkflowSurfaceHeadlessTests
         var graph = TestGraph.Create();
         using var surface = new WinFormsHeadlessSurface(graph);
         var point = new DrawingPointF(400f, 300f);
-        var before = WorkflowSurfaceBehavior.GetPan(surface.View);
+        var before = WorkflowSurfaceBehavior.GetPan(surface.View.SurfaceView);
 
         surface.View.ProcessPointerHWheel(point, -120);
         surface.Render();
-        var afterHorizontal = WorkflowSurfaceBehavior.GetPan(surface.View);
+        var afterHorizontal = WorkflowSurfaceBehavior.GetPan(surface.View.SurfaceView);
         Assert.AreNotEqual(before.X, afterHorizontal.X, "a horizontal wheel moves the camera horizontally");
         Assert.AreEqual(before.Y, afterHorizontal.Y, 1d, "a horizontal wheel does not move vertically");
 
-        WorkflowSurfaceBehavior.ProcessWheel(surface.View, point, 120, Keys.Shift);
+        WorkflowSurfaceBehavior.ProcessWheel(surface.View.SurfaceView, point, 120, Keys.Shift);
         surface.Render();
-        var afterShift = WorkflowSurfaceBehavior.GetPan(surface.View);
+        var afterShift = WorkflowSurfaceBehavior.GetPan(surface.View.SurfaceView);
         Assert.AreNotEqual(afterHorizontal.X, afterShift.X, "Shift+wheel moves the same horizontal axis");
         Assert.AreEqual(afterHorizontal.Y, afterShift.Y, 1d);
     }
@@ -346,7 +398,7 @@ public sealed class WorkflowSurfaceHeadlessTests
         Assert.IsTrue(node.Locate());
         surface.Render();
 
-        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View.SurfaceView);
         Assert.AreEqual(expectedX, world.Horizontal, 1d,
             "the far node's center must land at the viewport center");
         Assert.AreEqual(expectedY, world.Vertical, 1d);

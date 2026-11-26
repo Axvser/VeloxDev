@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.CompilerServices;
@@ -35,246 +35,442 @@ public sealed class WorkflowSurfaceBehavior
     private static readonly ConditionalWeakTable<VisualElement, Wf.WorkflowEventHandle> PressHandles = new();
 
     /// <summary>Whether the surface lifecycle is active on the control.</summary>
+    /// <summary>Starts or stops the surface on the visual root.</summary>
     public static readonly DependencyProperty IsEnabledProperty = DependencyProperty.RegisterAttached(
         "IsEnabled", typeof(bool), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(false, OnIsEnabledChanged));
+        new PropertyMetadata(false) { VisualPropertyChangedCallback = OnVisualIsEnabledChanged });
 
     /// <summary>Whether Ctrl + wheel zooms the camera.</summary>
     public static readonly DependencyProperty ZoomEnabledProperty = DependencyProperty.RegisterAttached(
         "ZoomEnabled", typeof(bool), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(false, OnConfigurationChanged));
+        new PropertyMetadata(false) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Name of the visual viewport part.</summary>
     public static readonly DependencyProperty ScrollViewerNameProperty = DependencyProperty.RegisterAttached(
         "ScrollViewerName", typeof(string), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null, OnConfigurationChanged));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Name of the visual canvas that hosts the pool.</summary>
     public static readonly DependencyProperty CanvasNameProperty = DependencyProperty.RegisterAttached(
         "CanvasName", typeof(string), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null, OnConfigurationChanged));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Name of the grid/ruler decorator part.</summary>
     public static readonly DependencyProperty GridDecoratorNameProperty = DependencyProperty.RegisterAttached(
         "GridDecoratorName", typeof(string), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null, OnConfigurationChanged));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Name of the minimap overlay part.</summary>
     public static readonly DependencyProperty MinimapOverlayNameProperty = DependencyProperty.RegisterAttached(
         "MinimapOverlayName", typeof(string), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null, OnConfigurationChanged));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>
     /// Name of the visual subtree that is the workflow surface when the host's root also carries a workbench
-    /// shell. Unset means the host root itself is the surface.
+    /// shell. Unset means the attached visual root itself is the surface.
     /// </summary>
     public static readonly DependencyProperty SurfaceNameProperty = DependencyProperty.RegisterAttached(
         "SurfaceName", typeof(string), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null, OnConfigurationChanged));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Kept for WPF parity; input is routed by the visual host, so no part is used as a press source.</summary>
     public static readonly DependencyProperty PointerPressSourceNameProperty = DependencyProperty.RegisterAttached(
         "PointerPressSourceName", typeof(string), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null, OnConfigurationChanged));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>The selector that creates the pooled views.</summary>
     public static readonly DependencyProperty VisualTemplateSelectorProperty = DependencyProperty.RegisterAttached(
         "VisualTemplateSelector", typeof(VisualTemplateSelector), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null, OnConfigurationChanged));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Resource key of the tree's selector; defaults to <c>WorkflowTemplateSelector</c>.</summary>
     public static readonly DependencyProperty VisualTemplateSelectorKeyProperty = DependencyProperty.RegisterAttached(
         "VisualTemplateSelectorKey", typeof(string), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata("WorkflowTemplateSelector", OnConfigurationChanged));
+        new PropertyMetadata("WorkflowTemplateSelector") { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Resting link colour.</summary>
     public static readonly DependencyProperty VisualLinkColorProperty = DependencyProperty.RegisterAttached(
         "VisualLinkColor", typeof(Color), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF), OnLinkStyleChanged));
+        new PropertyMetadata(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Resting link width.</summary>
     public static readonly DependencyProperty VisualLinkThicknessProperty = DependencyProperty.RegisterAttached(
         "VisualLinkThickness", typeof(float), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(2f, OnLinkStyleChanged));
+        new PropertyMetadata(2f) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Hovered link colour.</summary>
     public static readonly DependencyProperty VisualLinkHoverColorProperty = DependencyProperty.RegisterAttached(
         "VisualLinkHoverColor", typeof(Color), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(Color.White, OnLinkStyleChanged));
+        new PropertyMetadata(Color.White) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Hovered link width.</summary>
     public static readonly DependencyProperty VisualLinkHoverThicknessProperty = DependencyProperty.RegisterAttached(
         "VisualLinkHoverThickness", typeof(float), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(3.5f, OnLinkStyleChanged));
+        new PropertyMetadata(3.5f) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Virtual-link colour.</summary>
     public static readonly DependencyProperty VisualLinkVirtualColorProperty = DependencyProperty.RegisterAttached(
         "VisualLinkVirtualColor", typeof(Color), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF), OnLinkStyleChanged));
+        new PropertyMetadata(Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF)) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Whether resting links glow.</summary>
     public static readonly DependencyProperty VisualLinkGlowProperty = DependencyProperty.RegisterAttached(
         "VisualLinkGlow", typeof(bool), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(false, OnLinkStyleChanged));
-
-    /// <summary>The tree bound to the surface when no data context carries one.</summary>
-    public static readonly DependencyProperty WorkflowTreeProperty = DependencyProperty.RegisterAttached(
-        "WorkflowTree", typeof(Wf.ITreeComponent), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null, OnConfigurationChanged));
+        new PropertyMetadata(false) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Fills the link context menu.</summary>
     public static readonly DependencyProperty LinkMenuBuilderProperty = DependencyProperty.RegisterAttached(
         "LinkMenuBuilder", typeof(Action<ContextMenuStrip, Wf.ILinkComponent>), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Resource key of a visual context menu opened on a right-pressed link.</summary>
     public static readonly DependencyProperty LinkMenuKeyProperty = DependencyProperty.RegisterAttached(
         "LinkMenuKey", typeof(string), typeof(WorkflowSurfaceBehavior),
-        new PropertyMetadata(null));
+        new PropertyMetadata(null) { VisualPropertyChangedCallback = OnVisualConfigurationChanged });
 
     /// <summary>Gets whether the surface is active.</summary>
-    public static bool GetIsEnabled(Control element) => (bool)GetRequired(element, IsEnabledProperty)!;
+    public static bool GetIsEnabled(VisualElement element) => (bool)GetRequired(element, IsEnabledProperty)!;
 
     /// <summary>Starts or stops the surface.</summary>
-    public static void SetIsEnabled(Control element, bool value) => SetRequired(element, IsEnabledProperty, value);
+    public static void SetIsEnabled(VisualElement element, bool value) => SetRequired(element, IsEnabledProperty, value);
 
     /// <summary>Gets whether Ctrl + wheel zooms.</summary>
-    public static bool GetZoomEnabled(Control element) => (bool)GetRequired(element, ZoomEnabledProperty)!;
+    public static bool GetZoomEnabled(VisualElement element) => (bool)GetRequired(element, ZoomEnabledProperty)!;
 
     /// <summary>Sets whether Ctrl + wheel zooms.</summary>
-    public static void SetZoomEnabled(Control element, bool value) => SetRequired(element, ZoomEnabledProperty, value);
+    public static void SetZoomEnabled(VisualElement element, bool value) => SetRequired(element, ZoomEnabledProperty, value);
 
     /// <summary>Gets the viewport part name.</summary>
-    public static string? GetScrollViewerName(Control element) => (string?)GetRequired(element, ScrollViewerNameProperty);
+    public static string? GetScrollViewerName(VisualElement element) => (string?)GetRequired(element, ScrollViewerNameProperty);
 
     /// <summary>Names the viewport part.</summary>
-    public static void SetScrollViewerName(Control element, string? value)
+    public static void SetScrollViewerName(VisualElement element, string? value)
         => SetRequired(element, ScrollViewerNameProperty, value);
 
     /// <summary>Gets the canvas part name.</summary>
-    public static string? GetCanvasName(Control element) => (string?)GetRequired(element, CanvasNameProperty);
+    public static string? GetCanvasName(VisualElement element) => (string?)GetRequired(element, CanvasNameProperty);
 
     /// <summary>Names the canvas part.</summary>
-    public static void SetCanvasName(Control element, string? value) => SetRequired(element, CanvasNameProperty, value);
+    public static void SetCanvasName(VisualElement element, string? value) => SetRequired(element, CanvasNameProperty, value);
 
     /// <summary>Gets the grid-decorator part name.</summary>
-    public static string? GetGridDecoratorName(Control element)
+    public static string? GetGridDecoratorName(VisualElement element)
         => (string?)GetRequired(element, GridDecoratorNameProperty);
 
     /// <summary>Names the grid-decorator part.</summary>
-    public static void SetGridDecoratorName(Control element, string? value)
+    public static void SetGridDecoratorName(VisualElement element, string? value)
         => SetRequired(element, GridDecoratorNameProperty, value);
 
     /// <summary>Gets the minimap part name.</summary>
-    public static string? GetMinimapOverlayName(Control element)
+    public static string? GetMinimapOverlayName(VisualElement element)
         => (string?)GetRequired(element, MinimapOverlayNameProperty);
 
     /// <summary>Names the minimap part.</summary>
-    public static void SetMinimapOverlayName(Control element, string? value)
+    public static void SetMinimapOverlayName(VisualElement element, string? value)
         => SetRequired(element, MinimapOverlayNameProperty, value);
 
     /// <summary>Gets the embedded surface subtree name.</summary>
-    public static string? GetSurfaceName(Control element) => (string?)GetRequired(element, SurfaceNameProperty);
+    public static string? GetSurfaceName(VisualElement element) => (string?)GetRequired(element, SurfaceNameProperty);
 
     /// <summary>Names the visual subtree that is the surface inside a larger visual root.</summary>
-    public static void SetSurfaceName(Control element, string? value)
+    public static void SetSurfaceName(VisualElement element, string? value)
         => SetRequired(element, SurfaceNameProperty, value);
 
     /// <summary>Gets the WPF-parity press-source name (unused by the visual path).</summary>
-    public static string? GetPointerPressSourceName(Control element)
+    public static string? GetPointerPressSourceName(VisualElement element)
         => (string?)GetRequired(element, PointerPressSourceNameProperty);
 
     /// <summary>Sets the WPF-parity press-source name.</summary>
-    public static void SetPointerPressSourceName(Control element, string? value)
+    public static void SetPointerPressSourceName(VisualElement element, string? value)
         => SetRequired(element, PointerPressSourceNameProperty, value);
 
     /// <summary>Gets the explicit visual selector.</summary>
-    public static VisualTemplateSelector? GetVisualTemplateSelector(Control element)
+    public static VisualTemplateSelector? GetVisualTemplateSelector(VisualElement element)
         => (VisualTemplateSelector?)GetRequired(element, VisualTemplateSelectorProperty);
 
     /// <summary>Sets the explicit visual selector; it wins over the tree resource key.</summary>
-    public static void SetVisualTemplateSelector(Control element, VisualTemplateSelector? value)
+    public static void SetVisualTemplateSelector(VisualElement element, VisualTemplateSelector? value)
         => SetRequired(element, VisualTemplateSelectorProperty, value);
 
     /// <summary>Gets the selector resource key.</summary>
-    public static string? GetVisualTemplateSelectorKey(Control element)
+    public static string? GetVisualTemplateSelectorKey(VisualElement element)
         => (string?)GetRequired(element, VisualTemplateSelectorKeyProperty);
 
     /// <summary>Sets the selector resource key.</summary>
-    public static void SetVisualTemplateSelectorKey(Control element, string? value)
+    public static void SetVisualTemplateSelectorKey(VisualElement element, string? value)
         => SetRequired(element, VisualTemplateSelectorKeyProperty, value);
 
     /// <summary>Gets the resting link colour.</summary>
-    public static Color GetVisualLinkColor(Control element) => (Color)GetRequired(element, VisualLinkColorProperty)!;
+    public static Color GetVisualLinkColor(VisualElement element) => (Color)GetRequired(element, VisualLinkColorProperty)!;
 
     /// <summary>Sets the resting link colour.</summary>
-    public static void SetVisualLinkColor(Control element, Color value)
+    public static void SetVisualLinkColor(VisualElement element, Color value)
         => SetRequired(element, VisualLinkColorProperty, value);
 
     /// <summary>Gets the resting link width.</summary>
-    public static float GetVisualLinkThickness(Control element)
+    public static float GetVisualLinkThickness(VisualElement element)
         => (float)GetRequired(element, VisualLinkThicknessProperty)!;
 
     /// <summary>Sets the resting link width.</summary>
-    public static void SetVisualLinkThickness(Control element, float value)
+    public static void SetVisualLinkThickness(VisualElement element, float value)
         => SetRequired(element, VisualLinkThicknessProperty, value);
 
     /// <summary>Gets the hovered link colour.</summary>
-    public static Color GetVisualLinkHoverColor(Control element)
+    public static Color GetVisualLinkHoverColor(VisualElement element)
         => (Color)GetRequired(element, VisualLinkHoverColorProperty)!;
 
     /// <summary>Sets the hovered link colour.</summary>
-    public static void SetVisualLinkHoverColor(Control element, Color value)
+    public static void SetVisualLinkHoverColor(VisualElement element, Color value)
         => SetRequired(element, VisualLinkHoverColorProperty, value);
 
     /// <summary>Gets the hovered link width.</summary>
-    public static float GetVisualLinkHoverThickness(Control element)
+    public static float GetVisualLinkHoverThickness(VisualElement element)
         => (float)GetRequired(element, VisualLinkHoverThicknessProperty)!;
 
     /// <summary>Sets the hovered link width.</summary>
-    public static void SetVisualLinkHoverThickness(Control element, float value)
+    public static void SetVisualLinkHoverThickness(VisualElement element, float value)
         => SetRequired(element, VisualLinkHoverThicknessProperty, value);
 
     /// <summary>Gets the virtual-link colour.</summary>
-    public static Color GetVisualLinkVirtualColor(Control element)
+    public static Color GetVisualLinkVirtualColor(VisualElement element)
         => (Color)GetRequired(element, VisualLinkVirtualColorProperty)!;
 
     /// <summary>Sets the virtual-link colour.</summary>
-    public static void SetVisualLinkVirtualColor(Control element, Color value)
+    public static void SetVisualLinkVirtualColor(VisualElement element, Color value)
         => SetRequired(element, VisualLinkVirtualColorProperty, value);
 
     /// <summary>Gets whether links glow.</summary>
-    public static bool GetVisualLinkGlow(Control element) => (bool)GetRequired(element, VisualLinkGlowProperty)!;
+    public static bool GetVisualLinkGlow(VisualElement element) => (bool)GetRequired(element, VisualLinkGlowProperty)!;
 
     /// <summary>Sets whether links glow.</summary>
-    public static void SetVisualLinkGlow(Control element, bool value)
+    public static void SetVisualLinkGlow(VisualElement element, bool value)
         => SetRequired(element, VisualLinkGlowProperty, value);
 
-    /// <summary>Gets the explicitly bound tree.</summary>
-    public static Wf.ITreeComponent? GetWorkflowTree(Control element)
-        => (Wf.ITreeComponent?)GetRequired(element, WorkflowTreeProperty);
-
-    /// <summary>Binds a tree explicitly.</summary>
-    public static void SetWorkflowTree(Control element, Wf.ITreeComponent? value)
-        => SetRequired(element, WorkflowTreeProperty, value);
-
     /// <summary>Gets the link-menu builder.</summary>
-    public static Action<ContextMenuStrip, Wf.ILinkComponent>? GetLinkMenuBuilder(Control element)
+    public static Action<ContextMenuStrip, Wf.ILinkComponent>? GetLinkMenuBuilder(VisualElement element)
         => (Action<ContextMenuStrip, Wf.ILinkComponent>?)GetRequired(element, LinkMenuBuilderProperty);
 
     /// <summary>Sets the link-menu builder.</summary>
-    public static void SetLinkMenuBuilder(Control element, Action<ContextMenuStrip, Wf.ILinkComponent>? value)
+    public static void SetLinkMenuBuilder(VisualElement element, Action<ContextMenuStrip, Wf.ILinkComponent>? value)
         => SetRequired(element, LinkMenuBuilderProperty, value);
 
     /// <summary>Gets the visual link-menu resource key.</summary>
-    public static string? GetLinkMenuKey(Control element) => (string?)GetRequired(element, LinkMenuKeyProperty);
+    public static string? GetLinkMenuKey(VisualElement element) => (string?)GetRequired(element, LinkMenuKeyProperty);
 
     /// <summary>Sets the visual link-menu resource key.</summary>
-    public static void SetLinkMenuKey(Control element, string? value)
+    public static void SetLinkMenuKey(VisualElement element, string? value)
         => SetRequired(element, LinkMenuKeyProperty, value);
 
-    /// <summary>Re-reads the parts, tree, selector and camera.</summary>
-    public static void Refresh(Control host)
+    // ── host behavior bridge ────────────────────────────────────────────────
+
+    private static readonly ConditionalWeakTable<VisualElement, WorkflowSurfaceController> Controllers = new();
+    private static readonly ConditionalWeakTable<Control, SurfaceConfig> HostConfigs = new();
+    private static readonly SurfaceConfig DefaultConfig = new();
+
+    private static WorkflowSurfaceController GetOrCreateController(VisualElement root)
+        => Controllers.GetValue(root, static element => new WorkflowSurfaceController(element));
+
+    private static SurfaceConfig GetConfig(Control host)
+        => HostConfigs.TryGetValue(host, out var config) ? config : DefaultConfig;
+
+    private static void SetHostConfig(Control host, SurfaceConfig config)
+    {
+        if (HostConfigs.TryGetValue(host, out _))
+        {
+            HostConfigs.Remove(host);
+        }
+
+        HostConfigs.Add(host, config);
+    }
+
+    private static void OnVisualIsEnabledChanged(IWinformsObject target, DependencyPropertyChangedEventArgs e)
+    {
+        if (target is not VisualElement root)
+        {
+            return;
+        }
+
+        if (Equals(e.NewValue, true))
+        {
+            root.AddHostBehavior(GetOrCreateController(root));
+            return;
+        }
+
+        if (Controllers.TryGetValue(root, out var controller))
+        {
+            root.RemoveHostBehavior(controller);
+        }
+    }
+
+    private static void OnVisualConfigurationChanged(IWinformsObject target, DependencyPropertyChangedEventArgs e)
+    {
+        _ = e;
+        if (target is VisualElement root && Controllers.TryGetValue(root, out var controller))
+        {
+            controller.OnConfigurationChanged();
+        }
+    }
+
+    // 视觉根 -> 宿主引擎的一张配置快照。引擎仍以宿主为键；控制器只负责把根上的属性搬过来。
+    private sealed class SurfaceConfig
+    {
+        public string? ScrollViewerName { get; set; }
+
+        public string? CanvasName { get; set; }
+
+        public string? GridDecoratorName { get; set; }
+
+        public string? MinimapOverlayName { get; set; }
+
+        public string? SurfaceName { get; set; }
+
+        public string? PointerPressSourceName { get; set; }
+
+        public bool ZoomEnabled { get; set; }
+
+        public VisualTemplateSelector? VisualTemplateSelector { get; set; }
+
+        public string? VisualTemplateSelectorKey { get; set; } = "WorkflowTemplateSelector";
+
+        public Color VisualLinkColor { get; set; } = Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF);
+
+        public float VisualLinkThickness { get; set; } = 2f;
+
+        public Color VisualLinkHoverColor { get; set; } = Color.White;
+
+        public float VisualLinkHoverThickness { get; set; } = 3.5f;
+
+        public Color VisualLinkVirtualColor { get; set; } = Color.FromArgb(0xDD, 0xFF, 0xFF, 0xFF);
+
+        public bool VisualLinkGlow { get; set; }
+
+        public Wf.ITreeComponent? WorkflowTree { get; set; }
+
+        public Action<ContextMenuStrip, Wf.ILinkComponent>? LinkMenuBuilder { get; set; }
+
+        public string? LinkMenuKey { get; set; }
+    }
+
+    private sealed class WorkflowSurfaceController(VisualElement root) : IVisualHostBehavior
+    {
+        private VisualHost? _host;
+        private bool _dataContextQueued;
+
+        // 根级相机/刷新重载要从视觉根找回宿主上的状态。
+        internal VisualHost? Host => _host;
+
+        public void Attach(VisualHost host)
+        {
+            _host = host;
+            ApplyConfig(host);
+            AttachCore(host);
+
+            // DataContext 是树唯一的来源；继承自宿主的变化同样会从根这里进来。
+            root.PropertyChanged += OnRootPropertyChanged;
+        }
+
+        public void Detach()
+        {
+            root.PropertyChanged -= OnRootPropertyChanged;
+            _dataContextQueued = false;
+            if (_host is { } host)
+            {
+                DetachCore(host);
+                if (HostConfigs.TryGetValue(host, out _))
+                {
+                    HostConfigs.Remove(host);
+                }
+            }
+
+            _host = null;
+        }
+
+        public void OnConfigurationChanged()
+        {
+            if (_host is not { } host || !States.TryGetValue(host, out var state) || !state.Attached)
+            {
+                return;
+            }
+
+            ApplyAndRefresh(host);
+        }
+
+        private void ApplyAndRefresh(VisualHost host)
+        {
+            ApplyConfig(host);
+            Refresh(host);
+        }
+
+        // DataContext 是树唯一的来源；合并连续切换，排到消息泵之后，避免在布局中间重入。
+        private void OnRootPropertyChanged(object? sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (!ReferenceEquals(e.Property, VisualElement.DataContextProperty) || _dataContextQueued)
+            {
+                return;
+            }
+
+            if (_host is not { } host)
+            {
+                return;
+            }
+
+            _dataContextQueued = true;
+            host.Post(FlushDataContext);
+        }
+
+        private void FlushDataContext()
+        {
+            _dataContextQueued = false;
+            if (_host is not { } host || !States.TryGetValue(host, out var state) || !state.Attached)
+            {
+                return;
+            }
+
+            var tree = root.DataContext as Wf.ITreeComponent;
+            if (ReferenceEquals(tree, state.Config.WorkflowTree))
+            {
+                return;
+            }
+
+            ApplyAndRefresh(host);
+        }
+
+        private void ApplyConfig(VisualHost host)
+        {
+            var config = new SurfaceConfig
+            {
+                ScrollViewerName = GetScrollViewerName(root),
+                CanvasName = GetCanvasName(root),
+                GridDecoratorName = GetGridDecoratorName(root),
+                MinimapOverlayName = GetMinimapOverlayName(root),
+                SurfaceName = GetSurfaceName(root),
+                PointerPressSourceName = GetPointerPressSourceName(root),
+                ZoomEnabled = GetZoomEnabled(root),
+                VisualTemplateSelector = GetVisualTemplateSelector(root),
+                VisualTemplateSelectorKey = GetVisualTemplateSelectorKey(root),
+                VisualLinkColor = GetVisualLinkColor(root),
+                VisualLinkThickness = GetVisualLinkThickness(root),
+                VisualLinkHoverColor = GetVisualLinkHoverColor(root),
+                VisualLinkHoverThickness = GetVisualLinkHoverThickness(root),
+                VisualLinkVirtualColor = GetVisualLinkVirtualColor(root),
+                VisualLinkGlow = GetVisualLinkGlow(root),
+                WorkflowTree = root.DataContext as Wf.ITreeComponent,
+                LinkMenuBuilder = GetLinkMenuBuilder(root),
+                LinkMenuKey = GetLinkMenuKey(root),
+            };
+
+            // 嵌在大根树里的表面视图（工作台）靠名字从宿主根定位；单视图宿主沿用根本身。
+            if (string.IsNullOrEmpty(config.SurfaceName) && !ReferenceEquals(host.Root, root))
+            {
+                config.SurfaceName = root.Name;
+            }
+
+            SetHostConfig(host, config);
+        }
+    }
+
+    // 宿主键引擎入口；视觉根重载解析到宿主后复用。
+    private static void Refresh(Control host)
     {
         if (host is null) throw new ArgumentNullException(nameof(host));
 
@@ -286,16 +482,30 @@ public sealed class WorkflowSurfaceBehavior
         EnsureAttachedBehaviors(state.Surface ?? state.Root);
     }
 
-    /// <summary>The camera scale; one means world units equal surface units.</summary>
-    public static double GetZoom(Control host)
+    /// <summary>Re-reads the parts, tree, selector and camera through the visual root's controller.</summary>
+    public static void Refresh(VisualElement root)
+    {
+        if (ResolveHost(root) is { } host && States.TryGetValue(host, out _))
+        {
+            Refresh(host);
+        }
+    }
+
+    private static double GetZoom(Control host)
         => States.TryGetValue(host, out var state) ? state.Zoom : 1d;
 
-    /// <summary>The signed pan translation applied after scaling.</summary>
-    public static DrawingPointF GetPan(Control host)
+    /// <summary>The camera scale of the surface attached to the visual root, or one when none is attached.</summary>
+    public static double GetZoom(VisualElement root)
+        => ResolveState(root)?.Zoom ?? 1d;
+
+    private static DrawingPointF GetPan(Control host)
         => States.TryGetValue(host, out var state) ? state.Pan : DrawingPointF.Empty;
 
-    /// <summary>Sets the pan translation.</summary>
-    public static void SetPan(Control host, DrawingPointF pan)
+    /// <summary>The pan of the surface attached to the visual root, or the origin when none is attached.</summary>
+    public static DrawingPointF GetPan(VisualElement root)
+        => ResolveState(root)?.Pan ?? DrawingPointF.Empty;
+
+    private static void SetPan(Control host, DrawingPointF pan)
     {
         if (States.TryGetValue(host, out var state))
         {
@@ -304,84 +514,72 @@ public sealed class WorkflowSurfaceBehavior
         }
     }
 
-    /// <summary>Converts a surface point into world coordinates.</summary>
-    public static DrawingPointF SurfaceToWorld(Control host, DrawingPointF surfacePoint)
+    /// <summary>Sets the pan translation of the surface attached to the visual root.</summary>
+    public static void SetPan(VisualElement root, DrawingPointF pan)
     {
-        if (!States.TryGetValue(host, out var state))
+        if (ResolveState(root) is { } state)
         {
-            return surfacePoint;
+            state.Pan = pan;
+            ApplyCamera(state);
         }
-
-        var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
-        var origin = SurfaceOrigin(state);
-        return new DrawingPointF(
-            (float)(((surfacePoint.X - origin.X) - state.Pan.X - state.Content.X) / zoom),
-            (float)(((surfacePoint.Y - origin.Y) - state.Pan.Y - state.Content.Y) / zoom));
     }
 
-    /// <summary>Converts a world point into surface coordinates.</summary>
-    public static DrawingPointF WorldToSurface(Control host, DrawingPointF worldPoint)
-    {
-        if (!States.TryGetValue(host, out var state))
-        {
-            return worldPoint;
-        }
+    private static DrawingPointF SurfaceToWorld(Control host, DrawingPointF surfacePoint)
+        => States.TryGetValue(host, out var state) ? SurfaceToWorld(state, surfacePoint) : surfacePoint;
 
-        var origin = SurfaceOrigin(state);
-        return new DrawingPointF(
-            (float)((worldPoint.X * state.Zoom) + state.Pan.X + state.Content.X) + origin.X,
-            (float)((worldPoint.Y * state.Zoom) + state.Pan.Y + state.Content.Y) + origin.Y);
+    /// <summary>Converts a surface point of the visual root's surface into world coordinates.</summary>
+    public static DrawingPointF SurfaceToWorld(VisualElement root, DrawingPointF surfacePoint)
+        => ResolveState(root) is { } state ? SurfaceToWorld(state, surfacePoint) : surfacePoint;
+
+    private static DrawingPointF WorldToSurface(Control host, DrawingPointF worldPoint)
+        => States.TryGetValue(host, out var state) ? WorldToSurface(state, worldPoint) : worldPoint;
+
+    /// <summary>Converts a world point into the visual root's surface coordinates.</summary>
+    public static DrawingPointF WorldToSurface(VisualElement root, DrawingPointF worldPoint)
+        => ResolveState(root) is { } state ? WorldToSurface(state, worldPoint) : worldPoint;
+
+    private static Wf.Offset GetWorldViewport(Control host)
+        => States.TryGetValue(host, out var state) ? GetWorldViewport(state) : new Wf.Offset();
+
+    /// <summary>Returns the visual root's visible region's top-left in world coordinates.</summary>
+    public static Wf.Offset GetWorldViewport(VisualElement root)
+        => ResolveState(root) is { } state ? GetWorldViewport(state) : new Wf.Offset();
+
+    private static void SetWorldViewport(Control host, Wf.Offset worldOffset)
+    {
+        if (States.TryGetValue(host, out var state))
+        {
+            SetWorldViewport(state, worldOffset);
+        }
     }
 
-    /// <summary>Returns the visible region's top-left in world coordinates.</summary>
-    public static Wf.Offset GetWorldViewport(Control host)
+    /// <summary>Moves the visual root's camera so its visible region starts at <paramref name="worldOffset"/>.</summary>
+    public static void SetWorldViewport(VisualElement root, Wf.Offset worldOffset)
     {
-        if (!States.TryGetValue(host, out var state))
+        if (ResolveState(root) is { } state)
         {
-            return new Wf.Offset();
+            SetWorldViewport(state, worldOffset);
         }
-
-        var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
-        return new Wf.Offset(
-            (-state.Pan.X - state.Content.X) / zoom,
-            (-state.Pan.Y - state.Content.Y) / zoom);
     }
 
-    /// <summary>Moves the camera so its visible region starts at <paramref name="worldOffset"/>.</summary>
-    public static void SetWorldViewport(Control host, Wf.Offset worldOffset)
+    private static void ZoomAt(Control host, DrawingPointF surfacePoint, double factor)
     {
-        if (!States.TryGetValue(host, out var state))
+        if (States.TryGetValue(host, out var state))
         {
-            return;
+            ZoomAt(state, surfacePoint, factor);
         }
-
-        state.Pan = new DrawingPointF(
-            (float)(-(worldOffset.Horizontal * state.Zoom) - state.Content.X),
-            (float)(-(worldOffset.Vertical * state.Zoom) - state.Content.Y));
-        ApplyCamera(state);
     }
 
-    /// <summary>Zooms around a surface point, keeping the world point under it fixed.</summary>
-    public static void ZoomAt(Control host, DrawingPointF surfacePoint, double factor)
+    /// <summary>Zooms the visual root's surface around a point, keeping the world point under it fixed.</summary>
+    public static void ZoomAt(VisualElement root, DrawingPointF surfacePoint, double factor)
     {
-        if (!States.TryGetValue(host, out var state))
+        if (ResolveState(root) is { } state)
         {
-            return;
+            ZoomAt(state, surfacePoint, factor);
         }
-
-        var zoom = Math.Max(0.1d, Math.Min(10d, state.Zoom * factor));
-        var world = SurfaceToWorld(host, surfacePoint);
-        var origin = SurfaceOrigin(state);
-        var local = new DrawingPointF(surfacePoint.X - origin.X, surfacePoint.Y - origin.Y);
-        state.Zoom = zoom;
-        state.Pan = new DrawingPointF(
-            (float)(local.X - (world.X * zoom) - state.Content.X),
-            (float)(local.Y - (world.Y * zoom) - state.Content.Y));
-        ApplyCamera(state);
     }
 
-    /// <summary>Routes one wheel turn through the camera or the workflow scroller.</summary>
-    public static bool ProcessWheel(Control host, DrawingPointF surfacePoint, int delta, Keys modifiers)
+    private static bool ProcessWheel(Control host, DrawingPointF surfacePoint, int delta, Keys modifiers)
     {
         if (!States.TryGetValue(host, out var state) || state.Tree is null)
         {
@@ -392,46 +590,77 @@ public sealed class WorkflowSurfaceBehavior
         return true;
     }
 
+    /// <summary>Routes one wheel turn through the visual root's camera or workflow scroller.</summary>
+    public static bool ProcessWheel(VisualElement root, DrawingPointF surfacePoint, int delta, Keys modifiers)
+    {
+        if (ResolveState(root) is not { } state || state.Tree is null)
+        {
+            return false;
+        }
+
+        HandleWheel(state, surfacePoint, delta, modifiers);
+        return true;
+    }
+
+    // 根级重载按「视觉根 -> 控制器 -> 宿主 -> 状态」解析；没有附着时调用方走各自的默认值。
+    private static VisualHost? ResolveHost(VisualElement root)
+        => root is not null && Controllers.TryGetValue(root, out var controller) ? controller.Host : null;
+
+    private static SurfaceState? ResolveState(VisualElement root)
+        => ResolveHost(root) is { } host && States.TryGetValue(host, out var state) ? state : null;
+
+    private static DrawingPointF SurfaceToWorld(SurfaceState state, DrawingPointF surfacePoint)
+    {
+        var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
+        var origin = SurfaceOrigin(state);
+        return new DrawingPointF(
+            (float)(((surfacePoint.X - origin.X) - state.Pan.X - state.Content.X) / zoom),
+            (float)(((surfacePoint.Y - origin.Y) - state.Pan.Y - state.Content.Y) / zoom));
+    }
+
+    private static DrawingPointF WorldToSurface(SurfaceState state, DrawingPointF worldPoint)
+    {
+        var origin = SurfaceOrigin(state);
+        return new DrawingPointF(
+            (float)((worldPoint.X * state.Zoom) + state.Pan.X + state.Content.X) + origin.X,
+            (float)((worldPoint.Y * state.Zoom) + state.Pan.Y + state.Content.Y) + origin.Y);
+    }
+
+    private static Wf.Offset GetWorldViewport(SurfaceState state)
+    {
+        var zoom = state.Zoom <= 0d ? 1d : state.Zoom;
+        return new Wf.Offset(
+            (-state.Pan.X - state.Content.X) / zoom,
+            (-state.Pan.Y - state.Content.Y) / zoom);
+    }
+
+    private static void SetWorldViewport(SurfaceState state, Wf.Offset worldOffset)
+    {
+        state.Pan = new DrawingPointF(
+            (float)(-(worldOffset.Horizontal * state.Zoom) - state.Content.X),
+            (float)(-(worldOffset.Vertical * state.Zoom) - state.Content.Y));
+        ApplyCamera(state);
+    }
+
+    private static void ZoomAt(SurfaceState state, DrawingPointF surfacePoint, double factor)
+    {
+        var zoom = Math.Max(0.1d, Math.Min(10d, state.Zoom * factor));
+        var world = SurfaceToWorld(state, surfacePoint);
+        var origin = SurfaceOrigin(state);
+        var local = new DrawingPointF(surfacePoint.X - origin.X, surfacePoint.Y - origin.Y);
+        state.Zoom = zoom;
+        state.Pan = new DrawingPointF(
+            (float)(local.X - (world.X * zoom) - state.Content.X),
+            (float)(local.Y - (world.Y * zoom) - state.Content.Y));
+        ApplyCamera(state);
+    }
+
     internal static Wf.WorkflowEventHandle? GetPressHandle(VisualElement element)
         => PressHandles.TryGetValue(element, out var handle) ? handle : null;
 
     // ── lifecycle ────────────────────────────────────────────────────────────
 
-    private static void OnIsEnabledChanged(Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (Equals(e.NewValue, true))
-        {
-            Attach(target);
-        }
-        else
-        {
-            Detach(target);
-        }
-    }
-
-    private static void OnConfigurationChanged(Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (!States.TryGetValue(target, out var state) || !state.Attached)
-        {
-            return;
-        }
-
-        EnsureParts(target, state);
-        EnsureTree(target, state);
-        EnsurePool(target, state);
-        ApplyCamera(state);
-        EnsureAttachedBehaviors(state.Surface ?? state.Root);
-    }
-
-    private static void OnLinkStyleChanged(Control target, DependencyPropertyChangedEventArgs e)
-    {
-        if (States.TryGetValue(target, out var state) && state.Attached)
-        {
-            ApplyLinkStyles(state);
-        }
-    }
-
-    private static void Attach(Control host)
+    private static void AttachCore(Control host)
     {
         var state = GetState(host);
         if (state.Attached)
@@ -466,7 +695,7 @@ public sealed class WorkflowSurfaceBehavior
         EnsureAttachedBehaviors(state.Surface ?? state.Root);
     }
 
-    private static void Detach(Control host)
+    private static void DetachCore(Control host)
     {
         if (!States.TryGetValue(host, out var state) || !state.Attached)
         {
@@ -514,7 +743,7 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         var root = visualHost.Root as VisualElement;
-        var surface = ResolveSurface(host, root);
+        var surface = ResolveSurface(state, root);
         if (!ReferenceEquals(root, state.Root) || !ReferenceEquals(surface, state.Surface))
         {
             UnhookInput(state);
@@ -530,12 +759,13 @@ public sealed class WorkflowSurfaceBehavior
             BindParts(state);
         }
 
+        var config = state.Config;
         // 每次 Ensure 都重解析；注册表按引用比较，没换过的部件不会重订任何东西。
-        state.Parts.Set(WorkflowSurfacePart.Canvas, scope is null ? null : FindVisualNamed(scope, GetCanvasName(host)));
-        state.Parts.Set(WorkflowSurfacePart.ScrollViewer, scope is null ? null : FindVisualNamed(scope, GetScrollViewerName(host)));
-        state.Parts.Set(WorkflowSurfacePart.GridDecorator, scope is null ? null : FindVisualNamed(scope, GetGridDecoratorName(host)));
-        state.Parts.Set(WorkflowSurfacePart.PointerPressSource, scope is null ? null : FindVisualNamed(scope, GetPointerPressSourceName(host)));
-        state.Parts.Set(WorkflowSurfacePart.MinimapOverlay, scope is null ? null : FindVisualNamed(scope, GetMinimapOverlayName(host)));
+        state.Parts.Set(WorkflowSurfacePart.Canvas, scope is null ? null : FindVisualNamed(scope, config.CanvasName));
+        state.Parts.Set(WorkflowSurfacePart.ScrollViewer, scope is null ? null : FindVisualNamed(scope, config.ScrollViewerName));
+        state.Parts.Set(WorkflowSurfacePart.GridDecorator, scope is null ? null : FindVisualNamed(scope, config.GridDecoratorName));
+        state.Parts.Set(WorkflowSurfacePart.PointerPressSource, scope is null ? null : FindVisualNamed(scope, config.PointerPressSourceName));
+        state.Parts.Set(WorkflowSurfacePart.MinimapOverlay, scope is null ? null : FindVisualNamed(scope, config.MinimapOverlayName));
         state.Info = scope is null ? null : FindVisualNamed(scope, "PART_InfoOverlay") as WorkflowInfoOverlay;
     }
 
@@ -601,14 +831,14 @@ public sealed class WorkflowSurfaceBehavior
     }
 
     // 没设表面名时整棵根树就是表面，保持单视图宿主的原契约。
-    private static VisualElement? ResolveSurface(Control host, VisualElement? root)
+    private static VisualElement? ResolveSurface(SurfaceState state, VisualElement? root)
     {
         if (root is null)
         {
             return null;
         }
 
-        var name = GetSurfaceName(host);
+        var name = state.Config.SurfaceName;
         return string.IsNullOrWhiteSpace(name) ? root : FindVisualNamed(root, name);
     }
 
@@ -639,16 +869,18 @@ public sealed class WorkflowSurfaceBehavior
 
     private static void EnsureTree(Control host, SurfaceState state)
     {
-#if NET8_0_OR_GREATER
-        var dataTree = host.DataContext as Wf.ITreeComponent;
-#else
-        // Older WinForms TFMs have no Control.DataContext; hosts there bind the tree explicitly.
-        var dataTree = host.Tag as Wf.ITreeComponent;
-#endif
-        var resolved = GetWorkflowTree(host) ?? dataTree;
+        var resolved = state.Config.WorkflowTree;
         if (ReferenceEquals(resolved, state.Tree))
         {
             return;
+        }
+
+        // 新树的相机从零开始：无树期间布局推过的 content/pan 不能带进新树，
+        // 否则首次 DataContext 绑定的位置会被上一次空表面状态偏掉。
+        if (resolved is not null)
+        {
+            state.Pan = default;
+            state.Content = default;
         }
 
         DetachTree(host, state);
@@ -656,11 +888,6 @@ public sealed class WorkflowSurfaceBehavior
         if (resolved is null)
         {
             return;
-        }
-
-        if ((state.Surface ?? state.Root) is { } surface)
-        {
-            surface.DataContext = resolved;
         }
 
         // The visual surface zooms through its camera, not through the model's collapse factor.
@@ -674,6 +901,9 @@ public sealed class WorkflowSurfaceBehavior
         RegisterScroller(state, resolved);
         if (resolved.Layout is { } treeLayout)
         {
+            // Keep the pre-attach content offset: a zero ViewportOffset means the negative-offset
+            // layout stays visible (world viewport -ActualOffset); subtracting a freshly computed
+            // content here would center on world 0 and hide the upper/left nodes.
             state.Pan = new DrawingPointF(
                 (float)(-(treeLayout.ViewportOffset.Horizontal * state.Zoom) - state.Content.X),
                 (float)(-(treeLayout.ViewportOffset.Vertical * state.Zoom) - state.Content.Y));
@@ -708,11 +938,8 @@ public sealed class WorkflowSurfaceBehavior
             minimap.WorkflowTree = null;
         }
 
+        // 表面的 DataContext 归应用所有；引擎只清自己的池、滚动器、小地图与状态。
         state.Tree = null;
-        if ((state.Surface ?? state.Root) is { } surface)
-        {
-            surface.DataContext = null;
-        }
     }
 
     private static void EnsurePool(Control host, SurfaceState state)
@@ -729,7 +956,7 @@ public sealed class WorkflowSurfaceBehavior
 
         if (ViewPool.GetTemplateSelector(canvas) is null)
         {
-            var selector = ResolveVisualSelector(host, state);
+            var selector = ResolveVisualSelector(state);
             if (selector is not null)
             {
                 ViewPool.SetTemplateSelector(canvas, selector);
@@ -752,14 +979,14 @@ public sealed class WorkflowSurfaceBehavior
         ApplyLinkStyles(state);
     }
 
-    private static VisualTemplateSelector? ResolveVisualSelector(Control host, SurfaceState state)
+    private static VisualTemplateSelector? ResolveVisualSelector(SurfaceState state)
     {
-        if (GetVisualTemplateSelector(host) is { } explicitSelector)
+        if (state.Config.VisualTemplateSelector is { } explicitSelector)
         {
             return explicitSelector;
         }
 
-        var key = GetVisualTemplateSelectorKey(host);
+        var key = state.Config.VisualTemplateSelectorKey;
         if (string.IsNullOrWhiteSpace(key))
         {
             return null;
@@ -1082,7 +1309,6 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        var host = state.Host;
         foreach (var view in EnumerateVisuals(canvas))
         {
             if (view.DataContext is not Wf.ILinkComponent link)
@@ -1090,12 +1316,13 @@ public sealed class WorkflowSurfaceBehavior
                 continue;
             }
 
-            var changed = SetIfPresent(view, "LineColor", GetVisualLinkColor(host));
-            changed |= SetIfPresent(view, "HighlightColor", GetVisualLinkHoverColor(host));
-            changed |= SetIfPresent(view, "LineThickness", GetVisualLinkThickness(host));
-            changed |= SetIfPresent(view, "HighlightThickness", GetVisualLinkHoverThickness(host));
-            changed |= SetIfPresent(view, "VirtualColor", GetVisualLinkVirtualColor(host));
-            changed |= SetIfPresent(view, "IsGlow", GetVisualLinkGlow(host));
+            var config = state.Config;
+            var changed = SetIfPresent(view, "LineColor", config.VisualLinkColor);
+            changed |= SetIfPresent(view, "HighlightColor", config.VisualLinkHoverColor);
+            changed |= SetIfPresent(view, "LineThickness", config.VisualLinkThickness);
+            changed |= SetIfPresent(view, "HighlightThickness", config.VisualLinkHoverThickness);
+            changed |= SetIfPresent(view, "VirtualColor", config.VisualLinkVirtualColor);
+            changed |= SetIfPresent(view, "IsGlow", config.VisualLinkGlow);
             changed |= SetIfPresent(view, "IsVirtual", ReferenceEquals(link, state.Tree?.VirtualLink));
             if (changed)
             {
@@ -1321,7 +1548,7 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        if (!horizontalWheel && (modifiers & Keys.Control) != 0 && GetZoomEnabled(host))
+        if (!horizontalWheel && (modifiers & Keys.Control) != 0 && state.Config.ZoomEnabled)
         {
             ZoomAt(host, surfacePoint, delta > 0 ? 1.1d : 1d / 1.1d);
             return;
@@ -1510,16 +1737,16 @@ public sealed class WorkflowSurfaceBehavior
         };
     }
 
-    private static object? GetRequired(Control element, DependencyProperty property)
+    private static object? GetRequired(VisualElement element, DependencyProperty property)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        return property.GetValue(element);
+        return element.GetValue(property);
     }
 
-    private static void SetRequired(Control element, DependencyProperty property, object? value)
+    private static void SetRequired(VisualElement element, DependencyProperty property, object? value)
     {
         if (element is null) throw new ArgumentNullException(nameof(element));
-        property.SetValue(element, value);
+        element.SetValue(property, value);
     }
 
     // ── link menu / scroller ────────────────────────────────────────────────
@@ -1555,7 +1782,7 @@ public sealed class WorkflowSurfaceBehavior
             return;
         }
 
-        if (ResolveVisualLinkMenu(host, state) is { } visualMenu)
+        if (ResolveVisualLinkMenu(state) is { } visualMenu)
         {
             var surfacePoint = WorldToSurface(host, new DrawingPointF((float)e.Position.Horizontal, (float)e.Position.Vertical));
             var target = state.Canvas is { } canvas
@@ -1572,7 +1799,7 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         var menu = new ContextMenuStrip();
-        GetLinkMenuBuilder(host)?.Invoke(menu, link);
+        state.Config.LinkMenuBuilder?.Invoke(menu, link);
         if (menu.Items.Count == 0)
         {
             menu.Dispose();
@@ -1584,9 +1811,9 @@ public sealed class WorkflowSurfaceBehavior
         menu.Show(Cursor.Position);
     }
 
-    private static VisualContextMenu? ResolveVisualLinkMenu(Control host, SurfaceState state)
+    private static VisualContextMenu? ResolveVisualLinkMenu(SurfaceState state)
     {
-        var key = GetLinkMenuKey(host);
+        var key = state.Config.LinkMenuKey;
         if (string.IsNullOrWhiteSpace(key))
         {
             return null;
@@ -1689,6 +1916,8 @@ public sealed class WorkflowSurfaceBehavior
         }
 
         public Control Host { get; }
+
+        public SurfaceConfig Config => GetConfig(Host);
 
         public bool Attached { get; set; }
 
@@ -1812,7 +2041,7 @@ public sealed class WorkflowSurfaceBehavior
         {
             if (Attached)
             {
-                Detach(Host);
+                DetachCore(Host);
             }
         }
 

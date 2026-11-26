@@ -24,17 +24,18 @@ internal sealed class WinFormsHeadlessSurface : IDisposable
         {
             Minimap = new WorkflowMinimapOverlay { Name = "PART_Minimap" };
             View.RootContainer.Add(Minimap);
-            WorkflowSurfaceBehavior.SetMinimapOverlayName(View, "PART_Minimap");
+            WorkflowSurfaceBehavior.SetMinimapOverlayName(View.SurfaceView, "PART_Minimap");
         }
 
         if (bind)
         {
-            WorkflowSurfaceBehavior.SetWorkflowTree(View, graph.Tree);
+            // The host's data context is inherited into the visual root; it is the tree's only source.
+            View.DataContext = graph.Tree;
             // Bind the pool to the virtualized set the helper owns, exactly like the generated template.
             ViewPool.SetItemsSource(View.Canvas, graph.Tree.GetHelper().VisibleItems);
         }
 
-        WorkflowSurfaceBehavior.SetIsEnabled(View, true);
+        WorkflowSurfaceBehavior.SetIsEnabled(View.SurfaceView, true);
         Render();
     }
 
@@ -73,14 +74,14 @@ internal sealed class WinFormsHeadlessSurface : IDisposable
         => View.ProcessPointerUp(surfacePoint, MouseButtons.Left);
 
     public DrawingPointF WorldToSurface(DrawingPointF worldPoint)
-        => WorkflowSurfaceBehavior.WorldToSurface(View, worldPoint);
+        => WorkflowSurfaceBehavior.WorldToSurface(View.SurfaceView, worldPoint);
 
     public DrawingPointF SurfaceToWorld(DrawingPointF surfacePoint)
-        => WorkflowSurfaceBehavior.SurfaceToWorld(View, surfacePoint);
+        => WorkflowSurfaceBehavior.SurfaceToWorld(View.SurfaceView, surfacePoint);
 
     public void Dispose()
     {
-        WorkflowSurfaceBehavior.SetIsEnabled(View, false);
+        WorkflowSurfaceBehavior.SetIsEnabled(View.SurfaceView, false);
         View.Dispose();
         Application.DoEvents();
     }

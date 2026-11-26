@@ -5,6 +5,14 @@
     xmlns:behaviors="clr-namespace:VeloxDev.WorkflowSystem.AttachedBehaviors;assembly=VeloxDev.WinForms"
     xmlns:local="clr-namespace:Demo.Views.Workflow"
     x:Class="Demo.Views.Workflow.TreeView"
+    behaviors:WorkflowSurfaceBehavior.IsEnabled="True"
+    behaviors:WorkflowSurfaceBehavior.CanvasName="PART_Canvas"
+    behaviors:WorkflowSurfaceBehavior.ScrollViewerName="PART_ScrollViewer"
+    behaviors:WorkflowSurfaceBehavior.GridDecoratorName="PART_GridDecorator"
+    behaviors:WorkflowSurfaceBehavior.MinimapOverlayName="PART_MinimapOverlay"
+    behaviors:WorkflowSurfaceBehavior.PointerPressSourceName="PART_SurfaceBorder"
+    behaviors:WorkflowSurfaceBehavior.ZoomEnabled="True"
+    behaviors:WorkflowSurfaceBehavior.LinkMenuKey="LinkContextMenu"
     ClipToBounds="False">
 
   <!-- VeloxDev customization: the whole surface is visual, including the minimap and the info HUD. The host only
@@ -32,7 +40,11 @@
       <local:SlotView />
     </DataTemplate>
     <!-- VeloxDev customization: add or remove the link menu's entries; each item receives the pressed link. -->
-    <VisualContextMenu x:Key="LinkContextMenu" />
+    <VisualContextMenu x:Key="LinkContextMenu">
+      <VisualContextMenu.Items>
+        <VisualMenuItem Header="Delete" CommandPath="DeleteCommand" />
+      </VisualContextMenu.Items>
+    </VisualContextMenu>
     <!-- The host resolves this key in the tree root's resources; no code-behind selector instance is needed. -->
     <local:CustomTemplateSelector x:Key="WorkflowTemplateSelector"
                                   NodeTemplate="{StaticResource NodeTemplate}"

@@ -36,12 +36,12 @@ public sealed class EmbeddedSurfaceHeadlessTests
         Assert.AreEqual(ChromeHeight, origin.Y, 0.5f, "the surface sits below the title strip");
 
         var topLeft = WorkflowSurfaceBehavior.SurfaceToWorld(
-            host,
+            host.SurfaceView,
             new DrawingPointF(origin.X, origin.Y));
         Assert.AreEqual(0f, topLeft.X, 0.5f, "the surface's own top-left is world (0,0)");
         Assert.AreEqual(0f, topLeft.Y, 0.5f);
 
-        var roundTrip = WorkflowSurfaceBehavior.WorldToSurface(host, new DrawingPointF(123.5f, 67.25f));
+        var roundTrip = WorkflowSurfaceBehavior.WorldToSurface(host.SurfaceView, new DrawingPointF(123.5f, 67.25f));
         Assert.AreEqual(origin.X + 123.5f, roundTrip.X, 0.5f);
         Assert.AreEqual(origin.Y + 67.25f, roundTrip.Y, 0.5f);
     }
@@ -74,7 +74,7 @@ public sealed class EmbeddedSurfaceHeadlessTests
         var center = new DrawingPointF(
             (float)(graph.Left.Anchor.Horizontal + (graph.Left.Size.Width / 2d)),
             (float)(graph.Left.Anchor.Vertical + (graph.Left.Size.Height / 2d)));
-        var hostPoint = WorkflowSurfaceBehavior.WorldToSurface(host, center);
+        var hostPoint = WorkflowSurfaceBehavior.WorldToSurface(host.SurfaceView, center);
 
         host.ProcessPointerDown(hostPoint, MouseButtons.Left);
 
@@ -139,10 +139,10 @@ public sealed class EmbeddedSurfaceHeadlessTests
             Root = shell;
             ViewPool.SetTemplateSelector(SurfaceView.Canvas, new TestVisualTemplateSelector());
 
-            WorkflowSurfaceBehavior.SetSurfaceName(this, "WorkflowSurface");
-            WorkflowSurfaceBehavior.SetScrollViewerName(this, "PART_ScrollViewer");
-            WorkflowSurfaceBehavior.SetCanvasName(this, "PART_Canvas");
-            WorkflowSurfaceBehavior.SetGridDecoratorName(this, "PART_GridDecorator");
+            // The controller defaults SurfaceName to the attached root's name when it is not the host root.
+            WorkflowSurfaceBehavior.SetScrollViewerName(SurfaceView, "PART_ScrollViewer");
+            WorkflowSurfaceBehavior.SetCanvasName(SurfaceView, "PART_Canvas");
+            WorkflowSurfaceBehavior.SetGridDecoratorName(SurfaceView, "PART_GridDecorator");
         }
 
         public TestWorkflowSurfaceView SurfaceView { get; }
@@ -157,9 +157,10 @@ public sealed class EmbeddedSurfaceHeadlessTests
             PerformLayout();
             Render();
 
-            WorkflowSurfaceBehavior.SetWorkflowTree(this, graph.Tree);
+            // The host's data context is inherited into the surface root; it is the tree's only source.
+            DataContext = graph.Tree;
             ViewPool.SetItemsSource(SurfaceView.Canvas, graph.Tree.GetHelper().VisibleItems);
-            WorkflowSurfaceBehavior.SetIsEnabled(this, true);
+            WorkflowSurfaceBehavior.SetIsEnabled(SurfaceView, true);
             Render();
         }
 

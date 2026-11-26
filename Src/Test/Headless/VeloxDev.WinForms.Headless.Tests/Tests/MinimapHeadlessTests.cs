@@ -19,7 +19,7 @@ public sealed class MinimapHeadlessTests
         surface.Render();
         var minimap = surface.Minimap!;
 
-        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        var world = WorkflowSurfaceBehavior.GetWorldViewport(surface.View.SurfaceView);
         Assert.AreEqual(world.Horizontal, minimap.ScrollOffsetX, 1e-3,
             "the minimap scroll offset is the canvas-local viewport origin, not surface pixels");
         Assert.AreEqual(world.Vertical, minimap.ScrollOffsetY, 1e-3);
@@ -47,7 +47,7 @@ public sealed class MinimapHeadlessTests
             requestedY = y;
         };
 
-        var before = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        var before = WorkflowSurfaceBehavior.GetWorldViewport(surface.View.SurfaceView);
 
         // The placed minimap sits at the available top-right corner: its top-left is (right - margin - width,
         // top + margin). Press at its centre, then drag left.
@@ -67,7 +67,7 @@ public sealed class MinimapHeadlessTests
         Assert.IsFalse(double.IsNaN(requestedX), "dragging the viewport must raise ViewportScrollRequested");
         Assert.IsFalse(double.IsNaN(requestedY));
 
-        var after = WorkflowSurfaceBehavior.GetWorldViewport(surface.View);
+        var after = WorkflowSurfaceBehavior.GetWorldViewport(surface.View.SurfaceView);
         Assert.AreNotEqual(before.Horizontal, after.Horizontal, 1e-3,
             "the drag must move the surface viewport horizontally");
         Assert.AreEqual(after.Horizontal, graph.Tree.Helper.Viewport.Horizontal, 1e-3,
@@ -81,11 +81,12 @@ public sealed class MinimapHeadlessTests
         using var view = new TestWorkflowSurface();
         var minimap = new CapturingMinimap { Name = "PART_Minimap" };
         view.RootContainer.Add(minimap);
-        WorkflowSurfaceBehavior.SetMinimapOverlayName(view, "PART_Minimap");
-        WorkflowSurfaceBehavior.SetWorkflowTree(view, graph.Tree);
+        WorkflowSurfaceBehavior.SetMinimapOverlayName(view.SurfaceView, "PART_Minimap");
+        // The host's data context is inherited into the visual root; it is the tree's only source.
+        view.DataContext = graph.Tree;
         ViewPool.SetItemsSource(view.Canvas, graph.Tree.GetHelper().VisibleItems);
         ViewPool.SetTemplateSelector(view.Canvas, new TestVisualTemplateSelector());
-        WorkflowSurfaceBehavior.SetIsEnabled(view, true);
+        WorkflowSurfaceBehavior.SetIsEnabled(view.SurfaceView, true);
 
         Render(view);
         var before = minimap.LastContext!.ViewportBounds.Left;

@@ -76,7 +76,7 @@ public sealed class RenderingHeadlessTests
         using var surface = new WinFormsHeadlessSurface(graph, withMinimap: true);
         var minimap = surface.Minimap!;
 
-        WorkflowSurfaceBehavior.SetWorldViewport(surface.View, new Offset(60d, 40d));
+        WorkflowSurfaceBehavior.SetWorldViewport(surface.View.SurfaceView, new Offset(60d, 40d));
         surface.Render();
 
         Assert.AreSame(graph.Tree, minimap.WorkflowTree);

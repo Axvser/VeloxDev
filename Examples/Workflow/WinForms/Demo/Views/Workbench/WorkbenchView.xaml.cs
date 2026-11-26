@@ -53,7 +53,6 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
         BuildMenu();
         BuildActivityBar();
         WireShell();
-        ConfigureSurface();
 
         _uiTimer = new System.Windows.Forms.Timer { Interval = 500 };
         _uiTimer.Tick += (_, _) =>
@@ -70,7 +69,6 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
     /// </summary>
     public void Start()
     {
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(_host, true);
         ExplorerPage.SetMinimapState(WorkflowSurface.MinimapOverlay.IsMinimapVisible);
         LoadDemo(WorkflowDemoSession.Create());
     }
@@ -84,7 +82,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
         _nodeMenu?.Close();
         _nodeMenu?.Dispose();
         _nodeMenu = null;
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(_host, false);
+        WorkflowBehaviors.WorkflowSurfaceBehavior.SetIsEnabled(WorkflowSurface, false);
 
         if (_demo is not null)
         {
@@ -95,24 +93,6 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
     }
 
     // ── Surface wiring ───────────────────────────────────────────────────────
-
-    private void ConfigureSurface()
-    {
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetSurfaceName(_host, "WorkflowSurface");
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetCanvasName(_host, "PART_Canvas");
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetScrollViewerName(_host, "PART_ScrollViewer");
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetGridDecoratorName(_host, "PART_GridDecorator");
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetMinimapOverlayName(_host, "PART_MinimapOverlay");
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetPointerPressSourceName(_host, "PART_SurfaceBorder");
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetLinkMenuKey(_host, "LinkContextMenu");
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetZoomEnabled(_host, true);
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetVisualLinkColor(_host, Color.FromArgb(0xCC, 0x6E, 0x8B, 0xFF));
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetVisualLinkThickness(_host, 2f);
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetVisualLinkHoverColor(_host, Color.White);
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetVisualLinkHoverThickness(_host, 3.5f);
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetVisualLinkVirtualColor(_host, Color.FromArgb(0xCC, 0x6E, 0x8B, 0xFF));
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetVisualLinkGlow(_host, true);
-    }
 
     private void WireShell()
     {
@@ -298,7 +278,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
 
         if (!output)
         {
-            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(_host);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(WorkflowSurface);
         }
 
         UpdateActivityMarkers();
@@ -353,8 +333,8 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
         AgentPage.SetSession(_demo);
         McpPage.SetHelper(_demo.Tree.GetHelper() as AgentHelper);
 
-        WorkflowBehaviors.WorkflowSurfaceBehavior.SetWorkflowTree(_host, _demo.Tree);
-        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(_host);
+        WorkflowSurface.DataContext = _demo.Tree;
+        WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(WorkflowSurface);
         AttachSurfaceInput(_demo.Tree);
 
         UpdateWorkbenchStatus();
@@ -368,7 +348,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
         }
 
         _surfaceRefresh ??= new CoalescedRefresh(
-            () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(_host),
+            () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(WorkflowSurface),
             action => _host.BeginInvoke(action));
 
         helper.SelectionHandler = ShowSelectionDialogAsync;
@@ -564,7 +544,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
 
     private void UpdateZoom()
     {
-        var scale = WorkflowBehaviors.WorkflowSurfaceBehavior.GetZoom(_host);
+        var scale = WorkflowBehaviors.WorkflowSurfaceBehavior.GetZoom(WorkflowSurface);
         if (scale <= 0d)
         {
             scale = 1d;
@@ -701,7 +681,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
     private bool ShowNodeLayoutMenu(Wf.INodeComponent node, Wf.Anchor position)
     {
         var surfacePoint = WorkflowBehaviors.WorkflowSurfaceBehavior.WorldToSurface(
-            _host,
+            WorkflowSurface,
             new PointF((float)position.Horizontal, (float)position.Vertical));
 
         var hit = _host.FindElementAt(surfacePoint);
@@ -808,7 +788,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
         {
             var result = WorkflowLayoutDemo.Arrange(node, traversal, _nodeLayoutTolerance);
             StatusBar.HintLabel.Text = WorkflowLayoutDemo.Describe(result, $"从 {node.GetType().Name}");
-            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(_host);
+            WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(WorkflowSurface);
         }
         catch (Exception ex)
         {

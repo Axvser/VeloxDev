@@ -18,9 +18,11 @@ public sealed class SurfaceContractTests
         return type!;
     }
 
+    // Overloads are expected (the camera APIs have both a host and a visual-root form), so name lookup must not
+    // use GetMethod, which throws AmbiguousMatchException when a name has more than one overload.
     private static void RequireMethod(Type owner, string method)
-        => Assert.IsNotNull(
-            owner.GetMethod(method, BindingFlags.Public | BindingFlags.Static),
+        => Assert.IsTrue(
+            owner.GetMethods(BindingFlags.Public | BindingFlags.Static).Any(candidate => candidate.Name == method),
             $"missing public API: {owner.Name}.{method}");
 
     [TestMethod]
@@ -63,7 +65,6 @@ public sealed class SurfaceContractTests
                      "GetMinimapOverlayName", "SetMinimapOverlayName",
                      "GetSurfaceName", "SetSurfaceName",
                      "GetVisualTemplateSelector", "SetVisualTemplateSelector",
-                     "GetWorkflowTree", "SetWorkflowTree",
                      "GetZoom", "GetPan", "SetPan",
                      "SurfaceToWorld", "WorldToSurface",
                      "GetWorldViewport", "SetWorldViewport",

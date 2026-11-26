@@ -31,10 +31,10 @@ internal sealed class TestWorkflowSurface : VisualHost
         RootContainer.Add(SurfaceView);
         Root = RootContainer;
 
-        WorkflowSurfaceBehavior.SetScrollViewerName(this, "PART_ScrollViewer");
-        WorkflowSurfaceBehavior.SetCanvasName(this, "PART_Canvas");
-        WorkflowSurfaceBehavior.SetGridDecoratorName(this, "PART_GridDecorator");
-        WorkflowSurfaceBehavior.SetZoomEnabled(this, true);
+        WorkflowSurfaceBehavior.SetScrollViewerName(SurfaceView, "PART_ScrollViewer");
+        WorkflowSurfaceBehavior.SetCanvasName(SurfaceView, "PART_Canvas");
+        WorkflowSurfaceBehavior.SetGridDecoratorName(SurfaceView, "PART_GridDecorator");
+        WorkflowSurfaceBehavior.SetZoomEnabled(SurfaceView, true);
 
         // The headless selector owns every view: node cards bind their geometry, links bind their endpoints.
         ViewPool.SetTemplateSelector(SurfaceView.Canvas, new TestVisualTemplateSelector());
