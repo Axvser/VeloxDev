@@ -171,17 +171,23 @@ public class ComponentContextDiscoveryTests
 
     /// <summary>The requested language is honoured, and a member annotated in one language only falls back.</summary>
     /// <remarks>
-    /// <c>Anchor</c> carries both languages, so it answers each request with its own text. <c>PayloadHolderNode</c>
-    /// carries English only, so the Chinese request has to fall back rather than render an empty description —
-    /// the model reading a Chinese session must not lose a member that only has an English sentence.
+    /// <c>ControllerViewModel</c> carries both languages, so it answers a Chinese request with its own text.
+    /// The framework's <c>Anchor</c> and <c>PayloadHolderNode</c> carry English only, so the Chinese request has
+    /// to fall back rather than render an empty description — the model reading a Chinese session must not lose
+    /// a description that only exists in English.
     /// </remarks>
     [TestMethod]
     public void GetComponentContext_FollowsTheRequestedLanguage()
     {
-        var chinese = Context(typeof(Anchor).FullName!, "Chinese");
-        StringAssert.Contains(chinese, "用于在工作流系统中描述组件的空间位置");
-        Assert.IsFalse(chinese.Contains("Used to describe the spatial position"),
+        var chinese = Context(typeof(ControllerViewModel).FullName!, "Chinese");
+        StringAssert.Contains(chinese, "派生的Node组件之一");
+        Assert.IsFalse(chinese.Contains("A derived Node component that acts"),
             "an exact-language match is used outright, never mixed with the other language");
+
+        var frameworkFallback = Context(typeof(Anchor).FullName!, "Chinese");
+        StringAssert.Contains(frameworkFallback, "Used to describe the spatial position",
+            "an English-only framework description still answers a Chinese request");
+        Assert.IsFalse(frameworkFallback.Contains("用于在工作流系统中描述组件的空间位置"));
 
         var english = Context(typeof(PayloadHolderNode).FullName!, "English");
         var fallback = Context(typeof(PayloadHolderNode).FullName!, "Chinese");

@@ -409,6 +409,8 @@ Customer/                           ← 每个消费者程序集一个分片（�
 
 资源是**每个程序集各自**的：生成器只遍历当前编译，别家的类型解析不到。`VeloxDev.Core.Generator.targets`、`Src/Directory.Build.targets`、`Examples/Directory.Build.targets` 按 `**/*.agentcontext.xml` 收成 `AdditionalFiles`；同一路径被加两次时 `AIContextXml.Parse` 去重。框架自己的说明在 `Assets/VeloxDev.Core.agentcontext.xml`，由 `VeloxDev.Core.csproj` 显式收 —— `Assets` 在项目目录外，约定 glob 覆盖不到。
 
+该文件只写 `English`：框架说明不分语言，中文请求由 `AgentTextSelection.Select` 整体回退到英文。资源不重写继承关系已经表达过的说明 —— 类的继承成员由 `AIContextDirectory.MembersAcross` 沿基类链合并，接口的基契约由每个渲染块里的 `Base Interfaces` 列出；四个 `*DefaultViewModel` 在资源里没有条目，`TaskContext` 只留类型说明、不重写 `Data`/`Sender`/`Receiver`。
+
 ## 八、Agent 节点选中：动态提示词，不是新工具
 
 `VeloxDev.Core.Extension` 的 `Agent/Workflow/WorkflowAgentSelectionExtensions.cs` 把宿主选中的节点作为**每轮动态提示词**的一部分交给模型：
