@@ -17,11 +17,11 @@ That is the whole wiring: the skill context provider contributes the corpus *and
 | `UnloadSkill` | switches a skill off without unloading or rediscovering |
 | `read_skill_resource` | reads one resource under the skill's `references/` tree |
 
-⚙ **They are classified as query tools for the budget wherever they come from** — contributed by the provider, they are charged to `MaxReadToolCalls` and never mark the tree dirty, because switching a skill changes what the model is shown and never the graph. The classification is taken from `SkillAgentToolkit.ToolNames`, so it holds whether the provider or a host registered them. For **permissions**, they carry the default `AgentActionCategory.Execute`, so `Plan` denies them and `AutoEdit` asks. The budget and the permission gate read different things.
+⚙ **They are classified as query tools for the budget wherever they come from** — contributed by the provider, they are charged to `MaxReadToolCalls`, never the write budget. Dirty marking is unconditional, so they mark the tree like every other call even though switching a skill changes what the model is shown, not the graph. The classification is taken from `SkillAgentToolkit.ToolNames`, so it holds whether the provider or a host registered them. For **permissions**, they carry the default `AgentActionCategory.Execute`, so `Plan` denies them and `AutoEdit` asks. The budget and the permission gate read different things.
 
 ## The provider
 
-A skill provider's render is keyed on the scope's version *and* its prompt language. `scope.WithPromptLanguage(...)` reaches `SkillScope` for a language change to take effect; a standalone host sets it with `SkillScope.WithPromptLanguage`.
+A skill provider's render is keyed on the scope's version *and* its prompt language. `scope.WithPromptLanguage(...)` reaches `SkillScope` for a language change to take effect; the shipped corpus is English only, so the language key changes the cache identity, not the text. A standalone host sets it with `SkillScope.WithPromptLanguage`.
 
 A standalone skill host needs no workflow tree:
 

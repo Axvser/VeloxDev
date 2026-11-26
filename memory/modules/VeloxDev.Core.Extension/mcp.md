@@ -9,7 +9,7 @@
 
 `AddMcpServer` 与 `SetMcpServerArguments` **永远注册**，能不能跑由
 [`AgentPermissionMode`](architecture.md) 的 `Curate` 那一格（`Auto`/`AutoEdit`/`Manual` 下先问，`Bypass` 下不问）加宿主的规则决定，
-**拒绝文案点名模式或规则**。`McpAgentToolkit.CategoryOf` 把两个读工具归 `Read`、其余归 `Curate`。
+**拒绝文案点名模式或规则**。`McpAgentToolkit.CategoryOf` 把 `ReadToolNames` 里的读工具归 `Read`、其余归 `Curate`。
 
 **提问只发生一次。** 组合进工作流 scope 时由包装器问（`WorkflowAgentScope.WithMcps` 把策略接到 `McpScope.PermissionCheck`）；
 **独立使用 `McpScope` 时没有包装器**，所以两个写工具自己问（`McpScope.IsComposed == false` 时）——
@@ -168,7 +168,7 @@ Agent 拿到的从来不是 `McpClientTool`，而是 scope 自己的 `McpToolPro
    「每个非视图 scope 都注册」的进 `ToolNames`；`AddMcpServer` / `SetMcpServerArguments` 也永远注册，名字同样放进 `ToolNames`。把名字写死在 `CreateTools` 里而不进 `ToolNames` 会让
    `McpAgentContextProviderTests.BuildContext_ContributesTheManagementToolsAndTheirDescription` 当场红（它会红是对的：
    那条断言就是 `ToolNames` 的定义）。
-3. **如果它该算只读**：把名字加进 `McpAgentToolkit.ReadToolNames`。`WorkflowAgentToolkit.BuildQueryToolNames` 会自动并入这一组（**不是**并入 `ToolNames` —— 那里面还有会装软件、拆连接的写工具）。漏了这一步就会被计入写入预算并标脏。
+3. **如果它该算只读**：把名字加进 `McpAgentToolkit.ReadToolNames`。`WorkflowAgentToolkit.BuildQueryToolNames` 会自动并入这一组（**不是**并入 `ToolNames` —— 那里面还有会装软件、拆连接的写工具）。漏了这一步就会被计入写入预算。
 4. 若它的行为受权限模式影响，同步改 `BuildPromptContext()` 的措辞 —— 现在这段文本刻意与模式无关，拒绝文案由权限层给出。
 5. 读资源的工具要自己封顶：结果里放 `truncated` / `originalLength`，二进制只报大小 —— 全局的 `MaxToolResultChars` 是最后一道闸，它把整个结果换成一句提示，模型就此什么都拿不到。
 

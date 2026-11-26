@@ -47,7 +47,7 @@
 2. **同名归属**：第一个声明某名字的 source 拥有它；**同一个 source 的多个同名描述符全部保留**（`Refresh` 里同名归属那段）—— 那是同一个技能的多条描述符。
 3. `Apply(found, owners)` 重建状态，同时**按名字保留启用标志**。
 
-`SkillScope.SetEnabled` 三个非显然细节：
+`SkillScope.SetEnabled` 的非显然细节：
 
 - **查找发生在编组块内部**（`SetEnabled` 的 `RunOnUI` 块），因为 `Find` 走的是绑定集合 —— 宿主从后台线程切开关时不能在那里读它。
 - 名字不存在 ⇒ 返回 `false`，**并且不会凭空加一条**。
@@ -110,10 +110,10 @@
 | 在 `SetEnabled` 之外直接改 `Status.Skills[i].IsEnabled` | `Version` 不自增 ⇒ provider 不重渲染。注意 `SkillMemberViewModel`（Dashboard）就是**故意**不直写这个属性的，见 `dashboard.md` |
 | 用 `ConfigureAwait(false)` / 线程池线程切开关 | `Find` 读的是 `ObservableCollection`；`SetEnabled` 的查找被刻意放在编组块里（`SetEnabled` 的 `RunOnUI` 块） |
 | 让 provider **无条件**贡献 `BuildEmbeddedBlock` | 骨架已经带过语料时（宿主先取骨架后 `WithSkills`）每篇技能文档进两遍。要按 `embeddedCorpusDelivered` 分叉到 `BuildWithdrawnBlock` —— 见 §一末 |
-| 改 `SkillAgentToolkit.ToolNames` 之外另起一套技能工具名 | 那些名字不会被 `BuildQueryToolNames` 收进去 ⇒ 计成写操作、还可能触发标脏 |
+| 改 `SkillAgentToolkit.ToolNames` 之外另起一套技能工具名 | 那些名字不会被 `BuildQueryToolNames` 收进去 ⇒ 计成写操作 |
 
 ---
 
 ## 七、死面
 
-本目录**没有零调用者的成员**。需要留意的是 `Agent/Skills/` 与 `Agent/Workflow/Functions/` 共享的一个约定：`WorkflowAgentToolkit.BuildQueryToolNames` 是**唯一**把 `SkillAgentToolkit.ToolNames` 接进来的地方（`WorkflowAgentToolkit.BuildQueryToolNames` 里并入技能工具名的那段），它排在字面量集合之后 —— 重名时字面量赢，但两边目前无重名。
+本目录**没有零调用者的成员**。需要留意的是 `Agent/Skills/` 与 `Agent/Workflow/Functions/` 共享的一个约定：`WorkflowAgentToolkit.BuildQueryToolNames` 是把 `SkillAgentToolkit.ToolNames` 接进只读集合的唯一一处（`WorkflowAgentToolkit.BuildQueryToolNames` 里并入技能工具名的那段），它排在字面量集合之后 —— 重名时字面量赢；`SubAgentScope.TrySpawn` 也直接读 `SkillAgentToolkit.ToolNames` 建关停名单（见 `sub-agents.md` §3.1）。

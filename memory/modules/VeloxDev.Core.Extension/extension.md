@@ -128,7 +128,7 @@
 |---|---|
 | `WorkflowAgentToolkit.CreateAllTools` 的 `Add(类别, …)` | 不登记 ⇒ 工具不存在 |
 | `WorkflowToolCategory` | 类别只影响切片；新增类别要确认 `All` 覆盖到它 |
-| `WorkflowAgentToolkit.BuildQueryToolNames` | 决定读/写预算与标脏 |
+| `WorkflowAgentToolkit.BuildQueryToolNames` | 决定读/写预算分档 |
 | `SkillAgentToolkit.ToolNames`（若属于技能） | 会自动并入只读集合 |
 | `SubAgentAgentToolkit.ToolNames`（子代理的那组） | 同样自动并入（`BuildQueryToolNames` 里并入子代理工具名的循环）—— 改名字要改这一处，别另起一份清单 |
 | `McpAgentToolkit.ReadToolNames`（MCP 的只读那几个） | 也自动并入；**不要**并入 `ToolNames`，那里面还有 `Load` / `Add` 这类写工具 |

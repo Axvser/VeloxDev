@@ -122,7 +122,7 @@ Management tools — ten, all registered on a normal scope: `ListMcpServers`, `L
 
 ⚙ The management tools are `Curate` — except the six in `McpAgentToolkit.ReadToolNames` (`ListMcpServers`, `DescribeMcpServer`, and the resource/prompt reads), which are `Read`, with a source of `mcp:management`.
 
-⚙ **The session's permission mode decides, and on a normal scope all ten management tools are always registered.** `LoadMcpServers`, `UnloadMcpServer`, `AddMcpServer` and `SetMcpServerArguments` are `Curate`: `Auto` asks for them, `Manual` and `AutoEdit` ask too, `Plan` refuses them, and `Bypass` runs them unless a `Deny` rule matches. A refusal names the mode or the rule. A **standalone** `McpScope` has no wrapper around its tools. Only `AddMcpServer` and `SetMcpServerArguments` ask for themselves, through `WithConfirmationHandler`; with no handler an unanswerable prompt denies. `LoadMcpServers` and `UnloadMcpServer` have no gate of their own, so a standalone host gates those two itself.
+⚙ **The session's permission mode decides, and on a normal scope all ten management tools are always registered.** `LoadMcpServers`, `UnloadMcpServer`, `AddMcpServer` and `SetMcpServerArguments` are `Curate`: `Auto` asks for them, `Manual` and `AutoEdit` ask too, `Plan` refuses them, and `Bypass` runs them unless a `Deny` rule matches. A refusal names the mode or the rule. A **standalone** `McpScope` has no permission policy: its provider wraps the tools for the synchronization context only. Only `AddMcpServer` and `SetMcpServerArguments` ask for themselves, through `WithConfirmationHandler`; with no handler an unanswerable prompt denies. `LoadMcpServers` and `UnloadMcpServer` have no gate of their own, so a standalone host gates those two itself.
 
 ## Adding and reconfiguring at runtime
 
@@ -140,11 +140,9 @@ Management tools — ten, all registered on a normal scope: `ListMcpServers`, `L
 
 ## Prompting
 
-`ProvideProgressiveContextPrompt(language)` builds the system prompt from the shipped English resources under `Resources/Workflow/en/`.
+`ProvideProgressiveContextPrompt(language)` builds the system prompt from the shipped English resources under `Resources/Workflow/en/`. The corpus is English only; the language argument changes no text.
 
-⚙ **Language selection maps `Chinese → "zh"` and everything else to `"en"`, with a per-file fallback to English.** A partially translated resource set degrades document by document.
-
-⚙ `GetComponentContext(fullTypeName, language)` maps a name containing `Chinese` or `chinese` to Chinese and every other value to English, even though `AgentLanguages` declares many more members than the two the resource set ships (`Chinese` is an alias of `ChineseSimplified`).
+⚙ `GetComponentContext(fullTypeName, language)` maps a name containing `Chinese` or `chinese` to `AgentLanguages.Chinese` and every other value to English, then reads the per-type AgentContext descriptions in that language; `AgentLanguages` declares many more members than that mapping distinguishes.
 
 ⚙ The safety documents are prose injected into the prompt. They change what the model is *told*, not what the code lets it do.
 

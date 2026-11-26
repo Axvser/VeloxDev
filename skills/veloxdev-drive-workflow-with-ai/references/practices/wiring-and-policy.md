@@ -78,11 +78,11 @@ The policy is read per call, so the next call obeys a mid-session change.
 
 ⚙ **Skills and sub-agent tools are query tools for the budget** (their names are read from `SkillAgentToolkit.ToolNames` / `SubAgentAgentToolkit.ToolNames`), and `Execute` for the permission mode. The budget and the permission gate read different things. MCP joins through `McpAgentToolkit.ReadToolNames` — the six reading tools (`List`/`Describe`, resources, prompts) count as queries; `Load`/`Unload`/`Add`/`SetArguments` count as writes.
 
-⚙ **Dirty marking is unconditional.** The toolkit marks the tree dirty after every successful call and after a failure (a failed edit may have changed the graph halfway); queries included. The frame driver coalesces the marks, so there is no performance reason to skip one.
+⚙ **Dirty marking is unconditional.** The toolkit marks the tree dirty after every successful call and after a failure (a failed edit may have changed the graph halfway); queries included. The frame driver coalesces the marks, so there is no performance reason to skip one. `TreeHelper.DirtyRequestCount` against `PassRunCount` / `PassEmptyCount` separates raw marks from real virtualization passes; `ResetVirtualizationMetrics()` clears them.
 
 ⚙ **`ToolCalled` fires after every *successful* wrapped call.** Refused and failed calls do not raise it; they are published on `scope.Pipeline` as `AgentToolCallCompleted` with an `AgentToolOutcome`. Use `ToolCalled` for host-side logging or UI feedback.
 
-⚙ **Every tool call is serialised per tree.** `WorkflowAgentScope.MutationGate` is one lock per tree shared by every scope over it; the wrapper takes it for every category — reads included — because a query that enumerates the live graph while another scope writes is as unsafe as two writers. The single exemption is the sub-agent wait tool, which must not hold the gate while the children it waits for need it. There is still no version check (last write wins at the semantic level).
+⚙ **Every tool call takes the tree's gate.** `ToolPipeline.ToolGate` resolves one readers-writer `ToolGate` per tree, shared by every scope over it: `Shared` reads overlap, `Exclusive` edits and executions run alone, and an arriving writer is not starved by a stream of readers. The single exemption is the sub-agent wait tool, which must not hold the gate while the children it waits for need it. A host that sets only the legacy `MutationGate` gets whole-call exclusion. There is still no version check (last write wins at the semantic level).
 
 ## Custom tools
 
