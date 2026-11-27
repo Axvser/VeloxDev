@@ -4,3 +4,6 @@
 [submodule "Wiki"]
 	path = Wiki
 	url = https://github.com/Axvser/VeloxDev.Docs.git
+[submodule "Scribalix"]
+	path = Scribalix
+	url = https://github.com/Axvser/Scribalix.git

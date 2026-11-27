@@ -17,7 +17,7 @@
 
 ## 子模块与并行改动
 
-本仓库有两个 submodule：`Easel/`（Easel XAML 运行时，<https://github.com/Axvser/Easel>）与 `Wiki/`（文档站，<https://github.com/Axvser/VeloxDev.Docs>）。**本文件与 `memory/` 的全部要求同样适用于子模块**：子模块的改动先在各自仓库提交，再更新父仓库指针。
+本仓库有三个 submodule：`Easel/`（Easel XAML 运行时，<https://github.com/Axvser/Easel>）、`Wiki/`（文档站，<https://github.com/Axvser/VeloxDev.Docs>）与 `Scribalix/`（Studio 的生成服务与 Node Studio 客户端，<https://github.com/Axvser/Scribalix>）。**本文件与 `memory/` 的全部要求同样适用于子模块**：子模块的改动先在各自仓库提交，再更新父仓库指针。
 
 **代码修改一律走差分模式**：在仓库外的差分副本里改，主工作树只在合并时持 `main` 锁写入。多个会话/子代理用 `DevTools/repo_lock.py` 按模块加锁；开始任务、派发子代理、合并、运行 `dotnet new` 安装/卸载或 NuGet 发布之前，读[差分模式与跨会话锁](memory/specifications/parallel-workflow-specifications.md)。
 
