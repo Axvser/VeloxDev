@@ -17,9 +17,9 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Avalonia.Headless" Version="11.1.0" />
-		<PackageReference Include="Avalonia.Desktop" Version="11.1.0" />
-		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.0" />
+		<PackageReference Include="Avalonia.Headless" Version="11.3.23" />
+		<PackageReference Include="Avalonia.Desktop" Version="11.3.23" />
+		<PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.23" />
 		<PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
 		<!-- Jalium 适配器只引用平台中立的 Controls 包；有头宿主还需要 Windows 入口（AppBuilder / 窗口循环）。 -->
 		<PackageReference Include="Jalium.UI.Desktop" Version="26.10.9" />
