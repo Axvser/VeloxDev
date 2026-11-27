@@ -14,6 +14,13 @@
 3. 同步四处注册：`Easel/Examples/IndustrialWorkbench/Demo/Controls/<Name>.cs`、`Easel/Examples/IndustrialWorkbench/Demo/Views/Controls/<Name>View.xaml(.cs)`、`Easel/Examples/IndustrialWorkbench/Demo/ViewModels/ControlCatalog.cs` 的条目、`Easel/Examples/IndustrialWorkbench/Demo/Views/OverviewView.xaml` 的控件墙（若首页要展示）。
 4. 可交互控件把值写回 ViewModel（`Mode=TwoWay` 或 `Toggled` / `Acknowledged` 事件）；写回后仿真才能看到用户输入。
 
+## 新增一个可拆出/回坞的面板
+
+1. 页面持有槽位（`Border`/`Grid`）与面板根；拖出时 `DockSlot.Child = null`，再设 `Window.Content = 面板`（`Window` 是 `VisualForm` 的 XAML 窗口基类）。
+2. 回坞时先 `panel.ParentElement?.RemoveChild(panel)`（窗口的 `VisualBootRoot.Wrap` 包装），再 `window.Content = null`，最后 `DockSlot.Child = panel`。
+3. 新 `Window` 的 `DataContext` 在 `Content` 之前设成页面 VM；`Owner` 指向宿主窗口；卡片 `Dispose` 时关闭窗口。
+4. 拖动阈值在页面里决定，松手后再创建窗口；指针捕获留在原宿主，跨宿主拖动在窗口创建后重新开始。
+
 ## 官方做法 vs 看着能编译的捷径
 
 - 卡片分组与顺序只改 `GalleryTaxonomy` / `CardCatalog`，不在 shell 里排序。
