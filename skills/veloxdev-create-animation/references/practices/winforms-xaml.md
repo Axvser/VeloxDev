@@ -4,7 +4,7 @@ Easel's XAML surface animates itself: the engine ships inside Easel (`Easel.Anim
 `KeyFrameAnimation`, `TriggerActionGroup`, `VisualTransition` and element `Transitions` need no adapter package or
 backend registration. The full guide — timing, markup actions, element transitions, animatable types and
 composition timing — is Easel's:
-[`Easel/skills/easel-build-winforms-xaml-ui/references/animation.md`](../../../../Easel/skills/easel-build-winforms-xaml-ui/references/animation.md).
+[`SubRepos/Easel/skills/easel-build-winforms-xaml-ui/references/animation.md`](../../../../SubRepos/Easel/skills/easel-build-winforms-xaml-ui/references/animation.md).
 
 ## Use Easel's API
 
@@ -23,7 +23,7 @@ Easel.Visuals.VisualTransition.Animate(
 `VisualTransition.Animate` and the trigger actions write frames at `Easel.BindingPriority.Animation` and hold the
 reached value at `Easel.BindingPriority.LocalValue` when they complete or are stopped. An element-level `Transitions`
 entry instead releases the animation layer when it ends, so the trigger/style value shows through; the first style
-application is suppressed. See [the Easel reference](../../../../Easel/skills/easel-build-winforms-xaml-ui/references/animation.md#element-transitions).
+application is suppressed. See [the Easel reference](../../../../SubRepos/Easel/skills/easel-build-winforms-xaml-ui/references/animation.md#element-transitions).
 
 VeloxDev.Core's `Transition<T>` builder does **not** target Easel dependency properties, and `VeloxDev.WinForms`
 carries no Easel animator or bootstrap. Use `VisualTransition` and the trigger actions above instead.

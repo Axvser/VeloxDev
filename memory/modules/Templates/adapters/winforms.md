@@ -86,6 +86,6 @@ tree 资源里 `DataTemplate x:Key="NodeTemplate"` / `LinkTemplate` / `SlotTempl
 | 结论 | 在哪 |
 |---|---|
 | 适配器侧的硬限制、相机、输入、DPI | `memory/modules/WorkflowSystem/adapters/winforms.md` |
-| XAML 运行时、生成器、对象资源、`.xaml.cs` | `Easel/Src/Easel` 与 `Easel/Src/Generators/Easel.Generator` |
+| XAML 运行时、生成器、对象资源、`.xaml.cs` | `SubRepos/Easel/Src/Easel` 与 `SubRepos/Easel/Src/Generators/Easel.Generator`；记忆见 `SubRepos/Easel/memory/modules/Easel/` |
 | 适配器项目结构与三条轴 | `memory/modules/VeloxDev.WinForms/architecture.md` |
 | 「怎么用这套模板搭一个 WinForms 工作流视图」 | `skills/veloxdev-create-workflow/references/practices/gui/winforms.md` 的 `## Item templates` |

@@ -14,7 +14,7 @@ Rules live in memory/specifications/version-management-specifications.md §六.
 
 Usage:
     python DevTools/verify_version_commits.py
-    python DevTools/verify_version_commits.py --repo Easel
+    python DevTools/verify_version_commits.py --repo SubRepos/Easel
     python DevTools/verify_version_commits.py --branch master
     python DevTools/verify_version_commits.py --base origin/master
     python DevTools/verify_version_commits.py --fix

@@ -6,7 +6,7 @@ that view layer to the workflow model.
 
 **For the runtime itself — controls, layout, styles, resources, bindings, themes, visuals, 3D, animation
 contract, diagnostics and pitfalls — read the Easel skill:
-[`Easel/skills/easel-build-winforms-xaml-ui/SKILL.md`](../../../../../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md).**
+[`SubRepos/Easel/skills/easel-build-winforms-xaml-ui/SKILL.md`](../../../../../SubRepos/Easel/skills/easel-build-winforms-xaml-ui/SKILL.md).**
 This page only covers the workflow-specific parts: the surface behavior, node/slot/link templates, `ViewPool`,
 connection previews and the template pack.
 
@@ -232,4 +232,4 @@ dotnet build "Examples/Workflow/WinForms Trimmed/Demo/Demo.csproj"
 
 The template harness proves the seven item templates generate and build, not that they draw; run the Trimmed
 demo for the visual path. For the runtime's own tests and the feature catalogue, use
-`Easel/Src/Test/Unit/Easel.Test` and `Easel/Examples/XamlGallery` as described in the Easel skill.
+`SubRepos/Easel/Src/Test/Unit/Easel.Test` and `SubRepos/Easel/Examples/XamlGallery` as described in the Easel skill.

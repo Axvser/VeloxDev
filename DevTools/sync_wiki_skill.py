@@ -2,10 +2,10 @@
 """
 sync_wiki_skill.py
 
-Regenerate the CloudGlyph wiki-writing skill from the `Wiki` submodule and install
-the assembled copy into this repository's `.claude` directory.
+Regenerate the CloudGlyph wiki-writing skill from the `SubRepos/Wiki/` submodule and
+install the assembled copy into this repository's `.claude` directory.
 
-The Wiki submodule owns the skill modules, the installer and the parity check; this
+The `SubRepos/Wiki/` submodule owns the skill modules, the installer and the parity check; this
 script only fixes the paths for the host repository and adds a check mode.
 
 Usage:
@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SKILLS = REPO_ROOT / "Wiki" / "skills"
+SKILLS = REPO_ROOT / "SubRepos" / "Wiki" / "skills"
 INSTALLER = SKILLS / "claude_install.py"
 GENERATOR = SKILLS / "gen_skill.py"
 PARITY = SKILLS / "check_parity.py"
@@ -86,7 +86,7 @@ def check(lang: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Regenerate the CloudGlyph skill from Wiki/ and install it into .claude/."
+        description="Regenerate the CloudGlyph skill from SubRepos/Wiki/ and install it into .claude/."
     )
     parser.add_argument(
         "--lang",

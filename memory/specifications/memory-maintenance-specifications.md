@@ -25,6 +25,8 @@ memory/
 
 **模块名**：原样沿用 `Src/` 里的目录名或项目名 —— `TransitionSystem`、`WorkflowSystem`、`VeloxDev.WPF`、`VeloxDev.Core.Generator`。这样「模块名 → 代码在哪」是零成本的，不需要任何映射表。
 
+**子仓库记忆**：`SubRepos/<名>/memory/modules/` 由该子仓库自己维护；父仓不复制，只保留 `AGENTS.md` 索引与集成指针。模块名按该仓库的 `Src/` 目录名或项目名取。
+
 **粒度**：以 `Src/Core/VeloxDev.Core/<主题>/` 这一级为准；七家适配器各算一个模块。**不要按文件建模块** —— 那会退化成第二份文件清单。
 
 **不建模块索引**：找模块直接 `ls memory/modules/`。索引文件只会多一处会过期的地方。
@@ -141,12 +143,13 @@ memory/
 5. 新写的坑点带依据了吗？依据是树里的**路径 + 符号/原文引文**，**不是行号，更不是 commit**。行号只作可选辅助，不能当作「已核实」的证据。**行为依据**的数字留了吗？**机械清点**的数字（测试条数/通过数、文件数、接口数、整套耗时）删了吗？复核不到的数字标出来了吗？
 6. 动过的旧记忆，你是**改**了它，还是在下面追加了一段？
 7. 推送前 `python DevTools/verify_pushes.py` 是否以 0 退出，修复是否已 amend / autosquash 进原修改提交？
+8. 子仓库的细节记忆是否留在 `SubRepos/<名>/memory/modules/`，父仓只留指针？
 
 ---
 
 ## 七、推送前校验
 
-每次 `git push` 前运行 `python DevTools/verify_pushes.py`。它按仓库分别检查父仓库与 `Easel/`、`Wiki/` 子模块的 `memory/modules/` 改动，每个仓库以自己当前分支的上游为基线；子模块没有模块记忆时直接通过，子模块 `skills/` 的密度仍人工复核。父仓库的记忆部分逐笔检查未推送提交里的 `memory/modules/` 改动。
+每次 `git push` 前运行 `python DevTools/verify_pushes.py`。它按仓库分别检查父仓库与 `SubRepos/` 下各子仓库的 `memory/modules/` 改动，每个仓库以自己当前分支的上游为基线；子仓库没有模块记忆时直接通过，子仓库 `skills/` 的密度仍人工复核。父仓库的记忆部分逐笔检查未推送提交里的 `memory/modules/` 改动。
 
 **机械检查（退出码 1）**：
 
@@ -155,7 +158,7 @@ memory/
 - 模块索引文件、日期文件名；
 - 明确的历史叙述：`已删除` / `曾经` / `旧版` / `旧实现` / `原先` / `自 20xx…起`；
 - 机械清点：测试条数、通过 / 失败数、文件 / 类型 / 接口计数、测试或构建耗时、TRX / run 号；
-- 反引号里以仓库根（`Src/` / `Examples/` / `memory/` / `skills/` / `Wiki/` 等）开头的路径解析不到；
+- 反引号里以仓库根（`Src/` / `Examples/` / `memory/` / `skills/` / `SubRepos/` 等）开头的路径解析不到；
 - 同一文件里重复标题。
 
 **待复核**（脚本不判错，按 [memory-density-specifications.md](memory-density-specifications.md) §一 判断）：因果词（`因为` / `所以` / `否则`）、历史措辞（`以前` / `不再` / `原来`）、修辞（`真正` / `最重要的`）、未来推测（`将来` / `下次`），`architecture.md` / `pitfalls.md` 里的维护建议，相对路径解析不到或同名文件超过一处，`adapters/` 下七家之外的文件、非 Markdown 文件，同一句话被加进多个记忆文件，同一记忆文件被多笔未推送提交改动，以及模块记忆为空/被删除或 merge 提交带记忆改动。

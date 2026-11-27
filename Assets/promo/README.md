@@ -66,8 +66,8 @@ close.
 Regenerate from the Scribalix working tree:
 
 ```powershell
-cd E:\VisualStudio\Projects\Scribalix
-dotnet run --project tools/veloxdev-promo -- --gif-only --out ..\VeloxDev\Assets\promo
+cd SubRepos\Scribalix
+dotnet run --project tools/veloxdev-promo -- --gif-only --out ..\..\Assets\promo
 ```
 
 Inspect a film:
@@ -94,7 +94,7 @@ through the CLI to confirm it is a real graph:
 
 ```powershell
 veloxdev run --archive Assets\promo\02-viewmodels.json `
-  --assembly ..\Scribalix\src\Scribalix.Graph\bin\Release\net10.0\Scribalix.Graph.dll `
+  --assembly src\Scribalix.Graph\bin\Release\net10.0\Scribalix.Graph.dll `
   --root-type Scribalix.Graph.WorkflowTreeViewModel --start 0
 ```
 

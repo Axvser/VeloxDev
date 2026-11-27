@@ -15,9 +15,18 @@
 
 ---
 
-## 子模块与并行改动
+## 子仓库与并行改动
 
-本仓库有三个 submodule：`Easel/`（Easel XAML 运行时，<https://github.com/Axvser/Easel>）、`Wiki/`（文档站，<https://github.com/Axvser/VeloxDev.Docs>）与 `Scribalix/`（Studio 的生成服务与 Node Studio 客户端，<https://github.com/Axvser/Scribalix>）。**本文件与 `memory/` 的全部要求同样适用于子模块**：子模块的改动先在各自仓库提交，再更新父仓库指针。
+`SubRepos/` 下是四个**独立 git 仓库**。开发统一在 VeloxDev 体内统筹：主仓的规范（`AGENTS.md`、`memory/specifications/`、`skills/` 的密度要求、提交与版本规范）直接适用于 `SubRepos/<名>/` 下的改动，**不向子仓库复制这些规范**；子仓库只维护自己的 `memory/` 与 `skills/`（如有），同样受记忆密度约束。改动在哪个子仓库发生，就在那个仓库提交，父仓库只更新指针。主仓只在下面保留简短索引。
+
+| 子仓库 | 路径 | 上游 | 内容 |
+|---|---|---|---|
+| Easel | [`SubRepos/Easel/`](SubRepos/Easel/) | <https://github.com/Axvser/Easel> | Easel XAML 运行时 |
+| Wiki | [`SubRepos/Wiki/`](SubRepos/Wiki/) | <https://github.com/Axvser/VeloxDev.Docs> | 文档站 |
+| Scribalix | [`SubRepos/Scribalix/`](SubRepos/Scribalix/) | <https://github.com/Axvser/Scribalix> | Studio 的生成服务与 Node Studio 客户端 |
+| AvalonMarkdown | [`SubRepos/AvalonMarkdown/`](SubRepos/AvalonMarkdown/) | <https://github.com/Axvser/AvalonMarkdown> | Avalonia 的 Markdown 预览控件 |
+
+子仓库的模块记忆在 `SubRepos/<名>/memory/modules/`；父仓只保留这张索引与集成指针，不复制细节。
 
 **代码修改一律走差分模式**：在仓库外的差分副本里改，主工作树只在合并时持 `main` 锁写入。多个会话/子代理用 `DevTools/repo_lock.py` 按模块加锁；开始任务、派发子代理、合并、运行 `dotnet new` 安装/卸载或 NuGet 发布之前，读[差分模式与跨会话锁](memory/specifications/parallel-workflow-specifications.md)。
 
@@ -29,13 +38,13 @@
 |---|---|---|
 | 代码注释风格 | [memory/specifications/code-comment-specifications.md](memory/specifications/code-comment-specifications.md) | 新增、修改或评审 `Src/` 下任何 `.cs` 成员 / 函数体 / `.xaml` `.axaml` `.razor` 标记注释之前 |
 | 提交信息 | [memory/specifications/commit-message-specifications.md](memory/specifications/commit-message-specifications.md) | **每次 `git commit` 之前** —— 首行是 `[类型][模块] 英文标题`，body 是 `[what]`/`[why]`/`[how]` 三段中文；不合规就是不合规，不要凭习惯写 |
-| 模块记忆维护 | [memory/specifications/memory-maintenance-specifications.md](memory/specifications/memory-maintenance-specifications.md) | **每次任务收尾时** —— 把这一轮学到的东西落进对应模块；以及开始任务、需要先理解某个模块之前；**每次 `git push` 之前** —— 运行 `python DevTools/verify_pushes.py`（父仓库与 `Easel/`、`Wiki/` 子模块），记忆部分报错或待复核项不合规时改完并 amend / autosquash 进原修改提交，重跑通过再推送 |
+| 模块记忆维护 | [memory/specifications/memory-maintenance-specifications.md](memory/specifications/memory-maintenance-specifications.md) | **每次任务收尾时** —— 把这一轮学到的东西落进对应模块；以及开始任务、需要先理解某个模块之前；**每次 `git push` 之前** —— 运行 `python DevTools/verify_pushes.py`（父仓库与 `SubRepos/` 下各子仓库），记忆部分报错或待复核项不合规时改完并 amend / autosquash 进原修改提交，重跑通过再推送 |
 | 记忆写作密度 | [memory/specifications/memory-density-specifications.md](memory/specifications/memory-density-specifications.md) | **写或改 `memory/` 下任何文字之前** —— 赘叙类型（因果解释 / 历史叙述 / 副本 / 同义反复 / 说教铺垫 / 修辞强化 / 计数播报 / 跨文件重复 / 过期断言 / 未来推测 / 维护建议）；如无必要，宁缺毋滥 |
 | .NET Item Template | [memory/specifications/item-template-specifications.md](memory/specifications/item-template-specifications.md) | 改动 `Src/Templates/` 下任何文件之前；判断「这处改动该落在模板还是 demo」之前；新增 / 改名 / 删除一个模板项之前 |
 | 功能落层（Core / 适配器 / 模板 / demo） | [memory/specifications/layer-ownership-specifications.md](memory/specifications/layer-ownership-specifications.md) | 判断一段连线或视图的功能该落在 Core / 适配器 / item template / demo 哪一层之前；给连线做**外观**（高亮、选中、主题、流光）之前 |
 | 输入家族类型的别名 | [memory/specifications/input-alias-specifications.md](memory/specifications/input-alias-specifications.md) | 在 `Src/Adapters/`、`Src/Templates/`、`Examples/` 下写出输入家族那 15 个类型（`IInputEvents` / `InputRelay` / `InputKey` / `InputModifiers` / `MouseButton` / `Pointer*EventArgs` / `Key*EventArgs`，清单见手册 §二）中的**任何一个**之前 |
-| 差分模式与跨会话锁 | [memory/specifications/parallel-workflow-specifications.md](memory/specifications/parallel-workflow-specifications.md) | 修改 `Src/`、`Src/Templates/`、`Examples/` 或子模块代码之前；创建差分副本、合并回主树、提交子模块指针之前；派发子代理之前；运行 `dotnet new` 安装/卸载、NuGet 发布或其它机器级写操作之前 |
-| 版本管理 | [memory/specifications/version-management-specifications.md](memory/specifications/version-management-specifications.md) | **决定或提交一个新版本号时** —— 改任何包 csproj 的 `<Version>` 之前；判断这一轮改动该提 `x1` / `x2` / `x3` 哪一位之前；判断 Core / 生成器提升时哪些包必须同步、模板要不要动之前；**提交版本号变更之前**（必须独立成一笔、首行用 `[version][repo]`，body 列出包名 / 原版本 / 提升后的版本 / 修改简述）；**每次 `git push` 之前** —— 运行 `python DevTools/verify_pushes.py`（父仓库与 `Easel/`、`Wiki/` 子模块），发现版本改动未用 `[version]`、版本提交混入非 csproj 文件或不在待推送范围最后一笔时，先 `--fix` 或 rebase 修正再推送。破坏性提 `x1`、功能增量提 `x2`、优化修复提 `x3`（一轮命中多位时只取最高一档、低位归零）；7 个适配器与 CLI 独立：`x1` 跟 Core，`x2` 只看自身功能；适配器 `x3` 只算适配层自己的非破坏性变更（Core / Extension 依赖版本变化不算），CLI 的 `x3` 还包括 Core / Extension 依赖版本变更。**为适配更高 Core 而发版时，适配器与 CLI 的 `x1` / `x2` 对齐 Core** |
+| 差分模式与跨会话锁 | [memory/specifications/parallel-workflow-specifications.md](memory/specifications/parallel-workflow-specifications.md) | 修改 `Src/`、`Src/Templates/`、`Examples/` 或 `SubRepos/` 下子仓库代码之前；创建差分副本、合并回主树、提交子仓库指针之前；派发子代理之前；运行 `dotnet new` 安装/卸载、NuGet 发布或其它机器级写操作之前 |
+| 版本管理 | [memory/specifications/version-management-specifications.md](memory/specifications/version-management-specifications.md) | **决定或提交一个新版本号时** —— 改任何包 csproj 的 `<Version>` 之前；判断这一轮改动该提 `x1` / `x2` / `x3` 哪一位之前；判断 Core / 生成器提升时哪些包必须同步、模板要不要动之前；**提交版本号变更之前**（必须独立成一笔、首行用 `[version][repo]`，body 列出包名 / 原版本 / 提升后的版本 / 修改简述）；**每次 `git push` 之前** —— 运行 `python DevTools/verify_pushes.py`（父仓库与 `SubRepos/` 下各子仓库），发现版本改动未用 `[version]`、版本提交混入非 csproj 文件或不在待推送范围最后一笔时，先 `--fix` 或 rebase 修正再推送。破坏性提 `x1`、功能增量提 `x2`、优化修复提 `x3`（一轮命中多位时只取最高一档、低位归零）；7 个适配器与 CLI 独立：`x1` 跟 Core，`x2` 只看自身功能；适配器 `x3` 只算适配层自己的非破坏性变更（Core / Extension 依赖版本变化不算），CLI 的 `x3` 还包括 Core / Extension 依赖版本变更。**为适配更高 Core 而发版时，适配器与 CLI 的 `x1` / `x2` 对齐 Core** |
 
 ---
 

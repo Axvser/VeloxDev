@@ -32,9 +32,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!-- Easel is a git submodule at the repository root. Debug builds it from source; Release resolves
+		<!-- Easel is a git submodule under SubRepos/. Debug builds it from source; Release resolves
 		     the published package so the adapter's nuspec carries the real Easel dependency. -->
-		<ProjectReference Include="..\..\..\Easel\Src\Easel\Easel.csproj" Condition="'$(Configuration)' == 'Debug'" />
+		<ProjectReference Include="..\..\..\SubRepos\Easel\Src\Easel\Easel.csproj" Condition="'$(Configuration)' == 'Debug'" />
 		<PackageReference Include="WinForms.Easel" Version="3.0.0" Condition="'$(Configuration)' != 'Debug'" />
 	</ItemGroup>
 

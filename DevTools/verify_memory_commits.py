@@ -25,7 +25,7 @@ and memory/specifications/memory-density-specifications.md §一.
 
 Usage:
     python DevTools/verify_memory_commits.py
-    python DevTools/verify_memory_commits.py --repo Easel
+    python DevTools/verify_memory_commits.py --repo SubRepos/Easel
     python DevTools/verify_memory_commits.py --branch master
     python DevTools/verify_memory_commits.py --base origin/master
 
@@ -54,7 +54,7 @@ REPO_ROOT: Path | None = None
 MODULES_PREFIX = "memory/modules/"
 SPECS_PREFIX = "memory/specifications/"
 PLATFORMS = ("wpf", "avalonia", "winui", "maui", "winforms", "razor", "jalium")
-KNOWN_ROOTS = ("Src/", "Examples/", "memory/", "skills/", "Wiki/", "Assets/", "Docs/")
+KNOWN_ROOTS = ("Src/", "Examples/", "memory/", "skills/", "SubRepos/", "Assets/", "Docs/")
 
 ANCHOR_EXT = re.compile(
     r"\.(?:cs|xaml|axaml|razor|csproj|props|targets|md|json|ya?ml|ps1|py|"

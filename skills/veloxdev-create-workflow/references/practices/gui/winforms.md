@@ -16,7 +16,7 @@ dialogs and status bar are all Easel XAML too.
 The visual XAML runtime is **Easel**, not a WinForms platform XAML. For the full runtime guide — controls,
 layout, resources/styles, bindings, themes, visuals, 3D, animation contract, diagnostics and pitfalls — read:
 
-[`Easel/skills/easel-build-winforms-xaml-ui/SKILL.md`](../../../../../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md)
+[`SubRepos/Easel/skills/easel-build-winforms-xaml-ui/SKILL.md`](../../../../../SubRepos/Easel/skills/easel-build-winforms-xaml-ui/SKILL.md)
 
 The workflow-specific markup (behaviors, node/slot/link parts, `ViewPool`, connection previews) is in
 [winforms-xaml.md](winforms-xaml.md). This page summarizes the workflow surface.

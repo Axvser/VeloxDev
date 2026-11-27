@@ -26,7 +26,7 @@ The adapter package brings `VeloxDev.Core` in transitively, so that one referenc
 If the project's GUI is not in that table, read [references/practices/adapter.md](references/practices/adapter.md) before writing animation code.
 
 ⚙ **WinForms' visual XAML uses Easel's own animation engine, not HWND controls.** The trigger-action, keyframe, composition and interpolation guide is in
-[Easel's animation reference](../../Easel/skills/easel-build-winforms-xaml-ui/references/animation.md). Easel needs no adapter installation or backend registration; VeloxDev.Core's `Transition<T>` is not wired to Easel elements. See [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) for the WinForms-XAML specifics. The rest of this page applies to plain WinForms code and the other six adapters.
+[Easel's animation reference](../../SubRepos/Easel/skills/easel-build-winforms-xaml-ui/references/animation.md). Easel needs no adapter installation or backend registration; VeloxDev.Core's `Transition<T>` is not wired to Easel elements. See [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) for the WinForms-XAML specifics. The rest of this page applies to plain WinForms code and the other six adapters.
 
 `using VeloxDev.TransitionSystem;` covers the everyday API — `Transition<T>`, `TransitionEffect`, `Eases`, `TransitionEffects`, `PathIndex`, the event args and the path exceptions. The support types live one namespace down: `using VeloxDev.TransitionSystem.Abstractions;` is needed when you name `TransitionProperty` (`ReadableMembers` / `Members`), `InterpolatorCore`, or a scheduler / interpreter / host base. Every adapter exposes the same `VeloxDev.TransitionSystem` surface. Six of the seven also declare the generic `Property<TValue>` overload; **Razor offers typed overloads only** (`int`, `string?`, `double`, `float`, `decimal`, the `System.Drawing` structs and the `System.Numerics` types), so generic `Property` code does not compile there unchanged.
 
@@ -86,7 +86,7 @@ Transition<Border>.Create()
 | Pause, resume, seek, set a rate, stop | [references/practices/control-and-samplers.md](references/practices/control-and-samplers.md#controlling-a-running-animation) |
 | Interpolate a custom type | [references/practices/control-and-samplers.md](references/practices/control-and-samplers.md#custom-samplers) |
 | Animate a link's travelling highlight / a flow | [references/practices/flow.md](references/practices/flow.md) |
-| Animate a WinForms visual XAML element (Easel `VisualTransition`, trigger actions or element `Transitions`) | [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) · [Easel contract](../../Easel/skills/easel-build-winforms-xaml-ui/references/animation.md) |
+| Animate a WinForms visual XAML element (Easel `VisualTransition`, trigger actions or element `Transitions`) | [references/practices/winforms-xaml.md](references/practices/winforms-xaml.md) · [Easel contract](../../SubRepos/Easel/skills/easel-build-winforms-xaml-ui/references/animation.md) |
 | Build an adapter for another GUI | [references/practices/adapter.md](references/practices/adapter.md) |
 
 ## Pitfalls

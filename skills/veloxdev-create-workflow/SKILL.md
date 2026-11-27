@@ -59,7 +59,7 @@ An adapter package brings `VeloxDev.Core` in transitively. Versions are delibera
 | Take over the wheel, or scroll the surface from your own handler | [references/practices/view-layer.md](references/practices/view-layer.md#wheel-and-scrolling) |
 | Hear pointer/key input, or resolve the component under the pointer | [references/practices/input.md](references/practices/input.md), [references/practices/view-layer.md](references/practices/view-layer.md#how-the-surface-picks-a-link) |
 | Write or debug the WinForms XAML **workflow surface** (behaviors, parts, `ViewPool`, previews) | [references/practices/gui/winforms-xaml.md](references/practices/gui/winforms-xaml.md) |
-| Write WinForms XAML UI, styles, triggers, resources, themes, visuals or animations | [Easel skill](../../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md) |
+| Write WinForms XAML UI, styles, triggers, resources, themes, visuals or animations | [Easel skill](../../SubRepos/Easel/skills/easel-build-winforms-xaml-ui/SKILL.md) |
 | Support a GUI that has no adapter | [references/practices/new-adapter.md](references/practices/new-adapter.md) |
 | Drive the graph from an LLM | [../veloxdev-drive-workflow-with-ai/SKILL.md](../veloxdev-drive-workflow-with-ai/SKILL.md) |
 
@@ -71,7 +71,7 @@ Open your GUI's reference alongside whichever of the above you are reading — i
 | Avalonia | [references/practices/gui/avalonia.md](references/practices/gui/avalonia.md) |
 | WinUI 3 / Windows App SDK | [references/practices/gui/winui.md](references/practices/gui/winui.md) |
 | .NET MAUI | [references/practices/gui/maui.md](references/practices/gui/maui.md) |
-| Windows Forms | [workflow surface](references/practices/gui/winforms.md) · [Easel XAML skill](../../Easel/skills/easel-build-winforms-xaml-ui/SKILL.md) |
+| Windows Forms | [workflow surface](references/practices/gui/winforms.md) · [Easel XAML skill](../../SubRepos/Easel/skills/easel-build-winforms-xaml-ui/SKILL.md) |
 | Blazor / Razor | [references/practices/gui/razor.md](references/practices/gui/razor.md) |
 | Jalium | [references/practices/gui/jalium.md](references/practices/gui/jalium.md) |
 

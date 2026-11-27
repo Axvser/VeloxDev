@@ -298,7 +298,7 @@ function New-ProbeProject($config, [string] $probeDir) {
 
     switch ($config.ProbeKind) {
         'WinForms' {
-            $xamlGenerator = Join-Path $repoRoot 'Easel\Src\Generators\Easel.Generator\Easel.Generator.csproj'
+            $xamlGenerator = Join-Path $repoRoot 'SubRepos\Easel\Src\Generators\Easel.Generator\Easel.Generator.csproj'
             $project = @"
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>

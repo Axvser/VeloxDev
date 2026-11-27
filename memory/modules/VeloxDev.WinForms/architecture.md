@@ -1,7 +1,8 @@
 ﻿# VeloxDev.WinForms — 架构
 
-> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`WorkflowEvents`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32 样式 + 小地图滚动契约）、视觉 XAML 运行时在 Easel 子模块（`Easel/Src/Easel/`）。
-> 包版本见 csproj；生成器独立在 `Easel/Src/Generators/Easel.Generator/`。
+> 代码：`Src/Adapters/VeloxDev.WinForms/` —— `WorkflowSystem/AttachedBehaviors/`（`WorkflowSurfaceBehavior`、通用视觉 `ViewPool`、`WorkflowMinimapOverlay`、`WorkflowEvents`、三个视图附着行为）、`WorkflowSystem/ViewHosting/`（Core 视图管线的 WinForms 闭包）、`WorkflowSystem/Platform/`（Win32 样式 + 小地图滚动契约）、视觉 XAML 运行时在 Easel 子模块（`SubRepos/Easel/Src/Easel/`）。
+> 包版本见 csproj；生成器独立在 `SubRepos/Easel/Src/Generators/Easel.Generator/`。
+> Easel 运行时与示例的记忆在 `SubRepos/Easel/memory/modules/Easel/` 与 `SubRepos/Easel/memory/modules/Examples/`；本文只保留集成指针，不复制 Easel 内部细节。
 > **单一 XAML 后端**：控件是 `Easel.Visuals.Controls` 下的 `VisualElement`，`VisualHost` 是唯一 HWND；工作流表面是 `VisualHost` 上的附着行为。每个可见 item 由 `ViewPool` 经 Core 池物化为一个视觉元素，没有第二个 HWND。`Easel.Controls` 只留共享原语。
 >
 > **本模块没有 `adapters/` 子目录，也不该有**：模块名本身就是一个平台。它在三条轴上的平台差异分别落在
@@ -67,8 +68,12 @@
 | `Nullable` + `ImplicitUsings` + `LangVersion latest` | 同名属性 | 全模块开可空 |
 | `GeneratePackageOnBuild` + `<Version>` | 同名属性 | 与其余六家同；**没有** `GenerateDocumentationFile` |
 | Debug → `ProjectReference`／非 Debug → `PackageReference VeloxDev.Core` | 两个引用项 | 与生成器那套双轨同形 |
-| Debug → `ProjectReference Easel/Src/Easel`／非 Debug → `PackageReference WinForms.Easel` | Easel 引用 | 视觉运行时永远来自 Easel，不随本仓库发布；nuget.org 上 `Easel` 这个 ID 被保留，包名是 `WinForms.Easel` |
+| Debug → `ProjectReference SubRepos/Easel/Src/Easel`／非 Debug → `PackageReference WinForms.Easel` | Easel 引用 | 视觉运行时永远来自 Easel，不随本仓库发布；nuget.org 上 `Easel` 这个 ID 被保留，包名是 `WinForms.Easel` |
 | 四个 TFM 一起编 | — | 新写的 BCL 调用必须在 netframework4.6.1 与 netcoreapp3.0 上都存在 |
+
+**Easel 依赖的发布顺序**：Easel 的 `WinForms.Easel` / `WinForms.Easel.Generator` 先于 `VeloxDev.WinForms`；父仓 `publish.yml` 在打包适配器前等待 Easel 版本在 NuGet 可下载。
+
+**验证**：`dotnet test Src/Test/Headless/VeloxDev.WinForms.Headless.Tests/VeloxDev.WinForms.Headless.Tests.csproj`；`powershell -NoProfile -ExecutionPolicy Bypass -File Src/Test/Harness/verify-workflow-item-templates-all.ps1 -Strict`；构建 `Examples/Workflow/WinForms/Demo/Demo.csproj` 与 `Examples/Workflow/WinForms Trimmed/Demo/Demo.csproj`。`WorkflowSurfaceHeadlessTests` 覆盖相机/命中/缩放与池的物化，`SlotLayoutHeadlessTests` 覆盖槽测量与拖动/连接，`RenderingHeadlessTests` 覆盖无窗口绘制；模板 harness 证明七家生成、构建、drift 0，但不证明绘制。
 
 **别用 `bin/`/`obj/` 目录名推支持的框架**：两个下游 demo 都是 `net10.0-windows`，解析到 `net8.0-windows` 那份资产。旧 TFM 的兼容层在 `Compat.cs`：IsExternalInit、UnconditionalSuppressMessageAttribute、Clamp/IsFinite/TickCount64。
 
@@ -84,8 +89,7 @@
 8. **`Panel.ZIndex` 不是活动排序**：`ViewContainer.Attach` 只在首次挂载时按当前 `Panel.ZIndex` 插位（连线 -1 落在节点前），之后模板改 `Anchor.Layer` 不会重排；`SetZOrder` 是空实现，避免覆盖模板绑定。
 9. **Easel 动画由 Easel 直接驱动**：Easel 自带引擎（`Easel.Animation` 的 internal scheduler/run/interpreter/property/sampler），`VisualTransition` 与触发器动作直接驱动。`VeloxDev.WinForms` 只提供 workflow/MVVM 能力；不存在 `XamlAnimation` 模块、`EaselAnimationBootstrap` 或 `AnimationRuntime.Animator` 注册。
 10. **`SurfaceName` 只选子树，不换宿主**：行为要求视觉根解析得到 `VisualHost`；输入/命中用宿主坐标，相机用表面内坐标，`SurfaceToWorld`/`WorldToSurface` 里的 `SurfaceOrigin` 负责两者之差。自己算坐标必须走这两个 API；名字写错时部件、输入、视口都按整棵根树解析（`WorkflowSurfaceBehavior.EnsureParts` / `SurfaceOrigin`）。
-11. **Easel `Border` 默认 `Padding=12`**：把它当布局容器（外壳侧栏、标题条、列表行）而不显式写 `Padding="0"`，子内容会被挤小或裁掉（`Easel/Src/Easel/Visuals/Controls/CoreControls.cs` 的 `Border()` 构造）。
-12. **`PointFromSurface` 必须从根往叶反解**：先减祖先 `Bounds` / 反祖先 `Transform`，最后才是元素自己。叶到根的顺序会在祖先有偏移时把偏移再缩放一次；嵌入在偏移工作台里的画布一缩放，槽锚点就漂移、连线错位。回归 `PointFromSurface_UndoesAncestorOffsetsBeforeTheChildTransform`（`Easel/Src/Test/Unit/Easel.Test/VisualBackendTests.cs`）。
+11. **Easel 运行时的布局/坐标细节**：见 `SubRepos/Easel/memory/modules/Easel/architecture.md` 与 `SubRepos/Easel/memory/modules/Easel/pitfalls.md`；本文不复制。
 
 ## 六、入口：我要改 X 先打开哪个文件
 
@@ -99,8 +103,8 @@
 | 网格/标尺调色板与间距 | 模板条目 `workflow-grid-decorator/TemplateClass.cs` |
 | item → 视图的选择器 | `Easel.Visuals.VisualTemplateSelector` + 模板派生类 |
 | Win32 样式、100 控件阈值 | `WorkflowSystem/Platform/NativeWindowStyleHelper.cs` |
-| DPI 换算 | `VisualHost.DpiScale`（`Easel/Src/Easel/Visuals/VisualHost.cs`） |
-| 视觉运行时、DP、绑定、样式、模板 | `Easel/Src/Easel/`（`Easel.Visuals`） |
+| DPI 换算 | `VisualHost.DpiScale`（`SubRepos/Easel/Src/Easel/Visuals/VisualHost.cs`） |
+| 视觉运行时、DP、绑定、样式、模板 | `SubRepos/Easel/Src/Easel/`（`Easel.Visuals`）；记忆见 `SubRepos/Easel/memory/modules/Easel/` |
 | 包结构、TFM、双轨引用 | `VeloxDev.WinForms.csproj` |
 
 ## 七、这份文件没写的东西
@@ -110,6 +114,7 @@
 - TransitionSystem 侧 —— `memory/modules/TransitionSystem/adapters/winforms.md`。
 - 模板形状 —— `memory/modules/Templates/adapters/winforms.md`。
 - 人面向的搭建指南 —— `skills/veloxdev-create-workflow/references/practices/gui/winforms.md`。
+- 人面向的 WinForms XAML 指南 —— `skills/veloxdev-create-workflow/references/practices/gui/winforms-xaml.md`；动画 —— `skills/veloxdev-create-animation/references/practices/winforms-xaml.md`；通用 Easel UI 指南 —— `SubRepos/Easel/skills/easel-build-winforms-xaml-ui/SKILL.md`。
 
 ## Demo 工作台外壳（示例侧）
 
