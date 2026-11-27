@@ -4,18 +4,18 @@
 
 ## 一、新增一个视觉控件
 
-1. 在 `Src/Adapters/VeloxDev.WinForms/Xaml/Visuals/Controls/` 新建类，继承 `VisualElement` 或合适的派生基类（单内容继承 `ContentControl`，列表继承 `ItemsControl`）。
+1. 在 `Easel/Src/Easel/Visuals/Controls/` 新建类，继承 `VisualElement` 或合适的派生基类（单内容继承 `ContentControl`，列表继承 `ItemsControl`）。
 2. 布局/绘制属性用 `DependencyProperty.Register`，按需标记 `AffectsMeasure`/`AffectsArrange`/`AffectsRender`；纯配置属性把 `AffectsRender` 设 `false`。
 3. 覆写 `MeasureOverride`/`ArrangeOverride`/`OnRender`；绘制走 GDI+（`VisualText.Draw`），不要用 `TextRenderer`。
 4. 子元素用 `Add`/`Children`；原生控件写 `<native:…>`（`NativeElement`）或在代码里用 `NativeControlHost`。
 5. 生成器无需登记：不带前缀的类型按 `Visuals.Controls` → `Visuals.Controls.Shapes` → `Visuals` → 共享原语反射查找。
-6. 测试放 `Src/Test/Unit/WinFormsXaml/VeloxDev.WinForms.Xaml.Test/`；在 `Examples/XamlGallery` 的卡片条目里出现。
+6. 测试放 `Easel/Src/Test/Unit/Easel.Test/`；在 `Easel/Examples/XamlGallery` 的卡片条目里出现。
 
 联动：`XamlRuntime.ConvertValue`（新字面量类型）、`Theme` 默认值、文档、Gallery。
 
 ## 二、新增一个依赖属性
 
-- 生成器路径：`[XamlProperty(DefaultValue = ...)] public partial T X { get; set; }`。非可空引用类型必须写 `DefaultValue` 或改成可空，否则 `VELOX_XAMLP005`。
+- 生成器路径：`[XamlProperty(DefaultValue = ...)] public partial T X { get; set; }`。非可空引用类型必须写 `DefaultValue` 或改成可空；缺省时报 `EASEL_XAMLP005`。
 - 手写路径：`DependencyProperty.Register(nameof(X), typeof(T), typeof(Owner), new PropertyMetadata(default) { AffectsMeasure/AffectsArrange/AffectsRender = ... })` + CLR 包装，包装里 `GetValue`/`SetValue`。
 - 附加属性：`DependencyProperty.RegisterAttached` + 静态 `GetX`/`SetX`；适配器 owner 在 XAML 里不写前缀（`Grid.Row`），自己的 owner 写 `local:Owner.X`。
 - 视觉属性值存 `IWinformsObject` 的优先级层；写 `SetValue(..., BindingPriority.Animation)` 可让过渡帧不被本地值覆盖。
@@ -33,7 +33,7 @@
 - 新视觉类型继承 `Visual`，实现 `RenderContent`，按需覆写 `HitTestContent`；子项用 `ContainerVisual.Add`。`Bounds` 是父坐标，内容画在 `0..Width/Height`。
 - 效果实现 `VisualEffect`：`Padding` 声明额外空间，`Render` 在源位图上合成；组透明度与效果由 `Visual` 统一走临时位图。
 - 改树后调 `InvalidateVisual()`；命中用 `HitTestVisual(Point)`。
-- **不要**把原生 `Control` 直接塞进 `Children`：它不参与布局且被视觉内容盖住。用 `<native:…>`/`NativeElement` 作矩形岛；原生元素里的视觉内容赋给 `Content`，由嵌套 `VisualHost` 绘制。
+- **不要**把原生 `Control` 直接塞进 `Children`：它不参与布局且被视觉内容盖住。用 `<native:…>`/`NativeElement` 作矩形岛；原生元素里的视觉内容赋给 `Content`，由嵌套 `VisualHost` 绘制。代码里给任意元素挂原生子级用 `element.AddNative(control)`（返回包装元素，`NativeChildren` 负责删除/`Move` 排序）：`Panel` 按自己的布局摆，其它元素铺满 `Padding` 内容区。
 
 ## 五、样式、模板、资源与弹层
 
@@ -54,9 +54,10 @@
 
 | 想做的事 | 官方做法 | 错的捷径 |
 | --- | --- | --- |
-| 用原生控件 | 写 `<native:Foo Margin="8">`（`native` 是内置前缀，不用 xmlns）：布局属性自动路由到包装元素 | 直接 `new Foo()` 塞进 `Children` —— 不参与布局且被盖住 |
+| 用原生控件 | 写 `<native:Foo Margin="8">`（`native` 是内置前缀，不用 xmlns）：布局属性自动路由到包装元素；代码里用 `element.AddNative(control)` | 直接 `new Foo()` 塞进 `Children` —— 不参与布局且被盖住 |
 | 原生容器里放视觉内容 | `<native:GroupBox><StackPanel>…</StackPanel></native:GroupBox>`；多个原生子级自动包纵向 `StackPanel` | 把视觉子级 `Add` 到原生控件 —— 它们仍在主树里，会被 HWND 盖住 |
-| 原生控件的变换/透明 | `IsSnapshot="True"`：位图进视觉管线；有 Form 时 1/255 输入代理保留真实鼠标/键盘/IME（缩放重排、旋转近似） | 期待活体 HWND 接受 `WS_EX_LAYERED`/仿射变换 —— 平台拒绝 |
+| 原生控件的变换/透明 | 元素或祖先出现透明度/非恒等变换/效果/遮罩/3D 时自动转位图（`IsSnapshot="True"` 可强制）；有 Form 时 1/255 输入代理保留真实鼠标/键盘/IME（缩放重排、旋转近似） | 期待活体 HWND 接受 `WS_EX_LAYERED`/仿射变换 —— 平台拒绝 |
+| 原生控件的透明底色 | 托管期间自动换成最近祖先/宿主/主题的实色（`WS_EX_COMPOSITED` 下父窗口补画不可靠），摘下还原 | 让 Label 的 `BackColor=Transparent` 直接透出父窗口 —— 合成开启后变成系统控件色 |
 | 原生控件的圆角/边框 | 快照 + `CornerRadius`：位图按圆角路径裁（抗锯齿），`BorderBrush`/`BorderThickness` 画在内侧 | 期待活体圆角平滑 —— 窗区域只有开/关，原生边框在角上被切断 |
 | 原生属性绑定 | `Text="{Binding Name}"` 走 `NativePropertyBinding.For` 代理 DP；`Mode=TwoWay` 按 INPC→`XxxChanged` 自动回报，两者都没有时控件显式调用 `NativePropertyBinding.NotifyChanged`（不轮询）；`LostFocus` 靠 Enter/Leave 触发逻辑焦点事件 | 把原生 CLR 属性当绑定目标 —— 它不是 DP |
 | 新增会触发重排/重绘的属性 | `DependencyProperty.Register(..., PropertyMetadata { AffectsMeasure/AffectsArrange/AffectsRender = ... })` + CLR 包装 | 写成普通 auto-property —— 改了不失效，停在旧值 |
