@@ -14,9 +14,14 @@ Rules live in memory/specifications/version-management-specifications.md §六.
 
 Usage:
     python DevTools/verify_version_commits.py
+    python DevTools/verify_version_commits.py --repo Easel
     python DevTools/verify_version_commits.py --branch master
     python DevTools/verify_version_commits.py --base origin/master
     python DevTools/verify_version_commits.py --fix
+
+--repo checks another worktree (a submodule) instead of the current one; the
+branch defaults to that repository's current branch. Run verify_pushes.py to
+check the parent and every submodule in one command.
 
 --fix moves one misplaced [version] commit to the tip (rebase --onto, then
 cherry-pick). It refuses when the worktree is dirty, the range contains merge
@@ -288,6 +293,7 @@ def describe_edit(edit: VersionEdit) -> str:
 def print_report(
     base_label: str, branch: str, commits: list[CommitInfo], problems: list[Problem]
 ) -> None:
+    print(f"repo   {REPO_ROOT}")
     print(f"base   {base_label}")
     print(f"branch {branch}")
     print(f"range  {len(commits)} unpushed commit(s)")
@@ -452,9 +458,14 @@ def main() -> int:
         description="Check the unpushed commits for the version-commit rules."
     )
     parser.add_argument(
+        "--repo",
+        default=None,
+        help="repository path to check (default: the current worktree)",
+    )
+    parser.add_argument(
         "--branch",
-        default="master",
-        help="branch whose unpushed commits are checked (default: master)",
+        default=None,
+        help="branch whose unpushed commits are checked (default: the current branch)",
     )
     parser.add_argument(
         "--base",
@@ -468,7 +479,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    REPO_ROOT = discover_root()
+    REPO_ROOT = discover_root() if args.repo is None else Path(args.repo).resolve()
+    if not (REPO_ROOT / ".git").exists():
+        print(f"error: {REPO_ROOT} is not a git worktree", file=sys.stderr)
+        return 2
+
+    if args.branch is None:
+        current = run_git("symbolic-ref", "--short", "HEAD", check=False)
+        branch = current.stdout.strip()
+        if current.returncode != 0 or not branch:
+            print(
+                f"error: {REPO_ROOT} is not on a named branch; pass --branch",
+                file=sys.stderr,
+            )
+            return 2
+        args.branch = branch
 
     exists = run_git(
         "rev-parse", "--verify", f"refs/heads/{args.branch}", check=False

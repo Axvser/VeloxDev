@@ -62,7 +62,7 @@
 - **专用类型**：首行固定 `[version][repo] English subject`。`version` 是包版本号提交的唯一类型；`config` 不用于版本号。
 - **单独成笔**：只放 csproj 的 `<Version>` 变更，以及按 §三.6 必须同步修改的依赖引用版本；不要和代码、测试、模板、文档改动混在同一笔。代码改动先按自己的 `[类型][模块]` 提交。
 - **位于待推送范围的最后一笔**：版本提交之后不能再接任何未推送提交。写完版本提交又要改代码时，先提交新改动，再把版本提交移到顶端；不要带着中间的版本提交推送。
-- **推送前校验**：运行 `python DevTools/verify_version_commits.py`；另按 [模块记忆维护](memory-maintenance-specifications.md) §七 运行记忆门禁。版本脚本以 `master` 的上游（缺省 `origin/master`）为基线检查未推送提交，以下任一情况退出码为 1：改动 `Src/` 包 csproj 的 `<Version>` 却没有 `[version]` 类型；`[version]` 提交没有改 `<Version>`；`[version]` 提交动了 csproj 以外的文件；版本提交不是未推送范围里的最后一笔。修正后再推送。单个版本提交位置不对时，`python DevTools/verify_version_commits.py --fix` 会把它移到顶端（要求工作区干净、范围内无 merge）；未用 `[version]`、混入其他文件或有多个版本提交时，先用 `git rebase -i` 拆分、改类型、重排。
+- **推送前校验**：运行 `python DevTools/verify_pushes.py`；它按仓库分别运行版本门禁与记忆门禁，覆盖父仓库和 `Easel/`、`Wiki/` 子模块，每个仓库以自己当前分支的上游为基线。版本部分以下任一情况退出码为 1：改动 `Src/` 包 csproj 的 `<Version>` 却没有 `[version]` 类型；`[version]` 提交没有改 `<Version>`；`[version]` 提交动了 csproj 以外的文件；版本提交不是该仓库未推送范围里的最后一笔。修正后再推送。单个版本提交位置不对时，`python DevTools/verify_pushes.py --fix` 会把每个仓库里错位的版本提交移到顶端（要求该仓库工作区干净、范围内无 merge）；未用 `[version]`、混入其他文件或有多个版本提交时，先用 `git rebase -i` 拆分、改类型、重排。子模块被重写后先更新父指针，再重跑门禁。
 - 同一轮多个包同步提升时，放在**同一笔版本提交**里，在表格中逐行列出；不要一个包一笔。
 - **提交信息必须列出四个维度**，缺任何一列都不合规：
 
@@ -85,4 +85,4 @@
 - [ ] 四列表（包名 / 原版本 / 提升后的版本 / 修改简述）是否齐全，每行一个包？
 - [ ] 首行是否是 `[version][repo] ...`，且没有把代码/测试/文档混进来？
 - [ ] 这一笔是否是待推送范围里的最后一笔？
-- [ ] 推送前 `python DevTools/verify_version_commits.py` 是否以 0 退出？
+- [ ] 推送前 `python DevTools/verify_pushes.py` 是否以 0 退出？

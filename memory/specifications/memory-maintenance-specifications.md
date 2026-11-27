@@ -140,13 +140,13 @@ memory/
 4. 模块有平台差异轴吗？有的话 `adapters/` 下七家的文件齐吗（缺文件 ≠ 无差异）？契约有没有被重复七遍？
 5. 新写的坑点带依据了吗？依据是树里的**路径 + 符号/原文引文**，**不是行号，更不是 commit**。行号只作可选辅助，不能当作「已核实」的证据。**行为依据**的数字留了吗？**机械清点**的数字（测试条数/通过数、文件数、接口数、整套耗时）删了吗？复核不到的数字标出来了吗？
 6. 动过的旧记忆，你是**改**了它，还是在下面追加了一段？
-7. 推送前 `python DevTools/verify_memory_commits.py` 是否以 0 退出，修复是否已 amend / autosquash 进原修改提交？
+7. 推送前 `python DevTools/verify_pushes.py` 是否以 0 退出，修复是否已 amend / autosquash 进原修改提交？
 
 ---
 
 ## 七、推送前校验
 
-每次 `git push` 前运行 `python DevTools/verify_memory_commits.py`。脚本以 `master` 的上游（缺省 `origin/master`）为基线，逐笔检查未推送提交里的 `memory/modules/` 改动。
+每次 `git push` 前运行 `python DevTools/verify_pushes.py`。它按仓库分别检查父仓库与 `Easel/`、`Wiki/` 子模块的 `memory/modules/` 改动，每个仓库以自己当前分支的上游为基线；子模块没有模块记忆时直接通过，子模块 `skills/` 的密度仍人工复核。父仓库的记忆部分逐笔检查未推送提交里的 `memory/modules/` 改动。
 
 **机械检查（退出码 1）**：
 

@@ -60,7 +60,7 @@ python DevTools/repo_lock.py release --owner <session> --scope main
    - 在 `Easel/` 里 `git apply --check -p2 easel.patch`，通过后 `git apply -p2 easel.patch`，跑 Easel 测试，提交；
    - 更新父仓库的 `Easel` 指针；
    - 父仓库应用补丁，跑 Headless / 模板 harness / demo 构建，提交；
-   - `git push` 仍按版本与记忆门禁检查。
+   - `git push` 仍按版本与记忆门禁检查；门禁脚本 `DevTools/verify_pushes.py` 同时扫描父仓库与 `Easel/`、`Wiki/`。
 4. 释放全部锁。
 
 - 应用前先 `git apply --check`；失败就回副本修，不在主树手改。
