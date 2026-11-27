@@ -152,10 +152,13 @@ def resolve_base(branch: str, explicit: str | None) -> tuple[str, str]:
 
 def is_package_csproj(path: str) -> bool:
     normalized = path.replace("\\", "/")
+    # 子仓库可能把小写 src/ 用作项目根（AvalonMarkdown），与主仓的 Src/ 同等对待；
+    # 否则该仓库的版本提交会被判成「没有改 <Version>」。
+    lowered = normalized.lower()
     return (
-        normalized.startswith("Src/")
-        and not normalized.startswith("Src/Test/")
-        and normalized.endswith(".csproj")
+        (normalized.startswith("Src/") or lowered.startswith("src/"))
+        and not lowered.startswith("src/test/")
+        and lowered.endswith(".csproj")
     )
 
 
