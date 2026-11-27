@@ -12,7 +12,11 @@
 - `ProcessPointerDown/Move/Up` 接收物理客户区像素并在内部 `ToLogical`；合成拖拽坐标要乘 `DpiScale`，直接传 DIP 会点偏。锚点：`Easel/Src/Easel/Visuals/VisualHost.cs` 的 `ProcessPointerDown`、`TearOffView.DragOutForCapture`。
 - `VisualHost.AdoptPointerGesture` 会在屏幕点命中新宿主并补一次 `PointerPressed`；调用前先把目标元素摆到指针下，直接调用会在别的元素上补按下。锚点：`Easel/Src/Easel/Visuals/VisualHost.cs` 的 `AdoptPointerGesture`、`TearOffView.DetachAt`。
 - 不要在宿主自己的 `PointerPressed/Moved/Released` 里 `Dispose` 宿主：回坞发生在浮动窗口的 `PointerReleased` 内，先 `Hide()`，用 `BeginInvoke` 推迟 `Close/Dispose`。锚点：`Easel/Examples/XamlGallery/Demo/Views/Industrial/TearOffView.xaml.cs` 的 `DockBack`。
-- `VirtualizingPanel.InvalidateRealizedWindow` 必须先把当前窗口按 `_firstRealizedIndex` 退池，再置 `-1`；只置 `-1` 会让 `RecycleItem` 收到的索引与元素实际显示项不一致。锚点：`Easel/Src/Easel/Visuals/Controls/VirtualizingPanel.cs` 的 `InvalidateRealizedWindow`。
-- `VirtualizingPanel` 的 `CanContentScroll` 分支要把 `_ownVerticalOffset` / `_ownHorizontalOffset` 夹到 `TotalExtent - viewport`；数据源缩短后偏移越界会得到 `first == last == count`，窗口全空。锚点：同文件的 `ResolveViewport`。
+- `VirtualizingPanel` 是 abstract 引擎，不能直接 `new`；一维用 `VirtualizingStackPanel` / `VirtualizingListBox`，二维用 `VirtualizingWrapPanel` / `VirtualizingUniformGrid`，只有新排布语义才继承。
+- 基类 `RebuildItems` 先清空 `Items` 再调 `RealizeItems`，但 `_realized` 仍指向旧视觉；`RealizeItems` 必须把残余 map 项按索引 `RecycleItem` 入池并清空 `_realized`/`_orders`；残余 map 不清理会让换源继续显示旧项、换工厂/模板永不释放旧视觉。锚点：`Easel/Src/Easel/Visuals/Controls/VirtualizingPanel.cs` 的 `RealizeItems`。
+- `RecycleItem` 默认 `ClearValue(DataContextProperty)`；池里的视觉不得持有旧 item，重绑由 `BindRecycledItem` 写回。锚点：同文件 `RecycleItem`/`BindRecycledItem`。
+- 逻辑滚动（`CanContentScroll`）下 `_ownVerticalOffset` / `_ownHorizontalOffset` 要夹到 `TotalExtent - viewport`；数据源缩短后偏移越界会得到空窗口。锚点：同文件 `ResolveViewport`、`VirtualizingStackPanel.BuildLayout`。
+- `VirtualizationSpatialIndex.Query` 返回的是**格级候选**，同格但不重叠的矩形也会返回；需要精确相交时再按 bounds 过滤。锚点：`VirtualizationSpatialIndex`、`VirtualizationSpatialIndexTests`。
+- `VirtualizingStackPanel` 的 `ItemExtent` 是固定步长，不支持逐行可变高度；`VirtualizingWrapPanel`/`VirtualizingUniformGrid` 的列数/行数随可用宽变化，窗口要按行带重新算，不能缓存旧列数。锚点：三个布局类与对应 tests。
 - `VisualElement.Resources` 的索引器只查自己的字典，不查合并字典；主题键（如 `Raised`）要从 `Theme.Current` 或元素属性取，自定义键（如 `SignalWash`）才放本地。锚点：`Easel/Src/Easel/ResourceDictionary.cs` 的索引器、`TearOffView.UpdateDockHint`。
 - 150% DPI 下 Gallery 预览的默认三栏宽度装不下 540 DIP 卡片，截图会裁掉右侧；验证整页用 `--preview-only`，不要据普通截图判断控件尺寸。

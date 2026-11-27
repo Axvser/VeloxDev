@@ -27,11 +27,13 @@
 2. 新 Easel 视觉内容放原生容器的 `Content`（如 `native:GroupBox` 里的 StackPanel/ProgressBar）；原生事件只写数据源/DataContext，视觉绑定照常刷新。
 3. `IsSnapshot` 只用于确实需要 opacity/transform/clip 的原生岛，不作为 Gallery 演示；Gallery 的 Native 组保持 5 个真实场景。`ScrollViewer` 会自动重摆活体岛；自定义平移/相机宿主在移动内容后调用 `Surface.RefreshNativePlacements()`。
 
-## 自定义 VirtualizingPanel
+## 新增一个虚拟化布局
 
-1. 继承 `VirtualizingPanel`，override `RealizeItem` / `RecycleItem` / `BindRecycledItem`；固定 `ItemExtent`，外层用像素滚动 `ScrollViewer` 或 `CanContentScroll` 逻辑滚动。
-2. `InvalidateRealizedWindow` 在置 `FirstRealizedIndex = -1` 前先把当前窗口按真实索引退池；`CanContentScroll` 分支的 `_own*Offset` 夹到 `TotalExtent - viewport`。两处不变量见 `pitfalls.md`。
-3. 自定义子类可把选中状态放在行模型上，回收重绑后立即恢复；指标读取放在 `ArrangeOverride` 后，避免 `ScrollChanged` 早于 Arrange 的滞后。
+1. **先直接选 concrete**：一维固定步长用 `VirtualizingStackPanel`（`ItemExtent`/`Orientation`/`Spacing`），可选用 `VirtualizingListBox`；二维用 `VirtualizingWrapPanel` / `VirtualizingUniformGrid`。只有新排布语义才继承 abstract `VirtualizingPanel`。
+2. 继承时实现 `MeasureLayout(availableSize)` 与 `BuildLayout(VirtualizationLayoutRequest)`，返回 `VirtualizationLayoutContext`：`Items` 是 visible + overscan 的 `VirtualizationItemLayout`（文档坐标、row-major/自定义 `Order`），`Extent` 是完整尺寸，`OffsetX/Y` 是当前偏移。`ArrangeItem` 默认按 bounds 摆；own-scroll 时基类减 offset。
+3. 1D 固定 extent 用除法算可见区间（O(1)）；二维/任意 bounds 用 `VirtualizationSpatialIndex`（grid hash，查询返回格级候选，需自己精确相交），或行带算术（Wrap/UniformGrid 当前做法，O(visible)）。
+4. 源替换、模板/工厂替换、池和 `DataContext` 的生命周期由基类负责；不要在子类里缓存 index→visual 的旧 map。回收钩子 `RecycleItem` 默认清 DataContext，`BindRecycledItem` 重新写。
+5. 选择/keyboard/hover 放在 `VirtualizingListBox` 这类子类，不要塞进布局基类；`Items` 语义是窗口，不是源 1:1。
 
 ## 官方做法 vs 看着能编译的捷径
 
