@@ -140,7 +140,7 @@
 2. **改公开附着属性名** → 同上：模板包（各模板）、MAUI workflow demo 的 XAML、`ViewPool` 的 `ItemsSource`/`TemplateSelector` 用法，以及其它六家的同名属性。
 3. **加/删一个采样器类** → `Src/Test/AutoTest/Samplers/MauiEntries.cs`（闭式解）或 `UnreachableSamplers.cs`（造不出端点值）+ `Conformance/MauiConformance.cs`（真 app 侧）。**覆盖率测试读的是产品程序集里的 `ISampler` 类型集合**，所以新类不被登记就一定红；反过来，登记表按**类名**取类型（`MauiEntries.Entry<TValue>` 的程序集限定反射）。
 4. **动 `#if WINDOWS`** → 记住本家有两个 TFM（中立 + windows），多处分支会编出**两份不同的实现**；而 demo 的 Windows TFM 是**条件的**（`Examples/Workflow/MAUI Trimmed/Demo/Demo.csproj` 的 `IsOSPlatform('windows')`），非 Windows 机器上这些分支根本不参与编译。改完至少在一台 Windows 上编一次。
-5. **动 `MauiVersion` 或 Windows TFM 的下限** → 会整体决定「`#if WINDOWS` 的代码能不能编进库」（csproj 顶部注释记着 `10.0.0` 那版就是这么丢的）。同时 `Microsoft.WindowsAppSDK` 的版本要与消费 app 里 MAUI 解析到的那个对齐。
+5. **动 `MauiVersion` 或 Windows TFM 的下限** → 决定「`#if WINDOWS` 的代码能不能编进库」，且必须等于工作负载的 `$(MauiVersion)`：低于它时消费 app 的 `pri.resfiles` 同时列出两个版本的 `Microsoft.Maui.pri`，报 `PRI175` / `PRI277`。`Microsoft.WindowsAppSDK` 要取消费 app 里 MAUI 要求的那个版本，低于它报 NU1605。
 6. **不需要联动的**：生成器/分析器（本项目不引用它，`VeloxDev.MAUI.csproj` 的引用项）；`Docs/`（那套文档站点**不在本仓库**）。
 
 ---
