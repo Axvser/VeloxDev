@@ -8,7 +8,7 @@
 - **生成器**：`Src/Generators/Easel.Generator` 是 `VeloxDev.WinForms.Generator` 的副本，诊断 ID 为 `EASEL_XAML*` / `EASEL_XAMLP*`，unprefixed 类型按 Easel 命名空间解析。
 - **测试/示例**：`Src/Test/Unit/Easel.Test`、`Examples/XamlGallery` 已复制并改名。Easel 示例去掉了 Workflow graph 与 VeloxDev MVVM 卡片及对应依赖；Easel 测试去掉了依赖过渡引擎的动画行为测试（那些留在 VeloxDev 适配器侧）。
 - **对话框与窗口 chrome**：Gallery 顶部标题栏是 `VisualTitleBar`（无边框、图标/标题/最小化/最大化-还原/关闭；空白区拖动、吸附、拖回还原；`--preview-only` 时与旧标题区一起折叠），`overlay.dialog` 卡演示 `DialogService`。`Easel/Visuals/Dialogs/` 提供 `VisualDialog`/`DialogService`（消息/确认/输入，异步结果、遮罩、焦点锁、原生岛隐藏）；`VisualTitleBar`/`WindowChrome` 提供无边框标题栏（图标/标题/最小化/最大化-还原/关闭），空白区 `HTCAPTION` 保留系统拖动与 Aero Snap。
-- **项模板（1.4.0）**：`Src/Templates/Easel.Templates`（`WinForms.Easel.Templates`）提供 `e-usercontrol`、`e-resource`、`e-theme`、`e-style`、`e-controltemplate`、`e-datatemplate`，参数只有 `--namespace`；除 `e-usercontrol` 外都生成 `ResourceDictionary` + code-behind。`e-theme` 的调色板键按 `ThemePalette.FromResourceDictionary` 的约定写全。发布工作流把模板包列入版本检查、打包、推送与旧 patch 下架，并在推送前校验 nupkg 里六个短名的 `template.json`。
+- **模板（1.4.0）**：`Src/Templates/Easel.Templates`（`WinForms.Easel.Templates`）提供项目模板 `e-app`（`App.xaml`/`App.xaml.cs`（应用资源 + `StartupTheme`）+ `MainForm.xaml` + csproj，`--easel-version`，创建后 restore）与项模板 `e-usercontrol`、`e-window`、`e-resource`、`e-theme`、`e-style`、`e-controltemplate`、`e-datatemplate`（参数 `--namespace`）；除 `e-usercontrol` 与 `e-window` 外项模板都生成 `ResourceDictionary` + code-behind。`e-theme` 的调色板键按 `ThemePalette.FromResourceDictionary` 的约定写全。发布工作流把模板包列入版本检查、打包、推送与旧 patch 下架，并在推送前校验 nupkg 里八个短名的 `template.json`。
 - **动画**：Easel 自带引擎（`Easel/Animation/`）：`AnimationSpec`、`VisualTriggerActions` 门面，以及 internal 的 `AnimationScheduler`/`AnimationRun`/`AnimationInterpreter`/`AnimationProperty`/`ValueInterpolator`/`AnimationHost`。`VisualTransition`、`TransitionAction`、`KeyFrameAnimation` 直接驱动，不需要宿主注册后端；没有 `IVisualAnimator`/`AnimationRuntime`。支持数值、`Point`/`Size`/`Rectangle` 家族、`Thickness`/`Padding`、`Matrix`/`Matrix4x4`、`Color`/`Brush`/`Transform3D` 与 nullable；未支持类型启动时抛 `NotSupportedException`。写帧走 `BindingPriority.Animation`，收尾落 `LocalValue`；取代是按 DP 而不是按元素。
 - **VeloxDev 适配器只承担 workflow/MVVM**：`Src/Adapters/VeloxDev.WinForms/` 没有 `XamlAnimation/`；Easel 动画由它自己的引擎直接驱动。
 - **条件引用**：`VeloxDev.WinForms.csproj` 按配置分支 —— `Debug` 用子模块 `ProjectReference`（`..\..\..\Easel\Src\Easel\Easel.csproj`），其余配置用同版 `PackageReference Include="WinForms.Easel"`（当前 3.0.0），好让 nuspec 带上真实的 Easel 依赖（`Easel` 这个 ID 在 nuget.org 上是保留的，推不上去）。各个 XAML 宿主的 `WinForms.Easel.Generator` 同样是 3.0.0。
@@ -40,21 +40,21 @@
 
 ## Gallery（`Easel/Examples/XamlGallery`）
 
-- 外壳是 `Views/GalleryVisualShell.xaml` + `GalleryShellViewModel`；页面内大标题是 **Modern WinForms Gallery**，原生窗口标题仍是 `Easel Demos`。目录根节点写作 `Demos`，`Scenarios` 组是 8 个整页（dashboard / settings / player / video / chat / gradients / composition / 3d），其余为组件组。
-- 主题选择是四选一 ComboBox：Dark+ / Light+ / High contrast / Follow system。`ThemeMode.System` 解析 Windows 的 `AppsUseLightTheme`（高对比时用 HighContrast），并用 `SystemEvents.UserPreferenceChanged` 在选模式的那个线程上重读；`Theme.EffectiveMode` 给出实际调色板。
-- 兜底主题是库内的 `Src/Easel/Themes/{DarkTheme,LightTheme}.xaml`，根是 WPF 式 `<ResourceDictionary>`：调色板 Brush、`CornerRadius`/`ControlHeight` 与四个排版样式（Heading/Subheading/Body/Caption）。字体设置两者相同但每个文件都完整写一遍；`Theme.CreateDark/Light` 从这些 XAML 资源读回 `ThemePalette`，`Theme.CreateResourceDictionary(mode)` 给应用一份副本。High contrast 不是库内兜底：`Demo/Themes/HighContrastTheme.xaml` 是自定义主题示例，`ThemeService` 把它并入视图并用 `ThemePalette.FromResourceDictionary` 设为当前调色板；运行时仍有 `ThemeMode.HighContrast` 的 C# 调色板。生成器现在支持 `<ResourceDictionary>` 根、`x:Key` 资源、keyed Style/Template 与 `MergedDictionaries`（编译类型或内联；不支持文件 URI `Source`）。
+- 外壳是 `Easel/Examples/XamlGallery/Demo/Views/GalleryVisualShell.xaml` + `GalleryShellViewModel`；页面内大标题是 **Modern WinForms Gallery**，原生窗口标题仍是 `Easel Demos`。`Scenarios` 组是 8 个整页（dashboard / settings / player / video / chat / gradients / composition / 3d），其余为组件组。
+- 主题选择是五选一 ComboBox：Dark+ / Light+ / High contrast / Midnight / Follow system。`ThemeMode.System` 解析 Windows 的 `AppsUseLightTheme`（高对比时用 HighContrast），并用 `SystemEvents.UserPreferenceChanged` 在选模式的那个线程上重读；`Theme.EffectiveMode` 给出实际调色板。
+- 兜底主题是库内的 `Src/Easel/Themes/{DarkTheme,LightTheme,HighContrastTheme}.xaml`，根是 WPF 式 `<ResourceDictionary>`：调色板 Brush、`CornerRadius`/`ControlHeight` 与四个排版样式（Heading/Subheading/Body/Caption）。字体设置三份相同但每个文件都完整写一遍；`Theme.CreateDark/Light/HighContrast` 从这些 XAML 资源读回 `ThemePalette`，`Theme.CreateResourceDictionary(mode)` 给应用一份副本。Gallery 的 `Easel/Examples/XamlGallery/Demo/Themes/MidnightTheme.xaml` 是一份全新的自定义主题示例，`ThemeService` 把它并入视图并用 `ThemePalette.FromResourceDictionary` 设为当前调色板（承载模式 `ThemeMode.Dark`）。生成器支持 `<ResourceDictionary>` 根、`x:Key` 资源、keyed Style/Template 与 `MergedDictionaries`（编译类型或内联；不支持文件 URI `Source`）。
 - 每张卡是 `Views/Cards/*.xaml`；code-behind 只做 `DataContext`、树节点、弹层、日历/日期、位图、滑块/媒体接线。`Catalog/Cards/<Group>Cards.cs` 按组拼卡，`Catalog/CardCatalog.cs` 的顺序就是目录顺序。Styling 组有 `DynamicResource`/`StaticResource` 对比卡（`style.dynamic-resource`）。
-- 媒体页是真实的：3 首 MP3 + 12s H.264/AAC 作为 `EmbeddedResource` 放在 `Demo/Assets/Media`，首次解压到 temp；音频用 WPF `MediaPlayer` 轮询，视频用 `MediaElement` + `ElementHost` 放进唯一的 `NativeControlHost` 岛。Demo 开 `UseWPF` 时必须关掉 WPF 默认 Page/ApplicationDefinition，否则 WPF 会和 Easel 争着编译视图 `.xaml`；`ElementHost` 不能设 `Dock=Fill`（NativeControlHost 用 Bounds 摆放，Dock 会铺满整个 VisualHost）。`UseWPF` 还会改变隐式 using（缺 `System.IO`）并引入 `System.ComponentModel.SortDescription` 的歧义。
+- 媒体页是真实的：3 首 MP3 + 12s H.264/AAC 作为 `EmbeddedResource` 放在 `Demo/Assets/Media`，首次解压到 temp；音频用 WPF `MediaPlayer` 轮询，视频用 `MediaElement` + `ElementHost` 放进唯一的 `NativeControlHost` 岛。Demo 开 `UseWPF` 时必须关掉 WPF 默认 Page/ApplicationDefinition，避免 WPF 与 Easel 争着编译视图 `.xaml`；`ElementHost` 不能设 `Dock=Fill`（NativeControlHost 用 Bounds 摆放，Dock 会铺满整个 VisualHost）。`UseWPF` 还会改变隐式 using（缺 `System.IO`）并引入 `System.ComponentModel.SortDescription` 的歧义。
 - 场景页固定 540 宽；Data 组新卡 600–760 宽。`PreviewScroll` 横向 Auto（大卡可横向滚动），页内 `ScrollViewer` 横向禁用，窗口默认取工作区尺寸。3D/遮罩在 `graphics.*` 与 `scenario.*` 卡里演示。
-- Data 组：`data.data-grid`（2,048 行 × 7 列，序号、徽章、进度、勾选、拖入拖出）、`data.drag-board`（两块 DataGrid 同一批 `SampleRow` 互移）、`data.virtual-list`（5,000 行并显示已实现区间）；ListBox/TreeView/Calendar/DatePicker/ComboBox 都放大并带状态标注。
+- Data 组：`data.data-grid`（2,048 行 × 7 列，序号、徽章、进度、勾选、拖入拖出）、`data.drag-board`（两块 DataGrid 同一批 `SampleRow` 互移）、`data.virtualizing-list-box`（5,000 行并显示已实现区间）；ListBox/TreeView/Calendar/DatePicker/ComboBox 都放大并带状态标注。
 - 生成器把 Style/Trigger Setter 的 `{StaticResource}` 装成 `Get<object>`，由 `SetValue` 转成 DP 类型；写成 `Get<Color>` 会让 Brush 主题资源在 `Foreground` 上转换失败。
 
 ## 发布
 
 - Easel 独立仓的 `.github/workflows/publish.yml` 与 VeloxDev 同构：`version` 读 `Easel.csproj` / `Easel.Generator.csproj` 各自的 `<Version>` 并 HEAD flatcontainer，只发 NuGet 缺的版本；push 需仓库变量 `AUTO_PUBLISH=true`，`workflow_dispatch.force` 把两个包都当作缺失重跑；顺序是 `WinForms.Easel.Generator` 先推并轮询到可下载，再打包并推送 `WinForms.Easel`，最后按 `x3` unlist 同线旧 patch。
-- `WinForms.Easel` 包不声明 `WinForms.Easel.Generator` 依赖（源项目对生成器是 Analyzer `ProjectReference`，消费者按 README 同时装两个包），所以工作流里的等待保证的是发布顺序，不是 restore 依赖。
-- CI 的 publish job 是唯一校验 nupkg 里四个 TFM 资产齐全的地方（`scripts/pack-local.ps1` 只建 `net8.0-windows`）；推送前检查 `lib/net461*`、`lib/net5.0-windows*`、`lib/netcoreapp3.0*`、`lib/net8.0-windows*` 都存在。
+- `WinForms.Easel` 包不声明 `WinForms.Easel.Generator` 依赖（源项目对生成器是 Analyzer `ProjectReference`，消费者按 README 同时装两个包），工作流里的等待只保证发布顺序，不保证 restore 依赖。
+- CI 的 publish job 是唯一校验 nupkg 里四个 TFM 资产齐全的地方；推送前检查 `lib/net45*`、`lib/net5.0-windows*`、`lib/netcoreapp3.0*`、`lib/net8.0-windows*` 都存在。
 
-## 未完成
+## 发布顺序
 
-- `VeloxDev.WinForms.csproj` 的 Release 从 NuGet 取 Easel 包（Debug 走子模块源码），所以发布顺序是 Easel 先于 VeloxDev.WinForms；父仓 `publish.yml` 在打包 WinForms 适配器前等待 `VeloxDev.WinForms.csproj` 里写的 Easel 版本在 NuGet 可下载。
+- `VeloxDev.WinForms.csproj` 的 Release 从 NuGet 取 Easel 包（Debug 走子模块源码），发布顺序是 Easel 先于 VeloxDev.WinForms；父仓 `publish.yml` 在打包 WinForms 适配器前等待 `VeloxDev.WinForms.csproj` 里写的 Easel 版本在 NuGet 可下载。

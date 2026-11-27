@@ -19,14 +19,14 @@
 | `Visuals/Visual.cs` | `Visual` / `ContainerVisual` / `ShapeVisual` / `TextVisual` / `CurveBatchVisual` / `DropShadowEffect` | 视觉树节点：`Bounds`（父坐标）/ `Transform` / `Opacity` / `Clip` / `Effect`；`RenderContent` / `HitTestContent` |
 | `Visuals/VisualElement.cs` | `VisualElement : ContainerVisual, IDisposable` | 布局/输入/渲染基类：`Margin`/`Padding`/`Width`/`Height`/对齐/`Background`/`CornerRadius` 等 DP，measure/arrange、指针/键盘事件、逻辑焦点 |
 | `Visuals/VisualHost.cs` | `VisualHost : System.Windows.Forms.Control` | 唯一 HWND：`Root`、`Resources`、`DpiScaleOverride`、`RenderTo`、`ProcessPointer*` / `ProcessKey*` / 文本输入 |
-| `Easel/Src/Easel/Visuals/VisualForm.cs` / `Easel/Src/Easel/Visuals/Window.cs` | `VisualForm : Form` / `Window : VisualForm` | 窗口壳：内部持有 dock-filled `VisualHost`；`VisualForm.Root` 换根，`DataContext` 转发给宿主。`Window` 增加 XAML 根形状：`Content`（单根）、`Title`（映射 `Text`）、`Resources`（宿主字典）；XAML `Width`/`Height` 是 DIP，写入 `WidthDips`/`HeightDips`，句柄创建时按 DPI 应用，code-behind 的 `Form.Width`/`Height` 仍是物理像素 |
+| `Easel/Src/Easel/Visuals/VisualForm.cs` / `Easel/Src/Easel/Visuals/Window.cs` | `VisualForm : Form` / `Window : VisualForm` | 窗口壳：内部持有 dock-filled `VisualHost`；`VisualForm.Root` 换根，`DataContext` 转发给宿主。`Window` 增加 XAML 根形状：`Content`（单根）、`Title`（映射 `Text`）、`Resources`（宿主字典），根元素上的其它 CLR 属性（如 `StartPosition`/`WindowState`）直接写到窗口；XAML `Width`/`Height` 是 DIP，写入 `WidthDips`/`HeightDips`，句柄创建时按 DPI 应用，code-behind 的 `Form.Width`/`Height` 仍是物理像素；原生标题栏在句柄创建与主题切换时按 `Theme.EffectiveMode` 设 DWM 深/浅色（`NativeWindowTheme.ApplyDarkMode`），内容里有 `VisualTitleBar` 时由它接管自定义 chrome |
 | `Visuals/Controls/` | 视觉控件 | `UserControl`/`ContentControl`/`Border`/`StackPanel`/`Grid`/`DockPanel`/`Canvas`/`WrapPanel`/`UniformGrid`/`Viewbox`/`ScrollViewer`/`ScrollBar`/`ScrollContentPresenter`/`ItemsControl`/`ListBox`/`VirtualList`/`TreeView`/`ComboBox`/`TextBlock`/`TextBox`/`RichTextBox`/`Button` 系/`Slider`/`ProgressBar`/`Calendar`/`DatePicker`/`VisualMenu`/`VisualContextMenu`/`VisualPopup`/`VisualPresenter`/Shapes |
 | `Visuals/VisualBindingOperations.cs` | `VisualBindingOperations` / `VisualBindingExpression` | OneWay/OneTime/TwoWay、`DataContext` 路径、Converter/StringFormat/FallbackValue/TargetNullValue；`RelativeSource.Self`/`TemplateBinding`；无 `ElementName`/校验规则 |
 | `Visuals/Styling.cs` | `VisualStyle` / `VisualSetter` / `VisualTrigger` | 显式/隐式样式；setter 写 `Style` 层、trigger 写 `StyleTrigger` 层；`EnterAction`/`ExitAction` 在激活/失效时各跑一次；移除只清自己那两层 |
 | `Visuals/VisualTriggerActions.cs` | `VisualTriggerAction` / `TriggerActionGroup` / `TransitionAction` / `KeyFrameAnimation` / `VisualTransition` | 视觉目标（`VisualElement`）的触发器动作；动画经 `Transition<VisualElement>` 写 `Animation` 层，同一目标的新动画覆盖旧动画，`Stop` 停住 |
 | `Visuals/VisualControlTemplate.cs` | `VisualControlTemplate` | 模板应用：`TemplatedParent`、每实例 `VisualNameScope`、`GetTemplateChild<T>`；模板触发器写 `Template` 层，动作与 setter 用同一个 `TargetName` 部件 |
 | `Visuals/Controls/ButtonBase.cs` | `ButtonBase` | `Command`/`CommandParameter` DP；激活时 `CanExecute` 通过才执行；拒绝时命令负责禁用/恢复 |
-| `Visuals/VisualResources.cs` | `VisualResourceLookup` | 按「元素 → 祖先 → `VisualHost.Resources`」查找并做类型转换 |
+| `Easel/Src/Easel/Visuals/VisualResources.cs` | `VisualResourceLookup` | 按「元素 → 祖先 → `VisualHost.Resources` → `EaselApplication.Resources`」查找并做类型转换 |
 | `Visuals/DataTemplate.cs` | `DataTemplate` | `Func<VisualElement>` 工厂，由生成器填充；keyed 资源存进 `Resources` |
 | `Visuals/VisualTemplateSelector.cs` | `VisualTemplateSelector` | `object?` → `VisualElement?`；工作流的选择器基类 |
 | `Visuals/VisualShapes.cs` | Shapes | `Rectangle`/`Ellipse`/`Line`/`Polygon`/`Polyline`/`Path` |
@@ -49,7 +49,7 @@
 - **`RichTextBox`** 用扁平字符缓冲，每字符带 `RichTextStyle`；绘制必须走 `VisualText.Draw`。
 - **渲染缓存**：`Visual.CacheAsBitmap` 缓存本地子树；`VisualElement.InvalidateVisual` 标脏最近的缓存并上报矩形，`VisualHost` 只清/画脏矩形；有变换或 `Effect` 时整面重画。
 - **默认暗色对齐 Scribalix / VS Code workbench**：画布 `#141414`、面板 `#252526`、raised `#2D2D2D`、输入 `#2A2A2A`、边框 `#333333`、文本 `#E7E7E7`/`#A0A0A0`、accent/focus `#0078D4`、选中 `#094771`；light 为 Light+（`#FFFFFF`/`#F3F3F3`、选中 `#ADD6FF`）。普通圆角 4px、输入圆角 `InputCornerRadius` 6px（高对比 2px）、28px 控件高；输入悬停边框 `BorderHover`（light `#FFB7BDC6`、dark `#FF4A4F55`、高对比白）。
-- **`Theme` 内置三套调色板**：`ThemeMode.Dark` / `Light` / `HighContrast`。高对比是纯黑底、白字、琥珀 accent（`#FFB000`）、聚焦 `#FFD700`、`CornerRadius=2`、`ControlHeight=30`；`ThemeMode` 切换整套 `ThemePalette`，控件在下次构造/根重建时读取。
+- **`Theme` 内置三套调色板**：`ThemeMode.Dark` / `Light` / `HighContrast`（`Easel/Src/Easel/Themes/` 下的 `DarkTheme.xaml` / `LightTheme.xaml` / `HighContrastTheme.xaml`）。高对比是纯黑底、白字、琥珀 accent（`#FFB000`）、聚焦 `#FFD700`、`CornerRadius=2`、`ControlHeight=30`；`ThemeMode` 切换整套 `ThemePalette`，控件在重新构造或根重建时读取。
 - **DPI**：`VisualHost` 按 `DeviceDpi/96` 物理渲染；布局、相机、模型锚点与装饰偏移都是逻辑 DIP。WinForms 的 `DeviceDpi` 与 WM_DPICHANGED 只在**进程**为 PerMonitorV2 时生效（`ScaleHelper.IsThreadPerMonitorV2Aware` 先查 `GetProcessDpiAwareness`），窗口级线程上下文无效；默认由包内 `Easel/Src/Easel/build/WinForms.Easel.props` 设 `ApplicationHighDpiMode=PerMonitorV2`，其它启动方式用 `EaselApplication.Initialize()`。`VisualForm`/`Window` 自己设 `AutoScaleMode.None`。
 - **属性没有别名**（用户定）：一个概念只有一个 DP 名，`Background`/`Foreground` 而不是 `BackColor`/`ForeColor`。
 
@@ -75,7 +75,7 @@
 - **对话框与窗口 chrome**：`VisualDialog` 在 overlay 里铺 40% 遮罩（高对比 60%）+ 居中卡片（Surface/1px 边框/12 圆角/阴影），打开时隐藏原生子 HWND、关闭按原位恢复；焦点锁在顶层对话框、Tab 循环、Enter 主按钮、Esc 取消，多对话框堆叠。`VisualTitleBar` + `WindowChrome` 把 Form 设为无边框：空白标题区返回 `HTCAPTION`（Windows 负责拖动/吸附/拖回还原），按钮与可聚焦元素返回 `HTCLIENT`，未最大化时 8 DIP 边缘返回 `HT*`，最大化按工作区，DWM 圆角尽力而为。
 - **虚拟化与空间索引**：`VirtualizingPanel`（`ItemExtent` 统一行高、可见窗、回收池、`IScrollInfo`）支撑 `VirtualList`（`ItemHeight` 是别名）；DataGrid 只有设 `CellTemplate`/`CellFactory` 的列把可见单元格实现成元素（行的 item 是 DataContext），其余单元格仍自绘。`Easel.Visuals.Spatial` 的 `SpatialGridHashMap<T>`/`SpatialVirtualization<T>` 用 `RectangleF` 做视口与深度查询；Easel 布局不发 bounds-changed 事件，`VisualSpatialBoundsProvider` 需显式 `Refresh()`。
 - `VisualTemplateSelector` 是 item → 元素的唯一接缝；`VisualStyle` 是描述不是活对象，改已应用样式的集合不会自动重应用。
-- `VisualElement.Resources` 与 `VisualHost.Resources` 是普通 `ResourceDictionary`；静态资源在构造期解析，键必须先声明。
+- `VisualElement.Resources` 与 `VisualHost.Resources` 是普通 `ResourceDictionary`；静态资源在构造期解析，键必须先声明。`EaselApplication.Resources` 与 `EaselApplication.Styles` 是进程级兜底：资源在宿主字典之后查，隐式样式在宿主 `Styles` 之后、主题默认之前；应用字典里无键 `<Style TargetType="T">` 按 `typeof(T)` 成为隐式样式。都要在第一个窗口创建前放好。
 
 ## 四、坑（带依据）
 
@@ -107,7 +107,7 @@
 - **手势期间原生岛默认冻结**：`VisualHost.FreezeNativeIslandsDuringGestures`（默认 true）在指针按下时把每个活体岛截成位图并隐藏 HWND，由视觉管线跟着卡片画；松手后按当前排列矩形摆回。子 HWND 的位置和父窗口帧无法保证同一合成帧，快速拖动分割条时视频画面会拖影，冻结是消除它的唯一可靠手段；快照模式的元素本来就画位图，不参与冻结。回归：`AGestureFreezesNativeIslandsAndReleaseRestoresThem`。
 - **`Calendar` 不在“今天”上留标记**：只画选中日的 accent 填充。焦点环矩形或小圆点都会在换选日期后留在旧日期上，看起来像没清掉的选中框。回归：`Calendar_SelectingAnotherDayLeavesNoMarkerOnToday`。
 - **插入符按字形推进定位**：TextBox 的文字绘制与前缀测量使用 `VisualText.DrawTight`/`MeasureWidthTight`（GenericTypographic）；默认 `MeasureString` 首尾各留约 1/6 em padding，插入符会停在最后一个字之后的一段空白上。回归：`TextBox_CaretSitsAtTheEndOfTheLastCharacter`。
-- **插入符默认取主题的 `Caret`**：`ThemePalette.Caret`（缺省回退 `Focus`）；TextBox/RichTextBox 的 `CaretBrush` 未设置时用它，Dark+/Light+ 是聚焦色，Gallery 自定义高对比主题是黄色 `#FFD54A`。回归：`TextBox_UsesTheThemeCaretByDefault`。
+- **插入符默认取主题的 `Caret`**：`ThemePalette.Caret`（缺省回退 `Focus`）；TextBox/RichTextBox 的 `CaretBrush` 未设置时用它，Dark+/Light+ 是聚焦色，Gallery 的 Midnight 自定义主题是青色 `#FF4CC9F0`。回归：`TextBox_UsesTheThemeCaretByDefault`。
 - **Ins 切换覆盖模式**：`IsOverwriteMode`（Insert 键切换）在视觉路径画方块插入符并覆盖后续字符，换行仍插入；方块按 `CaretBlockOpacity`（默认 0.35）半透明填充，并描 1px 实色边，字符仍可见。原生岛沿用系统的插入行为。回归：`TextBox_InsertKeyTogglesOverwriteMode`、`TextBox_OverwriteReplacesTheNextCharacter`、`TextBox_OverwriteModeDrawsABlockCaret`。
 - **Backspace 不能在 `Text` 变更后再自减**：`Text` 的变更回调会 `ClampSelection` 把行尾光标夹到新长度；先算 `removeAt` 再删、删除后用 `removeAt` 赋回光标。旧顺序在行尾删除会多退一格。回归：`TextBox_DeleteAndBackspaceKeepTheCaretAcrossModes`。
 - **单行文本在内容矩形里垂直居中**：`RenderEditorSurface` 用 `textTop` 偏移把单行文本、选区与插入符一起居中；多行（`AcceptsReturn`/`Wrap`）保持顶部对齐。回归：`TextBox_CentersSingleLineTextVertically`。

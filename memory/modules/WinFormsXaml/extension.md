@@ -37,7 +37,7 @@
 
 ## 五、样式、模板、资源与弹层
 
-- 资源：`<Root.Resources>`（无前缀）放标量、空元素对象、`<Style>`、`<ControlTemplate>`、keyed `<DataTemplate>`。`StaticResource` 构造期解析，**键必须先声明**；查找顺序是元素 → 祖先 → `VisualHost.Resources`。
+- 资源：`<Root.Resources>`（无前缀）放标量、空元素对象、`<Style>`、`<ControlTemplate>`、keyed `<DataTemplate>`。`StaticResource` 构造期解析，**键必须先声明**；查找顺序是元素 → 祖先 → `VisualHost.Resources` → `EaselApplication.Resources`。
 - 工作流 tree 的选择器：tree 资源里声明 `<local:CustomTemplateSelector x:Key="WorkflowTemplateSelector" NodeTemplate="{StaticResource NodeTemplate}" ... />`；`WorkflowSurfaceBehavior.VisualTemplateSelectorKey` 默认按这个键从 tree 根资源解析。
 - 样式：`<Style TargetType="Button">` 用 `<Style.Setters>`/`<Style.Triggers>`；有 `x:Key` 走 `Style="{StaticResource}"`，无键按 `TargetType` 隐式。
 - 模板：`<ControlTemplate TargetType="ContentControl">` 必须恰好一个视觉根；`x:Name` 是部件名，`ContentPresenter` 显示 `Content`。`TemplateBinding` 绑 `TemplatedParent`；模板触发器写 `Template` 层，`TargetName` 指部件。
@@ -45,7 +45,7 @@
 - 视图物化：`PART_Canvas` 上挂 `behaviors:ViewPool.ItemsSource="{Binding Helper.VisibleItems}"` 与 `behaviors:ViewPool.TemplateSelector`（或单个 `ItemTemplate`）；池给每个 item 建一个视觉元素并设 `DataContext`，定位与绘制全在模板里。`WorkflowSurfaceBehavior` 在 `PART_Canvas` 尚未被绑定时替你把 `VisibleItems` 与 tree 的选择器接上。
 - 控件解耦的默认样式、`DefaultTemplate` 与迁移顺序见 [decoupling.md](decoupling.md)；模板取色靠宿主合并的主题字典，`{DynamicResource}` 直接引用主题键。
 - 自定义输入框：`<ControlTemplate TargetType="TextBox">` 里放 `TextBoxContentHost x:Name="PART_ContentHost"`。输入框默认就走视觉层（DP、模板、绑定、选区、撤销都可用），不会出现 HWND airspace；选中与插入符外观设 `SelectionBrush`/`SelectionForeground`/`CaretBrush`/`CaretThickness`/`CaretBlinkInterval`（`0` 常亮）；Insert 切换 `IsOverwriteMode`，视觉路径会画半透明方块插入符（`CaretBlockOpacity`，默认 0.35，带 1px 实色边）并覆盖下一个字符；单行字段的文字与插入符自动垂直居中，多行保持顶部对齐。插入符默认色取主题的 `Caret`（缺省回退 `Focus`），要按字段覆盖就设 `CaretBrush`。需要 IME 组合或原生无障碍 peer 时设 `UseNativeEditor="True"`，原生岛是兜底，岛显示期间选区和插入符由系统绘制。
-- 弹层：`ComboBox` 直接可用；自定义 `VisualPopup` 的 `PlacementTarget` 在 code-behind 赋值（视觉绑定没有 `ElementName`）。弹层内容脱离根树，只能看到自己的资源与 `VisualHost.Resources`。
+- 弹层：`ComboBox` 直接可用；自定义 `VisualPopup` 的 `PlacementTarget` 在 code-behind 赋值（视觉绑定没有 `ElementName`）。弹层内容脱离根树，只能看到自己的资源、`VisualHost.Resources` 与 `EaselApplication.Resources`。
 - XAML 视图按当前主题取色：在构造函数里先把调色板写进 `Resources`（例如 `Resources["Accent"] = Theme.Current.Accent`），再调 `InitializeComponent()`；`{StaticResource}` 在构造期解析，晚了取不到。keyed `Style` / `ControlTemplate` / `DataTemplate` 与属性上的 `{StaticResource}` 共用这本字典。
 - 自定义 `Visual` 改变绘制内容后调 `InvalidateCache()`；走依赖属性的元素由 `InvalidateVisual` 自动标脏最近的 `CacheAsBitmap` 祖先。
 - `DockPanel` 顶部子项要显式高度：没有 `RowDefinitions` 的 `Grid` 默认一行星号，会吃掉全部可用高度。
@@ -64,7 +64,9 @@
 | 绑定 `DataContext` 路径 | `element.DataContext = vm;` + `new Binding("Name")` | 依赖 `ElementName` —— 视觉后端没有 `NameScope` 解析 |
 | 给子树加隐式样式 | `root.Styles.Add(new VisualStyle { TargetType = typeof(TextBlock), ... })`；本地值仍优先 | 把颜色写进每个元素 —— 改主题只能重建整棵树 |
 | 写视觉 XAML | 根与子元素不带前缀；根派生视觉类型 | 根派生 HWND 控件 —— 子元素不会进视觉树 |
-| 新建 Easel 视图/资源 | 安装 `WinForms.Easel.Templates`：`e-usercontrol` / `e-resource` / `e-theme` / `e-style` / `e-controltemplate` / `e-datatemplate`，都带 `--namespace` | 手写 XAML + `x:Class` + code-behind —— 容易漏 `InitializeComponent` |
+| 新建完整 Easel 应用 | 安装 `WinForms.Easel.Templates` 后 `dotnet new e-app -n MyApp [--easel-version x.y.z]`：生成 csproj + `App.xaml`/`App.xaml.cs`（应用资源 + `StartupTheme`）+ `MainForm.xaml`，并执行 restore | 手写 csproj 容易漏 `AdditionalFiles` 与生成器 analyzer 的 `OutputItemType` |
+| 应用级资源 / 隐式样式 | `EaselApplication.Resources`（应用字典，可合并字典）与 `EaselApplication.Styles`（代码里的 `VisualStyle` 集合）；应用字典里无键 `<Style TargetType="T">` 按 `typeof(T)` 成为隐式样式；都在第一个窗口前设置 | 在每个窗口的 `Resources`/`Styles` 里重复一份；窗口建好后再改不会重解析 |
+| 新建 Easel 视图/资源 | 安装 `WinForms.Easel.Templates`：`e-usercontrol` / `e-window` / `e-resource` / `e-theme` / `e-style` / `e-controltemplate` / `e-datatemplate`，都带 `--namespace` | 手写 XAML + `x:Class` + code-behind —— 容易漏 `InitializeComponent` |
 | 视觉 XAML 里用资源/样式/模板 | `<Root.Resources>` 声明 `<Style>`/`<ControlTemplate>`/keyed `<DataTemplate>`，再 `{StaticResource}` | 写 `{DynamicResource}` —— 报诊断 |
 | 视觉模板里取命名部件 | `x:Name` + `GetTemplateChild<T>`，`TemplateBinding` 取 `TemplatedParent` | 把模板部件当字段 —— 每实例作用域不同 |
 | 下拉/菜单 | `ComboBox`，或 `VisualPopup` 挂进覆盖层 | 把弹层放进 `ScrollViewer`/`Border` 期待它浮起来 —— 会被祖先 `Clip` 裁掉 |
