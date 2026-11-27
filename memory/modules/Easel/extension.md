@@ -25,7 +25,7 @@
 
 1. 老 WinForms 控件不改写：XAML 用 `<native:…>`（布局属性落在 `NativeElement` 包装上），代码创建用 `NativeControlHost.Child`。
 2. 新 Easel 视觉内容放原生容器的 `Content`（如 `native:GroupBox` 里的 StackPanel/ProgressBar）；原生事件只写数据源/DataContext，视觉绑定照常刷新。
-3. `IsSnapshot` 只用于确实需要 opacity/transform/clip 的原生岛，不作为 Gallery 演示；Gallery 的 Native 组保持 5 个真实场景。
+3. `IsSnapshot` 只用于确实需要 opacity/transform/clip 的原生岛，不作为 Gallery 演示；Gallery 的 Native 组保持 5 个真实场景。`ScrollViewer` 会自动重摆活体岛；自定义平移/相机宿主在移动内容后调用 `Surface.RefreshNativePlacements()`。
 
 ## 自定义 VirtualizingPanel
 
