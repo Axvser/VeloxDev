@@ -17,9 +17,9 @@
 ## 新增一个可拆出/回坞的面板
 
 1. 页面持有槽位（`Border`/`Grid`）与面板根；拖出时 `DockSlot.Child = null`，再设 `Window.Content = 面板`（`Window` 是 `VisualForm` 的 XAML 窗口基类）。
-2. 回坞时先 `panel.ParentElement?.RemoveChild(panel)`（窗口的 `VisualBootRoot.Wrap` 包装），再 `window.Content = null`，最后 `DockSlot.Child = panel`。
-3. 新 `Window` 的 `DataContext` 在 `Content` 之前设成页面 VM；`Owner` 指向宿主窗口；卡片 `Dispose` 时关闭窗口。
-4. 拖动阈值在页面里决定，松手后再创建窗口；指针捕获留在原宿主，跨宿主拖动在窗口创建后重新开始。
+2. 拖动超过阈值时立即建窗：先按 `headerLocal` 把窗口放到指针下，调用 `source.CancelPointerGesture()` 取消旧宿主捕获，再 `window.Surface.AdoptPointerGesture(screenPoint, MouseButtons.Left)`；新宿主补一次按下并继续接收移动/抬起。
+3. 回坞时先 `panel.ParentElement?.RemoveChild(panel)`（窗口的 `VisualBootRoot.Wrap` 包装），再 `window.Content = null`，最后 `DockSlot.Child = panel`。回坞发生在浮动窗口自己的 `PointerReleased` 里：先 `Hide()`，用 `BeginInvoke` 推迟 `Close/Dispose`，不在该宿主的事件里销毁宿主。
+4. 新 `Window` 的 `DataContext` 在 `Content` 之前设成页面 VM；`Owner` 指向宿主窗口；卡片 `Dispose` 时关闭窗口。
 
 ## 官方做法 vs 看着能编译的捷径
 
