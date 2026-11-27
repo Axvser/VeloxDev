@@ -22,8 +22,8 @@
 		<SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
 		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
 		<DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_BREAK_ON_UNHANDLED_EXCEPTION</DefineConstants>
-		<!-- 与适配器固定的 10.0.20 对齐；$(MauiVersion) 默认值取自工作负载，两者不一致会 NU1605。-->
-		<MauiVersion>10.0.20</MauiVersion>
+		<!-- 与适配器固定的 10.0.110 对齐；低于工作负载的 $(MauiVersion) 会触发 NU1605 降级。-->
+		<MauiVersion>10.0.110</MauiVersion>
 
 		<!-- 验证工程：不打包、不被 dotnet test 发现。-->
 		<IsPackable>false</IsPackable>

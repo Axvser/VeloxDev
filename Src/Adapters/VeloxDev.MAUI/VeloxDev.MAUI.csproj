@@ -29,9 +29,9 @@
 		<Authors>Axvser</Authors>
 		<Description>VeloxDev.Core + MAUI</Description>
 		<PackageIcon>veloxdev-logo.png</PackageIcon>
-		<!-- Align with the installed MAUI workload (the demos use $(MauiVersion)); the 10.0.0
-		     pin has no Windows TFM assets, so #if WINDOWS code never compiled into the lib. -->
-		<MauiVersion>10.0.20</MauiVersion>
+		<!-- Equals the workload's $(MauiVersion), which the demos also resolve. A lower pin here
+		     makes the consuming app merge both versions' PRI fragments (PRI175/PRI277). -->
+		<MauiVersion>10.0.110</MauiVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -48,7 +48,7 @@
 		<!-- WinUI 3 (Microsoft.UI.Xaml) for the Windows TFM. Apps get WindowsAppSDK via the
 		     MAUI SDK; class libraries must reference it explicitly. Version matches what the
 		     workload's Microsoft.Maui.Controls resolves in the consuming app. -->
-		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250909003" />
+		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260529003" />
 	</ItemGroup>
 
 </Project>
