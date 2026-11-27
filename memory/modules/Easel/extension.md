@@ -29,7 +29,7 @@
 
 ## 新增一个虚拟化布局
 
-1. **先直接选 concrete**：一维固定步长用 `VirtualizingStackPanel`（`ItemExtent`/`Orientation`/`Spacing`），可选用 `VirtualizingListBox`；二维用 `VirtualizingWrapPanel` / `VirtualizingUniformGrid`。只有新排布语义才继承 abstract `VirtualizingPanel`。
+1. **先直接选 concrete**：一维固定步长用 `VirtualizingStackPanel`（`ItemExtent`/`Orientation`/`Spacing`），可选用 `VirtualizingListBox`；二维用 `VirtualizingWrapPanel` / `VirtualizingUniformGrid`。应用层自定义放置规则用 `VirtualizingLayoutPanel` + `IVirtualizingLayout`（或 `DelegateVirtualizingLayout`），不重写 `BuildLayout`；只有要发布一个新的可复用布局算法才继承 abstract `VirtualizingPanel`。
 2. 继承时实现 `MeasureLayout(availableSize)` 与 `BuildLayout(VirtualizationLayoutRequest)`，返回 `VirtualizationLayoutContext`：`Items` 是 visible + overscan 的 `VirtualizationItemLayout`（文档坐标、row-major/自定义 `Order`），`Extent` 是完整尺寸，`OffsetX/Y` 是当前偏移。`ArrangeItem` 默认按 bounds 摆；own-scroll 时基类减 offset。
 3. 1D 固定 extent 用除法算可见区间（O(1)）；二维/任意 bounds 用 `VirtualizationSpatialIndex`（grid hash，查询返回格级候选，需自己精确相交），或行带算术（Wrap/UniformGrid 当前做法，O(visible)）。
 4. 源替换、模板/工厂替换、池和 `DataContext` 的生命周期由基类负责；不要在子类里缓存 index→visual 的旧 map。回收钩子 `RecycleItem` 默认清 DataContext，`BindRecycledItem` 重新写。
