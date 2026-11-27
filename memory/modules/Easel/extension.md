@@ -21,6 +21,18 @@
 3. 回坞时先 `panel.ParentElement?.RemoveChild(panel)`（窗口的 `VisualBootRoot.Wrap` 包装），再 `window.Content = null`，最后 `DockSlot.Child = panel`。回坞发生在浮动窗口自己的 `PointerReleased` 里：先 `Hide()`，用 `BeginInvoke` 推迟 `Close/Dispose`，不在该宿主的事件里销毁宿主。
 4. 新 `Window` 的 `DataContext` 在 `Content` 之前设成页面 VM；`Owner` 指向宿主窗口；卡片 `Dispose` 时关闭窗口。
 
+## 原生控件场景
+
+1. 老 WinForms 控件不改写：XAML 用 `<native:…>`（布局属性落在 `NativeElement` 包装上），代码创建用 `NativeControlHost.Child`。
+2. 新 Easel 视觉内容放原生容器的 `Content`（如 `native:GroupBox` 里的 StackPanel/ProgressBar）；原生事件只写数据源/DataContext，视觉绑定照常刷新。
+3. `IsSnapshot` 只用于确实需要 opacity/transform/clip 的原生岛，不作为 Gallery 演示；Gallery 的 Native 组保持 5 个真实场景。
+
+## 自定义 VirtualizingPanel
+
+1. 继承 `VirtualizingPanel`，override `RealizeItem` / `RecycleItem` / `BindRecycledItem`；固定 `ItemExtent`，外层用像素滚动 `ScrollViewer` 或 `CanContentScroll` 逻辑滚动。
+2. `InvalidateRealizedWindow` 在置 `FirstRealizedIndex = -1` 前先把当前窗口按真实索引退池；`CanContentScroll` 分支的 `_own*Offset` 夹到 `TotalExtent - viewport`。两处不变量见 `pitfalls.md`。
+3. 自定义子类可把选中状态放在行模型上，回收重绑后立即恢复；指标读取放在 `ArrangeOverride` 后，避免 `ScrollChanged` 早于 Arrange 的滞后。
+
 ## 官方做法 vs 看着能编译的捷径
 
 - 卡片分组与顺序只改 `GalleryTaxonomy` / `CardCatalog`，不在 shell 里排序。

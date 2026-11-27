@@ -12,11 +12,13 @@
 - 跨宿主手势的原生入口在 `Easel/Src/Easel/Visuals/VisualHost.cs`：`CancelPointerGesture` 只清捕获、不补 `PointerReleased`；`AdoptPointerGesture` 命中新宿主并在当前位置补一次 `PointerPressed`，之后移动与抬起都走新宿主。
 - 虚拟化引擎：`VirtualizingPanel` 是 abstract；子类只实现 `MeasureLayout` / `BuildLayout`（返回 `VirtualizationLayoutContext`），引擎负责 keep/recycle/reuse/create、池和 host 顺序。应用层用 `VirtualizingLayoutPanel` + `IVirtualizingLayout` / `DelegateVirtualizingLayout`，不必继承；concrete 布局有 stack/listbox/wrap/uniform grid。1D 用区间算术，2D/任意布局可用 `VirtualizationSpatialIndex`；列表统一叫 `VirtualizingListBox`。
 - `Easel/Examples/XamlGallery/Demo/Views/GalleryTheme.cs` 的 `Fill` 除主题键外写一组固定的工业语义色：`Signal` / `Positive` / `Warning` / `Danger` / `HmiGrid` / `HmiTrack` / `SignalGradient`；状态色不随主题变。
+- Data 组的 `data.virtualizing-panel` 是自定义 `VirtualizingPanel` 子类（`Easel/Examples/XamlGallery/Demo/Views/Cards/VirtualizationLogPanel.cs`）窗口化 10 万/100 万行日志，显示 first/realized/created/reused/recycled；测试在 `Easel/Src/Test/Unit/Easel.Test/VirtualizingPanelScenarioTests.cs`。
+- WinForms native 组（`Easel/Examples/XamlGallery/Demo/Catalog/Cards/NativeCards.cs`）是 5 个真实托管场景，没有 `IsSnapshot` 快照卡：`native.workspace`（DataGridView/DataTable + TreeView + 原生编辑器 + ToolStrip/StatusStrip）、`native.embed`（原生 GroupBox 内放 Easel 视觉子树，与原生 ListBox 互驱）、`native.property`（PropertyGrid + CLR 设置对象）、`native.binding`、`native.host`。拆卸期用 `_detached` + `Native.IsDisposed` 守卫原生事件。
 - 启动开关在 `GalleryCapture`：`--group` 同时匹配组名与分区名，`--scroll` 只对单个 target 生效，`--preview-only` 隐藏两侧栏。
 
 ## IndustrialWorkbench
 
 - 组合根：`App` → `MainForm` → `WorkbenchShell`。首页 `OverviewView` 用固定设计尺寸（1056 DIP 宽）包在 `Viewbox` 里，任何窗口下全部控件同时可见；目录选中后切换到 `ControlDetailView`。
 - `Easel/Examples/IndustrialWorkbench/Demo/Controls/` 是自绘 `VisualElement`（`OnRender` + `DependencyProperty`），`StatusTile` 是 XAML `UserControl` + code-behind；`Easel/Examples/IndustrialWorkbench/Demo/Views/Controls/` 是每个控件的大图实例与用法片段。
-- `WorkbenchViewModel` 用 150 ms Timer 推进仿真；`Setpoint` / `PumpOn` / `ValveOpen` 通过 `Mode=TwoWay` 写回模型，阀门关闭会连锁到流量。
+- `WorkbenchViewModel` 用 16 ms（约 60 fps）Timer 推进可见动画；仿真值按真实时间缩放，趋势/报警仍按 150 ms accumulator 采样。`Setpoint` / `PumpOn` / `ValveOpen` 通过 `Mode=TwoWay` 写回模型，阀门关闭会连锁到流量。
 - 启动开关在 `WorkbenchCapture`：`--smoke`、`--capture [dir] [--entry id]`、`--selftest <dir>`；`--selftest` 注入真实指针验证旋钮拖动、拨杆/阀门切换与报警确认。
