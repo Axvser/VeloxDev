@@ -28,7 +28,6 @@ namespace Demo.Views.Workbench;
 /// </summary>
 public sealed partial class WorkbenchView : WorkbenchViewBase
 {
-    private readonly VisualHost _host;
     private readonly Dictionary<string, ActivityButton> _activityButtons = [];
     private readonly System.Windows.Forms.Timer _uiTimer;
 
@@ -43,12 +42,10 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
     private string _inspectorPage = "properties";
     private bool _dialogOpen;
 
-    /// <summary>Creates the shell; the host must be passed so the behavior can be attached after the root exists.</summary>
-    public WorkbenchView(VisualHost host)
+    /// <summary>Creates the shell. The surface is resolved when the view attaches to its window.</summary>
+    public WorkbenchView()
     {
-        _host = host;
         InitializeComponent();
-        WorkbenchDispatcher.Initialize(host);
 
         BuildMenu();
         BuildActivityBar();
@@ -61,20 +58,27 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
             AgentPage.SyncSubAgents();
         };
         _uiTimer.Start();
+
+        AddHostBehavior(new ShellLifecycle(this));
     }
 
-    /// <summary>
-    /// Starts the workflow surface and loads the demo. Call after <c>host.Root = this</c>: the behavior resolves
-    /// the named surface subtree from the root, so the root must be assigned first.
-    /// </summary>
-    public void Start()
+    // Starts the workflow surface and loads the demo once the view resolves its host. Idempotent so a
+    // detach/attach cycle does not reload the sample.
+    private void Start()
     {
+        if (_demo is not null)
+        {
+            return;
+        }
+
+        WorkbenchDispatcher.Initialize(
+            Surface ?? throw new InvalidOperationException("The workbench must be attached before Start."));
         ExplorerPage.SetMinimapState(WorkflowSurface.MinimapOverlay.IsMinimapVisible);
         LoadDemo(WorkflowDemoSession.Create());
     }
 
-    /// <summary>Closes the current run tree and the surface before the window goes away.</summary>
-    public async Task ShutdownAsync()
+    // Closes the current run tree and the surface before the window goes away.
+    private async Task ShutdownAsync()
     {
         _uiTimer.Stop();
         _uiTimer.Dispose();
@@ -131,7 +135,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
         file.Items.Add(new VisualMenuItem { Header = "加载工作流", InputGestureText = "Ctrl+O", Command = () => _ = LoadWorkflowAsync() });
         file.Items.Add(new VisualMenuItem { Header = "重新载入示例", Command = () => _ = ExecuteAsync(ReloadWorkflowAsync, "Failed to reset demo") });
         file.Items.Add(new VisualMenuItem { IsSeparator = true });
-        file.Items.Add(new VisualMenuItem { Header = "退出", Command = () => _host.FindForm()?.Close() });
+        file.Items.Add(new VisualMenuItem { Header = "退出", Command = () => Surface?.FindForm()?.Close() });
         MenuBar.Items.Add(file);
 
         var edit = new VisualMenuItem { Header = "编辑" };
@@ -349,7 +353,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
 
         _surfaceRefresh ??= new CoalescedRefresh(
             () => WorkflowBehaviors.WorkflowSurfaceBehavior.Refresh(WorkflowSurface),
-            action => _host.BeginInvoke(action));
+            action => Surface?.Post(action));
 
         helper.SelectionHandler = ShowSelectionDialogAsync;
         helper.ConfirmationHandler = ShowConfirmationDialogAsync;
@@ -407,7 +411,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
         }
 
         using var dialog = new FolderBrowserDialog();
-        if (dialog.ShowDialog(_host) == DialogResult.OK)
+        if (dialog.ShowDialog(Surface) == DialogResult.OK)
         {
             var path = System.IO.Path.Combine(dialog.SelectedPath, "Workflow.json");
             _demo.Tree.SaveCommand.Execute(path);
@@ -426,7 +430,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
             CheckPathExists = true,
         };
 
-        if (dialog.ShowDialog(_host) != DialogResult.OK)
+        if (dialog.ShowDialog(Surface) != DialogResult.OK)
         {
             return;
         }
@@ -684,7 +688,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
             WorkflowSurface,
             new PointF((float)position.Horizontal, (float)position.Vertical));
 
-        var hit = _host.FindElementAt(surfacePoint);
+        var hit = Surface?.FindElementAt(surfacePoint);
         if (IsInsideTextInput(hit))
         {
             return false;
@@ -920,7 +924,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
                     args.Handled = true;
                     return;
                 case Keys.Z:
-                    if (IsFocusInsideSurface() || _host.FocusedElement is VisualTextBox or VisualRichTextBox)
+                    if (IsFocusInsideSurface() || Surface?.FocusedElement is VisualTextBox or VisualRichTextBox)
                     {
                         break;
                     }
@@ -936,7 +940,7 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
 
     private bool IsFocusInsideSurface()
     {
-        for (var current = _host.FocusedElement; current is not null; current = current.ParentElement)
+        for (var current = Surface?.FocusedElement; current is not null; current = current.ParentElement)
         {
             if (ReferenceEquals(current, WorkflowSurface))
             {
@@ -945,5 +949,35 @@ public sealed partial class WorkbenchView : WorkbenchViewBase
         }
 
         return false;
+    }
+
+    private async void OnFormClosing(object? sender, FormClosingEventArgs e)
+        => await ShutdownAsync();
+
+    // Starts the shell when the view resolves its host and shuts it down with the hosting form.
+    private sealed class ShellLifecycle(WorkbenchView owner) : IVisualHostBehavior
+    {
+        private Form? _form;
+
+        public void Attach(VisualHost host)
+        {
+            _form = host.FindForm();
+            if (_form is not null)
+            {
+                _form.FormClosing += owner.OnFormClosing;
+            }
+
+            owner.Start();
+        }
+
+        public void Detach()
+        {
+            if (_form is not null)
+            {
+                _form.FormClosing -= owner.OnFormClosing;
+            }
+
+            _form = null;
+        }
     }
 }

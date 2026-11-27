@@ -1,0 +1,13 @@
+<Window
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:workflow="clr-namespace:Demo.Views.Workflow"
+    x:Class="Demo.MainForm"
+    Title="VeloxDev WinForms Trimmed"
+    Width="1085"
+    Height="683"
+    StartPosition="CenterScreen"
+    DataContext="{x:Static workflow:SampleTree.New}">
+  <!-- The window owns the surface; the tree arrives through the inherited DataContext. -->
+  <workflow:TreeView />
+</Window>

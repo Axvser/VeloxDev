@@ -1,0 +1,9 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    x:Class="Demo.App">
+
+  <!-- Application-wide resources belong here; the demos keep them in their own views. -->
+  <x:String x:Key="StartupTheme">Dark</x:String>
+
+</ResourceDictionary>

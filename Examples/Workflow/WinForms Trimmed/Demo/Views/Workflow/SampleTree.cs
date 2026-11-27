@@ -8,7 +8,10 @@ namespace Demo.Views.Workflow;
 /// <summary>The sample model the trimmed demo shows.</summary>
 internal static class SampleTree
 {
-    public static TreeViewModel Create()
+    /// <summary>A fresh sample model; the window's XAML uses it as the DataContext.</summary>
+    public static TreeViewModel New => Create();
+
+    private static TreeViewModel Create()
     {
         var tree = new TreeViewModel();
 
@@ -37,16 +40,8 @@ internal static class SampleTree
         nodes[2].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
         nodes[3].InputSlot.SetChannelCommand.Execute(SlotChannel.OneSource);
 
-        // One visible link so the trimmed demo exercises the visual link policy, not only the unit graph.
-        if (nodes[2].OutputSlots.Items.FirstOrDefault()?.Slot is { } sender)
-        {
-            tree.Links.Add(new LinkDefaultViewModel
-            {
-                Sender = sender,
-                Receiver = nodes[3].InputSlot,
-                IsVisible = true,
-            });
-        }
+        // The seeded scene is the baseline; the first undo should target the user's edit, not tear it down.
+        tree.GetHelper().ClearHistory();
 
         return tree;
     }
