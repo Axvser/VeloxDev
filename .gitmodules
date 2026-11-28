@@ -4,9 +4,6 @@
 [submodule "Wiki"]
 	path = SubRepos/Wiki
 	url = https://github.com/Axvser/VeloxDev.Docs.git
-[submodule "Scribalix"]
-	path = SubRepos/Scribalix
-	url = https://github.com/Axvser/Scribalix.git
 [submodule "AvalonMarkdown"]
 	path = SubRepos/AvalonMarkdown
 	url = https://github.com/Axvser/AvalonMarkdown.git

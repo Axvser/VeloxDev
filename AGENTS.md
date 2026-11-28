@@ -17,13 +17,12 @@
 
 ## 子仓库与并行改动
 
-`SubRepos/` 下是四个**独立 git 仓库**。开发统一在 VeloxDev 体内统筹：主仓的规范（`AGENTS.md`、`memory/specifications/`、`skills/` 的密度要求、提交与版本规范）直接适用于 `SubRepos/<名>/` 下的改动，**不向子仓库复制这些规范**；子仓库只维护自己的 `memory/` 与 `skills/`（如有），同样受记忆密度约束。改动在哪个子仓库发生，就在那个仓库提交，父仓库只更新指针。主仓只在下面保留简短索引。
+`SubRepos/` 下是三个**独立 git 仓库**。开发统一在 VeloxDev 体内统筹：主仓的规范（`AGENTS.md`、`memory/specifications/`、`skills/` 的密度要求、提交与版本规范）直接适用于 `SubRepos/<名>/` 下的改动，**不向子仓库复制这些规范**；子仓库只维护自己的 `memory/` 与 `skills/`（如有），同样受记忆密度约束。改动在哪个子仓库发生，就在那个仓库提交，父仓库只更新指针。主仓只在下面保留简短索引。
 
 | 子仓库 | 路径 | 上游 | 内容 |
 |---|---|---|---|
 | Easel | [`SubRepos/Easel/`](SubRepos/Easel/) | <https://github.com/Axvser/Easel> | Easel XAML 运行时 |
 | Wiki | [`SubRepos/Wiki/`](SubRepos/Wiki/) | <https://github.com/Axvser/VeloxDev.Docs> | 文档站 |
-| Scribalix | [`SubRepos/Scribalix/`](SubRepos/Scribalix/) | <https://github.com/Axvser/Scribalix> | Studio 的生成服务与 Node Studio 客户端 |
 | AvalonMarkdown | [`SubRepos/AvalonMarkdown/`](SubRepos/AvalonMarkdown/) | <https://github.com/Axvser/AvalonMarkdown> | Avalonia 的 Markdown 预览控件 |
 
 子仓库的模块记忆在 `SubRepos/<名>/memory/modules/`；父仓只保留这张索引与集成指针，不复制细节。

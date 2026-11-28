@@ -63,11 +63,11 @@ close.
 
 ## Verification
 
-Regenerate from the Scribalix working tree:
+Regenerate from a Scribalix checkout; the film tooling lives in the Scribalix repository, not here:
 
 ```powershell
-cd SubRepos\Scribalix
-dotnet run --project tools/veloxdev-promo -- --gif-only --out ..\..\Assets\promo
+cd <Scribalix-checkout>
+dotnet run --project tools/veloxdev-promo -- --gif-only --out <VeloxDev>\Assets\promo
 ```
 
 Inspect a film:
@@ -94,7 +94,7 @@ through the CLI to confirm it is a real graph:
 
 ```powershell
 veloxdev run --archive Assets\promo\02-viewmodels.json `
-  --assembly src\Scribalix.Graph\bin\Release\net10.0\Scribalix.Graph.dll `
+  --assembly ..\Scribalix\src\Scribalix.Graph\bin\Release\net10.0\Scribalix.Graph.dll `
   --root-type Scribalix.Graph.WorkflowTreeViewModel --start 0
 ```
 

@@ -12,7 +12,6 @@ Scopes:
                       submodule pointers, copying the baseline
     repo:Easel        SubRepos/Easel working tree and its commits/pushes
     repo:Wiki         SubRepos/Wiki working tree and its commits/pushes
-    repo:Scribalix    SubRepos/Scribalix working tree and its commits/pushes
     repo:AvalonMarkdown
                       SubRepos/AvalonMarkdown working tree and its commits/pushes
     module:<name>     one module's edits and merge; <name> is the Src/ or

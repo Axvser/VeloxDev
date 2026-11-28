@@ -78,7 +78,7 @@ python DevTools/repo_lock.py release --owner <session> --scope main
 | scope | 保护什么 | 什么时候拿 |
 |---|---|---|
 | `main` | 主工作树、父仓库提交/推送、版本号、子仓库指针、复制基线 | 合并、提交、复制主树时 |
-| `repo:Easel` / `repo:Wiki` / `repo:Scribalix` / `repo:AvalonMarkdown` | 各子仓库工作树的写入、提交、推送 | 合并该子仓库时 |
+| `repo:Easel` / `repo:Wiki` / `repo:AvalonMarkdown` | 各子仓库工作树的写入、提交、推送 | 合并该子仓库时 |
 | `module:<名>` | 一个模块的编辑与合并；名字取 `Src/` 或 `memory/modules/` 的目录名（`Easel`、`WinForms`、`Core`、`Templates`、`Docs`…） | 动该模块前后 |
 | `global` | `dotnet new` 安装/卸载、NuGet 发布/下架、其它机器级写操作 | 执行前 |
 
